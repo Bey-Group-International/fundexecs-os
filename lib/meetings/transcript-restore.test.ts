@@ -1,5 +1,5 @@
 import {
-  chooseTranscript,
+  mergeTranscripts,
   restoreTranscript,
   transcriptLineCount,
   type StoredLine,
@@ -59,26 +59,26 @@ describe("restoreTranscript", () => {
   });
 });
 
-describe("chooseTranscript", () => {
+describe("mergeTranscripts", () => {
   // The case this exists for: the host's tab reloaded mid-call, so their memory
   // holds a fragment of a meeting the rows remember whole.
   it("takes the stored copy when it holds more of the meeting", () => {
     const posted = "Alina: and finally";
     const stored = "Alina: shall we\nRae: agreed\nAlina: and finally";
-    expect(chooseTranscript(posted, stored)).toBe(stored);
+    expect(mergeTranscripts(posted, stored)).toBe(stored);
   });
 
   // The other direction: a participant whose writes were failing still
   // broadcast to the room, and the posted copy holds the final seconds.
   it("keeps the posted copy when it holds more", () => {
     const posted = "Alina: shall we\nRae: agreed\nAlina: done";
-    expect(chooseTranscript(posted, "Alina: shall we")).toBe(posted);
+    expect(mergeTranscripts(posted, "Alina: shall we")).toBe(posted);
   });
 
   it("falls back to whichever one exists", () => {
-    expect(chooseTranscript("", "Alina: shall we")).toBe("Alina: shall we");
-    expect(chooseTranscript("Alina: shall we", "")).toBe("Alina: shall we");
-    expect(chooseTranscript("", "")).toBe("");
+    expect(mergeTranscripts("", "Alina: shall we")).toBe("Alina: shall we");
+    expect(mergeTranscripts("Alina: shall we", "")).toBe("Alina: shall we");
+    expect(mergeTranscripts("", "")).toBe("");
   });
 
   it("counts lines, not characters", () => {
@@ -86,11 +86,72 @@ describe("chooseTranscript", () => {
     // a duplicated transcript wins on.
     const posted = `Alina: ${"x".repeat(500)}`;
     const stored = "Alina: a\nRae: b";
-    expect(chooseTranscript(posted, stored)).toBe(stored);
+    expect(mergeTranscripts(posted, stored)).toBe(stored);
   });
 
   it("ignores blank lines on both sides", () => {
     expect(transcriptLineCount("a\n\n\nb")).toBe(2);
+  });
+
+  // The defect the merge exists for. Picking the fuller copy handed back the
+  // stored one and silently dropped everything said after the last flush —
+  // which in a meeting is the part that decided something.
+  it("recovers the final seconds the stored copy never saw", () => {
+    const stored = "Alina: shall we\nRae: agreed\nAlina: on the number";
+    const posted = "Rae: agreed\nAlina: on the number\nRae: ship it Friday";
+    expect(mergeTranscripts(posted, stored)).toBe(
+      "Alina: shall we\nRae: agreed\nAlina: on the number\nRae: ship it Friday",
+    );
+  });
+
+  // The other direction, and the one the old rule got right by accident: when
+  // the posted copy is the longer one, the rows still hold the opening the
+  // host was not there for.
+  it("recovers the opening the posted copy never had", () => {
+    const stored = "Alina: before we start\nRae: agreed";
+    const posted = "Rae: agreed\nAlina: on the number\nRae: ship it Friday";
+    expect(mergeTranscripts(posted, stored)).toBe(
+      "Alina: before we start\nRae: agreed\nAlina: on the number\nRae: ship it Friday",
+    );
+  });
+
+  it("recovers an opening and an ending at once", () => {
+    const stored = "Alina: before we start\nRae: agreed\nAlina: on the number\nRae: and the date";
+    const posted = "Rae: agreed\nAlina: on the number\nRae: ship it Friday";
+    expect(mergeTranscripts(posted, stored)).toBe(
+      [
+        "Alina: before we start",
+        "Rae: agreed",
+        "Alina: on the number",
+        "Rae: and the date",
+        "Rae: ship it Friday",
+      ].join("\n"),
+    );
+  });
+
+  // A line the fuller copy is missing from its MIDDLE stays missing. There is
+  // no way to place it between two lines that are both already there, and a
+  // guess would reorder the conversation the model reads.
+  it("does not reorder or duplicate over a gap in the middle", () => {
+    const stored = "A: one\nB: two\nC: three\nD: four";
+    const posted = "A: one\nC: three\nD: four";
+    expect(mergeTranscripts(posted, stored)).toBe(stored);
+  });
+
+  // Two records with nothing in common cannot be placed against each other, so
+  // neither run can be called an opening or an ending.
+  it("keeps the fuller copy when the two share no line", () => {
+    const stored = "A: one\nB: two\nC: three";
+    const posted = "X: nine\nY: ten";
+    expect(mergeTranscripts(posted, stored)).toBe(stored);
+  });
+
+  it("never repeats a line it recovered", () => {
+    const stored = "A: one\nB: two\nC: three";
+    const posted = "A: one\nB: two\nC: three\nD: four";
+    const merged = mergeTranscripts(posted, stored).split("\n");
+    expect(merged).toEqual(["A: one", "B: two", "C: three", "D: four"]);
+    expect(new Set(merged).size).toBe(merged.length);
   });
 });
 

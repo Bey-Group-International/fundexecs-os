@@ -9,6 +9,7 @@ import { ExportMenu } from "./ExportMenu";
 import { TranscriptPanel } from "./TranscriptPanel";
 import type { RecordingPlayerHandle } from "./RecordingPlayer";
 import { transcriptCues, type CueRow } from "@/lib/meetings/transcript-cues";
+import { readAllTranscriptRows } from "@/lib/meetings/transcript-read";
 import { RecordingPanel } from "./RecordingPanel";
 import { normalizeNoteList, normalizeNoteText } from "@/lib/meetings/live-notes";
 import { reportViewState, shouldPollReport, type ReportViewState } from "@/lib/meetings/attendance";
@@ -90,12 +91,23 @@ export default function MeetingReportPage() {
     // Timed lines, read through the viewer's own client: RLS gives these to
     // the people who were in the meeting, the same rule the report uses. A
     // failure here costs the timestamps, not the transcript.
-    void supabase
-      .from("live_meeting_transcripts")
-      .select("speaker, text, ts, confidence, overlapped")
-      .eq("meeting_id", meeting.id)
-      .order("ts", { ascending: true })
-      .then(({ data: rows }) => setLines((rows as CueRow[] | null) ?? []));
+    //
+    // Paged, for the same reason the two report routes are: an unbounded
+    // select is cut off at `max_rows` (1000) with nothing to say so, and these
+    // rows are ordered oldest first — so the cues simply stopped partway
+    // through a long recording, at a point that looked like the end of the
+    // meeting rather than the end of the page.
+    void readAllTranscriptRows((from, to) =>
+      supabase
+        .from("live_meeting_transcripts")
+        .select("speaker, text, ts, confidence, overlapped")
+        .eq("meeting_id", meeting.id)
+        .order("ts", { ascending: true })
+        .order("id", { ascending: true })
+        .range(from, to),
+    )
+      .then((rows) => setLines(rows as unknown as CueRow[]))
+      .catch(() => setLines([]));
 
     const next: Data = {
       meeting: meeting as Meeting,

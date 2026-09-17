@@ -4794,7 +4794,7 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     return () => window.removeEventListener("pagehide", onHide);
   }, [recordDeparture]);
 
-  const leaveMeeting = useCallback(() => {
+  const leaveMeeting = useCallback(async () => {
     // The ref, not the state, is the guard: a second click lands before React has
     // committed the phase change from the first.
     if (endingRef.current || !canExit(callPhaseRef.current)) return;
@@ -4802,9 +4802,25 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     callPhaseRef.current = nextPhase(callPhaseRef.current, "leave");
     sendSignal({ type: "leave", from: myIdRef.current });
     teardownCall();
+
+    // Drain, not flush. This is the last chance these words have, and it was
+    // being handed to the flush effect's cleanup — ONE batch of at most
+    // MAX_BATCH lines, fired off with `keepalive` and never checked. A
+    // participant whose writes had been failing reached Leave holding hundreds
+    // of unsaved lines, and fifty of them were saved.
+    //
+    // `endMeeting` has always drained. But only a host sees End: every guest
+    // and every non-host leaves through here, which is to say most people in
+    // most meetings left by the path that saved one batch. Their words are the
+    // only copy of what they said — under the ownership rule in
+    // transcript-buffer, nobody else is saving them.
+    //
+    // Awaited before navigating so the requests are not racing an unmount.
+    await drainTranscript();
+
     if (isGuest) { setShowGuestUpsell(true); return; }
     router.push("/meetings");
-  }, [sendSignal, teardownCall, router, isGuest]);
+  }, [sendSignal, teardownCall, drainTranscript, router, isGuest]);
 
   const endMeeting = useCallback(async () => {
     // A second press while the report is generating would tear down an already
@@ -5151,7 +5167,7 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
         onToggleMic={toggleMic} onToggleCam={toggleCam}
         onToggleScreen={() => void toggleScreen()}
         onToggleCopilot={() => (copilotOpen ? collapseCopilot() : expandCopilot())}
-        onLeave={leaveMeeting} onEndForAll={() => void endForAll()}
+        onLeave={() => void leaveMeeting()} onEndForAll={() => void endForAll()}
         leaving={isAwaitingReport(callPhase)}
         onOpenBackgrounds={() => setBgPickerOpen((v) => !v)}
         backgroundActive={bgEffect.kind !== "none"}

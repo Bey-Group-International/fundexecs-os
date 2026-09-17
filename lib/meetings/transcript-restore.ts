@@ -57,26 +57,75 @@ export function transcriptLineCount(text: string): number {
 }
 
 /**
- * Choose between the transcript the room posted and the one on file.
+ * Split a rendered transcript into the lines that carry words.
  *
- * Neither is reliably the fuller record, so the rule is simply: take whichever
- * has more lines.
+ * Blank lines are dropped rather than preserved: they are formatting, they are
+ * not the same on both sides, and a blank matching a blank would make two
+ * records look like they overlap when they share nothing.
+ */
+function textLines(text: string): string[] {
+  return (text ?? "").split("\n").filter((l) => l.trim().length > 0);
+}
+
+/**
+ * Combine the transcript the room posted with the one on file.
  *
- *   - The database can hold MORE. That is the case this exists for: the host
- *     reloaded, or joined late, or their tab died and the report is being
- *     regenerated — their memory holds a fragment of a call the rows remember
- *     whole.
+ * This used to pick a winner — whichever held more lines — and throw the other
+ * away whole. Both directions of that lost words, because neither copy is a
+ * superset of the other:
+ *
+ *   - The database can hold MORE. The host reloaded, or joined late, or their
+ *     tab died and the report is being regenerated: their memory holds a
+ *     fragment of a call the rows remember from the beginning.
  *   - The posted copy can hold more. A participant whose writes were failing
  *     still broadcast their words to everyone else, so the host heard lines
  *     that never reached the table. It also holds the final seconds, spoken
- *     after the last flush.
+ *     after the last flush and after the last row was ever written.
  *
- * Counting lines rather than characters, because a duplicated record is longer
- * than a correct one and length would reward exactly the bug this replaced.
+ * So picking the longer one discarded the END of a meeting in exactly the case
+ * the restore exists for. A host whose tab reloaded got the stored copy, which
+ * is fuller and is missing everything said after the last flush — and the last
+ * thing said in a meeting is usually what it decided.
+ *
+ * The merge that replaces it is deliberately the narrow one. Both copies are
+ * rendered by the same formatter and both run in the order the words were
+ * spoken, so an identical line is the same utterance and shared lines anchor
+ * the two records against each other. What the fuller copy is missing is what
+ * sits OUTSIDE those anchors: a run at the start, a run at the end, or both.
+ * Those runs can be placed with certainty — before everything shared, or after
+ * it — so they are recovered.
+ *
+ * What is deliberately NOT recovered is a line the fuller copy is missing from
+ * its middle. Between two anchors there is no way to tell where it goes, its
+ * neighbours are already present, and guessing would reorder a conversation
+ * the model then reads as a different meeting. That case also barely happens:
+ * a write fails for a stretch, not for one sentence in the middle of a run.
+ *
+ * Counting lines rather than characters to choose the spine, because a
+ * duplicated record is longer than a correct one and length would reward
+ * exactly the bug this file replaced.
  */
-export function chooseTranscript(posted: string, stored: string): string {
-  const postedLines = transcriptLineCount(posted);
-  const storedLines = transcriptLineCount(stored);
-  if (storedLines > postedLines) return stored;
-  return posted.trim() ? posted : stored;
+export function mergeTranscripts(posted: string, stored: string): string {
+  const postedLines = textLines(posted);
+  const storedLines = textLines(stored);
+  if (postedLines.length === 0) return stored;
+  if (storedLines.length === 0) return posted;
+
+  const spine = storedLines.length > postedLines.length ? storedLines : postedLines;
+  const other = spine === storedLines ? postedLines : storedLines;
+  const inSpine = new Set(spine);
+
+  const first = other.findIndex((l) => inSpine.has(l));
+  // No line in common. The two records cannot be placed against each other at
+  // all, so there is nothing to recover and nowhere to put it: keep the fuller
+  // one, which is what this did before the merge existed.
+  if (first === -1) return spine.join("\n");
+
+  let last = other.length - 1;
+  while (last > first && !inSpine.has(other[last])) last -= 1;
+
+  const head = other.slice(0, first);
+  const tail = other.slice(last + 1);
+  if (head.length === 0 && tail.length === 0) return spine.join("\n");
+  return [...head, ...spine, ...tail].join("\n");
 }

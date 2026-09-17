@@ -8,7 +8,8 @@ import { parseActionItem } from "@/lib/meetings/action-items";
 import { loadOrgDirectory } from "@/lib/meetings/directory.server";
 import { normalizeNoteList, normalizeNoteText } from "@/lib/meetings/live-notes";
 import { EMPTY_REPORT, clampTranscript, generateMeetingReport } from "@/lib/meetings/report-analysis";
-import { chooseTranscript, restoreTranscript, type StoredLine } from "@/lib/meetings/transcript-restore";
+import { mergeTranscripts, restoreTranscript, type StoredLine } from "@/lib/meetings/transcript-restore";
+import { readAllTranscriptRows } from "@/lib/meetings/transcript-read";
 
 export const runtime = "nodejs";
 
@@ -97,20 +98,31 @@ export async function POST(req: Request) {
     // A failure to read is not a failure to report. The posted transcript is
     // still in hand, and answering 500 because the backup was unreachable would
     // lose a meeting we can perfectly well summarise.
+    //
+    // Paged, because this read is capped. `max_rows = 1000` in
+    // supabase/config.toml means an unbounded select returns the first
+    // thousand rows in silence, and ordering by `ts` makes those the earliest
+    // thousand — so a long meeting was summarised from its opening and not its
+    // end. `id` is the tiebreak: rows sharing a timestamp need a total order,
+    // or a page boundary landing inside a tie drops a row or repeats one.
     let stored = "";
     try {
-      const { data: rows } = await supabase
-        .from("live_meeting_transcripts")
-        .select("speaker, text, ts, confidence, overlapped")
-        .eq("meeting_id", body.meetingId)
-        .order("ts", { ascending: true });
-      if (rows?.length) stored = restoreTranscript(rows as unknown as StoredLine[]);
+      const rows = await readAllTranscriptRows((from, to) =>
+        supabase
+          .from("live_meeting_transcripts")
+          .select("speaker, text, ts, confidence, overlapped")
+          .eq("meeting_id", body.meetingId)
+          .order("ts", { ascending: true })
+          .order("id", { ascending: true })
+          .range(from, to),
+      );
+      if (rows.length) stored = restoreTranscript(rows as unknown as StoredLine[]);
     } catch (err) {
       console.warn("[/api/meetings/report] stored transcript unavailable", err);
     }
 
     // Cap transcript to stay within model context / cost budget.
-    const transcript = clampTranscript(chooseTranscript(body.transcript, stored));
+    const transcript = clampTranscript(mergeTranscripts(body.transcript, stored));
 
     // The prompt and schema live in lib/meetings/report-analysis so the
     // regenerate path produces the identical shape — the log reads
