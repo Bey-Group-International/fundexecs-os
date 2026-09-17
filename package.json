@@ -61,8 +61,8 @@
     "predev": "node scripts/copy-mediapipe-assets.mjs",
     "start": "next start",
     "test": "jest",
-    "typecheck": "tsc --noEmit",
-    "test:visual": "jest --config jest.visual.config.js"
+    "test:visual": "jest --config jest.visual.config.js",
+    "typecheck": "tsc --noEmit"
   },
   "version": "0.0.1"
 }
