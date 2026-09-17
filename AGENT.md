@@ -2839,6 +2839,72 @@ Deployed, monitoring               →  live, observability active
              |  interleaved to reproduce at all, which is why neither defect was
              |  noticed by hand. It is a small dent in the MeetingRoom coverage
              |  gap flagged on the last five passes — the hook, not the room.
+
+2026-09-17  |  The transcript that stopped at a thousand lines  |  Asked to check
+             |  for defects with the transcript, then to fix them. Three, and
+             |  the first is the one that quietly decides how much of a long
+             |  meeting this product remembers.
+             |  EVERY TRANSCRIPT READ WAS CAPPED AT 1000 ROWS. supabase/config.
+             |  toml sets `max_rows = 1000`. All three readers of
+             |  `live_meeting_transcripts` — /api/meetings/report, the
+             |  regenerate route, and the report page's clickable cues — asked
+             |  for the whole table with no `.range()`, so PostgREST returned
+             |  the first thousand rows and said nothing about stopping. No
+             |  error, no flag, no short page: a truncated read and a complete
+             |  one are the same shape. All three order by `ts` ascending, so
+             |  the thousand rows they got were the EARLIEST thousand and what a
+             |  meeting lost was its ENDING — the part where it decides things.
+             |  A thirty-minute call does not reach a thousand utterances; a
+             |  two-hour one, or a busy four-person one, does. The truncation
+             |  also skewed the restore: chooseTranscript picks by line count,
+             |  so a stored copy cut off at 1000 could lose to a posted copy
+             |  that held less of the meeting. Fixed by paging, in one place
+             |  (lib/meetings/transcript-read.ts) rather than three, because
+             |  getting it wrong is silent in exactly the same way each time.
+             |  `id` is now a tiebreak on `ts` so a page boundary cannot fall
+             |  inside a tie and drop a row or repeat one.
+             |  LEAVING A MEETING SAVED ONE BATCH. drainTranscript — the loop
+             |  that keeps flushing until nothing is owed — was called from
+             |  endMeeting and nowhere else. leaveMeeting tore the call down and
+             |  navigated, leaving the flush effect's cleanup to fire a single
+             |  keepalive flush of at most MAX_BATCH (50) lines, unchecked. Only
+             |  a host sees End; every guest and every non-host leaves through
+             |  the path that saved fifty lines. A participant whose writes had
+             |  been failing reached Leave holding hundreds, and under the
+             |  ownership rule in transcript-buffer nobody else was saving them.
+             |  leaveMeeting now drains, awaited before it navigates.
+             |  THE RESTORE PICKED A WINNER INSTEAD OF MERGING. chooseTranscript
+             |  took whichever copy had more lines and discarded the other
+             |  whole. Neither is a superset: the rows hold the opening a host
+             |  who reloaded or joined late never had, and the posted copy holds
+             |  the final seconds, spoken after the last flush and after the
+             |  last row was ever written. So in the exact case the restore
+             |  exists for — a host whose tab died — it returned the stored copy
+             |  and threw away the end of the meeting. Replaced by
+             |  mergeTranscripts. Both copies are rendered by the same formatter
+             |  and both run in speaking order, so an identical line is the same
+             |  utterance and shared lines anchor the two records; a run of
+             |  lines OUTSIDE those anchors can be placed with certainty, before
+             |  everything shared or after it, and is recovered. A line missing
+             |  from the fuller copy's MIDDLE is deliberately left missing:
+             |  between two anchors there is nowhere it provably goes, and a
+             |  guess reorders a conversation the model then reads as a
+             |  different meeting.
+             |  Also worth naming: two candidates did NOT survive checking. The
+             |  transcript POST returns `ids` the client deliberately ignores —
+             |  it marks lines saved from the batch it sent, so a reply lost in
+             |  transit still retires them, which is the better rule and not a
+             |  bug. And the SpeechRecognition restart loop calls start() inside
+             |  a setSrStatus updater, which contradicts the rule stated at
+             |  toggleCam but is idempotent here and does no harm.
+             |  Confidence: typecheck/eslint clean, production build passes,
+             |  Jest 6341 → 6357 green (+16 new, +1 suite), baseline re-measured
+             |  from origin/main in a clean worktree. The three merge cases were
+             |  run against the previous pick rule first and fail there. The
+             |  paging fix is covered at the loop, not at the call sites: the
+             |  MeetingRoom/Supabase coverage gap flagged on the last six passes
+             |  still means the three readers themselves are only exercised by
+             |  typecheck and build.
 ```
 
 ---
