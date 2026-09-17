@@ -2780,6 +2780,65 @@ Deployed, monitoring               →  live, observability active
              |  proof is this PR itself: jest.yml correctly will NOT run on it
              |  (its paths filter excludes .github/workflows/**), and ci.yml
              |  should fire once on open and again on ready-for-review.
+
+2026-09-17  |  State that outlived the thing it described  |  Asked to check for
+             |  defects with recording, then to fix all three. Two of them were
+             |  one mistake wearing two faces, and the face it wore was six refs
+             |  where there should have been one object.
+             |  A FAILED START BURIED THE PREVIOUS RECORDING. `recordingIdRef`
+             |  was set on a successful start and never cleared — not on stop,
+             |  not in finalize. So it still held recording #1's id when
+             |  recording #2's row insert failed, and the catch read it and
+             |  called finalize("failed") on #1: a finished, watchable file
+             |  rewritten to a failure, with an ended_at of now and a duration
+             |  counted from a start hours earlier. The trigger is the ordinary
+             |  failure mode of start — a transient insert error — so the cost
+             |  of a recording that would not begin was a recording that had
+             |  already finished.
+             |  A FAST RESTART BLANKED THE PREVIOUS RECORDING'S NUMBERS. finalize
+             |  captured the id up front and then awaited the upload queue,
+             |  which was right — and read the COUNTERS after that await, which
+             |  was not. `start` zeroes them, and the button is live the moment
+             |  onStopped sets "idle", so a host who stops and records again
+             |  while parts are still landing had #1 closed with size 0 and
+             |  chunk_count 0. The panel renders a size only when it is above
+             |  zero, so it simply vanished. Worse quietly: the same reset
+             |  cleared the dropped-part count, so the notice telling the host
+             |  what #1 had lost — added a fortnight ago for exactly this — was
+             |  thrown away before it could be shown.
+             |  Both are gone structurally rather than patched: one RecordingRun
+             |  object per recording, passed to the functions that need it, so
+             |  "is this still the current recording" is an identity check and a
+             |  function that wants a recording is handed the one it means.
+             |  A SWEPT RECORDING HAD NO LENGTH. The sweep recomputes size and
+             |  part count from the chunk rows — deliberately, because it cannot
+             |  trust wall-clock time for a tab that died — and then set no
+             |  duration at all, so every recording it closed was listed with a
+             |  size and no length. The data to compute one arrived when parts
+             |  began carrying offsets; only the reader was missing. It now uses
+             |  buildTimeline + timelineDuration, which is the same figure the
+             |  player's scrubber shows, from the same rows.
+             |  Worth naming: the sweep already knew the lesson the hook had not
+             |  learned. It refuses to trust in-memory state and recounts from
+             |  the rows; finalize trusted refs a restart could zero. When two
+             |  places answer the same question and one is careful, the careful
+             |  one is worth reading before writing the other.
+             |  Also worth naming: three candidates did NOT survive checking —
+             |  a dropped part stalling the player (partAtTime advances past the
+             |  gap), double-pressing Record (the button is disabled while
+             |  starting), and the two playback routes disagreeing on byte
+             |  offsets (same rows, same order). Reporting those as defects
+             |  would have cost more than finding them.
+             |  Confidence: typecheck/eslint clean, production build passes,
+             |  Jest 6192 → 6196 green (+4 new), baseline re-measured from
+             |  origin/main in a clean worktree. All four were run against the
+             |  previous behaviour first and fail there.
+             |  NEW: lib/meetings/use-recording.test.tsx is the first test in
+             |  this repo to drive a React hook, with the composer mocked and a
+             |  Supabase stand-in. Both of its cases need two recordings
+             |  interleaved to reproduce at all, which is why neither defect was
+             |  noticed by hand. It is a small dent in the MeetingRoom coverage
+             |  gap flagged on the last five passes — the hook, not the room.
 ```
 
 ---

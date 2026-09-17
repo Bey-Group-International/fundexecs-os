@@ -24,8 +24,14 @@ import { CHUNK_MS } from "@/lib/meetings/recording-policy";
 /** A stored part, as the database holds it. */
 export interface StoredPart {
   idx: number;
-  path: string;
   size: number;
+  /**
+   * Optional because nothing here reads it. The playback routes select it for
+   * their own use and hand the same rows straight to `buildTimeline`, so it is
+   * described; a caller that only wants a duration — the sweep closing out an
+   * abandoned recording — should not have to fetch a column to be ignored.
+   */
+  path?: string;
   offset_ms?: number | null;
   duration_ms?: number | null;
 }

@@ -21,6 +21,7 @@
 // code that deletes a recording — beyond the reach of a unit test.
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { RECORDING_BUCKET, recordingPrefix } from "@/lib/meetings/recording-policy";
+import { buildTimeline, timelineDuration, type StoredPart } from "@/lib/meetings/recording-timeline";
 import type { Database } from "@/lib/supabase/database.types";
 
 type Client = SupabaseClient<Database>;
@@ -103,15 +104,21 @@ export async function runRecordingSweep(
 
   for (const row of (stale ?? []) as { id: string; started_at: string }[]) {
     try {
-      // Counted from what actually landed, not from wall-clock time since the
-      // host pressed Record: a tab that died at minute four did not record the
-      // five hours that followed.
+      // Everything below is counted from what actually landed, never from
+      // wall-clock time since the host pressed Record: a tab that died at
+      // minute four did not record the five hours that followed.
       const { data: chunks } = await supabase
         .from("live_meeting_recording_chunks")
-        .select("size")
+        .select("idx, size, offset_ms, duration_ms")
         .eq("recording_id", row.id);
-      const parts = (chunks ?? []) as { size: number }[];
+      const parts = (chunks ?? []) as StoredPart[];
       const bytes = parts.reduce((n, c) => n + (c.size ?? 0), 0);
+      // The same figure the player's scrubber shows, from the same rows. This
+      // used to be left unset, so a recording the sweep closed was listed with
+      // a size and no length at all — the panel renders a duration only when
+      // there is one. The timing to compute it has existed since parts began
+      // carrying offsets; only the reader was missing.
+      const seconds = Math.round(timelineDuration(buildTimeline(parts)) / 1000);
 
       await supabase
         .from("live_meeting_recordings")
@@ -121,6 +128,7 @@ export async function runRecordingSweep(
           // recording of most of a meeting behind an error state.
           status: parts.length ? "complete" : "abandoned",
           ended_at: now.toISOString(),
+          duration_seconds: seconds,
           size_bytes: bytes,
           chunk_count: parts.length,
         })
