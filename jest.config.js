@@ -23,6 +23,10 @@ module.exports = {
       displayName: 'node',
       testEnvironment: 'node',
       testMatch: ['**/*.test.ts'],
+      // Visual checks need a browser and several seconds of CSS compilation, so
+      // they are their own project and out of the default run. `npm test` must
+      // stay fast and must not need Chromium installed.
+      testPathIgnorePatterns: [...shared.testPathIgnorePatterns, '\\.visual\\.test\\.ts$'],
     },
     {
       ...shared,
