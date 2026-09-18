@@ -97,20 +97,40 @@ const ROOM = "abc-defg-hi";
 function fakeNetwork(statuses: string[]) {
   const requests: { url: string; method: string; body?: unknown }[] = [];
   const queue = [...statuses];
+
+  /**
+   * A Response faithful enough for the code under test.
+   *
+   * It used to be `{ ok, json }` and nothing else. That was fine while the room
+   * read only those two, and stopped being fine the moment it started reading
+   * `status` and `headers` — which every real Response has, and which a stub
+   * missing them turns into a thrown TypeError the session reads as "the
+   * request failed". A mock that is a worse Response than the browser's is a
+   * test asserting something the product does not do.
+   */
+  const reply = (status: number, body: unknown) => ({
+    ok: status >= 200 && status <= 299,
+    status,
+    headers: new Headers(),
+    json: async () => body,
+  }) as Response;
   global.fetch = jest.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
     const method = init?.method ?? "GET";
     requests.push({ url, method, body: init?.body ? JSON.parse(String(init.body)) : undefined });
 
     if (url.includes("/knock")) {
+      // A withdraw answers, but does not consume a queued verdict: it is the
+      // guest hanging up, not the host deciding.
+      if (method === "DELETE") return reply(200, { ok: true, withdrawn: 1 });
       const status = queue.length > 1 ? queue.shift()! : queue[0] ?? "waiting";
-      return { ok: true, json: async () => ({ status, admissionId: "adm-1" }) } as Response;
+      return reply(200, { status, admissionId: "adm-1" });
     }
     // The public meeting lookup, for a guest with no account.
     if (url.includes("/api/meetings/public/")) {
-      return { ok: true, json: async () => ({ id: "m1", title: "Series B Diligence", status: "active" }) } as Response;
+      return reply(200, { id: "m1", title: "Series B Diligence", status: "active" });
     }
-    return { ok: false, status: 404, json: async () => ({}) } as Response;
+    return reply(404, {});
   }) as unknown as typeof fetch;
   return { requests, knocks: () => requests.filter((r) => r.url.includes("/knock")) };
 }

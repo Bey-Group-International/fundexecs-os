@@ -8,7 +8,8 @@
  * Fake timers throughout, so a two-minute wait costs no wall-clock and the poll
  * cadence can be asserted exactly rather than approximately.
  */
-import { ADMISSION_TIMEOUT_MS, createAdmissionSession } from "./admission-session";
+import { ADMISSION_MAX_WAIT_MS, ADMISSION_TIMEOUT_MS, createAdmissionSession } from "./admission-session";
+import { REFUSAL_BACKOFF_MS } from "./admission-poll";
 
 /** Put the tab in a visibility state and fire the event the browser would. */
 function setVisibility(state: "visible" | "hidden") {
@@ -28,12 +29,18 @@ function harness(opts: { knock?: (string | null)[]; poll?: (string | null)[] } =
     onEnded: jest.fn(),
     onWaiting: jest.fn(),
     onTimedOut: jest.fn(),
+    onBusy: jest.fn(),
+    onGaveUp: jest.fn(),
   };
 
   const session = createAdmissionSession({
     ...cb,
-    knock: async () => { calls.knock += 1; return knockAnswers.length > 1 ? knockAnswers.shift()! : knockAnswers[0] ?? "waiting"; },
-    poll: async () => { calls.poll += 1; return pollAnswers.length > 1 ? pollAnswers.shift()! : pollAnswers[0] ?? "waiting"; },
+    // The queues stay plain strings — a test states a sequence of answers, not a
+    // sequence of HTTP responses — and are wrapped in the shape the session now
+    // takes. `retryAfterMs` is left out: absent is what a server that sent no
+    // Retry-After looks like, and the backoff ladder has to work without one.
+    knock: async () => { calls.knock += 1; return { status: knockAnswers.length > 1 ? knockAnswers.shift()! : knockAnswers[0] ?? "waiting" }; },
+    poll: async () => { calls.poll += 1; return { status: pollAnswers.length > 1 ? pollAnswers.shift()! : pollAnswers[0] ?? "waiting" }; },
   });
 
   return { session, calls, ...cb };
@@ -154,7 +161,7 @@ describe("the knock", () => {
     const session = createAdmissionSession({
       ...cb,
       knock: async () => { throw new Error("offline"); },
-      poll: async () => "waiting",
+      poll: async () => ({ status: "waiting" }),
     });
     await session.start();
     expect(cb.onWaiting).toHaveBeenCalledTimes(1);
@@ -228,7 +235,7 @@ describe("the poll", () => {
     let polls = 0;
     const session = createAdmissionSession({
       ...cb,
-      knock: async () => "waiting",
+      knock: async () => ({ status: "waiting" }),
       poll: async () => { polls += 1; throw new Error("offline"); },
     });
     await session.start();
@@ -285,13 +292,13 @@ describe("the cadence", () => {
     const hang: { release?: () => void } = {};
     const session = createAdmissionSession({
       onAdmitted: jest.fn(), onDenied: jest.fn(), onEnded: jest.fn(),
-      knock: async () => "waiting",
+      knock: async () => ({ status: "waiting" }),
       poll: async () => {
         inFlight += 1;
         maxInFlight = Math.max(maxInFlight, inFlight);
         await new Promise<void>((r) => { hang.release = r; });
         inFlight -= 1;
-        return "waiting";
+        return { status: "waiting" };
       },
     });
     await session.start();
@@ -405,10 +412,10 @@ describe("stopping", () => {
     const cb = { onAdmitted: jest.fn(), onDenied: jest.fn(), onEnded: jest.fn() };
     const session = createAdmissionSession({
       ...cb,
-      knock: async () => "waiting",
+      knock: async () => ({ status: "waiting" }),
       poll: async () => {
         await new Promise<void>((r) => { hang.release = r; });
-        return "admitted";
+        return { status: "admitted" };
       },
     });
     await session.start();
@@ -428,10 +435,10 @@ describe("stopping", () => {
     let knocks = 0;
     const session = createAdmissionSession({
       onAdmitted: jest.fn(), onDenied: jest.fn(), onEnded: jest.fn(),
-      knock: async () => { knocks += 1; return "waiting"; },
+      knock: async () => { knocks += 1; return { status: "waiting" }; },
       poll: async () => {
         await new Promise<void>((r) => { hang.release = r; });
-        return "unknown";
+        return { status: "unknown" };
       },
     });
     await session.start();
@@ -486,8 +493,8 @@ describe("being let in, and not getting in", () => {
   function failing(reason: "throws" | "rejects") {
     const onAdmitFailed = jest.fn();
     const session = createAdmissionSession({
-      knock: async () => "admitted",
-      poll: async () => "admitted",
+      knock: async () => ({ status: "admitted" }),
+      poll: async () => ({ status: "admitted" }),
       onAdmitted: reason === "throws"
         ? () => { throw new Error("getUserMedia exploded"); }
         : async () => { throw new Error("ICE never came back"); },
@@ -522,8 +529,8 @@ describe("being let in, and not getting in", () => {
     const onAdmitFailed = jest.fn();
     const onAdmitted = jest.fn(async () => {});
     const session = createAdmissionSession({
-      knock: async () => "admitted",
-      poll: async () => "admitted",
+      knock: async () => ({ status: "admitted" }),
+      poll: async () => ({ status: "admitted" }),
       onAdmitted, onDenied: jest.fn(), onEnded: jest.fn(), onAdmitFailed,
     });
     await session.start();
@@ -536,8 +543,8 @@ describe("being let in, and not getting in", () => {
   // handed an unhandled rejection instead.
   it("survives a caller that does not want to know", async () => {
     const session = createAdmissionSession({
-      knock: async () => "admitted",
-      poll: async () => "admitted",
+      knock: async () => ({ status: "admitted" }),
+      poll: async () => ({ status: "admitted" }),
       onAdmitted: async () => { throw new Error("nope"); },
       onDenied: jest.fn(), onEnded: jest.fn(),
     });
@@ -551,8 +558,8 @@ describe("being let in, and not getting in", () => {
     const calls = { poll: 0 };
     const onAdmitFailed = jest.fn();
     const session = createAdmissionSession({
-      knock: async () => "admitted",
-      poll: async () => { calls.poll += 1; return "admitted"; },
+      knock: async () => ({ status: "admitted" }),
+      poll: async () => { calls.poll += 1; return { status: "admitted" }; },
       onAdmitted: async () => { throw new Error("no"); },
       onDenied: jest.fn(), onEnded: jest.fn(), onAdmitFailed,
     });
@@ -577,8 +584,8 @@ describe("a decision pushed over Realtime", () => {
     const session = createAdmissionSession({
       ...cb,
       watch: w.watch,
-      knock: async () => { calls.knock += 1; return knockAnswers.length > 1 ? knockAnswers.shift()! : knockAnswers[0] ?? "waiting"; },
-      poll: async () => { calls.poll += 1; return pollAnswers.length > 1 ? pollAnswers.shift()! : pollAnswers[0] ?? "waiting"; },
+      knock: async () => { calls.knock += 1; return { status: knockAnswers.length > 1 ? knockAnswers.shift()! : knockAnswers[0] ?? "waiting" }; },
+      poll: async () => { calls.poll += 1; return { status: pollAnswers.length > 1 ? pollAnswers.shift()! : pollAnswers[0] ?? "waiting" }; },
     });
     return { session, calls, watcher: w.state, ...cb };
   }
@@ -657,8 +664,8 @@ describe("a decision pushed over Realtime", () => {
     const session = createAdmissionSession({
       onAdmitted, onDenied: jest.fn(), onEnded: jest.fn(),
       watch: w.watch,
-      knock: async () => "waiting",
-      poll: async () => { calls.poll += 1; return status; },
+      knock: async () => ({ status: "waiting" }),
+      poll: async () => { calls.poll += 1; return { status }; },
     });
     await session.start();
     await flush();
@@ -726,8 +733,8 @@ describe("the cadence while something is watching", () => {
     const session = createAdmissionSession({
       onAdmitted: jest.fn(), onDenied: jest.fn(), onEnded: jest.fn(),
       watch: w.watch,
-      knock: async () => "waiting",
-      poll: async () => { calls.poll += 1; return "waiting"; },
+      knock: async () => ({ status: "waiting" }),
+      poll: async () => { calls.poll += 1; return { status: "waiting" }; },
     });
     return { session, calls, watcher: w.state };
   }
@@ -783,8 +790,8 @@ describe("the cadence while something is watching", () => {
     const session = createAdmissionSession({
       onAdmitted, onDenied: jest.fn(), onEnded: jest.fn(),
       watch: w.watch,
-      knock: async () => "waiting",
-      poll: async () => { calls.poll += 1; return calls.poll > 1 ? "admitted" : "waiting"; },
+      knock: async () => ({ status: "waiting" }),
+      poll: async () => { calls.poll += 1; return { status: calls.poll > 1 ? "admitted" : "waiting" }; },
     });
     await session.start();
 
@@ -792,5 +799,156 @@ describe("the cadence while something is watching", () => {
     await advance(45_000);
     expect(onAdmitted).toHaveBeenCalledTimes(1);
     session.stop();
+  });
+});
+
+// ── A knock the server refused is not a queue ───────────────────────────────
+//
+// `if (!res.ok) return null` at the call site made a 429 — no row inserted, the
+// host never told — indistinguishable from a knock that simply had no answer
+// yet. The guest was shown "Waiting for the host to let you in" over a queue
+// they were not in, and the poll's re-knock walked into the same refusal
+// forever. Nothing recovered and the host's panel stayed empty.
+
+describe("a knock the server refused", () => {
+  it("says so rather than claiming the host has been told", async () => {
+    const h = harness({ knock: ["busy"] });
+    await h.session.start();
+
+    expect(h.onBusy).toHaveBeenCalledWith(true);
+    // Still waiting — the refusal is temporary and the re-knock is what gets
+    // them in — but the screen is told which kind of waiting this is.
+    expect(h.onWaiting).toHaveBeenCalledTimes(1);
+    expect(h.onAdmitted).not.toHaveBeenCalled();
+    h.session.stop();
+  });
+
+  it("is never mistaken for a verdict", async () => {
+    const h = harness({ knock: ["busy"], poll: ["busy"] });
+    await h.session.start();
+    await advance(60_000);
+
+    expect(h.onAdmitted).not.toHaveBeenCalled();
+    expect(h.onDenied).not.toHaveBeenCalled();
+    expect(h.onEnded).not.toHaveBeenCalled();
+    h.session.stop();
+  });
+
+  // The fix's other half. Asking on the fastest cadence is what keeps a
+  // refused guest refused, so a refusal has to slow the asking down.
+  it("stops asking on the fastest cadence", async () => {
+    const h = harness({ knock: ["busy"], poll: ["busy"] });
+    await h.session.start();
+    const after = h.calls.poll;
+
+    // The first backoff step is longer than the 1.5s cadence, so a window
+    // shorter than it must produce no poll at all.
+    await advance(REFUSAL_BACKOFF_MS[0] - 500);
+    expect(h.calls.poll).toBe(after);
+
+    await advance(1_000);
+    expect(h.calls.poll).toBeGreaterThan(after);
+    h.session.stop();
+  });
+
+  it("goes back to the ordinary waiting copy once an answer gets through", async () => {
+    const h = harness({ knock: ["busy", "waiting"], poll: ["unknown", "waiting"] });
+    await h.session.start();
+    expect(h.onBusy).toHaveBeenLastCalledWith(true);
+
+    // The poll finds no row (nothing was ever inserted), re-knocks, and this
+    // time the knock lands.
+    await advance(30_000);
+    expect(h.onBusy).toHaveBeenLastCalledWith(false);
+    h.session.stop();
+  });
+
+  // Reported on the edge: a guest held off for a minute should not get a
+  // callback every few seconds saying the same thing.
+  it("reports the refusal once, not once per attempt", async () => {
+    const h = harness({ knock: ["busy"], poll: ["busy"] });
+    await h.session.start();
+    await advance(120_000);
+    expect(h.onBusy.mock.calls.filter((c) => c[0] === true)).toHaveLength(1);
+    h.session.stop();
+  });
+
+  it("still takes a real verdict that arrives after a refusal", async () => {
+    const h = harness({ knock: ["busy"], poll: ["busy", "admitted"] });
+    await h.session.start();
+    await advance(60_000);
+    expect(h.onAdmitted).toHaveBeenCalledTimes(1);
+    h.session.stop();
+  });
+});
+
+// ── The wait has an end ─────────────────────────────────────────────────────
+//
+// Three comments in this feature described a ten-minute bound and none of them
+// enforced it: the two-minute timeout is copy only, and scheduleNext
+// rescheduled unconditionally. A waiting tab left open asked an
+// unauthenticated endpoint every ten seconds for as long as it lived.
+
+describe("the end of a wait", () => {
+  it("keeps asking right up to the bound", async () => {
+    const h = harness();
+    await h.session.start();
+    await advance(ADMISSION_MAX_WAIT_MS - 30_000);
+
+    expect(h.onGaveUp).not.toHaveBeenCalled();
+    expect(h.calls.poll).toBeGreaterThan(0);
+    h.session.stop();
+  });
+
+  it("stops asking once it is past", async () => {
+    const h = harness();
+    await h.session.start();
+    await advance(ADMISSION_MAX_WAIT_MS + 5_000);
+    expect(h.onGaveUp).toHaveBeenCalledTimes(1);
+
+    const after = h.calls.poll;
+    await advance(120_000);
+    expect(h.calls.poll).toBe(after);
+  });
+
+  // Nobody decided anything, so this is not a verdict and must not be reported
+  // as one — the screen offers to ask again rather than saying they were
+  // turned away.
+  it("is not a verdict", async () => {
+    const h = harness();
+    await h.session.start();
+    await advance(ADMISSION_MAX_WAIT_MS + 5_000);
+
+    expect(h.onDenied).not.toHaveBeenCalled();
+    expect(h.onEnded).not.toHaveBeenCalled();
+    expect(h.onAdmitted).not.toHaveBeenCalled();
+  });
+
+  it("does not fire for a guest who was admitted first", async () => {
+    const h = harness({ poll: ["waiting", "admitted"] });
+    await h.session.start();
+    await advance(10_000);
+    expect(h.onAdmitted).toHaveBeenCalledTimes(1);
+
+    await advance(ADMISSION_MAX_WAIT_MS + 5_000);
+    expect(h.onGaveUp).not.toHaveBeenCalled();
+  });
+
+  it("does not fire after an ordinary cancel", async () => {
+    const h = harness();
+    await h.session.start();
+    h.session.stop();
+    await advance(ADMISSION_MAX_WAIT_MS + 5_000);
+    expect(h.onGaveUp).not.toHaveBeenCalled();
+  });
+
+  // The copy-only timeout still behaves as it always did, well before the end.
+  it("leaves the two-minute timeout doing its own job", async () => {
+    const h = harness();
+    await h.session.start();
+    await advance(ADMISSION_TIMEOUT_MS + 1_000);
+    expect(h.onTimedOut).toHaveBeenCalledTimes(1);
+    expect(h.onGaveUp).not.toHaveBeenCalled();
+    h.session.stop();
   });
 });

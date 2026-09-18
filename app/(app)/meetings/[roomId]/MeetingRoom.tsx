@@ -147,8 +147,8 @@ import { openCallMedia, openCameraOnly, type OpenedMedia } from "@/lib/meetings/
 import { resolveGuestKey } from "@/lib/meetings/guest-key";
 import { createAdmissionSession, type AdmissionSession } from "@/lib/meetings/admission-session";
 import { ADMISSION_NUDGE, admissionChannelName } from "@/lib/meetings/admission-channel";
-import { pollStatusFromResponse } from "@/lib/meetings/admission-poll";
-import type { AdmissionUiState } from "@/lib/meetings/admission-ui";
+import { admissionStatusFromResponse, retryAfterMs } from "@/lib/meetings/admission-poll";
+import { isAdmissionLive, type AdmissionUiState } from "@/lib/meetings/admission-ui";
 import { applyAdmissionChange, type AdmissionChange } from "@/lib/meetings/waiting-room";
 import {
   GuestThanksScreen,
@@ -1410,6 +1410,12 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
   // and must not be reused, while the admission key identifies the *person* and
   // must be, so the host's decision survives a reload. Lazily initialised — the
   // ref argument is evaluated on every render, and this one touches storage.
+  // The server is refusing knocks, so this guest is in no queue at all — see
+  // admission-ui's "busy". Separate from waitingForAdmit because it is a
+  // different claim about the world, not a different stage of the same one.
+  const [admissionBusy, setAdmissionBusy] = useState(false);
+  // The wait ran out its bound and stopped asking. See ADMISSION_MAX_WAIT_MS.
+  const [waitingGaveUp, setWaitingGaveUp] = useState(false);
   const guestKeyRef = useRef<string | null>(null);
   if (guestKeyRef.current === null) {
     guestKeyRef.current = resolveGuestKey(
@@ -1701,6 +1707,31 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
   }, []);
 
   /**
+   * Take this guest's pending knock off the host's panel.
+   *
+   * Giving up used to be entirely local: the session stopped, the screen went
+   * back to Join, and the row stayed `waiting` forever. There is no TTL on that
+   * table and nothing sweeps it, so the host went on seeing somebody who had
+   * left — in the panel, in the toolbar count, and in the system notification
+   * that fires when that count rises — and admitting them reached nobody.
+   *
+   * Best-effort by construction, and never awaited into anything a person is
+   * watching: failing to withdraw leaves exactly the stale row we had before,
+   * which is not worth holding up a screen the guest is walking away from.
+   * `keepalive` so the unload path survives the document going away.
+   */
+  const withdrawKnock = useCallback((opts: { keepalive?: boolean } = {}) => {
+    const key = guestKeyRef.current;
+    if (!key || !isGuestRef.current) return;
+    try {
+      void fetch(`/api/meetings/public/${roomCode}/knock?key=${encodeURIComponent(key)}`, {
+        method: "DELETE",
+        keepalive: opts.keepalive === true,
+      }).catch(() => { /* the row stays; the host can still deny it */ });
+    } catch { /* same */ }
+  }, [roomCode]);
+
+  /**
    * The meeting is over. Signed-in people get the report; a guest cannot read it
    * (it is inside the signed-in app) so they get the thank-you rather than the
    * login page that a push at the report URL would actually produce.
@@ -1726,13 +1757,17 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
    */
   const cancelAdmission = useCallback(() => {
     clearWaitingTimers();
+    // Tell the host, rather than only ourselves. See withdrawKnock.
+    withdrawKnock();
+    setAdmissionBusy(false);
+    setWaitingGaveUp(false);
     setWaitingForAdmit(false);
     setWaitingTimedOut(false);
     // Also the way back from a failed entry: the copy's "Try again" is this
     // button, and it has to clear the state that put it there.
     setAdmissionFailed(false);
     setJoining(false);
-  }, [clearWaitingTimers]);
+  }, [clearWaitingTimers, withdrawKnock]);
 
   /** Leave the waiting room because the host declined. */
   const showDenied = useCallback(() => {
@@ -1755,6 +1790,12 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
   // looking pressable while the request was in the air.
   const admissionUi: AdmissionUiState =
     admissionFailed ? "failed"
+    // Ordered by how much each claim overrides the one below it. "gave-up" is
+    // terminal, so it outranks the copy-only timeout. "busy" outranks both of
+    // the waiting states because it contradicts them: a refused knock inserted
+    // no row, so there is no queue to be timing out of.
+    : waitingGaveUp ? "gave-up"
+    : admissionBusy && (waitingForAdmit || joining) ? "busy"
     : waitingTimedOut ? "timed-out"
     : waitingForAdmit ? "waiting"
     : joining && !isHost ? "asking"
@@ -3227,24 +3268,41 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     // A second join without an intervening teardown would otherwise leave the
     // first session running and its visibility listener attached, both invisible.
     clearWaitingTimers();
+    // Asking again starts clean: the previous attempt's refusal and its
+    // abandoned wait are both statements about a wait that is now over.
+    setAdmissionBusy(false);
+    setWaitingGaveUp(false);
 
     const session = createAdmissionSession({
+      // Both halves read the response the same way now. The knock used to do
+      // `if (!res.ok) return null` inline, which made a knock the rate limiter
+      // REFUSED — no row inserted, host never told — indistinguishable from one
+      // that simply had no answer yet, and put the guest on "waiting for the
+      // host to let you in" over a queue they were not in.
       knock: async () => {
         const res = await fetch(`/api/meetings/public/${roomCode}/knock`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ guestKey, displayName: name }),
         });
-        if (!res.ok) return null;
-        return ((await res.json()) as { status?: string }).status ?? "waiting";
+        const body = res.ok ? ((await res.json()) as { status?: string }) : null;
+        const status = admissionStatusFromResponse(res.status, body);
+        return {
+          // A 2xx with no status is still a recorded knock; keep the old reading.
+          status: res.ok && status === null ? "waiting" : status,
+          retryAfterMs: retryAfterMs(res.headers.get("Retry-After")),
+        };
       },
       poll: async () => {
         const res = await fetch(`/api/meetings/public/${roomCode}/knock?key=${encodeURIComponent(guestKey)}`, { cache: "no-store" });
         // A 404 is the one non-OK answer that IS an answer: the meeting is not
         // there. Collapsing it into "no news" left a guest whose host cancelled
-        // watching a spinner for the full ten minutes a wait may run.
+        // watching a spinner for as long as the tab stayed open.
         const body = res.ok ? ((await res.json()) as { status?: string }) : null;
-        return pollStatusFromResponse(res.status, body);
+        return {
+          status: admissionStatusFromResponse(res.status, body),
+          retryAfterMs: retryAfterMs(res.headers.get("Retry-After")),
+        };
       },
       // Realtime carries a nudge, never a verdict — see admission-channel.ts.
       // The session answers it by asking the server, so a forged broadcast buys
@@ -3280,10 +3338,23 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
       // the waiting screen goes up, and the local preview with it.
       onWaiting: () => { setWaitingForAdmit(true); setJoining(false); },
       onTimedOut: () => setWaitingTimedOut(true),
+      // The screen stops claiming a queue while the server is refusing us, and
+      // goes back to the ordinary waiting copy the moment one gets through.
+      onBusy: setAdmissionBusy,
+      // The wait ended itself. Nothing is asking any more, so the row is ours
+      // to clean up — the host should not be left holding a name that stopped
+      // waiting ten minutes ago.
+      onGaveUp: () => {
+        withdrawKnock();
+        setWaitingGaveUp(true);
+        setWaitingForAdmit(false);
+        setWaitingTimedOut(false);
+        setJoining(false);
+      },
     });
     admissionSessionRef.current = session;
     await session.start();
-  }, [displayName, roomCode, supabase, router, enterRoom, clearWaitingTimers, showDenied, leaveEndedMeeting]);
+  }, [displayName, roomCode, supabase, router, enterRoom, clearWaitingTimers, showDenied, leaveEndedMeeting, withdrawKnock]);
 
   // ── Host: waiting-room admissions (DB-backed) ─────────────────────────────
   // Load the pending knocks for this meeting and keep them live. Reads go under
@@ -4946,6 +5017,21 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     window.addEventListener("pagehide", onHide);
     return () => window.removeEventListener("pagehide", onHide);
   }, [recordDeparture]);
+
+  // Closing the tab is also by far the most common way of giving up on a WAIT,
+  // and it left the host holding a name that was never coming — `recordDeparture`
+  // above covers people who got in, not people still outside. Only while
+  // actually waiting: a knock that has been decided is not ours to withdraw.
+  useEffect(() => {
+    // Every state where something is still asking on this guest's behalf, which
+    // is wider than `waitingForAdmit`: a guest refused on a RE-knock still has
+    // the row their first knock inserted, and withdrawing when there is nothing
+    // to withdraw costs one request nobody is waiting on.
+    if (!isAdmissionLive(admissionUi)) return;
+    const onHide = () => withdrawKnock({ keepalive: true });
+    window.addEventListener("pagehide", onHide);
+    return () => window.removeEventListener("pagehide", onHide);
+  }, [admissionUi, withdrawKnock]);
 
   const leaveMeeting = useCallback(async () => {
     // The ref, not the state, is the guard: a second click lands before React has

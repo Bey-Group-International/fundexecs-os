@@ -1,5 +1,8 @@
 import { ADMISSION_POLL_SCHEDULE, WATCHED_POLL_SCHEDULE, nextPollDelay, pollCount, shouldPollNow,
-  pollStatusFromResponse,
+  REFUSAL_BACKOFF_MS,
+  admissionStatusFromResponse,
+  refusalDelay,
+  retryAfterMs,
 } from "./admission-poll";
 
 describe("nextPollDelay", () => {
@@ -93,30 +96,91 @@ describe("WATCHED_POLL_SCHEDULE", () => {
 
 describe("what an answer from the status endpoint means", () => {
   it("passes a real verdict through", () => {
-    expect(pollStatusFromResponse(200, { status: "admitted" })).toBe("admitted");
-    expect(pollStatusFromResponse(200, { status: "denied" })).toBe("denied");
-    expect(pollStatusFromResponse(200, { status: "waiting" })).toBe("waiting");
+    expect(admissionStatusFromResponse(200, { status: "admitted" })).toBe("admitted");
+    expect(admissionStatusFromResponse(200, { status: "denied" })).toBe("denied");
+    expect(admissionStatusFromResponse(200, { status: "waiting" })).toBe("waiting");
   });
 
   // The one non-OK response that is an answer rather than an accident. A guest
   // whose host cancelled the meeting used to watch a spinner for ten minutes.
   it("treats a meeting that is not there as ended", () => {
-    expect(pollStatusFromResponse(404, null)).toBe("ended");
+    expect(admissionStatusFromResponse(404, null)).toBe("ended");
   });
 
-  // "Slower", not "never". Treating this as terminal would tell a guest the
-  // meeting is over while it is still going on.
-  it("keeps waiting when the limiter pushes back", () => {
-    expect(pollStatusFromResponse(429, null)).toBeNull();
+  // "Slower", not "never" — so it is not a verdict. But it is not nothing
+  // either: no row was inserted, so the guest is in no queue, and reading it as
+  // "no news" is what let the screen claim they were waiting on the host.
+  it("names a refusal rather than calling it no news", () => {
+    expect(admissionStatusFromResponse(429, null)).toBe("busy");
   });
 
   it("keeps waiting through a bad minute on the server", () => {
-    expect(pollStatusFromResponse(500, null)).toBeNull();
-    expect(pollStatusFromResponse(503, null)).toBeNull();
+    expect(admissionStatusFromResponse(500, null)).toBeNull();
+    expect(admissionStatusFromResponse(503, null)).toBeNull();
   });
 
   it("keeps waiting when the answer has no status in it", () => {
-    expect(pollStatusFromResponse(200, {})).toBeNull();
-    expect(pollStatusFromResponse(200, null)).toBeNull();
+    expect(admissionStatusFromResponse(200, {})).toBeNull();
+    expect(admissionStatusFromResponse(200, null)).toBeNull();
+  });
+});
+
+// ── Backing off when the server says to ─────────────────────────────────────
+//
+// The waiting room used to read a 429 as "no news" and keep asking on the
+// fastest cadence, which is exactly what kept a refused guest refused — while
+// the limiter was sending Retry-After into a header nobody read.
+
+describe("retryAfterMs", () => {
+  it("reads the seconds our limiter sends", () => {
+    expect(retryAfterMs("30")).toBe(30_000);
+    expect(retryAfterMs(" 5 ")).toBe(5_000);
+  });
+
+  it("has no opinion when the header is missing or unusable", () => {
+    expect(retryAfterMs(null)).toBeNull();
+    expect(retryAfterMs(undefined)).toBeNull();
+    expect(retryAfterMs("")).toBeNull();
+    // An HTTP-date is legal in the spec and is not what we send; rather than
+    // half-parse it, fall through to our own ladder.
+    expect(retryAfterMs("Wed, 21 Oct 2026 07:28:00 GMT")).toBeNull();
+    expect(retryAfterMs("-1")).toBeNull();
+  });
+
+  // "The window just turned" is not permission to ask again this instant.
+  it("treats zero as no guidance rather than as go-ahead", () => {
+    expect(retryAfterMs("0")).toBeNull();
+  });
+
+  it("will not be talked into waiting for hours", () => {
+    expect(retryAfterMs("86400")).toBe(5 * 60_000);
+  });
+});
+
+describe("refusalDelay", () => {
+  it("lengthens with each consecutive refusal, then holds", () => {
+    const ladder = [1, 2, 3, 4, 5, 9].map((n) => refusalDelay(n));
+    expect(ladder).toEqual([...REFUSAL_BACKOFF_MS, REFUSAL_BACKOFF_MS[3], REFUSAL_BACKOFF_MS[3]]);
+  });
+
+  // The whole point of the fix: whatever we back off to must be slower than the
+  // 1.5s cadence that was keeping the guest refused.
+  it("is always slower than the fastest poll cadence", () => {
+    for (let n = 1; n <= 6; n += 1) expect(refusalDelay(n)).toBeGreaterThan(1_500);
+  });
+
+  it("defers to the server when it said longer", () => {
+    expect(refusalDelay(1, 45_000)).toBe(45_000);
+  });
+
+  // The ladder is the floor: a server that says "come back in one second" is
+  // still a server that just refused us.
+  it("keeps its own floor when the server said less", () => {
+    expect(refusalDelay(3, 1_000)).toBe(REFUSAL_BACKOFF_MS[2]);
+  });
+
+  it("ignores a missing or nonsensical server answer", () => {
+    expect(refusalDelay(2, null)).toBe(REFUSAL_BACKOFF_MS[1]);
+    expect(refusalDelay(2, 0)).toBe(REFUSAL_BACKOFF_MS[1]);
   });
 });
