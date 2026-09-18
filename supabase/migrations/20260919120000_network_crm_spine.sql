@@ -113,6 +113,7 @@ grant execute on function public.network_contact_visible(uuid) to authenticated;
 -- default to 'org', so this is a no-op for everything already in the table.
 drop policy if exists "org members can manage their network contacts" on public.network_contacts;
 
+drop policy if exists network_contacts_select on public.network_contacts;
 create policy network_contacts_select on public.network_contacts
   for select to authenticated
   using (
@@ -125,10 +126,12 @@ create policy network_contacts_select on public.network_contacts
     )
   );
 
+drop policy if exists network_contacts_insert on public.network_contacts;
 create policy network_contacts_insert on public.network_contacts
   for insert to authenticated
   with check (organization_id in (select public.current_principal_org_ids()));
 
+drop policy if exists network_contacts_update on public.network_contacts;
 create policy network_contacts_update on public.network_contacts
   for update to authenticated
   using (
@@ -143,6 +146,7 @@ create policy network_contacts_update on public.network_contacts
   with check (organization_id in (select public.current_principal_org_ids()));
 
 -- Deleting a relationship is an admin act; everyone else archives.
+drop policy if exists network_contacts_delete on public.network_contacts;
 create policy network_contacts_delete on public.network_contacts
   for delete to authenticated
   using (public.is_org_admin(organization_id));
@@ -191,12 +195,14 @@ create index if not exists network_activities_investor_idx
 create index if not exists network_activities_type_idx
   on public.network_activities (organization_id, activity_type, occurred_at desc);
 
+drop trigger if exists network_activities_set_updated_at on public.network_activities;
 create trigger network_activities_set_updated_at
   before update on public.network_activities
   for each row execute function public.set_updated_at();
 
 alter table public.network_activities enable row level security;
 
+drop policy if exists network_activities_select on public.network_activities;
 create policy network_activities_select on public.network_activities
   for select to authenticated
   using (
@@ -204,6 +210,7 @@ create policy network_activities_select on public.network_activities
     and (contact_id is null or public.network_contact_visible(contact_id))
   );
 
+drop policy if exists network_activities_insert on public.network_activities;
 create policy network_activities_insert on public.network_activities
   for insert to authenticated
   with check (
@@ -212,6 +219,7 @@ create policy network_activities_insert on public.network_activities
   );
 
 -- Only your own hand-written entries, and never a system one.
+drop policy if exists network_activities_update on public.network_activities;
 create policy network_activities_update on public.network_activities
   for update to authenticated
   using (
@@ -221,6 +229,7 @@ create policy network_activities_update on public.network_activities
   )
   with check (organization_id in (select public.current_principal_org_ids()));
 
+drop policy if exists network_activities_delete on public.network_activities;
 create policy network_activities_delete on public.network_activities
   for delete to authenticated
   using (
@@ -286,12 +295,14 @@ create index if not exists network_tasks_contact_idx
   on public.network_tasks (contact_id, status, due_at)
   where contact_id is not null;
 
+drop trigger if exists network_tasks_set_updated_at on public.network_tasks;
 create trigger network_tasks_set_updated_at
   before update on public.network_tasks
   for each row execute function public.set_updated_at();
 
 alter table public.network_tasks enable row level security;
 
+drop policy if exists network_tasks_select on public.network_tasks;
 create policy network_tasks_select on public.network_tasks
   for select to authenticated
   using (
@@ -299,6 +310,7 @@ create policy network_tasks_select on public.network_tasks
     and (contact_id is null or public.network_contact_visible(contact_id))
   );
 
+drop policy if exists network_tasks_insert on public.network_tasks;
 create policy network_tasks_insert on public.network_tasks
   for insert to authenticated
   with check (
@@ -306,11 +318,13 @@ create policy network_tasks_insert on public.network_tasks
     and (contact_id is null or public.network_contact_visible(contact_id))
   );
 
+drop policy if exists network_tasks_update on public.network_tasks;
 create policy network_tasks_update on public.network_tasks
   for update to authenticated
   using (organization_id in (select public.current_principal_org_ids()))
   with check (organization_id in (select public.current_principal_org_ids()));
 
+drop policy if exists network_tasks_delete on public.network_tasks;
 create policy network_tasks_delete on public.network_tasks
   for delete to authenticated
   using (
@@ -338,12 +352,14 @@ create table if not exists public.network_saved_views (
 create index if not exists network_saved_views_org_idx
   on public.network_saved_views (organization_id, is_shared, name);
 
+drop trigger if exists network_saved_views_set_updated_at on public.network_saved_views;
 create trigger network_saved_views_set_updated_at
   before update on public.network_saved_views
   for each row execute function public.set_updated_at();
 
 alter table public.network_saved_views enable row level security;
 
+drop policy if exists network_saved_views_select on public.network_saved_views;
 create policy network_saved_views_select on public.network_saved_views
   for select to authenticated
   using (
@@ -351,6 +367,7 @@ create policy network_saved_views_select on public.network_saved_views
     and (is_shared or created_by = (select auth.uid()))
   );
 
+drop policy if exists network_saved_views_insert on public.network_saved_views;
 create policy network_saved_views_insert on public.network_saved_views
   for insert to authenticated
   with check (
@@ -358,6 +375,7 @@ create policy network_saved_views_insert on public.network_saved_views
     and created_by = (select auth.uid())
   );
 
+drop policy if exists network_saved_views_update on public.network_saved_views;
 create policy network_saved_views_update on public.network_saved_views
   for update to authenticated
   using (
@@ -366,6 +384,7 @@ create policy network_saved_views_update on public.network_saved_views
   )
   with check (organization_id in (select public.current_principal_org_ids()));
 
+drop policy if exists network_saved_views_delete on public.network_saved_views;
 create policy network_saved_views_delete on public.network_saved_views
   for delete to authenticated
   using (
@@ -405,10 +424,12 @@ create index if not exists network_audit_log_actor_idx
 
 alter table public.network_audit_log enable row level security;
 
+drop policy if exists network_audit_log_select on public.network_audit_log;
 create policy network_audit_log_select on public.network_audit_log
   for select to authenticated
   using (public.is_org_admin(organization_id));
 
+drop policy if exists network_audit_log_insert on public.network_audit_log;
 create policy network_audit_log_insert on public.network_audit_log
   for insert to authenticated
   with check (
@@ -424,6 +445,17 @@ create policy network_audit_log_insert on public.network_audit_log
 --
 -- SECURITY INVOKER (the default) is load-bearing: RLS on network_contacts —
 -- including the visibility rule above — applies to the caller as usual.
+--
+-- A blank or whitespace-only query_text is NOT an error and does not match
+-- nothing: it drops the text predicate so the structured filters below stand on
+-- their own ("every contact in diligence", "everything Bob owns"). The result
+-- is still bounded by match_limit and by the caller's own RLS, so this returns
+-- no more than a plain select on the table would. The API layer short-circuits
+-- an empty search box before it gets here; this is for filter-only callers.
+--
+-- extensions.similarity() needs USAGE on the extensions schema, which Supabase
+-- grants to authenticated by default — the same thing 0024_brain_kb.sql and
+-- 20260706120000_brain_kb_hybrid_search.sql already rely on.
 
 create or replace function public.search_network_contacts(
   target_org uuid,
@@ -515,3 +547,163 @@ grant execute on function public.search_network_contacts(uuid, text, int, text, 
 update public.network_contacts
    set last_activity_at = coalesce(strength_updated_at, updated_at, created_at)
  where last_activity_at is null;
+
+-- ── 9. merge_network_contacts() ──────────────────────────────────────────────
+--
+-- Folding a duplicate into the record you keep, as one statement.
+--
+-- This cannot be done from the client, for two reasons.
+--
+-- First, RLS. network_activities_update deliberately restricts a member to
+-- editing their OWN, non-system entries — that restriction is what makes the
+-- timeline evidence. Reparenting a duplicate's history means moving entries
+-- other people wrote and entries the engine wrote, which that policy correctly
+-- forbids. Done over PostgREST the update would match zero rows, report no
+-- error, and the caller would then tombstone the loser: its history stranded on
+-- a hidden record, which is the exact outcome keeping the row is meant to
+-- prevent.
+--
+-- Second, atomicity. PostgREST gives no transaction, so a client-side merge is
+-- four independent writes that can stop halfway.
+--
+-- So the merge runs here, SECURITY DEFINER, with authorization checked
+-- explicitly (membership, then visibility of BOTH records through the same
+-- helper the policies use) because the definer context has bypassed RLS.
+-- field_patch carries the already-decided field values from planMerge; this
+-- function does not re-decide them, it applies them.
+
+create or replace function public.merge_network_contacts(
+  target_org uuid,
+  keep_id uuid,
+  merge_id uuid,
+  field_patch jsonb default '{}'::jsonb
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  caller            uuid := (select auth.uid());
+  moved_activities  integer := 0;
+  moved_tasks       integer := 0;
+  moved_drafts      integer := 0;
+  loser_name        text;
+begin
+  if keep_id = merge_id then
+    raise exception 'A record cannot be merged into itself' using errcode = '22023';
+  end if;
+
+  -- SECURITY DEFINER has bypassed RLS, so every check the policies would have
+  -- made has to be made here instead.
+  if caller is null or not exists (
+    select 1 from public.organization_members
+     where principal_id = caller and organization_id = target_org
+  ) then
+    raise exception 'Not a member of that organization' using errcode = '42501';
+  end if;
+
+  -- Visible to THIS caller, not merely present: a private record must not be
+  -- reachable by merging it into one the caller can see.
+  if not public.network_contact_visible(keep_id)
+     or not public.network_contact_visible(merge_id) then
+    raise exception 'Contact not found' using errcode = 'P0002';
+  end if;
+
+  if not exists (
+    select 1 from public.network_contacts
+     where id = keep_id and organization_id = target_org and merged_into_id is null
+  ) then
+    raise exception 'Contact not found' using errcode = 'P0002';
+  end if;
+
+  select full_name into loser_name
+    from public.network_contacts
+   where id = merge_id and organization_id = target_org and merged_into_id is null;
+
+  if not found then
+    raise exception 'Contact not found' using errcode = 'P0002';
+  end if;
+
+  -- History first, then the tombstone: if anything below raises, the whole
+  -- function rolls back and both records are left intact and visible.
+  update public.network_activities set contact_id = keep_id
+   where organization_id = target_org and contact_id = merge_id;
+  get diagnostics moved_activities = row_count;
+
+  update public.network_tasks set contact_id = keep_id
+   where organization_id = target_org and contact_id = merge_id;
+  get diagnostics moved_tasks = row_count;
+
+  update public.outreach_drafts set contact_id = keep_id
+   where organization_id = target_org and contact_id = merge_id;
+  get diagnostics moved_drafts = row_count;
+
+  -- Suppression entries follow the person, not the row: a do-not-contact
+  -- recorded against the duplicate must keep applying after the merge.
+  update public.do_not_contact set contact_id = keep_id
+   where organization_id = target_org and contact_id = merge_id;
+
+  update public.unsubscribe_events set contact_id = keep_id
+   where organization_id = target_org and contact_id = merge_id;
+
+  -- Apply the decided field values. Columns are enumerated rather than built
+  -- dynamically: field_patch is caller-supplied, and no part of it should ever
+  -- be able to name a column of its own choosing.
+  update public.network_contacts c set
+    title                = coalesce(field_patch->>'title', c.title),
+    company              = coalesce(field_patch->>'company', c.company),
+    company_domain       = coalesce(field_patch->>'company_domain', c.company_domain),
+    email                = coalesce(field_patch->>'email', c.email),
+    phone                = coalesce(field_patch->>'phone', c.phone),
+    linkedin_url         = coalesce(field_patch->>'linkedin_url', c.linkedin_url),
+    avatar_url           = coalesce(field_patch->>'avatar_url', c.avatar_url),
+    location             = coalesce(field_patch->>'location', c.location),
+    relationship_type    = coalesce(field_patch->>'relationship_type', c.relationship_type),
+    relationship_owner   = coalesce((field_patch->>'relationship_owner')::uuid, c.relationship_owner),
+    connected_on         = coalesce((field_patch->>'connected_on')::date, c.connected_on),
+    next_step_at         = coalesce((field_patch->>'next_step_at')::timestamptz, c.next_step_at),
+    consent_basis        = coalesce(field_patch->>'consent_basis', c.consent_basis),
+    consent_at           = coalesce((field_patch->>'consent_at')::timestamptz, c.consent_at),
+    notes                = coalesce(field_patch->>'notes', c.notes),
+    visibility           = coalesce(field_patch->>'visibility', c.visibility),
+    communication_status = coalesce(field_patch->>'communication_status', c.communication_status),
+    strength_score       = coalesce((field_patch->>'strength_score')::integer, c.strength_score),
+    strength_label       = coalesce(field_patch->>'strength_label', c.strength_label),
+    relevance_score      = coalesce((field_patch->>'relevance_score')::integer, c.relevance_score),
+    confidence           = coalesce((field_patch->>'confidence')::integer, c.confidence),
+    verified             = coalesce((field_patch->>'verified')::boolean, c.verified),
+    last_activity_at     = coalesce((field_patch->>'last_activity_at')::timestamptz, c.last_activity_at),
+    tags = case
+             when field_patch ? 'tags'
+               then array(select jsonb_array_elements_text(field_patch->'tags'))
+             else c.tags
+           end,
+    compliance_flags = case
+             when field_patch ? 'compliance_flags'
+               then array(select jsonb_array_elements_text(field_patch->'compliance_flags'))
+             else c.compliance_flags
+           end,
+    updated_at = now()
+  where c.id = keep_id and c.organization_id = target_org;
+
+  -- Tombstone last. The row is KEPT so its remaining foreign keys stay valid
+  -- and a re-import recognises the duplicate instead of recreating it.
+  update public.network_contacts
+     set merged_into_id = keep_id,
+         archived_at    = coalesce(archived_at, now()),
+         updated_at     = now()
+   where id = merge_id and organization_id = target_org;
+
+  return jsonb_build_object(
+    'keptId', keep_id,
+    'mergedId', merge_id,
+    'mergedLabel', loser_name,
+    'movedActivities', moved_activities,
+    'movedTasks', moved_tasks,
+    'movedDrafts', moved_drafts
+  );
+end;
+$$;
+
+grant execute on function public.merge_network_contacts(uuid, uuid, uuid, jsonb) to authenticated;
