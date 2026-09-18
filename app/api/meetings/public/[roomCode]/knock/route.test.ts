@@ -5,6 +5,20 @@
 
 const from = jest.fn();
 const getUser = jest.fn(async () => ({ data: { user: null as { id: string } | null } }));
+
+/**
+ * `after` runs its callback here and now.
+ *
+ * The real one needs a request scope this unit test has no way to build. What
+ * matters to these tests is that the work is registered and runs at all —
+ * which is the whole reason it is `after` and not a bare `void`: in a
+ * serverless handler the runtime may freeze anything still pending the moment
+ * the response goes out.
+ */
+jest.mock("next/server", () => {
+  const actual = jest.requireActual("next/server");
+  return { ...actual, after: (fn: () => unknown) => { void fn(); } };
+});
 jest.mock("@/lib/supabase/server", () => ({
   hasSupabaseServiceEnv: () => true,
   createServiceClient: () => ({ from: (...a: unknown[]) => from(...a) }),

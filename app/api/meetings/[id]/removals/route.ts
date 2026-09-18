@@ -19,7 +19,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireOrgContext } from "@/lib/auth";
 import { createServerClient, createServiceClient, hasSupabaseServiceEnv } from "@/lib/supabase/server";
 import { nudgeGuests, nudgeRoom } from "@/lib/meetings/admission-broadcast";
-import { parseSubject, subjectColumns } from "@/lib/meetings/removal";
+import { subjectColumns, subjectFor, type RemovalSubject } from "@/lib/meetings/removal";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -29,6 +29,38 @@ const MAX_NAME = 80;
 
 type Params = Promise<{ id: string }>;
 type SupabaseLike = { from: (table: string) => any };
+
+/**
+ * Whose tile this is, according to the server.
+ *
+ * The host's screen knows a participant only as a signalling id — a fresh uuid
+ * per page load — so something has to turn that into a durable identity. The
+ * first version of this route had each peer ANNOUNCE its own subject over the
+ * signalling channel and took the host's word for it, which was wrong: that
+ * channel is publishable by anyone holding the room code, so a participant
+ * could announce somebody ELSE'S subject, watch the host remove the tile in
+ * front of them, and have the service role ban the victim instead.
+ *
+ * The knock is where the server already learns who somebody is, and it records
+ * the signalling id they are about to join under. So the answer comes from a
+ * row the server wrote, and a client that lies can only make its own tile
+ * unresolvable — which costs it the call, because the kick still lands.
+ */
+async function subjectOfTile(
+  svc: SupabaseLike,
+  meetingId: string,
+  signalId: string,
+): Promise<{ subject: RemovalSubject | null; displayName: string }> {
+  const { data } = await (svc as any)
+    .from("live_meeting_admissions")
+    .select("user_id, guest_key, display_name")
+    .eq("meeting_id", meetingId)
+    .eq("signal_id", signalId)
+    .maybeSingle();
+  const row = data as { user_id: string | null; guest_key: string | null; display_name: string } | null;
+  if (!row) return { subject: null, displayName: "" };
+  return { subject: subjectFor(row.user_id, row.guest_key), displayName: row.display_name ?? "" };
+}
 
 /**
  * Remove one person from this meeting, durably.
@@ -46,10 +78,10 @@ export async function POST(req: NextRequest, { params }: { params: Params }) {
   if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: auth.status });
   const { id } = await params;
 
-  const body = (await req.json().catch(() => ({}))) as { subject?: unknown; displayName?: unknown };
-  const subject = parseSubject(body.subject);
-  if (!subject) {
-    return NextResponse.json({ error: "subject must name a member or a guest" }, { status: 400 });
+  const body = (await req.json().catch(() => ({}))) as { signalId?: unknown };
+  const signalId = typeof body.signalId === "string" ? body.signalId.trim() : "";
+  if (!signalId) {
+    return NextResponse.json({ error: "signalId required" }, { status: 400 });
   }
 
   const rls = await createServerClient();
@@ -66,16 +98,25 @@ export async function POST(req: NextRequest, { params }: { params: Params }) {
   if (meeting.host_id !== auth.ctx.userId) {
     return NextResponse.json({ error: "Only the host can remove someone" }, { status: 403 });
   }
+  const write: SupabaseLike = hasSupabaseServiceEnv()
+    ? (createServiceClient() as SupabaseLike)
+    : (rls as SupabaseLike);
+
+  const { subject, displayName } = await subjectOfTile(write, meeting.id, signalId);
+  if (!subject) {
+    // No knock recorded under that signalling id. The kick has already gone out
+    // over the channel, so the person is out of the call; what cannot be done
+    // is keep them out, and saying so is better than writing a removal against
+    // a guess.
+    return NextResponse.json({ error: "That participant cannot be identified" }, { status: 404 });
+  }
   // A host removing themselves would lock the meeting's owner out of their own
   // room, and the door they would then be refused at is the one they control.
   if (subject.kind === "member" && subject.userId === auth.ctx.userId) {
     return NextResponse.json({ error: "The host cannot remove themselves" }, { status: 400 });
   }
 
-  const name = (typeof body.displayName === "string" ? body.displayName : "").trim().slice(0, MAX_NAME);
-  const write: SupabaseLike = hasSupabaseServiceEnv()
-    ? (createServiceClient() as SupabaseLike)
-    : (rls as SupabaseLike);
+  const name = displayName.trim().slice(0, MAX_NAME);
 
   const columns = subjectColumns(subject);
   const { error } = await (write as any).from("live_meeting_removals").upsert(
@@ -148,10 +189,10 @@ export async function DELETE(req: NextRequest, { params }: { params: Params }) {
   if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: auth.status });
   const { id } = await params;
 
-  const body = (await req.json().catch(() => ({}))) as { subject?: unknown };
-  const subject = parseSubject(body.subject);
-  if (!subject) {
-    return NextResponse.json({ error: "subject must name a member or a guest" }, { status: 400 });
+  const body = (await req.json().catch(() => ({}))) as { signalId?: unknown };
+  const signalId = typeof body.signalId === "string" ? body.signalId.trim() : "";
+  if (!signalId) {
+    return NextResponse.json({ error: "signalId required" }, { status: 400 });
   }
 
   const rls = await createServerClient();
@@ -171,14 +212,50 @@ export async function DELETE(req: NextRequest, { params }: { params: Params }) {
     ? (createServiceClient() as SupabaseLike)
     : (rls as SupabaseLike);
 
+  // Resolved the same way the removal was written, from the row the knock
+  // wrote — so undoing a removal cannot be aimed at somebody else either.
+  const { subject } = await subjectOfTile(write, meeting.id, signalId);
+  if (!subject) {
+    return NextResponse.json({ error: "That participant cannot be identified" }, { status: 404 });
+  }
+
+  const match = subject.kind === "member" ? { user_id: subject.userId } : { guest_key: subject.guestKey };
+
   const { error } = await (write as any)
     .from("live_meeting_removals")
     .delete()
     .eq("meeting_id", meeting.id)
-    .match(subject.kind === "member" ? { user_id: subject.userId } : { guest_key: subject.guestKey });
+    .match(match);
 
   if (error) {
     console.error("[/api/meetings/[id]/removals] could not undo removal", error.message);
+    return NextResponse.json({ error: "Could not let them back in" }, { status: 500 });
+  }
+
+  // And put the door back on its hinges.
+  //
+  // Lifting the bar is not enough on its own, and the first version of this
+  // stopped there — which made "Allow back" do nothing at all. POST denies the
+  // admission as well as recording the removal, and the knock is idempotent:
+  // it returns an existing decision rather than reconsidering it. So a person
+  // whose removal had been lifted knocked, was handed back the `denied` row,
+  // and stayed out forever.
+  //
+  // Reset to `waiting` rather than `admitted`: this is the host lifting a ban,
+  // not readmitting somebody to a meeting they may be nowhere near. They knock,
+  // and the host decides at the door, where they can see who it is.
+  const { error: admissionError } = await (write as any)
+    .from("live_meeting_admissions")
+    .update({ status: "waiting", decided_at: null, decided_by: null })
+    .eq("meeting_id", meeting.id)
+    .eq("status", "denied")
+    .match(match);
+
+  if (admissionError) {
+    // The bar is lifted but the door is still shut, which reads to the host as
+    // "Allow back did nothing". Reported, because the next press will fix it:
+    // the removal row is already gone, so this runs again on its own.
+    console.error("[/api/meetings/[id]/removals] removal lifted but admission still denied", admissionError.message);
     return NextResponse.json({ error: "Could not let them back in" }, { status: 500 });
   }
 

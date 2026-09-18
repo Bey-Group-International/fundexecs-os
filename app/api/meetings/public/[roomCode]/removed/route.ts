@@ -4,15 +4,20 @@
 // A removal reaches the room as a nudge — "the removals for this room changed"
 // — and deliberately carries no names, because anyone holding the room code can
 // publish on a broadcast channel and a nudge that named its target would be a
-// way to eject anybody from any meeting whose code had been forwarded once. See
+// way to eject anybody from any meeting whose link had been forwarded once. See
 // removal-channel.ts.
 //
-// So each client answers the nudge here, naming the peers IT can see. Which is
-// why this endpoint takes subjects and returns a subset of them, rather than
-// returning the meeting's removals: a caller learns only about people it was
-// already in a call with, and cannot enumerate a meeting's guest keys — a guest
-// key being enough to read that guest's admission status from the poll endpoint
-// next door.
+// So each client answers the nudge here, naming the SIGNALLING IDS it can see.
+// Those are the only identifiers a participant actually has for the others, and
+// they are already public within the room — everyone sees everyone's — so
+// naming them discloses nothing. The server does the resolving, from the row
+// the knock wrote.
+//
+// That is the second reason this shape and not the obvious one. An earlier
+// version took durable subjects that each peer had announced over the
+// signalling channel, which meant a client could ask about — and, through the
+// removal route, act on — an identity it had simply claimed. Signalling ids
+// cannot be repurposed that way: the server looks up whose they are.
 //
 // Unauthenticated, like the knock endpoints beside it, because invite-link
 // guests are participants too and they have to drop a removed peer just as the
@@ -20,7 +25,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerClient, createServiceClient, hasSupabaseServiceEnv } from "@/lib/supabase/server";
 import { checkRateLimit, clientIp, rateLimitHeaders } from "@/lib/rate-limit";
-import { parseSubject, removedAmong, subjectKey, type RemovalSubject } from "@/lib/meetings/removal";
+import { isRemoved, subjectFor } from "@/lib/meetings/removal";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -36,13 +41,12 @@ const CHECK_LIMIT = 120;
 const CHECK_WINDOW_MS = 60_000;
 
 /**
- * Most peers one call can ask about at once.
+ * Most peers one call may ask about at once.
  *
  * A meeting is a handful of people; this is a bound on a request body, not a
- * product limit. It is also what stops the endpoint being turned into a bulk
- * oracle one request at a time.
+ * product limit.
  */
-const MAX_SUBJECTS = 64;
+const MAX_IDS = 64;
 
 type SupabaseLike = { from: (table: string) => any };
 
@@ -63,14 +67,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ roo
   const code = roomCode?.trim();
   if (!code) return NextResponse.json({ error: "Missing room code" }, { status: 400 });
 
-  const body = (await req.json().catch(() => ({}))) as { subjects?: unknown };
-  const raw = Array.isArray(body.subjects) ? body.subjects.slice(0, MAX_SUBJECTS) : [];
-  // Parsed one at a time and the unreadable ones dropped, rather than refusing
-  // the request: one peer on an older build that announces nothing must not
-  // stop a client learning about the others.
-  const wanted = raw
-    .map(parseSubject)
-    .filter((s): s is RemovalSubject => s !== null);
+  const body = (await req.json().catch(() => ({}))) as { signalIds?: unknown };
+  const wanted = (Array.isArray(body.signalIds) ? body.signalIds : [])
+    .filter((id): id is string => typeof id === "string" && id.trim().length > 0)
+    .map((id) => id.trim())
+    .slice(0, MAX_IDS);
   if (wanted.length === 0) return NextResponse.json({ removed: [] });
 
   const supabase: SupabaseLike = hasSupabaseServiceEnv()
@@ -92,10 +93,40 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ roo
   // which room codes are real.
   if (!data) return NextResponse.json({ removed: [] });
 
-  const rows = ((data as { live_meeting_removals?: unknown }).live_meeting_removals ?? []) as Array<{
+  const meeting = data as { id: string; live_meeting_removals?: unknown };
+  const removals = (meeting.live_meeting_removals ?? []) as Array<{
+    user_id: string | null;
+    guest_key: string | null;
+  }>;
+  // Nobody has been removed, so there is nothing to resolve anyone against.
+  if (removals.length === 0) return NextResponse.json({ removed: [] });
+
+  // Only the tiles that were asked about. `in` on an indexed (meeting_id,
+  // signal_id) is one lookup, and it cannot return a row for anybody the
+  // caller did not name.
+  const { data: rows } = await (supabase as any)
+    .from("live_meeting_admissions")
+    .select("signal_id, user_id, guest_key")
+    .eq("meeting_id", meeting.id)
+    .in("signal_id", wanted);
+
+  const admissions = (rows ?? []) as Array<{
+    signal_id: string | null;
     user_id: string | null;
     guest_key: string | null;
   }>;
 
-  return NextResponse.json({ removed: removedAmong(rows, wanted).map(subjectKey) });
+  // Both identifiers, independently, for the same reason the knock checks both:
+  // subjectFor prefers the account, so a guest removed by key who has since
+  // signed in would be looked up under an account nobody removed.
+  const removed = admissions
+    .filter(
+      (row) =>
+        isRemoved(removals, subjectFor(row.user_id, null)) ||
+        isRemoved(removals, subjectFor(null, row.guest_key)),
+    )
+    .map((row) => row.signal_id)
+    .filter((id): id is string => typeof id === "string");
+
+  return NextResponse.json({ removed });
 }
