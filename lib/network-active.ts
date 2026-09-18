@@ -1,8 +1,10 @@
 // lib/network-active.ts
 // The Active Network layer — the institutional view of who is actually in the
 // operator's orbit right now, assembled from FIRST-PARTY Source-hub data rather
-// than an imported address book. No new tables: everything is composed at query
-// time from the relationship engine that already exists.
+// than an imported address book. The roster is still COMPOSED at query time
+// from the relationship engine; what 20260919120000 added is the CRM spine the
+// composed view had nowhere to write to — stage, owner, visibility, and a
+// logged timeline, all of which flow through here alongside the composed rows.
 //
 //   • Roster  — real people/firms ranked by warmth. Investors come through
 //     buildCapitalMap (temperature + thesis-fit + intro path + next action);
@@ -22,8 +24,13 @@ import type { Database } from "@/lib/supabase/database.types";
 import { buildCapitalMap, type Temperature } from "@/lib/capital-map";
 import { getLPRelationshipSummaries } from "@/lib/lp-relationships";
 import { listSignals, SIGNAL_LABELS } from "@/lib/sourcing-signals";
+// The stage vocabulary lives in its own module so client components can import
+// it without pulling this file's server-only dependencies into their bundle.
+import { CONTACT_STAGES, isContactStage, type ContactStage } from "@/lib/network-stages";
 
 export type { Temperature };
+export { CONTACT_STAGES, isContactStage };
+export type { ContactStage };
 
 // ── People ───────────────────────────────────────────────────────────────────
 
@@ -52,7 +59,22 @@ export interface ActiveNetworkPerson {
   introPath: string[] | null;
   thesisFitScore: number | null;
   email: string | null;
+  // ── CRM state (20260919120000). Contacts carry all of it; investors,
+  // partners, and providers carry what their own tables know.
+  /** Capital-formation stage — distinct from temperature, which is warmth. */
+  stage: ContactStage | null;
+  /** Principal who owns the relationship, when one is assigned. */
+  ownerId: string | null;
+  ownerName: string | null;
+  /** 'org' (pooled) or 'private' (owner, creator, and admins only). */
+  visibility: "org" | "private";
+  /** Most recent logged timeline entry — the "gone quiet" signal. */
+  lastActivityAt: string | null;
+  /** Count of open follow-ups against this person. */
+  openTasks: number;
+  tags: string[];
 }
+
 
 export interface NetworkPulse {
   /** Total people across every source. */
@@ -75,7 +97,61 @@ export type ActivityType =
   | "meeting"
   | "outreach"
   | "prospect"
-  | "contact";
+  | "contact"
+  | "note"
+  | "call"
+  | "email";
+
+/** A hand-logged timeline row, with the contact name joined in. */
+interface LoggedActivityRow {
+  id: string;
+  contact_id: string | null;
+  investor_id: string | null;
+  activity_type: string;
+  subject: string | null;
+  body: string | null;
+  occurred_at: string;
+  network_contacts: { full_name: string | null } | { full_name: string | null }[] | null;
+}
+
+/** network_activities.activity_type → the feed's own vocabulary. */
+const LOGGED_TYPE: Record<string, ActivityType> = {
+  note: "note",
+  call: "call",
+  email: "email",
+  linkedin: "outreach",
+  meeting: "meeting",
+  intro: "intro",
+  commitment: "commitment",
+  stage_change: "action",
+  owner_change: "action",
+  task: "action",
+  document: "action",
+  import: "contact",
+  merge: "contact",
+};
+
+/** Fallback headline when an entry was logged without a subject line. */
+const LOGGED_VERB: Record<string, string> = {
+  note: "Note logged",
+  call: "Call logged",
+  email: "Email logged",
+  linkedin: "LinkedIn message logged",
+  meeting: "Meeting logged",
+  intro: "Introduction logged",
+  commitment: "Commitment recorded",
+  stage_change: "Stage changed",
+  owner_change: "Owner changed",
+  task: "Follow-up logged",
+  document: "Document shared",
+  import: "Imported",
+  merge: "Records merged",
+};
+
+function truncate(s: string, max: number): string {
+  const clean = s.replace(/\s+/g, " ").trim();
+  return clean.length <= max ? clean : `${clean.slice(0, max - 1).trimEnd()}…`;
+}
 
 export interface NetworkActivityEvent {
   id: string;
@@ -125,6 +201,16 @@ function firstName(full: string): string {
   return full.trim().split(/\s+/)[0] || full;
 }
 
+/** Investors have no `stage` column — their capital-map temperature is the
+ *  stage. Mapping it onto the shared vocabulary lets one roster filter cover
+ *  investors and contacts alike. */
+const TEMPERATURE_TO_STAGE: Record<Temperature, ContactStage> = {
+  committed: "committed",
+  active: "diligence",
+  warm: "engaged",
+  cold: "prospect",
+};
+
 /** Compact USD, institutional style: $1.2B / $850M / $500K. */
 export function formatCompactUsd(n: number): string {
   if (!n) return "$0";
@@ -150,6 +236,12 @@ interface ContactRow {
   connected_on: string | null;
   created_at: string | null;
   updated_at: string | null;
+  stage: string | null;
+  visibility: string | null;
+  relationship_owner: string | null;
+  last_activity_at: string | null;
+  next_step_at: string | null;
+  tags: string[] | null;
 }
 
 interface DirectoryRow {
@@ -164,45 +256,77 @@ interface DirectoryRow {
   updated_at: string | null;
 }
 
+const CONTACT_COLUMNS_LEGACY =
+  "id, full_name, title, company, email, capital_role, strength_score, strength_label, strength_updated_at, connected_on, created_at, updated_at";
+
+const CONTACT_COLUMNS =
+  `${CONTACT_COLUMNS_LEGACY}, stage, visibility, relationship_owner, last_activity_at, next_step_at, tags`;
+
+function mapContact(c: ContactRow): ActiveNetworkPerson {
+  // "Last contact" now prefers a real logged timeline entry and only falls back
+  // to the scoring timestamp, which moves whenever the engine re-scores and so
+  // overstates how recently a human actually spoke to this person.
+  const last = c.last_activity_at ?? c.strength_updated_at ?? c.updated_at ?? null;
+  return {
+    id: c.id,
+    kind: "contact" as const,
+    name: c.full_name ?? "Unknown contact",
+    org: c.company,
+    role: c.title,
+    category: c.capital_role && c.capital_role !== "unknown" ? c.capital_role : null,
+    temperature: strengthToTemperature(c.strength_label),
+    warmth: c.strength_score ?? 0,
+    committedAmount: 0,
+    lastContactAt: last,
+    lastContactDays: last ? Math.floor((Date.now() - Date.parse(last)) / DAY_MS) : null,
+    addedAt: c.connected_on ?? c.created_at ?? null,
+    nextAction: null,
+    nextActionTier: null,
+    introducer: null,
+    introPath: null,
+    thesisFitScore: null,
+    email: c.email,
+    stage: isContactStage(c.stage) ? c.stage : "prospect",
+    ownerId: c.relationship_owner ?? null,
+    ownerName: null,
+    visibility: c.visibility === "private" ? "private" : "org",
+    lastActivityAt: c.last_activity_at ?? null,
+    openTasks: 0,
+    tags: c.tags ?? [],
+  };
+}
+
 async function loadContactPeople(
   client: SupabaseClient,
   orgId: string,
+  limit: number,
 ): Promise<ActiveNetworkPerson[]> {
-  try {
-    const { data } = await client
+  const query = (columns: string, crmColumnsPresent: boolean) => {
+    let q = client
       .from("network_contacts")
-      .select(
-        "id, full_name, title, company, email, capital_role, strength_score, strength_label, strength_updated_at, connected_on, created_at, updated_at",
-      )
+      .select(columns)
       .eq("organization_id", orgId)
-      .is("archived_at", null)
-      .order("strength_score", { ascending: false })
-      .limit(200);
-    return ((data ?? []) as ContactRow[]).map((c) => {
-      const last = c.strength_updated_at ?? c.updated_at ?? null;
-      return {
-        id: c.id,
-        kind: "contact" as const,
-        name: c.full_name ?? "Unknown contact",
-        org: c.company,
-        role: c.title,
-        category: c.capital_role && c.capital_role !== "unknown" ? c.capital_role : null,
-        temperature: strengthToTemperature(c.strength_label),
-        warmth: c.strength_score ?? 0,
-        committedAmount: 0,
-        lastContactAt: last,
-        lastContactDays: last ? Math.floor((Date.now() - Date.parse(last)) / DAY_MS) : null,
-        addedAt: c.connected_on ?? c.created_at ?? null,
-        nextAction: null,
-        nextActionTier: null,
-        introducer: null,
-        introPath: null,
-        thesisFitScore: null,
-        email: c.email,
-      };
-    });
+      .is("archived_at", null);
+    // A merged-away duplicate is kept for its foreign keys and audit trail but
+    // must never appear in the roster.
+    if (crmColumnsPresent) q = q.is("merged_into_id", null);
+    return q.order("strength_score", { ascending: false }).limit(limit);
+  };
+
+  try {
+    const { data, error } = await query(CONTACT_COLUMNS, true);
+    if (error) throw error;
+    return ((data ?? []) as unknown as ContactRow[]).map(mapContact);
   } catch {
-    return [];
+    // The CRM spine migration has not been applied yet. Fall back to the
+    // columns that have always existed rather than emptying the roster —
+    // a missing column must cost the new fields, not the whole network.
+    try {
+      const { data } = await query(CONTACT_COLUMNS_LEGACY, false);
+      return ((data ?? []) as unknown as ContactRow[]).map(mapContact);
+    } catch {
+      return [];
+    }
   }
 }
 
@@ -212,6 +336,7 @@ async function loadDirectoryPeople(
   table: "partners" | "service_providers",
   kind: "partner" | "provider",
   typeCol: string,
+  limit = 100,
 ): Promise<ActiveNetworkPerson[]> {
   try {
     const { data } = await client
@@ -220,7 +345,7 @@ async function loadDirectoryPeople(
       .eq("organization_id", orgId)
       .is("archived_at", null)
       .order("updated_at", { ascending: false })
-      .limit(100);
+      .limit(limit);
     return ((data ?? []) as unknown as Record<string, unknown>[]).map((raw) => {
       const r = raw as unknown as DirectoryRow & Record<string, unknown>;
       const type = (raw[typeCol] as string | null) ?? null;
@@ -250,6 +375,15 @@ async function loadDirectoryPeople(
         introPath: null,
         thesisFitScore: null,
         email: r.contact_email ?? null,
+        // Partners and providers live in their own tables and have no CRM
+        // spine of their own; their stage is implied by their status.
+        stage: status === "active" ? ("engaged" as ContactStage) : ("dormant" as ContactStage),
+        ownerId: null,
+        ownerName: null,
+        visibility: "org" as const,
+        lastActivityAt: last,
+        openTasks: 0,
+        tags: [],
       };
     });
   } catch {
@@ -265,10 +399,23 @@ async function loadDirectoryPeople(
 export async function loadActiveNetwork(
   db: SupabaseClient<Database>,
   orgId: string,
+  options: { contactLimit?: number; directoryLimit?: number } = {},
 ): Promise<{ people: ActiveNetworkPerson[]; pulse: NetworkPulse }> {
   const client = loose(db);
+  const contactLimit = options.contactLimit ?? 500;
+  const directoryLimit = options.directoryLimit ?? 200;
 
-  const entries = await buildCapitalMap(db).catch(() => []);
+  // The capital map and the three directory reads are independent, so they all
+  // go out together. Only the LP relationship summaries have to wait, because
+  // they need the investor ids the capital map returns.
+  const [entries, contactPeople, partnerPeople, providerPeople, owners] = await Promise.all([
+    buildCapitalMap(db).catch(() => [] as Awaited<ReturnType<typeof buildCapitalMap>>),
+    loadContactPeople(client, orgId, contactLimit),
+    loadDirectoryPeople(client, orgId, "partners", "partner", "partner_type", directoryLimit),
+    loadDirectoryPeople(client, orgId, "service_providers", "provider", "provider_type", directoryLimit),
+    loadOwnerNames(client, orgId),
+  ]);
+
   const investorIds = entries.map((e) => e.investor.id);
   const summaries = investorIds.length
     ? await getLPRelationshipSummaries(client, orgId, investorIds).catch(
@@ -276,17 +423,10 @@ export async function loadActiveNetwork(
       )
     : new Map();
 
-  const temperature: Record<Temperature, number> = { cold: 0, warm: 0, active: 0, committed: 0 };
-  let committed = 0;
-  let engaged = 0;
-
   const investorPeople: ActiveNetworkPerson[] = entries.map((e) => {
     const inv = e.investor;
     const rel = summaries.get(inv.id);
     const top = e.nextActions[0] ?? null;
-    temperature[e.temperature] += 1;
-    if (e.temperature === "committed") committed += 1;
-    if (e.temperature !== "cold") engaged += 1;
     const person = inv.contact_name?.trim();
     return {
       id: inv.id,
@@ -307,27 +447,71 @@ export async function loadActiveNetwork(
       introPath: e.introPath?.hops ?? null,
       thesisFitScore: e.thesisFit?.score ?? null,
       email: inv.contact_email ?? null,
+      // An investor's stage is already expressed by the capital map's
+      // temperature; mirror it onto the shared stage vocabulary so the roster
+      // can filter investors and contacts with one control.
+      stage: TEMPERATURE_TO_STAGE[e.temperature],
+      ownerId: null,
+      ownerName: null,
+      visibility: "org" as const,
+      lastActivityAt: rel?.lastContactAt ?? null,
+      openTasks: 0,
+      tags: [],
     };
   });
 
-  const [contactPeople, partnerPeople, providerPeople] = await Promise.all([
-    loadContactPeople(client, orgId),
-    loadDirectoryPeople(client, orgId, "partners", "partner", "partner_type"),
-    loadDirectoryPeople(client, orgId, "service_providers", "provider", "provider_type"),
-  ]);
+  const people = [...investorPeople, ...contactPeople, ...partnerPeople, ...providerPeople]
+    .map((p) => (p.ownerId ? { ...p, ownerName: owners.get(p.ownerId) ?? null } : p))
+    .sort((a, b) => b.warmth - a.warmth);
 
-  const people = [...investorPeople, ...contactPeople, ...partnerPeople, ...providerPeople].sort(
-    (a, b) => b.warmth - a.warmth,
-  );
+  return { people, pulse: computePulse(people) };
+}
 
-  const pulse: NetworkPulse = {
-    people: people.length,
-    committed,
-    engaged,
-    temperature,
-  };
+/**
+ * The header instrument panel, counted over the WHOLE roster.
+ *
+ * This used to tally only investors while reporting `people` across every
+ * source, so an org with 300 contacts and 4 investors read "304 in your orbit,
+ * 2 engaged" — the two numbers were measuring different populations.
+ */
+export function computePulse(people: ActiveNetworkPerson[]): NetworkPulse {
+  const temperature: Record<Temperature, number> = { cold: 0, warm: 0, active: 0, committed: 0 };
+  let committed = 0;
+  let engaged = 0;
 
-  return { people, pulse };
+  for (const p of people) {
+    const t = p.temperature ?? "cold";
+    temperature[t] += 1;
+    if (t === "committed") committed += 1;
+    if (t !== "cold") engaged += 1;
+  }
+
+  return { people: people.length, committed, engaged, temperature };
+}
+
+/** Principal id → display name, for rendering relationship owners. */
+async function loadOwnerNames(
+  client: SupabaseClient,
+  orgId: string,
+): Promise<Map<string, string>> {
+  const map = new Map<string, string>();
+  try {
+    const { data } = await client
+      .from("organization_members")
+      .select("principal_id, principals(full_name)")
+      .eq("organization_id", orgId)
+      .limit(200);
+    for (const row of (data ?? []) as unknown as {
+      principal_id: string;
+      principals: { full_name: string | null } | { full_name: string | null }[] | null;
+    }[]) {
+      const p = Array.isArray(row.principals) ? row.principals[0] : row.principals;
+      if (p?.full_name) map.set(row.principal_id, p.full_name);
+    }
+  } catch {
+    /* owner names are cosmetic — an unavailable join must not cost the roster */
+  }
+  return map;
 }
 
 // ── Activity feed ─────────────────────────────────────────────────────────────
@@ -341,14 +525,27 @@ async function tryQuery<T>(fn: () => PromiseLike<{ data: T[] | null }>): Promise
   }
 }
 
-/** Build an id → { firm, person } label map for the org's investors. */
+/**
+ * Build an id → { firm, person } label map for the investors the feed actually
+ * mentions.
+ *
+ * This used to pull every investor in the org (up to 500 rows) before any feed
+ * query had run, on a route the Network page polls on an interval. Now it runs
+ * after the sources return and asks only for the handful of ids they cited.
+ */
 async function investorLabels(
   client: SupabaseClient,
   orgId: string,
+  ids: string[],
 ): Promise<Map<string, { firm: string; person: string | null }>> {
   const map = new Map<string, { firm: string; person: string | null }>();
+  if (ids.length === 0) return map;
   const rows = await tryQuery<{ id: string; name: string; contact_name: string | null }>(() =>
-    client.from("investors").select("id, name, contact_name").eq("organization_id", orgId).limit(500),
+    client
+      .from("investors")
+      .select("id, name, contact_name")
+      .eq("organization_id", orgId)
+      .in("id", ids.slice(0, 200)),
   );
   for (const r of rows) map.set(r.id, { firm: r.name, person: r.contact_name });
   return map;
@@ -365,7 +562,148 @@ export async function loadNetworkActivity(
   limit = 40,
 ): Promise<NetworkActivityEvent[]> {
   const client = loose(db);
-  const labels = await investorLabels(client, orgId);
+
+  // Every source is independent, so they all go out at once. This function
+  // previously awaited nine queries one after another — including a 500-row
+  // investor scan before the first source query was even issued — on a route
+  // the Network page polls. The whole feed is now two round-trip waves: all
+  // sources together, then one label lookup for the ids they cited.
+  const [
+    signals,
+    commitments,
+    touches,
+    intros,
+    actions,
+    meetings,
+    outreach,
+    prospects,
+    contacts,
+    logged,
+  ] = await Promise.all([
+    listSignals(db as unknown as Parameters<typeof listSignals>[0], orgId, { limit: 30 }).catch(
+      () => [] as Awaited<ReturnType<typeof listSignals>>,
+    ),
+    tryQuery<{
+      id: string;
+      investor_id: string;
+      committed_amount: number | null;
+      committed_at: string | null;
+      created_at: string;
+    }>(() =>
+      client
+        .from("commitments")
+        .select("id, investor_id, committed_amount, committed_at, created_at")
+        .eq("organization_id", orgId)
+        .order("created_at", { ascending: false })
+        .limit(15),
+    ),
+    tryQuery<{
+      investor_id: string;
+      last_contact_at: string | null;
+      temperature: Temperature;
+      interaction_count: number | null;
+    }>(() =>
+      client
+        .from("relationship_scores")
+        .select("investor_id, last_contact_at, temperature, interaction_count")
+        .eq("organization_id", orgId)
+        .not("last_contact_at", "is", null)
+        .order("last_contact_at", { ascending: false })
+        .limit(20),
+    ),
+    tryQuery<{
+      id: string;
+      target_name: string;
+      introducer_name: string | null;
+      status: string;
+      sent_at: string | null;
+      created_at: string;
+    }>(() =>
+      client
+        .from("intro_requests")
+        .select("id, target_name, introducer_name, status, sent_at, created_at")
+        .eq("organization_id", orgId)
+        .order("created_at", { ascending: false })
+        .limit(15),
+    ),
+    tryQuery<{
+      id: string;
+      investor_id: string | null;
+      title: string;
+      action_type: string;
+      created_at: string;
+    }>(() =>
+      client
+        .from("next_best_actions")
+        .select("id, investor_id, title, action_type, created_at")
+        .eq("organization_id", orgId)
+        .is("completed_at", null)
+        .is("dismissed_at", null)
+        .order("created_at", { ascending: false })
+        .limit(12),
+    ),
+    tryQuery<{
+      id: string;
+      investor_id: string | null;
+      meeting_title: string;
+      meeting_at: string;
+      created_at: string;
+    }>(() =>
+      client
+        .from("meeting_briefs")
+        .select("id, investor_id, meeting_title, meeting_at, created_at")
+        .eq("organization_id", orgId)
+        .order("created_at", { ascending: false })
+        .limit(12),
+    ),
+    tryQuery<{ id: string; channel: string; status: string; created_at: string }>(() =>
+      client
+        .from("outreach_drafts")
+        .select("id, channel, status, created_at")
+        .eq("organization_id", orgId)
+        .order("created_at", { ascending: false })
+        .limit(10),
+    ),
+    tryQuery<{ id: string; name: string; created_at: string }>(() =>
+      client
+        .from("investors")
+        .select("id, name, created_at")
+        .eq("organization_id", orgId)
+        .is("archived_at", null)
+        .order("created_at", { ascending: false })
+        .limit(8),
+    ),
+    tryQuery<{ id: string; full_name: string | null; created_at: string }>(() =>
+      client
+        .from("network_contacts")
+        .select("id, full_name, created_at")
+        .eq("organization_id", orgId)
+        .is("archived_at", null)
+        .order("created_at", { ascending: false })
+        .limit(8),
+    ),
+    // The CRM timeline: notes, calls, and meetings people logged by hand.
+    tryQuery<LoggedActivityRow>(() =>
+      client
+        .from("network_activities")
+        .select(
+          "id, contact_id, investor_id, activity_type, subject, body, occurred_at, network_contacts(full_name)",
+        )
+        .eq("organization_id", orgId)
+        .order("occurred_at", { ascending: false })
+        .limit(20),
+    ),
+  ]);
+
+  // One label lookup, scoped to the ids the sources above actually referenced.
+  const referenced = new Set<string>();
+  for (const c of commitments) if (c.investor_id) referenced.add(c.investor_id);
+  for (const t of touches) if (t.investor_id) referenced.add(t.investor_id);
+  for (const a of actions) if (a.investor_id) referenced.add(a.investor_id);
+  for (const m of meetings) if (m.investor_id) referenced.add(m.investor_id);
+  for (const l of logged) if (l.investor_id) referenced.add(l.investor_id);
+
+  const labels = await investorLabels(client, orgId, [...referenced]);
   const label = (id: string | null): string | null =>
     id ? labels.get(id)?.person?.trim() || labels.get(id)?.firm || null : null;
   const firm = (id: string | null): string | null => (id ? labels.get(id)?.firm ?? null : null);
@@ -373,42 +711,21 @@ export async function loadNetworkActivity(
   const events: NetworkActivityEvent[] = [];
 
   // 1. Market signals — the richest, most human-readable source.
-  try {
-    const signals = await listSignals(db as unknown as Parameters<typeof listSignals>[0], orgId, {
-      limit: 30,
+  for (const s of signals) {
+    events.push({
+      id: `signal:${s.id}`,
+      type: "signal",
+      title: `${SIGNAL_LABELS[s.signalType] ?? "Signal"} · ${s.subjectName}`,
+      detail: s.summary,
+      actor: s.subjectName,
+      temperature: null,
+      strength: s.strength ?? null,
+      amount: null,
+      at: s.occurredAt ?? s.createdAt,
     });
-    for (const s of signals) {
-      events.push({
-        id: `signal:${s.id}`,
-        type: "signal",
-        title: `${SIGNAL_LABELS[s.signalType] ?? "Signal"} · ${s.subjectName}`,
-        detail: s.summary,
-        actor: s.subjectName,
-        temperature: null,
-        strength: s.strength ?? null,
-        amount: null,
-        at: s.occurredAt ?? s.createdAt,
-      });
-    }
-  } catch {
-    /* no signals surface */
   }
 
   // 2. Capital commitments — the strongest possible relationship event.
-  const commitments = await tryQuery<{
-    id: string;
-    investor_id: string;
-    committed_amount: number | null;
-    committed_at: string | null;
-    created_at: string;
-  }>(() =>
-    client
-      .from("commitments")
-      .select("id, investor_id, committed_amount, committed_at, created_at")
-      .eq("organization_id", orgId)
-      .order("created_at", { ascending: false })
-      .limit(15),
-  );
   for (const c of commitments) {
     events.push({
       id: `commitment:${c.id}`,
@@ -424,20 +741,6 @@ export async function loadNetworkActivity(
   }
 
   // 3. Relationship touches — last-contact events with temperature.
-  const touches = await tryQuery<{
-    investor_id: string;
-    last_contact_at: string | null;
-    temperature: Temperature;
-    interaction_count: number | null;
-  }>(() =>
-    client
-      .from("relationship_scores")
-      .select("investor_id, last_contact_at, temperature, interaction_count")
-      .eq("organization_id", orgId)
-      .not("last_contact_at", "is", null)
-      .order("last_contact_at", { ascending: false })
-      .limit(20),
-  );
   for (const t of touches) {
     if (!t.last_contact_at) continue;
     const who = label(t.investor_id);
@@ -455,21 +758,6 @@ export async function loadNetworkActivity(
   }
 
   // 4. Warm intros.
-  const intros = await tryQuery<{
-    id: string;
-    target_name: string;
-    introducer_name: string | null;
-    status: string;
-    sent_at: string | null;
-    created_at: string;
-  }>(() =>
-    client
-      .from("intro_requests")
-      .select("id, target_name, introducer_name, status, sent_at, created_at")
-      .eq("organization_id", orgId)
-      .order("created_at", { ascending: false })
-      .limit(15),
-  );
   for (const i of intros) {
     const verb = i.status === "sent" ? "sent to" : i.status === "replied" ? "replied —" : "requested to";
     events.push({
@@ -486,22 +774,6 @@ export async function loadNetworkActivity(
   }
 
   // 5. Next-best actions surfaced by the relationship engine.
-  const actions = await tryQuery<{
-    id: string;
-    investor_id: string | null;
-    title: string;
-    action_type: string;
-    created_at: string;
-  }>(() =>
-    client
-      .from("next_best_actions")
-      .select("id, investor_id, title, action_type, created_at")
-      .eq("organization_id", orgId)
-      .is("completed_at", null)
-      .is("dismissed_at", null)
-      .order("created_at", { ascending: false })
-      .limit(12),
-  );
   for (const a of actions) {
     events.push({
       id: `action:${a.id}`,
@@ -517,20 +789,6 @@ export async function loadNetworkActivity(
   }
 
   // 6. Meeting briefs.
-  const meetings = await tryQuery<{
-    id: string;
-    investor_id: string | null;
-    meeting_title: string;
-    meeting_at: string;
-    created_at: string;
-  }>(() =>
-    client
-      .from("meeting_briefs")
-      .select("id, investor_id, meeting_title, meeting_at, created_at")
-      .eq("organization_id", orgId)
-      .order("created_at", { ascending: false })
-      .limit(12),
-  );
   for (const m of meetings) {
     events.push({
       id: `meeting:${m.id}`,
@@ -546,19 +804,6 @@ export async function loadNetworkActivity(
   }
 
   // 7. Outreach drafted.
-  const outreach = await tryQuery<{
-    id: string;
-    channel: string;
-    status: string;
-    created_at: string;
-  }>(() =>
-    client
-      .from("outreach_drafts")
-      .select("id, channel, status, created_at")
-      .eq("organization_id", orgId)
-      .order("created_at", { ascending: false })
-      .limit(10),
-  );
   for (const o of outreach) {
     events.push({
       id: `outreach:${o.id}`,
@@ -574,15 +819,6 @@ export async function loadNetworkActivity(
   }
 
   // 8. Freshly added prospects and contacts.
-  const prospects = await tryQuery<{ id: string; name: string; created_at: string }>(() =>
-    client
-      .from("investors")
-      .select("id, name, created_at")
-      .eq("organization_id", orgId)
-      .is("archived_at", null)
-      .order("created_at", { ascending: false })
-      .limit(8),
-  );
   for (const p of prospects) {
     events.push({
       id: `prospect:${p.id}`,
@@ -597,15 +833,6 @@ export async function loadNetworkActivity(
     });
   }
 
-  const contacts = await tryQuery<{ id: string; full_name: string | null; created_at: string }>(() =>
-    client
-      .from("network_contacts")
-      .select("id, full_name, created_at")
-      .eq("organization_id", orgId)
-      .is("archived_at", null)
-      .order("created_at", { ascending: false })
-      .limit(8),
-  );
   for (const c of contacts) {
     events.push({
       id: `contact:${c.id}`,
@@ -617,6 +844,23 @@ export async function loadNetworkActivity(
       strength: null,
       amount: null,
       at: c.created_at,
+    });
+  }
+
+  // 9. Hand-logged CRM timeline entries.
+  for (const l of logged) {
+    const joined = Array.isArray(l.network_contacts) ? l.network_contacts[0] : l.network_contacts;
+    const who = joined?.full_name ?? label(l.investor_id);
+    events.push({
+      id: `logged:${l.id}`,
+      type: LOGGED_TYPE[l.activity_type] ?? "touch",
+      title: l.subject?.trim() || `${LOGGED_VERB[l.activity_type] ?? "Activity"}${who ? ` · ${who}` : ""}`,
+      detail: l.body ? truncate(l.body, 160) : who,
+      actor: who,
+      temperature: null,
+      strength: null,
+      amount: null,
+      at: l.occurred_at,
     });
   }
 

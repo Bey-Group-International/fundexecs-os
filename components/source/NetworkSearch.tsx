@@ -1,5 +1,11 @@
 "use client";
 
+// Network search. Results come back from Postgres (ranked full text + trigram)
+// with no model in the path, so typing a query returns immediately. "Explain
+// the matches" is a separate, explicit action that re-runs the same search and
+// asks Claude to write a relevance line per result — worth waiting for when the
+// query is a question, wasted on a name lookup.
+
 import { useState, useTransition } from "react";
 import Image from "next/image";
 import type { NetworkSearchResult } from "@/lib/network-search";
@@ -20,15 +26,31 @@ export function NetworkSearch({ onSelectContact }: Props) {
   const [results, setResults] = useState<NetworkSearchResult[]>([]);
   const [isPending, startTransition] = useTransition();
   const [hasSearched, setHasSearched] = useState(false);
+  const [aiRanked, setAiRanked] = useState(false);
+  const [explaining, setExplaining] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  async function runSearch(q: string) {
+  async function runSearch(q: string, useAI = false) {
     if (!q.trim()) return;
     setHasSearched(true);
+    setError(null);
+    if (useAI) setExplaining(true);
     startTransition(async () => {
-      const res = await fetch(`/api/network/search?q=${encodeURIComponent(q)}&limit=20`);
-      if (res.ok) {
-        const data = await res.json();
+      try {
+        const res = await fetch(
+          `/api/network/search?q=${encodeURIComponent(q)}&limit=20${useAI ? "&ai=1" : ""}`,
+        );
+        const data = await res.json().catch(() => null);
+        if (!res.ok) {
+          setError(data?.error ?? "Search failed. Please try again.");
+          return;
+        }
         setResults(data.results ?? []);
+        setAiRanked(Boolean(data.aiRanked));
+      } catch {
+        setError("Search failed. Check your connection and try again.");
+      } finally {
+        setExplaining(false);
       }
     });
   }
@@ -62,9 +84,33 @@ export function NetworkSearch({ onSelectContact }: Props) {
           disabled={isPending || !query.trim()}
           className="rounded-lg bg-accent px-4 py-2.5 text-sm font-medium text-white hover:bg-accent/90 disabled:opacity-40 transition-colors"
         >
-          {isPending ? "Searching…" : "Search"}
+          {isPending && !explaining ? "Searching…" : "Search"}
         </button>
       </div>
+
+      {error && (
+        <p className="rounded-lg border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-xs text-rose-200">
+          {error}
+        </p>
+      )}
+
+      {/* AI ranking, opt-in. The results are already on screen by the time this
+          is worth pressing. */}
+      {hasSearched && results.length > 0 && (
+        <div className="flex items-center gap-3 text-xs">
+          {aiRanked ? (
+            <span className="text-fg-muted">Match reasons written by Claude.</span>
+          ) : (
+            <button
+              onClick={() => runSearch(query, true)}
+              disabled={explaining}
+              className="rounded-full border border-line px-3 py-1 text-fg-muted transition hover:border-fg-muted hover:text-fg disabled:opacity-50"
+            >
+              {explaining ? "Asking Claude…" : "Explain these matches"}
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Example queries */}
       {!hasSearched && (
