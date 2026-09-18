@@ -104,7 +104,10 @@ describe("loadReportForExport attendance", () => {
     const { client, queries } = fakeClient({ meeting: MEETING });
     const loaded = await loadReportForExport(client, "abc-def", { userId: "host-1" });
     expect(loaded?.attended).toBe(true);
-    expect(queries.map((q) => q.table)).toEqual(["live_meetings"]);
+    // The claim is about the participants table specifically, not about the
+    // total set of queries: an attendee's export also reads what the document
+    // carries, and that is not what this test is pinning.
+    expect(queries.map((q) => q.table)).not.toContain("live_meeting_participants");
   });
 
   it("counts a member with an attendance row", async () => {
@@ -123,11 +126,28 @@ describe("loadReportForExport attendance", () => {
     expect(loaded?.attended).toBe(false);
   });
 
+  // What the gate is actually for: the blocks a document carries are read only
+  // once the caller is known to have been in the room. RLS would refuse them
+  // anyway — but a caller who is about to be told the report is not theirs has
+  // no business costing the queries.
+  it("reads the chat for someone who was there", async () => {
+    const { client, queries } = fakeClient({ meeting: MEETING });
+    await loadReportForExport(client, "abc-def", { userId: "host-1" });
+    expect(queries.map((q) => q.table)).toContain("live_meeting_chat");
+  });
+
+  it("does not read the chat for a co-member who was never in the room", async () => {
+    const { client, queries } = fakeClient({ meeting: MEETING, participant: null });
+    await loadReportForExport(client, "abc-def", { userId: "u2" });
+    expect(queries.map((q) => q.table)).not.toContain("live_meeting_chat");
+  });
+
   it("does not count an anonymous caller", async () => {
     const { client, queries } = fakeClient({ meeting: MEETING });
     const loaded = await loadReportForExport(client, "abc-def");
     expect(loaded?.attended).toBe(false);
-    // No user to look up, so no second query to make.
-    expect(queries).toHaveLength(1);
+    // No user to look up, and nothing an anonymous caller may read: neither the
+    // participant lookup nor the attendee-only blocks are fetched.
+    expect(queries.map((q) => q.table)).toEqual(["live_meetings"]);
   });
 });

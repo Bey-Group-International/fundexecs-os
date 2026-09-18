@@ -126,8 +126,40 @@ export async function loadReportForExport(
     actionItems: report?.action_items ?? null,
     analysis: (report?.analysis as Record<string, unknown> | null) ?? null,
     fullTranscript: (report?.full_transcript as string | null) ?? null,
-    recording: await loadRecordingForExport(supabase, meeting.id as string, options.origin),
+    // Both are gated on attendance. RLS would refuse them anyway, but a caller
+    // who is about to be told this report is not theirs has no business
+    // costing two more queries — and reading what somebody may not have is a
+    // habit worth not forming.
+    recording: attended ? await loadRecordingForExport(supabase, meeting.id as string, options.origin) : null,
+    chat: attended ? await loadChatForExport(supabase, meeting.id as string) : null,
   };
+}
+
+/**
+ * The meeting's chat, for the document to carry.
+ *
+ * Read through the caller's own client, so somebody who may not see the chat
+ * does not get it in their export. Never throws: a document is complete
+ * without the block, and an export must not fail because a chat lookup did.
+ */
+async function loadChatForExport(
+  supabase: SupabaseClient,
+  meetingId: string,
+): Promise<ReportExportInput["chat"]> {
+  try {
+    const { data } = await supabase
+      .from("live_meeting_chat")
+      .select("author_name, body, ts")
+      .eq("meeting_id", meetingId)
+      .order("ts", { ascending: true })
+      .limit(500);
+
+    const rows = (data ?? []) as Array<{ author_name: string; body: string; ts: string }>;
+    return rows.map((row) => ({ author: row.author_name, text: row.body, at: row.ts }));
+  } catch (err) {
+    console.warn("[report-export] chat lookup failed", err);
+    return null;
+  }
 }
 
 /**

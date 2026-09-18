@@ -4,6 +4,15 @@ import React, { useEffect, useLayoutEffect, useMemo, useReducer, useRef, useStat
 import { createPortal } from "react-dom";
 import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import {
+  chatClock,
+  cleanChatText,
+  groupChat,
+  mergeChat,
+  type ChatMessage,
+} from "@/lib/meetings/chat";
+import { handsFirst, handsUpLabel, raisedBy } from "@/lib/meetings/hands";
+import { ChatText } from "./ChatText";
 import { MeetingGreenRoom, type GreenRoomChoice } from "./MeetingGreenRoom";
 import { constraintsFor, displayConstraints, levelFromSamples, smoothLevel } from "@/lib/meetings/devices";
 import {
@@ -169,7 +178,7 @@ interface TranscriptLine {
   /** Someone else was audible at the same time. */
   overlapped: boolean;
 }
-interface ChatMessage { id: string; from: string; displayName: string; text: string; ts: number }
+
 
 type SignalMsg =
   | { type: "join"; from: string; displayName: string }
@@ -205,7 +214,7 @@ type SignalMsg =
   // own share — a guest presenting slides would be composited as a small tile
   // of their slides, which is the one thing the recording exists to capture.
   | { type: "video"; from: string; camOn: boolean; paused: boolean; sharing?: boolean }
-  | { type: "chat"; from: string; displayName: string; text: string; ts: number }
+  | { type: "chat"; id: string; from: string; displayName: string; text: string; ts: number }
   | { type: "raise_hand"; from: string; raised: boolean }
   | { type: "reaction"; from: string; emoji: string; ts: number }
   | { type: "mute_all"; from: string }
@@ -305,6 +314,8 @@ const SPEAKER_COLORS = [
   "#fdba74",
 ];
 const REACTIONS = ["👍", "👏", "😂", "❤️", "🎉", "🤔"];
+/** How long a reaction stays on somebody's tile. */
+const REACTION_VISIBLE_MS = 3_000;
 
 // Synthesize a short chime using Web Audio API (no audio files needed)
 /** What the browser currently says about notifications, including "no API". */
@@ -771,7 +782,7 @@ function formatClock(seconds: number): string {
 // ─── ControlBar ───────────────────────────────────────────────────────────────
 
 function ControlBar({
-  micOn, camOn, shareOn, shareStarting, copilotOpen, isHost, handRaised, layout, layoutForced, chatUnread, waitingCount, duration, roomCode, bwMode,
+  micOn, camOn, shareOn, shareStarting, copilotOpen, isHost, handRaised, handsUp, handsUpNote, layout, layoutForced, chatUnread, waitingCount, duration, roomCode, bwMode,
   onToggleMic, onToggleCam, onToggleScreen, onToggleCopilot, onLeave, onEndForAll,
   onSwitchMic, onSwitchCam, onSwitchSpeaker, onRaiseHand, onReaction, onMuteAll, onToggleLayout, onFlipCamera,
   activeMicId, activeCamId, camStarting,
@@ -792,6 +803,14 @@ function ControlBar({
   leaving: boolean;
   micOn: boolean; camOn: boolean; shareOn: boolean; shareStarting: boolean; copilotOpen: boolean; isHost: boolean;
   handRaised: boolean; layout: "grid" | "speaker"; chatUnread: number; waitingCount: number; duration: number;
+  /**
+   * How many OTHER people have a hand up, and how to say it.
+   *
+   * A raised hand used to live only on a tile and in a sidebar tab — both
+   * off-screen most of the time — while a one-word chat message lit a badge
+   * here. Somebody asking to speak deserves at least that.
+   */
+  handsUp: number; handsUpNote: string;
   roomCode: string; bwMode: BandwidthMode;
   /** A live screen share is holding speaker view open over the chosen grid. */
   layoutForced: boolean;
@@ -857,12 +876,21 @@ function ControlBar({
           <CtrlBtn active={shareOn} onClick={onToggleScreen} busy={shareStarting} title={shareOn ? "Stop sharing" : "Share screen"} activeIcon={<ScreenShareIcon />} inactiveIcon={<ScreenShareIcon />} />
         </span>
 
-        {/* Raise hand */}
-        <button onClick={onRaiseHand} title={handRaised ? "Lower hand" : "Raise hand"}
-          className={`w-10 h-10 rounded-full border flex items-center justify-center text-base transition-colors ${
+        {/* Raise hand — and the badge that says somebody else has. */}
+        <button onClick={onRaiseHand}
+          title={handsUpNote || (handRaised ? "Lower hand" : "Raise hand")}
+          aria-label={handsUpNote ? `${handRaised ? "Lower hand" : "Raise hand"}. ${handsUpNote}.` : (handRaised ? "Lower hand" : "Raise hand")}
+          className={`relative w-10 h-10 rounded-full border flex items-center justify-center text-base transition-colors ${
             handRaised ? "border-gold-400/60 bg-gold-400/10 text-[var(--gold-400)]"
                        : "border-[var(--line)] bg-[var(--surface-2)] text-[var(--fg-primary)] hover:bg-[var(--surface-3)]"
-          }`}>✋</button>
+          }`}>
+          ✋
+          {handsUp > 0 && (
+            <span className="absolute -top-1 -right-1 min-w-4 h-4 px-1 rounded-full bg-[var(--gold-400)] text-white text-[11px] font-bold flex items-center justify-center">
+              {handsUp}
+            </span>
+          )}
+        </button>
 
         {/* Reactions */}
         <button ref={reactionBtnRef} onClick={() => setReactionOpen((v: boolean) => !v)} title="Send reaction"
@@ -1121,10 +1149,25 @@ function CopilotSidebar({
         {tab === "chat" && (
           <>
             {chatMessages.length === 0 ? <EmptyCopilot label="Send a message to everyone in the call." /> : (
-              chatMessages.map((msg) => (
-                <div key={msg.id} className="flex flex-col gap-0.5">
-                  <span className="text-xs font-medium text-[var(--gold-400)]">{msg.displayName}</span>
-                  <div className="rounded-lg bg-[var(--surface-0)] border border-[var(--line)] px-3 py-2 text-sm text-[var(--fg-primary)]">{msg.text}</div>
+              // Grouped: three lines in a row is one person talking, and
+              // repeating their name above each is how a short exchange
+              // becomes a wall.
+              groupChat(chatMessages).map((turn) => (
+                <div key={turn.id} className="flex flex-col gap-0.5">
+                  <span className="flex items-baseline gap-2">
+                    <span className="text-xs font-medium text-[var(--gold-400)]">{turn.displayName}</span>
+                    <span className="font-mono text-[10px] tabular-nums text-[var(--fg-muted)]">
+                      {chatClock(turn.ts)}
+                    </span>
+                  </span>
+                  {turn.messages.map((msg) => (
+                    <div
+                      key={msg.id}
+                      className="whitespace-pre-wrap break-words rounded-lg bg-[var(--surface-0)] border border-[var(--line)] px-3 py-2 text-sm text-[var(--fg-primary)]"
+                    >
+                      <ChatText text={msg.text} />
+                    </div>
+                  ))}
                 </div>
               ))
             )}
@@ -1181,7 +1224,7 @@ function CopilotSidebar({
             {/* Participant list */}
             <div className="flex flex-col gap-1">
               <p className="text-xs font-medium text-[var(--fg-secondary)] uppercase tracking-wide px-1">In this call</p>
-              {participants.map((p) => {
+              {handsFirst(participants, raisedHands).map((p) => {
                 const isSpeaking = speaking.has(p.id);
                 const color = colorFor(p.id);
                 return (
@@ -1473,6 +1516,17 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
   const handRaisedRef = useRef(false);
   const [raisedHands, setRaisedHands] = useState<Set<string>>(new Set());
   const [reactions, setReactions] = useState<Record<string, string>>({});
+  /**
+   * The timer clearing each person's reaction.
+   *
+   * Held per sender so a second reaction cancels the first one's timer. The
+   * version this replaces compared the EMOJI on the way out — "clear it if it
+   * is still 👍" — so sending 👍 twice inside the window had the first timer
+   * clear the second one early, and the reaction vanished about a second after
+   * it appeared. Two different people were never the problem; one person
+   * reacting twice always was.
+   */
+  const reactionTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
 
   // Waiting room
   const [waitingPeers, setWaitingPeers] = useState<WaitingPeer[]>([]);
@@ -2574,8 +2628,11 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     }
 
     if (msg.type === "chat" && msg.from !== myId) {
-      const chatMsg: ChatMessage = { id: crypto.randomUUID(), from: msg.from, displayName: msg.displayName, text: msg.text, ts: msg.ts };
-      setChatMessages((prev) => [...prev, chatMsg]);
+      // Keyed on the SENDER's id, not a fresh one: the same message also
+      // arrives from the stored history, and two copies of one line is what a
+      // locally-minted id would guarantee.
+      const chatMsg: ChatMessage = { id: msg.id, from: msg.from, displayName: msg.displayName, text: msg.text, ts: msg.ts };
+      setChatMessages((prev) => mergeChat(prev, [chatMsg]));
       if (!chatOpenRef.current) setChatUnread((n) => n + 1);
     }
 
@@ -2584,9 +2641,7 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     }
 
     if (msg.type === "reaction" && msg.from !== myId) {
-      const { emoji } = msg;
-      setReactions((prev) => ({ ...prev, [msg.from]: emoji }));
-      setTimeout(() => setReactions((prev) => { const n = { ...prev }; if (n[msg.from] === emoji) delete n[msg.from]; return n; }), 3000);
+      showReactionRef.current(msg.from, msg.emoji);
     }
 
     if (msg.type === "mute_all" && msg.from !== myId) {
@@ -3108,6 +3163,13 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     setMeetingId(mId); meetingIdRef.current = mId;
     setIsHost(hostFlag); isHostRef.current = hostFlag;
     localUserIdRef.current = me?.id ?? null;
+
+    // The conversation so far. Somebody joining ten minutes into a call used
+    // to see an empty panel while the room referred back to what had been said
+    // in it — and a reload did the same thing to a person who had been there
+    // the whole time. Merged rather than assigned, because a broadcast can
+    // arrive before this resolves.
+    void loadChatHistoryRef.current();
 
     // The host and org teammates enter immediately; only external guests wait.
     if (hostFlag || isOrgMember) {
@@ -4620,16 +4682,104 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     sendSignalRef.current({ type: "raise_hand", from: myIdRef.current, raised: next });
   }, []);
 
-  const sendReaction = useCallback((emoji: string) => {
-    sendSignalRef.current({ type: "reaction", from: myIdRef.current, emoji, ts: Date.now() });
-    setReactions((prev) => ({ ...prev, local: emoji }));
-    setTimeout(() => setReactions((prev) => { const n = { ...prev }; if (n.local === emoji) delete n.local; return n; }), 3000);
+  /** Show one person's reaction, replacing whatever they were showing before. */
+  const showReaction = useCallback((who: string, emoji: string) => {
+    const timers = reactionTimers.current;
+    const running = timers.get(who);
+    if (running) clearTimeout(running);
+    setReactions((prev) => ({ ...prev, [who]: emoji }));
+    timers.set(
+      who,
+      setTimeout(() => {
+        timers.delete(who);
+        setReactions((prev) => {
+          const next = { ...prev };
+          delete next[who];
+          return next;
+        });
+      }, REACTION_VISIBLE_MS),
+    );
   }, []);
 
-  const sendChat = useCallback((text: string) => {
+  const showReactionRef = useRef(showReaction);
+  useEffect(() => { showReactionRef.current = showReaction; }, [showReaction]);
+
+  // Nothing should survive the component that scheduled it.
+  useEffect(() => {
+    const timers = reactionTimers.current;
+    return () => { timers.forEach(clearTimeout); timers.clear(); };
+  }, []);
+
+  const sendReaction = useCallback((emoji: string) => {
+    sendSignalRef.current({ type: "reaction", from: myIdRef.current, emoji, ts: Date.now() });
+    showReactionRef.current("local", emoji);
+  }, []);
+
+  /**
+   * The chat endpoint for this caller — a guest carries their key in the query,
+   * exactly as the transcript and ICE paths do.
+   */
+  const chatUrl = useCallback(() => {
+    const key = guestKeyRef.current;
+    const suffix = key ? `?guestKey=${encodeURIComponent(key)}` : "";
+    return `/api/meetings/${meetingIdRef.current}/chat${suffix}`;
+  }, []);
+
+  /** Store one message. Never throws: the room has already seen it. */
+  const persistChat = useCallback(async (msg: ChatMessage) => {
+    if (!meetingIdRef.current) return;
+    try {
+      await fetch(chatUrl(), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: msg.id, text: msg.text, displayName: msg.displayName }),
+        keepalive: true,
+      });
+    } catch (err) {
+      console.warn("[meeting] chat message not stored", err);
+    }
+  }, [chatUrl]);
+
+  /**
+   * The conversation so far.
+   *
+   * Never throws and never clears: losing the history costs a latecomer what
+   * they missed, not their part in the rest of the meeting.
+   */
+  const loadChatHistory = useCallback(async () => {
+    if (!meetingIdRef.current) return;
+    try {
+      const res = await fetch(chatUrl(), { cache: "no-store" });
+      if (!res.ok) return;
+      const { messages } = (await res.json()) as { messages?: ChatMessage[] };
+      if (Array.isArray(messages) && messages.length) {
+        setChatMessages((prev) => mergeChat(messages, prev));
+      }
+    } catch (err) {
+      console.warn("[meeting] chat history unavailable", err);
+    }
+  }, [chatUrl]);
+
+  const loadChatHistoryRef = useRef(loadChatHistory);
+  useEffect(() => { loadChatHistoryRef.current = loadChatHistory; }, [loadChatHistory]);
+
+  const persistChatRef = useRef(persistChat);
+  useEffect(() => { persistChatRef.current = persistChat; }, [persistChat]);
+
+  const sendChat = useCallback((raw: string) => {
+    const text = cleanChatText(raw);
+    if (!text) return;
+    // The id is minted here and travels with the message everywhere it goes:
+    // to the room over the broadcast, and to the table. That is what lets a
+    // post that timed out be retried without the room seeing it twice.
     const msg: ChatMessage = { id: crypto.randomUUID(), from: myIdRef.current, displayName: localName, text, ts: Date.now() };
-    setChatMessages((prev) => [...prev, msg]);
-    sendSignal({ type: "chat", from: myIdRef.current, displayName: localName, text, ts: msg.ts });
+    setChatMessages((prev) => mergeChat(prev, [msg]));
+    sendSignal({ type: "chat", id: msg.id, from: myIdRef.current, displayName: localName, text, ts: msg.ts });
+    // Stored as well as broadcast. The broadcast is what makes it immediate;
+    // the row is what makes it survive a latecomer, a reload, and the end of
+    // the meeting. A failure costs the record, not the message — the room has
+    // already seen it — so it is logged rather than surfaced.
+    void persistChatRef.current(msg);
   }, [localName, sendSignal]);
 
   const muteAll = useCallback(() => { sendSignal({ type: "mute_all", from: myIdRef.current }); }, [sendSignal]);
@@ -4980,6 +5130,10 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     })),
   ];
 
+  // The others' hands, oldest first — the order a chair would take them in.
+  const handsUpPeople = raisedBy(raisedHands, participantList, LOCAL_SPEAKER_ID);
+  const handsUpNote = handsUpLabel(handsUpPeople);
+
   const getReaction = (id: string) => reactions[id] ?? "";
   // Assume a peer's camera is on until they say otherwise: the announcement
   // lands a moment after they appear, and a tile that starts on "Camera off" and
@@ -5155,6 +5309,7 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
       <ControlBar
         micOn={micOn} camOn={camOn} shareOn={shareOn} shareStarting={shareStarting} copilotOpen={copilotOpen}
         isHost={isHost} handRaised={handRaised} layout={layout} chatUnread={chatUnread}
+        handsUp={handsUpPeople.length} handsUpNote={handsUpNote}
         waitingCount={isHost ? waitingPeers.length : 0} duration={duration}
         roomCode={roomCode} bwMode={bwMode} layoutForced={layoutIsForced(layout, sharerId)}
         recordingState={recordingBanner?.state ?? "idle"}

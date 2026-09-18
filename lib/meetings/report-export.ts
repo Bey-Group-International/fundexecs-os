@@ -48,6 +48,14 @@ export interface ReportExportInput {
    * later has no way to know it was ever there, let alone that it is going.
    */
   recording?: { url: string; expiresAt: string | null; durationSeconds: number | null } | null;
+  /**
+   * What was said in the meeting's chat.
+   *
+   * Part of the record rather than a footnote. Chat is where the links, the
+   * numbers and the names people could not say out loud actually get shared,
+   * and until it was stored it went when the call did.
+   */
+  chat?: Array<{ author: string; text: string; at: string | null }> | null;
 }
 
 export interface ReportExportOptions {
@@ -271,6 +279,11 @@ export function buildReportMarkdown(
   const recording = recordingFacts(input.recording);
   if (recording) lines.push(...section("Recording", recording));
 
+  // After the discussion and before the transcript: chat is a second, quieter
+  // record of the same meeting, and it reads as one.
+  const chat = chatTranscript(input.chat);
+  if (chat) lines.push(...section("Chat", chat));
+
   // Decisions first, then what they commit somebody to, then the discussion
   // that produced them. The old order opened on Key Points, which buries the
   // two sections anybody rereads this document for under the one they do not.
@@ -359,4 +372,28 @@ function recordingFacts(
   ].filter(Boolean) as string[];
 
   return facts.length ? facts.join("\n") : null;
+}
+
+/**
+ * The chat as a block of the document.
+ *
+ * Null when there was none — most meetings have an empty chat, and a "Chat"
+ * heading over nothing would be on the majority of exports.
+ */
+function chatTranscript(
+  chat: ReportExportInput["chat"],
+): string | null {
+  const lines = (chat ?? [])
+    .filter((m) => m && typeof m.text === "string" && m.text.trim().length > 0)
+    .map((m) => {
+      const who = (m.author ?? "").trim() || "Unknown";
+      const at = m.at ? headerTime(m.at) : null;
+      // Line breaks inside a message become spaces: five renderers have to
+      // agree on this markdown, and a bare newline means something different
+      // in each of them.
+      const said = m.text.trim().replace(/\s*\n\s*/g, " ");
+      return at ? `**${who}** (${at}): ${said}` : `**${who}**: ${said}`;
+    });
+
+  return lines.length ? lines.join("\n\n") : null;
 }
