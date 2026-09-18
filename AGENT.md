@@ -3206,8 +3206,48 @@ Deployed, monitoring               →  live, observability active
              |  than a limit on how many people may queue. Two sessions on one
              |  surface is now normal: assume it, and write the entry so the
              |  other half can be told apart from your own.
+             |  REVIEW CAUGHT TWO THINGS THAT WOULD HAVE SHIPPED BROKEN, and
+             |  both deserve recording because both were failures of a pattern
+             |  this file already warns about.
+             |  The unique indexes were PARTIAL — `(meeting_id, user_id) WHERE
+             |  user_id IS NOT NULL` — and `ON CONFLICT` can only infer a
+             |  partial index if the statement repeats its predicate, which
+             |  PostgREST's `on_conflict` (column names only) cannot. So every
+             |  removal upsert would have failed with 42P10: EXACTLY the defect
+             |  already recorded here against live_meeting_participants. Reading
+             |  your own changelog is not the same as applying it.
+             |  And "Allow back" did nothing: DELETE lifted the removal row but
+             |  left the admission at `denied`, and the knock is idempotent, so
+             |  the person stayed out forever. The undo I added to avoid a trap
+             |  was itself inert.
+             |  THE BIGGER CORRECTION was the identity model. Peers announced
+             |  their own subject over the signalling channel and the host sent
+             |  it back to be removed — so a participant could announce somebody
+             |  ELSE'S subject, let the host click Remove on their tile, and
+             |  have the service role ban the victim while they reconnected. I
+             |  had written "self-asserted, exactly as displayName already is"
+             |  and talked myself past it. It is not the same: a display name
+             |  misleads a human, an identity here drives a privileged write.
+             |  Now the knock records the signalling id, the host sends only
+             |  that, and the SERVER resolves whose tile it is. Which deleted
+             |  code — no subject on the wire, no parseSubject, no removedAmong
+             |  — and made the public check answer in signalling ids, which
+             |  everyone in the room already has.
+             |  The same move fixed the `kick` signal, which predates all of
+             |  this: it was obeyed on arrival, on a channel anyone with the
+             |  room code can publish to. It is a hint to go and ask now.
+             |  Also from review: the knock checked ONE subject (subjectFor
+             |  prefers the account, so a guest removed by key could sign in and
+             |  slip past); readRemovals treated a failed query as "nobody is
+             |  removed"; the presence write was a bare `void` in a serverless
+             |  handler, which this file records as a defect class and which
+             |  `after()` exists for; and the stale filter ran after the cap, so
+             |  a queue headed by people who had left would hide everyone real.
+             |  LESSON worth keeping: a comment explaining why something is
+             |  acceptable is the place to look hardest. Three of these were
+             |  under one.
              |  Confidence: typecheck/eslint clean, production build passes,
-             |  Jest 6449 → 6541 green (+92 new, +4 suites), baseline
+             |  Jest 6449 → 6566 green, baseline
              |  re-measured from origin/main in a clean worktree; visual suite
              |  8/8. The knock refusals were each run against the previous
              |  behaviour first and fail there.

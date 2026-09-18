@@ -15,6 +15,15 @@
 // match a member's account, and a missing value must never match a missing
 // value.
 //
+// Nothing here reads a subject off the wire, and that is deliberate. An earlier
+// version did: each peer announced its own subject over the signalling channel
+// and the host sent it back to be removed. That channel is publishable by
+// anyone holding the room code, so a participant could announce SOMEBODY ELSE'S
+// subject, let the host remove the tile in front of them, and have the service
+// role ban the victim. Subjects are now resolved server-side from the row the
+// knock wrote — see the removals route — and these functions only ever see
+// values that came out of the database.
+//
 // Pure: no network, no database, no clock beyond what is passed in.
 
 /** A member, by account; or a guest, by the key their browser holds. */
@@ -51,11 +60,6 @@ export function subjectKey(subject: RemovalSubject): string {
   return subject.kind === "member" ? `member:${subject.userId}` : `guest:${subject.guestKey}`;
 }
 
-/** The same person, by the identifier that was recorded for them. */
-export function sameSubject(a: RemovalSubject | null, b: RemovalSubject | null): boolean {
-  if (!a || !b) return false;
-  return subjectKey(a) === subjectKey(b);
-}
 
 /** A stored removal, in the two columns the table keeps it in. */
 export interface RemovalRow {
@@ -87,51 +91,7 @@ export function isRemoved(
   });
 }
 
-/**
- * The subjects in `wanted` that appear in `removals`.
- *
- * The shape the room asks its question in: a client holds the subjects its
- * peers announced and wants to know which of them it should be tearing down.
- * Answering only about subjects the caller already named is the point — it
- * cannot be used to enumerate a meeting's guest keys, which would be enough to
- * read another guest's admission status.
- */
-export function removedAmong(
-  removals: readonly RemovalRow[] | null | undefined,
-  wanted: readonly RemovalSubject[],
-): RemovalSubject[] {
-  if (!removals?.length) return [];
-  const removed = new Set(
-    removals
-      .map((row) => subjectOfRow(row))
-      .filter((s): s is RemovalSubject => s !== null)
-      .map(subjectKey),
-  );
-  return wanted.filter((subject) => removed.has(subjectKey(subject)));
-}
 
-/**
- * A subject off the wire, or null.
- *
- * Every field is checked rather than trusted, because this parses what a peer
- * announced about itself and what a request body claims. Note what this does
- * NOT attempt: a client can announce any subject it likes, exactly as it can
- * already announce any display name. That is the room's existing trust model
- * and this does not pretend to change it — what it buys is that a host's
- * removal has something durable to be written against, which is checked by the
- * server against the CALLER'S OWN authenticated account when they come back.
- */
-export function parseSubject(value: unknown): RemovalSubject | null {
-  if (!value || typeof value !== "object") return null;
-  const raw = value as { kind?: unknown; userId?: unknown; guestKey?: unknown };
-  if (raw.kind === "member" && typeof raw.userId === "string") {
-    return subjectFor(raw.userId, null);
-  }
-  if (raw.kind === "guest" && typeof raw.guestKey === "string") {
-    return subjectFor(null, raw.guestKey);
-  }
-  return null;
-}
 
 /** The columns to write for a subject, so the two callers cannot disagree. */
 export function subjectColumns(subject: RemovalSubject): { user_id: string | null; guest_key: string | null } {
