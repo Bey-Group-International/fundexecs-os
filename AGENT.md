@@ -3118,6 +3118,66 @@ Deployed, monitoring               →  live, observability active
              |  origin/main in a clean worktree; visual suite 8/8. The refusal
              |  and wait-bound cases were run against the previous behaviour
              |  first — four of them fail there.
+
+2026-09-19  |  The reaction nobody could see, and nobody could hear  |  Asked to
+             |  check for defects with reactions, then to fix all four. Two of
+             |  them are the same asymmetry: hands.ts had already written down
+             |  why a tile is a bad place to be noticed, #1113 acted on it for
+             |  raised hands, and reactions were left where they were.
+             |  THE EMOJI WAS RENDERED ON THE SENDER'S TERMS. The picker offers
+             |  six, and nothing on the receiving side ever consulted that list:
+             |  the handler passed msg.emoji straight through and the tile drew
+             |  it at text-4xl. A peer on a modified build could paint any
+             |  string of any length across somebody's picture. An allowlist
+             |  rather than a length bound, because "a reaction" means one of
+             |  those six — eight characters of anything else is still eight
+             |  characters of anything else. Applied on the way in AND out, the
+             |  same argument normalizeChatText makes.
+             |  A REACTION COULD BE COMPLETELY INVISIBLE. It was drawn in
+             |  exactly one place, an overlay on the sender's tile, and the
+             |  thumbnail strip is overflow-x-auto. Worse than the hands case it
+             |  mirrors, twice over: a hand stays up until lowered so a late
+             |  look still finds it, where a reaction lives three seconds; and a
+             |  screen share FORCES speaker layout, so everyone but the
+             |  presenter is in that scrolling strip at the moment people most
+             |  want to react. ReactionTicker puts them over the stage with the
+             |  name attached. Not a count, which is what the hands affordance
+             |  is — a reaction is an event, not a standing state.
+             |  A REACTION WAS INVISIBLE TO A SCREEN READER. The tile overlay is
+             |  a bare emoji with no text, so there was nothing to announce and
+             |  reactions did not exist at all for anyone not looking at the
+             |  picture. reactionLabel is the equivalent of handsUpLabel, whose
+             |  own docstring says it is "for a tooltip and for a screen
+             |  reader". The ticker is aria-live=polite; the tile overlay is now
+             |  aria-hidden, or it would read twice.
+             |  A DEPARTING PEER LEFT A LIVE TIMER. The leave handler dropped
+             |  the reaction and left the timeout running, so three seconds
+             |  later an orphan fired against somebody no longer in the room —
+             |  and its updater allocated a fresh record whether or not there
+             |  was anything to remove, re-rendering the whole meeting for
+             |  nothing. The leave handler two thousand lines earlier already
+             |  used the right idiom. That rule is withoutReaction now, and both
+             |  call it.
+             |  Worth naming: I wrote a visual check for the ticker and it
+             |  passed against the deliberately-broken version, so it was
+             |  deleted rather than shipped. Twice now a first-cut visual check
+             |  has measured the wrong thing — on the chat panel the control
+             |  caught it and the check was fixed; here the layout genuinely
+             |  cannot break the way I was measuring (a long name WRAPS by
+             |  default, and truncate clips), so there was nothing to guard. A
+             |  test that cannot fail is worse than no test: it reads as
+             |  coverage. Run the control before believing a green check.
+             |  Also worth naming: four candidates did NOT survive checking —
+             |  the double-reaction early-clear (fixed in #1113), a reaction
+             |  that fails to send (fire-and-forget by design; ephemeral, unlike
+             |  chat), reduced motion (the globals.css catch-all already
+             |  neutralises animate-bounce), and seeing your own twice
+             |  (broadcast self:false plus the from !== myId guard).
+             |  Confidence: typecheck/eslint clean, production build passes,
+             |  Jest 6483 → 6509 green (+26 new, +2 suites), baseline
+             |  re-measured from origin/main in a clean worktree; visual suite
+             |  8/8. The bound, the ordering and the no-op render were each run
+             |  against the previous behaviour first and fail there.
 ```
 
 ---
