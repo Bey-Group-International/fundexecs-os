@@ -164,7 +164,16 @@ import { createAdmissionSession, type AdmissionSession } from "@/lib/meetings/ad
 import { ADMISSION_NUDGE, admissionChannelName } from "@/lib/meetings/admission-channel";
 import { admissionStatusFromResponse, retryAfterMs } from "@/lib/meetings/admission-poll";
 import { isAdmissionLive, type AdmissionUiState } from "@/lib/meetings/admission-ui";
-import { applyAdmissionChange, type AdmissionChange } from "@/lib/meetings/waiting-room";
+import { REMOVAL_NUDGE, removalChannelName } from "@/lib/meetings/removal-channel";
+import { subjectFor, subjectKey, type RemovalSubject } from "@/lib/meetings/removal";
+import {
+  PRESENCE_GRACE_MS,
+  applyAdmissionChange,
+  presentOnly,
+  toEntry,
+  type AdmissionChange,
+  type WaitingRow,
+} from "@/lib/meetings/waiting-room";
 import {
   GuestThanksScreen,
   NotAdmittedScreen,
@@ -175,6 +184,9 @@ import {
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 interface Peer { id: string; displayName: string; stream: MediaStream | null }
+
+/** Somebody the host removed, and the name they had when it happened. */
+interface RemovedPerson { subject: RemovalSubject; displayName: string }
 
 // A transcript line carries who said it, not just what a microphone heard.
 // `speakerId` is the signaling id — stable across a rename and identical on
@@ -325,6 +337,20 @@ const RECONCILE_MS = 400;
 // that a normal meeting never pays for it, short enough that somebody at the
 // door is seen rather than left there.
 const WAITING_FALLBACK_MS = 10_000;
+// Most knocks the host's panel will read at once.
+//
+// Not a product limit — a host cannot work a queue this long — but a bound, for
+// the same reason every other read in the meeting stack has one: an unbounded
+// select is cut off at PostgREST's `max_rows` with nothing to say so, and a
+// knock costs an attacker a single request.
+const WAITING_CAP = 200;
+// How often the panel re-checks which waiting guests are still there.
+//
+// Presence is a timestamp on the row, so it goes stale on the clock rather than
+// on an event: without a tick of its own the panel would keep showing somebody
+// who stopped polling until the next unrelated re-read happened to arrive.
+// A third of the grace window, so the panel is never more than that out of date.
+const PRESENCE_TICK_MS = Math.floor(PRESENCE_GRACE_MS / 3);
 // Palette for per-speaker colours in the transcript.
 const SPEAKER_COLORS = [
   "var(--gold-400)",
@@ -1069,6 +1095,7 @@ function ControlBar({
 export function CopilotSidebar({
   srStatus, participants, roomCode, meetingTitle,
   chatMessages, chatUnread, onSendChat, onRetryChat, isHost, raisedHands, onKick, onAdmit, onDeny, onAdmitAll, waitingPeers, onChatVisibility,
+  removedPeople, onAllowBack,
   speaking, onCollapse,
 }: {
   srStatus: "idle" | "active" | "error" | "unsupported";
@@ -1085,6 +1112,9 @@ export function CopilotSidebar({
   raisedHands: Set<string>; onKick: (id: string) => void;
   onAdmit: (id: string) => void; onDeny: (id: string) => void; onAdmitAll: () => void;
   waitingPeers: WaitingPeer[];
+  /** Host only. Who has been removed, so the host can undo it. */
+  removedPeople: RemovedPerson[];
+  onAllowBack: (subject: RemovalSubject) => void;
   /** Whether the chat is the tab being looked at — true on it, false off it. */
   onChatVisibility: (visible: boolean) => void;
   /** Collapse the panel. The only way out on mobile, where it covers the screen. */
@@ -1313,6 +1343,36 @@ export function CopilotSidebar({
                 );
               })}
             </div>
+
+            {/* Removed — and how to undo it.
+                A removal is durable now: it is written down and refused at the
+                door, where before it lasted until the person pressed reload. So
+                a misclick no longer corrects itself, and this is what stops
+                that being a worse trap than the one it replaced. */}
+            {isHost && removedPeople.length > 0 && (
+              <div className="flex flex-col gap-1">
+                <p className="text-xs font-medium text-[var(--fg-secondary)] uppercase tracking-wide px-1">
+                  Removed
+                </p>
+                {removedPeople.map((r) => (
+                  <div key={subjectKey(r.subject)} className="flex items-center gap-2.5 rounded-lg px-2 py-2">
+                    <div className="w-7 h-7 rounded-full border border-[var(--line)] bg-[var(--surface-2)] flex items-center justify-center text-xs font-semibold text-[var(--fg-muted)]">
+                      {r.displayName.slice(0, 1).toUpperCase()}
+                    </div>
+                    <span className="flex-1 truncate text-sm text-[var(--fg-muted)]" title={r.displayName}>
+                      {r.displayName}
+                    </span>
+                    <button
+                      onClick={() => onAllowBack(r.subject)}
+                      title="They will have to knock again, and you decide"
+                      className="text-xs text-[var(--gold-400)] hover:underline"
+                    >
+                      Allow back
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
 
@@ -1608,6 +1668,8 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
   // The signed-in account behind this client, so a transcript line survives a
   // rename and a report can tie words to a real person. Null for guests.
   const localUserIdRef = useRef<string | null>(null);
+
+
   // Utterance boundaries. The recognizer hands us a sentence after the fact, so
   // attribution needs the moment it started, not the moment it arrived.
   const utteranceStartRef = useRef<number | null>(null);
@@ -1644,6 +1706,23 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
 
   // Waiting room
   const [waitingPeers, setWaitingPeers] = useState<WaitingPeer[]>([]);
+  /**
+   * Who the host has removed from this meeting.
+   *
+   * Shown so the removal can be undone. Before this change "Remove" lasted
+   * until the person pressed reload, so a misclick corrected itself; now it is
+   * a fact, and a fact with no way back would be a worse trap than the one it
+   * replaced.
+   */
+  const [removedPeople, setRemovedPeople] = useState<RemovedPerson[]>([]);
+  /**
+   * Said out loud when a removal could not be recorded.
+   *
+   * The person is out of the call either way — the broadcast saw to that — but
+   * whether they can come back is decided by a request that may have failed,
+   * and a host watching the tile vanish has every reason to assume it did not.
+   */
+  const [removalNotice, setRemovalNotice] = useState<string | null>(null);
   // Whether the host's admissions subscription is actually carrying events.
   // False starts the fallback poll below; see WAITING_FALLBACK_MS.
   const [waitingLive, setWaitingLive] = useState(false);
@@ -2589,6 +2668,11 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
 
     if (msg.type === "join" && msg.from !== myId) {
       playChime("join");
+      // The door is the enforcement point — the knock route refuses a removed
+      // subject before anything else — but the signalling channel has never
+      // been gated by the waiting room, so a client that simply skipped the
+      // knock could appear here. One request per join closes that.
+      void checkRemovalsRef.current();
       setPeers((prev) => {
         const next = new Map<string, Peer>(prev);
         const existing = next.get(msg.from);
@@ -2841,14 +2925,18 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     }
 
     if (msg.type === "kick" && msg.target === myId) {
-      sendSignalRef.current({ type: "leave", from: myId });
-      endingRef.current = true;
-      teardownCallRef.current();
-      setCallPhase((prev) => nextPhase(prev, "remote_end"));
-      // A guest has no /meetings to go back to — it is inside the signed-in app,
-      // so pushing them there answers "the host removed you" with a login form.
-      if (isGuestRef.current) { setShowGuestUpsell(true); return; }
-      router.push("/meetings");
+      // ASKED, not obeyed. This message arrives on a channel anyone holding the
+      // room code can publish to, so acting on it directly meant any
+      // participant — or anyone a link was ever forwarded to — could eject
+      // anybody from the call by sending one line. It predates this branch and
+      // was never the host's authority; it only looked like it.
+      //
+      // So it is a hint to go and check, exactly as the admission nudge is:
+      // checkRemovals asks the server which of the ids in this room have
+      // actually been removed, and stands this client down only if the answer
+      // includes its own. A forged kick now costs the forger one request by an
+      // honest client and nothing else.
+      void checkRemovalsRef.current();
       return;
     }
 
@@ -3394,7 +3482,10 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
         const res = await fetch(`/api/meetings/public/${roomCode}/knock`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ guestKey, displayName: name }),
+          // The id this client will appear under in the room, so the host's
+          // "remove that tile" can be resolved by the server rather than
+          // claimed by a peer. See the removals route.
+          body: JSON.stringify({ guestKey, displayName: name, signalId: myIdRef.current }),
         });
         const body = res.ok ? ((await res.json()) as { status?: string }) : null;
         const status = admissionStatusFromResponse(res.status, body);
@@ -3475,17 +3566,85 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     if (!meetingId) return;
     const { data } = await (supabase as any)
       .from("live_meeting_admissions")
-      .select("id, guest_key, display_name, status")
+      .select("id, guest_key, display_name, status, last_seen_at, created_at")
       .eq("meeting_id", meetingId)
       .eq("status", "waiting")
-      .order("created_at", { ascending: true });
-    const rows = (data ?? []) as Array<{ id: string; guest_key: string; display_name: string }>;
-    setWaitingPeers(rows.map((r) => ({ id: r.id, from: r.guest_key, displayName: r.display_name })));
+      // Stale rows are excluded HERE, not after the cap. Filtering them in the
+      // client would mean the oldest WAITING_CAP rows are fetched first and
+      // then thinned — so a queue whose head is full of people who left would
+      // push every guest who is actually waiting outside the result, and the
+      // host would see nobody at all.
+      //
+      // `last_seen_at` is null until a guest's first poll lands, so a row that
+      // has never been seen counts as present, exactly as `stillWaiting` does.
+      .or(`last_seen_at.is.null,last_seen_at.gte.${new Date(Date.now() - PRESENCE_GRACE_MS).toISOString()}`)
+      .order("created_at", { ascending: true })
+      // Bounded, like every other read in the meeting stack. An unbounded
+      // select is cut off at PostgREST's `max_rows` with nothing to say so —
+      // the same silent truncation the transcript read carried for months —
+      // and a knock costs an attacker one request. A host cannot work a queue
+      // this long anyway; what matters is that the panel is not lying about
+      // where it stops.
+      .limit(WAITING_CAP);
+    const rows = (data ?? []) as WaitingRow[];
+    setWaitingPeers(rows.map(toEntry));
   }, [meetingId, supabase]);
+
+  /** Everyone the host has removed, for the panel that can let them back in. */
+  const loadRemovals = useCallback(async () => {
+    if (!meetingId) return;
+    const { data } = await (supabase as any)
+      .from("live_meeting_removals")
+      .select("user_id, guest_key, display_name")
+      .eq("meeting_id", meetingId)
+      .order("removed_at", { ascending: true })
+      .limit(WAITING_CAP);
+    const rows = (data ?? []) as Array<{ user_id: string | null; guest_key: string | null; display_name: string }>;
+    setRemovedPeople(
+      rows
+        .map((r) => {
+          const subject = subjectFor(r.user_id, r.guest_key);
+          return subject ? { subject, displayName: r.display_name } : null;
+        })
+        .filter((r): r is RemovedPerson => r !== null),
+    );
+  }, [meetingId, supabase]);
+
+  const loadRemovalsRef = useRef(loadRemovals);
+  useEffect(() => { loadRemovalsRef.current = loadRemovals; }, [loadRemovals]);
+
+  /**
+   * Let a removed person back in.
+   *
+   * Only lifts the bar at the door — they still have to knock, and the host
+   * still decides, which is the point: the host sees who it is before they are
+   * back in the room.
+   */
+  const allowBack = useCallback(async (subject: RemovalSubject) => {
+    if (!meetingIdRef.current) return;
+    const key = subjectKey(subject);
+    setRemovedPeople((prev) => prev.filter((r) => subjectKey(r.subject) !== key));
+    try {
+      const res = await fetch(`/api/meetings/${meetingIdRef.current}/removals`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ subject }),
+      });
+      if (res.ok) return;
+      console.warn("[meeting] could not let them back in", res.status);
+    } catch (err) {
+      console.warn("[meeting] could not let them back in", err);
+    }
+    // The optimism needs an undo, for the same reason admit/deny's does: the
+    // list is not driven by Realtime, so nothing else would put them back and
+    // the host would believe they had lifted a bar that is still down.
+    await loadRemovalsRef.current();
+  }, []);
 
   useEffect(() => {
     if (!isHost || !sessionLive || !meetingId) return;
     void loadWaiting();
+    void loadRemovals();
 
     // Each event is applied to the list immediately — it carries the row, so the
     // panel redraws without waiting on a query — and schedules one reconciling
@@ -3516,7 +3675,7 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
       setWaitingLive(false);
       void supabase.removeChannel(channel);
     };
-  }, [isHost, sessionLive, meetingId, supabase, loadWaiting]);
+  }, [isHost, sessionLive, meetingId, supabase, loadWaiting, loadRemovals]);
 
   /**
    * The floor under the host's panel.
@@ -3532,6 +3691,33 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     return () => clearInterval(timer);
   }, [isHost, sessionLive, meetingId, waitingLive, loadWaiting]);
 
+  /**
+   * The people at the door who are actually still there.
+   *
+   * A `waiting` row is cleared by a decision and by nothing else, so a guest
+   * who knocked and then closed the tab used to stay in this panel for the rest
+   * of the meeting — chiming, badging the tab title, counting in "Waiting to
+   * join (3)", and ending with the host admitting somebody who was never going
+   * to appear. Their poll is the sign of life, and it is now recorded.
+   *
+   * Filtered here rather than by deleting the row: a guest who comes back —
+   * reopened the tab, came out of a tunnel — starts polling again and reappears
+   * with their place in the queue, instead of having to knock afresh and lose
+   * it. Presence goes stale on the clock rather than on an event, so this
+   * carries its own tick.
+   */
+  const [presenceNowMs, setPresenceNowMs] = useState(() => Date.now());
+  useEffect(() => {
+    if (!isHost || !sessionLive) return;
+    const timer = setInterval(() => setPresenceNowMs(Date.now()), PRESENCE_TICK_MS);
+    return () => clearInterval(timer);
+  }, [isHost, sessionLive]);
+
+  const livePeers = useMemo(
+    () => presentOnly(waitingPeers, presenceNowMs),
+    [waitingPeers, presenceNowMs],
+  );
+
   // A knock makes a sound. The bar below the video is visible whatever tab the
   // sidebar is on, but a host who has switched to another window sees none of
   // it — and a guest at the door is the one thing in a meeting that is waiting
@@ -3539,7 +3725,7 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
   // not chime on the way back down.
   const lastWaitingCountRef = useRef(0);
   useEffect(() => {
-    const count = waitingPeers.length;
+    const count = livePeers.length;
     const previous = lastWaitingCountRef.current;
     lastWaitingCountRef.current = count;
     if (isHost && count > previous) playChime("knock");
@@ -3555,7 +3741,7 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
       previousWaiting: previous,
       hidden: typeof document !== "undefined" && document.visibilityState === "hidden",
       permission: notificationPermission(),
-      name: waitingPeers.length === 1 ? waitingPeers[0]?.displayName : null,
+      name: livePeers.length === 1 ? livePeers[0]?.displayName : null,
     });
     if (!alert) return;
 
@@ -3569,7 +3755,7 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
       });
       note.onclick = () => { try { window.focus(); } catch { /* popup blocked */ } note.close(); };
     } catch { /* the constructor throws on some engines even when permitted */ }
-  }, [isHost, waitingPeers]);
+  }, [isHost, livePeers]);
 
   // Carry the waiting count into the browser tab title. A host who has tabbed
   // away to pull up a document is exactly the host most likely to leave someone
@@ -3577,9 +3763,9 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
   useEffect(() => {
     if (!isHost) return;
     const original = document.title;
-    if (waitingPeers.length > 0) document.title = `(${waitingPeers.length}) Waiting to join · ${original}`;
+    if (livePeers.length > 0) document.title = `(${livePeers.length}) Waiting to join · ${original}`;
     return () => { document.title = original; };
-  }, [isHost, waitingPeers.length]);
+  }, [isHost, livePeers.length]);
 
   /**
    * Route call audio to the chosen output device.
@@ -5103,16 +5289,172 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     } catch (e) { console.warn("[flipCamera]", e); }
   }, [facingMode, adoptCameraTrack]);
 
-  const kickPeer = useCallback((peerId: string) => {
-    sendSignal({ type: "kick", from: myIdRef.current, target: peerId });
+  /**
+   * Leave, because we have been removed.
+   *
+   * Reached two ways, which is why it is one function: the host's broadcast,
+   * which is immediate and cooperative, and this client's own reading of the
+   * meeting's removals, which is what covers a broadcast that never arrived —
+   * a client that had lost the channel, or one that reloaded straight back in.
+   */
+  const standDown = useCallback(() => {
+    if (endingRef.current) return;
+    sendSignalRef.current({ type: "leave", from: myIdRef.current });
+    endingRef.current = true;
+    teardownCallRef.current();
+    setCallPhase((prev) => nextPhase(prev, "remote_end"));
+    // A guest has no /meetings to go back to — it is inside the signed-in app,
+    // so pushing them there answers "the host removed you" with a login form.
+    if (isGuestRef.current) { setShowGuestUpsell(true); return; }
+    router.push("/meetings");
+  }, [router]);
+
+  const standDownRef = useRef(standDown);
+  useEffect(() => { standDownRef.current = standDown; }, [standDown]);
+
+  /** Tear down this client's own connection to a peer, and forget them. */
+  const dropPeer = useCallback((peerId: string) => {
     peersRef.current.get(peerId)?.close(); peersRef.current.delete(peerId);
     // Locally, not on the strength of a `leave` coming back: a removed client
     // that has already gone, crashed, or lost the channel sends nothing, and
     // its senders, buffered candidates and pending audit would then sit in
     // these maps for the rest of the call.
     forgetPeerState(peerId);
-    setPeers((prev) => { const next = new Map(prev); next.delete(peerId); return next; });
-  }, [sendSignal, forgetPeerState]);
+    setPeers((prev) => { if (!prev.has(peerId)) return prev; const next = new Map(prev); next.delete(peerId); return next; });
+    setPeerStatus((prev) => { if (!prev.has(peerId)) return prev; const next = new Map(prev); next.delete(peerId); return next; });
+    setPeerVideo((prev) => { if (!prev.has(peerId)) return prev; const next = new Map(prev); next.delete(peerId); return next; });
+    setRaisedHands((prev) => { if (!prev.has(peerId)) return prev; const next = new Set(prev); next.delete(peerId); return next; });
+    // One fewer upload to pay for.
+    applySendCapsRef.current();
+  }, [forgetPeerState]);
+
+  /**
+   * Ask the server which of the people in this room are no longer supposed to
+   * be here, and drop them.
+   *
+   * The nudge that triggers this carries no names, and deliberately: anyone
+   * holding the room code can publish on a broadcast channel, so a message
+   * saying "drop peer X" would be a way to eject anybody from any meeting whose
+   * link had been forwarded once. See removal-channel.ts.
+   *
+   * So the question is asked here, naming the SIGNALLING IDS this client can
+   * see, and answered by the server — which resolves each one to the person the
+   * knock recorded under it. Our own id goes in the same request: the host's
+   * broadcast is the fast path for standing down, and this is what covers the
+   * client that never received it, or that ignored it.
+   */
+  const checkRemovals = useCallback(async () => {
+    const mine = myIdRef.current;
+    const peerIds = [...peersRef.current.keys()];
+    const signalIds = [...peerIds, mine];
+
+    let removed: string[] = [];
+    try {
+      const res = await fetch(`/api/meetings/public/${roomCode}/removed`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ signalIds }),
+        cache: "no-store",
+      });
+      if (!res.ok) return;
+      removed = ((await res.json()) as { removed?: string[] }).removed ?? [];
+    } catch (err) {
+      // A removal is enforced at the door as well, so losing this costs the
+      // room the immediate teardown rather than the rule.
+      console.warn("[meeting] could not check removals", err);
+      return;
+    }
+    if (removed.length === 0) return;
+
+    const gone = new Set(removed);
+    for (const peerId of peerIds) {
+      if (gone.has(peerId)) dropPeer(peerId);
+    }
+    // Last, so the room is tidy before this client goes.
+    if (gone.has(mine)) standDownRef.current();
+  }, [roomCode, dropPeer]);
+
+  const checkRemovalsRef = useRef(checkRemovals);
+  useEffect(() => { checkRemovalsRef.current = checkRemovals; }, [checkRemovals]);
+
+  /**
+   * Listen for removals while we are in the call.
+   *
+   * Every participant, not just the host: the defect this closes is that a
+   * removed person stayed connected to everybody except the person who removed
+   * them. One channel per room, because this nudge names nobody and so has
+   * nothing to leak.
+   */
+  useEffect(() => {
+    if (!sessionLive || !roomCode) return;
+    const channel = supabase
+      .channel(removalChannelName(roomCode))
+      .on("broadcast", { event: REMOVAL_NUDGE }, () => {
+        void checkRemovalsRef.current();
+        // The host's own list is not driven by Realtime — the table is not in
+        // the publication — so the nudge it just caused is what refreshes it.
+        if (isHostRef.current) void loadRemovalsRef.current();
+      })
+      .subscribe();
+    return () => { void supabase.removeChannel(channel); };
+  }, [sessionLive, roomCode, supabase]);
+
+  /**
+   * Remove somebody from the meeting.
+   *
+   * This used to be a broadcast and a local close, and it removed them from
+   * exactly one screen. The `kick` message is acted on only by its target, and
+   * only the HOST closed a connection — so every other participant kept a live
+   * peer connection to the person, whose camera and microphone carried on
+   * reaching all of them. Meanwhile nothing was written anywhere, so a reload
+   * put them back: an invite-link guest's key is in localStorage against the
+   * room code and their admission row still said `admitted`, and a signed-in
+   * teammate never went near the waiting room at all.
+   *
+   * Three things happen now, in this order and for three different reasons.
+   * The broadcast goes first, because it is the fastest way for the removed
+   * client to stand itself down. The local teardown follows, because the host
+   * should not wait on a round trip to stop seeing them. And the route makes it
+   * a fact: it resolves the tile to whoever the knock recorded under that
+   * signalling id, records the removal, denies their admission, and nudges the
+   * room so every other participant drops them too.
+   *
+   * Only the SIGNALLING ID is sent. The host's screen has no durable identity
+   * for a participant, and an earlier version closed that gap by having peers
+   * announce their own — which meant a participant could announce somebody
+   * else's and have the host ban them by clicking Remove on the wrong tile.
+   * The server resolves it instead, from a row the server itself wrote.
+   */
+  const kickPeer = useCallback(async (peerId: string) => {
+    sendSignal({ type: "kick", from: myIdRef.current, target: peerId });
+    dropPeer(peerId);
+
+    if (!meetingIdRef.current) return;
+
+    // Awaited, and its failure surfaced. The broadcast above has already put
+    // them out of this call, but whether they can come BACK is decided by this
+    // request alone — and a host who saw the tile vanish has every reason to
+    // believe it is settled. A removal that silently failed to record is the
+    // defect this whole path replaced, so it must not be reintroduced as a
+    // console warning.
+    try {
+      const res = await fetch(`/api/meetings/${meetingIdRef.current}/removals`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ signalId: peerId }),
+      });
+      if (res.ok) {
+        void loadRemovalsRef.current();
+        return;
+      }
+      console.warn("[meeting] removal not recorded", res.status);
+    } catch (err) {
+      console.warn("[meeting] removal not recorded", err);
+    }
+    setRemovalNotice(
+      "They have been dropped from this call, but the removal could not be saved — they may be able to rejoin.",
+    );
+  }, [sendSignal, dropPeer]);
 
   // Admit / deny write the decision through the host-only admissions route
   // (service-role). The waiting guest's poll then picks up the new status and
@@ -5527,6 +5869,21 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
               </button>
             </div>
           )}
+          {/* A removal that could not be written down. The person IS out of the
+              call — the broadcast and the teardown both ran — but they may be
+              able to come back, and a host who watched the tile vanish would
+              otherwise have no way to know that. */}
+          {removalNotice && (
+            <div role="alert" className="flex items-center gap-3 px-4 py-2 bg-[var(--status-warning)]/10 border-b border-status-warning/30 shrink-0">
+              <p className="flex-1 text-xs text-[var(--fg-secondary)]">{removalNotice}</p>
+              <button
+                onClick={() => setRemovalNotice(null)}
+                className="shrink-0 text-xs text-[var(--fg-muted)] hover:text-[var(--fg-primary)] transition-colors"
+              >
+                Dismiss
+              </button>
+            </div>
+          )}
           {recorder.error && (
             <div role="alert" className="flex items-center gap-3 px-4 py-2 bg-red-500/10 border-b border-[var(--status-danger)]/30 shrink-0">
               <p className="flex-1 text-xs text-[var(--fg-secondary)]">{recorder.error}</p>
@@ -5613,8 +5970,9 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
               srStatus={srStatus} participants={participantList} roomCode={roomCode} meetingTitle={meetingTitle}
               chatMessages={chatMessages} chatUnread={chatUnread}
               onSendChat={(t) => void sendChat(t)} onRetryChat={(id) => void retryChat(id)} isHost={isHost}
-              raisedHands={raisedHands} onKick={kickPeer} onAdmit={admitPeer} onDeny={denyPeer} onAdmitAll={admitAll}
-              waitingPeers={waitingPeers}
+              raisedHands={raisedHands} onKick={(id) => void kickPeer(id)} onAdmit={admitPeer} onDeny={denyPeer} onAdmitAll={admitAll}
+              waitingPeers={livePeers}
+              removedPeople={removedPeople} onAllowBack={(s) => void allowBack(s)}
               onChatVisibility={handleChatVisibility}
               speaking={speaking}
               onCollapse={collapseCopilot}
@@ -5627,7 +5985,7 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
 
       {isHost && (
         <WaitingRoomBar
-          waitingPeers={waitingPeers}
+          waitingPeers={livePeers}
           onAdmit={admitPeer}
           onDeny={denyPeer}
           onAdmitAll={admitAll}
@@ -5641,7 +5999,7 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
         micOn={micOn} camOn={camOn} shareOn={shareOn} shareStarting={shareStarting} copilotOpen={copilotOpen}
         isHost={isHost} handRaised={handRaised} layout={layout} chatUnread={chatUnread}
         handsUp={handsUpPeople.length} handsUpNote={handsUpNote}
-        waitingCount={isHost ? waitingPeers.length : 0} duration={duration}
+        waitingCount={isHost ? livePeers.length : 0} duration={duration}
         roomCode={roomCode} bwMode={bwMode} layoutForced={layoutIsForced(layout, sharerId)}
         recordingState={recordingBanner?.state ?? "idle"}
         recordingBy={recordingBanner?.by ?? ""}

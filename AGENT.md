@@ -3178,6 +3178,145 @@ Deployed, monitoring               →  live, observability active
              |  re-measured from origin/main in a clean worktree; visual suite
              |  8/8. The bound, the ordering and the no-op render were each run
              |  against the previous behaviour first and fail there.
+2026-09-18  |  The removal that removed you from one screen  |  Asked to optimize
+             |  meeting participant management and the waiting room.
+             |  "REMOVE" WAS A MESSAGE. The host's client broadcast
+             |  {type:"kick", target} on the signalling channel and closed its
+             |  own peer connection, and nothing else happened anywhere. Two
+             |  consequences, both invisible from the host's screen, which is
+             |  where the tile had just vanished.
+             |  THEY NEVER LEFT. handleSignal gates the kick on
+             |  `msg.target === myId`, so only the removed person acts on it —
+             |  and kickPeer closed only the HOST's connection. Every other
+             |  participant kept a live peer connection, so the removed person's
+             |  camera and microphone carried on reaching all of them. The host
+             |  watched the tile go and reasonably concluded they were gone.
+             |  THEY CAME BACK. Nothing was written. A guest's guest_key lives
+             |  in localStorage against the room code and their admission row
+             |  still said "admitted", so a reload took the knock route's
+             |  "return the existing decision" path straight back into the call.
+             |  A signed-in teammate had it easier: callerIsOrgMember
+             |  auto-admits, so they never went near the waiting room at all.
+             |  Built: live_meeting_removals, keyed on the ACCOUNT for anyone
+             |  who has one and on the guest key otherwise. That asymmetry is
+             |  the whole design — membership is what waves a teammate past the
+             |  queue, and a teammate can drop a guest key but not an account.
+             |  Host-verified POST/DELETE route; the knock route refuses a
+             |  removed subject ahead of BOTH the membership check and quick
+             |  access, matched against the account the SERVER resolves from
+             |  cookies rather than anything the body claims.
+             |  DELETE exists because the fix opened a smaller hole than it
+             |  closed: a misclick used to correct itself the moment the person
+             |  pressed reload, and a durable removal with no undo would be a
+             |  worse trap than the one it replaced.
+             |  The nudge that tells the room names NOBODY, and that is load-
+             |  bearing. admission-channel.ts had already established that
+             |  anyone holding a room code can publish on a broadcast channel,
+             |  so a message saying "drop peer X" would be a way to eject
+             |  anybody from any meeting whose link was ever forwarded. Each
+             |  client instead asks POST /public/[roomCode]/removed about the
+             |  peers IT can see, and the endpoint answers only about subjects
+             |  the caller already named — so it cannot be turned into a way to
+             |  enumerate a meeting's guest keys, which would be enough to read
+             |  another guest's admission status from the poll next door.
+             |  Worth saying plainly: the subject a peer announces is
+             |  self-asserted, exactly as its displayName already was. This does
+             |  not pretend to fix the room's trust model. What it buys is that
+             |  a removal has something durable to be written against, and the
+             |  check that matters happens server-side on the way back in.
+             |  THE WAITING ROOM FILLED WITH PEOPLE WHO HAD LEFT. A `waiting`
+             |  row is cleared by a decision and by nothing else, so a guest who
+             |  knocked and closed the tab stayed in the host's panel for the
+             |  rest of the meeting — chiming, badging the tab title, counting
+             |  in "Waiting to join (3)", and ending with the host admitting
+             |  somebody who was never going to appear. The liveness signal
+             |  existed and was being discarded: a waiting guest polls every
+             |  1.5s and that handler only SELECTed. THE INVERSE OF THE USUAL
+             |  DIAGNOSTIC — instead of "follow what gets written and ask who
+             |  reads it", this was "follow what gets READ and ask what it could
+             |  have told us". Worth adding to the kit.
+             |  last_seen_at is throttled to a third of the grace window. The
+             |  naive version would have been an UPDATE every 1.5s per waiting
+             |  guest AND — because live_meeting_admissions is in the Realtime
+             |  publication and the host subscribes to `*` on it — a list
+             |  re-apply and a coalesced re-read on the host's screen at the
+             |  same rate. I nearly shipped that; the existing test asserting
+             |  the poll costs one query is what caught it.
+             |  The panel filters on presence rather than deleting rows, so a
+             |  guest who comes back (reopened the tab, out of the tunnel) keeps
+             |  their place in the queue instead of having to knock again.
+             |  Also: loadWaiting had no .limit(), so it truncated silently at
+             |  PostgREST's max_rows exactly as the transcript read used to. And
+             |  live_meeting_admissions.user_id has existed since the waiting
+             |  room shipped and has been NULL on EVERY row ever written — the
+             |  knock route resolved the caller's account to decide whether they
+             |  were a teammate and then threw it away. Found by the usual
+             |  diagnostic, and it is the column the removal needed.
+             |  MERGED WITH THE PASS ABOVE, which another session wrote at the
+             |  same time over the same files. The two fixed the stale-knock
+             |  defect from opposite ends and neither is redundant: they
+             |  withdraw eagerly (DELETE on cancel and pagehide), this expires
+             |  on a missing heartbeat. Their entry names the residual —
+             |  "a hard crash still leaves a stale row, because pagehide does
+             |  not fire for those. Closing that needs a server-side sweep" —
+             |  and last_seen_at closes exactly that, without a sweep. Where we
+             |  disagreed they listed loadWaiting's missing .limit() under
+             |  "checked and not changed"; it is bounded here, on the grounds
+             |  that it is a guard against PostgREST truncating silently rather
+             |  than a limit on how many people may queue. Two sessions on one
+             |  surface is now normal: assume it, and write the entry so the
+             |  other half can be told apart from your own.
+             |  REVIEW CAUGHT TWO THINGS THAT WOULD HAVE SHIPPED BROKEN, and
+             |  both deserve recording because both were failures of a pattern
+             |  this file already warns about.
+             |  The unique indexes were PARTIAL — `(meeting_id, user_id) WHERE
+             |  user_id IS NOT NULL` — and `ON CONFLICT` can only infer a
+             |  partial index if the statement repeats its predicate, which
+             |  PostgREST's `on_conflict` (column names only) cannot. So every
+             |  removal upsert would have failed with 42P10: EXACTLY the defect
+             |  already recorded here against live_meeting_participants. Reading
+             |  your own changelog is not the same as applying it.
+             |  And "Allow back" did nothing: DELETE lifted the removal row but
+             |  left the admission at `denied`, and the knock is idempotent, so
+             |  the person stayed out forever. The undo I added to avoid a trap
+             |  was itself inert.
+             |  THE BIGGER CORRECTION was the identity model. Peers announced
+             |  their own subject over the signalling channel and the host sent
+             |  it back to be removed — so a participant could announce somebody
+             |  ELSE'S subject, let the host click Remove on their tile, and
+             |  have the service role ban the victim while they reconnected. I
+             |  had written "self-asserted, exactly as displayName already is"
+             |  and talked myself past it. It is not the same: a display name
+             |  misleads a human, an identity here drives a privileged write.
+             |  Now the knock records the signalling id, the host sends only
+             |  that, and the SERVER resolves whose tile it is. Which deleted
+             |  code — no subject on the wire, no parseSubject, no removedAmong
+             |  — and made the public check answer in signalling ids, which
+             |  everyone in the room already has.
+             |  The same move fixed the `kick` signal, which predates all of
+             |  this: it was obeyed on arrival, on a channel anyone with the
+             |  room code can publish to. It is a hint to go and ask now.
+             |  Also from review: the knock checked ONE subject (subjectFor
+             |  prefers the account, so a guest removed by key could sign in and
+             |  slip past); readRemovals treated a failed query as "nobody is
+             |  removed"; the presence write was a bare `void` in a serverless
+             |  handler, which this file records as a defect class and which
+             |  `after()` exists for; and the stale filter ran after the cap, so
+             |  a queue headed by people who had left would hide everyone real.
+             |  LESSON worth keeping: a comment explaining why something is
+             |  acceptable is the place to look hardest. Three of these were
+             |  under one.
+             |  Confidence: typecheck/eslint clean, production build passes,
+             |  Jest 6449 → 6566 green, baseline
+             |  re-measured from origin/main in a clean worktree; visual suite
+             |  8/8. The knock refusals were each run against the previous
+             |  behaviour first and fail there.
+             |  STILL NOT COVERED: the MeetingRoom coverage gap flagged on the
+             |  last eight passes. CopilotSidebar's new panel is tested
+             |  directly, and the pure rules and both routes are; the room's own
+             |  wiring of them — the subject announcement, the nudge
+             |  subscription, dropPeer — is exercised only by typecheck and
+             |  build.
 ```
 
 ---
