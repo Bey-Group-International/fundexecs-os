@@ -46,3 +46,17 @@ if (typeof Blob !== "undefined") {
     });
   }
 }
+
+// Element.scrollIntoView() — jsdom has no layout engine, so it ships no
+// scrolling at all and the method is simply absent. Five components in this
+// repo call it to keep a list pinned to its newest entry, and every one of
+// them throws on mount in a test without this. A no-op is the honest fill:
+// there is no layout to scroll, and nothing a component test could assert
+// about the result. A test that cares can spy on it.
+if (typeof Element !== "undefined" && typeof Element.prototype.scrollIntoView !== "function") {
+  Object.defineProperty(Element.prototype, "scrollIntoView", {
+    configurable: true,
+    writable: true,
+    value() { /* no layout in jsdom — nothing to scroll */ },
+  });
+}

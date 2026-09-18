@@ -2905,6 +2905,74 @@ Deployed, monitoring               →  live, observability active
              |  MeetingRoom/Supabase coverage gap flagged on the last six passes
              |  still means the three readers themselves are only exercised by
              |  typecheck and build.
+
+2026-09-18  |  The chat that could not tell you it had failed  |  Asked to check
+             |  for defects with the chat, then to fix all four. Chat looks like
+             |  the simplest thing in the meeting and had the most ways to
+             |  mislead the person using it.
+             |  A SEND THAT FAILED LOOKED EXACTLY LIKE A SEND THAT WORKED.
+             |  sendSignal was `channelRef.current?.send(...)` with the returned
+             |  promise dropped. Realtime resolves it to "ok", "timed out" or
+             |  "error", and sendChat appended the message locally FIRST and
+             |  unconditionally. The channel is `broadcast: { self: false }`, so
+             |  there was never a round trip to notice the absence of either. A
+             |  send that timed out left somebody reading their own words in a
+             |  room that had not received them — and the optional chain turned
+             |  "there is no socket at all" into the same silence. Now the send
+             |  is awaited and its answer becomes the message's own state:
+             |  sending, sent, or "Not delivered" with a Retry that reuses the
+             |  original id so a message that did go out cannot land twice. The
+             |  precedent was already in the repo: nudgeGuests awaits the same
+             |  call and counts failures, and says in its header that it may
+             |  fail BECAUSE every guest also polls. Chat has no second chance.
+             |  THERE WAS NOWHERE AN UNREAD COUNT COULD APPEAR. chatOpenRef was
+             |  set true when the chat tab mounted and cleared only when the
+             |  whole panel collapsed, so switching to People left it true and
+             |  every message that arrived while somebody read the roster counted
+             |  as read. Nothing said otherwise either — the toolbar badge is
+             |  gated on `!copilotOpen`, and the Chat tab had no badge of its
+             |  own. A host triaging the waiting room got no sign at all. The
+             |  panel now reports visibility both ways round, and the Chat tab
+             |  carries the count.
+             |  MESSAGES WERE ORDERED BY ARRIVAL, SO NO TWO PEOPLE SAW THE SAME
+             |  CONVERSATION. `ts` was carried end to end and read by nothing:
+             |  the sender appended at send time, everyone else at receive time,
+             |  so a line landed before its replies on one screen and after them
+             |  on another. Sorted on ts now, tie-broken by the sender's message
+             |  id — which is why the id is now carried on the wire. Same fix,
+             |  for the same reason, restoreTranscript applies to rows.
+             |  TEXT AND NAMES WERE TAKEN ON THE SENDER'S TERMS. No bound on
+             |  either, and the name shown was whatever the payload claimed
+             |  rather than the roster's, keyed by signaling id — the thing the
+             |  TranscriptLine comment already argues for. Now bounded at 2000
+             |  characters on the way out AND the way in, without cutting a
+             |  surrogate pair in half, and resolved from the roster. A clock
+             |  more than two minutes from ours stops deciding where its
+             |  messages sit and gets our arrival time instead.
+             |  Worth naming: the audit's fourth finding was reported WRONG and
+             |  the browser said so. I wrote that a pasted URL would force the
+             |  column wider than the panel, "which only scrolls vertically".
+             |  It does not: Tailwind's `overflow-y-auto` sets one axis, and CSS
+             |  computes the other to `auto` whenever its pair is not `visible`.
+             |  So the panel silently becomes a SIDEWAYS SCROLLER and takes
+             |  every other message off-screen with it — milder than a burst
+             |  page, and still wrong. The first version of the visual check
+             |  passed against the unfixed bubble, which is how this was caught;
+             |  it now measures scrollWidth against clientWidth and fails at
+             |  phone width without `break-words`.
+             |  Confidence: typecheck/eslint clean, production build passes,
+             |  Jest 6357 → 6390 green (+33 new, +2 suites), baseline
+             |  re-measured from origin/main in a clean worktree; visual suite
+             |  8/8. Ordering, naming and the length bound were each run against
+             |  the previous behaviour first and fail there; delivery had no
+             |  previous behaviour to fail.
+             |  NEW: MeetingRoom.chat.visual.test.ts is the first layout check
+             |  on the meeting room, and jest.setup.dom.ts now fills
+             |  Element.scrollIntoView — absent from jsdom, called by five
+             |  components here, and the reason none of them had a test. A real
+             |  dent in the MeetingRoom coverage gap flagged on the last seven
+             |  passes: CopilotSidebar is now exported and tested directly, the
+             |  way HostExitControl already was.
 ```
 
 ---
