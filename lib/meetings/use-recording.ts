@@ -80,6 +80,22 @@ interface RecordingRun {
   bytes: number;
   count: number;
   /**
+   * Where the recording ENDS on its own clock — the furthest point any part
+   * that actually landed reaches.
+   *
+   * This is the duration, and it is not the same number as the wall clock
+   * since Record was pressed. A part that could not be stored after every
+   * retry is five seconds of meeting that is not in the file, and this path
+   * counts those (see `dropped`); wall clock counts them anyway. So a
+   * recording that lost a minute of a board meeting used to be filed, listed
+   * and exported as a minute longer than the video anyone could watch.
+   *
+   * Computed the same way the sweep and the player's scrubber compute it —
+   * the furthest `offsetMs + durationMs` — so all three agree by construction
+   * rather than by coincidence.
+   */
+  endMs: number;
+  /**
    * Parts that could not be stored after every attempt. Counted rather than
    * logged: a recording that quietly lost a minute of a board meeting and
    * reported itself complete is worse than one that says so.
@@ -185,6 +201,7 @@ export function useRecording(input: UseRecordingInput): UseRecordingResult {
 
         run.bytes += blob.size;
         run.count += 1;
+        run.endMs = Math.max(run.endMs, timing.offsetMs + timing.durationMs);
         return;
       } catch (err) {
         const delay = classifyUploadError(err) === "retry" ? uploadRetryDelay(attempt) : null;
@@ -208,7 +225,10 @@ export function useRecording(input: UseRecordingInput): UseRecordingResult {
     // recording can reach — that await is exactly where the counters used to
     // be swapped out from under this.
     await run.queue;
-    const seconds = run.startedAt ? Math.round((Date.now() - run.startedAt) / 1000) : 0;
+    // From the parts, never from the clock. See RecordingRun.endMs: the two
+    // disagree by exactly the parts that were dropped, and the stored file is
+    // the shorter of them.
+    const seconds = Math.round(run.endMs / 1000);
     try {
       await supabase
         .from("live_meeting_recordings")
@@ -262,6 +282,7 @@ export function useRecording(input: UseRecordingInput): UseRecordingResult {
         startedAt: Date.now(),
         bytes: 0,
         count: 0,
+        endMs: 0,
         dropped: 0,
         queue: Promise.resolve(),
       };

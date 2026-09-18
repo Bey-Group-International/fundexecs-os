@@ -36,6 +36,8 @@ function fakeClient() {
   /** Resolvers for uploads held open, so a test can decide when a part lands. */
   const held: Array<() => void> = [];
   let holdUploads = false;
+  /** Uploads refused outright — a 4xx, which upload-retry gives up on. */
+  let refuseUploads = false;
 
   const client = {
     from(table: string) {
@@ -68,6 +70,7 @@ function fakeClient() {
         return {
           upload: async () => {
             if (holdUploads) await new Promise<void>((resolve) => held.push(resolve));
+            if (refuseUploads) return { error: Object.assign(new Error("refused"), { status: 403 }) };
             return { error: null };
           },
         };
@@ -80,6 +83,7 @@ function fakeClient() {
     updates,
     failNextInsert: () => { insertFails = true; },
     holdUploads: () => { holdUploads = true; },
+    refuseUploads: () => { refuseUploads = true; },
     releaseUploads: () => { holdUploads = false; held.splice(0).forEach((r) => r()); },
   };
 }
@@ -164,5 +168,65 @@ describe("recording again while the previous one is still closing", () => {
     const closed = sb.updates.find((u) => u.id === "r1" && u.patch.status === "complete");
     expect(closed?.patch.chunk_count).toBe(2);
     expect(closed?.patch.size_bytes).toBe(300);
+  });
+});
+
+describe("how long the recording says it is", () => {
+  // The defect: duration_seconds came from the wall clock since Record was
+  // pressed, while the sweep and the player's scrubber both read it off the
+  // parts. They agree only when nothing was lost — and this path counts what
+  // was lost, so it always knew better.
+  it("measures the parts, not the clock", async () => {
+    const sb = fakeClient();
+    const { result } = setup(sb);
+
+    await act(async () => { await result.current.start(); });
+    act(() => { composer!.handlers.onChunk(new Blob(["a"]), 0, { offsetMs: 0, durationMs: 5000 }); });
+    await flush();
+    act(() => { composer!.handlers.onChunk(new Blob(["b"]), 1, { offsetMs: 5000, durationMs: 5000 }); });
+    await flush();
+
+    act(() => { composer!.handlers.onStopped("stopped"); });
+    await flush();
+
+    // Ten seconds of parts. The wall clock in a test is zero, which is exactly
+    // what the previous implementation would have written.
+    const closed = sb.updates.find((u) => u.id === "r1" && u.patch.status === "complete");
+    expect(closed?.patch.duration_seconds).toBe(10);
+  });
+
+  // The case the two measurements actually differ on in production: a part
+  // that could not be stored after every retry is five seconds of meeting that
+  // is not in the file, and the clock counts it anyway.
+  it("does not count a part that never made it", async () => {
+    const sb = fakeClient();
+    const { result } = setup(sb);
+
+    await act(async () => { await result.current.start(); });
+    act(() => { composer!.handlers.onChunk(new Blob(["a"]), 0, { offsetMs: 0, durationMs: 5000 }); });
+    await flush();
+
+    sb.refuseUploads();
+    act(() => { composer!.handlers.onChunk(new Blob(["b"]), 1, { offsetMs: 5000, durationMs: 5000 }); });
+    await flush();
+
+    act(() => { composer!.handlers.onStopped("stopped"); });
+    await flush();
+
+    const closed = sb.updates.find((u) => u.id === "r1" && u.patch.status === "complete");
+    expect(closed?.patch.duration_seconds).toBe(5);
+    expect(closed?.patch.chunk_count).toBe(1);
+  });
+
+  it("is zero for a recording that stored nothing", async () => {
+    const sb = fakeClient();
+    const { result } = setup(sb);
+
+    await act(async () => { await result.current.start(); });
+    act(() => { composer!.handlers.onStopped("stopped"); });
+    await flush();
+
+    const closed = sb.updates.find((u) => u.id === "r1" && u.patch.status === "complete");
+    expect(closed?.patch.duration_seconds).toBe(0);
   });
 });
