@@ -3217,6 +3217,67 @@ Deployed, monitoring               →  live, observability active
              |  wiring of them — the subject announcement, the nudge
              |  subscription, dropPeer — is exercised only by typecheck and
              |  build.
+
+2026-09-18  |  The recording that outlived the meeting  |  Asked to optimize the
+             |  meeting recording lifecycle and storage. The lifecycle itself
+             |  was already built — an hourly sweep expires recordings and
+             |  closes out ones whose host vanished mid-call — so this is three
+             |  ways the BYTES escaped it.
+             |  DELETING A MEETING DELETED EVERYTHING EXCEPT THE RECORDING.
+             |  live_meeting_recordings.meeting_id is ON DELETE CASCADE and the
+             |  chunk rows cascade from that, so a hard delete removed every row
+             |  that knew a recording existed and left the recording in the
+             |  bucket. And not in a harmless way: the Storage read policy asks
+             |  attended_live_meeting(), which resolves through live_meetings,
+             |  so with the meeting gone nobody could read them either. A host
+             |  pressed Delete, was told it was done, and the faces, voices and
+             |  shared screens stayed — unreachable, unfindable by the expiry
+             |  sweep, and kept. Worth naming the shape: THE CASCADE DESTROYED
+             |  THE EVIDENCE OF WHAT TO CLEAN UP. Any delete whose side effects
+             |  live outside Postgres has this problem, and the fix is always
+             |  the same two halves — read what you will need before the delete,
+             |  and have a sweep that can find the wreckage without it.
+             |  So: the route reads the ids first and removes the objects, and
+             |  the sweep gained an orphan pass driven from the BUCKET rather
+             |  than the database, because the database is exactly where the
+             |  evidence went. That pass is not belt-and-braces — it is what
+             |  covers every meeting deleted before today, and scheduling-
+             |  service.ts, which hard-deletes meetings without going near the
+             |  route. It spares soft-deleted meetings on purpose: those can
+             |  still be restored and their recording is still readable.
+             |  THE EXPIRY SWEEP ORPHANED EVERYTHING PAST THE THOUSANDTH PART.
+             |  removeObjects listed the prefix with { limit: 1000 } and no
+             |  paging. CHUNK_MS is 5s, so a thousand parts is 83 minutes: every
+             |  recording longer than that left its remainder behind while the
+             |  row was marked deleted, its size zeroed and its chunk rows
+             |  dropped — after which nothing pointed at those objects at all.
+             |  The function's own comment says it lists rather than reading the
+             |  chunk rows precisely so an object the rows lost track of still
+             |  gets cleaned; the cap silently defeated that, for exactly the
+             |  recordings that cost the most. Paged now, and it THROWS rather
+             |  than half-deleting: marking a row gone while objects nothing can
+             |  find remain is the one outcome worse than not deleting.
+             |  TWO CLOSE PATHS, TWO DIFFERENT DURATIONS. finalize() wrote
+             |  duration_seconds from wall clock; the sweep wrote it from the
+             |  part timeline and said so — "the same figure the player's
+             |  scrubber shows, from the same rows". They differ by exactly the
+             |  parts that were dropped, which this path already counts, so a
+             |  recording that lost a minute was listed and exported a minute
+             |  longer than the video anyone could watch. Both read the parts
+             |  now. THE DIAGNOSTIC HERE WAS "two things compute the same
+             |  number; do they agree?" — worth adding beside "follow what gets
+             |  written and ask who reads it".
+             |  Confidence: typecheck/eslint clean, production build passes,
+             |  Jest 6575 → 6600 green (+25 new, +1 suite) measured on this
+             |  branch's own merge base, which is the waiting-room pass plus
+             |  main after #1114. The paging and orphan cases were run against
+             |  the previous behaviour first and fail there; the delete route
+             |  had no tests at all before this.
+             |  NOT COVERED: nothing verifies the bucket against the database in
+             |  the other direction — a chunk row whose object is missing is
+             |  still only discovered by a viewer hitting a hole. And the orphan
+             |  pass reads the bucket root, which only ever grows; at some size
+             |  that listing needs its own cursor.
 ```
 
 ---
