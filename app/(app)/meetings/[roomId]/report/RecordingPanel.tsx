@@ -49,12 +49,15 @@ export function RecordingPanel({
   meetingId,
   playerRef,
   onRecordingReady,
+  onTime,
 }: {
   meetingId: string;
   /** Handed to the first playable recording, so the transcript can drive it. */
   playerRef?: React.Ref<RecordingPlayerHandle>;
   /** When the recording the transcript should follow is known. */
   onRecordingReady?: (startedAt: string) => void;
+  /** Where that recording has got to, so the transcript can follow it back. */
+  onTime?: (ms: number) => void;
 }) {
   const [recordings, setRecordings] = useState<Recording[] | null>(null);
 
@@ -123,6 +126,10 @@ export function RecordingPanel({
                 meetingId={meetingId}
                 recordingId={rec.id}
                 ref={index === 0 ? playerRef : undefined}
+                // Only the first: it is the one the transcript is timed
+                // against, and a second player reporting into the same
+                // follower would make the transcript jump between two clocks.
+                onTime={index === 0 ? onTime : undefined}
               />
               <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-[var(--fg-muted)]">
                 {rec.status === "recording" && (

@@ -3378,6 +3378,64 @@ Deployed, monitoring               →  live, observability active
              |  still only discovered by a viewer hitting a hole. And the orphan
              |  pass reads the bucket root, which only ever grows; at some size
              |  that listing needs its own cursor.
+
+2026-09-18  |  The transcript that would not follow, and the search that found
+             |  turns  |  Asked to optimize the meeting transcript search and
+             |  playback sync. Both defects turned out to be the same shape:
+             |  the panel knew something and told nobody.
+             |  SYNC RAN ONE WAY. A line could seek the recording — that was
+             |  built in #1101 — and the recording reported its position to
+             |  nobody. RecordingPlayer tracked positionMs in its own state and
+             |  never lifted it. So watching forty minutes of a meeting back
+             |  meant scrolling the transcript by hand to keep up, which is the
+             |  work having the two side by side exists to remove. Every piece
+             |  was already there: the cues carry a clock and the player tracks
+             |  one. The missing thing was a wire and the question "which of
+             |  these is being said right now" (cueAt — the LAST cue that has
+             |  started, not the nearest, so a pause mid-sentence still belongs
+             |  to the speaker).
+             |  cuesCanFollow is the honest half: transcriptCues clamps to zero
+             |  every turn spoken before Record was pressed, which is right for
+             |  seeking (the nearest moment the recording holds is its start)
+             |  and useless for following — a meeting recorded from halfway has
+             |  a pile of turns all claiming 0ms, and marking one of them "now"
+             |  would be inventing a fact. So following is offered only when
+             |  the clamped pile is not most of the transcript.
+             |  SEARCH FOUND TURNS, NOT WORDS. It filtered the list to the turns
+             |  containing the query and stopped. The match was never shown, so
+             |  searching "valuation" returned eight turns and left you reading
+             |  all of them to find the word — the task the search box exists to
+             |  avoid. There was no count and nowhere to step. And filtering
+             |  DELETED the conversation around each hit, which is the part that
+             |  makes a hit mean anything: "Yes, about forty" is not an answer
+             |  until the question above it is visible.
+             |  It locates now instead of filtering: every match, in order, with
+             |  its span inside the paragraph, so the caller paints them in
+             |  place. Parts rather than markup, the same rule chatParts
+             |  follows, because this is other people's words. A test asserts
+             |  the parts reassemble into exactly the sentence that was said — a
+             |  renderer that drops a character is rewriting a meeting record.
+             |  WORTH KEEPING: "what does this component know that it never
+             |  says?" found both. It is the same question as "follow what gets
+             |  written and ask who reads it", pointed at state instead of at
+             |  rows — positionMs was written on every timeupdate and read by
+             |  one scrubber.
+             |  Also: stepping to a search hit beats following the playhead, on
+             |  purpose. Somebody who searched is reading, not watching, and
+             |  being dragged away mid-sentence by the recording is the
+             |  behaviour that makes people switch sync off everywhere it
+             |  exists. Following also yields to the first scroll and offers
+             |  itself back rather than fighting.
+             |  Confidence: typecheck/eslint clean, production build passes,
+             |  Jest 6592 → 6663 green (+71 new, +2 suites) measured on this
+             |  branch's own base. The panel now has a component test at last —
+             |  a real dent in the report-page coverage gap flagged on the last
+             |  nine passes, and it covers both directions of the link plus the
+             |  text-integrity property.
+             |  NOT COVERED: the highlight is a substring match, so a search for
+             |  "forty" does not find "40". Worth doing and deliberately not
+             |  done here — number and homophone matching is its own pass, and
+             |  guessing at it silently would make the count untrustworthy.
 ```
 
 ---

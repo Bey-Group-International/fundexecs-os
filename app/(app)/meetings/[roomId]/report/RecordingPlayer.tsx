@@ -52,10 +52,21 @@ export interface RecordingPlayerHandle {
 export function RecordingPlayer({
   meetingId,
   recordingId,
+  onTime,
   ref,
 }: {
   meetingId: string;
   recordingId: string;
+  /**
+   * Where playback has got to, in milliseconds.
+   *
+   * Reported so the transcript can follow. Seeking was one-way before this:
+   * a line could drive the player, and the player told nobody where it was —
+   * so watching forty minutes of a meeting meant scrolling the transcript by
+   * hand to keep up, which is the work having the two side by side is
+   * supposed to remove.
+   */
+  onTime?: (ms: number) => void;
   ref?: React.Ref<RecordingPlayerHandle>;
 }) {
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -267,7 +278,12 @@ export function RecordingPlayer({
         onPlay={() => setPlaying(true)}
         onPause={() => setPlaying(false)}
         onTimeUpdate={() => {
-          if (!scrubbing) setPositionMs((videoRef.current?.currentTime ?? 0) * 1000);
+          const ms = (videoRef.current?.currentTime ?? 0) * 1000;
+          // The scrub guard is about the SLIDER, which must not fight the
+          // thumb somebody is dragging. The transcript has no such conflict
+          // and should keep following, so it is told either way.
+          if (!scrubbing) setPositionMs(ms);
+          onTime?.(ms);
           refill();
         }}
         onWaiting={refill}

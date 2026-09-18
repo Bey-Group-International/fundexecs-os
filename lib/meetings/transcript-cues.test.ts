@@ -89,3 +89,68 @@ describe("cuesAreTimed", () => {
     expect(cuesAreTimed(transcriptCues([row("Ana", "a", 0)], START))).toBe(false);
   });
 });
+
+// ── Following the recording ─────────────────────────────────────────────────
+
+import { cueAt, cuesCanFollow, type TranscriptCue } from "@/lib/meetings/transcript-cues";
+
+const cueAtMs = (atMs: number): TranscriptCue => ({
+  speaker: "Rae", atMs, uncertain: false, overlapped: false, paragraphs: ["…"],
+});
+
+describe("cueAt", () => {
+  const cues = [cueAtMs(0), cueAtMs(5_000), cueAtMs(12_000)];
+
+  it("finds the turn that has started, not the nearest one", () => {
+    // 11.9s is closer to 12s, but the turn at 5s is the one being spoken.
+    expect(cueAt(cues, 11_900)).toBe(1);
+  });
+
+  it("lands on a turn exactly at its own start", () => {
+    expect(cueAt(cues, 5_000)).toBe(1);
+  });
+
+  it("stays on the last turn past the end", () => {
+    expect(cueAt(cues, 9_999_999)).toBe(2);
+  });
+
+  // Lighting up the first line during a silent lead-in would be claiming
+  // somebody was speaking when they were not.
+  it("has no current turn before the first word", () => {
+    expect(cueAt([cueAtMs(3_000)], 1_000)).toBe(-1);
+  });
+
+  it("has nothing to say about nothing", () => {
+    expect(cueAt([], 1_000)).toBe(-1);
+    expect(cueAt(cues, NaN)).toBe(-1);
+    expect(cueAt(cues, -1)).toBe(-1);
+  });
+
+  // Called on every timeupdate against an hour of turns, so the walk has to be
+  // a search. This pins the answer, not the method — but a linear scan that
+  // stopped early would fail it.
+  it("agrees with a plain scan across a long transcript", () => {
+    const many = Array.from({ length: 2_000 }, (_, i) => cueAtMs(i * 5_000));
+    for (const ms of [0, 4_999, 5_000, 7_500_000, 9_999_999]) {
+      const scanned = many.reduce((best, c, i) => (c.atMs <= ms ? i : best), -1);
+      expect(cueAt(many, ms)).toBe(scanned);
+    }
+  });
+});
+
+describe("cuesCanFollow", () => {
+  it("follows a normally timed transcript", () => {
+    expect(cuesCanFollow([cueAtMs(0), cueAtMs(5_000), cueAtMs(12_000)])).toBe(true);
+  });
+
+  // A meeting recorded from halfway has every earlier turn clamped to zero.
+  // Marking whichever came last in that pile as "now" would invent a fact.
+  it("declines when most turns are clamped to the start", () => {
+    expect(cuesCanFollow([cueAtMs(0), cueAtMs(0), cueAtMs(0), cueAtMs(9_000)])).toBe(false);
+  });
+
+  it("declines a transcript with no clock at all", () => {
+    expect(cuesCanFollow([cueAtMs(0), cueAtMs(0)])).toBe(false);
+    expect(cuesCanFollow([])).toBe(false);
+  });
+});
