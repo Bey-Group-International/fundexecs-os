@@ -41,6 +41,8 @@ function setup(props: Partial<React.ComponentProps<typeof CopilotSidebar>> = {})
       onDeny={jest.fn()}
       onAdmitAll={jest.fn()}
       waitingPeers={[]}
+      removedPeople={[]}
+      onAllowBack={jest.fn()}
       onChatVisibility={onChatVisibility}
       onCollapse={jest.fn()}
       {...props}

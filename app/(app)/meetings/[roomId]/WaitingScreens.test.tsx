@@ -19,7 +19,7 @@ import {
 } from "./WaitingScreens";
 
 const peer = (over: Partial<WaitingPeer> = {}): WaitingPeer => ({
-  id: "adm-1", from: "guest-key-1", displayName: "Ada", ...over,
+  id: "adm-1", from: "guest-key-1", displayName: "Ada", seenAtMs: Date.now(), ...over,
 });
 
 describe("NotAdmittedScreen", () => {

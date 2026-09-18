@@ -107,6 +107,8 @@ function panel(chatMessages: ChatMessage[]): string {
       onDeny: () => {},
       onAdmitAll: () => {},
       waitingPeers: [],
+      removedPeople: [],
+      onAllowBack: () => {},
       onChatVisibility: () => {},
       onCollapse: () => {},
     }),

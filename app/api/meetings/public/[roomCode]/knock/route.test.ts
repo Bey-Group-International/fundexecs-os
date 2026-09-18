@@ -14,6 +14,7 @@ jest.mock("@/lib/supabase/server", () => ({
 import { NextRequest } from "next/server";
 import { clearRateLimitBucketsForTests } from "@/lib/rate-limit";
 import { POST, GET } from "./route";
+import { PRESENCE_WRITE_MS } from "@/lib/meetings/waiting-room";
 
 const params = (roomCode = "abc-defg-hi") => ({ params: Promise.resolve({ roomCode }) });
 
@@ -34,11 +35,12 @@ function memberBuilder(member: unknown) {
 }
 
 const updateCapture: { patch?: Record<string, unknown> } = {};
+const insertCapture: { row?: Record<string, unknown> } = {};
 function admissionsBuilder({ existing, inserted }: { existing?: unknown; inserted?: unknown }) {
   let inserting = false;
   const b: Record<string, unknown> = {
     select: () => b, eq: () => b, is: () => b, order: () => b,
-    insert: () => { inserting = true; return b; },
+    insert: (row: Record<string, unknown>) => { inserting = true; insertCapture.row = row; return b; },
     update: (patch: Record<string, unknown>) => { updateCapture.patch = patch; return b; },
     maybeSingle: async () => ({ data: inserting ? inserted ?? null : existing ?? null, error: null }),
     then: (resolve: (v: unknown) => void) => resolve({ error: null }),
@@ -86,15 +88,27 @@ function racingAdmissionsBuilder(
 /** Tables touched, in order — so a test can assert how many round trips a poll costs. */
 const tablesHit: string[] = [];
 
+/** The removals table: a plain awaited select, no maybeSingle. */
+function removalsBuilder(rows: unknown[]) {
+  const b: Record<string, unknown> = {
+    select: () => b,
+    eq: () => b,
+    then: (resolve: (v: unknown) => void) => resolve({ data: rows, error: null }),
+  };
+  return b;
+}
+
 function wire(
   meeting: unknown,
   admissions: { existing?: unknown; inserted?: unknown } = {},
   member: unknown = null,
+  removals: unknown[] = [],
 ) {
   from.mockImplementation((table: string) => {
     tablesHit.push(table);
     if (table === "live_meetings") return meetingBuilder(meeting);
     if (table === "organization_members") return memberBuilder(member);
+    if (table === "live_meeting_removals") return removalsBuilder(removals);
     return admissionsBuilder(admissions);
   });
 }
@@ -128,6 +142,7 @@ function postReq(body: unknown, ip = "198.51.100.7") {
 beforeEach(() => {
   jest.clearAllMocks();
   updateCapture.patch = undefined;
+  insertCapture.row = undefined;
   tablesHit.length = 0;
   getUser.mockResolvedValue({ data: { user: null } });
   // The limiter's buckets are module state. Cleared between tests so one test's
@@ -314,8 +329,10 @@ describe("GET poll", () => {
   }
 
   /** The joined shape the fast path selects: the admission with its meeting embedded. */
-  const joined = (status: string, meetingStatus = "active") => ({
+  const joined = (status: string, meetingStatus = "active", lastSeenAt: string | null = null) => ({
+    id: "a1",
     status,
+    last_seen_at: lastSeenAt,
     live_meetings: { status: meetingStatus, room_code: "abc-defg-hi", deleted_at: null },
   });
 
@@ -336,11 +353,51 @@ describe("GET poll", () => {
   });
 
   // This endpoint is polled by every waiting guest for as long as they wait, so
-  // the common case must not pay for a meeting lookup it does not need.
-  it("costs a single query when the guest has a knock on file", async () => {
+  // the common case must not pay for a meeting lookup it does not need. The
+  // claim is about THAT lookup: the joined read answers the status on its own.
+  it("costs no meeting lookup when the guest has a knock on file", async () => {
     wire({ id: "m1", organization_id: "org1", status: "active" }, { existing: joined("waiting") });
     await GET(getReq(), params());
+    expect(tablesHit).not.toContain("live_meetings");
+  });
+
+  // ── Presence ──────────────────────────────────────────────────────────────
+  //
+  // The poll is the only proof anybody has that a waiting guest is still there,
+  // and it used to be thrown away. Recording it is what stops a guest who
+  // knocked and closed the tab sitting in the host's panel all meeting.
+
+  it("records a first sighting for a guest with no presence yet", async () => {
+    wire({ id: "m1", organization_id: "org1", status: "active" }, { existing: joined("waiting") });
+    await GET(getReq(), params());
+    expect(updateCapture.patch).toMatchObject({ last_seen_at: expect.any(String) });
+  });
+
+  // Throttled hard. Unthrottled this is an UPDATE every 1.5s per waiting guest
+  // — and, because the table is published to Realtime and the host subscribes
+  // to `*` on it, a re-apply and a coalesced re-read on the host's screen at
+  // the same rate.
+  it("does not write again on the next tick", async () => {
+    const justNow = new Date().toISOString();
+    wire({ id: "m1", organization_id: "org1", status: "active" }, { existing: joined("waiting", "active", justNow) });
+    await GET(getReq(), params());
+    expect(updateCapture.patch).toBeUndefined();
     expect(tablesHit).toEqual(["live_meeting_admissions"]);
+  });
+
+  it("writes again once the record has gone stale", async () => {
+    const old = new Date(Date.now() - PRESENCE_WRITE_MS - 1_000).toISOString();
+    wire({ id: "m1", organization_id: "org1", status: "active" }, { existing: joined("waiting", "active", old) });
+    await GET(getReq(), params());
+    expect(updateCapture.patch).toMatchObject({ last_seen_at: expect.any(String) });
+  });
+
+  // A decided guest is not waiting for anything, and this is the hottest read
+  // in the meeting stack.
+  it("does not record presence for a guest who already has their answer", async () => {
+    wire({ id: "m1", organization_id: "org1", status: "active" }, { existing: joined("admitted") });
+    await GET(getReq(), params());
+    expect(updateCapture.patch).toBeUndefined();
   });
 
   it("reports an ended meeting from the joined row, without a second query", async () => {
@@ -465,5 +522,112 @@ describe("rate limiting", () => {
     wire(meeting, { existing: null, inserted: { id: "a1", status: "waiting" } });
     const res = await POST(postReq({ guestKey: "g1" }), params());
     expect(res.status).toBe(200);
+  });
+});
+
+// ── Removal ─────────────────────────────────────────────────────────────────
+//
+// Removing somebody used to write nothing at all: the host's client broadcast a
+// "kick" and closed its own peer connection, so the removal lasted exactly as
+// long as it took the person to press reload. This is the door being shut.
+
+describe("a removed person knocking again", () => {
+  const meeting = { id: "m1", organization_id: "org1", status: "active" };
+  const quickAccess = { ...meeting, guest_quick_access: true };
+
+  beforeEach(() => {
+    getUser.mockResolvedValue({ data: { user: null } });
+  });
+
+  it("refuses a removed guest by their key", async () => {
+    wire(meeting, { existing: null, inserted: { id: "a1", status: "waiting" } }, null, [
+      { user_id: null, guest_key: "g1" },
+    ]);
+    const res = await POST(postReq({ guestKey: "g1", displayName: "Mal" }), params());
+    expect(await res.json()).toEqual({ status: "denied" });
+  });
+
+  it("leaves everybody else alone", async () => {
+    wire(meeting, { existing: null, inserted: { id: "a2", status: "waiting" } }, null, [
+      { user_id: null, guest_key: "someone-else" },
+    ]);
+    const res = await POST(postReq({ guestKey: "g1", displayName: "Ada" }), params());
+    expect(await res.json()).toEqual({ admissionId: "a2", status: "waiting" });
+  });
+
+  // The reason a removal is keyed on the account for anyone who has one: org
+  // membership is what waves a teammate past the waiting room, so a removal
+  // that did not outrank it would not touch them at all.
+  it("refuses a removed teammate, ahead of their membership", async () => {
+    getUser.mockResolvedValue({ data: { user: { id: "u1" } } });
+    wire(meeting, { existing: null, inserted: { id: "a1", status: "admitted" } }, { organization_id: "org1" }, [
+      { user_id: "u1", guest_key: null },
+    ]);
+    const res = await POST(postReq({ guestKey: "g1", displayName: "Sam" }), params());
+    expect(await res.json()).toEqual({ status: "denied" });
+  });
+
+  // And the thing keying on the account actually buys: clearing site data
+  // mints a brand new guest key, and changes nothing.
+  it("refuses a removed teammate who arrives with a fresh guest key", async () => {
+    getUser.mockResolvedValue({ data: { user: { id: "u1" } } });
+    wire(meeting, { existing: null, inserted: { id: "a1", status: "admitted" } }, { organization_id: "org1" }, [
+      { user_id: "u1", guest_key: null },
+    ]);
+    const res = await POST(postReq({ guestKey: "brand-new-key", displayName: "Sam" }), params());
+    expect(await res.json()).toEqual({ status: "denied" });
+  });
+
+  // Quick access is the other way past the queue, and it used to skip resolving
+  // the caller entirely — so a removal on a quick-access meeting would have
+  // lasted until the person pressed reload.
+  it("refuses a removed guest even when quick access is on", async () => {
+    wire(quickAccess, { existing: null, inserted: { id: "a1", status: "admitted" } }, null, [
+      { user_id: null, guest_key: "g1" },
+    ]);
+    const res = await POST(postReq({ guestKey: "g1", displayName: "Mal" }), params());
+    expect(await res.json()).toEqual({ status: "denied" });
+  });
+
+  // An existing admitted row is the exact path a removed guest's reload took
+  // back into the call: the knock is idempotent and returned the old decision.
+  it("refuses before honouring a knock already on file", async () => {
+    wire(meeting, { existing: { id: "a1", status: "admitted", display_name: "Mal" } }, null, [
+      { user_id: null, guest_key: "g1" },
+    ]);
+    const res = await POST(postReq({ guestKey: "g1", displayName: "Mal" }), params());
+    expect(await res.json()).toEqual({ status: "denied" });
+  });
+});
+
+// The column that has existed since the waiting room shipped and has been NULL
+// on every row ever written. The knock route resolved the caller's account to
+// decide whether they were a teammate, and then threw it away — so the one
+// table that knew a signed-in person had knocked could not say who.
+describe("the account on a knock", () => {
+  const meeting = { id: "m1", organization_id: "org1", status: "active" };
+
+  it("records the account a signed-in caller knocked with", async () => {
+    getUser.mockResolvedValue({ data: { user: { id: "u1" } } });
+    wire(meeting, { existing: null, inserted: { id: "a1", status: "waiting" } });
+    await POST(postReq({ guestKey: "g1", displayName: "Sam" }), params());
+    expect(insertCapture.row).toMatchObject({ user_id: "u1", guest_key: "g1" });
+  });
+
+  it("leaves it null for an invite-link guest, who has no account", async () => {
+    getUser.mockResolvedValue({ data: { user: null } });
+    wire(meeting, { existing: null, inserted: { id: "a1", status: "waiting" } });
+    await POST(postReq({ guestKey: "g1", displayName: "Ada" }), params());
+    expect(insertCapture.row).toMatchObject({ user_id: null });
+  });
+
+  // A row written before this column was populated, or one whose first knock
+  // landed before its owner had signed in, is a row a later removal could not
+  // match. Backfilled on the way past rather than left to rot.
+  it("backfills the account on a knock already on file", async () => {
+    getUser.mockResolvedValue({ data: { user: { id: "u1" } } });
+    wire(meeting, { existing: { id: "a1", status: "waiting", display_name: "Sam" } }, { organization_id: "org1" });
+    await POST(postReq({ guestKey: "g1", displayName: "Sam" }), params());
+    expect(updateCapture.patch).toMatchObject({ status: "admitted", user_id: "u1" });
   });
 });

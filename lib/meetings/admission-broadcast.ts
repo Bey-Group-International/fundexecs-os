@@ -13,6 +13,7 @@
 // the request that made the decision.
 
 import { ADMISSION_NUDGE, admissionChannelName } from "./admission-channel";
+import { REMOVAL_NUDGE, removalChannelName } from "./removal-channel";
 
 /** The bit of the Supabase client this needs, so tests need not build one. */
 export interface BroadcastCapable {
@@ -62,4 +63,34 @@ export async function nudgeGuests(
   );
 
   return { sent, failed };
+}
+
+/**
+ * Nudge everyone in a room that its removals changed.
+ *
+ * Same contract as `nudgeGuests` — HTTP rather than a socket, failures counted
+ * rather than thrown — but one channel for the whole room, because this nudge
+ * names nobody and everybody in the call needs it. See removal-channel.ts.
+ *
+ * Best-effort in exactly the same way: a removal is stored, and refused at the
+ * door, whether or not this reaches anyone. What the nudge buys is that the
+ * room drops the connection now rather than when somebody next reloads.
+ */
+export async function nudgeRoom(
+  supabase: BroadcastCapable,
+  roomCode: string,
+): Promise<{ sent: number; failed: number }> {
+  try {
+    const channel = supabase.channel(removalChannelName(roomCode));
+    if (typeof channel.httpSend === "function") {
+      await channel.httpSend(REMOVAL_NUDGE, {});
+    } else if (typeof channel.send === "function") {
+      await channel.send({ type: "broadcast", event: REMOVAL_NUDGE, payload: {} });
+    } else {
+      return { sent: 0, failed: 1 };
+    }
+    return { sent: 1, failed: 0 };
+  } catch {
+    return { sent: 0, failed: 1 };
+  }
 }

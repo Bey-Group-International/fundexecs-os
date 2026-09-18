@@ -21,6 +21,15 @@ export interface WaitingPeer {
   id: string;
   from: string;
   displayName: string;
+  /**
+   * Epoch ms of the last sign of life, or 0 when there has been none.
+   *
+   * A waiting guest polls for their decision, and that poll is the only proof
+   * anyone has that they are still there — see lib/meetings/waiting-room.ts.
+   * The panel filters on it so a knock from somebody who has closed the tab
+   * stops being somebody the host is asked to admit.
+   */
+  seenAtMs: number;
 }
 
 /**
