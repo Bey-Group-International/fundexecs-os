@@ -5,6 +5,16 @@ import { createPortal } from "react-dom";
 import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { handsFirst, handsUpLabel, raisedBy } from "@/lib/meetings/hands";
+import {
+  REACTIONS,
+  REACTION_VISIBLE_MS,
+  activeReactions,
+  normalizeReaction,
+  reactionLabel,
+  withoutReaction,
+  type ActiveReaction,
+  type ReactionState,
+} from "@/lib/meetings/reactions";
 import { ChatText } from "./ChatText";
 import { MeetingGreenRoom, type GreenRoomChoice } from "./MeetingGreenRoom";
 import { constraintsFor, displayConstraints, levelFromSamples, smoothLevel } from "@/lib/meetings/devices";
@@ -350,9 +360,6 @@ const SPEAKER_COLORS = [
   "#fda4af",
   "#fdba74",
 ];
-const REACTIONS = ["👍", "👏", "😂", "❤️", "🎉", "🤔"];
-/** How long a reaction stays on somebody's tile. */
-const REACTION_VISIBLE_MS = 3_000;
 
 // Synthesize a short chime using Web Audio API (no audio files needed)
 /** What the browser currently says about notifications, including "no API". */
@@ -622,8 +629,10 @@ function VideoTile({
         </div>
       )}
       {handRaised && <div className="absolute top-2 right-3 text-lg">✋</div>}
+      {/* Decorative: ReactionTicker is what announces a reaction, and reading
+          it from both places would say it twice. */}
       {reaction && (
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-4xl animate-bounce pointer-events-none select-none">
+        <div aria-hidden="true" className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-4xl animate-bounce pointer-events-none select-none">
           {reaction}
         </div>
       )}
@@ -1387,6 +1396,53 @@ export function CopilotSidebar({
   );
 }
 
+/**
+ * Reactions, where they can be seen whatever the layout is doing.
+ *
+ * The tile overlay is not enough and `hands.ts` already said why: a tile is
+ * off-screen in speaker layout or below the fold in a large grid. Hands were
+ * given a toolbar count and a spoken label when that was noticed; reactions
+ * were not, and they are the worse case — a hand waits to be seen, a reaction
+ * is gone in three seconds, and a screen share forces the layout that hides
+ * everyone but the presenter.
+ *
+ * Not a count, which is what the hands affordance is: a reaction is an event,
+ * not a standing state, so this shows each one with the name attached and lets
+ * it expire. Anchored over the stage rather than in the control bar so it does
+ * not move the controls around as reactions come and go.
+ *
+ * `aria-live="polite"` is the other half of the fix. The tile overlay is a bare
+ * emoji with no text, so a screen reader had nothing to announce and reactions
+ * did not exist at all for anyone not looking at the picture.
+ *
+ * Exported for the tests, as HostExitControl and CopilotSidebar are: reaching
+ * it through MeetingRoom means entering a room, which opens a camera, an ICE
+ * negotiation and a Realtime channel.
+ */
+export function ReactionTicker({ entries }: { entries: readonly ActiveReaction[] }) {
+  return (
+    <div
+      role="status"
+      aria-live="polite"
+      aria-label="Reactions"
+      className="pointer-events-none absolute bottom-3 left-1/2 -translate-x-1/2 z-10 flex flex-col items-center gap-1"
+    >
+      {entries.map((entry) => (
+        <div
+          key={entry.id}
+          className="flex items-center gap-2 rounded-full bg-black/70 backdrop-blur-sm px-3 py-1 text-sm text-white max-w-[70vw]"
+        >
+          {/* The emoji is decorative here — reactionLabel carries it in text,
+              and announcing both would read it twice. */}
+          <span aria-hidden="true" className="text-base leading-none">{entry.emoji}</span>
+          <span className="sr-only">{reactionLabel(entry)}</span>
+          <span aria-hidden="true" className="truncate">{entry.displayName}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function EmptyCopilot({ label }: { label: string }) {
   return (
     <div className="flex-1 flex items-center justify-center py-8">
@@ -1635,7 +1691,7 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
   const [handRaised, setHandRaised] = useState(false);
   const handRaisedRef = useRef(false);
   const [raisedHands, setRaisedHands] = useState<Set<string>>(new Set());
-  const [reactions, setReactions] = useState<Record<string, string>>({});
+  const [reactions, setReactions] = useState<Record<string, ReactionState>>({});
   /**
    * The timer clearing each person's reaction.
    *
@@ -2656,7 +2712,7 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
       setPeers((prev) => { const next = new Map<string, Peer>(prev); next.delete(msg.from); return next; });
       // Drop the departed peer's transient UI state so a stale ✋ / emoji doesn't linger.
       setRaisedHands((prev) => { if (!prev.has(msg.from)) return prev; const next = new Set(prev); next.delete(msg.from); return next; });
-      setReactions((prev) => { if (!(msg.from in prev)) return prev; const n = { ...prev }; delete n[msg.from]; return n; });
+      clearReactionRef.current(msg.from);
       setPeerMicOn((prev) => { if (!prev.has(msg.from)) return prev; const next = new Map(prev); next.delete(msg.from); return next; });
       lastAudibleRef.current.delete(msg.from);
     }
@@ -5031,21 +5087,47 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     sendSignalRef.current({ type: "raise_hand", from: myIdRef.current, raised: next });
   }, []);
 
+  /**
+   * Take a reaction off one person, timer and all.
+   *
+   * The timer is the part that used to be missed. A peer leaving dropped their
+   * reaction from the record and left the pending timeout running, so three
+   * seconds later an orphan fired against somebody who was no longer in the
+   * room.
+   */
+  const clearReaction = useCallback((who: string) => {
+    const timers = reactionTimers.current;
+    const running = timers.get(who);
+    if (running) { clearTimeout(running); timers.delete(who); }
+    setReactions((prev) => withoutReaction(prev, who));
+  }, []);
+
+  const clearReactionRef = useRef(clearReaction);
+  useEffect(() => { clearReactionRef.current = clearReaction; }, [clearReaction]);
+
   /** Show one person's reaction, replacing whatever they were showing before. */
-  const showReaction = useCallback((who: string, emoji: string) => {
+  const showReaction = useCallback((who: string, raw: string) => {
+    // Bounded here as well as at the sender: the picker offers six emoji, and
+    // nothing used to check that what arrived was one of them. See
+    // lib/meetings/reactions.ts.
+    const emoji = normalizeReaction(raw);
+    if (!emoji) return;
+
     const timers = reactionTimers.current;
     const running = timers.get(who);
     if (running) clearTimeout(running);
-    setReactions((prev) => ({ ...prev, [who]: emoji }));
+    // `at` is local arrival time, and exists so the ticker can show reactions
+    // in the order they landed. A record keeps a key where it first appeared
+    // when its value is replaced, so key order is the wrong clock.
+    setReactions((prev) => ({ ...prev, [who]: { emoji, at: Date.now() } }));
     timers.set(
       who,
       setTimeout(() => {
         timers.delete(who);
-        setReactions((prev) => {
-          const next = { ...prev };
-          delete next[who];
-          return next;
-        });
+        // Returning a fresh object for a key that is not there re-rendered
+        // the whole room for nothing. The leave handler already got this
+        // right; this one did not. See withoutReaction.
+        setReactions((prev) => withoutReaction(prev, who));
       }, REACTION_VISIBLE_MS),
     );
   }, []);
@@ -5059,7 +5141,9 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     return () => { timers.forEach(clearTimeout); timers.clear(); };
   }, []);
 
-  const sendReaction = useCallback((emoji: string) => {
+  const sendReaction = useCallback((raw: string) => {
+    const emoji = normalizeReaction(raw);
+    if (!emoji) return;
     sendSignalRef.current({ type: "reaction", from: myIdRef.current, emoji, ts: Date.now() });
     showReactionRef.current("local", emoji);
   }, []);
@@ -5714,7 +5798,12 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
   const handsUpPeople = raisedBy(raisedHands, participantList, LOCAL_SPEAKER_ID);
   const handsUpNote = handsUpLabel(handsUpPeople);
 
-  const getReaction = (id: string) => reactions[id] ?? "";
+  // Reactions with a name attached, oldest first — the same shape raisedBy
+  // gives for hands, and for the same reason: the tile is not a reliable place
+  // to have seen it.
+  const liveReactions = activeReactions(reactions, participantList);
+
+  const getReaction = (id: string) => reactions[id]?.emoji ?? "";
   // Assume a peer's camera is on until they say otherwise: the announcement
   // lands a moment after they appear, and a tile that starts on "Camera off" and
   // corrects itself reads worse than one that starts blank.
@@ -5736,8 +5825,11 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
       {/* `relative` so the mobile copilot sheet fills the video area rather than
           the viewport — see the sheet's own note below. */}
       <div className="relative flex flex-1 overflow-hidden min-h-0">
-        {/* Video area */}
-        <div className="flex-1 flex flex-col overflow-hidden bg-[var(--surface-0)] min-w-0">
+        {/* Video area. `relative` anchors ReactionTicker to the stage: over the
+            viewport it would sit on top of the control bar, which is the mistake
+            the mobile copilot sheet already made once. */}
+        <div className="relative flex-1 flex flex-col overflow-hidden bg-[var(--surface-0)] min-w-0">
+          <ReactionTicker entries={liveReactions} />
           {/* Media permission warning */}
           {mediaError && (
             <div className="flex items-start gap-3 px-4 py-3 bg-amber-500/10 border-b border-amber-500/30 shrink-0">
@@ -5815,7 +5907,7 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
             <div className={`flex-1 grid ${gridClass} gap-3 p-4 content-center`}>
               <VideoTile stream={localStream} label={localName} muted isLocal handRaised={handRaised} reaction={getReaction("local")} micOn={micOn} speaking={speaking.has(LOCAL_SPEAKER_ID)} camOn={camOn} videoPaused={bwMode === "audio-only"} />
               {allPeers.map((peer: Peer) => (
-                <VideoTile key={peer.id} stream={peer.stream} label={peer.displayName} handRaised={raisedHands.has(peer.id)} reaction={reactions[peer.id] ?? ""} micOn={peerMicOn.get(peer.id) ?? true} speaking={speaking.has(peer.id)} camOn={videoOf(peer.id).camOn} videoPaused={videoOf(peer.id).paused} status={statusOf(peer.id)} />
+                <VideoTile key={peer.id} stream={peer.stream} label={peer.displayName} handRaised={raisedHands.has(peer.id)} reaction={getReaction(peer.id)} micOn={peerMicOn.get(peer.id) ?? true} speaking={speaking.has(peer.id)} camOn={videoOf(peer.id).camOn} videoPaused={videoOf(peer.id).paused} status={statusOf(peer.id)} />
               ))}
             </div>
           ) : (
