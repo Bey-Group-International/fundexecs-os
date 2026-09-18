@@ -3049,6 +3049,75 @@ Deployed, monitoring               →  live, observability active
              |  row has no idea whether your socket accepted the send), and the
              |  panel is grouped AND shows delivery AND links. Two parallel
              |  branches on one file is now the norm here, not the exception.
+
+2026-09-18  |  Four ways the waiting room told a guest the wrong thing  |  Asked
+             |  to check the waiting room again — a second pass over an area
+             |  already fixed once this session — then to fix all four.
+             |  A REFUSED KNOCK LOOKED LIKE A KNOCK NOBODY HAD ANSWERED. The
+             |  poll read its response through pollStatusFromResponse; the knock
+             |  did `if (!res.ok) return null` inline. So a 429 — no row
+             |  inserted, host never told — came back as "no verdict", the
+             |  session began waiting, and the guest was shown "Waiting for the
+             |  host to let you in" over a queue they were not in. It could not
+             |  recover: the poll answered "unknown" (no row on file) by
+             |  re-knocking straight into the same refusal. Two ways in, and the
+             |  single-guest one needs no crowd — the unknown→re-knock path
+             |  spends all 60 of KNOCK_LIMIT in about 90 seconds. Both halves of
+             |  the endpoint now read through one function, which names a
+             |  refusal "busy", and the screen says so.
+             |  THE POLL NEVER READ THE ONE ANSWER THAT SAID TO SLOW DOWN. A 429
+             |  mapped to null and the cadence was picked purely from elapsed
+             |  wait, so a limited guest kept asking every 1.5s — which is what
+             |  kept them limited — while the limiter sent Retry-After into a
+             |  header nobody read. Consecutive refusals now back off, the
+             |  server's own number wins when it gave one, and the ladder is the
+             |  floor under it. The repo had this pattern twice already, in
+             |  nextFlushDelay and nextRecovery.
+             |  A GUEST WHO GAVE UP STAYED ON THE HOST'S PANEL FOREVER.
+             |  cancelAdmission stopped the local session and touched nothing on
+             |  the server; there is no TTL on the table and nothing sweeps it.
+             |  The host went on seeing somebody who had left — in the panel, in
+             |  the toolbar count, and in the system notification knockAlert
+             |  fires when that count rises — and admitting them reached nobody.
+             |  DELETE on the knock route withdraws, guarded to status=waiting
+             |  so an admit (which the transcript route checks a guest's writes
+             |  against) and a deny are both untouchable. Called on cancel, on
+             |  pagehide while still asking, and when the wait ends itself.
+             |  THE WAIT HAD NO END, AND THREE COMMENTS SAID IT DID.
+             |  ADMISSION_TIMEOUT_MS changes the copy and nothing else — by
+             |  design, and documented — but scheduleNext rescheduled
+             |  unconditionally and nothing else stopped it. Meanwhile
+             |  admission-poll.ts, MeetingRoom and admission-poll.test.ts all
+             |  described "the full ten minutes a wait is allowed to run". So a
+             |  waiting tab left open asked an unauthenticated, service-role
+             |  endpoint every ten seconds for as long as it lived. The bound
+             |  those comments claimed now exists. Not a verdict: nobody decided
+             |  anything, so the screen offers to ask again.
+             |  Worth naming: MeetingRoom.admission's fetch stub was `{ ok,
+             |  json }` and nothing else. That was fine while the room read only
+             |  those two and broke the moment it read `status` and `headers` —
+             |  every real Response has both, and a stub missing them turns into
+             |  a TypeError the session reads as "the request failed". Six tests
+             |  went red on a change that was correct. A mock that is a worse
+             |  Response than the browser's is a test asserting something the
+             |  product does not do; it is a faithful stub now.
+             |  Also worth naming: five candidates did NOT survive checking — a
+             |  deny surviving a reload or a second tab (resolveGuestKey already
+             |  puts the key in localStorage), the knock's read-then-insert race
+             |  (UNIQUE_VIOLATION is caught and re-read through the same path), a
+             |  forged nudge (it carries no verdict), loadWaiting being unbounded
+             |  against max_rows (a thousand-person waiting list is not a
+             |  meeting), and a host closing their tab without ending the meeting
+             |  — real, but the meeting lifecycle rather than the waiting room.
+             |  Residual, stated plainly: a hard crash or a killed tab still
+             |  leaves a stale row, because pagehide does not fire for those. A
+             |  server-side sweep would close that; withdraw covers cancel,
+             |  unload and give-up, which is the overwhelming majority.
+             |  Confidence: typecheck/eslint clean, production build passes,
+             |  Jest 6390 → 6424 green (+34 new), baseline re-measured from
+             |  origin/main in a clean worktree; visual suite 8/8. The refusal
+             |  and wait-bound cases were run against the previous behaviour
+             |  first — four of them fail there.
 ```
 
 ---

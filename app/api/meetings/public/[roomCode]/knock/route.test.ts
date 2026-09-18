@@ -13,7 +13,7 @@ jest.mock("@/lib/supabase/server", () => ({
 
 import { NextRequest } from "next/server";
 import { clearRateLimitBucketsForTests } from "@/lib/rate-limit";
-import { POST, GET } from "./route";
+import { POST, GET, DELETE } from "./route";
 
 const params = (roomCode = "abc-defg-hi") => ({ params: Promise.resolve({ roomCode }) });
 
@@ -465,5 +465,87 @@ describe("rate limiting", () => {
     wire(meeting, { existing: null, inserted: { id: "a1", status: "waiting" } });
     const res = await POST(postReq({ guestKey: "g1" }), params());
     expect(res.status).toBe(200);
+  });
+});
+
+// ── Withdrawing a knock ─────────────────────────────────────────────────────
+//
+// A guest who gave up used to leave their row behind forever: cancelling was
+// entirely local, there is no TTL on the table and nothing sweeps it. The host
+// went on seeing somebody who had left, and admitting them reached nobody.
+
+/** Captures what a delete was filtered by, so the guard can be asserted. */
+function withdrawBuilder(removed: unknown[]) {
+  const filters: Array<[string, unknown]> = [];
+  let deleting = false;
+  const b: Record<string, unknown> = {
+    select: async () => (deleting ? { data: removed, error: null } : { data: null, error: null }),
+    delete: () => { deleting = true; return b; },
+    eq: (col: string, val: unknown) => { filters.push([col, val]); return b; },
+    is: () => b,
+    maybeSingle: async () => ({ data: null, error: null }),
+  };
+  return { b, filters };
+}
+
+function withdrawReq(key = "g-1") {
+  return new NextRequest(`http://x/api/meetings/public/abc-defg-hi/knock?key=${key}`, { method: "DELETE" });
+}
+
+describe("DELETE — withdrawing a knock", () => {
+  beforeEach(() => { clearRateLimitBucketsForTests(); from.mockReset(); });
+
+  it("removes this guest's pending row and says how many it took", async () => {
+    const w = withdrawBuilder([{ id: "a1" }]);
+    from.mockImplementation((table: string) =>
+      table === "live_meetings" ? meetingBuilder({ id: "m1", organization_id: "o1", status: "live" }) : w.b);
+
+    const res = await DELETE(withdrawReq(), params());
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ ok: true, withdrawn: 1 });
+  });
+
+  // The guard that makes this safe to expose unauthenticated. A decided row is
+  // not the caller's to erase: an admit is what the transcript route checks a
+  // guest's own writes against, and a deny must not be undoable by withdrawing.
+  it("only ever touches a row that is still waiting, in this meeting, for this key", async () => {
+    const w = withdrawBuilder([]);
+    from.mockImplementation((table: string) =>
+      table === "live_meetings" ? meetingBuilder({ id: "m1", organization_id: "o1", status: "live" }) : w.b);
+
+    await DELETE(withdrawReq("g-9"), params());
+    expect(w.filters).toEqual([
+      ["meeting_id", "m1"],
+      ["guest_key", "g-9"],
+      ["status", "waiting"],
+    ]);
+  });
+
+  it("needs a key", async () => {
+    const res = await DELETE(
+      new NextRequest("http://x/api/meetings/public/abc-defg-hi/knock", { method: "DELETE" }),
+      params(),
+    );
+    expect(res.status).toBe(400);
+  });
+
+  // Nothing to withdraw from, and nothing the guest can do about it — they are
+  // walking away from this screen either way.
+  it("is quiet about a meeting that is not there", async () => {
+    from.mockImplementation(() => meetingBuilder(null));
+    const res = await DELETE(withdrawReq(), params());
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ ok: true, withdrawn: 0 });
+  });
+
+  it("is bounded like the knock it withdraws", async () => {
+    const w = withdrawBuilder([]);
+    from.mockImplementation((table: string) =>
+      table === "live_meetings" ? meetingBuilder({ id: "m1", organization_id: "o1", status: "live" }) : w.b);
+
+    let last = await DELETE(withdrawReq(), params());
+    for (let i = 0; i < 70 && last.status !== 429; i += 1) last = await DELETE(withdrawReq(), params());
+    expect(last.status).toBe(429);
+    expect(last.headers.get("Retry-After")).toBeTruthy();
   });
 });

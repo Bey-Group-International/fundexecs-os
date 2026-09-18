@@ -41,10 +41,40 @@
 // Timers and visibility are read from the environment rather than injected, so
 // tests drive it the way a browser does — fake timers and a real `document`.
 
-import { WATCHED_POLL_SCHEDULE, nextPollDelay, shouldPollNow } from "./admission-poll";
+import { WATCHED_POLL_SCHEDULE, nextPollDelay, refusalDelay, shouldPollNow } from "./admission-poll";
 
 /** How long before the screen admits the host has not answered. Polling goes on. */
 export const ADMISSION_TIMEOUT_MS = 120_000;
+
+/**
+ * How long a wait may actually run before the session stops asking.
+ *
+ * Three separate comments in this feature described a ten-minute bound, and
+ * none of them was enforced anywhere: ADMISSION_TIMEOUT_MS changes the copy and
+ * nothing else, and scheduleNext rescheduled unconditionally. So a waiting tab
+ * left open kept asking an unauthenticated, service-role-backed endpoint every
+ * ten seconds for as long as the tab lived — overnight, on a laptop nobody
+ * closed.
+ *
+ * Ten minutes because that is the number the comments already claimed, and
+ * because it is well past any wait a host is going to answer. Ending the wait
+ * is not the same as refusing the guest: the screen offers to ask again, and
+ * asking again costs one press.
+ */
+export const ADMISSION_MAX_WAIT_MS = 10 * 60_000;
+
+/**
+ * One answer from the knock or status endpoint.
+ *
+ * `status` is what `admissionStatusFromResponse` made of it — including "busy",
+ * which is the limiter rather than the host. `retryAfterMs` is the server's own
+ * `Retry-After` when it sent one; our limiter always does on a 429, and this
+ * used to be sent and read by nobody.
+ */
+export interface AdmissionAnswer {
+  status: string | null;
+  retryAfterMs?: number | null;
+}
 
 /** What a live subscription tells the session. Both are advisory. */
 export interface AdmissionWatchHandlers {
@@ -55,10 +85,10 @@ export interface AdmissionWatchHandlers {
 }
 
 export interface AdmissionSessionOptions {
-  /** POST the knock. Resolves to the server's status, or null if the request failed. */
-  knock: () => Promise<string | null>;
-  /** GET the current decision. Resolves to the status, or null if the request failed. */
-  poll: () => Promise<string | null>;
+  /** POST the knock. Resolves to the server's answer; a null status is a failed request. */
+  knock: () => Promise<AdmissionAnswer>;
+  /** GET the current decision. Resolves to the server's answer. */
+  poll: () => Promise<AdmissionAnswer>;
   /**
    * Subscribe to this guest's decision being pushed. Returns an unsubscribe.
    *
@@ -92,7 +122,18 @@ export interface AdmissionSessionOptions {
   onWaiting?: () => void;
   /** Long enough that the host is probably not coming. Copy only. */
   onTimedOut?: () => void;
+  /**
+   * The server is refusing us, or has stopped.
+   *
+   * True means the rate limiter turned a knock away, so this guest is NOT in a
+   * queue however much the screen would like to say so. False means an answer
+   * got through again. Advisory: the session keeps trying either way.
+   */
+  onBusy?: (busy: boolean) => void;
+  /** The wait hit its bound and the session stopped asking. Terminal. */
+  onGaveUp?: () => void;
   timeoutMs?: number;
+  maxWaitMs?: number;
 }
 
 export interface AdmissionSession {
@@ -113,13 +154,20 @@ export interface AdmissionSession {
  */
 export function createAdmissionSession(opts: AdmissionSessionOptions): AdmissionSession {
   const timeoutMs = opts.timeoutMs ?? ADMISSION_TIMEOUT_MS;
+  const maxWaitMs = opts.maxWaitMs ?? ADMISSION_MAX_WAIT_MS;
 
   let stopped = false;
   let settled = false;
   let startedAt = 0;
   let watching = false;
+  let busy = false;
+  /** Consecutive refusals, which is what sets how long to hold off. */
+  let refusals = 0;
+  /** What the server said to wait, on the most recent refusal. */
+  let serverRetryMs: number | null = null;
   let pollTimer: ReturnType<typeof setTimeout> | null = null;
   let timeoutTimer: ReturnType<typeof setTimeout> | null = null;
+  let giveUpTimer: ReturnType<typeof setTimeout> | null = null;
   let detachVisibility: (() => void) | null = null;
   let detachWatch: (() => void) | null = null;
 
@@ -127,10 +175,27 @@ export function createAdmissionSession(opts: AdmissionSessionOptions): Admission
     stopped = true;
     if (pollTimer !== null) { clearTimeout(pollTimer); pollTimer = null; }
     if (timeoutTimer !== null) { clearTimeout(timeoutTimer); timeoutTimer = null; }
+    if (giveUpTimer !== null) { clearTimeout(giveUpTimer); giveUpTimer = null; }
     detachVisibility?.();
     detachVisibility = null;
     detachWatch?.();
     detachWatch = null;
+  }
+
+  /**
+   * Record whether the server is turning us away, and say so once per change.
+   *
+   * The screen has to stop claiming this guest is in a queue: a refused knock
+   * inserted no row, so the host has never heard of them. Reported on the edge
+   * rather than per answer, because a guest held off for a minute would
+   * otherwise get a callback every few seconds saying the same thing.
+   */
+  function setBusy(next: boolean, retryMs: number | null = null): void {
+    if (next) { refusals += 1; serverRetryMs = retryMs; }
+    else { refusals = 0; serverRetryMs = null; }
+    if (busy === next) return;
+    busy = next;
+    opts.onBusy?.(next);
   }
 
   /**
@@ -161,32 +226,47 @@ export function createAdmissionSession(opts: AdmissionSessionOptions): Admission
     if (stopped || settled) return;
     if (!shouldPollNow(typeof document === "undefined" ? undefined : document.visibilityState)) return;
 
-    let status: string | null = null;
+    let answer: AdmissionAnswer;
     try {
-      status = await opts.poll();
+      answer = await opts.poll();
     } catch {
       return; // A failed poll is not news. Try again on the next tick.
     }
     // The session may have ended while this request was in the air.
     if (stopped || settled) return;
 
-    if (isVerdict(status)) { settle(status); return; }
-    if (status === "unknown") {
-      // No knock on file — the POST lost its race, or the row is gone.
+    if (answer.status === "busy") { setBusy(true, answer.retryAfterMs ?? null); return; }
+    if (isVerdict(answer.status)) { settle(answer.status); return; }
+
+    if (answer.status === "unknown") {
+      // No knock on file — the POST lost its race, the row is gone, or the
+      // first knock was refused and never inserted anything at all.
       try {
         const again = await opts.knock();
-        if (!stopped && !settled && isVerdict(again)) settle(again);
+        if (stopped || settled) return;
+        if (again.status === "busy") { setBusy(true, again.retryAfterMs ?? null); return; }
+        setBusy(false);
+        if (isVerdict(again.status)) settle(again.status);
       } catch { /* the next tick will try again */ }
+      return;
     }
+
+    // Anything else that came back at all means the server is answering us.
+    if (answer.status !== null) setBusy(false);
   }
 
   function scheduleNext(): void {
     if (stopped || settled) return;
     if (pollTimer !== null) { clearTimeout(pollTimer); pollTimer = null; }
     const schedule = watching ? WATCHED_POLL_SCHEDULE : undefined;
+    const cadence = nextPollDelay(Date.now() - startedAt, schedule);
+    // A refusal overrides the cadence, never shortens it. Asking on the fastest
+    // schedule is exactly what keeps a limited guest limited, and the limiter
+    // had been telling us how long to hold off into a header nobody read.
+    const delay = refusals > 0 ? Math.max(cadence, refusalDelay(refusals, serverRetryMs)) : cadence;
     pollTimer = setTimeout(() => {
       void pollOnce().then(() => { scheduleNext(); });
-    }, nextPollDelay(Date.now() - startedAt, schedule));
+    }, delay);
   }
 
   /**
@@ -228,6 +308,17 @@ export function createAdmissionSession(opts: AdmissionSessionOptions): Admission
       if (!stopped && !settled) opts.onTimedOut?.();
     }, timeoutMs);
 
+    // ...but the wait does end eventually. This is the bound three comments in
+    // this feature described and none of them enforced — see
+    // ADMISSION_MAX_WAIT_MS. Not a verdict: nobody decided anything, so this
+    // does not settle. The screen offers to ask again.
+    giveUpTimer = setTimeout(() => {
+      giveUpTimer = null;
+      if (stopped || settled) return;
+      stop();
+      opts.onGaveUp?.();
+    }, maxWaitMs);
+
     // Subscribed before the first poll is scheduled, so a decision made while
     // the guest was still knocking is pushed rather than waited for.
     if (opts.watch) {
@@ -248,12 +339,23 @@ export function createAdmissionSession(opts: AdmissionSessionOptions): Admission
 
   async function start(): Promise<void> {
     if (stopped || settled) return;
-    let status: string | null = null;
+    let answer: AdmissionAnswer = { status: null };
     // A knock that never lands is a wait: the poll below re-knocks, which is a
     // better answer than an error screen for what is usually a dropped packet.
-    try { status = await opts.knock(); } catch { status = null; }
+    try { answer = await opts.knock(); } catch { answer = { status: null }; }
     if (stopped || settled) return;
-    if (isVerdict(status)) { settle(status); return; }
+
+    // A REFUSED knock is different in kind from a dropped one, and conflating
+    // them is what put a guest on "waiting for the host" over a row that was
+    // never inserted. The wait still begins — the refusal is temporary and the
+    // poll's re-knock is what gets them in — but the screen is told the truth
+    // about it, and the asking starts at the backoff rather than at 1.5s.
+    if (answer.status === "busy") {
+      setBusy(true, answer.retryAfterMs ?? null);
+      beginWaiting();
+      return;
+    }
+    if (isVerdict(answer.status)) { settle(answer.status); return; }
     beginWaiting();
   }
 

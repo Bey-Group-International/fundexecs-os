@@ -28,8 +28,16 @@ export type AdmissionUiState =
   | "asking"
   /** Knocked, and the host has not answered. */
   | "waiting"
+  /**
+   * The server is turning knocks away, so nobody has been told about this
+   * guest yet. Still trying — but it is not a queue, and must not be described
+   * as one.
+   */
+  | "busy"
   /** Long enough that the host may not be coming. Still waiting. */
   | "timed-out"
+  /** The wait ran out its bound. Nothing is asking any more. */
+  | "gave-up"
   /** Let in, and entering the room did not work. Nothing is waiting any more. */
   | "failed";
 
@@ -48,6 +56,11 @@ export function canPressJoin(state: AdmissionUiState): boolean {
 /** Whether this state is a failure rather than a stage of waiting. */
 export function isAdmissionFailure(state: AdmissionUiState): boolean {
   return state === "failed";
+}
+
+/** Whether anything is still asking on the guest's behalf. */
+export function isAdmissionLive(state: AdmissionUiState): boolean {
+  return state === "asking" || state === "waiting" || state === "busy" || state === "timed-out";
 }
 
 /** Whether the guest is knocking or waiting, rather than merely looking. */
@@ -79,11 +92,29 @@ export function admissionStatusCopy(state: AdmissionUiState): AdmissionStatusCop
         detail: "You can keep setting up while you wait.",
         cancelLabel: "Cancel",
       };
+    case "busy":
+      // Deliberately not "waiting for the host": a refused knock inserted no
+      // row, so the host has not been told about this guest at all. Saying they
+      // are in a queue they are not in is the defect this state exists to end.
+      return {
+        title: "Too many people are joining at once",
+        detail: "We haven't been able to reach the host yet. Still trying.",
+        cancelLabel: "Cancel",
+      };
     case "timed-out":
       return {
         title: "The host hasn't answered yet",
         detail: "You'll be let in as soon as they do.",
         cancelLabel: "Stop waiting",
+      };
+    case "gave-up":
+      // The wait ended itself. Nothing is polling now, so this has to offer the
+      // way back rather than describe something in progress — and it must not
+      // read as a refusal, because nobody refused anything.
+      return {
+        title: "We stopped waiting",
+        detail: "The host didn't answer. You can ask again whenever you like.",
+        cancelLabel: "Ask again",
       };
     case "failed":
       // The one state here that is not a wait. The host said yes and the room

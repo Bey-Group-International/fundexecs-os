@@ -262,3 +262,48 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ room
   if (meeting.status === "ended") return NextResponse.json({ status: "ended" });
   return NextResponse.json({ status: "unknown" });
 }
+
+// DELETE ?key=<guestKey> — withdraw a knock that is still waiting.
+//
+// A guest who gave up used to leave their row behind forever. Cancelling the
+// wait touched nothing on the server, there is no TTL on the table and nothing
+// sweeps it, so the host went on seeing somebody who had left: in the panel, in
+// the toolbar count, and in the system notification that fires when that count
+// rises. Admitting them reached nobody, and the only way to clear the entry was
+// to deny a person who was no longer there.
+//
+// Only a WAITING row is removed, and this is why it deletes rather than marking
+// a new status: the host's panel already drops a row on a DELETE event
+// (applyAdmissionChange), and a guest who comes back simply knocks again. A
+// decided row is left exactly as it is — an admit is what the transcript route
+// checks a guest's own writes against, and a deny is a decision that a withdraw
+// must not be able to erase.
+//
+// Unauthenticated like the rest of this endpoint, and keyed by the same
+// guest_key: withdrawing is only ever destructive to the caller's own pending
+// knock, and anyone holding a key already controls that knock completely.
+export async function DELETE(req: NextRequest, { params }: { params: Promise<{ roomCode: string }> }) {
+  const limit = checkRateLimit({ key: `knock:${clientIp(req)}`, limit: KNOCK_LIMIT, windowMs: KNOCK_WINDOW_MS });
+  if (!limit.ok) return tooMany(limit, KNOCK_LIMIT);
+
+  const { roomCode } = await params;
+  const code = roomCode?.trim();
+  const guestKey = req.nextUrl.searchParams.get("key")?.trim() ?? "";
+  if (!code || !guestKey) return NextResponse.json({ error: "Missing params" }, { status: 400 });
+
+  const { supabase, meeting } = await resolveMeeting(code);
+  // Nothing to withdraw from, and nothing a guest can do about it. Not an error
+  // worth surfacing on a screen they are leaving anyway.
+  if (!meeting) return NextResponse.json({ ok: true, withdrawn: 0 });
+
+  const { data: removed, error } = await (supabase as any)
+    .from("live_meeting_admissions")
+    .delete()
+    .eq("meeting_id", meeting.id)
+    .eq("guest_key", guestKey)
+    .eq("status", "waiting")
+    .select("id");
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  return NextResponse.json({ ok: true, withdrawn: ((removed ?? []) as unknown[]).length });
+}

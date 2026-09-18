@@ -1,8 +1,10 @@
 import { admissionStatusCopy, canPressJoin, isAwaitingAdmission, type AdmissionUiState,
-  isAdmissionFailure,
+  isAdmissionFailure, isAdmissionLive,
 } from "./admission-ui";
 
-const ALL: AdmissionUiState[] = ["idle", "asking", "waiting", "timed-out"];
+// Every state, so the sweeps below cover the two that were added rather than
+// quietly skipping them: a "busy" guest must not be able to press Join either.
+const ALL: AdmissionUiState[] = ["idle", "asking", "waiting", "busy", "timed-out", "gave-up", "failed"];
 
 describe("canPressJoin", () => {
   it("is live before knocking", () => {
@@ -96,5 +98,56 @@ describe("being let in and not getting in", () => {
   // cannot race the state it is trying to leave.
   it("does not leave the join button live underneath it", () => {
     expect(canPressJoin("failed")).toBe(false);
+  });
+});
+
+// ── The two states that were missing ────────────────────────────────────────
+
+describe("a knock the server refused", () => {
+  // The defect: the screen said "Waiting for the host to let you in" over a row
+  // that was never inserted. The host had not been told about this guest at
+  // all, so there was no queue to be waiting in.
+  it("does not claim the host has been told", () => {
+    const copy = admissionStatusCopy("busy");
+    expect(copy).not.toBeNull();
+    expect(`${copy!.title} ${copy!.detail}`).not.toMatch(/waiting for the host/i);
+  });
+
+  it("says it is still trying, because it is", () => {
+    expect(admissionStatusCopy("busy")!.detail).toMatch(/still trying/i);
+    expect(isAdmissionLive("busy")).toBe(true);
+  });
+
+  it("is not a failure — nothing has gone wrong that will not right itself", () => {
+    expect(isAdmissionFailure("busy")).toBe(false);
+  });
+
+  it("can still be cancelled", () => {
+    expect(admissionStatusCopy("busy")!.cancelLabel).toBeTruthy();
+  });
+});
+
+describe("a wait that ran out", () => {
+  it("offers the way back, because nothing is asking any more", () => {
+    expect(isAdmissionLive("gave-up")).toBe(false);
+    expect(admissionStatusCopy("gave-up")!.cancelLabel).toBe("Ask again");
+  });
+
+  // Nobody decided anything. Reading as a refusal would tell the guest the host
+  // turned them away, which is a different meeting and a different conversation.
+  it("does not read as a refusal", () => {
+    const copy = admissionStatusCopy("gave-up")!;
+    expect(`${copy.title} ${copy.detail}`).not.toMatch(/denied|refused|declined|can.?t join/i);
+  });
+
+  it("is not a failure either", () => {
+    expect(isAdmissionFailure("gave-up")).toBe(false);
+  });
+});
+
+describe("isAdmissionLive", () => {
+  it("is true for exactly the states where something is still asking", () => {
+    expect((["asking", "waiting", "busy", "timed-out"] as AdmissionUiState[]).map(isAdmissionLive)).toEqual([true, true, true, true]);
+    expect((["idle", "gave-up", "failed"] as AdmissionUiState[]).map(isAdmissionLive)).toEqual([false, false, false]);
   });
 });
