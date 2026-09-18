@@ -1,73 +1,235 @@
 // lib/meetings/chat.ts
-// The rules meeting chat needs, none of which involve a network.
+// What the in-call chat shows, and whether a message actually left the room.
 //
-// Chat was a broadcast and a React array: nothing stored it, so a person who
-// joined ten minutes late saw an empty panel, a reload emptied your own copy,
-// and the whole conversation went when the call did — including the links
-// people had shared, which is the single commonest thing anyone puts in a
-// meeting chat.
+// Chat looks like the simplest thing in the meeting and had the most ways to
+// mislead the person using it. All four are here because all four are
+// decisions rather than rendering:
 //
-// Storing it makes three things matter that did not before. What may be sent
-// has to be bounded, because it is now going into a table. History and live
-// messages have to merge without duplicating, because a message you sent
-// arrives back to you from the server as well. And the result has to READ like
-// a conversation rather than a log, which is grouping and times and — above
-// all — links you can actually follow.
+//  1. A send that failed looked exactly like a send that worked. The panel
+//     appended the message locally and broadcast it with the result thrown
+//     away — so on a struggling socket somebody watched their own message sit
+//     in a room where nobody had received it. `delivery` is what makes the
+//     difference visible, and it is only ever carried on your OWN messages: a
+//     message you received is delivered by definition.
+//
+//  2. Messages were ordered by arrival, so no two people saw the same
+//     conversation. `ts` was carried through the whole feature and read by
+//     nothing. Sorting on it is the same fix, for the same reason, that
+//     restoreTranscript applies to transcript rows.
+//
+//  3. A name was whatever the message claimed. The roster already holds the
+//     authoritative one, keyed by the signaling id — the same argument the
+//     transcript makes for resolving a speaker's name live rather than
+//     freezing it at the moment the words were spoken.
+//
+//  4. Text arrived unbounded and was rendered unbounded.
+//
+//  5. Nothing stored it. A person who joined ten minutes late saw an empty
+//     panel, a reload emptied their own copy, and the whole conversation went
+//     when the call did — including the links people shared, which is the
+//     commonest thing anyone puts in a meeting chat. Storing it makes two more
+//     things decisions rather than rendering: history and live messages have to
+//     fold together without duplicating (mergeChat), and the result has to read
+//     as a conversation rather than a log — grouping, times, and links you can
+//     actually follow (groupChat, chatClock, chatParts).
+//
+// Pure: no React, no Supabase, no clock beyond what is passed in.
 
-/** Longest message this accepts. A chat line is a sentence, not a document. */
-export const MAX_CHAT_CHARS = 2_000;
-/** Consecutive messages from one person inside this window read as one turn. */
-export const GROUP_WINDOW_MS = 120_000;
+/**
+ * The longest message the room will send or show.
+ *
+ * Not a policy about how much somebody may say — it is the point past which a
+ * "message" is a pasted document, and one of those costs every participant a
+ * re-render and a scroll. Realtime has its own frame limit well above this;
+ * this bound is about the panel.
+ */
+export const CHAT_MAX_LENGTH = 2000;
 
+/**
+ * How far a sender's clock may disagree with ours before we stop believing it.
+ *
+ * Ordering by the sender's timestamp is what makes everyone see one
+ * conversation, and it hands every participant's clock a say in where their
+ * messages land. Ordinary skew is milliseconds and is exactly what we want
+ * applied. A machine an hour out is different in kind: every message it sends
+ * would pin itself to the top or the bottom of the panel forever. Past this
+ * bound we substitute our own arrival time — which is wrong by less.
+ */
+export const CHAT_CLOCK_TOLERANCE_MS = 2 * 60_000;
+
+/** Whether a message you sent has actually been accepted by the socket. */
+export type ChatDelivery = "sending" | "sent" | "failed";
+
+/** One message in the panel. */
 export interface ChatMessage {
   id: string;
-  /** Who sent it, as the room knows them. */
+  /** Signaling id of the sender. */
   from: string;
   displayName: string;
   text: string;
-  /** Epoch milliseconds. */
+  /** Milliseconds since the epoch, as the SENDER's clock read it. */
   ts: number;
+  /** Own messages only. Absent on anything received. */
+  delivery?: ChatDelivery;
 }
 
 /**
- * What a message becomes on its way out, or "" for one that should not be sent.
+ * Trim a message and bound it, on the way out and on the way in.
  *
- * Trimmed, capped, and stripped of the control characters a paste can carry —
- * which are invisible in the composer and are about to be stored, rendered to
- * everyone in the room, and put in an exported document. Interior newlines
- * survive: somebody pasting three lines of an address meant the three lines.
+ * Applied to received text as well as sent, because the bound that matters is
+ * the one on the panel doing the rendering — a peer running an older build, or
+ * a modified one, does not get to decide how much this browser draws.
  */
-export function cleanChatText(raw: string | null | undefined): string {
-  const text = (raw ?? "")
-    // Control characters except newline and tab, which are legitimate here.
+export function normalizeChatText(raw: unknown): string {
+  if (typeof raw !== "string") return "";
+  const clean = raw
+    // One newline convention, so a paste from a Windows editor does not carry
+    // a stray carriage return into the table and the exported document.
+    .replace(/\r\n?/g, "\n")
+    // Control characters other than newline and tab: invisible in the
+    // composer, and now on their way into a row, onto everyone's screen and
+    // into an export. Interior newlines survive — somebody pasting three lines
+    // of an address meant the three lines.
     .replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, "")
-    // Runs of blank lines collapse: a paste should not push the room's
-    // conversation off the top of the panel.
+    // A paste should not push the room's conversation off the top of the panel.
     .replace(/\n{3,}/g, "\n\n")
     .trim();
-  return text.length > MAX_CHAT_CHARS ? text.slice(0, MAX_CHAT_CHARS).trimEnd() : text;
+  const clipped = clean.slice(0, CHAT_MAX_LENGTH);
+  // Never leave half a surrogate pair at the cut: a lone surrogate renders as
+  // a replacement character, so clipping an emoji would end the message with
+  // a black diamond rather than with the emoji missing.
+  const last = clipped.charCodeAt(clipped.length - 1);
+  return (last >= 0xd800 && last <= 0xdbff ? clipped.slice(0, -1) : clipped).trimEnd();
 }
 
 /**
- * History and live messages as one conversation.
+ * Read a Realtime send result.
  *
- * Keyed by id and ordered by time, because both halves overlap: the server
- * hands back messages this browser has already shown, and a broadcast can
- * arrive before the row it was written from is readable. Ids are minted by the
- * sender for exactly this reason.
+ * `channel.send()` resolves to "ok", "timed out" or "error" and this feature
+ * threw all three away. Anything that is not an explicit "ok" is a failure:
+ * an unrecognised result means a client version we cannot interpret, and the
+ * safe reading of "I do not know whether that was delivered" is to tell the
+ * person it was not.
+ */
+export function deliveryFromSendResult(result: unknown): ChatDelivery {
+  return result === "ok" ? "sent" : "failed";
+}
+
+/**
+ * The timestamp to file a received message under.
  *
- * A later copy of an id wins. The stored row is the one with the authoritative
- * name and time, and it is the one that arrives second.
+ * See CHAT_CLOCK_TOLERANCE_MS. A missing or unparseable claim is treated the
+ * same as an impossible one.
+ */
+export function resolveTimestamp(
+  claimed: unknown,
+  receivedAt: number,
+  toleranceMs: number = CHAT_CLOCK_TOLERANCE_MS,
+): number {
+  if (typeof claimed !== "number" || !Number.isFinite(claimed)) return receivedAt;
+  return Math.abs(claimed - receivedAt) > toleranceMs ? receivedAt : claimed;
+}
+
+/** Whether `a` belongs after `b` in the panel. */
+function isAfter(a: ChatMessage, b: ChatMessage): boolean {
+  if (a.ts !== b.ts) return a.ts > b.ts;
+  // Two messages sent in the same millisecond still need ONE order, and it has
+  // to be the same order on every screen — so it is decided by the id the
+  // sender minted, which every participant sees the same value of.
+  return a.id > b.id;
+}
+
+/**
+ * Place a message in the panel, in the order it was spoken.
+ *
+ * A backward scan rather than a re-sort: the list is already ordered and a new
+ * message almost always belongs at the end, so the common case costs one
+ * comparison. The out-of-order case — a peer whose packet took the long way
+ * round — is the whole point, and it is rare enough to pay for by walking.
+ *
+ * Ignores a message whose id is already present. Broadcast does not redeliver,
+ * so this is not the case it exists for; it exists so that a retry of a
+ * message that did in fact go out cannot show it twice.
+ */
+export function insertMessage(
+  list: readonly ChatMessage[],
+  msg: ChatMessage,
+): ChatMessage[] {
+  if (list.some((m) => m.id === msg.id)) return [...list];
+  const out = [...list];
+  let i = out.length;
+  while (i > 0 && isAfter(out[i - 1], msg)) i -= 1;
+  out.splice(i, 0, msg);
+  return out;
+}
+
+/** Record what the socket said about one of our own messages. */
+export function markDelivery(
+  list: readonly ChatMessage[],
+  id: string,
+  delivery: ChatDelivery,
+): ChatMessage[] {
+  return list.map((m) => (m.id === id ? { ...m, delivery } : m));
+}
+
+/**
+ * The name to show against a message.
+ *
+ * Resolved from the roster by signaling id, and only falling back to the name
+ * the message carried. The id is what every other part of the room agrees on;
+ * the name in the payload is a claim by whoever sent it, which is both how a
+ * modified client could sign somebody else's name to a message and why a
+ * rename never used to reach the panel.
+ */
+export function displayNameFor(
+  msg: { from: string; displayName?: string },
+  roster: ReadonlyMap<string, { displayName: string }>,
+): string {
+  const known = roster.get(msg.from)?.displayName?.trim();
+  if (known) return known;
+  const claimed = (msg.displayName ?? "").trim();
+  return claimed || "Someone";
+}
+
+// ── Stored chat ─────────────────────────────────────────────────────────────
+//
+// Everything above is about the message on its way through the room. What
+// follows is about the conversation once it is a table: folding the history
+// back in without duplicating it, and rendering it as something a person reads
+// rather than a log they scan.
+
+/** Consecutive messages from one person inside this window read as one turn. */
+export const GROUP_WINDOW_MS = 120_000;
+
+/**
+ * History and the live panel as one conversation.
+ *
+ * Keyed by id and ordered exactly as insertMessage orders, because both halves
+ * overlap: the server hands back messages this browser has already shown, and
+ * a broadcast can arrive before the row it was written from is readable. Ids
+ * are minted by the sender for that reason.
+ *
+ * A later group wins, so the caller decides which copy is authoritative —
+ * `mergeChat(panel, history)` lets the stored row correct the name and time.
+ * `delivery` is the exception: it is carried forward from the earlier copy,
+ * because it is local knowledge about your own send that no stored row has and
+ * losing it would silently retract a "Not delivered" the sender is looking at.
  */
 export function mergeChat(...groups: ReadonlyArray<readonly ChatMessage[]>): ChatMessage[] {
   const byId = new Map<string, ChatMessage>();
   for (const group of groups) {
     for (const msg of group ?? []) {
       if (!msg?.id || typeof msg.text !== "string") continue;
-      byId.set(msg.id, msg);
+      const before = byId.get(msg.id);
+      byId.set(
+        msg.id,
+        before?.delivery !== undefined && msg.delivery === undefined
+          ? { ...msg, delivery: before.delivery }
+          : msg,
+      );
     }
   }
-  return [...byId.values()].sort((a, b) => a.ts - b.ts || a.id.localeCompare(b.id));
+  return [...byId.values()].sort((a, b) => (isAfter(a, b) ? 1 : isAfter(b, a) ? -1 : 0));
 }
 
 export interface ChatTurn {
@@ -118,8 +280,8 @@ const TRAILING = /[.,;:!?)\]}'"]+$/;
  *
  * Parts rather than markup: the caller renders them as React nodes, so nothing
  * here can put HTML on a page. That is the whole point — this is other
- * people's text, and the previous version showed it as flat, unclickable
- * prose precisely because making it clickable safely was never done.
+ * people's text, and the panel showed a shared URL as flat, unfollowable prose
+ * precisely because making it clickable safely was never done.
  */
 export function chatParts(text: string): ChatPart[] {
   const out: ChatPart[] = [];

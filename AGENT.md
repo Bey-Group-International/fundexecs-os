@@ -2905,6 +2905,150 @@ Deployed, monitoring               →  live, observability active
              |  MeetingRoom/Supabase coverage gap flagged on the last six passes
              |  still means the three readers themselves are only exercised by
              |  typecheck and build.
+
+2026-09-18  |  The chat that could not tell you it had failed  |  Asked to check
+             |  for defects with the chat, then to fix all four. Chat looks like
+             |  the simplest thing in the meeting and had the most ways to
+             |  mislead the person using it.
+             |  A SEND THAT FAILED LOOKED EXACTLY LIKE A SEND THAT WORKED.
+             |  sendSignal was `channelRef.current?.send(...)` with the returned
+             |  promise dropped. Realtime resolves it to "ok", "timed out" or
+             |  "error", and sendChat appended the message locally FIRST and
+             |  unconditionally. The channel is `broadcast: { self: false }`, so
+             |  there was never a round trip to notice the absence of either. A
+             |  send that timed out left somebody reading their own words in a
+             |  room that had not received them — and the optional chain turned
+             |  "there is no socket at all" into the same silence. Now the send
+             |  is awaited and its answer becomes the message's own state:
+             |  sending, sent, or "Not delivered" with a Retry that reuses the
+             |  original id so a message that did go out cannot land twice. The
+             |  precedent was already in the repo: nudgeGuests awaits the same
+             |  call and counts failures, and says in its header that it may
+             |  fail BECAUSE every guest also polls. Chat has no second chance.
+             |  THERE WAS NOWHERE AN UNREAD COUNT COULD APPEAR. chatOpenRef was
+             |  set true when the chat tab mounted and cleared only when the
+             |  whole panel collapsed, so switching to People left it true and
+             |  every message that arrived while somebody read the roster counted
+             |  as read. Nothing said otherwise either — the toolbar badge is
+             |  gated on `!copilotOpen`, and the Chat tab had no badge of its
+             |  own. A host triaging the waiting room got no sign at all. The
+             |  panel now reports visibility both ways round, and the Chat tab
+             |  carries the count.
+             |  MESSAGES WERE ORDERED BY ARRIVAL, SO NO TWO PEOPLE SAW THE SAME
+             |  CONVERSATION. `ts` was carried end to end and read by nothing:
+             |  the sender appended at send time, everyone else at receive time,
+             |  so a line landed before its replies on one screen and after them
+             |  on another. Sorted on ts now, tie-broken by the sender's message
+             |  id — which is why the id is now carried on the wire. Same fix,
+             |  for the same reason, restoreTranscript applies to rows.
+             |  TEXT AND NAMES WERE TAKEN ON THE SENDER'S TERMS. No bound on
+             |  either, and the name shown was whatever the payload claimed
+             |  rather than the roster's, keyed by signaling id — the thing the
+             |  TranscriptLine comment already argues for. Now bounded at 2000
+             |  characters on the way out AND the way in, without cutting a
+             |  surrogate pair in half, and resolved from the roster. A clock
+             |  more than two minutes from ours stops deciding where its
+             |  messages sit and gets our arrival time instead.
+             |  Worth naming: the audit's fourth finding was reported WRONG and
+             |  the browser said so. I wrote that a pasted URL would force the
+             |  column wider than the panel, "which only scrolls vertically".
+             |  It does not: Tailwind's `overflow-y-auto` sets one axis, and CSS
+             |  computes the other to `auto` whenever its pair is not `visible`.
+             |  So the panel silently becomes a SIDEWAYS SCROLLER and takes
+             |  every other message off-screen with it — milder than a burst
+             |  page, and still wrong. The first version of the visual check
+             |  passed against the unfixed bubble, which is how this was caught;
+             |  it now measures scrollWidth against clientWidth and fails at
+             |  phone width without `break-words`.
+             |  Confidence: typecheck/eslint clean, production build passes,
+             |  Jest 6357 → 6390 green (+33 new, +2 suites), baseline
+             |  re-measured from origin/main in a clean worktree; visual suite
+             |  8/8. Ordering, naming and the length bound were each run against
+             |  the previous behaviour first and fail there; delivery had no
+             |  previous behaviour to fail.
+             |  NEW: MeetingRoom.chat.visual.test.ts is the first layout check
+             |  on the meeting room, and jest.setup.dom.ts now fills
+             |  Element.scrollIntoView — absent from jsdom, called by five
+             |  components here, and the reason none of them had a test. A real
+             |  dent in the MeetingRoom coverage gap flagged on the last seven
+             |  passes: CopilotSidebar is now exported and tested directly, the
+             |  way HostExitControl already was.
+
+2026-09-18  |  The chat that did not outlive the call  |  Asked to optimize the
+             |  meeting chat and reactions. Landed on top of the same day's
+             |  delivery/ordering/naming pass, which fixed how a message
+             |  behaves on its way through the room; this is about what happens
+             |  to it afterwards.
+             |  NOTHING STORED THE CHAT. It was a Supabase broadcast into a
+             |  React array and nowhere else. Broadcast has no history and no
+             |  durability, so somebody who joined ten minutes into a call saw
+             |  an empty panel while the room talked about what had been said in
+             |  it, a reload emptied their own copy, and the conversation went
+             |  when the call did. The report carried the transcript of what was
+             |  SAID and nothing of what was TYPED — which for most calls is
+             |  where the documents, the numbers and the links were. Found by
+             |  the same diagnostic as the last five passes: follow what gets
+             |  written and ask who reads it. Nothing was written, so nobody
+             |  could.
+             |  Built: live_meeting_chat (client-minted id as the primary key,
+             |  so a retried post upserts rather than duplicating, exactly as
+             |  live_meeting_transcripts does), attendees-only SELECT and NO
+             |  write policy at all — writes go through GET/POST
+             |  /api/meetings/[id]/chat, because a table whose only sensible
+             |  policy is keyed on auth.uid() has nothing to say about an
+             |  invite-link guest, and the route is what authorizes one.
+             |  THE CALLER CHECK WAS ABOUT TO BE COPIED. The transcript route's
+             |  host/participant/org-member/admitted-guest ladder is the rule
+             |  the chat route needs, verbatim. Extracted to
+             |  lib/meetings/meeting-access.server.ts rather than pasted: three
+             |  copies drifting apart is how a guest ends up able to write a
+             |  transcript line and not a chat message, with nobody able to say
+             |  which was intended.
+             |  THE CHAT READ AS A LOG. Three lines from one person repeated
+             |  their name three times; nothing carried a time; and a shared URL
+             |  — the single commonest thing anybody puts in a meeting chat —
+             |  was flat, unfollowable prose. groupChat, chatClock and chatParts
+             |  fix all three. chatParts returns PARTS, not markup, so the
+             |  caller renders React nodes and nothing here can put HTML on a
+             |  page; it matches plainly-written http(s) and nothing else, and
+             |  the href is re-parsed with `new URL` rather than pattern-matched
+             |  (a "javascript:" inside a sentence is text, and is tested as
+             |  such).
+             |  A REPEATED REACTION CLEARED ITSELF EARLY. The expiry compared
+             |  the emoji VALUE: sending 👍 twice meant the second send's
+             |  timeout and the first send's timeout both matched, so the first
+             |  one's expiry wiped the second one three seconds early. Timers
+             |  are keyed by person now and cleared on unmount.
+             |  A RAISED HAND GOT NONE OF THE ATTENTION CHAT GETS. It showed as
+             |  a ✋ on a tile that is off-screen in speaker layout, and beside a
+             |  name in a sidebar tab that is closed by default — while a
+             |  one-word chat message lights a badge on the toolbar. So the
+             |  person whose hand is up waits on somebody happening to look.
+             |  lib/meetings/hands.ts: raisedBy (others only, oldest first —
+             |  the order a chair would take them in, and the order a Set
+             |  preserves), handsUpLabel, handsFirst. The control bar carries
+             |  the count and says who; the people list lifts them to the top.
+             |  Also: the export's recording block and the new chat block are
+             |  now BOTH gated on attendance. RLS would refuse them anyway, but
+             |  a caller about to be told the report is not theirs has no
+             |  business costing the queries. The test that caught it asserted
+             |  the whole set of tables queried while claiming something
+             |  narrower ("without asking the participants table"); tightened to
+             |  what it says rather than relaxed.
+             |  Confidence: typecheck/eslint clean, production build passes,
+             |  Jest 6390 → 6444 green (+54 new, +2 suites), baseline
+             |  re-measured from origin/main in a clean worktree; visual suite
+             |  still green, and the chat panel's own layout check re-run
+             |  against the grouped, linkified rendering.
+             |  MERGE NOTE worth keeping: this branch and the delivery/ordering
+             |  pass above built lib/meetings/chat.ts in parallel and collided
+             |  on it. Resolved by union, not by choosing: normalizeChatText
+             |  gained the control-character strip the stored path needs,
+             |  mergeChat sorts by the same comparator insertMessage uses (and
+             |  carries `delivery` forward from the local copy, because a stored
+             |  row has no idea whether your socket accepted the send), and the
+             |  panel is grouped AND shows delivery AND links. Two parallel
+             |  branches on one file is now the norm here, not the exception.
 ```
 
 ---

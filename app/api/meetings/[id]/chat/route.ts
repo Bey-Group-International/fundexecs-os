@@ -14,7 +14,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createServerClient, createServiceClient, hasSupabaseServiceEnv } from "@/lib/supabase/server";
 import { checkRateLimit, clientIp, rateLimitHeaders } from "@/lib/rate-limit";
 import { authorizeMeetingCaller } from "@/lib/meetings/meeting-access.server";
-import { cleanChatText, type ChatMessage } from "@/lib/meetings/chat";
+import { normalizeChatText, type ChatMessage } from "@/lib/meetings/chat";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -118,7 +118,7 @@ export async function POST(req: NextRequest, { params }: { params: Params }) {
   };
 
   const messageId = typeof body.id === "string" && body.id.length > 0 && body.id.length <= 64 ? body.id : "";
-  const text = cleanChatText(typeof body.text === "string" ? body.text : "");
+  const text = normalizeChatText(typeof body.text === "string" ? body.text : "");
   const name = (typeof body.displayName === "string" ? body.displayName : "").trim().slice(0, MAX_NAME);
   if (!messageId || !text) {
     return NextResponse.json({ error: "A message needs an id and something to say." }, { status: 422 });

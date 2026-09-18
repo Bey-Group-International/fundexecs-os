@@ -4,13 +4,6 @@ import React, { useEffect, useLayoutEffect, useMemo, useReducer, useRef, useStat
 import { createPortal } from "react-dom";
 import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import {
-  chatClock,
-  cleanChatText,
-  groupChat,
-  mergeChat,
-  type ChatMessage,
-} from "@/lib/meetings/chat";
 import { handsFirst, handsUpLabel, raisedBy } from "@/lib/meetings/hands";
 import { ChatText } from "./ChatText";
 import { MeetingGreenRoom, type GreenRoomChoice } from "./MeetingGreenRoom";
@@ -25,6 +18,20 @@ import {
   speakingIds,
   type ParticipantAudio,
 } from "@/lib/meetings/speaker-attribution";
+import {
+  CHAT_MAX_LENGTH,
+  chatClock,
+  deliveryFromSendResult,
+  displayNameFor,
+  groupChat,
+  insertMessage,
+  markDelivery,
+  mergeChat,
+  normalizeChatText,
+  resolveTimestamp,
+  type ChatDelivery,
+  type ChatMessage,
+} from "@/lib/meetings/chat";
 import { MeetingShareLink } from "@/app/(app)/meetings/MeetingShareLink";
 import { CopilotErrorBoundary } from "./CopilotErrorBoundary";
 import { BackgroundPicker } from "./BackgroundPicker";
@@ -179,7 +186,6 @@ interface TranscriptLine {
   overlapped: boolean;
 }
 
-
 type SignalMsg =
   | { type: "join"; from: string; displayName: string }
   | { type: "leave"; from: string }
@@ -214,7 +220,12 @@ type SignalMsg =
   // own share — a guest presenting slides would be composited as a small tile
   // of their slides, which is the one thing the recording exists to capture.
   | { type: "video"; from: string; camOn: boolean; paused: boolean; sharing?: boolean }
-  | { type: "chat"; id: string; from: string; displayName: string; text: string; ts: number }
+  // `id` is the sender's own message id, carried so every participant files
+  // the message under the same key: it dedupes a retry of a message that did
+  // in fact go out, it breaks the tie when two people send in the same
+  // millisecond, and it is the primary key of the row the message is stored
+  // as. Optional, so a client on an older build still chats.
+  | { type: "chat"; from: string; displayName: string; text: string; ts: number; id?: string }
   | { type: "raise_hand"; from: string; raised: boolean }
   | { type: "reaction"; from: string; emoji: string; ts: number }
   | { type: "mute_all"; from: string }
@@ -1042,9 +1053,13 @@ function ControlBar({
  * is built from it, and the "Live" lamp in this header is how someone knows it
  * is working.
  */
-function CopilotSidebar({
+// Exported for the tests, exactly as HostExitControl is: reaching this panel
+// through MeetingRoom means entering a room, which opens a camera, an ICE
+// negotiation and a Realtime channel, and a test that mocked all of that would
+// be testing its own mocks.
+export function CopilotSidebar({
   srStatus, participants, roomCode, meetingTitle,
-  chatMessages, onSendChat, isHost, raisedHands, onKick, onAdmit, onDeny, onAdmitAll, waitingPeers, onChatOpen,
+  chatMessages, chatUnread, onSendChat, onRetryChat, isHost, raisedHands, onKick, onAdmit, onDeny, onAdmitAll, waitingPeers, onChatVisibility,
   speaking, onCollapse,
 }: {
   srStatus: "idle" | "active" | "error" | "unsupported";
@@ -1052,10 +1067,17 @@ function CopilotSidebar({
   /** Ids of everyone whose voice is in the room right now. */
   speaking: Set<string>;
   roomCode: string; meetingTitle: string; chatMessages: ChatMessage[];
-  onSendChat: (text: string) => void; isHost: boolean;
+  /** Messages that have arrived since the panel last showed the chat tab. */
+  chatUnread: number;
+  onSendChat: (text: string) => void;
+  /** Send a message again after the socket refused it. */
+  onRetryChat: (id: string) => void;
+  isHost: boolean;
   raisedHands: Set<string>; onKick: (id: string) => void;
   onAdmit: (id: string) => void; onDeny: (id: string) => void; onAdmitAll: () => void;
-  waitingPeers: WaitingPeer[]; onChatOpen: () => void;
+  waitingPeers: WaitingPeer[];
+  /** Whether the chat is the tab being looked at — true on it, false off it. */
+  onChatVisibility: (visible: boolean) => void;
   /** Collapse the panel. The only way out on mobile, where it covers the screen. */
   onCollapse: () => void;
 }) {
@@ -1067,7 +1089,9 @@ function CopilotSidebar({
   const [emailSent, setEmailSent] = useState(false);
 
   useEffect(() => { if (tab === "chat") chatBottomRef.current?.scrollIntoView({ behavior: "smooth" }); }, [chatMessages, tab]);
-  useEffect(() => { if (tab === "chat") onChatOpen(); }, [tab, onChatOpen]);
+  // Reported both ways round. Reporting only "the chat is open" is what let
+  // messages arriving while somebody read the People tab count as read.
+  useEffect(() => { onChatVisibility(tab === "chat"); }, [tab, onChatVisibility]);
 
   // Colour by id, not by position in the list — so a speaker keeps their colour
   // when someone above them leaves, and holds the same one on every screen.
@@ -1132,6 +1156,16 @@ function CopilotSidebar({
                         : "text-[var(--fg-muted)] hover:text-[var(--fg-secondary)]"
             }`}>
             {t === "people" ? `People ${participants.length}` : "Chat"}
+            {/* The only place an unread count can appear while the panel is
+                open: the toolbar badge is suppressed for exactly that case. */}
+            {t === "chat" && tab !== "chat" && chatUnread > 0 && (
+              <span
+                title={`${chatUnread} unread`}
+                className="absolute top-0.5 right-0.5 min-w-3.5 h-3.5 px-1 rounded-full bg-[var(--gold-400)] text-white text-[10px] font-bold flex items-center justify-center"
+              >
+                {chatUnread}
+              </span>
+            )}
             {t === "people" && isHost && waitingPeers.length > 0 && (
               <span
                 title={`${waitingPeers.length} waiting to join`}
@@ -1153,19 +1187,33 @@ function CopilotSidebar({
               // repeating their name above each is how a short exchange
               // becomes a wall.
               groupChat(chatMessages).map((turn) => (
-                <div key={turn.id} className="flex flex-col gap-0.5">
+                // `min-w-0` and `break-words` together are what stop a pasted
+                // URL — the most common thing anybody pastes into a meeting
+                // chat — from forcing this column wider than the panel, which
+                // only scrolls vertically.
+                <div key={turn.id} className="flex flex-col gap-0.5 min-w-0">
                   <span className="flex items-baseline gap-2">
-                    <span className="text-xs font-medium text-[var(--gold-400)]">{turn.displayName}</span>
+                    <span className="text-xs font-medium text-[var(--gold-400)] break-words">{turn.displayName}</span>
                     <span className="font-mono text-[10px] tabular-nums text-[var(--fg-muted)]">
                       {chatClock(turn.ts)}
                     </span>
                   </span>
                   {turn.messages.map((msg) => (
-                    <div
-                      key={msg.id}
-                      className="whitespace-pre-wrap break-words rounded-lg bg-[var(--surface-0)] border border-[var(--line)] px-3 py-2 text-sm text-[var(--fg-primary)]"
-                    >
-                      <ChatText text={msg.text} />
+                    <div key={msg.id} className="flex flex-col gap-0.5 min-w-0">
+                      <div className="rounded-lg bg-[var(--surface-0)] border border-[var(--line)] px-3 py-2 text-sm text-[var(--fg-primary)] break-words whitespace-pre-wrap">
+                        <ChatText text={msg.text} />
+                      </div>
+                      {msg.delivery === "sending" && (
+                        <span className="text-[10px] text-[var(--fg-muted)]">Sending…</span>
+                      )}
+                      {msg.delivery === "failed" && (
+                        <span className="text-[10px] text-[var(--status-danger)] flex items-center gap-1.5">
+                          Not delivered
+                          <button onClick={() => onRetryChat(msg.id)} className="underline hover:no-underline font-semibold">
+                            Retry
+                          </button>
+                        </span>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -1266,6 +1314,7 @@ function CopilotSidebar({
         <div className="border-t border-[var(--line)] p-3 flex gap-2 shrink-0">
           <input value={chatInput} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setChatInput(e.target.value)}
             onKeyDown={(e: React.KeyboardEvent<HTMLInputElement>) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendChat(); } }}
+            maxLength={CHAT_MAX_LENGTH}
             placeholder="Message everyone…"
             className="flex-1 rounded-lg border border-[var(--line)] bg-[var(--surface-0)] px-3 py-2 text-sm text-[var(--fg-primary)] placeholder:text-[var(--fg-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--gold-400)]" />
           <button onClick={sendChat} disabled={!chatInput.trim()}
@@ -1508,6 +1557,9 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
 
   // Chat
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  // Read by retryChat, which must not re-create itself every time somebody
+  // speaks — a new identity on each message would re-run the panel's effects.
+  const chatMessagesRef = useRef<ChatMessage[]>([]);
   const [chatUnread, setChatUnread] = useState(0);
   const chatOpenRef = useRef(false);
 
@@ -1758,13 +1810,40 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     : joining && !isHost ? "asking"
     : "idle";
 
-  const sendSignal = useCallback((msg: SignalMsg) => {
-    channelRef.current?.send({ type: "broadcast", event: "signal", payload: msg });
+  /**
+   * Broadcast, and report whether the socket accepted it.
+   *
+   * `channel.send()` has always resolved to "ok", "timed out" or "error", and
+   * this room has always thrown that away. For most signals that is the right
+   * trade — a `mic` state that misses is corrected by the next one, and an
+   * `ice` candidate that misses is one of many. Chat has no next one: it is
+   * typed once, by a person, who is then shown their own words and left to
+   * assume the room saw them.
+   *
+   * A null channel is a failure rather than a silent no-op for the same
+   * reason. `teardownCall` nulls it, and the optional chain used to turn
+   * "there is no socket" into "sent".
+   */
+  const sendSignalAck = useCallback(async (msg: SignalMsg): Promise<ChatDelivery> => {
+    const channel = channelRef.current;
+    if (!channel) return "failed";
+    try {
+      return deliveryFromSendResult(
+        await channel.send({ type: "broadcast", event: "signal", payload: msg }),
+      );
+    } catch {
+      return "failed";
+    }
   }, []);
+
+  // Every other signal keeps the fire-and-forget shape it had, over the same
+  // one transport — so there is no second way for a message to leave the room.
+  const sendSignal = useCallback((msg: SignalMsg) => { void sendSignalAck(msg); }, [sendSignalAck]);
 
   const sendSignalRef = useRef(sendSignal);
   useEffect(() => { sendSignalRef.current = sendSignal; }, [sendSignal]);
   useEffect(() => { localNameRef.current = localName; }, [localName]);
+  useEffect(() => { chatMessagesRef.current = chatMessages; }, [chatMessages]);
   useEffect(() => { peersDataRef.current = peers; }, [peers]);
   useEffect(() => { micOnRef.current = micOn; }, [micOn]);
   useEffect(() => { handRaisedRef.current = handRaised; }, [handRaised]);
@@ -2628,12 +2707,25 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     }
 
     if (msg.type === "chat" && msg.from !== myId) {
-      // Keyed on the SENDER's id, not a fresh one: the same message also
-      // arrives from the stored history, and two copies of one line is what a
-      // locally-minted id would guarantee.
-      const chatMsg: ChatMessage = { id: msg.id, from: msg.from, displayName: msg.displayName, text: msg.text, ts: msg.ts };
-      setChatMessages((prev) => mergeChat(prev, [chatMsg]));
-      if (!chatOpenRef.current) setChatUnread((n) => n + 1);
+      // Every field is taken on our terms rather than theirs: the text is
+      // bounded here as well as at the sender, the name comes from the roster
+      // by signaling id rather than from the claim in the payload, and a
+      // timestamp from a badly-set clock is replaced by our own arrival time.
+      const text = normalizeChatText(msg.text);
+      if (text) {
+        const chatMsg: ChatMessage = {
+          id: msg.id ?? crypto.randomUUID(),
+          from: msg.from,
+          displayName: displayNameFor(msg, peersDataRef.current),
+          text,
+          ts: resolveTimestamp(msg.ts, Date.now()),
+        };
+        // Placed by when it was SAID, not when it landed. Appending meant the
+        // sender saw their line before the replies and everyone else saw it
+        // after — one conversation rendered as several.
+        setChatMessages((prev) => insertMessage(prev, chatMsg));
+        if (!chatOpenRef.current) setChatUnread((n) => n + 1);
+      }
     }
 
     if (msg.type === "raise_hand") {
@@ -4725,7 +4817,14 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     return `/api/meetings/${meetingIdRef.current}/chat${suffix}`;
   }, []);
 
-  /** Store one message. Never throws: the room has already seen it. */
+  /**
+   * Store one message.
+   *
+   * Never throws, and its failure is not the sender's problem: `delivery` is
+   * about whether the ROOM got it, which the broadcast already answered. This
+   * is about whether the record will still have it tomorrow, and the shared id
+   * makes a later retry of the same message land in the same row.
+   */
   const persistChat = useCallback(async (msg: ChatMessage) => {
     if (!meetingIdRef.current) return;
     try {
@@ -4744,7 +4843,9 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
    * The conversation so far.
    *
    * Never throws and never clears: losing the history costs a latecomer what
-   * they missed, not their part in the rest of the meeting.
+   * they missed, not their part in the rest of the meeting. Merged rather than
+   * assigned — the panel may already hold messages that arrived while this was
+   * in flight, and `mergeChat` keeps what the socket said about your own sends.
    */
   const loadChatHistory = useCallback(async () => {
     if (!meetingIdRef.current) return;
@@ -4753,7 +4854,7 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
       if (!res.ok) return;
       const { messages } = (await res.json()) as { messages?: ChatMessage[] };
       if (Array.isArray(messages) && messages.length) {
-        setChatMessages((prev) => mergeChat(messages, prev));
+        setChatMessages((prev) => mergeChat(prev, messages));
       }
     } catch (err) {
       console.warn("[meeting] chat history unavailable", err);
@@ -4766,21 +4867,72 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
   const persistChatRef = useRef(persistChat);
   useEffect(() => { persistChatRef.current = persistChat; }, [persistChat]);
 
-  const sendChat = useCallback((raw: string) => {
-    const text = cleanChatText(raw);
+  /**
+   * Say something to the room, and say honestly whether it got there.
+   *
+   * The old version appended the message and fired the broadcast into the
+   * dark. Everything after the append is new: the send is awaited, and what it
+   * says becomes the message's own state. `sending` is a moment on a healthy
+   * socket and a visible one on a sick socket — which is when somebody is most
+   * likely to be typing "can you hear me?" into this box.
+   *
+   * The message is stored as well as broadcast. The broadcast is what makes it
+   * immediate; the row is what makes it survive a latecomer, a reload and the
+   * end of the meeting. The id is minted here and travels with the message to
+   * both, which is what lets a retry be safe in either direction.
+   */
+  const sendChat = useCallback(async (raw: string) => {
+    const text = normalizeChatText(raw);
     if (!text) return;
-    // The id is minted here and travels with the message everywhere it goes:
-    // to the room over the broadcast, and to the table. That is what lets a
-    // post that timed out be retried without the room seeing it twice.
-    const msg: ChatMessage = { id: crypto.randomUUID(), from: myIdRef.current, displayName: localName, text, ts: Date.now() };
-    setChatMessages((prev) => mergeChat(prev, [msg]));
-    sendSignal({ type: "chat", id: msg.id, from: myIdRef.current, displayName: localName, text, ts: msg.ts });
-    // Stored as well as broadcast. The broadcast is what makes it immediate;
-    // the row is what makes it survive a latecomer, a reload, and the end of
-    // the meeting. A failure costs the record, not the message — the room has
-    // already seen it — so it is logged rather than surfaced.
+    const msg: ChatMessage = {
+      id: crypto.randomUUID(),
+      from: myIdRef.current,
+      displayName: localNameRef.current,
+      text,
+      ts: Date.now(),
+      delivery: "sending",
+    };
+    setChatMessages((prev) => insertMessage(prev, msg));
     void persistChatRef.current(msg);
-  }, [localName, sendSignal]);
+    const delivery = await sendSignalAck({
+      type: "chat", id: msg.id, from: msg.from, displayName: msg.displayName, text, ts: msg.ts,
+    });
+    setChatMessages((prev) => markDelivery(prev, msg.id, delivery));
+  }, [sendSignalAck]);
+
+  /**
+   * Send a failed message again.
+   *
+   * Without this, telling somebody their message did not arrive just moves the
+   * work to them: they retype it, from memory, while the call carries on. The
+   * id and timestamp are the original ones, so a retry of a message that DID
+   * go out lands as the same message on every screen rather than as a second
+   * one — see insertMessage — and as the same ROW rather than a second one.
+   */
+  const retryChat = useCallback(async (id: string) => {
+    const msg = chatMessagesRef.current.find((m) => m.id === id);
+    if (!msg || msg.delivery !== "failed") return;
+    setChatMessages((prev) => markDelivery(prev, id, "sending"));
+    void persistChatRef.current(msg);
+    const delivery = await sendSignalAck({
+      type: "chat", id: msg.id, from: msg.from, displayName: msg.displayName, text: msg.text, ts: msg.ts,
+    });
+    setChatMessages((prev) => markDelivery(prev, id, delivery));
+  }, [sendSignalAck]);
+
+  /**
+   * Whether the chat panel is the thing being looked at.
+   *
+   * Was set true when the chat tab mounted and cleared only when the whole
+   * panel collapsed — so switching to People left it true, and every message
+   * that arrived while somebody read the roster counted as read. Nothing said
+   * otherwise either: the toolbar badge is suppressed while the panel is open,
+   * and the Chat tab had no badge of its own.
+   */
+  const handleChatVisibility = useCallback((visible: boolean) => {
+    chatOpenRef.current = visible;
+    if (visible) setChatUnread(0);
+  }, []);
 
   const muteAll = useCallback(() => { sendSignal({ type: "mute_all", from: myIdRef.current }); }, [sendSignal]);
 
@@ -5281,10 +5433,11 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
             <CopilotErrorBoundary resetKey={participantList.length}>
             <CopilotSidebar
               srStatus={srStatus} participants={participantList} roomCode={roomCode} meetingTitle={meetingTitle}
-              chatMessages={chatMessages} onSendChat={sendChat} isHost={isHost}
+              chatMessages={chatMessages} chatUnread={chatUnread}
+              onSendChat={(t) => void sendChat(t)} onRetryChat={(id) => void retryChat(id)} isHost={isHost}
               raisedHands={raisedHands} onKick={kickPeer} onAdmit={admitPeer} onDeny={denyPeer} onAdmitAll={admitAll}
               waitingPeers={waitingPeers}
-              onChatOpen={() => { chatOpenRef.current = true; setChatUnread(0); }}
+              onChatVisibility={handleChatVisibility}
               speaking={speaking}
               onCollapse={collapseCopilot}
             />
