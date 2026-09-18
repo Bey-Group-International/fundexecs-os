@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse, after } from "next/server";
 import { createServerClient, createServiceClient, hasSupabaseServiceEnv } from "@/lib/supabase/server";
 import { checkRateLimit, clientIp, rateLimitHeaders } from "@/lib/rate-limit";
 import { isRemoved, subjectFor } from "@/lib/meetings/removal";
@@ -123,12 +123,20 @@ async function readKnock(svc: SupabaseLike, meetingId: string, guestKey: string)
 async function readRemovals(
   svc: SupabaseLike,
   meetingId: string,
-): Promise<Array<{ user_id: string | null; guest_key: string | null }>> {
-  const { data } = await (svc as any)
+): Promise<{ rows: Array<{ user_id: string | null; guest_key: string | null }>; failed: boolean }> {
+  const { data, error } = await (svc as any)
     .from("live_meeting_removals")
     .select("user_id, guest_key")
     .eq("meeting_id", meetingId);
-  return (data ?? []) as Array<{ user_id: string | null; guest_key: string | null }>;
+  // FAILS CLOSED. Treating a failed read as an empty list would make "the
+  // database is unwell" mean "nobody has been removed", and the caller would
+  // then be handed to the membership and quick-access checks that a removal
+  // exists precisely to outrank.
+  if (error) {
+    console.error("[knock] could not read removals", error.message);
+    return { rows: [], failed: true };
+  }
+  return { rows: (data ?? []) as Array<{ user_id: string | null; guest_key: string | null }>, failed: false };
 }
 
 /**
@@ -145,6 +153,7 @@ async function answerKnock(
   admitOnSight: boolean,
   displayName: string,
   userId: string | null,
+  signalId: string,
 ) {
   if (admitOnSight && existing.status === "waiting") {
     await (svc as any)
@@ -152,7 +161,14 @@ async function answerKnock(
       // The account goes on here too: a teammate whose first knock landed before
       // they had signed in, or whose row predates this column being written at
       // all, is a row a later removal would not be able to match.
-      .update({ status: "admitted", decided_at: new Date().toISOString(), ...(userId ? { user_id: userId } : {}) })
+      .update({
+        status: "admitted",
+        decided_at: new Date().toISOString(),
+        ...(userId ? { user_id: userId } : {}),
+        // A reload mints a new signalling id, and the row has to follow it or
+        // the host's next removal would resolve to nobody.
+        ...(signalId ? { signal_id: signalId } : {}),
+      })
       .eq("id", existing.id);
     return NextResponse.json({ admissionId: existing.id, status: "admitted" });
   }
@@ -164,7 +180,7 @@ async function answerKnock(
   if (existing.status === "waiting" && displayName !== existing.display_name) {
     await (svc as any)
       .from("live_meeting_admissions")
-      .update({ display_name: displayName, ...(userId ? { user_id: userId } : {}) })
+      .update({ display_name: displayName, ...(userId ? { user_id: userId } : {}), ...(signalId ? { signal_id: signalId } : {}) })
       .eq("id", existing.id);
   }
   return NextResponse.json({ admissionId: existing.id, status: existing.status });
@@ -184,8 +200,19 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ roo
   const code = roomCode?.trim();
   if (!code) return NextResponse.json({ error: "Missing room code" }, { status: 400 });
 
-  const body = (await req.json().catch(() => ({}))) as { guestKey?: string; displayName?: string };
+  const body = (await req.json().catch(() => ({}))) as {
+    guestKey?: string;
+    displayName?: string;
+    signalId?: string;
+  };
   const guestKey = typeof body.guestKey === "string" ? body.guestKey.trim() : "";
+  // The id this person's client is about to appear under in the room. Recorded
+  // so the host can later say "remove that tile" and have the SERVER resolve
+  // whose it is — see the migration's note on why a peer announcing its own
+  // subject was the wrong answer. Self-asserted and that is fine: the only
+  // thing a client can do by lying is make its own tile unremovable, which
+  // costs it the call, because the kick still lands.
+  const signalId = typeof body.signalId === "string" ? body.signalId.trim().slice(0, 64) : "";
   const displayName = (typeof body.displayName === "string" && body.displayName.trim()) || "Guest";
   if (!guestKey) return NextResponse.json({ error: "guestKey required" }, { status: 400 });
 
@@ -227,13 +254,24 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ roo
   // from the request's cookies, never against anything the body claimed: a
   // removed teammate who clears their site data arrives with a brand new guest
   // key and the same account, and it is the account that stops them.
-  const subject = subjectFor(caller.userId, guestKey);
-  if (isRemoved(removals, subject)) {
+  //
+  // BOTH identifiers, independently. `subjectFor` prefers the account, which is
+  // the right rule for WRITING a removal — there is one subject per person and
+  // the durable one wins. It is the wrong rule for reading one: a guest removed
+  // by their key could then sign in and have the account subject looked up
+  // instead, finding nothing.
+  if (removals.failed) {
+    // A removal that cannot be read is not a removal that does not exist.
+    return NextResponse.json({ error: "Could not check this meeting" }, { status: 503 });
+  }
+  const removedByAccount = isRemoved(removals.rows, subjectFor(caller.userId, null));
+  const removedByKey = isRemoved(removals.rows, subjectFor(null, guestKey));
+  if (removedByAccount || removedByKey) {
     return NextResponse.json({ status: "denied" });
   }
 
   const admitOnSight = quickAccess || caller.isOrgMember;
-  if (existing) return answerKnock(supabase, existing, admitOnSight, displayName, caller.userId);
+  if (existing) return answerKnock(supabase, existing, admitOnSight, displayName, caller.userId, signalId);
 
   const { data: inserted, error } = await (supabase as any)
     .from("live_meeting_admissions")
@@ -245,6 +283,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ roo
       // one table that knows a signed-in person knocked cannot say who, and a
       // removal keyed on the account has nothing to match.
       user_id: caller.userId,
+      ...(signalId ? { signal_id: signalId } : {}),
       display_name: displayName,
       status: admitOnSight ? "admitted" : "waiting",
       ...(admitOnSight ? { decided_at: new Date().toISOString() } : {}),
@@ -267,7 +306,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ roo
   // race went, including the promotion a teammate is owed.
   if ((error as { code?: string } | null)?.code === UNIQUE_VIOLATION) {
     const winner = await readKnock(supabase, meeting.id, guestKey);
-    if (winner) return answerKnock(supabase, winner, admitOnSight, displayName, caller.userId);
+    if (winner) return answerKnock(supabase, winner, admitOnSight, displayName, caller.userId, signalId);
   }
   return NextResponse.json({ error: "Could not knock" }, { status: 500 });
 }
@@ -329,16 +368,20 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ room
     // list re-apply and a coalesced re-read on the host's screen at the same
     // rate. See PRESENCE_WRITE_MS.
     //
-    // Fire-and-forget: the answer above does not depend on it, and a guest must
-    // never wait on our bookkeeping to hear their decision.
+    // Registered with `after` rather than fired into the void. The guest must
+    // not wait on our bookkeeping to hear their decision — but a bare `void` in
+    // a serverless handler is work the runtime may freeze the moment the
+    // response is returned, and this repo has already shipped that defect once:
+    // a `void Promise.allSettled(...)` before a `return` that never ran. `after`
+    // is the one thing that keeps it non-blocking AND keeps it happening.
     if (row.status === "waiting" && shouldRecordPresence(row.last_seen_at, Date.now())) {
-      void (supabase as any)
-        .from("live_meeting_admissions")
-        .update({ last_seen_at: new Date().toISOString() })
-        .eq("id", row.id)
-        .then(({ error }: { error: { message: string } | null }) => {
-          if (error) console.warn("[knock] presence not recorded", error.message);
-        });
+      after(async () => {
+        const { error } = await (supabase as any)
+          .from("live_meeting_admissions")
+          .update({ last_seen_at: new Date().toISOString() })
+          .eq("id", row.id);
+        if (error) console.warn("[knock] presence not recorded", error.message);
+      });
     }
 
     return NextResponse.json({ status: row.status });

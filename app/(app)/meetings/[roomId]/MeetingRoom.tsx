@@ -5,6 +5,16 @@ import { createPortal } from "react-dom";
 import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { handsFirst, handsUpLabel, raisedBy } from "@/lib/meetings/hands";
+import {
+  REACTIONS,
+  REACTION_VISIBLE_MS,
+  activeReactions,
+  normalizeReaction,
+  reactionLabel,
+  withoutReaction,
+  type ActiveReaction,
+  type ReactionState,
+} from "@/lib/meetings/reactions";
 import { ChatText } from "./ChatText";
 import { MeetingGreenRoom, type GreenRoomChoice } from "./MeetingGreenRoom";
 import { constraintsFor, displayConstraints, levelFromSamples, smoothLevel } from "@/lib/meetings/devices";
@@ -199,20 +209,11 @@ interface TranscriptLine {
 }
 
 type SignalMsg =
-  // `subject` is the durable identity behind a signalling id — an account for a
-  // member, a guest key for an invite-link guest. It exists so that "Remove"
-  // has something to be written against: a signalling id is a fresh uuid per
-  // page load and means nothing to the server or to anyone else's next visit.
-  //
-  // Self-asserted, exactly as `displayName` beside it already is, and worth no
-  // more than that. What makes a removal sound is the other end: a person
-  // coming back is matched against the account the SERVER resolves from their
-  // cookies, never against anything they send.
-  | { type: "join"; from: string; displayName: string; subject?: RemovalSubject }
+  | { type: "join"; from: string; displayName: string }
   | { type: "leave"; from: string }
   | { type: "end"; from: string }
-  | { type: "offer"; from: string; to: string; sdp: RTCSessionDescriptionInit; displayName?: string; subject?: RemovalSubject }
-  | { type: "answer"; from: string; to: string; sdp: RTCSessionDescriptionInit; displayName?: string; subject?: RemovalSubject }
+  | { type: "offer"; from: string; to: string; sdp: RTCSessionDescriptionInit; displayName?: string }
+  | { type: "answer"; from: string; to: string; sdp: RTCSessionDescriptionInit; displayName?: string }
   | { type: "ice"; from: string; to: string; candidate: RTCIceCandidateInit }
   | {
       type: "transcript";
@@ -359,9 +360,6 @@ const SPEAKER_COLORS = [
   "#fda4af",
   "#fdba74",
 ];
-const REACTIONS = ["👍", "👏", "😂", "❤️", "🎉", "🤔"];
-/** How long a reaction stays on somebody's tile. */
-const REACTION_VISIBLE_MS = 3_000;
 
 // Synthesize a short chime using Web Audio API (no audio files needed)
 /** What the browser currently says about notifications, including "no API". */
@@ -631,8 +629,10 @@ function VideoTile({
         </div>
       )}
       {handRaised && <div className="absolute top-2 right-3 text-lg">✋</div>}
+      {/* Decorative: ReactionTicker is what announces a reaction, and reading
+          it from both places would say it twice. */}
       {reaction && (
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-4xl animate-bounce pointer-events-none select-none">
+        <div aria-hidden="true" className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-4xl animate-bounce pointer-events-none select-none">
           {reaction}
         </div>
       )}
@@ -1396,6 +1396,53 @@ export function CopilotSidebar({
   );
 }
 
+/**
+ * Reactions, where they can be seen whatever the layout is doing.
+ *
+ * The tile overlay is not enough and `hands.ts` already said why: a tile is
+ * off-screen in speaker layout or below the fold in a large grid. Hands were
+ * given a toolbar count and a spoken label when that was noticed; reactions
+ * were not, and they are the worse case — a hand waits to be seen, a reaction
+ * is gone in three seconds, and a screen share forces the layout that hides
+ * everyone but the presenter.
+ *
+ * Not a count, which is what the hands affordance is: a reaction is an event,
+ * not a standing state, so this shows each one with the name attached and lets
+ * it expire. Anchored over the stage rather than in the control bar so it does
+ * not move the controls around as reactions come and go.
+ *
+ * `aria-live="polite"` is the other half of the fix. The tile overlay is a bare
+ * emoji with no text, so a screen reader had nothing to announce and reactions
+ * did not exist at all for anyone not looking at the picture.
+ *
+ * Exported for the tests, as HostExitControl and CopilotSidebar are: reaching
+ * it through MeetingRoom means entering a room, which opens a camera, an ICE
+ * negotiation and a Realtime channel.
+ */
+export function ReactionTicker({ entries }: { entries: readonly ActiveReaction[] }) {
+  return (
+    <div
+      role="status"
+      aria-live="polite"
+      aria-label="Reactions"
+      className="pointer-events-none absolute bottom-3 left-1/2 -translate-x-1/2 z-10 flex flex-col items-center gap-1"
+    >
+      {entries.map((entry) => (
+        <div
+          key={entry.id}
+          className="flex items-center gap-2 rounded-full bg-black/70 backdrop-blur-sm px-3 py-1 text-sm text-white max-w-[70vw]"
+        >
+          {/* The emoji is decorative here — reactionLabel carries it in text,
+              and announcing both would read it twice. */}
+          <span aria-hidden="true" className="text-base leading-none">{entry.emoji}</span>
+          <span className="sr-only">{reactionLabel(entry)}</span>
+          <span aria-hidden="true" className="truncate">{entry.displayName}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function EmptyCopilot({ label }: { label: string }) {
   return (
     <div className="flex-1 flex items-center justify-center py-8">
@@ -1622,30 +1669,7 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
   // rename and a report can tie words to a real person. Null for guests.
   const localUserIdRef = useRef<string | null>(null);
 
-  /**
-   * This client's own durable identity, for the removal it might be the subject
-   * of. An account when there is one — a member can drop their guest key, they
-   * cannot drop their account — and the guest key otherwise.
-   */
-  const mySubject = useCallback(
-    (): RemovalSubject | null => subjectFor(localUserIdRef.current, guestKeyRef.current),
-    [],
-  );
 
-  /**
-   * What each peer says it is, keyed by signalling id.
-   *
-   * Kept beside the roster rather than inside `Peer`, which `setPeerName`
-   * rebuilds wholesale. This is the map that makes "Remove" possible at all:
-   * the host clicks a tile, and a tile is a signalling id — a fresh uuid per
-   * page load that means nothing to the server and nothing to that person's
-   * next visit.
-   */
-  const peerSubjectsRef = useRef<Map<string, RemovalSubject>>(new Map());
-
-  // Read from the signalling callbacks, which are deliberately created once.
-  const mySubjectRef = useRef(mySubject);
-  useEffect(() => { mySubjectRef.current = mySubject; }, [mySubject]);
   // Utterance boundaries. The recognizer hands us a sentence after the fact, so
   // attribution needs the moment it started, not the moment it arrived.
   const utteranceStartRef = useRef<number | null>(null);
@@ -1667,7 +1691,7 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
   const [handRaised, setHandRaised] = useState(false);
   const handRaisedRef = useRef(false);
   const [raisedHands, setRaisedHands] = useState<Set<string>>(new Set());
-  const [reactions, setReactions] = useState<Record<string, string>>({});
+  const [reactions, setReactions] = useState<Record<string, ReactionState>>({});
   /**
    * The timer clearing each person's reaction.
    *
@@ -1691,6 +1715,14 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
    * replaced.
    */
   const [removedPeople, setRemovedPeople] = useState<RemovedPerson[]>([]);
+  /**
+   * Said out loud when a removal could not be recorded.
+   *
+   * The person is out of the call either way — the broadcast saw to that — but
+   * whether they can come back is decided by a request that may have failed,
+   * and a host watching the tile vanish has every reason to assume it did not.
+   */
+  const [removalNotice, setRemovalNotice] = useState<string | null>(null);
   // Whether the host's admissions subscription is actually carrying events.
   // False starts the fallback poll below; see WAITING_FALLBACK_MS.
   const [waitingLive, setWaitingLive] = useState(false);
@@ -2374,7 +2406,7 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
       // trying to rescue.
       if (!canSetLocalOffer(pc.signalingState)) return;
       await pc.setLocalDescription(offer);
-      sendSignalRef.current({ type: "offer", from: myIdRef.current, to: peerId, sdp: offer, displayName: localNameRef.current, subject: mySubjectRef.current() ?? undefined });
+      sendSignalRef.current({ type: "offer", from: myIdRef.current, to: peerId, sdp: offer, displayName: localNameRef.current });
       negotiationArmedRef.current.set(peerId, true);
     } catch (e) {
       console.warn("[WebRTC] offer", e);
@@ -2605,20 +2637,6 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
 
   // ── handleSignal ─────────────────────────────────────────────────────────
 
-  /** Remember what a peer says it is. See peerSubjectsRef. */
-  const notePeerSubject = useCallback((peerId: string, subject: RemovalSubject | undefined) => {
-    if (!subject) return;
-    // Parsed rather than stored as it arrived: this came off a broadcast
-    // channel anybody with the room code can publish on.
-    const parsed =
-      subject.kind === "member"
-        ? subjectFor(subject.userId, null)
-        : subject.kind === "guest"
-          ? subjectFor(null, subject.guestKey)
-          : null;
-    if (parsed) peerSubjectsRef.current.set(peerId, parsed);
-  }, []);
-
   // Upsert a peer's display name without disturbing its stream.
   const setPeerName = useCallback((peerId: string, name: string) => {
     setPeers((prev) => {
@@ -2650,7 +2668,6 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
 
     if (msg.type === "join" && msg.from !== myId) {
       playChime("join");
-      notePeerSubject(msg.from, msg.subject);
       // The door is the enforcement point — the knock route refuses a removed
       // subject before anything else — but the signalling channel has never
       // been gated by the waiting room, so a client that simply skipped the
@@ -2695,7 +2712,7 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
       setPeers((prev) => { const next = new Map<string, Peer>(prev); next.delete(msg.from); return next; });
       // Drop the departed peer's transient UI state so a stale ✋ / emoji doesn't linger.
       setRaisedHands((prev) => { if (!prev.has(msg.from)) return prev; const next = new Set(prev); next.delete(msg.from); return next; });
-      setReactions((prev) => { if (!(msg.from in prev)) return prev; const n = { ...prev }; delete n[msg.from]; return n; });
+      clearReactionRef.current(msg.from);
       setPeerMicOn((prev) => { if (!prev.has(msg.from)) return prev; const next = new Map(prev); next.delete(msg.from); return next; });
       lastAudibleRef.current.delete(msg.from);
     }
@@ -2710,7 +2727,6 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
       if (!pc) pc = createPeerConnection(msg.from);
       // Record the offerer's name (e.g. the host) so guests don't see a UUID.
       if (msg.displayName) setPeerName(msg.from, msg.displayName);
-      notePeerSubject(msg.from, msg.subject);
 
       // Two ends can offer at the same moment — an ICE restart after a link
       // failed in both directions is the ordinary way it happens — and a
@@ -2739,7 +2755,7 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
         const answer = await pc.createAnswer();
         answer.sdp = withOpusResilience(answer.sdp ?? "");
         await pc.setLocalDescription(answer);
-        sendSignalRef.current({ type: "answer", from: myId, to: msg.from, sdp: answer, displayName: localNameRef.current, subject: mySubjectRef.current() ?? undefined });
+        sendSignalRef.current({ type: "answer", from: myId, to: msg.from, sdp: answer, displayName: localNameRef.current });
         // From here a `negotiationneeded` is a real renegotiation rather than
         // the echo of the transceivers we set up above.
         negotiationArmedRef.current.set(msg.from, true);
@@ -2749,7 +2765,6 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
 
     if (msg.type === "answer" && msg.to === myId) {
       if (msg.displayName) setPeerName(msg.from, msg.displayName);
-      notePeerSubject(msg.from, msg.subject);
       const pc = peersRef.current.get(msg.from);
       if (pc) {
         try {
@@ -2910,7 +2925,18 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     }
 
     if (msg.type === "kick" && msg.target === myId) {
-      standDownRef.current();
+      // ASKED, not obeyed. This message arrives on a channel anyone holding the
+      // room code can publish to, so acting on it directly meant any
+      // participant — or anyone a link was ever forwarded to — could eject
+      // anybody from the call by sending one line. It predates this branch and
+      // was never the host's authority; it only looked like it.
+      //
+      // So it is a hint to go and check, exactly as the admission nudge is:
+      // checkRemovals asks the server which of the ids in this room have
+      // actually been removed, and stands this client down only if the answer
+      // includes its own. A forged kick now costs the forger one request by an
+      // honest client and nothing else.
+      void checkRemovalsRef.current();
       return;
     }
 
@@ -2918,7 +2944,7 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     // a waiting guest never joins this signaling channel until admitted, so
     // admit_request / admit / deny no longer travel over the WebRTC channel.
 
-  }, [createPeerConnection, router, setPeerName, notePeerSubject, flushPendingIce, forgetPeerState]);
+  }, [createPeerConnection, router, setPeerName, flushPendingIce, forgetPeerState]);
 
   // ── Detect host status on mount (pre-join screen label) ──────────────────
 
@@ -3200,7 +3226,7 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
             (pc) => pc.connectionState !== "connected" && pc.connectionState !== "closed",
           );
           if (!first && !stalled) return;
-          sendSignal({ type: "join", from: myIdRef.current, displayName: name, subject: mySubject() ?? undefined });
+          sendSignal({ type: "join", from: myIdRef.current, displayName: name });
           sendSignal({ type: "mic", from: myIdRef.current, micOn: micOnRef.current, displayName: name });
           announceVideoStateRef.current();
         });
@@ -3220,10 +3246,7 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     // be suppressed for want of activation, which costs nothing, because the
     // alternative is a host who is never offered it at all.
     requestHostNotifications(isHostRef.current);
-    // `mySubject` is created once (it reads refs), so naming it here does not
-    // re-create this callback — which must stay stable, because the signalling
-    // channel is opened from it.
-  }, [supabase, roomCode, handleSignal, sendSignal, clearWaitingTimers, mySubject]);
+  }, [supabase, roomCode, handleSignal, sendSignal, clearWaitingTimers]);
 
   /**
    * Fetch the ICE servers for this call.
@@ -3459,7 +3482,10 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
         const res = await fetch(`/api/meetings/public/${roomCode}/knock`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ guestKey, displayName: name }),
+          // The id this client will appear under in the room, so the host's
+          // "remove that tile" can be resolved by the server rather than
+          // claimed by a peer. See the removals route.
+          body: JSON.stringify({ guestKey, displayName: name, signalId: myIdRef.current }),
         });
         const body = res.ok ? ((await res.json()) as { status?: string }) : null;
         const status = admissionStatusFromResponse(res.status, body);
@@ -3543,6 +3569,15 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
       .select("id, guest_key, display_name, status, last_seen_at, created_at")
       .eq("meeting_id", meetingId)
       .eq("status", "waiting")
+      // Stale rows are excluded HERE, not after the cap. Filtering them in the
+      // client would mean the oldest WAITING_CAP rows are fetched first and
+      // then thinned — so a queue whose head is full of people who left would
+      // push every guest who is actually waiting outside the result, and the
+      // host would see nobody at all.
+      //
+      // `last_seen_at` is null until a guest's first poll lands, so a row that
+      // has never been seen counts as present, exactly as `stillWaiting` does.
+      .or(`last_seen_at.is.null,last_seen_at.gte.${new Date(Date.now() - PRESENCE_GRACE_MS).toISOString()}`)
       .order("created_at", { ascending: true })
       // Bounded, like every other read in the meeting stack. An unbounded
       // select is cut off at PostgREST's `max_rows` with nothing to say so —
@@ -5052,21 +5087,47 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     sendSignalRef.current({ type: "raise_hand", from: myIdRef.current, raised: next });
   }, []);
 
+  /**
+   * Take a reaction off one person, timer and all.
+   *
+   * The timer is the part that used to be missed. A peer leaving dropped their
+   * reaction from the record and left the pending timeout running, so three
+   * seconds later an orphan fired against somebody who was no longer in the
+   * room.
+   */
+  const clearReaction = useCallback((who: string) => {
+    const timers = reactionTimers.current;
+    const running = timers.get(who);
+    if (running) { clearTimeout(running); timers.delete(who); }
+    setReactions((prev) => withoutReaction(prev, who));
+  }, []);
+
+  const clearReactionRef = useRef(clearReaction);
+  useEffect(() => { clearReactionRef.current = clearReaction; }, [clearReaction]);
+
   /** Show one person's reaction, replacing whatever they were showing before. */
-  const showReaction = useCallback((who: string, emoji: string) => {
+  const showReaction = useCallback((who: string, raw: string) => {
+    // Bounded here as well as at the sender: the picker offers six emoji, and
+    // nothing used to check that what arrived was one of them. See
+    // lib/meetings/reactions.ts.
+    const emoji = normalizeReaction(raw);
+    if (!emoji) return;
+
     const timers = reactionTimers.current;
     const running = timers.get(who);
     if (running) clearTimeout(running);
-    setReactions((prev) => ({ ...prev, [who]: emoji }));
+    // `at` is local arrival time, and exists so the ticker can show reactions
+    // in the order they landed. A record keeps a key where it first appeared
+    // when its value is replaced, so key order is the wrong clock.
+    setReactions((prev) => ({ ...prev, [who]: { emoji, at: Date.now() } }));
     timers.set(
       who,
       setTimeout(() => {
         timers.delete(who);
-        setReactions((prev) => {
-          const next = { ...prev };
-          delete next[who];
-          return next;
-        });
+        // Returning a fresh object for a key that is not there re-rendered
+        // the whole room for nothing. The leave handler already got this
+        // right; this one did not. See withoutReaction.
+        setReactions((prev) => withoutReaction(prev, who));
       }, REACTION_VISIBLE_MS),
     );
   }, []);
@@ -5080,7 +5141,9 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     return () => { timers.forEach(clearTimeout); timers.clear(); };
   }, []);
 
-  const sendReaction = useCallback((emoji: string) => {
+  const sendReaction = useCallback((raw: string) => {
+    const emoji = normalizeReaction(raw);
+    if (!emoji) return;
     sendSignalRef.current({ type: "reaction", from: myIdRef.current, emoji, ts: Date.now() });
     showReactionRef.current("local", emoji);
   }, []);
@@ -5257,7 +5320,6 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     // its senders, buffered candidates and pending audit would then sit in
     // these maps for the rest of the call.
     forgetPeerState(peerId);
-    peerSubjectsRef.current.delete(peerId);
     setPeers((prev) => { if (!prev.has(peerId)) return prev; const next = new Map(prev); next.delete(peerId); return next; });
     setPeerStatus((prev) => { if (!prev.has(peerId)) return prev; const next = new Map(prev); next.delete(peerId); return next; });
     setPeerVideo((prev) => { if (!prev.has(peerId)) return prev; const next = new Map(prev); next.delete(peerId); return next; });
@@ -5275,23 +5337,23 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
    * saying "drop peer X" would be a way to eject anybody from any meeting whose
    * link had been forwarded once. See removal-channel.ts.
    *
-   * So the question is asked here, naming the peers THIS client can see, and
-   * answered by the server. Our own subject goes in the same request: the
-   * broadcast the host sends is the fast path for standing down, and this is
-   * what covers the client that never received it.
+   * So the question is asked here, naming the SIGNALLING IDS this client can
+   * see, and answered by the server — which resolves each one to the person the
+   * knock recorded under it. Our own id goes in the same request: the host's
+   * broadcast is the fast path for standing down, and this is what covers the
+   * client that never received it, or that ignored it.
    */
   const checkRemovals = useCallback(async () => {
-    const mine = mySubjectRef.current();
-    const peerEntries = [...peerSubjectsRef.current.entries()];
-    const subjects = [...peerEntries.map(([, subject]) => subject), ...(mine ? [mine] : [])];
-    if (subjects.length === 0) return;
+    const mine = myIdRef.current;
+    const peerIds = [...peersRef.current.keys()];
+    const signalIds = [...peerIds, mine];
 
     let removed: string[] = [];
     try {
       const res = await fetch(`/api/meetings/public/${roomCode}/removed`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ subjects }),
+        body: JSON.stringify({ signalIds }),
         cache: "no-store",
       });
       if (!res.ok) return;
@@ -5305,11 +5367,11 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     if (removed.length === 0) return;
 
     const gone = new Set(removed);
-    for (const [peerId, subject] of peerEntries) {
-      if (gone.has(subjectKey(subject))) dropPeer(peerId);
+    for (const peerId of peerIds) {
+      if (gone.has(peerId)) dropPeer(peerId);
     }
     // Last, so the room is tidy before this client goes.
-    if (mine && gone.has(subjectKey(mine))) standDownRef.current();
+    if (gone.has(mine)) standDownRef.current();
   }, [roomCode, dropPeer]);
 
   const checkRemovalsRef = useRef(checkRemovals);
@@ -5349,42 +5411,49 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
    * room code and their admission row still said `admitted`, and a signed-in
    * teammate never went near the waiting room at all.
    *
-   * Three things now happen, in this order and for three different reasons.
-   * The broadcast stays, because it is the fastest way for the removed client
-   * to stand itself down and the only one that works if they have no durable
-   * identity. The local teardown stays, because the host should not be waiting
-   * on a round trip to stop seeing them. And the route makes it a fact: it
-   * records the removal, denies their admission, and nudges the room so every
-   * other participant drops them too.
+   * Three things happen now, in this order and for three different reasons.
+   * The broadcast goes first, because it is the fastest way for the removed
+   * client to stand itself down. The local teardown follows, because the host
+   * should not wait on a round trip to stop seeing them. And the route makes it
+   * a fact: it resolves the tile to whoever the knock recorded under that
+   * signalling id, records the removal, denies their admission, and nudges the
+   * room so every other participant drops them too.
+   *
+   * Only the SIGNALLING ID is sent. The host's screen has no durable identity
+   * for a participant, and an earlier version closed that gap by having peers
+   * announce their own — which meant a participant could announce somebody
+   * else's and have the host ban them by clicking Remove on the wrong tile.
+   * The server resolves it instead, from a row the server itself wrote.
    */
-  const kickPeer = useCallback((peerId: string) => {
+  const kickPeer = useCallback(async (peerId: string) => {
     sendSignal({ type: "kick", from: myIdRef.current, target: peerId });
-    const subject = peerSubjectsRef.current.get(peerId);
-    const displayName = peersDataRef.current.get(peerId)?.displayName ?? "";
     dropPeer(peerId);
 
-    if (!meetingIdRef.current || !subject) {
-      // A peer on a build that announces no identity can still be dropped from
-      // this call — that is what the broadcast above does — but there is
-      // nothing durable to write, so it cannot be kept out. Said out loud
-      // rather than failing silently, because "Remove" quietly meaning "until
-      // they press reload" is the defect this replaced.
-      console.warn("[meeting] removed a peer with no durable identity; they can rejoin");
-      return;
-    }
+    if (!meetingIdRef.current) return;
 
-    void (async () => {
-      try {
-        const res = await fetch(`/api/meetings/${meetingIdRef.current}/removals`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ subject, displayName }),
-        });
-        if (!res.ok) console.warn("[meeting] removal not recorded", res.status);
-      } catch (err) {
-        console.warn("[meeting] removal not recorded", err);
+    // Awaited, and its failure surfaced. The broadcast above has already put
+    // them out of this call, but whether they can come BACK is decided by this
+    // request alone — and a host who saw the tile vanish has every reason to
+    // believe it is settled. A removal that silently failed to record is the
+    // defect this whole path replaced, so it must not be reintroduced as a
+    // console warning.
+    try {
+      const res = await fetch(`/api/meetings/${meetingIdRef.current}/removals`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ signalId: peerId }),
+      });
+      if (res.ok) {
+        void loadRemovalsRef.current();
+        return;
       }
-    })();
+      console.warn("[meeting] removal not recorded", res.status);
+    } catch (err) {
+      console.warn("[meeting] removal not recorded", err);
+    }
+    setRemovalNotice(
+      "They have been dropped from this call, but the removal could not be saved — they may be able to rejoin.",
+    );
   }, [sendSignal, dropPeer]);
 
   // Admit / deny write the decision through the host-only admissions route
@@ -5729,7 +5798,12 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
   const handsUpPeople = raisedBy(raisedHands, participantList, LOCAL_SPEAKER_ID);
   const handsUpNote = handsUpLabel(handsUpPeople);
 
-  const getReaction = (id: string) => reactions[id] ?? "";
+  // Reactions with a name attached, oldest first — the same shape raisedBy
+  // gives for hands, and for the same reason: the tile is not a reliable place
+  // to have seen it.
+  const liveReactions = activeReactions(reactions, participantList);
+
+  const getReaction = (id: string) => reactions[id]?.emoji ?? "";
   // Assume a peer's camera is on until they say otherwise: the announcement
   // lands a moment after they appear, and a tile that starts on "Camera off" and
   // corrects itself reads worse than one that starts blank.
@@ -5751,8 +5825,11 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
       {/* `relative` so the mobile copilot sheet fills the video area rather than
           the viewport — see the sheet's own note below. */}
       <div className="relative flex flex-1 overflow-hidden min-h-0">
-        {/* Video area */}
-        <div className="flex-1 flex flex-col overflow-hidden bg-[var(--surface-0)] min-w-0">
+        {/* Video area. `relative` anchors ReactionTicker to the stage: over the
+            viewport it would sit on top of the control bar, which is the mistake
+            the mobile copilot sheet already made once. */}
+        <div className="relative flex-1 flex flex-col overflow-hidden bg-[var(--surface-0)] min-w-0">
+          <ReactionTicker entries={liveReactions} />
           {/* Media permission warning */}
           {mediaError && (
             <div className="flex items-start gap-3 px-4 py-3 bg-amber-500/10 border-b border-amber-500/30 shrink-0">
@@ -5792,6 +5869,21 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
               </button>
             </div>
           )}
+          {/* A removal that could not be written down. The person IS out of the
+              call — the broadcast and the teardown both ran — but they may be
+              able to come back, and a host who watched the tile vanish would
+              otherwise have no way to know that. */}
+          {removalNotice && (
+            <div role="alert" className="flex items-center gap-3 px-4 py-2 bg-[var(--status-warning)]/10 border-b border-status-warning/30 shrink-0">
+              <p className="flex-1 text-xs text-[var(--fg-secondary)]">{removalNotice}</p>
+              <button
+                onClick={() => setRemovalNotice(null)}
+                className="shrink-0 text-xs text-[var(--fg-muted)] hover:text-[var(--fg-primary)] transition-colors"
+              >
+                Dismiss
+              </button>
+            </div>
+          )}
           {recorder.error && (
             <div role="alert" className="flex items-center gap-3 px-4 py-2 bg-red-500/10 border-b border-[var(--status-danger)]/30 shrink-0">
               <p className="flex-1 text-xs text-[var(--fg-secondary)]">{recorder.error}</p>
@@ -5815,7 +5907,7 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
             <div className={`flex-1 grid ${gridClass} gap-3 p-4 content-center`}>
               <VideoTile stream={localStream} label={localName} muted isLocal handRaised={handRaised} reaction={getReaction("local")} micOn={micOn} speaking={speaking.has(LOCAL_SPEAKER_ID)} camOn={camOn} videoPaused={bwMode === "audio-only"} />
               {allPeers.map((peer: Peer) => (
-                <VideoTile key={peer.id} stream={peer.stream} label={peer.displayName} handRaised={raisedHands.has(peer.id)} reaction={reactions[peer.id] ?? ""} micOn={peerMicOn.get(peer.id) ?? true} speaking={speaking.has(peer.id)} camOn={videoOf(peer.id).camOn} videoPaused={videoOf(peer.id).paused} status={statusOf(peer.id)} />
+                <VideoTile key={peer.id} stream={peer.stream} label={peer.displayName} handRaised={raisedHands.has(peer.id)} reaction={getReaction(peer.id)} micOn={peerMicOn.get(peer.id) ?? true} speaking={speaking.has(peer.id)} camOn={videoOf(peer.id).camOn} videoPaused={videoOf(peer.id).paused} status={statusOf(peer.id)} />
               ))}
             </div>
           ) : (
@@ -5878,7 +5970,7 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
               srStatus={srStatus} participants={participantList} roomCode={roomCode} meetingTitle={meetingTitle}
               chatMessages={chatMessages} chatUnread={chatUnread}
               onSendChat={(t) => void sendChat(t)} onRetryChat={(id) => void retryChat(id)} isHost={isHost}
-              raisedHands={raisedHands} onKick={kickPeer} onAdmit={admitPeer} onDeny={denyPeer} onAdmitAll={admitAll}
+              raisedHands={raisedHands} onKick={(id) => void kickPeer(id)} onAdmit={admitPeer} onDeny={denyPeer} onAdmitAll={admitAll}
               waitingPeers={livePeers}
               removedPeople={removedPeople} onAllowBack={(s) => void allowBack(s)}
               onChatVisibility={handleChatVisibility}
