@@ -2772,6 +2772,18 @@ export type LiveMeetingTranscript = {
  * indexed by LiveMeetingRecordingChunk. This row is the recording's identity,
  * its state while it is being made, and its expiry.
  */
+/** One message from a meeting's chat. See migration 20260918100000. */
+export type LiveMeetingChatMessage = {
+  id: string;
+  meeting_id: string;
+  /** The signed-in account, or null for a guest the host admitted. */
+  author_id: string | null;
+  author_name: string;
+  body: string;
+  ts: string;
+  created_at: string;
+};
+
 export type LiveMeetingRecording = {
   id: string;
   meeting_id: string;
@@ -3110,6 +3122,7 @@ export type Database = {
       live_meeting_participants: TableShape<LiveMeetingParticipant>;
       live_meeting_transcripts: TableShape<LiveMeetingTranscript>;
       live_meeting_reports: TableShape<LiveMeetingReport>;
+      live_meeting_chat: TableShape<LiveMeetingChatMessage>;
       live_meeting_recordings: TableShape<LiveMeetingRecording>;
       live_meeting_recording_chunks: TableShape<LiveMeetingRecordingChunk>;
       scheduling_pages: TableShape<SchedulingPage>;

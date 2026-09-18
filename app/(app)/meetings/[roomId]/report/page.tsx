@@ -7,6 +7,7 @@ import { createClient } from "@/lib/supabase/client";
 import { FollowUpPanel } from "./FollowUpPanel";
 import { ExportMenu } from "./ExportMenu";
 import { TranscriptPanel } from "./TranscriptPanel";
+import { ChatPanel } from "./ChatPanel";
 import type { RecordingPlayerHandle } from "./RecordingPlayer";
 import { transcriptCues, type CueRow } from "@/lib/meetings/transcript-cues";
 import { readAllTranscriptRows } from "@/lib/meetings/transcript-read";
@@ -298,6 +299,10 @@ export default function MeetingReportPage() {
         playerRef={playerRef}
         onRecordingReady={handleRecordingReady}
       />
+
+      {/* What was typed, next to what was said. Renders nothing when nobody
+          used the chat, which is most meetings. */}
+      <ChatPanel meetingId={meeting.id} />
 
       {/* Full transcript, read back into turns rather than shown as the raw
           block it is stored as. */}

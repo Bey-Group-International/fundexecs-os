@@ -2974,6 +2974,82 @@ Deployed, monitoring               →  live, observability active
              |  passes: CopilotSidebar is now exported and tested directly, the
              |  way HostExitControl already was.
 
+2026-09-18  |  The chat that did not outlive the call  |  Asked to optimize the
+             |  meeting chat and reactions. Landed on top of the same day's
+             |  delivery/ordering/naming pass, which fixed how a message
+             |  behaves on its way through the room; this is about what happens
+             |  to it afterwards.
+             |  NOTHING STORED THE CHAT. It was a Supabase broadcast into a
+             |  React array and nowhere else. Broadcast has no history and no
+             |  durability, so somebody who joined ten minutes into a call saw
+             |  an empty panel while the room talked about what had been said in
+             |  it, a reload emptied their own copy, and the conversation went
+             |  when the call did. The report carried the transcript of what was
+             |  SAID and nothing of what was TYPED — which for most calls is
+             |  where the documents, the numbers and the links were. Found by
+             |  the same diagnostic as the last five passes: follow what gets
+             |  written and ask who reads it. Nothing was written, so nobody
+             |  could.
+             |  Built: live_meeting_chat (client-minted id as the primary key,
+             |  so a retried post upserts rather than duplicating, exactly as
+             |  live_meeting_transcripts does), attendees-only SELECT and NO
+             |  write policy at all — writes go through GET/POST
+             |  /api/meetings/[id]/chat, because a table whose only sensible
+             |  policy is keyed on auth.uid() has nothing to say about an
+             |  invite-link guest, and the route is what authorizes one.
+             |  THE CALLER CHECK WAS ABOUT TO BE COPIED. The transcript route's
+             |  host/participant/org-member/admitted-guest ladder is the rule
+             |  the chat route needs, verbatim. Extracted to
+             |  lib/meetings/meeting-access.server.ts rather than pasted: three
+             |  copies drifting apart is how a guest ends up able to write a
+             |  transcript line and not a chat message, with nobody able to say
+             |  which was intended.
+             |  THE CHAT READ AS A LOG. Three lines from one person repeated
+             |  their name three times; nothing carried a time; and a shared URL
+             |  — the single commonest thing anybody puts in a meeting chat —
+             |  was flat, unfollowable prose. groupChat, chatClock and chatParts
+             |  fix all three. chatParts returns PARTS, not markup, so the
+             |  caller renders React nodes and nothing here can put HTML on a
+             |  page; it matches plainly-written http(s) and nothing else, and
+             |  the href is re-parsed with `new URL` rather than pattern-matched
+             |  (a "javascript:" inside a sentence is text, and is tested as
+             |  such).
+             |  A REPEATED REACTION CLEARED ITSELF EARLY. The expiry compared
+             |  the emoji VALUE: sending 👍 twice meant the second send's
+             |  timeout and the first send's timeout both matched, so the first
+             |  one's expiry wiped the second one three seconds early. Timers
+             |  are keyed by person now and cleared on unmount.
+             |  A RAISED HAND GOT NONE OF THE ATTENTION CHAT GETS. It showed as
+             |  a ✋ on a tile that is off-screen in speaker layout, and beside a
+             |  name in a sidebar tab that is closed by default — while a
+             |  one-word chat message lights a badge on the toolbar. So the
+             |  person whose hand is up waits on somebody happening to look.
+             |  lib/meetings/hands.ts: raisedBy (others only, oldest first —
+             |  the order a chair would take them in, and the order a Set
+             |  preserves), handsUpLabel, handsFirst. The control bar carries
+             |  the count and says who; the people list lifts them to the top.
+             |  Also: the export's recording block and the new chat block are
+             |  now BOTH gated on attendance. RLS would refuse them anyway, but
+             |  a caller about to be told the report is not theirs has no
+             |  business costing the queries. The test that caught it asserted
+             |  the whole set of tables queried while claiming something
+             |  narrower ("without asking the participants table"); tightened to
+             |  what it says rather than relaxed.
+             |  Confidence: typecheck/eslint clean, production build passes,
+             |  Jest 6390 → 6444 green (+54 new, +2 suites), baseline
+             |  re-measured from origin/main in a clean worktree; visual suite
+             |  still green, and the chat panel's own layout check re-run
+             |  against the grouped, linkified rendering.
+             |  MERGE NOTE worth keeping: this branch and the delivery/ordering
+             |  pass above built lib/meetings/chat.ts in parallel and collided
+             |  on it. Resolved by union, not by choosing: normalizeChatText
+             |  gained the control-character strip the stored path needs,
+             |  mergeChat sorts by the same comparator insertMessage uses (and
+             |  carries `delivery` forward from the local copy, because a stored
+             |  row has no idea whether your socket accepted the send), and the
+             |  panel is grouped AND shows delivery AND links. Two parallel
+             |  branches on one file is now the norm here, not the exception.
+
 2026-09-18  |  Four ways the waiting room told a guest the wrong thing  |  Asked
              |  to check the waiting room again — a second pass over an area
              |  already fixed once this session — then to fix all four.

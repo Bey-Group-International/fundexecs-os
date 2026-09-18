@@ -15,7 +15,7 @@ import {
   directReward,
   levelOverride,
   milestoneAt,
-  isReferralEarning,
+  REFERRAL_REASONS,
 } from "@/lib/referrals";
 import type { CreditGift } from "@/lib/supabase/database.types";
 
@@ -104,6 +104,26 @@ export async function getReferralInvite(
   }
 }
 
+/**
+ * The caller's own organisation name, for personalising the invite they send
+ * ("Acme Capital uses FundExecs…"). Read through the session client, so it is
+ * governed by RLS like any other read of the operator's own org.
+ */
+export async function getOwnOrgName(orgId: string): Promise<string | null> {
+  try {
+    const supabase = await createServerClient();
+    const { data } = await supabase
+      .from("organizations")
+      .select("name")
+      .eq("id", orgId)
+      .maybeSingle();
+    return (data?.name as string | undefined) ?? null;
+  } catch (err) {
+    console.error("[gift-earn] getOwnOrgName failed:", err);
+    return null;
+  }
+}
+
 export interface DownlineRow {
   orgId: string;
   name: string;
@@ -142,42 +162,47 @@ export async function getReferralSummary(orgId: string): Promise<ReferralSummary
 
 async function computeReferralSummary(orgId: string): Promise<ReferralSummary> {
   const service = createServiceClient();
-  const downline: DownlineRow[] = [];
+
+  // Walking down the forest is inherently sequential — each level's frontier is
+  // the previous level's ids — but naming the orgs is not. Collect the edges
+  // first and resolve every name in one query at the end, rather than a second
+  // round trip per level.
+  const edges: { orgId: string; status: string; createdAt: string; level: number }[] = [];
   const levelCounts: Record<number, number> = {};
   let frontier = [orgId];
 
   for (let level = 1; level <= MAX_LEVEL && frontier.length > 0; level++) {
-    const { data: edges } = await service
+    const { data } = await service
       .from("referrals")
       .select("referred_organization_id, status, created_at")
       .in("referrer_organization_id", frontier);
-    const rows = edges ?? [];
+    const rows = data ?? [];
     if (rows.length === 0) break;
 
-    const ids = rows.map((r) => r.referred_organization_id);
-    const { data: orgs } = await service.from("organizations").select("id, name").in("id", ids);
-    const nameById = new Map((orgs ?? []).map((o) => [o.id, o.name]));
-
     for (const r of rows) {
-      downline.push({
+      edges.push({
         orgId: r.referred_organization_id,
-        name: nameById.get(r.referred_organization_id) ?? "An organization",
         status: r.status,
         createdAt: r.created_at,
         level,
       });
     }
     levelCounts[level] = rows.length;
-    frontier = ids;
+    frontier = rows.map((r) => r.referred_organization_id);
   }
 
-  const { data: ledger } = await service
-    .from("credit_ledger")
-    .select("amount, reason")
-    .eq("organization_id", orgId);
-  const earnedTotal = (ledger ?? [])
-    .filter((e) => isReferralEarning(e.reason))
-    .reduce((sum, e) => sum + e.amount, 0);
+  const [nameById, earnedTotal] = await Promise.all([
+    resolveOrgNames(service, edges.map((e) => e.orgId)),
+    sumReferralEarnings(service, orgId),
+  ]);
+
+  const downline: DownlineRow[] = edges.map((e) => ({
+    orgId: e.orgId,
+    name: nameById.get(e.orgId) ?? "An organization",
+    status: e.status,
+    createdAt: e.createdAt,
+    level: e.level,
+  }));
 
   return {
     directCount: levelCounts[1] ?? 0,
@@ -186,6 +211,33 @@ async function computeReferralSummary(orgId: string): Promise<ReferralSummary> {
     downline,
     earnedTotal,
   };
+}
+
+/** Org names for a set of ids, in one query. Empty input never hits the DB. */
+async function resolveOrgNames(
+  service: ServiceClient,
+  ids: string[],
+): Promise<Map<string, string>> {
+  const unique = [...new Set(ids)];
+  if (unique.length === 0) return new Map();
+  const { data } = await service.from("organizations").select("id, name").in("id", unique);
+  return new Map((data ?? []).map((o) => [o.id, o.name as string]));
+}
+
+/**
+ * Total credits this org earned from referrals. Summed in the database over
+ * just the referral reasons: the ledger also holds every plan grant, pack
+ * purchase and agent spend, and pulling all of that back to add up four kinds
+ * of row grows without bound as the org uses the product.
+ */
+async function sumReferralEarnings(service: ServiceClient, orgId: string): Promise<number> {
+  const { data } = await service
+    .from("credit_ledger")
+    .select("amount.sum()")
+    .eq("organization_id", orgId)
+    .in("reason", [...REFERRAL_REASONS])
+    .single();
+  return (data as unknown as { sum: number | null } | null)?.sum ?? 0;
 }
 
 export interface RedeemReferralResult {
