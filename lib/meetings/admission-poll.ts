@@ -93,28 +93,73 @@ export function pollCount(waitedMs: number, schedule: readonly PollStep[] = ADMI
 }
 
 /**
- * What an answer from the status endpoint means.
+ * How long to hold off after the server has refused us, by consecutive refusal.
  *
- * The caller used to collapse every non-OK response into null — "no news, ask
- * again" — which is right for a dropped packet and wrong for the one response
- * that is an answer. A 404 from that route means the meeting is not there: it
- * was deleted, or its room code never existed. Nothing about asking again can
- * change that, so a guest whose host cancelled the meeting sat watching a
- * spinner for the full ten minutes a wait is allowed to run, for a room that no
- * longer exists.
+ * A 429 is the one answer that says what to do about itself, and the waiting
+ * room used to treat it as no news: the guest kept asking on the fastest
+ * cadence, which is what kept them refused. The last value repeats.
  *
- * Everything else non-OK stays transient on purpose. A 429 is the limiter
- * saying "slower", not "never", and a 500 is a bad minute rather than a
- * verdict — treating either as terminal would turn a blip into a guest told
- * the meeting is over while it is still going on.
+ * Deliberately longer than the fast cadence it overrides, and deliberately
+ * bounded — a refusal is temporary by construction, and a guest who backs off
+ * past the window has paid for it twice.
  */
-export function pollStatusFromResponse(
+export const REFUSAL_BACKOFF_MS = [2_000, 6_000, 15_000, 30_000] as const;
+
+/** The server's own answer, when it gave one. Seconds, as our limiter sends it. */
+export function retryAfterMs(header: string | null | undefined): number | null {
+  if (!header) return null;
+  const seconds = Number(header.trim());
+  if (!Number.isFinite(seconds) || seconds < 0) return null;
+  // A limiter can legitimately say 0 ("the window just turned"); treat that as
+  // no useful guidance rather than as permission to ask again immediately.
+  return seconds > 0 ? Math.min(seconds * 1000, 5 * 60_000) : null;
+}
+
+/**
+ * How long to wait after a refusal.
+ *
+ * The server's `Retry-After` wins when it gave one — it knows when the window
+ * actually turns, and the ladder is only a guess at it. The ladder is the floor
+ * underneath, for a limiter that sent no header at all.
+ */
+export function refusalDelay(consecutive: number, serverMs?: number | null): number {
+  const i = Math.min(Math.max(consecutive, 1), REFUSAL_BACKOFF_MS.length) - 1;
+  const ours = REFUSAL_BACKOFF_MS[i];
+  return serverMs && serverMs > 0 ? Math.max(serverMs, ours) : ours;
+}
+
+/**
+ * What an answer from the knock or status endpoint means.
+ *
+ * Used for BOTH halves of the endpoint, because the guest's session has to read
+ * them the same way. It did not: the poll had this function and the knock had
+ * `if (!res.ok) return null` inline, which is how a knock the rate limiter
+ * refused came to be indistinguishable from a knock nobody had answered yet.
+ * The guest was shown "Waiting for the host to let you in" over a row that was
+ * never inserted, and the poll's re-knock walked straight back into the same
+ * 429. Nothing recovered, and the host's panel stayed empty.
+ *
+ * The three answers that are answers:
+ *
+ *  - **404** — the meeting is not there. It was deleted, or the room code never
+ *    existed. Nothing about asking again can change that, and for a guest it is
+ *    indistinguishable from the meeting having ended, which the session already
+ *    knows how to act on.
+ *  - **429** — the limiter, not the host. Temporary, so not a verdict; but the
+ *    guest must not be told they are in a queue they are not in, and the asking
+ *    must slow down. See refusalDelay.
+ *  - **2xx** — whatever the body says.
+ *
+ * Everything else non-OK stays transient on purpose: a 500 is a bad minute
+ * rather than a verdict, and treating it as terminal would turn a blip into a
+ * guest told the meeting is over while it is still going on.
+ */
+export function admissionStatusFromResponse(
   httpStatus: number,
   body: { status?: string } | null,
 ): string | null {
-  // The meeting is gone. For a guest that is indistinguishable from it having
-  // ended, and "ended" is a verdict the session already knows how to act on.
   if (httpStatus === 404) return "ended";
+  if (httpStatus === 429) return "busy";
   if (httpStatus < 200 || httpStatus > 299) return null;
   return body?.status ?? null;
 }
