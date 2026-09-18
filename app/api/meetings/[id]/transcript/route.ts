@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerClient, createServiceClient, hasSupabaseServiceEnv } from "@/lib/supabase/server";
+import { authorizeMeetingCaller } from "@/lib/meetings/meeting-access.server";
 import { checkRateLimit, clientIp, rateLimitHeaders } from "@/lib/rate-limit";
 import { MAX_BATCH, type TranscriptRow } from "@/lib/meetings/transcript-buffer";
 
@@ -38,75 +39,6 @@ const MAX_TEXT = 4_000;
 
 type Params = Promise<{ id: string }>;
 type SupabaseLike = { from: (table: string) => any };
-
-interface Caller {
-  ok: boolean;
-  /** The signed-in account, or null for an admitted guest. */
-  userId: string | null;
-}
-
-const DENIED: Caller = { ok: false, userId: null };
-
-/**
- * Who is asking, and may they write to this meeting.
- *
- * Deliberately not reusing RLS: the guest case has no session for a policy to
- * read, which is the whole reason this route exists.
- */
-async function authorize(req: NextRequest, meetingId: string): Promise<Caller> {
-  const authed = await createServerClient();
-  const { data: { user } } = await authed.auth.getUser();
-  const svc: SupabaseLike = hasSupabaseServiceEnv() ? createServiceClient() : (authed as SupabaseLike);
-
-  if (user) {
-    // Host, participant, or a member of the meeting's org. The third case
-    // matters: a teammate walks straight into the room without knocking, and
-    // their participant row is written by a different code path that may not
-    // have landed yet when their first flush goes out.
-    const { data } = await svc
-      .from("live_meetings")
-      .select("id, host_id, organization_id")
-      .eq("id", meetingId)
-      .is("deleted_at", null)
-      .maybeSingle();
-    const meeting = data as { id: string; host_id: string | null; organization_id: string | null } | null;
-    if (!meeting) return DENIED;
-    if (meeting.host_id === user.id) return { ok: true, userId: user.id };
-
-    const { data: participant } = await svc
-      .from("live_meeting_participants")
-      .select("id")
-      .eq("meeting_id", meetingId)
-      .eq("user_id", user.id)
-      .maybeSingle();
-    if (participant) return { ok: true, userId: user.id };
-
-    if (meeting.organization_id) {
-      const { data: member } = await svc
-        .from("organization_members")
-        .select("id")
-        .eq("organization_id", meeting.organization_id)
-        .eq("principal_id", user.id)
-        .maybeSingle();
-      if (member) return { ok: true, userId: user.id };
-    }
-    return DENIED;
-  }
-
-  const guestKey = req.nextUrl.searchParams.get("guestKey")?.trim() ?? "";
-  if (!guestKey) return DENIED;
-
-  const { data: admission } = await svc
-    .from("live_meeting_admissions")
-    .select("id, live_meetings!inner(id, status, deleted_at)")
-    .eq("guest_key", guestKey)
-    .eq("status", "admitted")
-    .eq("meeting_id", meetingId)
-    .is("live_meetings.deleted_at", null)
-    .maybeSingle();
-
-  return admission ? { ok: true, userId: null } : DENIED;
-}
 
 /**
  * Accept only what this caller could honestly have said.
@@ -163,7 +95,7 @@ export async function POST(req: NextRequest, { params }: { params: Params }) {
   }
 
   const { id } = await params;
-  const caller = await authorize(req, id);
+  const caller = await authorizeMeetingCaller(req, id);
   // The same answer whether the meeting does not exist or the caller has no
   // business with it: this is not a way to discover which meeting ids are real.
   if (!caller.ok) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

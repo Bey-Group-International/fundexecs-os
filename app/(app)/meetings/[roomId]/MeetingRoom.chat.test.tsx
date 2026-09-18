@@ -124,8 +124,27 @@ describe("message text", () => {
   // carries the text. MeetingRoom.chat.visual.test.ts measures the result.
   it("lets a long unbroken word break", () => {
     setup({ chatMessages: [message({ text: "https://example.com/" + "a".repeat(120) })] });
-    const bubble = screen.getByText(/^https:\/\/example\.com\//);
-    expect(bubble.className).toContain("break-words");
+    // A URL is rendered as a link now, so the text node's own element is the
+    // anchor. The rule belongs on the bubble that holds it — overflow-wrap is
+    // inherited, so that is the element that has to carry it.
+    const bubble = screen.getByText(/^https:\/\/example\.com\//).closest("div");
+    expect(bubble?.className).toContain("break-words");
+  });
+
+  // The commonest thing anybody puts in a meeting chat, and until the text was
+  // split into parts it was flat, unfollowable prose.
+  it("makes a shared link followable", () => {
+    setup({ chatMessages: [message({ text: "deck: https://example.com/deck.pdf" })] });
+    const link = screen.getByRole("link", { name: "https://example.com/deck.pdf" });
+    expect(link).toHaveAttribute("href", "https://example.com/deck.pdf");
+    expect(link).toHaveAttribute("rel", expect.stringContaining("noopener"));
+  });
+
+  // Rendered as React nodes, never as markup: this is other people's text on
+  // everybody's screen.
+  it("does not make a scheme somebody invented followable", () => {
+    setup({ chatMessages: [message({ text: "javascript:alert(1)" })] });
+    expect(screen.queryByRole("link")).not.toBeInTheDocument();
   });
 
   it("sends the trimmed text and clears the box", async () => {

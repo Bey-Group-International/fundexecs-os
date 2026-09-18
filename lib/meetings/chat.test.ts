@@ -1,14 +1,19 @@
 /**
- * The four ways the chat panel could mislead the person using it.
+ * The five ways the chat panel could mislead the person using it.
  *
  * Each block names the defect it covers. All of them are decisions the panel
  * was making implicitly — by appending, by trusting, by ignoring a field it
- * was already carrying — which is why none of them could be seen by reading
- * the rendering code.
+ * was already carrying, by keeping none of it — which is why none of them
+ * could be seen by reading the rendering code.
  */
 import {
   CHAT_CLOCK_TOLERANCE_MS,
   CHAT_MAX_LENGTH,
+  GROUP_WINDOW_MS,
+  chatClock,
+  chatParts,
+  groupChat,
+  mergeChat,
   deliveryFromSendResult,
   displayNameFor,
   insertMessage,
@@ -169,5 +174,172 @@ describe("normalizeChatText", () => {
     expect(normalizeChatText("   ")).toBe("");
     expect(normalizeChatText(undefined)).toBe("");
     expect(normalizeChatText(42)).toBe("");
+  });
+});
+
+// ── 5. Nothing stored it ────────────────────────────────────────────────────
+//
+// What storing the chat made newly true: a message is going into a table and
+// into an exported document, history and the live panel have to fold together
+// without duplicating, and the result has to read as a conversation.
+
+describe("normalizeChatText, once a message is going into a table", () => {
+  it("keeps the line breaks somebody meant", () => {
+    expect(normalizeChatText("line one\nline two")).toBe("line one\nline two");
+  });
+
+  it("settles on one newline convention", () => {
+    expect(normalizeChatText("line one\r\nline two")).toBe("line one\nline two");
+  });
+
+  it("collapses a paste that would push the room off the top of the panel", () => {
+    expect(normalizeChatText("a\n\n\n\n\nb")).toBe("a\n\nb");
+  });
+
+  // Invisible in the composer, and about to be stored, shown to everyone, and
+  // put in an exported document.
+  it("strips control characters a paste can carry", () => {
+    expect(normalizeChatText("he\u0000llo\u0007")).toBe("hello");
+  });
+});
+
+describe("mergeChat", () => {
+  it("orders one conversation by time", () => {
+    const merged = mergeChat(
+      [msg({ id: "b", from: "u2", text: "second", ts: 2_000 })],
+      [msg({ id: "a", from: "u1", text: "first", ts: 1_000 })],
+    );
+    expect(merged.map((m) => m.id)).toEqual(["a", "b"]);
+  });
+
+  // A message you sent comes back from the server as well as being shown
+  // locally the moment you sent it.
+  it("shows a message once when it arrives twice", () => {
+    const merged = mergeChat([msg({ id: "a", ts: 1_000 })], [msg({ id: "a", ts: 1_000 })]);
+    expect(merged).toHaveLength(1);
+  });
+
+  it("lets the stored copy win, since it arrives second", () => {
+    const merged = mergeChat(
+      [msg({ id: "a", from: "u1", text: "hi", ts: 1_000, displayName: "guest" })],
+      [msg({ id: "a", from: "u1", text: "hi", ts: 1_000, displayName: "Ana Vidal" })],
+    );
+    expect(merged[0].displayName).toBe("Ana Vidal");
+  });
+
+  it("orders ties without flickering between renders", () => {
+    const merged = mergeChat([msg({ id: "b", ts: 5 }), msg({ id: "a", ts: 5 })]);
+    expect(merged.map((m) => m.id)).toEqual(["a", "b"]);
+  });
+
+  // Local knowledge about your own send that no stored row carries. Losing it
+  // would silently retract a "Not delivered" the sender is looking at.
+  it("keeps what the socket said about your own message", () => {
+    const merged = mergeChat(
+      [msg({ id: "a", ts: 1_000, delivery: "failed" })],
+      [msg({ id: "a", ts: 1_000, displayName: "Ana Vidal" })],
+    );
+    expect(merged[0]).toMatchObject({ displayName: "Ana Vidal", delivery: "failed" });
+  });
+
+  it("orders the same way insertMessage does", () => {
+    const a = msg({ id: "a", ts: 5 });
+    const b = msg({ id: "b", ts: 5 });
+    expect(mergeChat([b, a]).map((m) => m.id)).toEqual(insertMessage([b], a).map((m) => m.id));
+  });
+
+  it("drops entries that are not messages", () => {
+    expect(mergeChat([{ id: "", from: "u", displayName: "u", text: "x", ts: 1 }])).toEqual([]);
+    expect(mergeChat([])).toEqual([]);
+  });
+});
+
+describe("groupChat", () => {
+  it("reads three lines in a row as one person talking", () => {
+    const turns = groupChat([
+      msg({ id: "a", from: "u1", text: "one", ts: 0, displayName: "u1" }),
+      msg({ id: "b", from: "u1", text: "two", ts: 1_000, displayName: "u1" }),
+      msg({ id: "c", from: "u2", text: "hi", ts: 2_000, displayName: "u2" }),
+    ]);
+    expect(turns).toHaveLength(2);
+    expect(turns[0].messages.map((m) => m.text)).toEqual(["one", "two"]);
+    expect(turns[1].from).toBe("u2");
+  });
+
+  it("starts a new turn when the same person returns much later", () => {
+    const turns = groupChat([msg({ id: "a", from: "u1", text: "one", ts: 0, displayName: "u1" }), msg({ id: "b", from: "u1", text: "two", ts: GROUP_WINDOW_MS + 1, displayName: "u1" })]);
+    expect(turns).toHaveLength(2);
+  });
+
+  // The turn keeps the first message's id so React keys hold as it grows.
+  it("keys a turn on the message that started it", () => {
+    const turns = groupChat([msg({ id: "a", from: "u1", text: "one", ts: 0, displayName: "u1" }), msg({ id: "b", from: "u1", text: "two", ts: 1_000, displayName: "u1" })]);
+    expect(turns[0].id).toBe("a");
+    expect(turns[0].ts).toBe(0);
+  });
+
+  it("survives an empty conversation", () => {
+    expect(groupChat([])).toEqual([]);
+  });
+});
+
+describe("chatParts", () => {
+  it("leaves plain text alone", () => {
+    expect(chatParts("no links here")).toEqual([{ kind: "text", value: "no links here" }]);
+  });
+
+  // The commonest thing anyone puts in a meeting chat, and it could not be
+  // followed.
+  it("finds a link in a sentence", () => {
+    expect(chatParts("deck is at https://fund.test/deck now")).toEqual([
+      { kind: "text", value: "deck is at " },
+      { kind: "link", value: "https://fund.test/deck", href: "https://fund.test/deck" },
+      { kind: "text", value: " now" },
+    ]);
+  });
+
+  it("leaves the sentence's full stop out of the link", () => {
+    const parts = chatParts("see https://fund.test/docs.");
+    expect(parts[1]).toEqual({ kind: "link", value: "https://fund.test/docs", href: "https://fund.test/docs" });
+    expect(parts[2]).toEqual({ kind: "text", value: "." });
+  });
+
+  it("finds several links", () => {
+    const parts = chatParts("https://a.test and https://b.test");
+    expect(parts.filter((p) => p.kind === "link")).toHaveLength(2);
+  });
+
+  // This decides what becomes a clickable href in front of everyone in the
+  // room, so it matches plainly-written http(s) and nothing else.
+  it.each([
+    "javascript:alert(1)",
+    "data:text/html,<script>alert(1)</script>",
+    "file:///etc/passwd",
+    "fund.test/deck",
+    "ftp://fund.test/x",
+  ])("does not make %j a link", (text) => {
+    expect(chatParts(text).every((p) => p.kind === "text")).toBe(true);
+  });
+
+  it("does not swallow a scheme hidden inside a sentence", () => {
+    // "javascript:" must not become a link even when an http link is present.
+    const parts = chatParts("try javascript:alert(1) or https://fund.test");
+    const links = parts.filter((p) => p.kind === "link");
+    expect(links).toHaveLength(1);
+    expect(links[0].kind === "link" && links[0].href).toBe("https://fund.test");
+  });
+
+  it("returns nothing for nothing", () => {
+    expect(chatParts("")).toEqual([]);
+  });
+});
+
+describe("chatClock", () => {
+  it("reads as a time", () => {
+    expect(chatClock(Date.parse("2026-09-18T14:05:00Z"), "en-GB")).toMatch(/\d{1,2}:\d{2}/);
+  });
+
+  it("says nothing for a time that is not one", () => {
+    expect(chatClock(NaN)).toBe("");
   });
 });
