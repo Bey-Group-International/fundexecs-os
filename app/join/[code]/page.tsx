@@ -76,9 +76,13 @@ export default async function JoinInvitePage(props: {
             )}
           </h1>
           <p className="mt-1.5 text-sm text-fg-secondary">
+            The operating system for private markets — deal sourcing, diligence,
+            underwriting, LP relations and reporting, in one place.
+          </p>
+          <p className="mt-2 text-sm text-fg-secondary">
             {invite
-              ? "This link puts your request in front of the team with the invitation already attached."
-              : "Request access below and we'll be in touch."}
+              ? "FundExecs is invite-only. This link puts your request in front of the team with the invitation already attached."
+              : "FundExecs is invite-only. Request access below and we'll be in touch."}
           </p>
 
           {/* The welcome bonus — the concrete thing the invite is worth. Only
@@ -100,6 +104,38 @@ export default async function JoinInvitePage(props: {
               </div>
             </div>
           )}
+
+          {/* The drop-off on an invite-only product is not "is this good?" but
+              "what happens if I click?". Three lines answer it. */}
+          <ol className="mt-5 flex flex-col gap-3 border-t border-line/60 pt-5">
+            {[
+              {
+                n: 1,
+                title: "Tell us about your firm",
+                detail: "A short form — name, firm, what you invest in.",
+              },
+              {
+                n: 2,
+                title: "We review it by hand",
+                detail: "Every request, with your invitation attached to it.",
+              },
+              {
+                n: 3,
+                title: "Your workspace opens",
+                detail: "We email you the moment it's ready.",
+              },
+            ].map((step) => (
+              <li key={step.n} className="flex gap-3">
+                <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-gold-400/40 bg-gold-400/10 font-mono text-[11px] text-gold-300">
+                  {step.n}
+                </span>
+                <div className="text-sm">
+                  <p className="font-medium text-fg-primary">{step.title}</p>
+                  <p className="mt-0.5 text-xs text-fg-secondary">{step.detail}</p>
+                </div>
+              </li>
+            ))}
+          </ol>
 
           <Link
             href={requestHref}

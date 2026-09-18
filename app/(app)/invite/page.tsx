@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { getSessionContext } from "@/lib/auth";
 import { getWalletBalance } from "@/lib/wallet";
 import { formatCredits } from "@/lib/billing";
-import { getOrCreateReferralCode, getReferralSummary } from "@/lib/gift-earn";
+import { getOrCreateReferralCode, getOwnOrgName, getReferralSummary } from "@/lib/gift-earn";
 import {
   DIRECT_TIERS,
   LEVEL_OVERRIDES,
@@ -11,10 +11,10 @@ import {
   rankFor,
 } from "@/lib/referrals";
 import { ReferralLink } from "./ReferralLink";
+import { NetworkList } from "./NetworkList";
 
 export const dynamic = "force-dynamic";
 
-const LEVEL_LABEL: Record<number, string> = { 1: "Direct", 2: "2nd level", 3: "3rd level" };
 
 // The referral program lives on its own page: the invite link, what the org has
 // earned from it, and the network it has built. Gifting credits is a separate
@@ -24,10 +24,11 @@ export default async function InvitePage() {
   if (!ctx) redirect("/login");
   if (!ctx.orgId) redirect("/onboarding");
 
-  const [code, summary, balance] = await Promise.all([
+  const [code, summary, balance, orgName] = await Promise.all([
     getOrCreateReferralCode(ctx.orgId, ctx.userId),
     getReferralSummary(ctx.orgId),
     getWalletBalance(ctx.orgId),
+    getOwnOrgName(ctx.orgId),
   ]);
 
   const { rank, next, progress } = rankFor(summary.directCount);
@@ -137,7 +138,7 @@ export default async function InvitePage() {
               to start — your rewards begin immediately.
             </p>
             {code ? (
-              <ReferralLink code={code} />
+              <ReferralLink code={code} orgName={orgName} />
             ) : (
               <p className="text-sm text-fg-muted">
                 Your invite link is being set up — check back in a moment.
@@ -210,47 +211,11 @@ export default async function InvitePage() {
                 </p>
               </div>
             ) : (
-              <div className="overflow-hidden rounded-2xl border border-neural-400/20 bg-surface-0/85 shadow-[0_1px_2px_rgb(15_23_42/0.10)]">
-                <div className="flex items-center justify-between border-b border-neural-400/15 px-4 py-3">
-                  <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-neural-300">
-                    {summary.totalDownline} firm{summary.totalDownline !== 1 ? "s" : ""} in network
-                  </p>
-                  <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-fg-muted">
-                    {summary.directCount} direct
-                  </p>
-                </div>
-                <div className="divide-y divide-neural-400/10">
-                  {summary.downline.map((row) => (
-                    <div key={row.orgId} className="flex items-center gap-3 px-4 py-3 transition-colors hover:bg-surface-1/40">
-                      <span
-                        className={`shrink-0 rounded-full border px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider ${
-                          row.level === 1
-                            ? "border-gold-400/50 bg-gold-400/10 text-gold-300 shadow-[0_0_8px_rgb(var(--fx-gold-rgb)/0.25)]"
-                            : row.level === 2
-                            ? "border-neural-400/40 bg-neural-400/10 text-neural-300"
-                            : "border-line/60 bg-surface-2/40 text-fg-muted"
-                        }`}
-                      >
-                        {LEVEL_LABEL[row.level] ?? `L${row.level}`}
-                      </span>
-                      <span className="min-w-0 flex-1 truncate text-sm text-fg-primary">
-                        {row.name}
-                      </span>
-                      <span
-                        className={`shrink-0 rounded-full px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider ${
-                          row.status === "subscribed"
-                            ? "bg-status-success/15 text-status-success"
-                            : row.status === "joined"
-                            ? "bg-neural-400/10 text-neural-300"
-                            : "bg-surface-2/40 text-fg-muted"
-                        }`}
-                      >
-                        {row.status}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              </div>
+              <NetworkList
+                rows={summary.downline}
+                totalDownline={summary.totalDownline}
+                directCount={summary.directCount}
+              />
             )}
           </div>
 
