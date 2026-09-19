@@ -3378,6 +3378,39 @@ Deployed, monitoring               →  live, observability active
              |  still only discovered by a viewer hitting a hole. And the orphan
              |  pass reads the bucket root, which only ever grows; at some size
              |  that listing needs its own cursor.
+             |  REVIEW ROUND, AND THE LESSON OF THE PASS. A review of this diff
+             |  found the very defect it was written to fix living in two more
+             |  places IN THE FIX ITSELF. sweepOrphans listed the root at offset
+             |  0, limit 200, every run — and living meetings' folders are never
+             |  removed, so the window never advances: past ~200 recorded
+             |  meetings an orphan sorting after it is never examined again.
+             |  "A backlog is taken next hour" was in the comment and was false;
+             |  this pass is the only thing that can find these objects, so it
+             |  was never. And clear-all read 50 ids while deleting every
+             |  meeting, discarding the read's error, so a host with 120
+             |  meetings orphaned 70+ on the spot and a failed read cleaned
+             |  nothing, deleted everything and returned 200.
+             |  WORTH KEEPING, and the real output of this pass: WRITING THE
+             |  FIX FOR A DEFECT DOES NOT INOCULATE THE FIX AGAINST IT. I had
+             |  just written two paragraphs on a cap silently orphaning the
+             |  remainder, and then wrote two more caps that do it. The tell in
+             |  both was the same and was sitting in my own prose: a bound
+             |  whose comment explains why the remainder is fine. That is the
+             |  "a comment explaining why something is acceptable is the place
+             |  to look hardest" rule from the last pass, met again one pass
+             |  later, in my own words, about my own code.
+             |  Second: the harnesses HID both. list() ignored its offset and
+             |  limit() ignored its bound, so each cap passed its tests as
+             |  though it were not there. A stub that does not honour the
+             |  argument under test cannot fail the test that matters — so when
+             |  a bound is the thing being fixed, fix the harness first and
+             |  watch the old code fail.
+             |  Also: recordings.orphaned was computed and dropped on the floor.
+             |  It is in the cron metrics now — the one number that would have
+             |  exposed either of the two above.
+             |  Re-verified after: Jest 6621 green across 488 suites, typecheck
+             |  and eslint clean, build passes; four new tests, each run against
+             |  the previous behaviour first and failing there.
 ```
 
 ---
