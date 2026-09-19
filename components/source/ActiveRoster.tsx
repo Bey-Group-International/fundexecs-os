@@ -18,6 +18,9 @@ import type { ActiveNetworkPerson, PersonKind, Temperature } from "@/lib/network
 // the capital map and the Anthropic SDK, which must not reach a client bundle.
 import { CONTACT_STAGES, STAGE_LABEL, type ContactStage } from "@/lib/network-stages";
 import type { RosterFacets, RosterPage, RosterSort } from "@/lib/network-roster";
+import type { FieldDef } from "@/lib/network-fields";
+import { ContactTable } from "./ContactTable";
+import { SavedViewBar, type SavedView } from "./SavedViewBar";
 
 const TEMP: Record<Temperature, { dot: string; chip: string; label: string }> = {
   committed: { dot: "bg-emerald-400", chip: "border-emerald-500/30 bg-emerald-500/10 text-emerald-300", label: "Committed" },
@@ -126,10 +129,20 @@ interface Props {
   initialPage: RosterPage;
   owners?: OwnerOption[];
   pageSize?: number;
+  /** The org's own contact columns, shown in the table view. */
+  fieldDefs?: FieldDef[];
   onSelect?: (person: ActiveNetworkPerson) => void;
 }
 
-export function ActiveRoster({ initialPage, owners = [], pageSize = 30, onSelect }: Props) {
+type ViewMode = "list" | "table";
+
+export function ActiveRoster({
+  initialPage,
+  owners = [],
+  pageSize = 30,
+  fieldDefs = [],
+  onSelect,
+}: Props) {
   const [rows, setRows] = useState<ActiveNetworkPerson[]>(initialPage.rows);
   const [total, setTotal] = useState(initialPage.total);
   const [nextOffset, setNextOffset] = useState<number | null>(initialPage.nextOffset);
@@ -148,6 +161,10 @@ export function ActiveRoster({ initialPage, owners = [], pageSize = 30, onSelect
   const [error, setError] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  // The list reads one relationship at a time; the table is for sweeping a
+  // column across many. Same rows, same filters, same query.
+  const [viewMode, setViewMode] = useState<ViewMode>("list");
+  const [activeViewId, setActiveViewId] = useState<string | null>(null);
 
   const sentinelRef = useRef<HTMLDivElement | null>(null);
   // Guards against a slow early request overwriting a later, faster one.
@@ -301,6 +318,25 @@ export function ActiveRoster({ initialPage, owners = [], pageSize = 30, onSelect
     },
     [selectedIds, fetchPage],
   );
+
+  const applySavedView = useCallback((view: SavedView) => {
+    const f = view.filters as Partial<Filters> & { q?: string };
+    setFilters({
+      temp: (f.temp as TempFilter) ?? "all",
+      kind: (f.kind as PersonKind | "all") ?? "all",
+      stage: (f.stage as ContactStage | "all") ?? "all",
+      owner: f.owner ?? "all",
+      category: f.category ?? "all",
+      committedOnly: f.committedOnly === true,
+      introOnly: f.introOnly === true,
+      needsAttention: f.needsAttention === true,
+    });
+    setQuery(f.q ?? "");
+    if ((SORTS as { key: RosterSort }[]).some((s) => s.key === view.sort)) {
+      setSort(view.sort as RosterSort);
+    }
+    setActiveViewId(view.id);
+  }, []);
 
   const exportCsv = useCallback(() => {
     const params = buildQuery(filters, sort, query, 0, 1);
@@ -549,6 +585,33 @@ export function ActiveRoster({ initialPage, owners = [], pageSize = 30, onSelect
         </div>
       )}
 
+      {/* Saved views + view mode */}
+      <div className="flex flex-wrap items-center gap-3">
+        <SavedViewBar
+          currentQuery={buildQuery(filters, sort, query, 0, pageSize).toString()}
+          onApply={applySavedView}
+          activeId={activeViewId}
+          onClearActive={() => {
+            setActiveViewId(null);
+            setFilters(DEFAULT_FILTERS);
+            setQuery("");
+          }}
+        />
+        <div className="fx-segment ml-auto inline-flex font-mono text-[11px] uppercase tracking-wider">
+          {(["list", "table"] as ViewMode[]).map((mode) => (
+            <button
+              key={mode}
+              onClick={() => setViewMode(mode)}
+              className={`rounded-md px-2.5 py-1 transition ${
+                viewMode === mode ? "bg-surface-2 text-fg-primary" : "text-fg-muted hover:text-fg-primary"
+              }`}
+            >
+              {mode}
+            </button>
+          ))}
+        </div>
+      </div>
+
       {/* Bulk action bar */}
       {selected.size > 0 && (
         <BulkBar
@@ -584,7 +647,14 @@ export function ActiveRoster({ initialPage, owners = [], pageSize = 30, onSelect
       )}
 
       {/* Roster */}
-      {rows.length === 0 && !loading ? (
+      {viewMode === "table" ? (
+        <ContactTable
+          rows={rows}
+          fieldDefs={fieldDefs}
+          owners={owners}
+          onChanged={() => void fetchPage(0, "replace")}
+        />
+      ) : rows.length === 0 && !loading ? (
         <p className="py-8 text-center text-sm text-fg-muted">No one matches those filters.</p>
       ) : (
         <div className="flex flex-col divide-y divide-line/60 overflow-hidden rounded-2xl border border-line/80 bg-surface-1/40">
