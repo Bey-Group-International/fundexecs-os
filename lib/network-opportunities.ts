@@ -73,10 +73,12 @@ export function terminalProbability(stage: OpportunityStage): number | undefined
   return terminal === "won" ? 100 : 0;
 }
 
+/** Narrow an unchecked value from a request body to a known stage. */
 export function isOpportunityStage(v: unknown): v is OpportunityStage {
   return typeof v === "string" && (OPPORTUNITY_STAGES as readonly string[]).includes(v);
 }
 
+/** Narrow an unchecked value from a request body to a known status. */
 export function isOpportunityStatus(v: unknown): v is OpportunityStatus {
   return typeof v === "string" && (OPPORTUNITY_STATUSES as readonly string[]).includes(v);
 }
@@ -112,6 +114,12 @@ export interface Opportunity {
   overdue: boolean;
 }
 
+/**
+ * A deal's target size discounted by its odds — what the pipeline is worth.
+ *
+ * Summed across open deals this is the forecast, which is why a closed stage
+ * must carry 100 or 0 rather than whatever it held on the way there.
+ */
 export function weightedAmount(target: number | null, probability: number): number {
   if (!target || !Number.isFinite(target)) return 0;
   return Math.round(target * (probability / 100));
@@ -119,6 +127,10 @@ export function weightedAmount(target: number | null, probability: number): numb
 
 type Row = Record<string, any>;
 
+/**
+ * Turn a database row into the client shape, resolving the embedded contact and
+ * fund and deriving `weightedAmount` and `overdue` rather than storing either.
+ */
 export function mapOpportunity(row: Row, ownerNames?: Map<string, string>): Opportunity {
   const contact = Array.isArray(row.network_contacts) ? row.network_contacts[0] : row.network_contacts;
   const fund = Array.isArray(row.funds) ? row.funds[0] : row.funds;

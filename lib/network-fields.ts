@@ -52,10 +52,12 @@ const MAX_TEXT = 500;
 const MAX_LONG_TEXT = 10_000;
 const MAX_SELECT_VALUES = 50;
 
+/** Narrow an unchecked value from a request body to a supported column type. */
 export function isFieldType(v: unknown): v is FieldType {
   return typeof v === "string" && (FIELD_TYPES as readonly string[]).includes(v);
 }
 
+/** Narrow an unchecked value to an object custom columns can be defined on. */
 export function isFieldEntity(v: unknown): v is FieldEntity {
   return typeof v === "string" && (FIELD_ENTITIES as readonly string[]).includes(v);
 }
@@ -78,6 +80,11 @@ export function slugifyFieldKey(label: string): string {
   return KEY_PATTERN.test(base) ? base : `f_${base}`.slice(0, 40).replace(/_+$/, "");
 }
 
+/**
+ * Whether a key satisfies the `network_field_defs.field_key` check constraint.
+ *
+ * Checked here so a bad key is a 400 rather than an opaque constraint error.
+ */
 export function isValidFieldKey(key: string): boolean {
   return KEY_PATTERN.test(key);
 }
