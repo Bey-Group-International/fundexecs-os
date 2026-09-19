@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   parseTranscript,
   speakerInitials,
@@ -8,7 +8,17 @@ import {
   transcriptWordCount,
 } from "@/lib/meetings/transcript-view";
 import { speakerColorIndex } from "@/lib/meetings/speaker-attribution";
-import { cuesAreTimed, type TranscriptCue } from "@/lib/meetings/transcript-cues";
+import { cueAt, cuesAreTimed, cuesCanFollow, type TranscriptCue } from "@/lib/meetings/transcript-cues";
+import {
+  findMatches,
+  groupMatches,
+  matchSummary,
+  matchesIn,
+  MIN_QUERY,
+  partsFor,
+  SPEAKER,
+  stepMatch,
+} from "@/lib/meetings/transcript-search";
 import { formatClock } from "@/lib/meetings/recording-timeline";
 
 // The transcript, typeset.
@@ -38,6 +48,7 @@ export function TranscriptPanel({
   transcript,
   cues,
   onSeek,
+  currentMs,
 }: {
   transcript: string;
   /**
@@ -51,9 +62,21 @@ export function TranscriptPanel({
   cues?: TranscriptCue[];
   /** Jump the recording to a moment. Absent, timestamps are not offered. */
   onSeek?: (ms: number) => void;
+  /**
+   * Where the recording has got to, so the transcript can follow it.
+   *
+   * The other half of a link that only ever ran one way: a line could drive
+   * the player, and the player reported to nobody — so watching a meeting back
+   * meant scrolling this by hand to keep up.
+   */
+  currentMs?: number;
 }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
+  /** Which hit the reader is on. -1 is "typed, but stepped to nothing yet". */
+  const [at, setAt] = useState(-1);
+  /** Following is on by default and off the moment somebody scrolls away. */
+  const [follow, setFollow] = useState(true);
 
   const timed = Boolean(onSeek && cues && cuesAreTimed(cues));
   const turns = useMemo(
@@ -63,15 +86,38 @@ export function TranscriptPanel({
   const speakers = useMemo(() => transcriptSpeakers(turns), [turns]);
   const words = useMemo(() => transcriptWordCount(turns), [turns]);
 
-  const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    if (!q) return turns;
-    return turns.filter(
-      (t) =>
-        t.speaker.toLowerCase().includes(q) ||
-        t.paragraphs.some((p) => p.toLowerCase().includes(q)),
-    );
-  }, [turns, query]);
+  // Located rather than filtered. Filtering removed the conversation around a
+  // hit, which is the part that makes a hit mean anything — "Yes, about forty"
+  // is not an answer until the question above it is visible.
+  const matches = useMemo(() => findMatches(turns, query), [turns, query]);
+  const grouped = useMemo(() => groupMatches(matches), [matches]);
+  useEffect(() => { setAt(matches.length ? 0 : -1); }, [matches]);
+
+  // The line being spoken, when there is a clock worth trusting. See
+  // cuesCanFollow: a meeting recorded from halfway has every earlier turn
+  // clamped to zero, and marking one of those as "now" would invent a fact.
+  const canFollow = Boolean(cues && cuesCanFollow(cues));
+  const playing = canFollow && typeof currentMs === "number" ? cueAt(cues!, currentMs) : -1;
+
+  const listRef = useRef<HTMLOListElement>(null);
+  const activeRef = useRef<HTMLLIElement>(null);
+  const markRef = useRef<HTMLElement>(null);
+
+  // Stepping to a hit. Deliberately NOT keyed on the playhead: an effect that
+  // re-runs every second and re-centres the current hit drags a reader who has
+  // scrolled away back to it, which is the behaviour this is supposed to
+  // prevent. Searching moves the transcript only when the reader steps.
+  useEffect(() => {
+    if (!open || at < 0) return;
+    scrollWithin(listRef.current, markRef.current);
+  }, [open, at]);
+
+  // Following the recording. Yields to a search — somebody who searched is
+  // reading, not watching — and to the first scroll.
+  useEffect(() => {
+    if (!open || !follow || matches.length > 0) return;
+    scrollWithin(listRef.current, activeRef.current);
+  }, [open, playing, follow, matches.length]);
 
   const colorFor = (speaker: string) =>
     SPEAKER_COLORS[speakerColorIndex(speaker, SPEAKER_COLORS.length)];
@@ -122,25 +168,73 @@ export function TranscriptPanel({
 
       {open && (
         <div className="border-t border-[var(--line)]">
-          <div className="border-b border-[var(--line)] px-4 py-2.5">
+          <div className="flex items-center gap-2 border-b border-[var(--line)] px-4 py-2.5">
             <input
               type="search"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
+              // Enter for the next hit, Shift+Enter for the previous one —
+              // the shape every find box has, so nobody has to be told.
+              onKeyDown={(e) => {
+                if (e.key !== "Enter" || matches.length === 0) return;
+                e.preventDefault();
+                setAt((n) => stepMatch(n, matches.length, e.shiftKey ? -1 : 1));
+              }}
               placeholder="Search the transcript…"
               aria-label="Search the transcript"
-              className="w-full rounded-lg border border-[var(--line)] bg-[var(--surface-0)] px-3 py-1.5 text-xs text-[var(--fg-primary)] placeholder:text-[var(--fg-muted)] focus:border-[var(--gold-400)] focus:outline-none"
+              className="min-w-0 flex-1 rounded-lg border border-[var(--line)] bg-[var(--surface-0)] px-3 py-1.5 text-xs text-[var(--fg-primary)] placeholder:text-[var(--fg-muted)] focus:border-[var(--gold-400)] focus:outline-none"
             />
+            {query.trim() && (
+              <>
+                {/* Announced, because a count that only exists visually is a
+                    count a screen reader user has to infer from the noise of
+                    a list scrolling. */}
+                <span role="status" aria-live="polite" className="shrink-0 whitespace-nowrap text-[11px] tabular-nums text-[var(--fg-muted)]">
+                  {matchSummary(at, matches.length, query)}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setAt((n) => stepMatch(n, matches.length, -1))}
+                  disabled={matches.length === 0}
+                  aria-label="Previous match"
+                  className="shrink-0 rounded-lg border border-[var(--line)] px-2 py-1 text-xs text-[var(--fg-secondary)] hover:border-gold-400/40 disabled:opacity-40"
+                >
+                  ↑
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setAt((n) => stepMatch(n, matches.length, 1))}
+                  disabled={matches.length === 0}
+                  aria-label="Next match"
+                  className="shrink-0 rounded-lg border border-[var(--line)] px-2 py-1 text-xs text-[var(--fg-secondary)] hover:border-gold-400/40 disabled:opacity-40"
+                >
+                  ↓
+                </button>
+              </>
+            )}
           </div>
 
-          {filtered.length === 0 ? (
-            <p className="px-4 py-8 text-center text-xs text-[var(--fg-muted)]">
-              Nothing in the transcript matches “{query.trim()}”.
-            </p>
-          ) : (
-            <ol className="max-h-[32rem] divide-y divide-[var(--line)] overflow-y-auto">
-              {filtered.map((turn, i) => (
-                <li key={i} className="flex gap-3 px-4 py-3 sm:gap-4">
+          {/* The transcript stays whole. It used to be filtered down to the
+              turns containing the query, which threw away the conversation
+              around every hit — and the line before a hit is usually the
+              question the hit is answering. */}
+          <ol
+            ref={listRef}
+            // Following is a convenience, not a leash: the first scroll turns
+            // it off, and it comes back when the reader asks for it.
+            onWheel={() => setFollow(false)}
+            onTouchMove={() => setFollow(false)}
+            className="max-h-[32rem] divide-y divide-[var(--line)] overflow-y-auto"
+          >
+              {turns.map((turn, i) => (
+                <li
+                  key={i}
+                  ref={i === playing ? activeRef : undefined}
+                  aria-current={i === playing ? "true" : undefined}
+                  className={`flex gap-3 px-4 py-3 sm:gap-4 transition-colors ${
+                    i === playing ? "bg-gold-400/10" : ""
+                  }`}
+                >
                   {/* A fixed left column, so the eye can run down the names
                       rather than hunting for them inside the prose. */}
                   <div className="flex w-24 shrink-0 flex-col items-start gap-1 sm:w-32">
@@ -152,8 +246,27 @@ export function TranscriptPanel({
                         >
                           {speakerInitials(turn.speaker)}
                         </span>
+                        {/* The name is searchable too — the filter this
+                            replaced matched on it, and "what did Priya say" is
+                            half of what anyone asks a transcript. */}
                         <span className="w-full truncate text-xs font-medium text-[var(--fg-secondary)]" title={turn.speaker}>
-                          {turn.speaker}
+                          {partsFor(turn.speaker, matchesIn(grouped, i, SPEAKER)).map((part, k) =>
+                            part.match ? (
+                              <mark
+                                key={k}
+                                ref={part.index === at ? markRef : undefined}
+                                className={
+                                  part.index === at
+                                    ? "rounded bg-[var(--gold-400)] px-0.5 text-[var(--surface-0)]"
+                                    : "rounded bg-gold-400/25 px-0.5 text-[var(--fg-secondary)]"
+                                }
+                              >
+                                {part.value}
+                              </mark>
+                            ) : (
+                              <span key={k}>{part.value}</span>
+                            ),
+                          )}
                         </span>
                       </>
                     ) : (
@@ -186,20 +299,75 @@ export function TranscriptPanel({
                   </div>
 
                   <div className="min-w-0 flex-1 space-y-1.5">
-                    {turn.paragraphs.map((p, j) => (
+                    {turn.paragraphs.map((paragraph, j) => (
                       <p key={j} className="text-sm leading-relaxed text-[var(--fg-primary)]">
-                        {p}
+                        {/* Painted in place rather than the turn being pulled
+                            out of the transcript. Parts, never markup: these
+                            are other people's words. */}
+                        {partsFor(paragraph, matchesIn(grouped, i, j)).map((part, k) =>
+                          part.match ? (
+                            <mark
+                              key={k}
+                              ref={part.index === at ? markRef : undefined}
+                              className={
+                                part.index === at
+                                  ? "rounded bg-[var(--gold-400)] px-0.5 text-[var(--surface-0)]"
+                                  : "rounded bg-gold-400/25 px-0.5 text-[var(--fg-primary)]"
+                              }
+                            >
+                              {part.value}
+                            </mark>
+                          ) : (
+                            <span key={k}>{part.value}</span>
+                          ),
+                        )}
                       </p>
                     ))}
                   </div>
                 </li>
               ))}
-            </ol>
+          </ol>
+
+          {query.trim().length >= MIN_QUERY && matches.length === 0 && (
+            <p className="border-t border-[var(--line)] px-4 py-3 text-center text-xs text-[var(--fg-muted)]">
+              Nothing in the transcript matches “{query.trim()}”.
+            </p>
+          )}
+
+          {/* Offered only once it has been turned off, and only when there is
+              something to follow. */}
+          {canFollow && !follow && (
+            <button
+              type="button"
+              onClick={() => setFollow(true)}
+              className="w-full border-t border-[var(--line)] px-4 py-2 text-center text-[11px] text-[var(--gold-400)] hover:underline"
+            >
+              Follow the recording
+            </button>
           )}
         </div>
       )}
     </div>
   );
+}
+
+/**
+ * Centre an element inside the transcript's own scroller.
+ *
+ * NOT scrollIntoView: that scrolls every scrollable ancestor, and the report
+ * page's <main> is one — so following the playhead yanked the whole page back
+ * to the transcript at every turn boundary. This moves one box.
+ */
+function scrollWithin(list: HTMLElement | null, target: HTMLElement | null) {
+  if (!list || !target) return;
+  const listBox = list.getBoundingClientRect();
+  const targetBox = target.getBoundingClientRect();
+  const delta = targetBox.top - listBox.top - (list.clientHeight - targetBox.height) / 2;
+  const top = Math.max(0, list.scrollTop + delta);
+  // jsdom has no scrollTo, and neither do some older engines; the property
+  // assignment is the behaviour that matters, the smoothness is not.
+  if (typeof list.scrollTo === "function") list.scrollTo({ top, behavior: "smooth" });
+  else list.scrollTop = top;
 }
 
 function ChevronIcon() {

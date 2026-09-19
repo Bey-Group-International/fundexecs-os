@@ -47,6 +47,30 @@ export default function MeetingReportPage() {
   const [lines, setLines] = useState<CueRow[]>([]);
   const [recordingStartedAt, setRecordingStartedAt] = useState<string | null>(null);
   const playerRef = useRef<RecordingPlayerHandle>(null);
+  /**
+   * Where the recording has got to, so the transcript can follow it.
+   *
+   * The link between the two only ever ran one way: a line could seek the
+   * player, and the player reported its position to nobody — so watching a
+   * meeting back meant scrolling the transcript by hand to keep up, which is
+   * the work having them side by side exists to remove.
+   *
+   * Rounded to the second before it reaches state. `timeupdate` fires about
+   * four times a second, and re-rendering an hour-long transcript at that rate
+   * to move a highlight that only changes between turns is most of a core for
+   * nothing.
+   */
+  // undefined, not 0: zero is a real position, so starting there marks a turn
+  // as being spoken and scrolls to it before anything has been played.
+  const [playheadMs, setPlayheadMs] = useState<number | undefined>(undefined);
+  const handleTime = useCallback((ms: number) => {
+    // Only when the second changes, so a 4Hz timeupdate does not re-render the
+    // transcript four times a second. The first report always lands, because
+    // "nothing has played" is not a second.
+    setPlayheadMs((prev) =>
+      prev !== undefined && Math.floor(ms / 1000) === Math.floor(prev / 1000) ? prev : ms,
+    );
+  }, []);
 
   async function fetchReport() {
     const supabase = createClient();
@@ -298,6 +322,7 @@ export default function MeetingReportPage() {
         meetingId={meeting.id}
         playerRef={playerRef}
         onRecordingReady={handleRecordingReady}
+        onTime={handleTime}
       />
 
       {/* What was typed, next to what was said. Renders nothing when nobody
@@ -311,6 +336,7 @@ export default function MeetingReportPage() {
           transcript={report.full_transcript}
           cues={cues}
           onSeek={recordingStartedAt ? seekRecording : undefined}
+          currentMs={recordingStartedAt ? playheadMs : undefined}
         />
       )}
 

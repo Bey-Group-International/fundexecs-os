@@ -93,3 +93,65 @@ export function transcriptCues(
 export function cuesAreTimed(cues: readonly TranscriptCue[]): boolean {
   return cues.length > 1 && cues.some((c) => c.atMs > 0);
 }
+
+// ── Following the recording ─────────────────────────────────────────────────
+//
+// Seeking was one-way. A line in the transcript could drive the player, and the
+// player told nobody where it had got to — so while a recording played, the
+// transcript sat exactly where the reader had left it. Watching forty minutes
+// of a meeting meant scrolling the transcript by hand to keep up, which is the
+// work having a transcript beside a recording is supposed to remove.
+//
+// Everything needed was already here: the cues carry a clock and the player
+// tracks one. What was missing was the answer to "which of these is being said
+// right now".
+
+/**
+ * The cue playing at `ms`, or -1.
+ *
+ * The LAST cue that has started, not the nearest — a turn owns the time from
+ * when it begins until the next one does, so a long pause inside somebody's
+ * sentence still belongs to them rather than jumping ahead to whoever speaks
+ * next.
+ *
+ * A binary search, because this is called on every timeupdate — four times a
+ * second, against an hour of turns.
+ */
+export function cueAt(cues: readonly TranscriptCue[], ms: number): number {
+  if (!cues?.length || !Number.isFinite(ms) || ms < 0) return -1;
+  // Before the first word was spoken there is no current turn. Saying "the
+  // first one" would light a line up during a silent lead-in.
+  if (ms < cues[0].atMs) return -1;
+
+  let low = 0;
+  let high = cues.length - 1;
+  let found = -1;
+  while (low <= high) {
+    const mid = (low + high) >> 1;
+    if (cues[mid].atMs <= ms) {
+      found = mid;
+      low = mid + 1;
+    } else {
+      high = mid - 1;
+    }
+  }
+  return found;
+}
+
+/**
+ * Whether following the recording would tell a reader anything.
+ *
+ * `transcriptCues` clamps to zero every turn spoken before Record was pressed,
+ * which is right for seeking — the nearest moment the recording holds is its
+ * beginning — and useless for following: a meeting recorded from halfway has a
+ * pile of turns all claiming 0ms, and marking whichever came last in the pile
+ * as "now" would be inventing a fact.
+ *
+ * So following is offered only when the cues are timed AND the clamped pile at
+ * the start is not most of them.
+ */
+export function cuesCanFollow(cues: readonly TranscriptCue[]): boolean {
+  if (!cuesAreTimed(cues)) return false;
+  const clamped = cues.filter((c) => c.atMs === 0).length;
+  return clamped * 2 <= cues.length;
+}

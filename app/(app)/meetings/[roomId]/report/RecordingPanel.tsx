@@ -49,12 +49,15 @@ export function RecordingPanel({
   meetingId,
   playerRef,
   onRecordingReady,
+  onTime,
 }: {
   meetingId: string;
   /** Handed to the first playable recording, so the transcript can drive it. */
   playerRef?: React.Ref<RecordingPlayerHandle>;
   /** When the recording the transcript should follow is known. */
   onRecordingReady?: (startedAt: string) => void;
+  /** Where that recording has got to, so the transcript can follow it back. */
+  onTime?: (ms: number) => void;
 }) {
   const [recordings, setRecordings] = useState<Recording[] | null>(null);
 
@@ -83,6 +86,11 @@ export function RecordingPanel({
 
   if (!recordings?.length) return null;
 
+  // The same row onRecordingReady reports, by the same rule — so the player
+  // that drives the transcript and the start time the transcript is offset
+  // against can never be two different recordings.
+  const playableId = recordings.find((r) => !r.deleted_at && r.status !== "abandoned")?.id;
+
   return (
     <section className="rounded-xl border border-[var(--line)] bg-[var(--surface-1)] p-5">
       <h2 className="text-sm font-semibold text-[var(--fg-primary)] mb-1">
@@ -93,7 +101,7 @@ export function RecordingPanel({
       </p>
 
       <div className="flex flex-col gap-5">
-        {recordings.map((rec, index) => {
+        {recordings.map((rec) => {
           // Said plainly rather than shown as a broken player. A recording that
           // aged out is a different thing from one that failed, and a viewer
           // following an old link deserves to know which.
@@ -122,7 +130,16 @@ export function RecordingPanel({
               <RecordingPlayer
                 meetingId={meetingId}
                 recordingId={rec.id}
-                ref={index === 0 ? playerRef : undefined}
+                ref={rec.id === playableId ? playerRef : undefined}
+                // The first PLAYABLE recording, which is the row
+                // onRecordingReady reports and therefore the clock the
+                // transcript is timed against. Keyed on index instead, a
+                // meeting whose first row was abandoned or deleted renders no
+                // player for it at all — so nothing received the ref, the
+                // timestamps seeked nothing and the transcript never followed.
+                // Only one: two players reporting into the same follower would
+                // make the transcript jump between two clocks.
+                onTime={rec.id === playableId ? onTime : undefined}
               />
               <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-[var(--fg-muted)]">
                 {rec.status === "recording" && (
