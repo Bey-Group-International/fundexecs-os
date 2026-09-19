@@ -21,6 +21,8 @@ import type {
   NetworkLiveCounts,
   Temperature,
 } from "@/lib/network-active";
+import type { RosterPage } from "@/lib/network-roster";
+import type { OwnerOption } from "./ActiveRoster";
 import type { NetworkSearchResult } from "@/lib/network-search";
 
 type Tab = "network" | "search" | "circles";
@@ -57,11 +59,14 @@ interface Circle {
 interface Props {
   senderName: string;
   senderTitle?: string | null;
-  people: ActiveNetworkPerson[];
+  /** The first page of the roster, already filtered and faceted server-side. */
+  initialRoster: RosterPage;
   pulse: NetworkPulse;
   activityEvents: NetworkActivityEvent[];
   liveCounts: NetworkLiveCounts;
   circles?: Circle[];
+  owners?: OwnerOption[];
+  pageSize?: number;
 }
 
 const TEMP_BAR: Record<Temperature, { bg: string; label: string }> = {
@@ -74,11 +79,13 @@ const TEMP_BAR: Record<Temperature, { bg: string; label: string }> = {
 export function NetworkModule({
   senderName,
   senderTitle,
-  people,
+  initialRoster,
   pulse,
   activityEvents,
   liveCounts,
   circles = [],
+  owners = [],
+  pageSize = 30,
 }: Props) {
   const [tab, setTab] = useState<Tab>("network");
   const [showAdd, setShowAdd] = useState(false);
@@ -198,7 +205,12 @@ export function NetworkModule({
       {/* Tab content */}
       {tab === "network" && (
         <div className="grid gap-6 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
-          <ActiveRoster people={people} onSelect={(p) => setSelectedContact(personToContact(p))} />
+          <ActiveRoster
+            initialPage={initialRoster}
+            owners={owners}
+            pageSize={pageSize}
+            onSelect={(p) => setSelectedContact(personToContact(p))}
+          />
           <div className="lg:sticky lg:top-6 lg:max-h-[calc(100vh-6rem)]">
             <NetworkActivityFeed initialEvents={activityEvents} initialLive={liveCounts} />
           </div>

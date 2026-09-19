@@ -1,11 +1,27 @@
-// Natural-language network search powered by Claude.
-// Queries the org-pooled network_contacts table plus existing relationships.
-// New tables not in database.types.ts — cast supabase client to bypass strict typing.
+// lib/network-search.ts
+//
+// Network search — lexical first, AI second.
+//
+// This used to block on TWO Claude calls before it could return anything: one
+// to parse the query into filters, another to write a reason line per result.
+// Every keystroke-driven search paid both, and the results themselves came from
+// an ILIKE built by concatenating the model's extracted terms into a PostgREST
+// `.or()` string — so a term containing a comma or a parenthesis did not match
+// literally, it rewrote the filter expression.
+//
+// Now the search itself is Postgres: ranked full-text over the `fts` column
+// (added in 20260702000300 and, until this, never queried) with trigram
+// similarity as the fallback for misspellings, all inside the
+// search_network_contacts function so the terms travel as bound parameters.
+// It is fast, it costs nothing, and it works with no API key configured.
+//
+// The model is still available, but as an explicit second step: rankWithAI()
+// annotates results the database already found. Nothing waits on it to render.
 
-import Anthropic from "@anthropic-ai/sdk";
 import { anthropicClient } from "@/lib/anthropic-client";
 import { createServerClient } from "@/lib/supabase/server";
 import { requireOrgContext } from "@/lib/auth";
+import { recordNetworkAudit } from "@/lib/network-audit";
 
 const MODEL = process.env.CLAUDE_MODEL || "claude-sonnet-4-6";
 
@@ -23,9 +39,12 @@ export interface NetworkSearchResult {
   connectedOn: string | null;
   relevanceReason: string;
   introPath: string[] | null;
+  stage?: string | null;
+  capitalRole?: string | null;
+  lastActivityAt?: string | null;
 }
 
-interface ContactRow {
+interface SearchRow {
   id: string;
   full_name: string | null;
   title: string | null;
@@ -34,113 +53,36 @@ interface ContactRow {
   email: string | null;
   linkedin_url: string | null;
   avatar_url: string | null;
-  strength_score: number;
-  strength_label: string;
+  strength_score: number | null;
+  strength_label: string | null;
+  capital_role: string | null;
+  stage: string | null;
+  tags: string[] | null;
   connected_on: string | null;
-  notes: string | null;
-  tags: string[];
+  last_activity_at: string | null;
+  rank: number | null;
 }
 
-// Parse natural language intent into structured filters using Claude.
-async function parseQueryIntent(query: string): Promise<{
-  roles: string[];
-  companies: string[];
-  locations: string[];
-  industries: string[];
-  keywords: string[];
-}> {
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) {
-    return { roles: [], companies: [], locations: [], industries: [], keywords: [query] };
-  }
-
-  const client = anthropicClient(apiKey);
-  const message = await client.messages.create({
-    model: MODEL,
-    max_tokens: 256,
-    messages: [
-      {
-        role: "user",
-        content: `Extract search intent from this network search query. Return JSON only.
-
-Query: "${query}"
-
-Return: {"roles":[],"companies":[],"locations":[],"industries":[],"keywords":[]}
-
-Rules:
-- roles: job titles or functions mentioned (e.g. "VP Sales", "CTO", "family office")
-- companies: specific company names
-- locations: cities or regions
-- industries: sectors (e.g. "fintech", "climate tech", "real estate")
-- keywords: any other relevant terms`,
-      },
-    ],
-  });
-
-  try {
-    const text = message.content[0].type === "text" ? message.content[0].text : "{}";
-    const json = text.match(/\{[\s\S]*\}/)?.[0] ?? "{}";
-    return JSON.parse(json);
-  } catch {
-    return { roles: [], companies: [], locations: [], industries: [], keywords: [query] };
-  }
+export interface SearchOptions {
+  limit?: number;
+  stage?: string | null;
+  owner?: string | null;
+  capitalRole?: string | null;
+  /** Ask the model to write a relevance line per result. Off by default: it
+   *  adds a round trip and an API cost to a query the database already
+   *  answered. */
+  useAI?: boolean;
 }
 
-// Score why a contact is relevant and generate a reason string.
-async function scoreRelevance(
-  query: string,
-  contacts: ContactRow[],
-): Promise<Map<string, string>> {
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  const map = new Map<string, string>();
-  if (!apiKey || contacts.length === 0) {
-    contacts.forEach((c) => map.set(c.id, "Matches your search"));
-    return map;
-  }
+/**
+ * 2-hop intro path heuristic: a well-connected contact at the same company
+ * bridges to a colder one.
+ */
+function buildSimpleIntroPath(target: SearchRow, all: SearchRow[]): string[] | null {
+  const name = target.full_name ?? target.id;
+  if ((target.strength_score ?? 0) >= 60) return ["You", name];
 
-  const client = anthropicClient(apiKey);
-  const contactList = contacts
-    .map((c) => `${c.id}|${c.full_name}|${c.title ?? ""}|${c.company ?? ""}|${c.location ?? ""}`)
-    .join("\n");
-
-  const message = await client.messages.create({
-    model: MODEL,
-    max_tokens: 512,
-    messages: [
-      {
-        role: "user",
-        content: `For each contact, write a 1-sentence reason why they match this search query.
-
-Query: "${query}"
-
-Contacts (id|name|title|company|location):
-${contactList}
-
-Return JSON: {"reasons":{"<id>":"<reason>"}}`,
-      },
-    ],
-  });
-
-  try {
-    const text = message.content[0].type === "text" ? message.content[0].text : "{}";
-    const json = text.match(/\{[\s\S]*\}/)?.[0] ?? "{}";
-    const parsed = JSON.parse(json);
-    const reasons = parsed.reasons ?? {};
-    contacts.forEach((c) => map.set(c.id, reasons[c.id] ?? "Matches your search"));
-  } catch {
-    contacts.forEach((c) => map.set(c.id, "Matches your search"));
-  }
-  return map;
-}
-
-// 2-hop intro path heuristic: if a high-strength contact shares the same company, use them as a bridge.
-function buildSimpleIntroPath(
-  target: ContactRow,
-  allContacts: ContactRow[],
-): string[] | null {
-  if ((target.strength_score ?? 0) >= 60) return ["You", target.full_name ?? target.id];
-
-  const bridge = allContacts.find(
+  const bridge = all.find(
     (c) =>
       c.id !== target.id &&
       c.company &&
@@ -148,69 +90,148 @@ function buildSimpleIntroPath(
       c.company.toLowerCase() === target.company.toLowerCase() &&
       (c.strength_score ?? 0) >= 50,
   );
-  if (bridge) return ["You", bridge.full_name ?? bridge.id, target.full_name ?? target.id];
-  return null;
+  return bridge ? ["You", bridge.full_name ?? bridge.id, name] : null;
 }
 
-export async function searchNetwork(query: string, limit = 20): Promise<NetworkSearchResult[]> {
+/** The default reason line — stated in terms of what actually matched, rather
+ *  than the model's paraphrase of the query. */
+function lexicalReason(row: SearchRow, query: string): string {
+  const q = query.trim().toLowerCase();
+  if (!q) return "In your network";
+  if (row.full_name?.toLowerCase().includes(q)) return "Name matches your search";
+  if (row.company?.toLowerCase().includes(q)) return `At ${row.company}`;
+  if (row.title?.toLowerCase().includes(q)) return row.title;
+  if (row.location?.toLowerCase().includes(q)) return `Based in ${row.location}`;
+  if (row.tags?.some((t) => t.toLowerCase().includes(q))) return "Tagged for this";
+  return [row.title, row.company].filter(Boolean).join(" · ") || "Matches your search";
+}
+
+function toResult(row: SearchRow, rows: SearchRow[], query: string): NetworkSearchResult {
+  return {
+    id: row.id,
+    fullName: row.full_name ?? "",
+    title: row.title,
+    company: row.company,
+    location: row.location,
+    email: row.email,
+    linkedinUrl: row.linkedin_url,
+    avatarUrl: row.avatar_url,
+    strengthScore: row.strength_score ?? 0,
+    strengthLabel: row.strength_label ?? "cold",
+    connectedOn: row.connected_on,
+    relevanceReason: lexicalReason(row, query),
+    introPath: buildSimpleIntroPath(row, rows),
+    stage: row.stage,
+    capitalRole: row.capital_role,
+    lastActivityAt: row.last_activity_at,
+  };
+}
+
+/**
+ * Ask the model for a one-line reason per result.
+ *
+ * Runs only when explicitly requested, only over results the database already
+ * returned, and never blocks them: on any failure the lexical reasons stand.
+ */
+export async function annotateWithAI(
+  query: string,
+  results: NetworkSearchResult[],
+): Promise<NetworkSearchResult[]> {
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  if (!apiKey || results.length === 0) return results;
+
+  try {
+    const client = anthropicClient(apiKey);
+    const roster = results
+      .slice(0, 25)
+      .map((r) => `${r.id}|${r.fullName}|${r.title ?? ""}|${r.company ?? ""}|${r.location ?? ""}`)
+      .join("\n");
+
+    const message = await client.messages.create({
+      model: MODEL,
+      max_tokens: 512,
+      messages: [
+        {
+          role: "user",
+          content: `For each contact, write a 1-sentence reason why they match this search query.
+
+Query: "${query}"
+
+Contacts (id|name|title|company|location):
+${roster}
+
+Return JSON: {"reasons":{"<id>":"<reason>"}}`,
+        },
+      ],
+    });
+
+    const text = message.content[0]?.type === "text" ? message.content[0].text : "{}";
+    const json = text.match(/\{[\s\S]*\}/)?.[0] ?? "{}";
+    const reasons = (JSON.parse(json) as { reasons?: Record<string, string> }).reasons ?? {};
+
+    return results.map((r) =>
+      typeof reasons[r.id] === "string" && reasons[r.id].trim()
+        ? { ...r, relevanceReason: reasons[r.id].trim() }
+        : r,
+    );
+  } catch {
+    // The database answer is the answer. A model failure costs the prose, not
+    // the results.
+    return results;
+  }
+}
+
+/**
+ * Search the org's contacts.
+ *
+ * Returns ranked results from Postgres. RLS — including the private-contact
+ * visibility rule — applies inside the function, so a member never sees a
+ * relationship they could not open directly.
+ */
+export async function searchNetwork(
+  query: string,
+  limitOrOptions: number | SearchOptions = 20,
+): Promise<NetworkSearchResult[]> {
+  const options: SearchOptions =
+    typeof limitOrOptions === "number" ? { limit: limitOrOptions } : limitOrOptions;
+  const limit = Math.min(Math.max(options.limit ?? 20, 1), 100);
+
   if (!query.trim()) return [];
 
   const auth = await requireOrgContext();
   if (!auth.ok) return [];
   const { ctx } = auth;
 
-  // Cast to any — network_contacts is not yet in database.types.ts.
-  const supabase = await createServerClient() as any;
+  // network_contacts and the search function are not in database.types.
+  const supabase = (await createServerClient()) as any;
 
-  const intent = await parseQueryIntent(query);
-  const allTerms = [
-    ...intent.roles,
-    ...intent.companies,
-    ...intent.locations,
-    ...intent.industries,
-    ...intent.keywords,
-  ].filter(Boolean);
+  const { data, error } = await supabase.rpc("search_network_contacts", {
+    target_org: ctx.orgId,
+    query_text: query,
+    match_limit: limit,
+    stage_filter: options.stage ?? null,
+    owner_filter: options.owner ?? null,
+    role_filter: options.capitalRole ?? null,
+  });
 
-  let dbQuery = supabase
-    .from("network_contacts")
-    .select(
-      "id, full_name, title, company, location, email, linkedin_url, avatar_url, strength_score, strength_label, connected_on, notes, tags",
-    )
-    .eq("organization_id", ctx.orgId)
-    .limit(limit * 3);
-
-  if (allTerms.length > 0) {
-    const conditions = allTerms
-      .flatMap((term: string) => [
-        `full_name.ilike.%${term}%`,
-        `title.ilike.%${term}%`,
-        `company.ilike.%${term}%`,
-        `location.ilike.%${term}%`,
-        `notes.ilike.%${term}%`,
-      ])
-      .join(",");
-    dbQuery = dbQuery.or(conditions);
+  if (error) {
+    console.error("[network-search] rpc failed", error);
+    return [];
   }
 
-  const { data: rawContacts } = await dbQuery.order("strength_score", { ascending: false });
-  const contacts: ContactRow[] = (rawContacts ?? []) as ContactRow[];
-  if (contacts.length === 0) return [];
+  const rows = (data ?? []) as SearchRow[];
 
-  const reasons = await scoreRelevance(query, contacts.slice(0, limit));
+  // Searching the book is itself an audited act — it is how someone would
+  // enumerate an org's relationships, and the query text is the evidence of
+  // what they were looking for.
+  await recordNetworkAudit(supabase, {
+    orgId: ctx.orgId,
+    actorId: ctx.userId,
+    action: "search",
+    entityType: "network_contact",
+    metadata: { query: query.slice(0, 200), results: rows.length },
+  });
 
-  return contacts.slice(0, limit).map((c) => ({
-    id: c.id,
-    fullName: c.full_name ?? "",
-    title: c.title,
-    company: c.company,
-    location: c.location,
-    email: c.email,
-    linkedinUrl: c.linkedin_url,
-    avatarUrl: c.avatar_url,
-    strengthScore: c.strength_score ?? 0,
-    strengthLabel: c.strength_label ?? "cold",
-    connectedOn: c.connected_on,
-    relevanceReason: reasons.get(c.id) ?? "Matches your search",
-    introPath: buildSimpleIntroPath(c, contacts),
-  }));
+  const results = rows.map((row) => toResult(row, rows, query));
+  return options.useAI ? annotateWithAI(query, results) : results;
 }
