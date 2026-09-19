@@ -56,6 +56,7 @@ export function NewDealForm({ owners = [], onCreated, onCancel }: Props) {
   const [matches, setMatches] = useState<CounterpartyOption[]>([]);
   const [fundId, setFundId] = useState("");
   const [funds, setFunds] = useState<FundOption[]>([]);
+  const [fundsTruncated, setFundsTruncated] = useState(false);
   const [stage, setStage] = useState<OpportunityStage>("sourced");
   const [targetAmount, setTargetAmount] = useState("");
   const [currency, setCurrency] = useState("USD");
@@ -69,8 +70,13 @@ export function NewDealForm({ owners = [], onCreated, onCancel }: Props) {
     void (async () => {
       try {
         const res = await fetch("/api/network/funds");
-        const body = (await res.json().catch(() => null)) as { funds?: FundOption[] } | null;
-        if (!cancelled && res.ok) setFunds(body?.funds ?? []);
+        const body = (await res.json().catch(() => null)) as
+          | { funds?: FundOption[]; truncated?: boolean }
+          | null;
+        if (!cancelled && res.ok) {
+          setFunds(body?.funds ?? []);
+          setFundsTruncated(body?.truncated === true);
+        }
       } catch {
         // A fund is optional on a deal, so failing to load the list is not
         // worth blocking the form for — it just leaves the picker empty.
@@ -252,6 +258,14 @@ export function NewDealForm({ owners = [], onCreated, onCancel }: Props) {
               </option>
             ))}
           </select>
+          {/* If the list ever is shortened, say so. A picker that quietly
+              omits the fund somebody is looking for sends them hunting for a
+              bug in their own data. */}
+          {fundsTruncated && (
+            <span className="text-[11px] text-gold-300">
+              Showing the first 1,000 funds — not all of them are listed.
+            </span>
+          )}
         </label>
 
         <label className="flex flex-col gap-1">

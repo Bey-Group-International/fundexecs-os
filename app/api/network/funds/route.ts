@@ -25,6 +25,9 @@ export interface FundOption {
   currency: string;
 }
 
+/** Defensive ceiling, not a page size. See the note on the query below. */
+const MAX_FUNDS = 1000;
+
 /** This organization's funds, newest vintage first, for the deal form's picker. */
 export async function GET() {
   const auth = await requireOrgContext();
@@ -37,14 +40,23 @@ export async function GET() {
     .eq("organization_id", auth.ctx.orgId)
     .order("vintage_year", { ascending: false, nullsFirst: false })
     .order("name", { ascending: true })
-    .limit(200);
+    // A picker that silently omits rows is the failure this whole feature is
+    // trying to stop making. The old cap of 200 had no cursor and no search
+    // behind it, so a fund past the cap could not be chosen at all and nothing
+    // said so. This ceiling exists only to bound a pathological query; if it is
+    // ever reached the response says so rather than quietly shortening the
+    // list. One extra row tells us whether there were more.
+    .limit(MAX_FUNDS + 1);
 
   if (error) {
     console.error("[network/funds] read", error);
     return NextResponse.json({ error: "Failed to load funds" }, { status: 500 });
   }
 
-  const funds: FundOption[] = ((data ?? []) as Record<string, any>[]).map((f) => ({
+  const rows = (data ?? []) as Record<string, any>[];
+  const truncated = rows.length > MAX_FUNDS;
+
+  const funds: FundOption[] = rows.slice(0, MAX_FUNDS).map((f) => ({
     id: String(f.id),
     name: String(f.name ?? "Untitled fund"),
     fundType: f.fund_type ?? null,
@@ -52,5 +64,5 @@ export async function GET() {
     currency: String(f.currency ?? "USD"),
   }));
 
-  return NextResponse.json({ funds });
+  return NextResponse.json({ funds, truncated });
 }
