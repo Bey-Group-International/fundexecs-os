@@ -13,6 +13,8 @@ import { checkRateLimit, rateLimitHeaders } from "@/lib/rate-limit";
 import { isContactStage } from "@/lib/network-stages";
 import { loadContactRecord, loadPrincipalNames, mapContactRecord } from "@/lib/network-contact";
 import { recordNetworkAudit, type AuditAction } from "@/lib/network-audit";
+import { loadFieldDefs } from "@/lib/network-field-defs.server";
+import { applyCustomPatch } from "@/lib/network-fields";
 import { invalidateRoster } from "@/lib/network-roster";
 
 export const dynamic = "force-dynamic";
@@ -60,6 +62,8 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
     nextStepAt?: string | null;
     title?: string | null;
     company?: string | null;
+    /** Values for this org's own columns, keyed by field_key. */
+    custom?: Record<string, unknown>;
   } | null;
 
   if (!payload || Object.keys(payload).length === 0) {
@@ -70,7 +74,7 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
 
   const { data: before } = await supabase
     .from("network_contacts")
-    .select("id, full_name, stage, relationship_owner, visibility")
+    .select("id, full_name, stage, relationship_owner, visibility, custom")
     .eq("organization_id", auth.ctx.orgId)
     .eq("id", id)
     .maybeSingle();
@@ -145,6 +149,18 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
   if (payload.title !== undefined) patch.title = payload.title?.slice(0, 200) ?? null;
   if (payload.company !== undefined) patch.company = payload.company?.slice(0, 200) ?? null;
 
+  if (payload.custom !== undefined) {
+    // Values are type-checked here because a jsonb column cannot do it: an
+    // unchecked write is how "AUM" ends up holding 2000000 on one row and
+    // "$2m" on the next, and stops being sortable.
+    const defs = await loadFieldDefs(supabase, auth.ctx.orgId, "contact");
+    const merged = applyCustomPatch(defs, (before.custom as Record<string, unknown>) ?? {}, payload.custom);
+    if (!merged.ok) {
+      return NextResponse.json({ error: merged.errors.join(" ") }, { status: 400 });
+    }
+    patch.custom = merged.custom;
+  }
+
   if (Object.keys(patch).length === 0) {
     return NextResponse.json({ error: "Nothing to update." }, { status: 400 });
   }
@@ -157,7 +173,7 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
     .eq("organization_id", auth.ctx.orgId)
     .eq("id", id)
     .select(
-      "id, first_name, last_name, full_name, title, company, company_domain, email, phone, linkedin_url, avatar_url, location, capital_role, relationship_type, stage, visibility, relationship_owner, strength_score, strength_label, relevance_score, tags, notes, source, connected_on, created_at, last_activity_at, next_step_at, verified, confidence, communication_status, consent_basis, consent_at, compliance_flags, archived_at, merged_into_id",
+      "id, first_name, last_name, full_name, title, company, company_domain, email, phone, linkedin_url, avatar_url, location, capital_role, relationship_type, stage, visibility, relationship_owner, strength_score, strength_label, relevance_score, tags, notes, source, connected_on, created_at, last_activity_at, next_step_at, verified, confidence, communication_status, consent_basis, consent_at, compliance_flags, archived_at, merged_into_id, custom",
     )
     .single();
 

@@ -41,6 +41,7 @@ function person(over: Partial<ActiveNetworkPerson> = {}): ActiveNetworkPerson {
     lastActivityAt: null,
     openTasks: 0,
     tags: [],
+    custom: {},
     ...over,
   };
 }

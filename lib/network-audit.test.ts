@@ -103,6 +103,7 @@ describe("rosterToCsv", () => {
     lastActivityAt: "2026-09-10T00:00:00.000Z",
     openTasks: 2,
     tags: ["lp", "priority"],
+    custom: {},
   };
 
   it("writes a header row and one row per person", () => {

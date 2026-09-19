@@ -73,6 +73,10 @@ export interface ActiveNetworkPerson {
   /** Count of open follow-ups against this person. */
   openTasks: number;
   tags: string[];
+  /** Values for this org's own columns (20260919140000), keyed by field_key.
+   *  Empty for investors, partners and providers, which have no custom fields
+   *  of their own. */
+  custom: Record<string, unknown>;
 }
 
 
@@ -242,6 +246,7 @@ interface ContactRow {
   last_activity_at: string | null;
   next_step_at: string | null;
   tags: string[] | null;
+  custom: Record<string, unknown> | null;
 }
 
 interface DirectoryRow {
@@ -260,7 +265,7 @@ const CONTACT_COLUMNS_LEGACY =
   "id, full_name, title, company, email, capital_role, strength_score, strength_label, strength_updated_at, connected_on, created_at, updated_at";
 
 const CONTACT_COLUMNS =
-  `${CONTACT_COLUMNS_LEGACY}, stage, visibility, relationship_owner, last_activity_at, next_step_at, tags`;
+  `${CONTACT_COLUMNS_LEGACY}, stage, visibility, relationship_owner, last_activity_at, next_step_at, tags, custom`;
 
 function mapContact(c: ContactRow): ActiveNetworkPerson {
   // "Last contact" now prefers a real logged timeline entry and only falls back
@@ -293,6 +298,7 @@ function mapContact(c: ContactRow): ActiveNetworkPerson {
     lastActivityAt: c.last_activity_at ?? null,
     openTasks: 0,
     tags: c.tags ?? [],
+    custom: c.custom ?? {},
   };
 }
 
@@ -384,6 +390,7 @@ async function loadDirectoryPeople(
         lastActivityAt: last,
         openTasks: 0,
         tags: [],
+        custom: {},
       };
     });
   } catch {
@@ -457,6 +464,7 @@ export async function loadActiveNetwork(
       lastActivityAt: rel?.lastContactAt ?? null,
       openTasks: 0,
       tags: [],
+      custom: {},
     };
   });
 
