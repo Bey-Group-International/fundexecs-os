@@ -114,9 +114,11 @@ export function PipelineBoard({ initialOpportunities, initialSummary }: Props) {
 
   const moveDeal = useCallback(
     async (dealId: string, stage: OpportunityStage) => {
-      const before = deals;
       const deal = deals.find((d) => d.id === dealId);
       if (!deal || deal.stage === stage) return;
+      // Cards move independently (busy state is per deal), so a failure must
+      // restore only this card rather than the whole board snapshot.
+      const previousStage = deal.stage;
 
       setBusy((b) => new Set(b).add(dealId));
       // Optimistic: the card lands where it was dropped immediately.
@@ -140,7 +142,9 @@ export function PipelineBoard({ initialOpportunities, initialSummary }: Props) {
         setDeals((prev) => prev.map((d) => (d.id === dealId ? body.opportunity! : d)));
         setError(null);
       } catch (err) {
-        setDeals(before);
+        setDeals((current) =>
+          current.map((d) => (d.id === dealId ? { ...d, stage: previousStage } : d)),
+        );
         setError(err instanceof Error ? err.message : "Couldn't move that deal.");
       } finally {
         setBusy((b) => {

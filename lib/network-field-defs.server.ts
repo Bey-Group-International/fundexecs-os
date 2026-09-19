@@ -41,6 +41,34 @@ export async function loadFieldDefs(
   }
 }
 
+/**
+ * The strict variant, for WRITE paths.
+ *
+ * loadFieldDefs swallows a failed read and returns [] so a render still works.
+ * On a write that is dangerous: applyCustomPatch skips every key with no
+ * matching definition and still reports success, so a transient failure here
+ * would make the route accept an edit, discard every custom value in it, and
+ * answer 200. The operator sees the edit land and the value is simply gone.
+ *
+ * So validation reads through this instead, and a failed read becomes a 5xx.
+ */
+export async function loadFieldDefsStrict(
+  client: SupabaseClient,
+  orgId: string,
+  entity: FieldEntity,
+): Promise<FieldDef[]> {
+  const { data, error } = await client
+    .from("network_field_defs")
+    .select(FIELD_DEF_SELECT)
+    .eq("organization_id", orgId)
+    .eq("entity", entity)
+    .is("archived_at", null)
+    .order("position", { ascending: true })
+    .limit(100);
+  if (error) throw error;
+  return ((data ?? []) as Record<string, unknown>[]).map(mapFieldDef);
+}
+
 /** Both entities in one round trip, for pages that show contacts and deals. */
 export async function loadAllFieldDefs(
   client: SupabaseClient,

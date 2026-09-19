@@ -128,7 +128,15 @@ create policy network_opportunities_update on public.network_opportunities
     organization_id in (select public.current_principal_org_ids())
     and (contact_id is null or public.network_contact_visible(contact_id))
   )
-  with check (organization_id in (select public.current_principal_org_ids()));
+  -- Visibility is repeated on the NEW row, not just the old one. Postgres does
+  -- refuse a move onto an invisible contact today (verified), but that falls
+  -- out of how UPDATE re-checks the row rather than from anything this policy
+  -- says. An authorization boundary should state its own rule, and the INSERT
+  -- policy already states this one.
+  with check (
+    organization_id in (select public.current_principal_org_ids())
+    and (contact_id is null or public.network_contact_visible(contact_id))
+  );
 
 drop policy if exists network_opportunities_delete on public.network_opportunities;
 create policy network_opportunities_delete on public.network_opportunities
@@ -309,3 +317,63 @@ as $$
 $$;
 
 grant execute on function public.network_pipeline_summary(uuid) to authenticated;
+
+-- ── 6. Atomic custom-value merge ─────────────────────────────────────────────
+--
+-- Read-modify-write on a jsonb column loses concurrent edits: two requests read
+-- the same `custom` snapshot, each merges its own key, and whichever writes
+-- second erases the other's. That is not a theoretical race here — the table
+-- view exists precisely so somebody can edit many cells quickly, and two cells
+-- on the SAME row save independently.
+--
+-- These apply the already-validated keys in one statement, so the merge happens
+-- in the database against the current row rather than against a snapshot the
+-- application read moments earlier. `-` removes the keys the patch cleared,
+-- which `||` alone cannot express.
+--
+-- SECURITY INVOKER (the default) is load-bearing: RLS still decides whether
+-- this caller may write this row.
+
+create or replace function public.network_contact_merge_custom(
+  target_org uuid,
+  target_contact uuid,
+  patch jsonb,
+  remove_keys text[] default '{}'::text[]
+)
+returns jsonb
+language sql
+volatile
+set search_path = public
+as $$
+  update public.network_contacts c
+     set custom = (coalesce(c.custom, '{}'::jsonb) || coalesce(patch, '{}'::jsonb))
+                    - coalesce(remove_keys, '{}'::text[]),
+         updated_at = now()
+   where c.id = target_contact
+     and c.organization_id = target_org
+  returning c.custom;
+$$;
+
+grant execute on function public.network_contact_merge_custom(uuid, uuid, jsonb, text[]) to authenticated;
+
+create or replace function public.network_opportunity_merge_custom(
+  target_org uuid,
+  target_opportunity uuid,
+  patch jsonb,
+  remove_keys text[] default '{}'::text[]
+)
+returns jsonb
+language sql
+volatile
+set search_path = public
+as $$
+  update public.network_opportunities o
+     set custom = (coalesce(o.custom, '{}'::jsonb) || coalesce(patch, '{}'::jsonb))
+                    - coalesce(remove_keys, '{}'::text[]),
+         updated_at = now()
+   where o.id = target_opportunity
+     and o.organization_id = target_org
+  returning o.custom;
+$$;
+
+grant execute on function public.network_opportunity_merge_custom(uuid, uuid, jsonb, text[]) to authenticated;

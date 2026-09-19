@@ -17,9 +17,10 @@ import {
   OPPORTUNITY_SELECT,
   STAGE_LABEL,
   isOpportunityStage,
+  validateOpportunityRefs,
   type OpportunityStatus,
 } from "@/lib/network-opportunities";
-import { loadFieldDefs } from "@/lib/network-field-defs.server";
+import { loadFieldDefsStrict } from "@/lib/network-field-defs.server";
 import { recordNetworkAudit } from "@/lib/network-audit";
 import { invalidateRoster } from "@/lib/network-roster";
 
@@ -59,24 +60,35 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
     .maybeSingle();
   if (!before) return NextResponse.json({ error: "Deal not found" }, { status: 404 });
 
-  // An owner must be a member of this org, or the deal is assigned to nobody
-  // the team can see.
-  if (payload.ownerId) {
-    const { data: member } = await supabase
-      .from("organization_members")
-      .select("principal_id")
-      .eq("organization_id", auth.ctx.orgId)
-      .eq("principal_id", payload.ownerId)
-      .maybeSingle();
-    if (!member) {
-      return NextResponse.json(
-        { error: "That owner is not a member of this organization." },
-        { status: 400 },
-      );
-    }
+  // Every relationship id the request supplied must belong to this org — not
+  // just the owner. The foreign keys are single-column, so the schema alone
+  // would happily let a deal point at another tenant's fund or investor.
+  let refError: string | null;
+  try {
+    refError = await validateOpportunityRefs(supabase, auth.ctx.orgId, {
+      contactId: payload.contactId,
+      investorId: payload.investorId,
+      fundId: payload.fundId,
+      ownerId: payload.ownerId,
+    });
+  } catch (err) {
+    console.error("[network/opportunities] ref check", err);
+    return NextResponse.json({ error: "Failed to update the deal" }, { status: 500 });
+  }
+  if (refError) {
+    return NextResponse.json(
+      { error: refError },
+      { status: refError.endsWith("not found") ? 404 : 400 },
+    );
   }
 
-  const defs = await loadFieldDefs(supabase, auth.ctx.orgId, "opportunity");
+  let defs;
+  try {
+    defs = await loadFieldDefsStrict(supabase, auth.ctx.orgId, "opportunity");
+  } catch (err) {
+    console.error("[network/opportunities] field defs", err);
+    return NextResponse.json({ error: "Failed to read this workspace's columns" }, { status: 503 });
+  }
   const result = buildOpportunityPatch(
     payload,
     {
@@ -102,6 +114,38 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
   }
   if (result.patch.investor_id === null && !before.contact_id && payload.contactId == null) {
     return NextResponse.json({ error: "A deal needs a contact or an investor." }, { status: 400 });
+  }
+
+  // Custom values go through the database-side merge so a concurrent edit to a
+  // different key on the same row is not erased by this one's snapshot.
+  if (result.patch.custom !== undefined && payload.custom) {
+    const { error: mergeError } = await supabase.rpc("network_opportunity_merge_custom", {
+      target_org: auth.ctx.orgId,
+      target_opportunity: id,
+      patch: Object.fromEntries(
+        Object.entries(result.patch.custom as Record<string, unknown>).filter(
+          ([key]) => key in (payload.custom as Record<string, unknown>),
+        ),
+      ),
+      remove_keys: result.customRemoved ?? [],
+    });
+    if (mergeError) {
+      console.error("[network/opportunities] custom merge", mergeError);
+      return NextResponse.json({ error: "Failed to update the deal" }, { status: 500 });
+    }
+    delete result.patch.custom;
+  }
+
+  if (Object.keys(result.patch).length === 0) {
+    // The custom merge above was the whole update.
+    const { data: merged } = await supabase
+      .from("network_opportunities")
+      .select(OPPORTUNITY_SELECT)
+      .eq("organization_id", auth.ctx.orgId)
+      .eq("id", id)
+      .maybeSingle();
+    const owners = await loadOwnerNames(supabase, auth.ctx.orgId);
+    return NextResponse.json({ opportunity: mapOpportunity(merged ?? {}, owners) });
   }
 
   const { data, error } = await supabase

@@ -116,7 +116,17 @@ export function ContactTable({ rows, fieldDefs, owners, onChanged }: Props) {
   const save = useCallback(
     async (person: ActiveNetworkPerson, column: Column, value: unknown) => {
       const key = cellKey(person.id, column.id);
-      const before = people;
+      // Only what THIS cell is about to change, so a failure here cannot undo a
+      // different cell's edit that landed while this request was in flight.
+      // Cells save independently, including two cells on the same row.
+      const previous =
+        column.kind === "stage"
+          ? person.stage
+          : column.kind === "owner"
+            ? { ownerId: person.ownerId, ownerName: person.ownerName }
+            : column.kind === "tags"
+              ? person.tags
+              : person.custom?.[column.def!.key];
 
       setPending((p) => new Set(p).add(key));
       setFailed((f) => {
@@ -165,9 +175,27 @@ export function ContactTable({ rows, fieldDefs, owners, onChanged }: Props) {
         if (!res.ok) throw new Error(json?.error ?? "Couldn't save that.");
         onChanged?.();
       } catch (err) {
-        // Revert only this cell's row, and say why on the cell itself — a grid
-        // that silently drops an edit is how data quietly goes wrong.
-        setPeople(before);
+        // Revert only this cell, and say why on the cell itself — a grid that
+        // silently drops an edit is how data quietly goes wrong.
+        setPeople((current) =>
+          current.map((p) => {
+            if (p.id !== person.id) return p;
+            switch (column.kind) {
+              case "stage":
+                return { ...p, stage: previous as ContactStage };
+              case "owner": {
+                const o = previous as { ownerId: string | null; ownerName: string | null };
+                return { ...p, ownerId: o.ownerId, ownerName: o.ownerName };
+              }
+              case "tags":
+                return { ...p, tags: previous as string[] };
+              case "custom":
+                return { ...p, custom: { ...p.custom, [column.def!.key]: previous } };
+              default:
+                return p;
+            }
+          }),
+        );
         setFailed((f) => {
           const next = new Map(f);
           next.set(key, err instanceof Error ? err.message : "Save failed");
@@ -181,7 +209,7 @@ export function ContactTable({ rows, fieldDefs, owners, onChanged }: Props) {
         });
       }
     },
-    [people, owners, onChanged],
+    [owners, onChanged],
   );
 
   if (people.length === 0) {

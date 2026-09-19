@@ -145,11 +145,24 @@ export function coerceFieldValue(def: FieldDef, raw: unknown): CoerceResult {
     }
 
     case "date": {
-      const ms = Date.parse(String(raw));
+      const text = String(raw).trim();
+      const ms = Date.parse(text);
       if (Number.isNaN(ms)) return { ok: false, error: `${def.label} must be a valid date.` };
+      const day = new Date(ms).toISOString().slice(0, 10);
+
+      // Date.parse ROLLS OVER an impossible calendar date rather than refusing
+      // it: "2026-02-30" parses happily and comes back as 2026-03-02. Storing
+      // that silently changes what someone typed, so a plain YYYY-MM-DD input
+      // has to round-trip to itself to be accepted. This also catches
+      // "2025-02-29" in a non-leap year.
+      const plain = /^(\d{4})-(\d{2})-(\d{2})$/.exec(text);
+      if (plain && day !== text) {
+        return { ok: false, error: `${def.label} is not a real date.` };
+      }
+
       // Stored as a plain day. A committee date is a date, not an instant, and
       // keeping a timezone on it makes it drift across a date line.
-      return { ok: true, value: new Date(ms).toISOString().slice(0, 10) };
+      return { ok: true, value: day };
     }
 
     case "email": {
@@ -212,7 +225,17 @@ export interface CustomPatchResult {
   ok: boolean;
   /** The merged custom object to store. */
   custom: Record<string, unknown>;
+  /** Keys the patch cleared, so a caller doing a database-side merge knows
+   *  what to remove rather than inferring it from the merged object. */
+  removed: string[];
   errors: string[];
+}
+
+export interface CustomPatchOptions {
+  /** Creating a record rather than editing one. A required column has to be
+   *  supplied at creation, but must NOT be demanded again on an unrelated
+   *  partial update — the value is already on the row. */
+  creating?: boolean;
 }
 
 /**
@@ -227,9 +250,11 @@ export function applyCustomPatch(
   defs: FieldDef[],
   existing: Record<string, unknown>,
   patch: Record<string, unknown>,
+  options: CustomPatchOptions = {},
 ): CustomPatchResult {
   const byKey = new Map(defs.map((d) => [d.key, d]));
   const custom: Record<string, unknown> = { ...existing };
+  const removed: string[] = [];
   const errors: string[] = [];
 
   for (const [key, raw] of Object.entries(patch)) {
@@ -241,11 +266,26 @@ export function applyCustomPatch(
       errors.push(result.error);
       continue;
     }
-    if (result.value === null) delete custom[key];
-    else custom[key] = result.value;
+    if (result.value === null) {
+      delete custom[key];
+      removed.push(key);
+    } else {
+      custom[key] = result.value;
+    }
   }
 
-  return { ok: errors.length === 0, custom, errors };
+  // On creation every required column must end up with a value. Without this a
+  // client can simply omit a required key and the record is born incomplete,
+  // because coerceFieldValue only sees the keys it was handed.
+  if (options.creating) {
+    for (const def of defs) {
+      if (def.required && (custom[def.key] === undefined || custom[def.key] === null)) {
+        errors.push(`${def.label} is required.`);
+      }
+    }
+  }
+
+  return { ok: errors.length === 0, custom, removed, errors };
 }
 
 /** Map a network_field_defs row onto the client shape. */

@@ -197,20 +197,23 @@ export function resolveStageTransition(
 }
 
 export interface OpportunityPatchInput {
-  name?: string;
+  /** Every field here arrives as parsed JSON from a request body, so the types
+   *  are a description of what is EXPECTED, not a guarantee. The builder
+   *  re-checks each one. */
+  name?: unknown;
   stage?: unknown;
   status?: unknown;
   contactId?: string | null;
   investorId?: string | null;
   fundId?: string | null;
   targetAmount?: unknown;
-  currency?: string;
+  currency?: unknown;
   probability?: unknown;
-  expectedClose?: string | null;
-  lostReason?: string | null;
+  expectedClose?: unknown;
+  lostReason?: unknown;
   ownerId?: string | null;
-  source?: string | null;
-  notes?: string | null;
+  source?: unknown;
+  notes?: unknown;
   tags?: unknown;
   custom?: Record<string, unknown>;
 }
@@ -221,6 +224,9 @@ export interface BuildPatchResult {
   errors: string[];
   /** Set when the stage changed, for the timeline entry. */
   stageChange: { from: OpportunityStage; to: OpportunityStage } | null;
+  /** Custom keys the patch cleared, so the database-side merge knows what to
+   *  remove rather than inferring it from the merged object. */
+  customRemoved: string[];
 }
 
 function parseAmount(raw: unknown): number | null | undefined {
@@ -254,11 +260,16 @@ export function buildOpportunityPatch(
   const patch: Record<string, unknown> = {};
   const errors: string[] = [];
   let stageChange: BuildPatchResult["stageChange"] = null;
+  let customRemoved: string[] = [];
 
   if (input.name !== undefined) {
-    const name = String(input.name).trim();
-    if (!name) errors.push("A deal needs a name.");
-    else patch.name = name.slice(0, 200);
+    if (typeof input.name !== "string") {
+      errors.push("A deal needs a name.");
+    } else {
+      const name = input.name.trim();
+      if (!name) errors.push("A deal needs a name.");
+      else patch.name = name.slice(0, 200);
+    }
   }
 
   if (input.stage !== undefined) {
@@ -304,6 +315,8 @@ export function buildOpportunityPatch(
   if (input.expectedClose !== undefined) {
     if (input.expectedClose === null) {
       patch.expected_close = null;
+    } else if (typeof input.expectedClose !== "string") {
+      errors.push("Expected close must be a valid date.");
     } else {
       const ms = Date.parse(input.expectedClose);
       if (Number.isNaN(ms)) errors.push("Expected close must be a valid date.");
@@ -312,7 +325,7 @@ export function buildOpportunityPatch(
   }
 
   if (input.currency !== undefined) {
-    const code = String(input.currency).trim().toUpperCase();
+    const code = typeof input.currency === "string" ? input.currency.trim().toUpperCase() : "";
     if (!/^[A-Z]{3}$/.test(code)) errors.push("Currency must be a 3-letter code.");
     else patch.currency = code;
   }
@@ -321,9 +334,31 @@ export function buildOpportunityPatch(
   if (input.investorId !== undefined) patch.investor_id = input.investorId;
   if (input.fundId !== undefined) patch.fund_id = input.fundId;
   if (input.ownerId !== undefined) patch.owner_id = input.ownerId;
-  if (input.source !== undefined) patch.source = input.source?.slice(0, 120) ?? null;
-  if (input.notes !== undefined) patch.notes = input.notes?.slice(0, 20_000) ?? null;
-  if (input.lostReason !== undefined) patch.lost_reason = input.lostReason?.slice(0, 500) ?? null;
+
+  // The declared types say string | null, but this input is parsed JSON from a
+  // request body — a number here would make `raw?.slice(...)` throw a
+  // TypeError and turn a 400 into an unhandled 500.
+  const text = (raw: unknown, label: string, max: number): string | null | undefined => {
+    if (raw === null) return null;
+    if (typeof raw !== "string") {
+      errors.push(`${label} must be text.`);
+      return undefined;
+    }
+    return raw.slice(0, max);
+  };
+
+  if (input.source !== undefined) {
+    const value = text(input.source, "Source", 120);
+    if (value !== undefined) patch.source = value;
+  }
+  if (input.notes !== undefined) {
+    const value = text(input.notes, "Notes", 20_000);
+    if (value !== undefined) patch.notes = value;
+  }
+  if (input.lostReason !== undefined) {
+    const value = text(input.lostReason, "Lost reason", 500);
+    if (value !== undefined) patch.lost_reason = value;
+  }
 
   if (input.tags !== undefined) {
     if (!Array.isArray(input.tags)) {
@@ -340,10 +375,14 @@ export function buildOpportunityPatch(
     }
   }
 
-  if (input.custom !== undefined) {
+  if (input.custom !== undefined && input.custom !== null && typeof input.custom === "object") {
     const merged = applyCustomPatch(fieldDefs, current.custom ?? {}, input.custom);
-    if (!merged.ok) errors.push(...merged.errors);
-    else patch.custom = merged.custom;
+    if (!merged.ok) {
+      errors.push(...merged.errors);
+    } else {
+      patch.custom = merged.custom;
+      customRemoved = merged.removed;
+    }
   }
 
   // Never let the counterparty constraint be violated from the app: dropping
@@ -354,7 +393,7 @@ export function buildOpportunityPatch(
     errors.push("A deal needs a contact or an investor.");
   }
 
-  return { ok: errors.length === 0, patch, errors, stageChange };
+  return { ok: errors.length === 0, patch, errors, stageChange, customRemoved };
 }
 
 /** Principal id → display name, for owners. */
@@ -380,4 +419,79 @@ export async function loadOwnerNames(
     /* names are cosmetic */
   }
   return map;
+}
+
+/**
+ * Confirm every relationship id a request supplied belongs to this org.
+ *
+ * The foreign keys on network_opportunities point at single columns, so nothing
+ * in the schema requires contact_id, investor_id, fund_id or owner_id to be in
+ * the SAME organization as the deal. Without this check a member could attach a
+ * deal to another tenant's fund or investor by id — the row would be accepted,
+ * and the pipeline would silently reference something across a tenant boundary.
+ *
+ * Returns an error message for the first id that does not check out.
+ */
+export async function validateOpportunityRefs(
+  client: SupabaseClient,
+  orgId: string,
+  refs: {
+    contactId?: string | null;
+    investorId?: string | null;
+    fundId?: string | null;
+    ownerId?: string | null;
+  },
+): Promise<string | null> {
+  const checks: { table: string; column: string; id: string; error: string }[] = [];
+
+  if (refs.contactId) {
+    checks.push({
+      table: "network_contacts",
+      column: "organization_id",
+      id: refs.contactId,
+      error: "Contact not found",
+    });
+  }
+  if (refs.investorId) {
+    checks.push({
+      table: "investors",
+      column: "organization_id",
+      id: refs.investorId,
+      error: "Investor not found",
+    });
+  }
+  if (refs.fundId) {
+    checks.push({
+      table: "funds",
+      column: "organization_id",
+      id: refs.fundId,
+      error: "Fund not found",
+    });
+  }
+
+  for (const check of checks) {
+    const { data, error } = await client
+      .from(check.table)
+      .select("id")
+      .eq(check.column, orgId)
+      .eq("id", check.id)
+      .maybeSingle();
+    if (error) throw error;
+    if (!data) return check.error;
+  }
+
+  // The owner lives in organization_members rather than a table keyed by
+  // organization_id alone.
+  if (refs.ownerId) {
+    const { data, error } = await client
+      .from("organization_members")
+      .select("principal_id")
+      .eq("organization_id", orgId)
+      .eq("principal_id", refs.ownerId)
+      .maybeSingle();
+    if (error) throw error;
+    if (!data) return "That owner is not a member of this organization.";
+  }
+
+  return null;
 }

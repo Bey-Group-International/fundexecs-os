@@ -13,13 +13,16 @@ import { checkRateLimit, rateLimitHeaders } from "@/lib/rate-limit";
 import { isContactStage } from "@/lib/network-stages";
 import { loadContactRecord, loadPrincipalNames, mapContactRecord } from "@/lib/network-contact";
 import { recordNetworkAudit, type AuditAction } from "@/lib/network-audit";
-import { loadFieldDefs } from "@/lib/network-field-defs.server";
+import { loadFieldDefsStrict } from "@/lib/network-field-defs.server";
 import { applyCustomPatch } from "@/lib/network-fields";
 import { invalidateRoster } from "@/lib/network-roster";
 
 export const dynamic = "force-dynamic";
 
 type Ctx = { params: Promise<{ id: string }> };
+
+const CONTACT_RETURN_COLUMNS =
+  "id, first_name, last_name, full_name, title, company, company_domain, email, phone, linkedin_url, avatar_url, location, capital_role, relationship_type, stage, visibility, relationship_owner, strength_score, strength_label, relevance_score, tags, notes, source, connected_on, created_at, last_activity_at, next_step_at, verified, confidence, communication_status, consent_basis, consent_at, compliance_flags, archived_at, merged_into_id, custom";
 
 const MAX_NOTES = 20_000;
 const MAX_TAGS = 25;
@@ -149,19 +152,70 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
   if (payload.title !== undefined) patch.title = payload.title?.slice(0, 200) ?? null;
   if (payload.company !== undefined) patch.company = payload.company?.slice(0, 200) ?? null;
 
-  if (payload.custom !== undefined) {
-    // Values are type-checked here because a jsonb column cannot do it: an
-    // unchecked write is how "AUM" ends up holding 2000000 on one row and
-    // "$2m" on the next, and stops being sortable.
-    const defs = await loadFieldDefs(supabase, auth.ctx.orgId, "contact");
-    const merged = applyCustomPatch(defs, (before.custom as Record<string, unknown>) ?? {}, payload.custom);
+  // Custom values are type-checked here because a jsonb column cannot do it: an
+  // unchecked write is how "AUM" ends up holding 2000000 on one row and "$2m"
+  // on the next, and stops being sortable.
+  if (payload.custom !== undefined && payload.custom !== null && typeof payload.custom === "object") {
+    // Strict: a failed definitions read must not read as "this org has no
+    // custom columns", which would silently discard every value sent and still
+    // answer 200.
+    let defs;
+    try {
+      defs = await loadFieldDefsStrict(supabase, auth.ctx.orgId, "contact");
+    } catch (err) {
+      console.error("[network/contact] field defs", err);
+      return NextResponse.json(
+        { error: "Failed to read this workspace's columns" },
+        { status: 503 },
+      );
+    }
+
+    const merged = applyCustomPatch(
+      defs,
+      (before.custom as Record<string, unknown>) ?? {},
+      payload.custom,
+    );
     if (!merged.ok) {
       return NextResponse.json({ error: merged.errors.join(" ") }, { status: 400 });
     }
-    patch.custom = merged.custom;
+
+    // Applied through a database-side merge rather than written as a whole
+    // object: the table view exists so somebody can edit many cells quickly,
+    // and two cells on the SAME row save independently. A read-modify-write
+    // would let the slower one erase the faster one's key.
+    const sent = payload.custom as Record<string, unknown>;
+    const { error: mergeError } = await supabase.rpc("network_contact_merge_custom", {
+      target_org: auth.ctx.orgId,
+      target_contact: id,
+      patch: Object.fromEntries(
+        Object.entries(merged.custom).filter(([key]) => key in sent),
+      ),
+      remove_keys: merged.removed,
+    });
+    if (mergeError) {
+      console.error("[network/contact] custom merge", mergeError);
+      return NextResponse.json({ error: "Failed to update contact" }, { status: 500 });
+    }
   }
 
   if (Object.keys(patch).length === 0) {
+    // The custom merge above may have been the entire update.
+    if (payload.custom !== undefined) {
+      const names = await loadPrincipalNames(supabase, auth.ctx.orgId);
+      const { data: current } = await supabase
+        .from("network_contacts")
+        .select(CONTACT_RETURN_COLUMNS)
+        .eq("organization_id", auth.ctx.orgId)
+        .eq("id", id)
+        .maybeSingle();
+      if (!current) return NextResponse.json({ error: "Contact not found" }, { status: 404 });
+      return NextResponse.json({
+        contact: mapContactRecord(
+          current as Record<string, unknown>,
+          names.get(String((current as Record<string, unknown>).relationship_owner)) ?? null,
+        ),
+      });
+    }
     return NextResponse.json({ error: "Nothing to update." }, { status: 400 });
   }
 
@@ -172,9 +226,7 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
     .update(patch)
     .eq("organization_id", auth.ctx.orgId)
     .eq("id", id)
-    .select(
-      "id, first_name, last_name, full_name, title, company, company_domain, email, phone, linkedin_url, avatar_url, location, capital_role, relationship_type, stage, visibility, relationship_owner, strength_score, strength_label, relevance_score, tags, notes, source, connected_on, created_at, last_activity_at, next_step_at, verified, confidence, communication_status, consent_basis, consent_at, compliance_flags, archived_at, merged_into_id, custom",
-    )
+    .select(CONTACT_RETURN_COLUMNS)
     .single();
 
   if (error || !updated) {

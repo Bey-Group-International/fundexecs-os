@@ -216,11 +216,16 @@ export async function PATCH(req: NextRequest) {
     .eq("organization_id", auth.ctx.orgId)
     .eq("id", payload.id)
     .select("id, entity, field_key, label, field_type, options, help_text, is_required, position")
-    .single();
+    .maybeSingle();
 
-  if (error || !data) {
+  // .single() raises PGRST116 for zero rows, which would turn an unknown id —
+  // or one belonging to another org — into a 500.
+  if (error) {
     console.error("[network/fields] update", error);
     return NextResponse.json({ error: "Failed to update the column" }, { status: 500 });
+  }
+  if (!data) {
+    return NextResponse.json({ error: "Column not found" }, { status: 404 });
   }
 
   await recordNetworkAudit(supabase, {
@@ -260,11 +265,14 @@ export async function DELETE(req: NextRequest) {
     .eq("organization_id", auth.ctx.orgId)
     .eq("id", id)
     .select("id, label")
-    .single();
+    .maybeSingle();
 
-  if (error || !data) {
+  if (error) {
     console.error("[network/fields] archive", error);
     return NextResponse.json({ error: "Failed to remove the column" }, { status: 500 });
+  }
+  if (!data) {
+    return NextResponse.json({ error: "Column not found" }, { status: 404 });
   }
 
   await recordNetworkAudit(supabase, {

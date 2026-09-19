@@ -18,9 +18,10 @@ import {
   mapOpportunity,
   OPPORTUNITY_SELECT,
   STAGE_DEFAULT_PROBABILITY,
+  validateOpportunityRefs,
   type OpportunityStage,
 } from "@/lib/network-opportunities";
-import { loadFieldDefs } from "@/lib/network-field-defs.server";
+import { loadFieldDefsStrict } from "@/lib/network-field-defs.server";
 import { applyCustomPatch } from "@/lib/network-fields";
 import { recordNetworkAudit } from "@/lib/network-audit";
 
@@ -154,22 +155,46 @@ export async function POST(req: NextRequest) {
     expectedClose = new Date(ms).toISOString().slice(0, 10);
   }
 
-  const supabase = (await createServerClient()) as any;
-
-  // The contact must be one the caller can see. RLS would refuse the insert
-  // anyway; reading first turns that into a clear 404.
-  if (payload.contactId) {
-    const { data: contact } = await supabase
-      .from("network_contacts")
-      .select("id")
-      .eq("organization_id", auth.ctx.orgId)
-      .eq("id", payload.contactId)
-      .maybeSingle();
-    if (!contact) return NextResponse.json({ error: "Contact not found" }, { status: 404 });
+  if (payload.currency !== undefined && payload.currency !== null &&
+      typeof payload.currency !== "string") {
+    return NextResponse.json({ error: "Currency must be a 3-letter code." }, { status: 400 });
   }
 
-  const defs = await loadFieldDefs(supabase, auth.ctx.orgId, "opportunity");
-  const merged = applyCustomPatch(defs, {}, payload.custom ?? {});
+  const supabase = (await createServerClient()) as any;
+
+  // Every relationship id the request supplied has to belong to this org. The
+  // foreign keys are single-column, so nothing in the schema would stop a deal
+  // pointing at another tenant's fund or investor.
+  let refError: string | null;
+  try {
+    refError = await validateOpportunityRefs(supabase, auth.ctx.orgId, {
+      contactId: payload.contactId,
+      investorId: payload.investorId,
+      fundId: payload.fundId,
+      ownerId: payload.ownerId,
+    });
+  } catch (err) {
+    console.error("[network/opportunities] ref check", err);
+    return NextResponse.json({ error: "Failed to create the deal" }, { status: 500 });
+  }
+  if (refError) {
+    return NextResponse.json(
+      { error: refError },
+      { status: refError.endsWith("not found") ? 404 : 400 },
+    );
+  }
+
+  // Strict: a failed definitions read must not look like "this org has no
+  // custom columns" and silently drop every value the request supplied.
+  let defs;
+  try {
+    defs = await loadFieldDefsStrict(supabase, auth.ctx.orgId, "opportunity");
+  } catch (err) {
+    console.error("[network/opportunities] field defs", err);
+    return NextResponse.json({ error: "Failed to read this workspace's columns" }, { status: 503 });
+  }
+
+  const merged = applyCustomPatch(defs, {}, payload.custom ?? {}, { creating: true });
   if (!merged.ok) {
     return NextResponse.json({ error: merged.errors.join(" ") }, { status: 400 });
   }

@@ -180,6 +180,49 @@ describe("buildOpportunityPatch", () => {
     expect(bad.ok).toBe(false);
   });
 
+  it("rejects non-string text instead of throwing on .slice", () => {
+    // These arrive as parsed JSON; a number here used to throw a TypeError and
+    // turn a 400 into an unhandled 500.
+    for (const field of ["source", "notes", "lostReason"] as const) {
+      const result = buildOpportunityPatch({ [field]: 123 }, current(), [], NOW);
+      expect(result.ok).toBe(false);
+    }
+    expect(() => buildOpportunityPatch({ name: 42 }, current(), [], NOW)).not.toThrow();
+    expect(buildOpportunityPatch({ name: 42 }, current(), [], NOW).ok).toBe(false);
+    expect(() => buildOpportunityPatch({ currency: 5 }, current(), [], NOW)).not.toThrow();
+    expect(buildOpportunityPatch({ currency: 5 }, current(), [], NOW).ok).toBe(false);
+    expect(buildOpportunityPatch({ expectedClose: 20261231 }, current(), [], NOW).ok).toBe(false);
+  });
+
+  it("still accepts null to clear a text field", () => {
+    const result = buildOpportunityPatch({ source: null, notes: null }, current(), [], NOW);
+    expect(result.ok).toBe(true);
+    expect(result.patch).toEqual({ source: null, notes: null });
+  });
+
+  it("reports cleared custom keys for the database-side merge", () => {
+    const defs: FieldDef[] = [
+      {
+        id: "f1",
+        entity: "opportunity",
+        key: "ticket",
+        label: "Ticket",
+        type: "currency",
+        options: [],
+        helpText: null,
+        required: false,
+        position: 0,
+      },
+    ];
+    const result = buildOpportunityPatch(
+      { custom: { ticket: null } },
+      current({ custom: { ticket: 5 } }),
+      defs,
+      NOW,
+    );
+    expect(result.customRemoved).toEqual(["ticket"]);
+  });
+
   it("de-duplicates and bounds tags", () => {
     const result = buildOpportunityPatch(
       { tags: ["lp", "lp", " priority ", ""] },

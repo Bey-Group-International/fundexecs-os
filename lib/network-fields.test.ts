@@ -84,6 +84,24 @@ describe("coerceFieldValue", () => {
     expect(coerceFieldValue(def({ type: "percent" }), -1).ok).toBe(false);
   });
 
+  it("refuses an impossible calendar date instead of rolling it over", () => {
+    // Date.parse("2026-02-30") succeeds and yields 2026-03-02, which would
+    // silently store a different day than the one someone typed.
+    expect(coerceFieldValue(def({ type: "date" }), "2026-02-30")).toEqual({
+      ok: false,
+      error: "AUM is not a real date.",
+    });
+    expect(coerceFieldValue(def({ type: "date" }), "2025-02-29").ok).toBe(false);
+    expect(coerceFieldValue(def({ type: "date" }), "2026-04-31").ok).toBe(false);
+  });
+
+  it("still accepts a real leap day", () => {
+    expect(coerceFieldValue(def({ type: "date" }), "2028-02-29")).toEqual({
+      ok: true,
+      value: "2028-02-29",
+    });
+  });
+
   it("stores a date as a plain day", () => {
     // A committee date is a day, not an instant — keeping a timezone on it
     // makes it drift across a date line.
@@ -181,6 +199,33 @@ describe("applyCustomPatch", () => {
     expect(result.ok).toBe(false);
     expect(result.custom.consultant).toBe("Mercer");
     expect(result.custom).not.toHaveProperty("aum");
+  });
+
+  it("reports which keys were cleared, for the database-side merge", () => {
+    const result = applyCustomPatch(defs, { aum: 100, consultant: "Mercer" }, { aum: null });
+    expect(result.removed).toEqual(["aum"]);
+  });
+
+  it("enforces required columns when creating, but not on a partial update", () => {
+    const withRequired = [
+      def({ key: "aum", label: "AUM", type: "currency", required: true }),
+      def({ id: "f2", key: "consultant", label: "Consultant", type: "text" }),
+    ];
+
+    // Creating with the required key omitted must fail rather than producing an
+    // incomplete record.
+    const creating = applyCustomPatch(withRequired, {}, { consultant: "Mercer" }, { creating: true });
+    expect(creating.ok).toBe(false);
+    expect(creating.errors).toContain("AUM is required.");
+
+    // Supplying it is fine.
+    expect(
+      applyCustomPatch(withRequired, {}, { aum: 100, consultant: "Mercer" }, { creating: true }).ok,
+    ).toBe(true);
+
+    // An unrelated later edit must NOT demand the value again — it is already
+    // on the row.
+    expect(applyCustomPatch(withRequired, { aum: 100 }, { consultant: "Aon" }).ok).toBe(true);
   });
 
   it("leaves the existing object untouched", () => {
