@@ -12,7 +12,7 @@
 // Column headers show count, total and WEIGHTED total. The weighted number is
 // the one worth reading: $40m of pipeline at 10% is not $40m.
 
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import {
   OPPORTUNITY_STAGES,
@@ -101,13 +101,6 @@ export function PipelineBoard({ initialOpportunities, initialSummary }: Props) {
   // paints the stale board, where an effect would show the old page for a frame
   // first.
   const [seed, setSeed] = useState(initialOpportunities);
-  // Advances on every re-seed. A drag started against one server snapshot must
-  // not write into a newer one: clearing `moves` below only discards the deltas
-  // that exist AT that moment, and a PATCH still in flight would re-add its
-  // delta afterwards — on top of a rollup that already counts the committed
-  // move. That is the same double-count the clear was meant to prevent, just
-  // arriving a few hundred milliseconds later.
-  const seedEpoch = useRef(0);
   if (seed !== initialOpportunities) {
     setSeed(initialOpportunities);
     setDeals(initialOpportunities);
@@ -115,8 +108,27 @@ export function PipelineBoard({ initialOpportunities, initialSummary }: Props) {
     // This rollup was computed after them, so keeping the deltas would count
     // every move a second time.
     setMoves(new Map());
-    seedEpoch.current += 1;
   }
+
+  // Which snapshot the board has actually COMMITTED to.
+  //
+  // A drag started against one server snapshot must not write into a newer
+  // one: clearing `moves` above only discards the deltas that exist at that
+  // moment, and a PATCH still in flight would re-add its delta afterwards, on
+  // top of a rollup that already counts the committed move.
+  //
+  // Recorded here rather than bumped in the block above, because that block
+  // runs during RENDER and React may discard or replay a render. A bump that
+  // leaked from work which never committed would make a FAILING patch believe
+  // the board had moved on and skip its rollback — leaving the optimistic
+  // stage on the card and a delta in the header for a move the server
+  // refused. A layout effect fires only after the render commits, and fires
+  // before any promise continuation can observe it, which a passive effect
+  // does not guarantee.
+  const committedSeed = useRef(initialOpportunities);
+  useLayoutEffect(() => {
+    committedSeed.current = seed;
+  }, [seed]);
 
   const byStage = useMemo(() => {
     const map = new Map<OpportunityStage, Opportunity[]>();
@@ -182,7 +194,7 @@ export function PipelineBoard({ initialOpportunities, initialSummary }: Props) {
         probability: deal.probability,
       };
 
-      const epochAtStart = seedEpoch.current;
+      const seedAtStart = committedSeed.current;
 
       setBusy((b) => new Set(b).add(dealId));
       // Optimistic: the card lands where it was dropped immediately, and the
@@ -214,7 +226,7 @@ export function PipelineBoard({ initialOpportunities, initialSummary }: Props) {
           | { opportunity?: Opportunity; error?: string }
           | null;
         if (!res.ok || !body?.opportunity) throw new Error(body?.error ?? "Move failed");
-        if (seedEpoch.current !== epochAtStart) {
+        if (committedSeed.current !== seedAtStart) {
           // The server re-rendered while this was in flight. Its page and its
           // rollup already include this move, so both the card and the delta
           // below would be applied twice. Leave the fresh snapshot alone.
@@ -242,7 +254,7 @@ export function PipelineBoard({ initialOpportunities, initialSummary }: Props) {
         });
         setError(null);
       } catch (err) {
-        if (seedEpoch.current !== epochAtStart) {
+        if (committedSeed.current !== seedAtStart) {
           // A newer snapshot already shows the deal where the server has it —
           // un-moved, since the PATCH failed. Rolling back would restore a
           // delta measured against a rollup that no longer exists.
