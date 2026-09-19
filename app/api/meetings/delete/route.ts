@@ -26,12 +26,20 @@ import { createServerClient, createServiceClient, hasSupabaseServiceEnv } from "
 import { removeMeetingRecordings } from "@/lib/meetings/recording-sweep.server";
 
 /**
- * Most meetings one "clear all" will strip recordings from.
+ * Meeting ids read per page when enumerating what a "clear all" will delete.
  *
- * Only a bound on the work done inside one request; anything past it is taken
- * by the orphan pass of the hourly sweep, which exists for exactly this.
+ * Paged to exhaustion rather than capped, because the delete itself is not
+ * capped: reading one page and deleting everything strands the recordings of
+ * every meeting past it. The page size is a bound on a query, not on how many
+ * meetings are read.
  */
-const MAX_RECORDING_CLEANUP = 50;
+const CLEANUP_PAGE = 500;
+
+/**
+ * Pages one enumeration may take before it gives up and leaves the remainder
+ * to the sweep. Twenty thousand meetings for a single host is not a host.
+ */
+const MAX_CLEANUP_PAGES = 40;
 
 export async function DELETE(req: NextRequest) {
   // Scope every delete to the caller's ACTIVE org. Scoping by host_id alone let a
@@ -64,12 +72,20 @@ export async function DELETE(req: NextRequest) {
       // to say which meetings these were. This is the whole reason the objects
       // had to be orphaned rather than deleted: the cascade destroys the
       // evidence of what to clean up.
-      const { data: doomed } = await supabase
-        .from("live_meetings")
-        .select("id")
-        .eq("organization_id", auth.ctx.orgId)
-        .eq("host_id", auth.ctx.userId)
-        .limit(MAX_RECORDING_CLEANUP);
+      let doomed: string[];
+      try {
+        doomed = await hostMeetingIds(supabase, auth.ctx.orgId, auth.ctx.userId);
+      } catch (err) {
+        // Fails closed. Deleting first and discovering afterwards that the list
+        // could not be read is the exact shape this route exists to stop: rows
+        // gone, objects stranded, and a 200 saying it was done. Nothing has
+        // been destroyed yet, so the honest answer is to refuse and be retried.
+        console.error("[meetings/delete] could not enumerate meetings to clear", err);
+        return NextResponse.json(
+          { error: "Could not read the meetings to delete" },
+          { status: 500 },
+        );
+      }
 
       const { error } = await supabase
         .from("live_meetings")
@@ -78,7 +94,7 @@ export async function DELETE(req: NextRequest) {
         .eq("host_id", auth.ctx.userId);
       if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-      await dropRecordings(((doomed ?? []) as { id: string }[]).map((m) => m.id));
+      await dropRecordings(doomed);
     }
     return NextResponse.json({ ok: true });
   }
@@ -127,6 +143,47 @@ export async function DELETE(req: NextRequest) {
  * bucket's read and insert policies, both of which resolve through
  * `live_meetings` — a table this function is called after deleting from.
  */
+/**
+ * Every meeting this host owns in this org, paged.
+ *
+ * Ordered by id so the pages are stable — an unordered paged read can return
+ * the same row twice and miss another, and a missed row here is a recording
+ * nothing deletes. Throws on a read error: the caller must not delete rows it
+ * could not enumerate.
+ *
+ * Exceeding the page cap is NOT an error. That leaves a remainder rather than
+ * a blank, and the sweep's orphan pass scans the whole bucket, so what is left
+ * is found within the hour.
+ */
+async function hostMeetingIds(
+  supabase: { from: (table: string) => any },
+  orgId: string,
+  userId: string,
+): Promise<string[]> {
+  const ids: string[] = [];
+
+  for (let page = 0; page < MAX_CLEANUP_PAGES; page++) {
+    const from = page * CLEANUP_PAGE;
+    const { data, error } = await supabase
+      .from("live_meetings")
+      .select("id")
+      .eq("organization_id", orgId)
+      .eq("host_id", userId)
+      .order("id", { ascending: true })
+      .range(from, from + CLEANUP_PAGE - 1);
+    if (error) throw new Error(error.message);
+
+    const rows = (data ?? []) as { id: string }[];
+    for (const row of rows) ids.push(row.id);
+    if (rows.length < CLEANUP_PAGE) return ids;
+  }
+
+  console.warn(
+    `[meetings/delete] stopped enumerating after ${MAX_CLEANUP_PAGES} pages; the sweep takes the rest`,
+  );
+  return ids;
+}
+
 async function dropRecordings(meetingIds: readonly string[]): Promise<void> {
   if (meetingIds.length === 0 || !hasSupabaseServiceEnv()) return;
   const service = createServiceClient();

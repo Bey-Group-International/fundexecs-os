@@ -307,6 +307,7 @@ export async function GET(request: Request) {
         meetingRemindersFailed: reminders.failed,
         recordingsExpired: recordings.expired,
         recordingsClosedOut: recordings.abandoned,
+        recordingsOrphaned: recordings.orphaned,
         recordingObjectsDeleted: recordings.objectsDeleted,
         subscriptionsDue: subscriptions.due,
         subscriptionsRenewed: subscriptions.renewed,

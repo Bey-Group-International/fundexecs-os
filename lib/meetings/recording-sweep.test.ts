@@ -21,6 +21,16 @@ interface Harness {
   deletes: { table: string; id: unknown }[];
   removed: string[][];
   removeFails?: boolean;
+  /** The bucket root refuses to list. */
+  listFails?: boolean;
+  /**
+   * Meetings that still exist, answered per `in (...)` batch.
+   *
+   * The queue cannot serve the orphan pass once it asks in batches: a second
+   * batch would get an empty answer and read every meeting in it as gone. This
+   * answers whatever is asked, which is what a database does.
+   */
+  livingIds?: Set<string>;
   /**
    * The bucket, as object names under each prefix. "" is the root, whose
    * entries are meeting folders — which is what the orphan pass reads.
@@ -48,13 +58,21 @@ function client(h: Harness) {
       lte: () => chain,
       order: () => chain,
       eq: (col: string, val: unknown) => { filters[col] = val; return chain; },
-      in: () => chain,
+      in: (col: string, vals: unknown[]) => { filters[col] = vals; return chain; },
       update: (p: Row) => { mode = "update"; patch = p; return chain; },
       delete: () => { mode = "delete"; return chain; },
       limit: () => Promise.resolve({ data: nextRows(h, table) }),
       then: (resolve: (v: { data: Row[] }) => unknown) => {
         if (mode === "update") h.updates.push({ table, patch, id: filters.id });
         if (mode === "delete") h.deletes.push({ table, id: filters.recording_id ?? filters.id });
+        // Only what was asked about comes back, so a batched existence check
+        // is answered honestly batch by batch rather than from a queue that
+        // runs dry and reports every later meeting as gone.
+        if (mode === "select" && table === "live_meetings" && h.livingIds && Array.isArray(filters.id)) {
+          const asked = filters.id as string[];
+          const data = asked.filter((id) => h.livingIds!.has(id)).map((id) => ({ id }));
+          return Promise.resolve(resolve({ data }));
+        }
         const data = mode === "select" ? nextRows(h, table) : [];
         return Promise.resolve(resolve({ data }));
       },
@@ -66,10 +84,15 @@ function client(h: Harness) {
     from: (table: string) => builder(table),
     storage: {
       from: () => ({
-        list: async (prefix: string, opts?: { limit?: number }) => ({
-          data: (h.objects[prefix] ?? []).slice(0, opts?.limit ?? 100).map((name) => ({ name })),
-          error: null,
-        }),
+        list: async (prefix: string, opts?: { limit?: number; offset?: number }) => {
+          if (h.listFails && prefix === "") return { data: null, error: { message: "list failed" } };
+          // Offset is honoured, because the orphan pass pages the root with it
+          // and a stub that ignored it would pass whether or not the paging
+          // advanced — which is the whole defect being pinned below.
+          const from = opts?.offset ?? 0;
+          const names = (h.objects[prefix] ?? []).slice(from, from + (opts?.limit ?? 100));
+          return { data: names.map((name) => ({ name })), error: null };
+        },
         remove: async (paths: string[]) => {
           if (h.removeFails) return { error: { message: "remove failed" } };
           h.removed.push(paths);
@@ -93,9 +116,14 @@ function harness(opts: {
   chunks?: Row[];
   /** Meetings that still exist, for the orphan pass. */
   living?: Row[];
+  /** The same, answered per batch. Use when more than one batch is asked. */
+  livingIds?: Set<string>;
+  listFails?: boolean;
   objects?: Record<string, string[]>;
 } = {}): Harness {
   return {
+    livingIds: opts.livingIds,
+    listFails: opts.listFails,
     queues: {
       live_meeting_recordings: [opts.expired ?? [], opts.stale ?? []],
       live_meeting_recording_chunks: [opts.chunks ?? []],
@@ -398,4 +426,45 @@ describe("orphaned recordings", () => {
       expect(stats.errors).toBe(0);
     });
   });
+
+  // The defect this pass is most likely to develop, and the one it would never
+  // report: living meetings' folders are never removed, so a fixed first-page
+  // window sits on them forever and every orphan after it is invisible. Nothing
+  // else in the product can find these objects, so "next hour" would be never.
+  it("finds an orphan past the first page of the bucket root", () => {
+    const living = Array.from({ length: 1200 }, (_, i) => uuidAt(i));
+    const orphan = uuidAt(9999);
+    const objects: Record<string, string[]> = {
+      // The orphan sorts last, exactly where a first-page-only scan cannot see
+      // it — and where it stays, because the folders ahead of it never leave.
+      "": [...living, orphan],
+      [orphan]: ["r1"],
+      [`${orphan}/r1`]: parts(2),
+    };
+    const h = harness({ livingIds: new Set(living), objects });
+    return runRecordingSweep(client(h), NOW).then((stats) => {
+      expect(stats.orphaned).toBe(1);
+      expect(stats.objectsDeleted).toBe(2);
+      expect(h.objects[`${orphan}/r1`]).toEqual([]);
+      expect(stats.errors).toBe(0);
+    });
+  });
+
+  // A pass that cannot read the bucket has found nothing, which looks exactly
+  // like a clean run. The difference has to reach the caller, because this is
+  // the only pass that can see these objects at all.
+  it("counts a bucket it could not read, instead of reporting a clean run", () => {
+    const h = harness({ living: [], listFails: true, objects: { "": [M1] } });
+    return runRecordingSweep(client(h), NOW).then((stats) => {
+      expect(stats.errors).toBe(1);
+      expect(stats.orphaned).toBe(0);
+      expect(h.removed).toEqual([]);
+    });
+  });
 });
+
+/** A distinct, well-formed meeting id for the nth folder. */
+function uuidAt(n: number): string {
+  const tail = String(n).padStart(12, "0");
+  return `00000000-0000-4000-8000-${tail}`;
+}
