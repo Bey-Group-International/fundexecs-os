@@ -25,6 +25,7 @@ export interface FundOption {
   currency: string;
 }
 
+/** This organization's funds, newest vintage first, for the deal form's picker. */
 export async function GET() {
   const auth = await requireOrgContext();
   if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: auth.status });

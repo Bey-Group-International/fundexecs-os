@@ -21,6 +21,8 @@ interface Props {
   onOpenCalendar?: () => void;
 }
 
+/** Money in a compact form (£1.2M), falling back to a plain figure rather than
+ *  blanking the cell when the currency code is one Intl does not know. */
 function compactMoney(n: number, currency: string): string {
   try {
     return new Intl.NumberFormat(undefined, {
@@ -34,6 +36,7 @@ function compactMoney(n: number, currency: string): string {
   }
 }
 
+/** One number with its label, rendered as a button when there is somewhere to go. */
 function Tile({
   label,
   value,
@@ -71,6 +74,13 @@ function Tile({
   );
 }
 
+/**
+ * The strip of numbers the workspace opens with.
+ *
+ * Renders nothing but an "unavailable" notice when the read fails: falling back
+ * to zeroes would turn "we could not check" into "nothing is overdue", which is
+ * the one error here that makes somebody stop worrying.
+ */
 export function WorkspaceSummary({ onOpenTasks, onOpenCalendar }: Props) {
   const [summary, setSummary] = useState<Summary | null>(null);
   const [failed, setFailed] = useState(false);

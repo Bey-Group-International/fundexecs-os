@@ -14,6 +14,7 @@ import { mapWorkspaceSummary } from "@/lib/network-workspace";
 
 export const dynamic = "force-dynamic";
 
+/** The workspace's opening numbers for the caller's organization, in one round trip. */
 export async function GET() {
   const auth = await requireOrgContext();
   if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: auth.status });

@@ -25,6 +25,7 @@ import {
 
 const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
+/** A `YYYY-MM` as a readable month and year, read in UTC so it names the right one. */
 function monthLabel(month: string): string {
   const ms = Date.parse(`${month}-01T00:00:00Z`);
   if (Number.isNaN(ms)) return month;
@@ -35,6 +36,8 @@ function monthLabel(month: string): string {
   });
 }
 
+/** Money in a compact form (£1.2M), falling back to a plain figure rather than
+ *  blanking the cell when the currency code is one Intl does not know. */
 function compactMoney(n: number, currency: string): string {
   try {
     return new Intl.NumberFormat(undefined, {
@@ -49,6 +52,13 @@ function compactMoney(n: number, currency: string): string {
   }
 }
 
+/**
+ * The month grid: tasks and expected closes on the same days.
+ *
+ * Dragging an item — or editing the date input beside it, for anyone not using
+ * a pointer — moves it, optimistically, restoring that one item on failure so a
+ * concurrent move is not undone with it.
+ */
 export function NetworkCalendar() {
   const [month, setMonth] = useState(() => monthOf());
   const [entries, setEntries] = useState<ScheduleEntry[]>([]);

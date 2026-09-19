@@ -139,6 +139,7 @@ export interface CalendarDay {
   isWeekend: boolean;
 }
 
+/** Split a `YYYY-MM` into its parts, or null if it is not one. */
 function parseMonth(month: string): { year: number; month: number } | null {
   const m = /^(\d{4})-(\d{2})$/.exec(month);
   if (!m) return null;
@@ -269,6 +270,14 @@ const EMPTY_SUMMARY: WorkspaceSummary = {
 };
 
 /** Map the summary RPC's row onto the client shape. */
+/**
+ * Normalize one `network_workspace_summary` row into the shape the tiles read.
+ *
+ * Counts coerce to a finite number and money is grouped per currency exactly as
+ * the database returned it. A missing row yields zeroes only because the caller
+ * has already decided the read succeeded — a FAILED read must not reach here,
+ * since "nothing overdue" and "we could not check" are different facts.
+ */
 export function mapWorkspaceSummary(row: Record<string, unknown> | null | undefined): WorkspaceSummary {
   if (!row) return { ...EMPTY_SUMMARY };
   const num = (v: unknown) => {

@@ -19,6 +19,14 @@ const DAY_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 /** Widest window we will answer, so one request cannot ask for a decade. */
 const MAX_DAYS = 400;
 
+/**
+ * Tasks and expected closes for one window.
+ *
+ * Takes either `?month=YYYY-MM` (answered over the GRID's range, not the
+ * month's) or an explicit `?start=&end=` pair. Every way of naming a window
+ * that cannot be honoured is a 400 rather than a substituted default: a
+ * well-formed list of the wrong days is the worst answer this route can give.
+ */
 export async function GET(req: NextRequest) {
   const auth = await requireOrgContext();
   if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: auth.status });

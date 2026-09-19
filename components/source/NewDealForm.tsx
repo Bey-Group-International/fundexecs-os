@@ -42,6 +42,13 @@ const OPENING_STAGES = OPPORTUNITY_STAGES.filter(
   (s) => s !== "committed" && s !== "passed",
 );
 
+/**
+ * The pipeline's create form — an allocation, its counterparty and its fund.
+ *
+ * The roster mixes sources, so the chosen id is routed to `contactId` or
+ * `investorId` by the row's kind; sending an `investors.id` as a contact is an
+ * opaque foreign-key error rather than a visible refusal.
+ */
 export function NewDealForm({ owners = [], onCreated, onCancel }: Props) {
   const [name, setName] = useState("");
   const [counterparty, setCounterparty] = useState<CounterpartyOption | null>(null);

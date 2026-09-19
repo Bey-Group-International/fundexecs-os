@@ -41,6 +41,7 @@ const PRIORITY_DOT: Record<string, string> = {
   low: "bg-fg-muted/25",
 };
 
+/** A due date as a short weekday-and-day label, or "No date" if there isn't one. */
 function dueLabel(dueAt: string | null): string {
   if (!dueAt) return "No date";
   const ms = Date.parse(dueAt);
@@ -52,6 +53,13 @@ function dueLabel(dueAt: string | null): string {
   });
 }
 
+/**
+ * Every open follow-up across the book, grouped by urgency.
+ *
+ * Fetches `/api/network/tasks` for the selected assignee filter and completes
+ * inline. A failed load reports itself rather than rendering as an empty queue,
+ * because only one of those two means somebody is done for the day.
+ */
 export function TaskQueue({ owners = [] }: Props) {
   const [tasks, setTasks] = useState<QueueTask[]>([]);
   const [assignee, setAssignee] = useState<AssigneeFilter>("me");
