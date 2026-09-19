@@ -10,6 +10,13 @@ import {
   parseRosterQuery,
   DEFAULT_PAGE_SIZE,
 } from "@/lib/network-roster";
+import { loadAllFieldDefs } from "@/lib/network-field-defs.server";
+import {
+  loadOwnerNames,
+  mapOpportunity,
+  OPPORTUNITY_SELECT,
+  type OpportunityStage,
+} from "@/lib/network-opportunities";
 
 export const metadata: Metadata = {
   title: "Network · FundExecs OS",
@@ -39,7 +46,18 @@ export default async function NetworkPage() {
   const looseDb = supabase as any;
   const orgId = ctx.orgId;
 
-  const [{ people, pulse }, activityEvents, liveCounts, circlesRes, principalRes, membersRes] = await Promise.all([
+  const [
+    { people, pulse },
+    activityEvents,
+    liveCounts,
+    circlesRes,
+    principalRes,
+    membersRes,
+    fieldDefs,
+    opportunitiesRes,
+    pipelineSummaryRes,
+    ownerNames,
+  ] = await Promise.all([
     getRoster(supabase, orgId),
     loadNetworkActivity(supabase, orgId, 40),
     loadNetworkLiveCounts(supabase, orgId),
@@ -61,9 +79,45 @@ export default async function NetworkPage() {
       .select("principal_id, principals(full_name)")
       .eq("organization_id", orgId)
       .limit(200),
+    // The org's own columns, for the table view.
+    loadAllFieldDefs(looseDb, orgId),
+    // Live pipeline for the board, plus the rollup it puts in its headers.
+    looseDb
+      .from("network_opportunities")
+      .select(OPPORTUNITY_SELECT)
+      .eq("organization_id", orgId)
+      .eq("status", "open")
+      .order("expected_close", { ascending: true, nullsFirst: false })
+      .limit(200),
+    looseDb.rpc("network_pipeline_summary", { target_org: orgId }),
+    loadOwnerNames(looseDb, orgId),
   ]);
 
   const initialRoster = applyRosterQuery(people, parseRosterQuery(new URLSearchParams()), pulse);
+
+  // A failed read must not render as an empty pipeline. Zero deals and an
+  // unreachable database look the same on the board, and only one of them is a
+  // fact about the business — so say the numbers are unavailable instead of
+  // quietly reporting nothing raised.
+  const pipelineFailed = Boolean(opportunitiesRes.error || pipelineSummaryRes.error);
+  if (pipelineFailed) {
+    console.error(
+      "[network] pipeline load",
+      opportunitiesRes.error ?? pipelineSummaryRes.error,
+    );
+  }
+
+  const opportunities = ((opportunitiesRes.data ?? []) as Record<string, any>[]).map((row) =>
+    mapOpportunity(row, ownerNames),
+  );
+
+  const pipelineSummary = ((pipelineSummaryRes.data ?? []) as Record<string, any>[]).map((r) => ({
+    stage: r.stage as OpportunityStage,
+    currency: String(r.currency ?? "USD"),
+    dealCount: Number(r.deal_count ?? 0),
+    targetTotal: Number(r.target_total ?? 0),
+    weightedTotal: Math.round(Number(r.weighted_total ?? 0)),
+  }));
 
   type MemberRow = {
     principal_id: string;
@@ -122,6 +176,10 @@ export default async function NetworkPage() {
         initialRoster={initialRoster}
         owners={owners}
         pageSize={DEFAULT_PAGE_SIZE}
+        fieldDefs={fieldDefs.contact}
+        opportunities={opportunities}
+        pipelineSummary={pipelineSummary}
+        pipelineUnavailable={pipelineFailed}
         pulse={pulse}
         activityEvents={activityEvents}
         liveCounts={liveCounts}

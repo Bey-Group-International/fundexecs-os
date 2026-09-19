@@ -14,6 +14,7 @@ import { SyndicateCircle } from "./SyndicateCircle";
 import { WarmIntroPanel } from "./WarmIntroPanel";
 import { ActiveRoster } from "./ActiveRoster";
 import { NetworkActivityFeed } from "./NetworkActivityFeed";
+import { PipelineBoard, type StageSummary } from "./PipelineBoard";
 import type {
   ActiveNetworkPerson,
   NetworkPulse,
@@ -24,8 +25,10 @@ import type {
 import type { RosterPage } from "@/lib/network-roster";
 import type { OwnerOption } from "./ActiveRoster";
 import type { NetworkSearchResult } from "@/lib/network-search";
+import type { FieldDef } from "@/lib/network-fields";
+import type { Opportunity } from "@/lib/network-opportunities";
 
-type Tab = "network" | "search" | "circles";
+type Tab = "network" | "pipeline" | "search" | "circles";
 
 /** Adapt a roster person to the shape the warm-intro drafter expects. */
 function personToContact(p: ActiveNetworkPerson): NetworkSearchResult {
@@ -67,6 +70,13 @@ interface Props {
   circles?: Circle[];
   owners?: OwnerOption[];
   pageSize?: number;
+  /** The org's own contact columns, for the table view. */
+  fieldDefs?: FieldDef[];
+  opportunities?: Opportunity[];
+  pipelineSummary?: StageSummary[];
+  /** The pipeline read failed. Distinct from "no deals": the board must say the
+   *  numbers are unavailable rather than render a confident zero. */
+  pipelineUnavailable?: boolean;
 }
 
 const TEMP_BAR: Record<Temperature, { bg: string; label: string }> = {
@@ -86,6 +96,10 @@ export function NetworkModule({
   circles = [],
   owners = [],
   pageSize = 30,
+  fieldDefs = [],
+  opportunities = [],
+  pipelineSummary = [],
+  pipelineUnavailable = false,
 }: Props) {
   const [tab, setTab] = useState<Tab>("network");
   const [showAdd, setShowAdd] = useState(false);
@@ -120,6 +134,7 @@ export function NetworkModule({
 
   const TABS: { key: Tab; label: string }[] = [
     { key: "network", label: "Active Network" },
+    { key: "pipeline", label: "Pipeline" },
     { key: "search", label: "Search" },
     { key: "circles", label: "Circles" },
   ];
@@ -209,6 +224,7 @@ export function NetworkModule({
             initialPage={initialRoster}
             owners={owners}
             pageSize={pageSize}
+            fieldDefs={fieldDefs}
             onSelect={(p) => setSelectedContact(personToContact(p))}
           />
           <div className="lg:sticky lg:top-6 lg:max-h-[calc(100vh-6rem)]">
@@ -216,6 +232,26 @@ export function NetworkModule({
           </div>
         </div>
       )}
+
+      {tab === "pipeline" &&
+        (pipelineUnavailable ? (
+          // An empty board and an unreachable one look identical, and only one
+          // of them is a fact about the business. Saying so is the whole point
+          // of tracking the failure on the server.
+          <div className="fx-card p-8 text-center">
+            <p className="text-sm font-medium text-fg-primary">Pipeline unavailable</p>
+            <p className="mt-1 text-xs text-fg-muted">
+              The pipeline could not be loaded, so these totals would be wrong rather than
+              empty. Reload to try again.
+            </p>
+          </div>
+        ) : (
+          <PipelineBoard
+            initialOpportunities={opportunities}
+            initialSummary={pipelineSummary}
+            owners={owners}
+          />
+        ))}
 
       {tab === "search" && <NetworkSearch onSelectContact={(c) => setSelectedContact(c)} />}
 
