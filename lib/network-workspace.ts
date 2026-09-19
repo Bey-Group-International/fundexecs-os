@@ -254,6 +254,8 @@ export interface WorkspaceSummary {
   tasksMine: number;
   contactsCold: number;
   activitiesWeek: number;
+  /** Open deals whose expected close is already in the past. */
+  closesOverdue: number;
   /** Deals closing within 30 days, per currency. Never summed across them. */
   closingSoon: ClosingBucket[];
 }
@@ -266,6 +268,7 @@ const EMPTY_SUMMARY: WorkspaceSummary = {
   tasksMine: 0,
   contactsCold: 0,
   activitiesWeek: 0,
+  closesOverdue: 0,
   closingSoon: [],
 };
 
@@ -293,6 +296,7 @@ export function mapWorkspaceSummary(row: Record<string, unknown> | null | undefi
     tasksMine: num(row.tasks_mine),
     contactsCold: num(row.contacts_cold),
     activitiesWeek: num(row.activities_week),
+    closesOverdue: num(row.closes_overdue),
     closingSoon: raw.map((b) => {
       const bucket = (b ?? {}) as Record<string, unknown>;
       return {

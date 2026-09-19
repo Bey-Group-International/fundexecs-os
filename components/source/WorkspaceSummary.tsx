@@ -193,6 +193,20 @@ export function WorkspaceSummary({ onOpenTasks, onOpenCalendar }: Props) {
         hint="calls, notes, meetings"
       />
 
+      {/* Only when there are any. A deal past its expected close is late, not
+          imminent, so it is counted here rather than folded into the window
+          above — where, before it was bounded, a deal that missed its date two
+          years ago was still being reported as closing within the month. */}
+      {summary.closesOverdue > 0 && (
+        <Tile
+          label="Past close date"
+          value={String(summary.closesOverdue)}
+          hint="open, date already gone"
+          tone="text-rose-300"
+          onClick={onOpenCalendar}
+        />
+      )}
+
       {summary.tasksUnassigned > 0 && (
         <Tile
           label="Unowned"

@@ -73,9 +73,16 @@ export function NetworkCalendar() {
   // rescheduled by any means at all — on the busiest days, which are precisely
   // the ones somebody opens a calendar to sort out.
   const [expandedDay, setExpandedDay] = useState<string | null>(null);
+  // Which month's read is the current one. Paging back three months quickly
+  // fires three requests and nothing cancels the earlier two; whichever answers
+  // last wins. A stale month is worse here than in a list, because its entries
+  // are keyed by date and simply would not match any cell on the grid — the
+  // month would render empty rather than visibly wrong.
+  const latestRead = useRef(0);
   const liveRegion = useRef<HTMLParagraphElement | null>(null);
 
   const load = useCallback(async (targetMonth: string) => {
+    const seq = ++latestRead.current;
     setLoading(true);
     try {
       const res = await fetch(`/api/network/schedule?month=${encodeURIComponent(targetMonth)}`);
@@ -83,15 +90,19 @@ export function NetworkCalendar() {
         | { entries?: ScheduleEntry[]; error?: string }
         | null;
       if (!res.ok) throw new Error(body?.error ?? "Couldn't load the calendar.");
+      if (seq !== latestRead.current) return;
       setEntries(body?.entries ?? []);
       setError(null);
     } catch (err) {
+      // A superseded month must not report its failure over the month now on
+      // screen, which may have loaded perfectly well.
+      if (seq !== latestRead.current) return;
       // An empty month and an unreachable one look identical on a grid, so say
       // which one this is rather than drawing 30 empty squares.
       setError(err instanceof Error ? err.message : "Couldn't load the calendar.");
       setEntries([]);
     } finally {
-      setLoading(false);
+      if (seq === latestRead.current) setLoading(false);
     }
   }, []);
 

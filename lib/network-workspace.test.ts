@@ -248,6 +248,7 @@ describe("mapWorkspaceSummary", () => {
       tasks_mine: 5,
       contacts_cold: 7,
       activities_week: 12,
+      closes_overdue: 2,
       closing_soon: [
         { currency: "USD", deal_count: 2, target_total: "10000000.00", weighted_total: "5000000.5" },
         { currency: "EUR", deal_count: 1, target_total: 5000000, weighted_total: 4000000 },
@@ -263,11 +264,15 @@ describe("mapWorkspaceSummary", () => {
     });
     // The two currencies stay separate rows — there is no combined total to read.
     expect(summary.closingSoon.map((c) => c.currency)).toEqual(["USD", "EUR"]);
+    // Deals past their close date are their own number, never folded into the
+    // window above: late and imminent are not the same claim about a deal.
+    expect(summary.closesOverdue).toBe(2);
   });
 
   it("returns zeroes for a missing row rather than throwing", () => {
     const summary = mapWorkspaceSummary(null);
     expect(summary.tasksOverdue).toBe(0);
+    expect(summary.closesOverdue).toBe(0);
     expect(summary.closingSoon).toEqual([]);
   });
 

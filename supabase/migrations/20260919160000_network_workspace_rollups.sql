@@ -37,6 +37,7 @@ returns table (
   tasks_mine        bigint,
   contacts_cold     bigint,
   activities_week   bigint,
+  closes_overdue    bigint,
   closing_soon      jsonb
 )
 language sql
@@ -104,7 +105,25 @@ as $$
       where a.organization_id = target_org
         and a.occurred_at >= now() - interval '7 days')               as activities_week,
 
+    -- Deals whose expected close has already passed and which are still open.
+    -- These are counted SEPARATELY rather than dropped, because the window
+    -- below now excludes them and this was the only number that saw them. A
+    -- deal that was meant to close last quarter and did not is a fact somebody
+    -- needs; silently removing it from the dashboard would trade one wrong
+    -- number for no number.
+    (select count(*) from public.network_opportunities o
+      where o.organization_id = target_org
+        and o.status = 'open'
+        and o.expected_close is not null
+        and o.expected_close < (now() at time zone 'UTC')::date)     as closes_overdue,
+
     -- Deals expected to close within 30 days, per currency.
+    --
+    -- Bounded at BOTH ends. With only an upper bound, an open deal with an
+    -- expected close from any past year sat in "closing in 30 days" forever,
+    -- inflating the count and the money with it — and the older the miss, the
+    -- longer it kept inflating them. A deal whose date has passed is late, not
+    -- imminent, and the two must not be added together.
     coalesce((
       select jsonb_agg(row_to_json(s))
       from (
@@ -117,7 +136,8 @@ as $$
         where o.organization_id = target_org
           and o.status = 'open'
           and o.expected_close is not null
-          and o.expected_close <= ((now() at time zone 'UTC')::date + 30)
+          and o.expected_close between (now() at time zone 'UTC')::date
+                                   and ((now() at time zone 'UTC')::date + 30)
         group by o.currency
         order by coalesce(sum(o.target_amount), 0) desc
       ) s

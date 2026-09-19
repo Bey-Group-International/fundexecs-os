@@ -12,7 +12,7 @@
 // write in this workspace. A checkbox that ticks and then silently un-ticks on
 // the next refresh is how somebody stops trusting the list.
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import {
   BUCKET_LABEL,
@@ -46,10 +46,15 @@ function dueLabel(dueAt: string | null): string {
   if (!dueAt) return "No date";
   const ms = Date.parse(dueAt);
   if (Number.isNaN(ms)) return "No date";
+  // Rendered in UTC, like every other day in this workspace. Formatting in the
+  // browser zone put a task due 2026-09-20T00:00Z under a "Fri, Sep 19" label
+  // while `groupTaskQueue` filed it on the 20th — the row disagreed with the
+  // heading it was sitting under.
   return new Date(ms).toLocaleDateString(undefined, {
     weekday: "short",
     month: "short",
     day: "numeric",
+    timeZone: "UTC",
   });
 }
 
@@ -66,8 +71,15 @@ export function TaskQueue({ owners = [] }: Props) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState<Set<string>>(() => new Set());
+  // Which read is the current one. Switching filter starts a new request
+  // without cancelling the old, and responses do not have to come back in
+  // order — so a slow "Mine" could land after a fast "Everyone" and leave the
+  // list showing one person's work under a button that says Everyone. Only the
+  // newest request is allowed to write.
+  const latestRead = useRef(0);
 
   const load = useCallback(async () => {
+    const seq = ++latestRead.current;
     setLoading(true);
     try {
       const params = new URLSearchParams({ status: "open", limit: "200" });
@@ -77,15 +89,19 @@ export function TaskQueue({ owners = [] }: Props) {
         | { tasks?: QueueTask[]; error?: string }
         | null;
       if (!res.ok) throw new Error(body?.error ?? "Couldn't load the queue.");
+      if (seq !== latestRead.current) return;
       setTasks(body?.tasks ?? []);
       setError(null);
     } catch (err) {
+      // A superseded request must not report its failure either: the filter it
+      // failed for is not the one on screen any more.
+      if (seq !== latestRead.current) return;
       // An empty queue and an unreachable one are different claims; only one of
       // them means you are done for the day.
       setError(err instanceof Error ? err.message : "Couldn't load the queue.");
       setTasks([]);
     } finally {
-      setLoading(false);
+      if (seq === latestRead.current) setLoading(false);
     }
   }, [assignee]);
 

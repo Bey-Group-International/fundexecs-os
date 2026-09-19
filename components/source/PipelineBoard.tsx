@@ -57,7 +57,16 @@ function formatDay(iso: string | null): string | null {
   const ms = Date.parse(iso);
   if (Number.isNaN(ms)) return null;
   const d = new Date(ms);
-  return d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+  // `expectedClose` is a DATE, so it parses to midnight UTC. Formatted in the
+  // browser zone, a deal closing 2026-09-26 printed "Sep 25" on its card while
+  // the calendar drew it in the Sep 26 cell — one deal, two dates, depending
+  // on which tab you were looking at.
+  return d.toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    timeZone: "UTC",
+  });
 }
 
 interface Props {
