@@ -12,7 +12,7 @@
 // nothing happens, so nothing appears anywhere. Counting it is the only way it
 // ever surfaces.
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { WorkspaceSummary as Summary } from "@/lib/network-workspace";
 
 interface Props {
@@ -84,22 +84,35 @@ function Tile({
 export function WorkspaceSummary({ onOpenTasks, onOpenCalendar }: Props) {
   const [summary, setSummary] = useState<Summary | null>(null);
   const [failed, setFailed] = useState(false);
+  const [loading, setLoading] = useState(false);
+  // Retry is a button, and buttons get clicked twice. The other three loaders
+  // in this workspace already order their reads; this one did not, so an older
+  // response could overwrite a newer one — including an old failure landing on
+  // top of a fresh success, which would claim the numbers are unavailable when
+  // they had just arrived.
+  const latestRead = useRef(0);
 
   const load = useCallback(async () => {
+    const seq = ++latestRead.current;
+    setLoading(true);
     try {
       const res = await fetch("/api/network/summary");
       const body = (await res.json().catch(() => null)) as
         | { summary?: Summary; error?: string }
         | null;
       if (!res.ok || !body?.summary) throw new Error(body?.error ?? "unavailable");
+      if (seq !== latestRead.current) return;
       setSummary(body.summary);
       setFailed(false);
     } catch {
+      if (seq !== latestRead.current) return;
       // Deliberately NOT falling back to zeroes. "Nothing overdue" and "we
       // could not check" are different facts, and only one of them means
       // somebody can stop worrying about it.
       setFailed(true);
       setSummary(null);
+    } finally {
+      if (seq === latestRead.current) setLoading(false);
     }
   }, []);
 
@@ -113,9 +126,10 @@ export function WorkspaceSummary({ onOpenTasks, onOpenCalendar }: Props) {
         Workspace numbers unavailable — these would be wrong rather than empty.
         <button
           onClick={() => void load()}
-          className="ml-auto rounded px-2 py-0.5 hover:text-fg-primary"
+          disabled={loading}
+          className="ml-auto rounded px-2 py-0.5 hover:text-fg-primary disabled:opacity-50"
         >
-          Retry
+          {loading ? "Checking…" : "Retry"}
         </button>
       </div>
     );

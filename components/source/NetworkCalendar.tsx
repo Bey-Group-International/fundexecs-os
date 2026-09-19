@@ -118,6 +118,10 @@ export function NetworkCalendar() {
     async (entry: ScheduleEntry, toDate: string) => {
       if (entry.onDate === toDate) return;
       const from = entry.onDate;
+      // Which month read this move was made against — see the note in
+      // TaskQueue. A read taken before the server committed still carries the
+      // old date, so without this the calendar could snap a moved item back.
+      const readAtStart = latestRead.current;
 
       setBusy((b) => new Set(b).add(entry.id));
       setEntries((prev) =>
@@ -145,14 +149,29 @@ export function NetworkCalendar() {
 
         const body = (await res.json().catch(() => null)) as { error?: string } | null;
         if (!res.ok) throw new Error(body?.error ?? "Couldn't move that.");
+        // Re-apply the date, unconditionally. Idempotent if nothing intervened,
+        // and corrective if a read in flight restored the old one. If the month
+        // has since changed the entry is not in the list and this is a no-op.
+        setEntries((prev) =>
+          prev.map((e) =>
+            e.id === entry.id && e.kind === entry.kind ? { ...e, onDate: toDate } : e,
+          ),
+        );
         setError(null);
       } catch (err) {
-        // Restore this one item only. Another item may have been moved while
-        // this request was in flight, and a snapshot would undo that too.
-        setEntries((prev) =>
-          prev.map((e) => (e.id === entry.id && e.kind === entry.kind ? { ...e, onDate: from } : e)),
-        );
-        setError(err instanceof Error ? err.message : "Couldn't move that.");
+        if (latestRead.current === readAtStart) {
+          // Restore this one item only. Another item may have been moved while
+          // this request was in flight, and a snapshot would undo that too.
+          setEntries((prev) =>
+            prev.map((e) =>
+              e.id === entry.id && e.kind === entry.kind ? { ...e, onDate: from } : e,
+            ),
+          );
+          setError(err instanceof Error ? err.message : "Couldn't move that.");
+        }
+        // Otherwise the grid is showing a different month; rolling back would
+        // write a date into a list that no longer draws it, and report a
+        // failure about a month nobody is looking at.
       } finally {
         setBusy((b) => {
           const next = new Set(b);

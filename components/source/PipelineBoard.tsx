@@ -101,6 +101,13 @@ export function PipelineBoard({ initialOpportunities, initialSummary }: Props) {
   // paints the stale board, where an effect would show the old page for a frame
   // first.
   const [seed, setSeed] = useState(initialOpportunities);
+  // Advances on every re-seed. A drag started against one server snapshot must
+  // not write into a newer one: clearing `moves` below only discards the deltas
+  // that exist AT that moment, and a PATCH still in flight would re-add its
+  // delta afterwards — on top of a rollup that already counts the committed
+  // move. That is the same double-count the clear was meant to prevent, just
+  // arriving a few hundred milliseconds later.
+  const seedEpoch = useRef(0);
   if (seed !== initialOpportunities) {
     setSeed(initialOpportunities);
     setDeals(initialOpportunities);
@@ -108,6 +115,7 @@ export function PipelineBoard({ initialOpportunities, initialSummary }: Props) {
     // This rollup was computed after them, so keeping the deltas would count
     // every move a second time.
     setMoves(new Map());
+    seedEpoch.current += 1;
   }
 
   const byStage = useMemo(() => {
@@ -174,6 +182,8 @@ export function PipelineBoard({ initialOpportunities, initialSummary }: Props) {
         probability: deal.probability,
       };
 
+      const epochAtStart = seedEpoch.current;
+
       setBusy((b) => new Set(b).add(dealId));
       // Optimistic: the card lands where it was dropped immediately, and the
       // header moves with it rather than waiting for the server's rollup.
@@ -204,6 +214,13 @@ export function PipelineBoard({ initialOpportunities, initialSummary }: Props) {
           | { opportunity?: Opportunity; error?: string }
           | null;
         if (!res.ok || !body?.opportunity) throw new Error(body?.error ?? "Move failed");
+        if (seedEpoch.current !== epochAtStart) {
+          // The server re-rendered while this was in flight. Its page and its
+          // rollup already include this move, so both the card and the delta
+          // below would be applied twice. Leave the fresh snapshot alone.
+          setError(null);
+          return;
+        }
         // Take the server's version: it decided status, close date and
         // probability, and those are not guessable from the drop alone.
         setDeals((prev) => prev.map((d) => (d.id === dealId ? body.opportunity! : d)));
@@ -225,6 +242,12 @@ export function PipelineBoard({ initialOpportunities, initialSummary }: Props) {
         });
         setError(null);
       } catch (err) {
+        if (seedEpoch.current !== epochAtStart) {
+          // A newer snapshot already shows the deal where the server has it —
+          // un-moved, since the PATCH failed. Rolling back would restore a
+          // delta measured against a rollup that no longer exists.
+          return;
+        }
         setDeals((current) =>
           current.map((d) => (d.id === dealId ? { ...d, stage: previousStage } : d)),
         );

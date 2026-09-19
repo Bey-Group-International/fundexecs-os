@@ -111,6 +111,13 @@ export function TaskQueue({ owners = [] }: Props) {
 
   const complete = useCallback(
     async (task: QueueTask) => {
+      // Which read this tick was made against. The read token orders reads
+      // against each other; it does not order THIS mutation against a read that
+      // finishes after it, and a read taken before the server committed still
+      // lists the task. Without the comparison below, ticking a task and then
+      // switching filter could put it back on screen, completed.
+      const readAtStart = latestRead.current;
+
       setPending((p) => new Set(p).add(task.id));
       // Optimistic: it leaves the list at once. A queue that lags behind the
       // tick makes people click twice.
@@ -124,12 +131,23 @@ export function TaskQueue({ owners = [] }: Props) {
         });
         const body = (await res.json().catch(() => null)) as { error?: string } | null;
         if (!res.ok) throw new Error(body?.error ?? "Couldn't complete that.");
+        // Remove it again, unconditionally. If an intervening read put it back
+        // this corrects that; if it is already gone this is a no-op. Every list
+        // here is queried `status=open`, so a completed task never belongs to
+        // one whatever the filter has since become.
+        setTasks((prev) => prev.filter((t) => t.id !== task.id));
         setError(null);
       } catch (err) {
-        // Put back exactly the one task, not a whole snapshot: other rows may
-        // have been completed while this request was in flight.
-        setTasks((prev) => (prev.some((t) => t.id === task.id) ? prev : [...prev, task]));
-        setError(err instanceof Error ? err.message : "Couldn't complete that.");
+        if (latestRead.current === readAtStart) {
+          // Put back exactly the one task, not a whole snapshot: other rows may
+          // have been completed while this request was in flight.
+          setTasks((prev) => (prev.some((t) => t.id === task.id) ? prev : [...prev, task]));
+          setError(err instanceof Error ? err.message : "Couldn't complete that.");
+        }
+        // Otherwise the list on screen is a different filter's. Restoring would
+        // inject a task from "Mine" into the "Unassigned" list, which is a
+        // worse lie than the failure going unreported; the next read shows it
+        // again under its own filter.
       } finally {
         setPending((p) => {
           const next = new Set(p);
