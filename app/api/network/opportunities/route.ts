@@ -18,6 +18,7 @@ import {
   mapOpportunity,
   OPPORTUNITY_SELECT,
   STAGE_DEFAULT_PROBABILITY,
+  terminalProbability,
   validateOpportunityRefs,
   type OpportunityStage,
 } from "@/lib/network-opportunities";
@@ -199,14 +200,22 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: merged.errors.join(" ") }, { status: 400 });
   }
 
+  // A deal created straight into a closed stage has no forecast to state: the
+  // stage already fixes it at 100 (committed) or 0 (passed), so a caller-
+  // supplied number is ignored rather than allowed to under-count committed
+  // capital. Only an open stage takes the caller's odds, falling back to what
+  // the stage implies.
+  const pinned = terminalProbability(stage);
   const probability =
-    typeof payload.probability === "number" &&
-    payload.probability >= 0 &&
-    payload.probability <= 100
-      ? Math.round(payload.probability)
-      : STAGE_DEFAULT_PROBABILITY[stage];
+    pinned !== undefined
+      ? pinned
+      : typeof payload.probability === "number" &&
+          payload.probability >= 0 &&
+          payload.probability <= 100
+        ? Math.round(payload.probability)
+        : STAGE_DEFAULT_PROBABILITY[stage];
 
-  const isTerminal = stage === "committed" || stage === "passed";
+  const isTerminal = pinned !== undefined;
 
   const { data, error } = await supabase
     .from("network_opportunities")

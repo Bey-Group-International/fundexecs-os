@@ -76,8 +76,40 @@ create table if not exists public.network_opportunities (
     check (contact_id is not null or investor_id is not null),
   -- A closed opportunity has to say when. Keeps "won last quarter" answerable.
   constraint network_opportunities_closed_at
-    check (status = 'open' or closed_at is not null)
+    check (status = 'open' or closed_at is not null),
+  -- A closed stage is not a forecast. "committed" is certain and "passed" is
+  -- not happening, so neither can carry odds in between: weighted_total below
+  -- multiplies target_amount by probability, and a won deal sitting at 50 would
+  -- report half the capital the firm actually raised.
+  constraint network_opportunities_terminal_probability
+    check (
+      (stage <> 'committed' or probability = 100)
+      and (stage <> 'passed' or probability = 0)
+    )
 );
+
+-- The table above is created `if not exists`, so a database that already has it
+-- from an earlier run of this branch would skip the constraint entirely.
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conname = 'network_opportunities_terminal_probability'
+      and conrelid = 'public.network_opportunities'::regclass
+  ) then
+    update public.network_opportunities
+      set probability = case when stage = 'committed' then 100 else 0 end
+      where (stage = 'committed' and probability <> 100)
+         or (stage = 'passed' and probability <> 0);
+
+    alter table public.network_opportunities
+      add constraint network_opportunities_terminal_probability
+      check (
+        (stage <> 'committed' or probability = 100)
+        and (stage <> 'passed' or probability = 0)
+      );
+  end if;
+end $$;
 
 create index if not exists network_opportunities_org_stage_idx
   on public.network_opportunities (organization_id, stage)

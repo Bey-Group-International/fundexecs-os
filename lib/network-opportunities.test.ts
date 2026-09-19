@@ -111,6 +111,54 @@ describe("buildOpportunityPatch", () => {
     expect(result.patch.probability).toBe(75);
   });
 
+  it("refuses to let an explicit probability outrank a closed stage", () => {
+    // Closing a deal at 50% would leave half its size in the weighted forecast
+    // forever — the firm would under-report the capital it actually raised.
+    const won = buildOpportunityPatch(
+      { stage: "committed", probability: 50 },
+      current(),
+      [],
+      NOW,
+    );
+    expect(won.ok).toBe(true);
+    expect(won.patch.status).toBe("won");
+    expect(won.patch.probability).toBe(100);
+
+    // And a lost deal held at 80% would keep money in a pipeline nobody works.
+    const lost = buildOpportunityPatch(
+      { stage: "passed", probability: 80 },
+      current(),
+      [],
+      NOW,
+    );
+    expect(lost.patch.status).toBe("lost");
+    expect(lost.patch.probability).toBe(0);
+  });
+
+  it("pins a probability edit on a deal that is ALREADY closed", () => {
+    // No stage in the patch, so nothing re-derives it — this is the path that
+    // would otherwise reach the database and trip the check constraint.
+    const result = buildOpportunityPatch(
+      { probability: 50 },
+      current({ stage: "committed", status: "won", probability: 100, closedAt: NOW.toISOString() }),
+      [],
+      NOW,
+    );
+    expect(result.ok).toBe(true);
+    expect(result.patch.probability).toBe(100);
+  });
+
+  it("still lets an explicit probability win on an OPEN stage", () => {
+    // The pinning must not swallow ordinary forecasting judgement.
+    const result = buildOpportunityPatch(
+      { stage: "legal", probability: 70 },
+      current(),
+      [],
+      NOW,
+    );
+    expect(result.patch.probability).toBe(70);
+  });
+
   it("rejects an unknown stage and an out-of-range probability", () => {
     expect(buildOpportunityPatch({ stage: "negotiating" }, current(), [], NOW).ok).toBe(false);
     expect(buildOpportunityPatch({ probability: 150 }, current(), [], NOW).ok).toBe(false);

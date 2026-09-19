@@ -60,6 +60,19 @@ const TERMINAL_STAGE: Partial<Record<OpportunityStage, OpportunityStatus>> = {
   passed: "lost",
 };
 
+/**
+ * The only probability a closed stage can hold, or undefined while it is open.
+ *
+ * This is an invariant, not a default: the weighted forecast multiplies target
+ * amounts by probability, so a won deal below 100 under-counts committed
+ * capital and a lost deal above 0 keeps money in a pipeline nobody is working.
+ */
+export function terminalProbability(stage: OpportunityStage): number | undefined {
+  const terminal = TERMINAL_STAGE[stage];
+  if (!terminal) return undefined;
+  return terminal === "won" ? 100 : 0;
+}
+
 export function isOpportunityStage(v: unknown): v is OpportunityStage {
   return typeof v === "string" && (OPPORTUNITY_STAGES as readonly string[]).includes(v);
 }
@@ -182,7 +195,7 @@ export function resolveStageTransition(
     transition.closedAt = current.closedAt ?? now.toISOString();
     // A won deal is certain and a lost one is not happening. Leaving the old
     // probability would keep a closed deal in the weighted forecast.
-    transition.probability = terminal === "won" ? 100 : 0;
+    transition.probability = terminalProbability(next);
   } else {
     transition.status = "open";
     transition.closedAt = null;
@@ -285,7 +298,12 @@ export function buildOpportunityPatch(
     }
   }
 
-  // An explicit probability always wins over the one a stage move inferred.
+  // An explicit probability wins over the one a stage move inferred — but only
+  // while the deal is still open. A closed stage is not a forecast: "committed"
+  // means 100 and "passed" means 0, and a caller-supplied 50 on a won deal
+  // would sit it in the weighted pipeline at half its size forever. The
+  // database enforces the same invariant; pinning here keeps that from
+  // surfacing as an opaque constraint violation.
   if (input.probability !== undefined) {
     const n = typeof input.probability === "number" ? input.probability : Number(input.probability);
     if (!Number.isFinite(n) || n < 0 || n > 100) {
@@ -293,6 +311,15 @@ export function buildOpportunityPatch(
     } else {
       patch.probability = Math.round(n);
     }
+  }
+
+  // The stage the row will ACTUALLY be in once this patch lands — which is the
+  // current one when the patch does not move it. A plain `{ probability: 50 }`
+  // against a row already sitting in "committed" has to be pinned too.
+  const resultingStage = (patch.stage as OpportunityStage | undefined) ?? current.stage;
+  const pinned = terminalProbability(resultingStage);
+  if (pinned !== undefined && patch.probability !== undefined && patch.probability !== pinned) {
+    patch.probability = pinned;
   }
 
   if (input.status !== undefined && input.stage === undefined) {
