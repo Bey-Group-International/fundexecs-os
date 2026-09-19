@@ -24,10 +24,23 @@ export async function GET(req: NextRequest) {
   if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: auth.status });
 
   const sp = req.nextUrl.searchParams;
-  let start = sp.get("start");
-  let end = sp.get("end");
+  const rawStart = sp.get("start");
+  const rawEnd = sp.get("end");
 
-  if (!start || !end) {
+  // Half a window is not a window. `?start=2026-09-01` alone used to fall
+  // through to the month grid, so the caller got a range they did not ask for
+  // and no indication their parameter had been dropped — the worst kind of
+  // wrong answer, because it looks like a right one.
+  if ((rawStart === null) !== (rawEnd === null)) {
+    return NextResponse.json(
+      { error: "start and end must be given together." },
+      { status: 400 },
+    );
+  }
+
+  let start: string;
+  let end: string;
+  if (rawStart === null || rawEnd === null) {
     const month = sp.get("month") ?? monthOf();
     const range = gridRange(month);
     if (!range) {
@@ -35,6 +48,9 @@ export async function GET(req: NextRequest) {
     }
     start = range.start;
     end = range.end;
+  } else {
+    start = rawStart;
+    end = rawEnd;
   }
 
   if (!DAY_PATTERN.test(start) || !DAY_PATTERN.test(end)) {

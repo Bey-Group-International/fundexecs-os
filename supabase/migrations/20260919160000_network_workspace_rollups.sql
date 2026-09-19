@@ -46,19 +46,38 @@ as $$
   select
     -- Work that is already late. Tasks with no due date are not late; they are
     -- unscheduled, which is a different problem and counted nowhere.
+    --
+    -- Compared as plain UTC CALENDAR DAYS, not as instants, because that is
+    -- what `bucketTask` and the tasks route do. An instant comparison made a
+    -- task due at 09:00 today read as overdue on this tile from 09:01 onwards
+    -- while the queue it links to still filed it under "Today" — the tile said
+    -- somebody was late for work they had all afternoon to do.
+    --
+    -- `date_trunc('day', now())` was wrong for the same reason in the other
+    -- direction: it truncates in the SESSION timezone, so the day these counts
+    -- meant depended on a connection setting rather than on the calendar the
+    -- rest of the feature agrees on.
     (select count(*) from public.network_tasks t
       where t.organization_id = target_org and t.status = 'open'
-        and t.due_at is not null and t.due_at < now())                as tasks_overdue,
+        and t.due_at is not null
+        and (t.due_at at time zone 'UTC')::date
+              < (now() at time zone 'UTC')::date)                     as tasks_overdue,
 
     (select count(*) from public.network_tasks t
       where t.organization_id = target_org and t.status = 'open'
-        and t.due_at >= date_trunc('day', now())
-        and t.due_at <  date_trunc('day', now()) + interval '1 day')  as tasks_due_today,
+        and t.due_at is not null
+        and (t.due_at at time zone 'UTC')::date
+              = (now() at time zone 'UTC')::date)                     as tasks_due_today,
 
+    -- Today plus the next seven days: exactly the span the queue shows under
+    -- its "Today" and "This week" headings together, so the number on the tile
+    -- is one a person can arrive at by counting what they are looking at.
     (select count(*) from public.network_tasks t
       where t.organization_id = target_org and t.status = 'open'
-        and t.due_at >= date_trunc('day', now())
-        and t.due_at <  date_trunc('day', now()) + interval '7 days') as tasks_due_week,
+        and t.due_at is not null
+        and (t.due_at at time zone 'UTC')::date
+              between (now() at time zone 'UTC')::date
+                  and (now() at time zone 'UTC')::date + 7)           as tasks_due_week,
 
     -- Work nobody owns. In a team this is the queue that quietly rots.
     (select count(*) from public.network_tasks t
@@ -98,7 +117,7 @@ as $$
         where o.organization_id = target_org
           and o.status = 'open'
           and o.expected_close is not null
-          and o.expected_close <= (current_date + 30)
+          and o.expected_close <= ((now() at time zone 'UTC')::date + 30)
         group by o.currency
         order by coalesce(sum(o.target_amount), 0) desc
       ) s
@@ -155,7 +174,12 @@ as $$
     t.opportunity_id,
     null::numeric                                          as amount,
     null::text                                             as currency,
-    (t.status = 'open' and t.due_at < now())               as overdue
+    -- Same UTC-day rule as the queue and the summary. A calendar that paints a
+    -- task red at midday while the queue still calls it today's work is telling
+    -- two different stories about one row.
+    (t.status = 'open'
+      and (t.due_at at time zone 'UTC')::date
+            < (now() at time zone 'UTC')::date)                as overdue
   from public.network_tasks t
   where t.organization_id = target_org
     and t.due_at is not null
@@ -176,7 +200,10 @@ as $$
     o.id                                                   as opportunity_id,
     o.target_amount                                        as amount,
     o.currency,
-    (o.status = 'open' and o.expected_close < current_date) as overdue
+    -- `current_date` is the session timezone's today; the calendar draws UTC
+    -- days, so an expected close was briefly overdue on one and not the other.
+    (o.status = 'open'
+      and o.expected_close < (now() at time zone 'UTC')::date) as overdue
   from public.network_opportunities o
   where o.organization_id = target_org
     and o.expected_close is not null

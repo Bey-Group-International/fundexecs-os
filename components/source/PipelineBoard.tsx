@@ -78,6 +78,29 @@ export function PipelineBoard({ initialOpportunities, initialSummary }: Props) {
   const [error, setError] = useState<string | null>(null);
   const liveRegion = useRef<HTMLParagraphElement | null>(null);
 
+  // Re-seed when the server sends a different page.
+  //
+  // `useState(initialOpportunities)` runs its initializer ONCE. A
+  // `router.refresh()` re-renders the server component and hands down a new
+  // array, but React keeps this component mounted and `deals` keeps pointing at
+  // the page from first paint — so a deal created through the new-allocation
+  // form never appeared on the board until a full reload. The board could
+  // create work it then refused to show.
+  //
+  // Adjusting state during render rather than in an effect is deliberate: React
+  // re-runs this component immediately with the corrected state and never
+  // paints the stale board, where an effect would show the old page for a frame
+  // first.
+  const [seed, setSeed] = useState(initialOpportunities);
+  if (seed !== initialOpportunities) {
+    setSeed(initialOpportunities);
+    setDeals(initialOpportunities);
+    // The deltas existed only to correct a rollup computed BEFORE those moves.
+    // This rollup was computed after them, so keeping the deltas would count
+    // every move a second time.
+    setMoves(new Map());
+  }
+
   const byStage = useMemo(() => {
     const map = new Map<OpportunityStage, Opportunity[]>();
     for (const stage of BOARD_STAGES) map.set(stage, []);

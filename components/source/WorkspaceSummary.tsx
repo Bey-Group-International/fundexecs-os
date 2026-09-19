@@ -119,18 +119,30 @@ export function WorkspaceSummary({ onOpenTasks, onOpenCalendar }: Props) {
 
   return (
     <div className="flex flex-wrap gap-2">
+      {/* Each tile states whose work it counts. The week figure used to sit
+          under "Mine, open" as though it were a subset of it, but it counts the
+          whole book — so a person with four open tasks could read "4 open, 9
+          due this week" and have no way to tell that six of them were somebody
+          else's. A number that cannot be a subset must not be printed as one. */}
       <Tile
         label="Overdue"
         value={String(summary.tasksOverdue)}
-        hint={summary.tasksDueToday > 0 ? `${summary.tasksDueToday} due today` : "follow-ups"}
+        hint={summary.tasksDueToday > 0 ? `${summary.tasksDueToday} due today` : "across the book"}
         tone={summary.tasksOverdue > 0 ? "text-rose-300" : undefined}
+        onClick={onOpenTasks}
+      />
+
+      <Tile
+        label="Due in 7 days"
+        value={String(summary.tasksDueWeek)}
+        hint="across the book"
         onClick={onOpenTasks}
       />
 
       <Tile
         label="Mine, open"
         value={String(summary.tasksMine)}
-        hint={`${summary.tasksDueWeek} due this week`}
+        hint="assigned to you"
         onClick={onOpenTasks}
       />
 
@@ -159,6 +171,16 @@ export function WorkspaceSummary({ onOpenTasks, onOpenCalendar }: Props) {
         value={String(summary.contactsCold)}
         hint="live, untouched 90d"
         tone={summary.contactsCold > 0 ? "text-gold-300" : undefined}
+      />
+
+      {/* The counterweight to "going cold": what the book actually did this
+          week. It was computed and carried all the way through the summary
+          contract without ever being drawn, which is the same gap this phase
+          existed to close everywhere else. */}
+      <Tile
+        label="Logged, 7d"
+        value={String(summary.activitiesWeek)}
+        hint="calls, notes, meetings"
       />
 
       {summary.tasksUnassigned > 0 && (

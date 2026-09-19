@@ -256,9 +256,11 @@ export function NetworkModule({
               onCancel={() => setNewDeal(false)}
               onCreated={() => {
                 setNewDeal(false);
-                // The board reads its deals from the server-rendered page, so a
-                // reload is what shows the new one. Cheaper than threading a
-                // refetch through for a create that happens a few times a day.
+                // Re-renders the server component, which re-queries the
+                // pipeline. PipelineBoard re-seeds itself when that new page
+                // arrives, so the deal appears without a full reload — the
+                // refresh alone is not enough, and used to leave the board
+                // showing a pipeline that no longer matched the database.
                 router.refresh();
               }}
             />

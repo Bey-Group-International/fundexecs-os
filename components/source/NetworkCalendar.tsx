@@ -57,6 +57,12 @@ export function NetworkCalendar() {
   const [dragging, setDragging] = useState<ScheduleEntry | null>(null);
   const [overDay, setOverDay] = useState<string | null>(null);
   const [busy, setBusy] = useState<Set<string>>(() => new Set());
+  // The one day currently showing all of its items. A cell only has room for
+  // three, and the rest were unreachable: the overflow count was static text,
+  // so a fourth follow-up had no drag handle and no date input and could not be
+  // rescheduled by any means at all — on the busiest days, which are precisely
+  // the ones somebody opens a calendar to sort out.
+  const [expandedDay, setExpandedDay] = useState<string | null>(null);
   const liveRegion = useRef<HTMLParagraphElement | null>(null);
 
   const load = useCallback(async (targetMonth: string) => {
@@ -81,6 +87,7 @@ export function NetworkCalendar() {
 
   useEffect(() => {
     void load(month);
+    setExpandedDay(null);
   }, [load, month]);
 
   const grid = useMemo(() => monthGrid(month), [month]);
@@ -194,6 +201,8 @@ export function NetworkCalendar() {
           {grid.map((day) => {
             const items = scheduled.get(day.date) ?? [];
             const isDropTarget = overDay === day.date;
+            const isExpanded = expandedDay === day.date;
+            const shown = isExpanded ? items : items.slice(0, 3);
             return (
               <div
                 key={day.date}
@@ -233,7 +242,7 @@ export function NetworkCalendar() {
                 </div>
 
                 <ul className="mt-0.5 flex flex-col gap-0.5">
-                  {items.slice(0, 3).map((item) => (
+                  {shown.map((item) => (
                     <li key={`${item.kind}-${item.id}`}>
                       <div
                         draggable={!busy.has(item.id)}
@@ -279,9 +288,14 @@ export function NetworkCalendar() {
                 </ul>
 
                 {items.length > 3 && (
-                  <p className="px-1.5 pt-0.5 text-[10px] text-fg-muted">
-                    +{items.length - 3} more
-                  </p>
+                  <button
+                    type="button"
+                    onClick={() => setExpandedDay(isExpanded ? null : day.date)}
+                    aria-expanded={isExpanded}
+                    className="px-1.5 pt-0.5 text-[10px] text-fg-muted transition hover:text-fg-primary"
+                  >
+                    {isExpanded ? "Show less" : `+${items.length - 3} more`}
+                  </button>
                 )}
               </div>
             );
