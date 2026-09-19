@@ -234,3 +234,43 @@ describe("applyCustomPatch", () => {
     expect(existing).toEqual({ aum: 1 });
   });
 });
+
+describe("what reaches the database-side merge", () => {
+  // The routes hand the RPC `merged.custom` filtered to the keys the client
+  // actually sent. These pin what that filter can and cannot let through,
+  // because the RPC writes straight into the jsonb column.
+  const defs = [def({ key: "aum", label: "AUM", type: "currency" })];
+
+  function rpcPatch(existing: Record<string, unknown>, sent: Record<string, unknown>) {
+    const merged = applyCustomPatch(defs, existing, sent);
+    return {
+      ok: merged.ok,
+      patch: Object.fromEntries(Object.entries(merged.custom).filter(([k]) => k in sent)),
+      remove: merged.removed,
+    };
+  }
+
+  it("never forwards a key the org has not defined", () => {
+    const r = rpcPatch({}, { aum: "5,000,000", rogue: "anything" });
+    expect(r.patch).toEqual({ aum: 5000000 });
+  });
+
+  it("forwards only what the client sent, not the row's other values", () => {
+    const r = rpcPatch({ aum: 1, other_existing: "x" }, { aum: 2 });
+    expect(r.patch).toEqual({ aum: 2 });
+  });
+
+  it("writes a stale key back unchanged rather than taking the client's value", () => {
+    // `legacy` has no definition — its column was archived. It survives the
+    // filter because it is already on the row, so the question is whether the
+    // CLIENT's value can ride through on its back. It cannot.
+    const r = rpcPatch({ legacy: "original" }, { legacy: "attacker-supplied" });
+    expect(r.patch.legacy).toBe("original");
+  });
+
+  it("forwards nothing when a value failed validation", () => {
+    const r = rpcPatch({}, { aum: "not a number" });
+    expect(r.ok).toBe(false);
+    expect(r.patch).toEqual({});
+  });
+});
