@@ -33,12 +33,22 @@ export interface SearchableTurn {
 export interface TranscriptMatch {
   /** Index into the turns array. */
   turn: number;
-  /** Index into that turn's paragraphs. */
+  /**
+   * Index into that turn's paragraphs, or SPEAKER for the speaker's name.
+   *
+   * The name is searchable because it always was: the filter this replaced
+   * matched on it, and "what did Priya say" is one of the two things anybody
+   * searches a transcript for. It is a separate slot rather than a paragraph
+   * so the caller can paint it in the column where the name actually is.
+   */
   paragraph: number;
-  /** Character offsets within the paragraph. */
+  /** Character offsets within that text. */
   start: number;
   end: number;
 }
+
+/** The `paragraph` of a match found in the speaker's name rather than in prose. */
+export const SPEAKER = -1;
 
 /**
  * The shortest query worth running.
@@ -66,17 +76,57 @@ export function findMatches(
 
   const out: TranscriptMatch[] = [];
   (turns ?? []).forEach((turn, t) => {
+    // The speaker first, because that is reading order: the name sits to the
+    // left of the words, and a reader stepping through hits expects them in
+    // the order they appear.
+    locate(turn?.speaker ?? "", needle).forEach(([start, end]) => {
+      out.push({ turn: t, paragraph: SPEAKER, start, end });
+    });
     turn?.paragraphs?.forEach((paragraph, p) => {
-      const hay = (paragraph ?? "").toLowerCase();
-      let from = 0;
-      for (;;) {
-        const at = hay.indexOf(needle, from);
-        if (at === -1) break;
-        out.push({ turn: t, paragraph: p, start: at, end: at + needle.length });
-        from = at + needle.length;
-      }
+      locate(paragraph ?? "", needle).forEach(([start, end]) => {
+        out.push({ turn: t, paragraph: p, start, end });
+      });
     });
   });
+  return out;
+}
+
+/**
+ * Every occurrence of a lowercased needle in one piece of text, as offsets
+ * into the ORIGINAL.
+ *
+ * The obvious version searches `text.toLowerCase()` and hands back those
+ * offsets, which is wrong for any character whose lowercase is longer than it
+ * is — "İ" (U+0130) lowercases to two code units, so every match after one in
+ * the same paragraph is painted a character to the left, over the wrong
+ * letters. Rare, and a renderer that highlights the wrong characters of a
+ * meeting record is still a renderer that misquotes people.
+ *
+ * So the lowercase is built alongside a map back to the source index that
+ * produced each unit, and the offsets are translated through it.
+ */
+function locate(text: string, needle: string): Array<[number, number]> {
+  if (!text) return [];
+
+  let hay = "";
+  const source: number[] = [];
+  for (let i = 0; i < text.length; i++) {
+    const lower = text[i].toLowerCase();
+    hay += lower;
+    for (let k = 0; k < lower.length; k++) source.push(i);
+  }
+
+  const out: Array<[number, number]> = [];
+  let from = 0;
+  for (;;) {
+    const at = hay.indexOf(needle, from);
+    if (at === -1) break;
+    // The end is taken from the LAST unit consumed, plus one, so a match that
+    // ends inside an expanded character still covers that whole character
+    // rather than collapsing to nothing.
+    out.push([source[at], source[at + needle.length - 1] + 1]);
+    from = at + needle.length;
+  }
   return out;
 }
 
@@ -105,22 +155,65 @@ export function splitParagraph(
   turn: number,
   paragraph: number,
 ): TextPart[] {
-  const source = text ?? "";
-  const mine: Array<{ m: TranscriptMatch; index: number }> = [];
-  matches.forEach((m, index) => {
-    if (m.turn === turn && m.paragraph === paragraph) mine.push({ m, index });
+  return partsFor(text, groupMatches(matches).get(slot(turn, paragraph)));
+}
+
+/** One located match, carrying its place in the list the reader steps through. */
+export interface PlacedMatch {
+  match: TranscriptMatch;
+  index: number;
+}
+
+/** Where a match belongs: one turn's speaker name, or one of its paragraphs. */
+function slot(turn: number, paragraph: number): string {
+  return `${turn}:${paragraph}`;
+}
+
+/**
+ * The match list, bucketed by the text each match sits in.
+ *
+ * Built once per search rather than rescanned per paragraph. The panel renders
+ * every paragraph on every playhead tick, so the naive version is the whole
+ * match list walked once per paragraph per second.
+ */
+export function groupMatches(matches: readonly TranscriptMatch[]): Map<string, PlacedMatch[]> {
+  const out = new Map<string, PlacedMatch[]>();
+  matches.forEach((match, index) => {
+    const key = slot(match.turn, match.paragraph);
+    const bucket = out.get(key);
+    if (bucket) bucket.push({ match, index });
+    else out.set(key, [{ match, index }]);
   });
-  if (mine.length === 0) return source ? [{ value: source, match: false, index: -1 }] : [];
+  return out;
+}
+
+/** The parts of one piece of text, given only the matches that fall inside it. */
+export function partsFor(text: string, mine: readonly PlacedMatch[] | undefined): TextPart[] {
+  const source = text ?? "";
+  if (!mine || mine.length === 0) {
+    return source ? [{ value: source, match: false, index: -1 }] : [];
+  }
 
   const out: TextPart[] = [];
   let cursor = 0;
-  for (const { m, index } of mine) {
-    if (m.start > cursor) out.push({ value: source.slice(cursor, m.start), match: false, index: -1 });
-    out.push({ value: source.slice(m.start, m.end), match: true, index });
-    cursor = m.end;
+  for (const { match, index } of mine) {
+    if (match.start > cursor) {
+      out.push({ value: source.slice(cursor, match.start), match: false, index: -1 });
+    }
+    out.push({ value: source.slice(match.start, match.end), match: true, index });
+    cursor = match.end;
   }
   if (cursor < source.length) out.push({ value: source.slice(cursor), match: false, index: -1 });
   return out;
+}
+
+/** The matches for one piece of text, from a grouped list. */
+export function matchesIn(
+  grouped: Map<string, PlacedMatch[]>,
+  turn: number,
+  paragraph: number,
+): PlacedMatch[] | undefined {
+  return grouped.get(slot(turn, paragraph));
 }
 
 /**

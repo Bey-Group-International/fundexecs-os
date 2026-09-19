@@ -11,8 +11,12 @@ import { speakerColorIndex } from "@/lib/meetings/speaker-attribution";
 import { cueAt, cuesAreTimed, cuesCanFollow, type TranscriptCue } from "@/lib/meetings/transcript-cues";
 import {
   findMatches,
+  groupMatches,
   matchSummary,
-  splitParagraph,
+  matchesIn,
+  MIN_QUERY,
+  partsFor,
+  SPEAKER,
   stepMatch,
 } from "@/lib/meetings/transcript-search";
 import { formatClock } from "@/lib/meetings/recording-timeline";
@@ -86,6 +90,7 @@ export function TranscriptPanel({
   // hit, which is the part that makes a hit mean anything — "Yes, about forty"
   // is not an answer until the question above it is visible.
   const matches = useMemo(() => findMatches(turns, query), [turns, query]);
+  const grouped = useMemo(() => groupMatches(matches), [matches]);
   useEffect(() => { setAt(matches.length ? 0 : -1); }, [matches]);
 
   // The line being spoken, when there is a clock worth trusting. See
@@ -98,14 +103,21 @@ export function TranscriptPanel({
   const activeRef = useRef<HTMLLIElement>(null);
   const markRef = useRef<HTMLElement>(null);
 
-  // Stepping to a hit takes priority over following: somebody who searched is
-  // reading, not watching, and having the playhead drag them away mid-sentence
-  // is the behaviour that makes people turn sync off.
+  // Stepping to a hit. Deliberately NOT keyed on the playhead: an effect that
+  // re-runs every second and re-centres the current hit drags a reader who has
+  // scrolled away back to it, which is the behaviour this is supposed to
+  // prevent. Searching moves the transcript only when the reader steps.
   useEffect(() => {
-    if (!open) return;
-    const target = markRef.current ?? (matches.length === 0 && follow ? activeRef.current : null);
-    target?.scrollIntoView({ block: "center", behavior: "smooth" });
-  }, [open, at, playing, matches.length, follow]);
+    if (!open || at < 0) return;
+    scrollWithin(listRef.current, markRef.current);
+  }, [open, at]);
+
+  // Following the recording. Yields to a search — somebody who searched is
+  // reading, not watching — and to the first scroll.
+  useEffect(() => {
+    if (!open || !follow || matches.length > 0) return;
+    scrollWithin(listRef.current, activeRef.current);
+  }, [open, playing, follow, matches.length]);
 
   const colorFor = (speaker: string) =>
     SPEAKER_COLORS[speakerColorIndex(speaker, SPEAKER_COLORS.length)];
@@ -234,8 +246,27 @@ export function TranscriptPanel({
                         >
                           {speakerInitials(turn.speaker)}
                         </span>
+                        {/* The name is searchable too — the filter this
+                            replaced matched on it, and "what did Priya say" is
+                            half of what anyone asks a transcript. */}
                         <span className="w-full truncate text-xs font-medium text-[var(--fg-secondary)]" title={turn.speaker}>
-                          {turn.speaker}
+                          {partsFor(turn.speaker, matchesIn(grouped, i, SPEAKER)).map((part, k) =>
+                            part.match ? (
+                              <mark
+                                key={k}
+                                ref={part.index === at ? markRef : undefined}
+                                className={
+                                  part.index === at
+                                    ? "rounded bg-[var(--gold-400)] px-0.5 text-[var(--surface-0)]"
+                                    : "rounded bg-gold-400/25 px-0.5 text-[var(--fg-secondary)]"
+                                }
+                              >
+                                {part.value}
+                              </mark>
+                            ) : (
+                              <span key={k}>{part.value}</span>
+                            ),
+                          )}
                         </span>
                       </>
                     ) : (
@@ -273,7 +304,7 @@ export function TranscriptPanel({
                         {/* Painted in place rather than the turn being pulled
                             out of the transcript. Parts, never markup: these
                             are other people's words. */}
-                        {splitParagraph(paragraph, matches, i, j).map((part, k) =>
+                        {partsFor(paragraph, matchesIn(grouped, i, j)).map((part, k) =>
                           part.match ? (
                             <mark
                               key={k}
@@ -297,7 +328,7 @@ export function TranscriptPanel({
               ))}
           </ol>
 
-          {query.trim() && matches.length === 0 && (
+          {query.trim().length >= MIN_QUERY && matches.length === 0 && (
             <p className="border-t border-[var(--line)] px-4 py-3 text-center text-xs text-[var(--fg-muted)]">
               Nothing in the transcript matches “{query.trim()}”.
             </p>
@@ -318,6 +349,25 @@ export function TranscriptPanel({
       )}
     </div>
   );
+}
+
+/**
+ * Centre an element inside the transcript's own scroller.
+ *
+ * NOT scrollIntoView: that scrolls every scrollable ancestor, and the report
+ * page's <main> is one — so following the playhead yanked the whole page back
+ * to the transcript at every turn boundary. This moves one box.
+ */
+function scrollWithin(list: HTMLElement | null, target: HTMLElement | null) {
+  if (!list || !target) return;
+  const listBox = list.getBoundingClientRect();
+  const targetBox = target.getBoundingClientRect();
+  const delta = targetBox.top - listBox.top - (list.clientHeight - targetBox.height) / 2;
+  const top = Math.max(0, list.scrollTop + delta);
+  // jsdom has no scrollTo, and neither do some older engines; the property
+  // assignment is the behaviour that matters, the smoothness is not.
+  if (typeof list.scrollTo === "function") list.scrollTo({ top, behavior: "smooth" });
+  else list.scrollTop = top;
 }
 
 function ChevronIcon() {

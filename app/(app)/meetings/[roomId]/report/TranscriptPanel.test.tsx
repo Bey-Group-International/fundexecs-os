@@ -44,8 +44,9 @@ async function openPanel(user: ReturnType<typeof userEvent.setup>) {
 }
 
 beforeAll(() => {
-  // jsdom has no layout, so this exists only to be called.
+  // jsdom has no layout, so these exist only to be called.
   Element.prototype.scrollIntoView = jest.fn();
+  Element.prototype.scrollTo = jest.fn() as unknown as Element["scrollTo"];
 });
 
 describe("search", () => {
@@ -184,5 +185,73 @@ describe("driving the recording", () => {
     await openPanel(user);
     await user.click(screen.getByRole("button", { name: "0:05" }));
     expect(onSeek).toHaveBeenCalledWith(5_000);
+  });
+});
+
+describe("what the transcript is allowed to scroll", () => {
+  // scrollIntoView scrolls EVERY scrollable ancestor, and the report page's
+  // <main> is one — so following the playhead yanked the whole report back to
+  // the transcript at every turn boundary. Only the transcript's own box may
+  // move.
+  it("never calls scrollIntoView", async () => {
+    const { user } = setup({ currentMs: 13_000 });
+    (Element.prototype.scrollIntoView as jest.Mock).mockClear();
+    await openPanel(user);
+    await user.type(screen.getByLabelText("Search the transcript"), "valuation");
+
+    expect(Element.prototype.scrollIntoView as jest.Mock).not.toHaveBeenCalled();
+  });
+
+  // Somebody who searched is reading, not watching. An effect keyed on the
+  // playhead re-centres the current hit every second, which drags them back to
+  // it — the precise behaviour this panel claims to avoid.
+  it("does not move the reader when the playhead advances during a search", async () => {
+    const { user, view } = setup({ currentMs: 1_000 });
+    await openPanel(user);
+    await user.type(screen.getByLabelText("Search the transcript"), "valuation");
+
+    const scrollTo = Element.prototype.scrollTo as jest.Mock;
+    const intoView = Element.prototype.scrollIntoView as jest.Mock;
+    scrollTo.mockClear();
+    intoView.mockClear();
+    view.rerender(
+      <TranscriptPanel transcript="" cues={CUES} onSeek={jest.fn()} currentMs={31_000} />,
+    );
+
+    // Either mechanism moving the reader is the same defect, so neither is
+    // allowed to fire — otherwise this passes merely because the panel changed
+    // which API it scrolls with.
+    expect(scrollTo).not.toHaveBeenCalled();
+    expect(intoView).not.toHaveBeenCalled();
+  });
+});
+
+describe("a query too short to run", () => {
+  // The status line says "Type at least 2 characters"; saying "nothing
+  // matches" underneath it at the same time is the panel contradicting itself.
+  it("is not reported as nothing matching", async () => {
+    const { user } = setup();
+    await openPanel(user);
+    await user.type(screen.getByLabelText("Search the transcript"), "v");
+
+    expect(screen.queryByText(/Nothing in the transcript matches/)).toBeNull();
+  });
+
+  it("still reports nothing matching for a real query that misses", async () => {
+    const { user } = setup();
+    await openPanel(user);
+    await user.type(screen.getByLabelText("Search the transcript"), "zzzz");
+
+    expect(screen.getByText(/Nothing in the transcript matches/)).toBeInTheDocument();
+  });
+});
+
+describe("searching a speaker", () => {
+  it("finds the name and marks it in the column", async () => {
+    const { user } = setup();
+    await openPanel(user);
+    await user.type(screen.getByLabelText("Search the transcript"), CUES[0].speaker);
+
+    expect(screen.getAllByText(CUES[0].speaker, { selector: "mark" }).length).toBeGreaterThan(0);
   });
 });

@@ -1,7 +1,11 @@
 import {
   MIN_QUERY,
+  SPEAKER,
   findMatches,
+  groupMatches,
   matchSummary,
+  matchesIn,
+  partsFor,
   splitParagraph,
   stepMatch,
   type SearchableTurn,
@@ -155,5 +159,68 @@ describe("matchSummary", () => {
 
   it("reads as the first before anything has been stepped to", () => {
     expect(matchSummary(-1, 17, "valuation")).toBe("1 of 17");
+  });
+});
+
+describe("the speaker's name", () => {
+  const turns = [
+    { speaker: "Priya Raman", paragraphs: ["We should revisit the valuation."] },
+    { speaker: "Tom", paragraphs: ["Priya already covered that."] },
+  ];
+
+  // The filter this replaced matched on the speaker, so dropping it was a
+  // regression: searching a participant's name reported "no matches" on a
+  // transcript that is full of them.
+  it("is searched, not just the words", () => {
+    const hits = findMatches(turns, "priya");
+    expect(hits).toHaveLength(2);
+    expect(hits[0]).toMatchObject({ turn: 0, paragraph: SPEAKER, start: 0, end: 5 });
+  });
+
+  // Reading order: the name sits to the left of the words it introduces.
+  it("comes before that turn's own paragraphs", () => {
+    const hits = findMatches([{ speaker: "Ada", paragraphs: ["Ada speaking."] }], "ada");
+    expect(hits.map((h) => h.paragraph)).toEqual([SPEAKER, 0]);
+  });
+});
+
+describe("offsets under a lowercase that changes length", () => {
+  // "İ" (U+0130) lowercases to two code units. Searching the lowercased text
+  // and applying those offsets to the original shifts every later match in the
+  // paragraph — highlighting the wrong characters of somebody's words.
+  it("still points at the text that actually matched", () => {
+    const text = "İstanbul and the word here";
+    const hits = findMatches([{ speaker: "", paragraphs: [text] }], "here");
+    expect(hits).toHaveLength(1);
+    expect(text.slice(hits[0].start, hits[0].end)).toBe("here");
+  });
+
+  it("keeps the parts reassembling into the original", () => {
+    const text = "İstanbul and the word here";
+    const hits = findMatches([{ speaker: "", paragraphs: [text] }], "here");
+    const parts = splitParagraph(text, hits, 0, 0);
+    expect(parts.map((p) => p.value).join("")).toBe(text);
+  });
+});
+
+describe("groupMatches", () => {
+  it("buckets by the text each match sits in, keeping the global index", () => {
+    const turns = [
+      { speaker: "Ada", paragraphs: ["one two", "two three"] },
+    ];
+    const hits = findMatches(turns, "two");
+    const grouped = groupMatches(hits);
+    expect(matchesIn(grouped, 0, 0)?.map((p) => p.index)).toEqual([0]);
+    expect(matchesIn(grouped, 0, 1)?.map((p) => p.index)).toEqual([1]);
+    expect(matchesIn(grouped, 0, 2)).toBeUndefined();
+  });
+
+  it("agrees with splitParagraph", () => {
+    const turns = [{ speaker: "Ada", paragraphs: ["a two b two c"] }];
+    const hits = findMatches(turns, "two");
+    const grouped = groupMatches(hits);
+    expect(partsFor(turns[0].paragraphs[0], matchesIn(grouped, 0, 0))).toEqual(
+      splitParagraph(turns[0].paragraphs[0], hits, 0, 0),
+    );
   });
 });

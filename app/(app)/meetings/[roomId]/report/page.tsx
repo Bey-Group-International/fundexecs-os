@@ -60,9 +60,16 @@ export default function MeetingReportPage() {
    * to move a highlight that only changes between turns is most of a core for
    * nothing.
    */
-  const [playheadMs, setPlayheadMs] = useState(0);
+  // undefined, not 0: zero is a real position, so starting there marks a turn
+  // as being spoken and scrolls to it before anything has been played.
+  const [playheadMs, setPlayheadMs] = useState<number | undefined>(undefined);
   const handleTime = useCallback((ms: number) => {
-    setPlayheadMs((prev) => (Math.floor(ms / 1000) === Math.floor(prev / 1000) ? prev : ms));
+    // Only when the second changes, so a 4Hz timeupdate does not re-render the
+    // transcript four times a second. The first report always lands, because
+    // "nothing has played" is not a second.
+    setPlayheadMs((prev) =>
+      prev !== undefined && Math.floor(ms / 1000) === Math.floor(prev / 1000) ? prev : ms,
+    );
   }, []);
 
   async function fetchReport() {
