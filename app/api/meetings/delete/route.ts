@@ -41,6 +41,27 @@ const CLEANUP_PAGE = 500;
  */
 const MAX_CLEANUP_PAGES = 40;
 
+/**
+ * Recordings removed at once.
+ *
+ * Each meeting costs a listing per recording plus a remove, so an unbounded
+ * fan-out over a large clear-all opens thousands of Storage requests at once
+ * and can exhaust the function before it finishes. That failure lands in the
+ * worst possible place: AFTER the rows are gone, which is the state this route
+ * exists to avoid.
+ */
+const DROP_CONCURRENCY = 8;
+
+/**
+ * Meetings whose recordings are removed inside the request.
+ *
+ * Deliberately a cap, and safe as one only because the sweep's orphan pass now
+ * scans the WHOLE bucket rather than its first page — so what is left here is
+ * genuinely found within the hour rather than never. Before that fix this
+ * number would have been another way to strand objects permanently.
+ */
+const MAX_EAGER_CLEANUP = 1000;
+
 export async function DELETE(req: NextRequest) {
   // Scope every delete to the caller's ACTIVE org. Scoping by host_id alone let a
   // user who hosts meetings in multiple orgs wipe meetings across all of them with
@@ -187,13 +208,33 @@ async function hostMeetingIds(
 async function dropRecordings(meetingIds: readonly string[]): Promise<void> {
   if (meetingIds.length === 0 || !hasSupabaseServiceEnv()) return;
   const service = createServiceClient();
-  await Promise.all(
-    meetingIds.map(async (id) => {
+
+  const eager = meetingIds.slice(0, MAX_EAGER_CLEANUP);
+  if (meetingIds.length > eager.length) {
+    console.info(
+      `[meetings/delete] ${meetingIds.length} meetings deleted; clearing ${eager.length} recordings now, the sweep takes the rest`,
+    );
+  }
+
+  // A fixed pool rather than one promise per meeting. Workers take the next id
+  // until there are none left, so the number of Storage requests in flight is
+  // the pool size whether this call deletes three meetings or a thousand.
+  let next = 0;
+  const worker = async () => {
+    for (;;) {
+      const i = next++;
+      if (i >= eager.length) return;
+      const id = eager[i];
       try {
         await removeMeetingRecordings(service as never, id);
       } catch (err) {
+        // One meeting's objects failing is not a reason to abandon the rest,
+        // and never a reason to fail the delete: the rows are already gone and
+        // the sweep's orphan pass will find whatever is left.
         console.warn("[meetings/delete] recording objects left for the sweep", id, err);
       }
-    }),
-  );
+    }
+  };
+
+  await Promise.all(Array.from({ length: Math.min(DROP_CONCURRENCY, eager.length) }, worker));
 }
