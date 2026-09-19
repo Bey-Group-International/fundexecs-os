@@ -116,45 +116,47 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
     return NextResponse.json({ error: "A deal needs a contact or an investor." }, { status: 400 });
   }
 
-  // Custom values go through the database-side merge so a concurrent edit to a
-  // different key on the same row is not erased by this one's snapshot.
+  // Custom values and ordinary columns are applied in ONE statement. Splitting
+  // them meant the jsonb merge committed first, so a failure on the scalars
+  // left the custom values written while the caller was told the whole update
+  // failed. The merge is still database-side (`custom || patch`), so a
+  // concurrent edit to a different key on the same row survives.
+  let customPatch: Record<string, unknown> = {};
   if (result.patch.custom !== undefined && payload.custom) {
-    const { error: mergeError } = await supabase.rpc("network_opportunity_merge_custom", {
-      target_org: auth.ctx.orgId,
-      target_opportunity: id,
-      patch: Object.fromEntries(
-        Object.entries(result.patch.custom as Record<string, unknown>).filter(
-          ([key]) => key in (payload.custom as Record<string, unknown>),
-        ),
+    customPatch = Object.fromEntries(
+      Object.entries(result.patch.custom as Record<string, unknown>).filter(
+        ([key]) => key in (payload.custom as Record<string, unknown>),
       ),
-      remove_keys: result.customRemoved ?? [],
-    });
-    if (mergeError) {
-      console.error("[network/opportunities] custom merge", mergeError);
-      return NextResponse.json({ error: "Failed to update the deal" }, { status: 500 });
-    }
+    );
     delete result.patch.custom;
   }
 
-  if (Object.keys(result.patch).length === 0) {
-    // The custom merge above was the whole update.
-    const { data: merged } = await supabase
-      .from("network_opportunities")
-      .select(OPPORTUNITY_SELECT)
-      .eq("organization_id", auth.ctx.orgId)
-      .eq("id", id)
-      .maybeSingle();
-    const owners = await loadOwnerNames(supabase, auth.ctx.orgId);
-    return NextResponse.json({ opportunity: mapOpportunity(merged ?? {}, owners) });
+  const hasCustom = Object.keys(customPatch).length > 0 || (result.customRemoved ?? []).length > 0;
+  if (Object.keys(result.patch).length === 0 && !hasCustom) {
+    return NextResponse.json({ error: "Nothing to update." }, { status: 400 });
   }
 
+  const { error: applyError } = await supabase.rpc("network_opportunity_apply_patch", {
+    target_org: auth.ctx.orgId,
+    target_opportunity: id,
+    scalars: result.patch,
+    custom_patch: customPatch,
+    remove_keys: result.customRemoved ?? [],
+  });
+
+  if (applyError) {
+    console.error("[network/opportunities] update", applyError);
+    return NextResponse.json({ error: "Failed to update the deal" }, { status: 500 });
+  }
+
+  // Re-read for the response shape: the row is already committed, so this is a
+  // read that can only cost a 500, never a partial write.
   const { data, error } = await supabase
     .from("network_opportunities")
-    .update({ ...result.patch, updated_at: new Date().toISOString() })
+    .select(OPPORTUNITY_SELECT)
     .eq("organization_id", auth.ctx.orgId)
     .eq("id", id)
-    .select(OPPORTUNITY_SELECT)
-    .single();
+    .maybeSingle();
 
   if (error || !data) {
     console.error("[network/opportunities] update", error);

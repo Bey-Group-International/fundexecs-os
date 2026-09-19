@@ -515,3 +515,113 @@ as $$
 $$;
 
 grant execute on function public.network_opportunity_merge_custom(uuid, uuid, jsonb, text[]) to authenticated;
+
+-- ── 7. One-statement PATCH ───────────────────────────────────────────────────
+--
+-- A request can carry custom values and ordinary columns together. Doing those
+-- as two calls — merge the jsonb, then update the scalars — means a failure
+-- between them leaves the custom values written and the rest not, and the
+-- caller is told the whole thing failed. The edit is then half-applied and
+-- nobody knows which half.
+--
+-- Both happen in one UPDATE here, so they commit or roll back together, and the
+-- jsonb merge still happens database-side (`custom || patch`) rather than as a
+-- read-modify-write that would drop a concurrent edit to another key.
+--
+-- Columns are enumerated rather than applied dynamically: `scalars ? 'col'`
+-- distinguishes "set this to null" from "leave it alone", and an explicit list
+-- means a caller cannot reach a column the route never meant to expose.
+
+create or replace function public.network_contact_apply_patch(
+  target_org uuid,
+  target_contact uuid,
+  scalars jsonb default '{}'::jsonb,
+  custom_patch jsonb default '{}'::jsonb,
+  remove_keys text[] default '{}'::text[]
+)
+returns jsonb
+language sql
+volatile
+set search_path = public
+as $$
+  update public.network_contacts c
+     set title = case when scalars ? 'title' then scalars->>'title' else c.title end,
+         company = case when scalars ? 'company' then scalars->>'company' else c.company end,
+         notes = case when scalars ? 'notes' then scalars->>'notes' else c.notes end,
+         stage = case when scalars ? 'stage' then scalars->>'stage' else c.stage end,
+         visibility = case when scalars ? 'visibility'
+                        then scalars->>'visibility' else c.visibility end,
+         relationship_owner = case when scalars ? 'relationship_owner'
+                        then (scalars->>'relationship_owner')::uuid
+                        else c.relationship_owner end,
+         next_step_at = case when scalars ? 'next_step_at'
+                        then (scalars->>'next_step_at')::timestamptz
+                        else c.next_step_at end,
+         tags = case when scalars ? 'tags'
+                  then coalesce(
+                    (select array_agg(t) from jsonb_array_elements_text(scalars->'tags') t),
+                    '{}'::text[])
+                  else c.tags end,
+         custom = (coalesce(c.custom, '{}'::jsonb) || coalesce(custom_patch, '{}'::jsonb))
+                    - coalesce(remove_keys, '{}'::text[]),
+         updated_at = now()
+   where c.id = target_contact
+     and c.organization_id = target_org
+  returning to_jsonb(c);
+$$;
+
+grant execute on function public.network_contact_apply_patch(uuid, uuid, jsonb, jsonb, text[])
+  to authenticated;
+
+create or replace function public.network_opportunity_apply_patch(
+  target_org uuid,
+  target_opportunity uuid,
+  scalars jsonb default '{}'::jsonb,
+  custom_patch jsonb default '{}'::jsonb,
+  remove_keys text[] default '{}'::text[]
+)
+returns jsonb
+language sql
+volatile
+set search_path = public
+as $$
+  update public.network_opportunities o
+     set name = case when scalars ? 'name' then scalars->>'name' else o.name end,
+         stage = case when scalars ? 'stage' then scalars->>'stage' else o.stage end,
+         status = case when scalars ? 'status' then scalars->>'status' else o.status end,
+         contact_id = case when scalars ? 'contact_id'
+                        then (scalars->>'contact_id')::uuid else o.contact_id end,
+         investor_id = case when scalars ? 'investor_id'
+                        then (scalars->>'investor_id')::uuid else o.investor_id end,
+         fund_id = case when scalars ? 'fund_id'
+                        then (scalars->>'fund_id')::uuid else o.fund_id end,
+         owner_id = case when scalars ? 'owner_id'
+                        then (scalars->>'owner_id')::uuid else o.owner_id end,
+         target_amount = case when scalars ? 'target_amount'
+                        then (scalars->>'target_amount')::numeric else o.target_amount end,
+         currency = case when scalars ? 'currency' then scalars->>'currency' else o.currency end,
+         probability = case when scalars ? 'probability'
+                        then (scalars->>'probability')::integer else o.probability end,
+         expected_close = case when scalars ? 'expected_close'
+                        then (scalars->>'expected_close')::date else o.expected_close end,
+         closed_at = case when scalars ? 'closed_at'
+                        then (scalars->>'closed_at')::timestamptz else o.closed_at end,
+         lost_reason = case when scalars ? 'lost_reason'
+                        then scalars->>'lost_reason' else o.lost_reason end,
+         source = case when scalars ? 'source' then scalars->>'source' else o.source end,
+         notes = case when scalars ? 'notes' then scalars->>'notes' else o.notes end,
+         tags = case when scalars ? 'tags'
+                  then coalesce(
+                    (select array_agg(t) from jsonb_array_elements_text(scalars->'tags') t),
+                    '{}'::text[])
+                  else o.tags end,
+         custom = (coalesce(o.custom, '{}'::jsonb) || coalesce(custom_patch, '{}'::jsonb))
+                    - coalesce(remove_keys, '{}'::text[]),
+         updated_at = now()
+   where o.id = target_opportunity
+     and o.organization_id = target_org
+  returning to_jsonb(o);
+$$;
+
+grant execute on function public.network_opportunity_apply_patch(uuid, uuid, jsonb, jsonb, text[])
+  to authenticated;

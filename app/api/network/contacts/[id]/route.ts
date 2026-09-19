@@ -152,6 +152,11 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
   if (payload.title !== undefined) patch.title = payload.title?.slice(0, 200) ?? null;
   if (payload.company !== undefined) patch.company = payload.company?.slice(0, 200) ?? null;
 
+  // Collected from the custom block below, then applied together with the
+  // scalar columns in one statement.
+  let customPatch: Record<string, unknown> | null = null;
+  let customRemove: string[] = [];
+
   // Custom values are type-checked here because a jsonb column cannot do it: an
   // unchecked write is how "AUM" ends up holding 2000000 on one row and "$2m"
   // on the next, and stops being sortable.
@@ -179,60 +184,40 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
       return NextResponse.json({ error: merged.errors.join(" ") }, { status: 400 });
     }
 
-    // Applied through a database-side merge rather than written as a whole
-    // object: the table view exists so somebody can edit many cells quickly,
-    // and two cells on the SAME row save independently. A read-modify-write
-    // would let the slower one erase the faster one's key.
+    // Held until the single UPDATE below. Both the custom merge and the
+    // ordinary columns go in one statement so a failure cannot leave half the
+    // request written — and the jsonb merge still happens database-side
+    // (`custom || patch`), so a concurrent edit to a different key on the same
+    // row is not erased by a read-modify-write.
     const sent = payload.custom as Record<string, unknown>;
-    const { error: mergeError } = await supabase.rpc("network_contact_merge_custom", {
-      target_org: auth.ctx.orgId,
-      target_contact: id,
-      patch: Object.fromEntries(
-        Object.entries(merged.custom).filter(([key]) => key in sent),
-      ),
-      remove_keys: merged.removed,
-    });
-    if (mergeError) {
-      console.error("[network/contact] custom merge", mergeError);
-      return NextResponse.json({ error: "Failed to update contact" }, { status: 500 });
-    }
+    customPatch = Object.fromEntries(
+      Object.entries(merged.custom).filter(([key]) => key in sent),
+    );
+    customRemove = merged.removed;
   }
 
-  if (Object.keys(patch).length === 0) {
-    // The custom merge above may have been the entire update.
-    if (payload.custom !== undefined) {
-      const names = await loadPrincipalNames(supabase, auth.ctx.orgId);
-      const { data: current } = await supabase
-        .from("network_contacts")
-        .select(CONTACT_RETURN_COLUMNS)
-        .eq("organization_id", auth.ctx.orgId)
-        .eq("id", id)
-        .maybeSingle();
-      if (!current) return NextResponse.json({ error: "Contact not found" }, { status: 404 });
-      return NextResponse.json({
-        contact: mapContactRecord(
-          current as Record<string, unknown>,
-          names.get(String((current as Record<string, unknown>).relationship_owner)) ?? null,
-        ),
-      });
-    }
+  if (Object.keys(patch).length === 0 && customPatch === null) {
     return NextResponse.json({ error: "Nothing to update." }, { status: 400 });
   }
 
-  patch.updated_at = new Date().toISOString();
+  const { data: applied, error } = await supabase.rpc("network_contact_apply_patch", {
+    target_org: auth.ctx.orgId,
+    target_contact: id,
+    scalars: patch,
+    custom_patch: customPatch ?? {},
+    remove_keys: customRemove,
+  });
 
-  const { data: updated, error } = await supabase
-    .from("network_contacts")
-    .update(patch)
-    .eq("organization_id", auth.ctx.orgId)
-    .eq("id", id)
-    .select(CONTACT_RETURN_COLUMNS)
-    .single();
-
-  if (error || !updated) {
+  if (error) {
     console.error("[network/contact] update", error);
     return NextResponse.json({ error: "Failed to update contact" }, { status: 500 });
   }
+  // The function matches on (id, organization_id), so no row means the contact
+  // is not this org's — or does not exist. Either way it is a 404, not a 500.
+  if (!applied) {
+    return NextResponse.json({ error: "Contact not found" }, { status: 404 });
+  }
+  const updated = applied as Record<string, any>;
 
   invalidateRoster(auth.ctx.orgId);
 

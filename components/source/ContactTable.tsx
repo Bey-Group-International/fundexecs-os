@@ -93,6 +93,20 @@ export function ContactTable({ rows, fieldDefs, owners, onChanged }: Props) {
   // Keep in step when the parent re-fetches (filter change, new page).
   useEffect(() => setPeople(rows), [rows]);
 
+  // A column sweep saves many cells in quick succession. Refetching the roster
+  // after each one meant a page-0 response could land while another cell was
+  // still in flight, replace `people`, and take that cell's optimistic value
+  // with it — the edit looked accepted and then reverted on screen. So the
+  // refresh is deferred until nothing is pending, and coalesced into one.
+  const refreshNeeded = useRef(false);
+
+  useEffect(() => {
+    if (pending.size === 0 && refreshNeeded.current) {
+      refreshNeeded.current = false;
+      onChanged?.();
+    }
+  }, [pending, onChanged]);
+
   const columns = useMemo<Column[]>(
     () => [
       ...BASE_COLUMNS,
@@ -173,7 +187,9 @@ export function ContactTable({ rows, fieldDefs, owners, onChanged }: Props) {
         });
         const json = (await res.json().catch(() => null)) as { error?: string } | null;
         if (!res.ok) throw new Error(json?.error ?? "Couldn't save that.");
-        onChanged?.();
+        // Ask for a refresh, but let the effect above decide when: firing it
+        // here would race the saves still in flight.
+        refreshNeeded.current = true;
       } catch (err) {
         // Revert only this cell, and say why on the cell itself — a grid that
         // silently drops an edit is how data quietly goes wrong.
@@ -209,7 +225,10 @@ export function ContactTable({ rows, fieldDefs, owners, onChanged }: Props) {
         });
       }
     },
-    [owners, onChanged],
+    // onChanged is no longer called here — the effect above fires it once the
+    // pending set empties — so keeping it as a dependency would rebuild this
+    // callback for nothing.
+    [owners],
   );
 
   if (people.length === 0) {
