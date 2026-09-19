@@ -20,6 +20,11 @@ const TYPE_META: Record<ActivityType, { icon: React.ReactNode; tone: string }> =
   outreach: { tone: "text-fg-secondary bg-surface-2", icon: <path d="M4 4h16v16H4zM22 6l-10 7L2 6" /> },
   prospect: { tone: "text-emerald-300 bg-emerald-500/10", icon: <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2M12 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8ZM19 8v6M22 11h-6" /> },
   contact: { tone: "text-fg-secondary bg-surface-2", icon: <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2M12 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z" /> },
+  // Hand-logged CRM timeline entries. Tinted accent so what a human recorded
+  // reads differently from what the engine inferred.
+  note: { tone: "text-accent-300 bg-accent-400/10", icon: <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zM14 2v6h6M16 13H8M16 17H8M10 9H8" /> },
+  call: { tone: "text-accent-300 bg-accent-400/10", icon: <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.9.34 1.85.57 2.81.7A2 2 0 0 1 22 16.92Z" /> },
+  email: { tone: "text-accent-300 bg-accent-400/10", icon: <path d="M4 4h16v16H4zM22 6l-10 7L2 6" /> },
 };
 
 function relativeTime(iso: string): string {

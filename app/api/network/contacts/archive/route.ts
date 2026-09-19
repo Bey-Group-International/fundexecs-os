@@ -7,6 +7,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireOrgContext } from "@/lib/auth";
 import { createServerClient } from "@/lib/supabase/server";
+import { invalidateRoster } from "@/lib/network-roster";
+import { recordNetworkAudit } from "@/lib/network-audit";
 
 export const dynamic = "force-dynamic";
 
@@ -51,6 +53,15 @@ export async function POST(req: NextRequest) {
     if (!data || data.length === 0) {
       return NextResponse.json({ error: "Contact not found." }, { status: 404 });
     }
+    // The roster is composed and cached per org; without this the archived row
+    // keeps appearing until the cache expires.
+    invalidateRoster(auth.ctx.orgId);
+    await recordNetworkAudit(supabase as never, {
+      orgId: auth.ctx.orgId,
+      actorId: auth.ctx.userId,
+      action: "archive",
+      entityId: contactId,
+    });
     return NextResponse.json({ ok: true });
   } catch (err) {
     console.error("[network/contacts/archive]", err);

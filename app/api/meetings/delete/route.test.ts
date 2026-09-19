@@ -17,6 +17,10 @@ const state: {
   /** Object paths removed from the bucket. */
   objectsRemoved: string[];
   deleteError: { message: string } | null;
+  /** The enumeration of what a clear-all would delete fails. */
+  readError: { message: string } | null;
+  /** Called on every bucket listing, so a test can watch concurrency. */
+  onList: (() => Promise<void>) | null;
   listThrows: boolean;
   /** The last filters applied, so a test can pin what the delete was scoped to. */
   filters: Record<string, unknown>;
@@ -28,6 +32,8 @@ const state: {
   foldersListed: [],
   objectsRemoved: [],
   deleteError: null,
+  readError: null,
+  onList: null,
   listThrows: false,
   filters: {},
   mode: "",
@@ -41,6 +47,7 @@ function storage() {
     from: () => ({
       list: async (prefix: string) => {
         if (state.listThrows) return { data: null, error: { message: "storage down" } };
+        if (state.onList) await state.onList();
         state.foldersListed.push(prefix);
         // "<meeting>" lists its recordings; "<meeting>/<recording>" its parts.
         return prefix.includes("/")
@@ -79,7 +86,13 @@ function meetingsBuilder() {
     delete: () => { state.mode = "delete"; return chain; },
     eq: (col: string, val: unknown) => { state.filters[col] = val; return chain; },
     is: (col: string, val: unknown) => { state.filters[col] = val; return chain; },
-    limit: () => Promise.resolve({ data: state.removedRows, error: null }),
+    order: () => chain,
+    // Both actually apply their bound. A harness that answered with every row
+    // regardless would report a capped read as though it had read everything —
+    // which is precisely the defect these tests exist to catch.
+    limit: (n: number) => Promise.resolve({ data: state.removedRows.slice(0, n), error: state.readError }),
+    range: (from: number, to: number) =>
+      Promise.resolve({ data: state.removedRows.slice(from, to + 1), error: state.readError }),
     then: (resolve: (v: unknown) => unknown) =>
       Promise.resolve(resolve({ data: state.removedRows, error: state.deleteError })),
   };
@@ -92,6 +105,8 @@ beforeEach(() => {
   state.foldersListed = [];
   state.objectsRemoved = [];
   state.deleteError = null;
+  state.readError = null;
+  state.onList = null;
   state.listThrows = false;
   state.filters = {};
   state.mode = "";
@@ -118,6 +133,52 @@ describe("a hard delete takes the recording with it", () => {
     state.removedRows = [{ id: "m1" }, { id: "m2" }];
     await DELETE(req({ clearAll: true }));
     expect(state.foldersListed).toEqual(expect.arrayContaining(["m1", "m2"]));
+  });
+
+  // A clear-all deletes every meeting the host has, so reading only the first
+  // page of them strands the recordings of all the rest — the same "a cap
+  // quietly orphans the remainder" defect this route was written to fix,
+  // one level up.
+  it("clears the recordings of more meetings than one page of them holds", async () => {
+    state.removedRows = Array.from({ length: 600 }, (_, i) => ({ id: `m${i}` }));
+    const res = await DELETE(req({ clearAll: true }));
+    expect(res.status).toBe(200);
+    // Meeting-level prefixes only; each meeting also has its recording's parts
+    // listed under "<meeting>/<recording>".
+    const meetings = state.foldersListed.filter((prefix) => !prefix.includes("/"));
+    expect(meetings).toContain("m0");
+    expect(meetings).toContain("m599");
+    expect(meetings).toHaveLength(600);
+  });
+
+  // An unbounded fan-out opens a Storage request per meeting at once, and the
+  // failure lands after the rows are already gone — the exact state this route
+  // exists to avoid. The pool is what makes a big clear-all cost the same
+  // number of concurrent requests as a small one.
+  it("never has more than the pool's worth of removals in flight", async () => {
+    state.removedRows = Array.from({ length: 200 }, (_, i) => ({ id: `m${i}` }));
+    let inFlight = 0;
+    let peak = 0;
+    state.onList = async () => {
+      inFlight += 1;
+      peak = Math.max(peak, inFlight);
+      await new Promise((r) => setTimeout(r, 0));
+      inFlight -= 1;
+    };
+    await DELETE(req({ clearAll: true }));
+    expect(peak).toBeGreaterThan(0);
+    expect(peak).toBeLessThanOrEqual(8);
+  });
+
+  // Fails closed. Deleting first and finding out afterwards that the list could
+  // not be read is the exact outcome this route exists to prevent: rows gone,
+  // objects stranded, and a 200 saying it was done.
+  it("refuses a clear-all it could not enumerate, rather than deleting blind", async () => {
+    state.readError = { message: "read failed" };
+    const res = await DELETE(req({ clearAll: true }));
+    expect(res.status).toBe(500);
+    expect(state.mode).not.toBe("delete");
+    expect(state.objectsRemoved).toEqual([]);
   });
 
   // Ownership is proved by the delete itself, which is scoped to this host in

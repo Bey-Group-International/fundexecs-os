@@ -3,7 +3,13 @@ import { redirect } from "next/navigation";
 import { getSessionContext } from "@/lib/auth";
 import { createServerClient } from "@/lib/supabase/server";
 import { NetworkModule } from "@/components/source/NetworkModule";
-import { loadActiveNetwork, loadNetworkActivity, loadNetworkLiveCounts } from "@/lib/network-active";
+import { loadNetworkActivity, loadNetworkLiveCounts } from "@/lib/network-active";
+import {
+  applyRosterQuery,
+  getRoster,
+  parseRosterQuery,
+  DEFAULT_PAGE_SIZE,
+} from "@/lib/network-roster";
 
 export const metadata: Metadata = {
   title: "Network · FundExecs OS",
@@ -16,9 +22,12 @@ export const dynamic = "force-dynamic";
 // Network OS — a standalone, side-rail destination. The default view is the
 // operator's ACTIVE NETWORK, assembled from first-party Source-hub data (the
 // capital pipeline, relationship contacts, partners, providers) rather than an
-// imported address book, alongside a live activity feed. Loads the roster,
-// pulse, initial feed + live counts, active circles, and the signed-in
-// principal's identity so warm-intro drafts are attributed correctly.
+// imported address book, alongside a live activity feed.
+//
+// Only the FIRST PAGE of the roster is rendered here. This page used to embed
+// every person in the org in its payload and let the browser page through them;
+// the rest now comes from /api/network/roster as the operator scrolls or
+// filters, which is the same code path this first page goes through.
 export default async function NetworkPage() {
   const ctx = await getSessionContext();
   if (!ctx) redirect("/login");
@@ -30,8 +39,8 @@ export default async function NetworkPage() {
   const looseDb = supabase as any;
   const orgId = ctx.orgId;
 
-  const [{ people, pulse }, activityEvents, liveCounts, circlesRes, principalRes] = await Promise.all([
-    loadActiveNetwork(supabase, orgId),
+  const [{ people, pulse }, activityEvents, liveCounts, circlesRes, principalRes, membersRes] = await Promise.all([
+    getRoster(supabase, orgId),
     loadNetworkActivity(supabase, orgId, 40),
     loadNetworkLiveCounts(supabase, orgId),
     looseDb
@@ -46,7 +55,26 @@ export default async function NetworkPage() {
       .eq("id", ctx.userId)
       .limit(1)
       .single(),
+    // The assignable owners for the roster's owner filter and bulk assign.
+    looseDb
+      .from("organization_members")
+      .select("principal_id, principals(full_name)")
+      .eq("organization_id", orgId)
+      .limit(200),
   ]);
+
+  const initialRoster = applyRosterQuery(people, parseRosterQuery(new URLSearchParams()), pulse);
+
+  type MemberRow = {
+    principal_id: string;
+    principals: { full_name: string | null } | { full_name: string | null }[] | null;
+  };
+  const owners = ((membersRes.data ?? []) as MemberRow[])
+    .map((m) => {
+      const p = Array.isArray(m.principals) ? m.principals[0] : m.principals;
+      return { id: m.principal_id, name: p?.full_name ?? "Unnamed member" };
+    })
+    .sort((a, b) => a.name.localeCompare(b.name));
 
   type CircleRow = {
     id: string;
@@ -91,7 +119,9 @@ export default async function NetworkPage() {
       <NetworkModule
         senderName={senderName}
         senderTitle={senderTitle}
-        people={people}
+        initialRoster={initialRoster}
+        owners={owners}
+        pageSize={DEFAULT_PAGE_SIZE}
         pulse={pulse}
         activityEvents={activityEvents}
         liveCounts={liveCounts}

@@ -16,6 +16,8 @@ import {
   type CapitalRole,
 } from "@/lib/integrations/professional-network";
 import { addProfessionalContact } from "@/lib/integrations/professional-network/pipeline.server";
+import { invalidateRoster } from "@/lib/network-roster";
+import { recordNetworkAudit } from "@/lib/network-audit";
 
 export const dynamic = "force-dynamic";
 
@@ -108,6 +110,18 @@ export async function POST(req: NextRequest) {
   if (!result.ok) {
     return NextResponse.json({ error: result.error }, { status: 500 });
   }
+
+  // A newly added contact must show up in the roster now, not after the
+  // composition cache expires.
+  invalidateRoster(auth.ctx.orgId);
+  await recordNetworkAudit(supabase as never, {
+    orgId: auth.ctx.orgId,
+    actorId: auth.ctx.userId,
+    action: "create",
+    entityId: result.contactId ?? null,
+    entityLabel: `${adapted.first_name} ${adapted.last_name}`.trim(),
+    metadata: { source: adapted.source, mode: payload.mode },
+  });
 
   return NextResponse.json({
     ok: true,

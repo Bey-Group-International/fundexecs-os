@@ -49,13 +49,24 @@ export interface RecordingSweepStats {
 }
 
 /**
- * Meeting folders examined per sweep.
+ * Meeting folders whose recordings ONE sweep may remove.
  *
- * The bucket's top level is one folder per meeting that has ever been
- * recorded, so this list only ever grows. Bounded like every other pass here;
- * a backlog is taken next hour.
+ * This bounds the work of a run, not what the pass can ever see. The scan
+ * itself is exhaustive — see listMeetingFolders — which is the difference
+ * between a backlog that is taken next hour and one that is never taken at
+ * all: an orphan left this run is found again next run, because the next scan
+ * reads the whole bucket rather than the same first page of it.
  */
 export const MAX_ORPHAN_CHECK = 200;
+
+/**
+ * Meeting ids asked about in one `in (...)`.
+ *
+ * A bound on a query, not on the scan: every folder found is asked about, a
+ * batch at a time. Well under PostgREST's max_rows, so the answer to a batch
+ * is never silently short — which would read as "this meeting is gone".
+ */
+const ORPHAN_QUERY_CHUNK = 200;
 
 /**
  * Objects asked for per listing call, and the most pages one prefix may take.
@@ -224,34 +235,61 @@ export async function runRecordingSweep(
  * database is precisely where the evidence was destroyed.
  */
 async function sweepOrphans(supabase: Client, stats: RecordingSweepStats): Promise<void> {
-  const { data: folders, error } = await supabase.storage
-    .from(RECORDING_BUCKET)
-    .list("", { limit: MAX_ORPHAN_CHECK });
-  if (error || !folders?.length) return;
+  let folders: string[];
+  try {
+    folders = await listMeetingFolders(supabase);
+  } catch (err) {
+    // Counted and said out loud, rather than returning as though the bucket
+    // were clean. A pass that cannot read the bucket has found nothing, which
+    // is indistinguishable from having found nothing to do unless it reports —
+    // and this pass is the only thing that can find these objects at all.
+    stats.errors += 1;
+    console.error("[recording-sweep] could not list the recording bucket", err);
+    return;
+  }
 
   // Objects are keyed `<meeting_id>/<recording_id>/part-NNNNNN.webm`, so every
   // top-level entry is a meeting id. Anything that is not one is not ours to
   // reason about and is left alone.
-  const meetingIds = folders.map((f) => f.name).filter(isUuid);
+  const meetingIds = folders.filter(isUuid);
   if (meetingIds.length === 0) return;
 
-  // One query, asking which of these still exist. `deleted_at` is deliberately
-  // NOT consulted: a soft-deleted meeting is one the host can still restore,
-  // and its recording is still readable through the report. Only a row that is
-  // gone outright means nothing can ever reach these bytes again.
-  const { data: alive, error: readError } = await supabase
-    .from("live_meetings")
-    .select("id")
-    .in("id", meetingIds);
-  if (readError) {
-    stats.errors += 1;
-    console.error("[recording-sweep] could not check for orphaned recordings", readError.message);
-    return;
+  // Everything is resolved BEFORE anything is deleted. Two phases rather than
+  // one because deleting a folder changes the listing that is being paged: the
+  // scan has to finish while the bucket still holds what it is scanning.
+  const orphans: string[] = [];
+  for (let i = 0; i < meetingIds.length; i += ORPHAN_QUERY_CHUNK) {
+    const batch = meetingIds.slice(i, i + ORPHAN_QUERY_CHUNK);
+    // Asking which of these still exist. `deleted_at` is deliberately NOT
+    // consulted: a soft-deleted meeting is one the host can still restore, and
+    // its recording is still readable through the report. Only a row that is
+    // gone outright means nothing can ever reach these bytes again.
+    const { data: alive, error: readError } = await supabase
+      .from("live_meetings")
+      .select("id")
+      .in("id", batch);
+    if (readError) {
+      // Stop rather than carry on with the batches that did answer. A failed
+      // read says nothing about whether these meetings exist, and the action
+      // it would license is deleting their recordings.
+      stats.errors += 1;
+      console.error("[recording-sweep] could not check for orphaned recordings", readError.message);
+      return;
+    }
+
+    const living = new Set(((alive ?? []) as { id: string }[]).map((m) => m.id));
+    for (const meetingId of batch) {
+      if (!living.has(meetingId)) orphans.push(meetingId);
+    }
   }
 
-  const living = new Set(((alive ?? []) as { id: string }[]).map((m) => m.id));
-  for (const meetingId of meetingIds) {
-    if (living.has(meetingId)) continue;
+  if (orphans.length > MAX_ORPHAN_CHECK) {
+    console.info(
+      `[recording-sweep] ${orphans.length} orphaned recordings found, removing ${MAX_ORPHAN_CHECK} this run`,
+    );
+  }
+
+  for (const meetingId of orphans.slice(0, MAX_ORPHAN_CHECK)) {
     try {
       stats.objectsDeleted += await removeMeetingFolder(supabase, meetingId);
       stats.orphaned += 1;
@@ -260,6 +298,36 @@ async function sweepOrphans(supabase: Client, stats: RecordingSweepStats): Promi
       console.error("[recording-sweep] could not remove orphaned recording", meetingId, err);
     }
   }
+}
+
+/**
+ * Every top-level folder in the bucket, paged to the end.
+ *
+ * Offset paging is safe here and only here, because this reads the whole root
+ * before a single object is deleted. removePrefix re-lists at zero instead,
+ * for the opposite reason: paging by offset over a listing being deleted from
+ * skips a page for every page removed.
+ *
+ * Exhaustive on purpose. The top level is one folder per meeting that has ever
+ * been recorded and living meetings' folders are never removed, so a fixed
+ * first-page window would never advance past them — every orphan sorting after
+ * it would be invisible to this pass forever, and this pass is the only thing
+ * that can see it.
+ */
+async function listMeetingFolders(supabase: Client): Promise<string[]> {
+  const bucket = supabase.storage.from(RECORDING_BUCKET);
+  const names: string[] = [];
+
+  for (let page = 0; page < MAX_LIST_PAGES; page++) {
+    const { data, error } = await bucket.list("", { limit: LIST_PAGE, offset: page * LIST_PAGE });
+    if (error) throw error;
+    if (!data?.length) return names;
+
+    for (const entry of data) names.push(entry.name);
+    if (data.length < LIST_PAGE) return names;
+  }
+
+  throw new Error(`[recording-sweep] bucket root still listing after ${MAX_LIST_PAGES} pages`);
 }
 
 /**
