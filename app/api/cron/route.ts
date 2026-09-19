@@ -228,7 +228,8 @@ export async function GET(request: Request) {
     console.error("meeting_reminders failed", e);
   }
 
-  // Meeting recordings: retention, and closing out recordings nobody stopped.
+  // Meeting recordings: retention, closing out recordings nobody stopped, and
+  // the ones whose meeting was deleted out from under them.
   //
   // Recordings are by a wide margin the most expensive thing this product
   // stores — around 675 MB per hour of meeting — and nothing else deletes them.
@@ -237,7 +238,7 @@ export async function GET(request: Request) {
   // which is a host whose tab died mid-call: the parts they did upload are kept
   // and the recording is marked complete, because those parts are a real,
   // watchable record of most of a meeting.
-  let recordings: RecordingSweepStats = { expired: 0, abandoned: 0, objectsDeleted: 0, errors: 0 };
+  let recordings: RecordingSweepStats = { expired: 0, abandoned: 0, orphaned: 0, objectsDeleted: 0, errors: 0 };
   try {
     recordings = await runRecordingSweep(supabase, now);
   } catch (e) {
@@ -306,6 +307,7 @@ export async function GET(request: Request) {
         meetingRemindersFailed: reminders.failed,
         recordingsExpired: recordings.expired,
         recordingsClosedOut: recordings.abandoned,
+        recordingsOrphaned: recordings.orphaned,
         recordingObjectsDeleted: recordings.objectsDeleted,
         subscriptionsDue: subscriptions.due,
         subscriptionsRenewed: subscriptions.renewed,
