@@ -195,11 +195,16 @@ alter table public.network_opportunities enable row level security;
 -- SECURITY DEFINER because a member cannot read another org's investors or
 -- funds to check them — the question "does this row belong to my org?" has to
 -- be answerable without granting sight of the row.
+-- Dropped first: adding a parameter would create an overload rather than
+-- replace this, and the policies would keep resolving to the old arity.
+drop function if exists public.network_opportunity_refs_ok(uuid, uuid, uuid, uuid);
+
 create or replace function public.network_opportunity_refs_ok(
   target_org uuid,
   p_investor_id uuid,
   p_fund_id uuid,
-  p_commitment_id uuid
+  p_commitment_id uuid,
+  p_owner_id uuid
 )
 returns boolean
 language sql
@@ -216,11 +221,18 @@ as $$
       where f.id = p_fund_id and f.organization_id = target_org))
     and (p_commitment_id is null or exists (
       select 1 from public.commitments c
-      where c.id = p_commitment_id and c.organization_id = target_org));
+      where c.id = p_commitment_id and c.organization_id = target_org))
+    -- The owner must be a member of the same org. Without this a direct write
+    -- can assign a deal to a principal outside it: loadOwnerNames only reads
+    -- this org's members, so the deal would show an owner nobody can name and
+    -- no "my pipeline" filter would ever surface it.
+    and (p_owner_id is null or exists (
+      select 1 from public.organization_members m
+      where m.principal_id = p_owner_id and m.organization_id = target_org));
 $$;
 
-revoke all on function public.network_opportunity_refs_ok(uuid, uuid, uuid, uuid) from public;
-grant execute on function public.network_opportunity_refs_ok(uuid, uuid, uuid, uuid) to authenticated;
+revoke all on function public.network_opportunity_refs_ok(uuid, uuid, uuid, uuid, uuid) from public;
+grant execute on function public.network_opportunity_refs_ok(uuid, uuid, uuid, uuid, uuid) to authenticated;
 
 drop policy if exists network_opportunities_select on public.network_opportunities;
 create policy network_opportunities_select on public.network_opportunities
@@ -237,7 +249,7 @@ create policy network_opportunities_insert on public.network_opportunities
     organization_id in (select public.current_principal_org_ids())
     and (contact_id is null or public.network_contact_visible(contact_id))
     and public.network_opportunity_refs_ok(
-      organization_id, investor_id, fund_id, commitment_id
+      organization_id, investor_id, fund_id, commitment_id, owner_id
     )
   );
 
@@ -257,7 +269,7 @@ create policy network_opportunities_update on public.network_opportunities
     organization_id in (select public.current_principal_org_ids())
     and (contact_id is null or public.network_contact_visible(contact_id))
     and public.network_opportunity_refs_ok(
-      organization_id, investor_id, fund_id, commitment_id
+      organization_id, investor_id, fund_id, commitment_id, owner_id
     )
   );
 

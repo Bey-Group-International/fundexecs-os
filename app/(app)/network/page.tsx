@@ -179,6 +179,7 @@ export default async function NetworkPage() {
         fieldDefs={fieldDefs.contact}
         opportunities={opportunities}
         pipelineSummary={pipelineSummary}
+        pipelineUnavailable={pipelineFailed}
         pulse={pulse}
         activityEvents={activityEvents}
         liveCounts={liveCounts}

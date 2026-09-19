@@ -74,6 +74,9 @@ interface Props {
   fieldDefs?: FieldDef[];
   opportunities?: Opportunity[];
   pipelineSummary?: StageSummary[];
+  /** The pipeline read failed. Distinct from "no deals": the board must say the
+   *  numbers are unavailable rather than render a confident zero. */
+  pipelineUnavailable?: boolean;
 }
 
 const TEMP_BAR: Record<Temperature, { bg: string; label: string }> = {
@@ -96,6 +99,7 @@ export function NetworkModule({
   fieldDefs = [],
   opportunities = [],
   pipelineSummary = [],
+  pipelineUnavailable = false,
 }: Props) {
   const [tab, setTab] = useState<Tab>("network");
   const [showAdd, setShowAdd] = useState(false);
@@ -229,13 +233,25 @@ export function NetworkModule({
         </div>
       )}
 
-      {tab === "pipeline" && (
-        <PipelineBoard
-          initialOpportunities={opportunities}
-          initialSummary={pipelineSummary}
-          owners={owners}
-        />
-      )}
+      {tab === "pipeline" &&
+        (pipelineUnavailable ? (
+          // An empty board and an unreachable one look identical, and only one
+          // of them is a fact about the business. Saying so is the whole point
+          // of tracking the failure on the server.
+          <div className="fx-card p-8 text-center">
+            <p className="text-sm font-medium text-fg-primary">Pipeline unavailable</p>
+            <p className="mt-1 text-xs text-fg-muted">
+              The pipeline could not be loaded, so these totals would be wrong rather than
+              empty. Reload to try again.
+            </p>
+          </div>
+        ) : (
+          <PipelineBoard
+            initialOpportunities={opportunities}
+            initialSummary={pipelineSummary}
+            owners={owners}
+          />
+        ))}
 
       {tab === "search" && <NetworkSearch onSelectContact={(c) => setSelectedContact(c)} />}
 
