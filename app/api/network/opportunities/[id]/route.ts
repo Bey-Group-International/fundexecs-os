@@ -165,12 +165,17 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
     const { from, to } = result.stageChange;
     const { error: logError } = await supabase.from("network_activities").insert({
       organization_id: auth.ctx.orgId,
-      contact_id: before.contact_id ?? null,
-      investor_id: before.investor_id ?? null,
+      // The counterparty the deal ENDS UP with. One PATCH can move the stage
+      // and reassign the contact at once, and reading `before` put the timeline
+      // entry — and the resulting last_activity_at bump — on the party the deal
+      // just left. `data` is the row the database returned, so it already has
+      // whichever of these the patch changed, and explicit nulls survive.
+      contact_id: data.contact_id ?? null,
+      investor_id: data.investor_id ?? null,
       opportunity_id: id,
       actor_id: auth.ctx.userId,
       activity_type: "stage_change",
-      subject: `${before.name}: ${STAGE_LABEL[from]} → ${STAGE_LABEL[to]}`,
+      subject: `${data.name ?? before.name}: ${STAGE_LABEL[from]} → ${STAGE_LABEL[to]}`,
       is_system: true,
       metadata: { opportunityId: id, from, to },
     });

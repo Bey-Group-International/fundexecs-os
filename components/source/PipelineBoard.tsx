@@ -19,15 +19,14 @@ import {
   STAGE_LABEL,
   weightedAmount,
   type Opportunity,
+  adjustPipelineSummary,
+  impliedStatus,
   type OpportunityStage,
+  type StageSummary,
+  type SummaryDelta,
 } from "@/lib/network-opportunities";
 
-export interface StageSummary {
-  stage: OpportunityStage;
-  dealCount: number;
-  targetTotal: number;
-  weightedTotal: number;
-}
+export type { StageSummary } from "@/lib/network-opportunities";
 
 /** Board columns. Closed stages live at the end, visually separated. */
 const BOARD_STAGES: OpportunityStage[] = [...OPPORTUNITY_STAGES];
@@ -73,6 +72,9 @@ export function PipelineBoard({ initialOpportunities, initialSummary }: Props) {
   const [dragging, setDragging] = useState<string | null>(null);
   const [overStage, setOverStage] = useState<OpportunityStage | null>(null);
   const [busy, setBusy] = useState<Set<string>>(() => new Set());
+  // Cards moved in this session, keyed by deal id so a card moved twice holds
+  // one delta rather than accumulating them.
+  const [moves, setMoves] = useState<Map<string, SummaryDelta>>(() => new Map());
   const [error, setError] = useState<string | null>(null);
   const liveRegion = useRef<HTMLParagraphElement | null>(null);
 
@@ -83,34 +85,44 @@ export function PipelineBoard({ initialOpportunities, initialSummary }: Props) {
     return map;
   }, [deals]);
 
-  // Recomputed from the cards on screen so the header stays in step with an
-  // optimistic move instead of waiting for the server's rollup.
-  const summary = useMemo(() => {
-    const map = new Map<OpportunityStage, StageSummary>();
-    for (const stage of BOARD_STAGES) {
-      const rows = byStage.get(stage) ?? [];
-      const open = rows.filter((d) => d.status === "open");
-      map.set(stage, {
-        stage,
-        dealCount: rows.length,
-        targetTotal: open.reduce((sum, d) => sum + (d.targetAmount ?? 0), 0),
-        weightedTotal: open.reduce(
-          (sum, d) => sum + weightedAmount(d.targetAmount, d.probability),
-          0,
-        ),
-      });
-    }
-    return map;
-  }, [byStage]);
+  // The header comes from the SERVER's rollup, corrected for moves made since
+  // it was computed — not from the cards on screen. The board loads a capped
+  // page, so deriving totals from `deals` made an organization past that cap
+  // under-report its own pipeline: the number on screen was the sample, not
+  // the business.
+  const adjusted = useMemo(
+    () => adjustPipelineSummary(initialSummary, moves.values()),
+    [initialSummary, moves],
+  );
 
+  /** Per stage, the rows for each currency present. Currencies stay apart. */
+  const summary = useMemo(() => {
+    const map = new Map<OpportunityStage, StageSummary[]>();
+    for (const stage of BOARD_STAGES) map.set(stage, []);
+    for (const row of adjusted) map.get(row.stage)?.push(row);
+    for (const rows of map.values()) rows.sort((a, b) => b.targetTotal - a.targetTotal);
+    return map;
+  }, [adjusted]);
+
+  /** Top line: open work only, still never summing across currencies. */
   const totals = useMemo(() => {
-    const open = deals.filter((d) => d.status === "open");
+    const open = adjusted.filter((r) => impliedStatus(r.stage) === "open");
+    const byCurrency = new Map<string, { target: number; weighted: number }>();
+    let count = 0;
+    for (const r of open) {
+      count += r.dealCount;
+      const c = byCurrency.get(r.currency) ?? { target: 0, weighted: 0 };
+      c.target += r.targetTotal;
+      c.weighted += r.weightedTotal;
+      byCurrency.set(r.currency, c);
+    }
     return {
-      count: open.length,
-      target: open.reduce((s, d) => s + (d.targetAmount ?? 0), 0),
-      weighted: open.reduce((s, d) => s + weightedAmount(d.targetAmount, d.probability), 0),
+      count,
+      byCurrency: [...byCurrency.entries()]
+        .map(([currency, v]) => ({ currency, ...v }))
+        .sort((a, b) => b.target - a.target),
     };
-  }, [deals]);
+  }, [adjusted]);
 
   const moveDeal = useCallback(
     async (dealId: string, stage: OpportunityStage) => {
@@ -120,9 +132,32 @@ export function PipelineBoard({ initialOpportunities, initialSummary }: Props) {
       // restore only this card rather than the whole board snapshot.
       const previousStage = deal.stage;
 
+      // What the card contributed to the rollup before this move. Kept from the
+      // card's ORIGINAL stage across repeated moves, so the delta stays
+      // relative to the server's numbers rather than to the last drag.
+      const origin = moves.get(dealId);
+      const fromStage = origin?.fromStage ?? previousStage;
+      const before = origin?.before ?? {
+        targetAmount: deal.targetAmount,
+        probability: deal.probability,
+      };
+
       setBusy((b) => new Set(b).add(dealId));
-      // Optimistic: the card lands where it was dropped immediately.
+      // Optimistic: the card lands where it was dropped immediately, and the
+      // header moves with it rather than waiting for the server's rollup.
       setDeals((prev) => prev.map((d) => (d.id === dealId ? { ...d, stage } : d)));
+      setMoves((m) => {
+        const next = new Map(m);
+        next.set(dealId, {
+          id: dealId,
+          fromStage,
+          toStage: stage,
+          currency: deal.currency,
+          before,
+          after: { targetAmount: deal.targetAmount, probability: deal.probability },
+        });
+        return next;
+      });
       if (liveRegion.current) {
         liveRegion.current.textContent = `${deal.name} moved to ${STAGE_LABEL[stage]}`;
       }
@@ -140,11 +175,36 @@ export function PipelineBoard({ initialOpportunities, initialSummary }: Props) {
         // Take the server's version: it decided status, close date and
         // probability, and those are not guessable from the drop alone.
         setDeals((prev) => prev.map((d) => (d.id === dealId ? body.opportunity! : d)));
+        // Reconcile the delta with what the server actually stored: the PATCH
+        // decides status and probability, so the optimistic guess above can be
+        // wrong about the weighted figure.
+        const saved = body.opportunity;
+        setMoves((m) => {
+          const next = new Map(m);
+          next.set(dealId, {
+            id: dealId,
+            fromStage,
+            toStage: saved.stage,
+            currency: saved.currency,
+            before,
+            after: { targetAmount: saved.targetAmount, probability: saved.probability },
+          });
+          return next;
+        });
         setError(null);
       } catch (err) {
         setDeals((current) =>
           current.map((d) => (d.id === dealId ? { ...d, stage: previousStage } : d)),
         );
+        // Drop the delta too, or the header keeps counting a move that did not
+        // happen. Restoring the prior delta rather than deleting outright keeps
+        // an earlier successful move intact.
+        setMoves((m) => {
+          const next = new Map(m);
+          if (origin) next.set(dealId, origin);
+          else next.delete(dealId);
+          return next;
+        });
         setError(err instanceof Error ? err.message : "Couldn't move that deal.");
       } finally {
         setBusy((b) => {
@@ -154,7 +214,7 @@ export function PipelineBoard({ initialOpportunities, initialSummary }: Props) {
         });
       }
     },
-    [deals],
+    [deals, moves],
   );
 
   if (deals.length === 0) {
@@ -179,18 +239,27 @@ export function PipelineBoard({ initialOpportunities, initialSummary }: Props) {
           </span>{" "}
           open {totals.count === 1 ? "allocation" : "allocations"}
         </p>
-        <p className="text-xs text-fg-muted">
-          Pipeline{" "}
-          <span className="font-mono tabular-nums text-fg-secondary">
-            {compactUsd(totals.target)}
+        {/* One pair per currency. Adding a EUR total to a USD total produces a
+            number that is not money in either, so they are never combined. */}
+        {totals.byCurrency.map(({ currency, target, weighted }) => (
+          <span key={currency} className="flex items-baseline gap-x-4">
+            <span className="text-xs text-fg-muted">
+              Pipeline{" "}
+              <span className="font-mono tabular-nums text-fg-secondary">
+                {compactUsd(target, currency)}
+              </span>
+            </span>
+            <span
+              className="text-xs text-fg-muted"
+              title="Target size discounted by each deal's probability"
+            >
+              Weighted{" "}
+              <span className="font-mono tabular-nums text-gold-300">
+                {compactUsd(weighted, currency)}
+              </span>
+            </span>
           </span>
-        </p>
-        <p className="text-xs text-fg-muted" title="Target size discounted by each deal's probability">
-          Weighted{" "}
-          <span className="font-mono tabular-nums text-gold-300">
-            {compactUsd(totals.weighted)}
-          </span>
-        </p>
+        ))}
       </div>
 
       {error && (
@@ -208,7 +277,7 @@ export function PipelineBoard({ initialOpportunities, initialSummary }: Props) {
       <div className="flex gap-3 overflow-x-auto pb-2">
         {BOARD_STAGES.map((stage) => {
           const rows = byStage.get(stage) ?? [];
-          const stats = summary.get(stage);
+          const stats = summary.get(stage) ?? [];
           return (
             <section
               key={stage}
@@ -234,17 +303,30 @@ export function PipelineBoard({ initialOpportunities, initialSummary }: Props) {
                     {STAGE_LABEL[stage]}
                   </h3>
                   <span className="font-mono text-[11px] tabular-nums text-fg-muted">
-                    {stats?.dealCount ?? 0}
+                    {stats.reduce((n, r) => n + r.dealCount, 0)}
                   </span>
                 </div>
-                <p className="mt-0.5 flex items-baseline gap-2 text-[11px] text-fg-muted">
-                  <span className="tabular-nums">{compactUsd(stats?.targetTotal ?? 0)}</span>
-                  {(stats?.weightedTotal ?? 0) > 0 && (
-                    <span className="tabular-nums text-gold-300/80">
-                      {compactUsd(stats?.weightedTotal ?? 0)} wtd
-                    </span>
-                  )}
-                </p>
+                {stats.length === 0 ? (
+                  <p className="mt-0.5 text-[11px] tabular-nums text-fg-muted">
+                    {compactUsd(0)}
+                  </p>
+                ) : (
+                  stats.map((r) => (
+                    <p
+                      key={r.currency}
+                      className="mt-0.5 flex items-baseline gap-2 text-[11px] text-fg-muted"
+                    >
+                      <span className="tabular-nums">
+                        {compactUsd(r.targetTotal, r.currency)}
+                      </span>
+                      {r.weightedTotal > 0 && (
+                        <span className="tabular-nums text-gold-300/80">
+                          {compactUsd(r.weightedTotal, r.currency)} wtd
+                        </span>
+                      )}
+                    </p>
+                  ))
+                )}
               </header>
 
               <div className="flex min-h-[4rem] flex-col gap-2 p-2">

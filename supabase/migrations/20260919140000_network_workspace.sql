@@ -85,6 +85,18 @@ create table if not exists public.network_opportunities (
     check (
       (stage <> 'committed' or probability = 100)
       and (stage <> 'passed' or probability = 0)
+    ),
+  -- Status is derived from stage, so the two cannot disagree. Without this a
+  -- direct write could close a deal while leaving it in 'diligence': it would
+  -- drop out of the open pipeline while every stage-keyed report still counted
+  -- it as live work. The column stays for the partial indexes below.
+  constraint network_opportunities_status_stage
+    check (
+      status = case stage
+        when 'committed' then 'won'
+        when 'passed' then 'lost'
+        else 'open'
+      end
     )
 );
 
@@ -107,6 +119,41 @@ begin
       check (
         (stage <> 'committed' or probability = 100)
         and (stage <> 'passed' or probability = 0)
+      );
+  end if;
+end $$;
+
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conname = 'network_opportunities_status_stage'
+      and conrelid = 'public.network_opportunities'::regclass
+  ) then
+    update public.network_opportunities
+      set status = case stage
+            when 'committed' then 'won'
+            when 'passed' then 'lost'
+            else 'open'
+          end,
+          closed_at = case
+            when stage in ('committed', 'passed') then coalesce(closed_at, now())
+            else null
+          end
+      where status <> case stage
+            when 'committed' then 'won'
+            when 'passed' then 'lost'
+            else 'open'
+          end;
+
+    alter table public.network_opportunities
+      add constraint network_opportunities_status_stage
+      check (
+        status = case stage
+          when 'committed' then 'won'
+          when 'passed' then 'lost'
+          else 'open'
+        end
       );
   end if;
 end $$;
@@ -137,6 +184,44 @@ alter table public.network_opportunities enable row level security;
 
 -- An opportunity inherits its contact's visibility: a private relationship's
 -- pipeline must not be readable through the deal when the person is hidden.
+-- Tenant ownership for the rows an opportunity points at.
+--
+-- contact_id, investor_id, fund_id and commitment_id are single-column foreign
+-- keys, so the schema alone lets a deal in org A reference org B's fund. The
+-- API layer checks this too (validateOpportunityRefs), but PostgREST exposes
+-- the table directly: an authenticated client can write it without going
+-- through the route, so the boundary has to state the rule itself.
+--
+-- SECURITY DEFINER because a member cannot read another org's investors or
+-- funds to check them — the question "does this row belong to my org?" has to
+-- be answerable without granting sight of the row.
+create or replace function public.network_opportunity_refs_ok(
+  target_org uuid,
+  p_investor_id uuid,
+  p_fund_id uuid,
+  p_commitment_id uuid
+)
+returns boolean
+language sql
+stable
+security definer
+set search_path = public, extensions
+as $$
+  select
+    (p_investor_id is null or exists (
+      select 1 from public.investors i
+      where i.id = p_investor_id and i.organization_id = target_org))
+    and (p_fund_id is null or exists (
+      select 1 from public.funds f
+      where f.id = p_fund_id and f.organization_id = target_org))
+    and (p_commitment_id is null or exists (
+      select 1 from public.commitments c
+      where c.id = p_commitment_id and c.organization_id = target_org));
+$$;
+
+revoke all on function public.network_opportunity_refs_ok(uuid, uuid, uuid, uuid) from public;
+grant execute on function public.network_opportunity_refs_ok(uuid, uuid, uuid, uuid) to authenticated;
+
 drop policy if exists network_opportunities_select on public.network_opportunities;
 create policy network_opportunities_select on public.network_opportunities
   for select to authenticated
@@ -151,6 +236,9 @@ create policy network_opportunities_insert on public.network_opportunities
   with check (
     organization_id in (select public.current_principal_org_ids())
     and (contact_id is null or public.network_contact_visible(contact_id))
+    and public.network_opportunity_refs_ok(
+      organization_id, investor_id, fund_id, commitment_id
+    )
   );
 
 drop policy if exists network_opportunities_update on public.network_opportunities;
@@ -168,6 +256,9 @@ create policy network_opportunities_update on public.network_opportunities
   with check (
     organization_id in (select public.current_principal_org_ids())
     and (contact_id is null or public.network_contact_visible(contact_id))
+    and public.network_opportunity_refs_ok(
+      organization_id, investor_id, fund_id, commitment_id
+    )
   );
 
 drop policy if exists network_opportunities_delete on public.network_opportunities;
@@ -325,9 +416,15 @@ $$;
 -- The numbers the board header shows, computed in one pass rather than by
 -- pulling every deal to the client and summing it there.
 
+-- Dropped first: the return type gains a `currency` column, and `create or
+-- replace` cannot change a function's return type. A database that already ran
+-- an earlier version of this migration would otherwise fail here.
+drop function if exists public.network_pipeline_summary(uuid);
+
 create or replace function public.network_pipeline_summary(target_org uuid)
 returns table (
   stage            text,
+  currency         text,
   deal_count       bigint,
   target_total     numeric,
   weighted_total   numeric
@@ -336,16 +433,25 @@ language sql
 stable
 set search_path = public
 as $$
+  -- Grouped by currency as well as stage. Summing a EUR deal and a USD deal
+  -- into one number produces a total that is not an amount of money in any
+  -- currency, and the board would then label it with whichever symbol it
+  -- happened to render. A firm raising across vehicles in more than one
+  -- currency has to see them apart.
   select
     o.stage,
+    o.currency,
     count(*) as deal_count,
     coalesce(sum(o.target_amount), 0) as target_total,
     -- What the pipeline is actually worth: size discounted by the odds.
     coalesce(sum(o.target_amount * o.probability / 100.0), 0) as weighted_total
   from public.network_opportunities o
   where o.organization_id = target_org
-    and o.status = 'open'
-  group by o.stage;
+  -- No status filter: network_opportunities_status_stage makes stage decide
+  -- status, so grouping by stage already separates open work from closed. That
+  -- lets the closed columns carry real totals too, rather than whatever subset
+  -- of cards the board happened to load.
+  group by o.stage, o.currency;
 $$;
 
 grant execute on function public.network_pipeline_summary(uuid) to authenticated;

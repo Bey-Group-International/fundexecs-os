@@ -1,4 +1,5 @@
 import {
+  adjustPipelineSummary,
   buildOpportunityPatch,
   resolveStageTransition,
   weightedAmount,
@@ -279,5 +280,102 @@ describe("buildOpportunityPatch", () => {
       NOW,
     );
     expect(result.patch.tags).toEqual(["lp", "priority"]);
+  });
+});
+
+describe("adjustPipelineSummary", () => {
+  const base = [
+    { stage: "diligence" as const, currency: "USD", dealCount: 40, targetTotal: 400_000_000, weightedTotal: 160_000_000 },
+    { stage: "legal" as const, currency: "USD", dealCount: 5, targetTotal: 50_000_000, weightedTotal: 42_500_000 },
+  ];
+
+  it("returns the server's rollup untouched when nothing moved", () => {
+    expect(adjustPipelineSummary(base, [])).toEqual(base);
+  });
+
+  it("keeps totals authoritative for an org past the card cap", () => {
+    // This is the whole point: the board holds at most 200 cards, but the org
+    // has 40 deals in diligence worth 400M. Moving ONE card must not collapse
+    // the header to just the cards on screen.
+    const out = adjustPipelineSummary(base, [
+      {
+        id: "d1",
+        fromStage: "diligence",
+        toStage: "legal",
+        currency: "USD",
+        before: { targetAmount: 10_000_000, probability: 40 },
+        after: { targetAmount: 10_000_000, probability: 85 },
+      },
+    ]);
+    const dil = out.find((r) => r.stage === "diligence")!;
+    const legal = out.find((r) => r.stage === "legal")!;
+    expect(dil.dealCount).toBe(39);
+    expect(dil.targetTotal).toBe(390_000_000);
+    expect(dil.weightedTotal).toBe(156_000_000);
+    expect(legal.dealCount).toBe(6);
+    expect(legal.targetTotal).toBe(60_000_000);
+    expect(legal.weightedTotal).toBe(51_000_000);
+  });
+
+  it("never merges two currencies into one number", () => {
+    const mixed = [
+      ...base,
+      { stage: "diligence" as const, currency: "EUR", dealCount: 2, targetTotal: 20_000_000, weightedTotal: 8_000_000 },
+    ];
+    const out = adjustPipelineSummary(mixed, []);
+    const usd = out.find((r) => r.stage === "diligence" && r.currency === "USD")!;
+    const eur = out.find((r) => r.stage === "diligence" && r.currency === "EUR")!;
+    expect(usd.targetTotal).toBe(400_000_000);
+    expect(eur.targetTotal).toBe(20_000_000);
+  });
+
+  it("opens a row for a stage the rollup never reported", () => {
+    const out = adjustPipelineSummary(base, [
+      {
+        id: "d1",
+        fromStage: "legal",
+        toStage: "committed",
+        currency: "USD",
+        before: { targetAmount: 10_000_000, probability: 85 },
+        after: { targetAmount: 10_000_000, probability: 100 },
+      },
+    ]);
+    const committed = out.find((r) => r.stage === "committed")!;
+    expect(committed.dealCount).toBe(1);
+    expect(committed.weightedTotal).toBe(10_000_000);
+  });
+
+  it("ignores a delta that did not change stage", () => {
+    expect(
+      adjustPipelineSummary(base, [
+        {
+          id: "d1",
+          fromStage: "legal",
+          toStage: "legal",
+          currency: "USD",
+          before: { targetAmount: 1, probability: 1 },
+          after: { targetAmount: 999, probability: 99 },
+        },
+      ]),
+    ).toEqual(base);
+  });
+
+  it("clamps rather than rendering a negative pipeline", () => {
+    // If the base and the deltas ever disagree, a negative total on screen is
+    // worse than a slightly stale one.
+    const out = adjustPipelineSummary(
+      [{ stage: "legal", currency: "USD", dealCount: 0, targetTotal: 0, weightedTotal: 0 }],
+      [
+        {
+          id: "d1",
+          fromStage: "legal",
+          toStage: "committed",
+          currency: "USD",
+          before: { targetAmount: 10_000_000, probability: 85 },
+          after: { targetAmount: 10_000_000, probability: 100 },
+        },
+      ],
+    );
+    expect(out.every((r) => r.dealCount >= 0 && r.targetTotal >= 0)).toBe(true);
   });
 });

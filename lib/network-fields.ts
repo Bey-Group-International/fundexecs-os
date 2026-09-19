@@ -122,7 +122,11 @@ export function coerceFieldValue(def: FieldDef, raw: unknown): CoerceResult {
   switch (def.type) {
     case "text":
     case "long_text": {
-      const s = String(raw).trim();
+      // String(raw) would turn {} into "[object Object]" and store it as if
+      // someone had typed it, which is worse than refusing the write: the
+      // column silently stops meaning anything.
+      if (typeof raw !== "string") return { ok: false, error: `${def.label} must be text.` };
+      const s = raw.trim();
       const max = def.type === "text" ? MAX_TEXT : MAX_LONG_TEXT;
       return { ok: true, value: s.slice(0, max) };
     }
@@ -198,7 +202,10 @@ export function coerceFieldValue(def: FieldDef, raw: unknown): CoerceResult {
     }
 
     case "select": {
-      const s = String(raw).trim();
+      // Same reasoning as text: an unconfigured select (no options) would
+      // otherwise accept an object and store "[object Object]".
+      if (typeof raw !== "string") return { ok: false, error: `${def.label} must be text.` };
+      const s = raw.trim();
       if (def.options.length > 0 && !def.options.includes(s)) {
         return { ok: false, error: `${def.label} must be one of: ${def.options.join(", ")}.` };
       }
@@ -211,6 +218,11 @@ export function coerceFieldValue(def: FieldDef, raw: unknown): CoerceResult {
         0,
         MAX_SELECT_VALUES,
       );
+      // An empty array is not `emptyish`, so a required multi_select sent as []
+      // would reach the creation check already "present" and satisfy it.
+      if (def.required && values.length === 0) {
+        return { ok: false, error: `${def.label} is required.` };
+      }
       if (def.options.length > 0) {
         const unknown = values.filter((v) => !def.options.includes(v));
         if (unknown.length > 0) {
@@ -266,7 +278,14 @@ export function applyCustomPatch(
 
   for (const [key, raw] of Object.entries(patch)) {
     const def = byKey.get(key);
-    if (!def) continue;
+    // A key with no active definition is refused, not skipped. Skipping it
+    // answered 200 while dropping the value, so a stale client editing a
+    // since-archived column, or one with a typo in the key, saw the edit land
+    // and the value was simply gone. The key is still never written.
+    if (!def) {
+      errors.push(`There is no column called "${key}".`);
+      continue;
+    }
 
     const result = coerceFieldValue(def, raw);
     if (!result.ok) {

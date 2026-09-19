@@ -85,6 +85,15 @@ export async function POST(req: NextRequest) {
     required?: boolean;
   } | null;
 
+  // Parsed JSON, so the cast above is a description of intent, not a promise.
+  // `{ "label": 1 }` used to throw on .trim() and return a 500.
+  for (const field of ["label", "key", "helpText"] as const) {
+    const v = payload?.[field];
+    if (v !== undefined && v !== null && typeof v !== "string") {
+      return NextResponse.json({ error: `${field} must be text.` }, { status: 400 });
+    }
+  }
+
   const label = payload?.label?.trim();
   if (!label) return NextResponse.json({ error: "A column needs a name." }, { status: 400 });
 
@@ -188,6 +197,13 @@ export async function PATCH(req: NextRequest) {
 
   if (!payload?.id) return NextResponse.json({ error: "id is required." }, { status: 400 });
 
+  for (const field of ["label", "helpText"] as const) {
+    const v = payload[field];
+    if (v !== undefined && v !== null && typeof v !== "string") {
+      return NextResponse.json({ error: `${field} must be text.` }, { status: 400 });
+    }
+  }
+
   const patch: Record<string, unknown> = {};
   if (payload.label !== undefined) {
     const label = payload.label.trim();
@@ -210,6 +226,34 @@ export async function PATCH(req: NextRequest) {
   }
 
   const supabase = (await createServerClient()) as any;
+
+  // POST refuses a choice column with no options; PATCH used to allow emptying
+  // one, which leaves a select on screen that nobody can pick a value from.
+  // field_type is immutable, so the stored one is the one that matters.
+  if (payload.options !== undefined) {
+    const { data: existing, error: readError } = await supabase
+      .from("network_field_defs")
+      .select("field_type")
+      .eq("organization_id", auth.ctx.orgId)
+      .eq("id", payload.id)
+      .maybeSingle();
+
+    if (readError) {
+      console.error("[network/fields] read for options", readError);
+      return NextResponse.json({ error: "Failed to update the column" }, { status: 500 });
+    }
+    if (!existing) {
+      return NextResponse.json({ error: "Column not found" }, { status: 404 });
+    }
+    const isChoice = existing.field_type === "select" || existing.field_type === "multi_select";
+    if (isChoice && (patch.options as string[]).length === 0) {
+      return NextResponse.json(
+        { error: "A choice column needs at least one option." },
+        { status: 400 },
+      );
+    }
+  }
+
   const { data, error } = await supabase
     .from("network_field_defs")
     .update(patch)

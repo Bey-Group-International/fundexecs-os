@@ -92,6 +92,9 @@ interface Filters {
   needsAttention: boolean;
 }
 
+/** The sort a cleared view returns to; also the initial one. */
+const DEFAULT_SORT: RosterSort = "warmth";
+
 const DEFAULT_FILTERS: Filters = {
   temp: "all",
   kind: "all",
@@ -150,7 +153,7 @@ export function ActiveRoster({
   const [orbitTotal] = useState(initialPage.pulse.people);
 
   const [query, setQuery] = useState("");
-  const [sort, setSort] = useState<RosterSort>("warmth");
+  const [sort, setSort] = useState<RosterSort>(DEFAULT_SORT);
   const [sortMenu, setSortMenu] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
   const [filters, setFilters] = useState<Filters>(DEFAULT_FILTERS);
@@ -595,6 +598,10 @@ export function ActiveRoster({
             setActiveViewId(null);
             setFilters(DEFAULT_FILTERS);
             setQuery("");
+            // applySavedView sets the sort too, so clearing has to put it back
+            // — otherwise the list stays in the cleared view's order and looks
+            // like the clear did not take.
+            setSort(DEFAULT_SORT);
           }}
         />
         <div className="fx-segment ml-auto inline-flex font-mono text-[11px] uppercase tracking-wider">

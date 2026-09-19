@@ -81,8 +81,17 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "Failed to load the pipeline" }, { status: 500 });
   }
 
+  // A failed rollup must not be served as zeroes. These are the numbers a
+  // partner reads as "what we have raised"; an empty pipeline and an
+  // unreachable one look identical on screen and only one of them is true.
+  if (summaryRes?.error) {
+    console.error("[network/opportunities] summary", summaryRes.error);
+    return NextResponse.json({ error: "Failed to load the pipeline" }, { status: 500 });
+  }
+
   const summary = ((summaryRes?.data ?? []) as Record<string, any>[]).map((r) => ({
     stage: r.stage as OpportunityStage,
+    currency: String(r.currency ?? "USD"),
     dealCount: Number(r.deal_count ?? 0),
     targetTotal: Number(r.target_total ?? 0),
     weightedTotal: Math.round(Number(r.weighted_total ?? 0)),
@@ -129,13 +138,39 @@ export async function POST(req: NextRequest) {
     custom?: Record<string, unknown>;
   } | null;
 
+  // These arrive as parsed JSON, so the type assertion above describes what is
+  // EXPECTED, not what will be there. A numeric `name` used to throw on .trim()
+  // and turn a 400 into an unhandled 500.
+  for (const field of ["name", "source", "notes", "currency"] as const) {
+    const v = payload?.[field];
+    if (v !== undefined && v !== null && typeof v !== "string") {
+      return NextResponse.json({ error: `${field} must be text.` }, { status: 400 });
+    }
+  }
+
   const name = payload?.name?.trim();
   if (!name) return NextResponse.json({ error: "A deal needs a name." }, { status: 400 });
   if (!payload?.contactId && !payload?.investorId) {
     return NextResponse.json({ error: "A deal needs a contact or an investor." }, { status: 400 });
   }
 
+  // An unknown stage is a mistake, not a reason to default. Falling back to
+  // "sourced" filed the deal in the wrong place and told the caller it worked,
+  // so a typo silently moved money to the back of the pipeline.
+  if (payload.stage !== undefined && payload.stage !== null && !isOpportunityStage(payload.stage)) {
+    return NextResponse.json({ error: "Unknown stage." }, { status: 400 });
+  }
   const stage: OpportunityStage = isOpportunityStage(payload.stage) ? payload.stage : "sourced";
+
+  // [A-Z]{3} in full, rather than truncating: "dollars" used to be stored as
+  // "DOL", which is not a currency and would silently mis-label a total.
+  let currency = "USD";
+  if (payload.currency !== undefined && payload.currency !== null) {
+    currency = payload.currency.trim().toUpperCase();
+    if (!/^[A-Z]{3}$/.test(currency)) {
+      return NextResponse.json({ error: "Currency must be a 3-letter code." }, { status: 400 });
+    }
+  }
 
   let targetAmount: number | null = null;
   if (payload.targetAmount !== undefined && payload.targetAmount !== null) {
@@ -229,7 +264,7 @@ export async function POST(req: NextRequest) {
       investor_id: payload.investorId ?? null,
       fund_id: payload.fundId ?? null,
       target_amount: targetAmount,
-      currency: (payload.currency ?? "USD").toUpperCase().slice(0, 3),
+      currency,
       probability,
       expected_close: expectedClose,
       owner_id: payload.ownerId ?? auth.ctx.userId,

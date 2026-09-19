@@ -74,6 +74,14 @@ export function terminalProbability(stage: OpportunityStage): number | undefined
 }
 
 /** Narrow an unchecked value from a request body to a known stage. */
+/**
+ * The status a stage implies. Stage is the single source of truth: a deal is
+ * won because it reached "committed", not because someone set a flag.
+ */
+export function impliedStatus(stage: OpportunityStage): OpportunityStatus {
+  return TERMINAL_STAGE[stage] ?? "open";
+}
+
 export function isOpportunityStage(v: unknown): v is OpportunityStage {
   return typeof v === "string" && (OPPORTUNITY_STAGES as readonly string[]).includes(v);
 }
@@ -334,13 +342,23 @@ export function buildOpportunityPatch(
     patch.probability = pinned;
   }
 
-  if (input.status !== undefined && input.stage === undefined) {
+  // Status is DERIVED from stage, never set independently. Writing it directly
+  // was how a `{ status: "lost" }` on a diligence deal closed it while leaving
+  // stage=diligence and probability=40 on the row: it vanished from the open
+  // pipeline while every stage-keyed report still counted it as live work. A
+  // caller may still send a status, but only one the stage already implies —
+  // anything else is a contradiction, and the honest answer is to say so rather
+  // than to persist half of it.
+  if (input.status !== undefined) {
     if (!isOpportunityStatus(input.status)) {
       errors.push("Unknown status.");
     } else {
-      patch.status = input.status;
-      patch.closed_at =
-        input.status === "open" ? null : (current.closedAt ?? now.toISOString());
+      const implied = impliedStatus(resultingStage);
+      if (input.status !== implied) {
+        errors.push(
+          `A deal in ${STAGE_LABEL[resultingStage]} is ${implied}. Move the stage instead of setting the status directly.`,
+        );
+      }
     }
   }
 
@@ -533,4 +551,102 @@ export async function validateOpportunityRefs(
   }
 
   return null;
+}
+
+/** One stage's rollup, per currency. Currencies are never summed together. */
+export interface StageSummary {
+  stage: OpportunityStage;
+  currency: string;
+  dealCount: number;
+  targetTotal: number;
+  weightedTotal: number;
+}
+
+/** A card the user moved in this session: where it was, and where it is now. */
+export interface SummaryDelta {
+  id: string;
+  fromStage: OpportunityStage;
+  toStage: OpportunityStage;
+  currency: string;
+  /** The card's contribution BEFORE the move. */
+  before: { targetAmount: number | null; probability: number };
+  /** The card's contribution AFTER the server confirmed it. */
+  after: { targetAmount: number | null; probability: number };
+}
+
+function summaryKey(stage: OpportunityStage, currency: string): string {
+  return `${stage}\u0000${currency}`;
+}
+
+/**
+ * The board's header numbers: the server's rollup, corrected for moves made
+ * since it was computed.
+ *
+ * The board loads a capped page of cards, but the rollup counts every deal, so
+ * totals must come from the rollup or an organization past the cap silently
+ * under-reports its own pipeline. The cards still have to move the numbers
+ * immediately though — a drag that leaves the header unchanged looks broken —
+ * so each moved card is subtracted from where it was and added to where it
+ * landed. Applying a delta twice is impossible because deltas are keyed by
+ * deal id, not accumulated.
+ */
+export function adjustPipelineSummary(
+  base: StageSummary[],
+  deltas: Iterable<SummaryDelta>,
+): StageSummary[] {
+  const map = new Map<string, StageSummary>();
+  for (const row of base) {
+    map.set(summaryKey(row.stage, row.currency), { ...row });
+  }
+
+  const bump = (
+    stage: OpportunityStage,
+    currency: string,
+    count: number,
+    target: number,
+    weighted: number,
+  ) => {
+    const key = summaryKey(stage, currency);
+    const row = map.get(key) ?? {
+      stage,
+      currency,
+      dealCount: 0,
+      targetTotal: 0,
+      weightedTotal: 0,
+    };
+    row.dealCount += count;
+    row.targetTotal += target;
+    row.weightedTotal += weighted;
+    map.set(key, row);
+  };
+
+  for (const d of deltas) {
+    if (d.fromStage === d.toStage) continue;
+    bump(
+      d.fromStage,
+      d.currency,
+      -1,
+      -(d.before.targetAmount ?? 0),
+      -weightedAmount(d.before.targetAmount, d.before.probability),
+    );
+    bump(
+      d.toStage,
+      d.currency,
+      1,
+      d.after.targetAmount ?? 0,
+      weightedAmount(d.after.targetAmount, d.after.probability),
+    );
+  }
+
+  // A stage the rollup never reported and that nets back to nothing should not
+  // appear as an empty row, and a negative count means the base and the deltas
+  // disagreed — clamp rather than render a negative pipeline.
+  return [...map.values()]
+    .map((r) => ({
+      ...r,
+      dealCount: Math.max(0, r.dealCount),
+      targetTotal: Math.max(0, r.targetTotal),
+      weightedTotal: Math.max(0, r.weightedTotal),
+    }))
+    .filter((r) => r.dealCount > 0 || r.targetTotal > 0);
 }

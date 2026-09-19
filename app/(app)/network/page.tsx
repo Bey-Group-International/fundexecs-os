@@ -95,12 +95,25 @@ export default async function NetworkPage() {
 
   const initialRoster = applyRosterQuery(people, parseRosterQuery(new URLSearchParams()), pulse);
 
+  // A failed read must not render as an empty pipeline. Zero deals and an
+  // unreachable database look the same on the board, and only one of them is a
+  // fact about the business — so say the numbers are unavailable instead of
+  // quietly reporting nothing raised.
+  const pipelineFailed = Boolean(opportunitiesRes.error || pipelineSummaryRes.error);
+  if (pipelineFailed) {
+    console.error(
+      "[network] pipeline load",
+      opportunitiesRes.error ?? pipelineSummaryRes.error,
+    );
+  }
+
   const opportunities = ((opportunitiesRes.data ?? []) as Record<string, any>[]).map((row) =>
     mapOpportunity(row, ownerNames),
   );
 
   const pipelineSummary = ((pipelineSummaryRes.data ?? []) as Record<string, any>[]).map((r) => ({
     stage: r.stage as OpportunityStage,
+    currency: String(r.currency ?? "USD"),
     dealCount: Number(r.deal_count ?? 0),
     targetTotal: Number(r.target_total ?? 0),
     weightedTotal: Math.round(Number(r.weighted_total ?? 0)),

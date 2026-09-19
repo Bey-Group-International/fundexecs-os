@@ -69,6 +69,9 @@ export interface ContactRecord {
   strengthLabel: string;
   relevanceScore: number;
   tags: string[];
+  /** Values for the org's own columns. Returned so a custom-field edit can be
+   *  reflected without a second fetch — the PATCH routes write these. */
+  custom: Record<string, unknown>;
   notes: string | null;
   source: string | null;
   connectedOn: string | null;
@@ -155,6 +158,10 @@ export function mapContactRecord(row: Row, ownerName: string | null): ContactRec
     visibility: row.visibility === "private" ? "private" : "org",
     ownerId: str(row.relationship_owner),
     ownerName,
+    custom:
+      row.custom && typeof row.custom === "object" && !Array.isArray(row.custom)
+        ? (row.custom as Record<string, unknown>)
+        : {},
     strengthScore: num(row.strength_score),
     strengthLabel: str(row.strength_label) ?? "cold",
     relevanceScore: num(row.relevance_score),
@@ -181,7 +188,8 @@ const CONTACT_SELECT = `
   linkedin_url, avatar_url, location, capital_role, relationship_type, stage, visibility,
   relationship_owner, strength_score, strength_label, relevance_score, tags, notes, source,
   connected_on, created_at, last_activity_at, next_step_at, verified, confidence,
-  communication_status, consent_basis, consent_at, compliance_flags, archived_at, merged_into_id
+  communication_status, consent_basis, consent_at, compliance_flags, archived_at, merged_into_id,
+  custom
 `;
 
 /** One display name per principal in the org, for actors, owners, assignees. */

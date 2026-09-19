@@ -153,6 +153,29 @@ describe("coerceFieldValue", () => {
     expect(coerceFieldValue(d, ["PE", "Crypto"]).ok).toBe(false);
   });
 
+  it("refuses an object for a text field instead of storing [object Object]", () => {
+    // String(raw) used to coerce this, and the column quietly stopped meaning
+    // anything — the value looked typed rather than fabricated.
+    expect(coerceFieldValue(def({ type: "text" }), {})).toEqual({
+      ok: false,
+      error: "AUM must be text.",
+    });
+    expect(coerceFieldValue(def({ type: "text" }), ["a", "b"]).ok).toBe(false);
+    expect(coerceFieldValue(def({ type: "long_text" }), { a: 1 }).ok).toBe(false);
+    // An unconfigured select takes the same path.
+    expect(coerceFieldValue(def({ type: "select" }), {}).ok).toBe(false);
+  });
+
+  it("refuses an empty required multi_select", () => {
+    // [] is not emptyish, so it used to reach the creation check already
+    // "present" and satisfy the required column with nothing in it.
+    const d = def({ type: "multi_select", options: ["PE", "VC"], required: true });
+    expect(coerceFieldValue(d, [])).toEqual({ ok: false, error: "AUM is required." });
+    expect(coerceFieldValue(d, ["PE"]).ok).toBe(true);
+    // Not required: an empty list is a legitimate "none of these".
+    expect(coerceFieldValue(def({ type: "multi_select", options: ["PE"] }), []).ok).toBe(true);
+  });
+
   it("accepts any value for a select with no options configured", () => {
     expect(coerceFieldValue(def({ type: "select" }), "Anything")).toEqual({
       ok: true,
@@ -173,11 +196,15 @@ describe("applyCustomPatch", () => {
     expect(result.custom).toEqual({ consultant: "Mercer", aum: 5000000 });
   });
 
-  it("ignores keys the org has not defined", () => {
+  it("refuses a key the org has not defined instead of dropping it quietly", () => {
     // A stale client or a hand-rolled request must not accumulate junk in the
-    // jsonb that no column definition explains.
+    // jsonb that no column definition explains — but it must not be told the
+    // edit succeeded either. Skipping the key answered 200 while discarding
+    // the value, so someone editing a since-archived column watched their
+    // entry vanish with no error.
     const result = applyCustomPatch(defs, {}, { aum: 100, rogue_key: "whatever" });
-    expect(result.custom).toEqual({ aum: 100 });
+    expect(result.ok).toBe(false);
+    expect(result.errors).toContain('There is no column called "rogue_key".');
     expect(result.custom).not.toHaveProperty("rogue_key");
   });
 
@@ -250,9 +277,12 @@ describe("what reaches the database-side merge", () => {
     };
   }
 
-  it("never forwards a key the org has not defined", () => {
+  it("never forwards a key the org has not defined, and says so", () => {
     const r = rpcPatch({}, { aum: "5,000,000", rogue: "anything" });
     expect(r.patch).toEqual({ aum: 5000000 });
+    // The route turns !ok into a 400, so the undefined key cannot ride through
+    // as a silent success either.
+    expect(r.ok).toBe(false);
   });
 
   it("forwards only what the client sent, not the row's other values", () => {
@@ -261,6 +291,8 @@ describe("what reaches the database-side merge", () => {
   });
 
   it("writes a stale key back unchanged rather than taking the client's value", () => {
+    // Note this is now also a 400 (the key has no definition); the property
+    // under test is that even so, the client's value never reaches the column.
     // `legacy` has no definition — its column was archived. It survives the
     // filter because it is already on the row, so the question is whether the
     // CLIENT's value can ride through on its back. It cannot.
