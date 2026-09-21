@@ -6,6 +6,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireOrgContext } from "@/lib/auth";
 import { createServerClient } from "@/lib/supabase/server";
 import { recordNetworkAudit } from "@/lib/network-audit";
+import { runEventAutomations } from "@/lib/network-automations.server";
+import { taskSnapshot } from "@/lib/network-automation-snapshots";
 
 export const dynamic = "force-dynamic";
 
@@ -84,7 +86,13 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
     .update(patch)
     .eq("organization_id", auth.ctx.orgId)
     .eq("id", id)
-    .select("id, title, notes, due_at, priority, status, assignee_id, contact_id, completed_at, created_at")
+    // investor_id, opportunity_id and updated_at are read for the automation
+    // snapshot below, not for the response: a rule's conditions are evaluated
+    // against the task's own columns, and updated_at is the firing's identity.
+    .select(
+      "id, title, notes, due_at, priority, status, assignee_id, contact_id, " +
+        "investor_id, opportunity_id, completed_at, created_at, updated_at",
+    )
     .single();
 
   if (error || !data) {
@@ -103,6 +111,17 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
       metadata: { taskId: data.id },
     });
     if (logError) console.warn("[network/tasks] timeline entry failed", logError);
+  }
+
+  // Completing a follow-up is a trigger: "when the intro call is logged done,
+  // raise the diligence pack request". Only the OPEN → DONE transition fires
+  // it, so re-saving an already-done task does nothing, and the row's version
+  // keeps a client retry from firing it twice.
+  if (patch.status === "done" && before.status !== "done") {
+    await runEventAutomations(
+      { supabase, orgId: auth.ctx.orgId, actorId: auth.ctx.userId },
+      { kind: "task_completed", snapshot: taskSnapshot(data as Record<string, unknown>) },
+    );
   }
 
   await recordNetworkAudit(supabase, {

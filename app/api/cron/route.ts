@@ -18,6 +18,10 @@ import {
   type RenewalStats,
 } from "@/lib/subscriptions.server";
 import { recordCronRun } from "@/lib/cron-health";
+import {
+  runScheduledAutomationsAllOrgs,
+  type SweepStats as NetworkAutomationStats,
+} from "@/lib/network-automations.server";
 import type { Automation } from "@/lib/supabase/database.types";
 
 // Each due automation plans + (if trusted) executes a full workflow via Claude.
@@ -282,6 +286,32 @@ export async function GET(request: Request) {
     console.error("subscription_renewals failed", e);
   }
 
+  // ---------------------------------------------------------------------------
+  // Network OS automations — the three time-based triggers.
+  //
+  // The event triggers are evaluated inside the request that changed the row.
+  // These three cannot be: "no contact for 30 days" is not caused by anybody
+  // doing anything, which is exactly why it is the one a firm most wants
+  // watched. The sweep asks each org's rules for their candidates and fires
+  // once per row per UTC day — the dedupe key on the run log is what makes an
+  // hourly sweep raise one follow-up rather than twenty-four.
+  //
+  // Self-contained and never throws: an automation problem must not stop the
+  // renewals, reminders, or health tracking below it.
+  let networkAutomations: NetworkAutomationStats = {
+    orgs: 0,
+    rules: 0,
+    applied: 0,
+    skipped: 0,
+    duplicates: 0,
+    failed: 0,
+  };
+  try {
+    networkAutomations = await runScheduledAutomationsAllOrgs(supabase, now);
+  } catch (e) {
+    console.error("network_automations sweep failed", e);
+  }
+
   // Last-run tracking (append-only, best-effort): record that the hourly sweep
   // ran so the pipeline's liveness is observable. Never throws; never changes the
   // response below.
@@ -320,6 +350,9 @@ export async function GET(request: Request) {
         bankDebitsPolled: nativeCollections.polled,
         bankDebitsSettled: nativeCollections.settled,
         bankDebitsReturned: nativeCollections.bounced,
+        networkAutomationOrgs: networkAutomations.orgs,
+        networkAutomationsApplied: networkAutomations.applied,
+        networkAutomationsFailed: networkAutomations.failed,
       },
       startedAt: now,
     });
@@ -327,5 +360,5 @@ export async function GET(request: Request) {
     // best-effort: never let health tracking break the cron response
   }
 
-  return NextResponse.json({ swept: due.length, results, radar, escalated, webhooks, proactive, reminders, subscriptions, settledInvoices, nativeCollections });
+  return NextResponse.json({ swept: due.length, results, radar, escalated, webhooks, proactive, reminders, subscriptions, settledInvoices, nativeCollections, networkAutomations });
 }

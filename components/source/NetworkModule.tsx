@@ -20,6 +20,8 @@ import { NetworkCalendar } from "./NetworkCalendar";
 import { NewDealForm } from "./NewDealForm";
 import { useRouter } from "next/navigation";
 import { WorkspaceSummary } from "./WorkspaceSummary";
+import { AutomationsPanel } from "./AutomationsPanel";
+import { FieldManager } from "./FieldManager";
 import type {
   ActiveNetworkPerson,
   NetworkPulse,
@@ -33,7 +35,7 @@ import type { NetworkSearchResult } from "@/lib/network-search";
 import type { FieldDef } from "@/lib/network-fields";
 import type { Opportunity } from "@/lib/network-opportunities";
 
-type Tab = "network" | "pipeline" | "tasks" | "calendar" | "search" | "circles";
+type Tab = "network" | "pipeline" | "tasks" | "calendar" | "search" | "circles" | "setup";
 
 /** Adapt a roster person to the shape the warm-intro drafter expects. */
 function personToContact(p: ActiveNetworkPerson): NetworkSearchResult {
@@ -146,6 +148,7 @@ export function NetworkModule({
     { key: "calendar", label: "Calendar" },
     { key: "search", label: "Search" },
     { key: "circles", label: "Circles" },
+    { key: "setup", label: "Setup" },
   ];
 
   return (
@@ -306,6 +309,16 @@ export function NetworkModule({
       {tab === "search" && <NetworkSearch onSelectContact={(c) => setSelectedContact(c)} />}
 
       {tab === "circles" && <SyndicateCircle circles={circleList} onCreateCircle={handleCreateCircle} />}
+
+      {/* How the workspace itself is shaped: the rules that act on their own,
+          and the columns this firm tracks that the next one does not. Both are
+          readable by every member and writable only by admins. */}
+      {tab === "setup" && (
+        <div className="flex flex-col gap-10">
+          <AutomationsPanel />
+          <FieldManager />
+        </div>
+      )}
 
       {/* Warm-intro drawer from search results */}
       {selectedContact && (
