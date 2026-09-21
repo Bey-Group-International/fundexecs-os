@@ -16,13 +16,15 @@ import { recordNetworkAudit, type AuditAction } from "@/lib/network-audit";
 import { loadFieldDefsStrict } from "@/lib/network-field-defs.server";
 import { applyCustomPatch } from "@/lib/network-fields";
 import { invalidateRoster } from "@/lib/network-roster";
+import { runEventAutomations } from "@/lib/network-automations.server";
+import { contactSnapshot } from "@/lib/network-automation-snapshots";
 
 export const dynamic = "force-dynamic";
 
 type Ctx = { params: Promise<{ id: string }> };
 
 const CONTACT_RETURN_COLUMNS =
-  "id, first_name, last_name, full_name, title, company, company_domain, email, phone, linkedin_url, avatar_url, location, capital_role, relationship_type, stage, visibility, relationship_owner, strength_score, strength_label, relevance_score, tags, notes, source, connected_on, created_at, last_activity_at, next_step_at, verified, confidence, communication_status, consent_basis, consent_at, compliance_flags, archived_at, merged_into_id, custom";
+  "id, first_name, last_name, full_name, title, company, company_domain, email, phone, linkedin_url, avatar_url, location, capital_role, relationship_type, stage, visibility, relationship_owner, strength_score, strength_label, relevance_score, tags, notes, source, connected_on, created_at, updated_at, last_activity_at, next_step_at, verified, confidence, communication_status, consent_basis, consent_at, compliance_flags, archived_at, merged_into_id, custom";
 
 const MAX_NOTES = 20_000;
 const MAX_TAGS = 25;
@@ -257,6 +259,22 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
   if (systemEntries.length > 0) {
     const { error: logError } = await supabase.from("network_activities").insert(systemEntries);
     if (logError) console.warn("[network/contact] system timeline entry failed", logError);
+  }
+
+  // Rules watching a relationship move through the capital-formation cycle.
+  // The snapshot is the row AFTER the patch, so a condition reads what the
+  // relationship became; its updated_at is the firing's identity, which is why
+  // the column is in CONTACT_RETURN_COLUMNS above. Never throws.
+  if (patch.stage !== undefined && patch.stage !== before.stage) {
+    await runEventAutomations(
+      { supabase, orgId: auth.ctx.orgId, actorId: auth.ctx.userId },
+      {
+        kind: "contact_stage_changed",
+        from: String(before.stage ?? ""),
+        to: String(patch.stage),
+        snapshot: contactSnapshot(updated),
+      },
+    );
   }
 
   for (const action of auditActions) {

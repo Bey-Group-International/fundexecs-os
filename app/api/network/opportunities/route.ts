@@ -25,6 +25,8 @@ import {
 import { loadFieldDefsStrict } from "@/lib/network-field-defs.server";
 import { applyCustomPatch } from "@/lib/network-fields";
 import { recordNetworkAudit } from "@/lib/network-audit";
+import { runEventAutomations } from "@/lib/network-automations.server";
+import { opportunitySnapshot } from "@/lib/network-automation-snapshots";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
@@ -306,6 +308,26 @@ export async function POST(req: NextRequest) {
     metadata: { stage, targetAmount },
   });
 
+  // Rules watching for a new deal. Awaited so a welcome task exists by the
+  // time the board reloads, and evaluated with the caller's client so a rule
+  // can only reach rows this member could reach. Never throws — a broken rule
+  // must not make a successful create look like a failure.
+  let responseRow = data;
+  const tally = await runEventAutomations(
+    { supabase, orgId: auth.ctx.orgId, actorId: auth.ctx.userId },
+    { kind: "opportunity_created", snapshot: opportunitySnapshot(data as Record<string, unknown>) },
+  );
+  // A rule may have tagged or reassigned the row we are about to return.
+  if (tally.applied > 0) {
+    const { data: after } = await supabase
+      .from("network_opportunities")
+      .select(OPPORTUNITY_SELECT)
+      .eq("organization_id", auth.ctx.orgId)
+      .eq("id", data.id)
+      .maybeSingle();
+    if (after) responseRow = after;
+  }
+
   const owners = await loadOwnerNames(supabase, auth.ctx.orgId);
-  return NextResponse.json({ opportunity: mapOpportunity(data, owners) });
+  return NextResponse.json({ opportunity: mapOpportunity(responseRow, owners) });
 }

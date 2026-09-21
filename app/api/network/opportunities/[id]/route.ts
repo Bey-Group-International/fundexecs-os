@@ -23,6 +23,8 @@ import {
 import { loadFieldDefsStrict } from "@/lib/network-field-defs.server";
 import { recordNetworkAudit } from "@/lib/network-audit";
 import { invalidateRoster } from "@/lib/network-roster";
+import { runEventAutomations } from "@/lib/network-automations.server";
+import { opportunitySnapshot } from "@/lib/network-automation-snapshots";
 
 export const dynamic = "force-dynamic";
 
@@ -163,6 +165,10 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
     return NextResponse.json({ error: "Failed to update the deal" }, { status: 500 });
   }
 
+  // What the response returns. It starts as the row the patch produced and is
+  // replaced below only if an automation changed the row underneath us.
+  let responseRow = data;
+
   if (result.stageChange) {
     const { from, to } = result.stageChange;
     const { error: logError } = await supabase.from("network_activities").insert({
@@ -184,6 +190,43 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
     if (logError) console.warn("[network/opportunities] timeline entry failed", logError);
     // The trigger just moved the contact's last_activity_at.
     invalidateRoster(auth.ctx.orgId);
+
+    // Automations watching this move. Evaluated with the caller's own client,
+    // so a rule can only touch rows this member could touch, and awaited
+    // rather than fired off: a task a rule raises should exist by the time the
+    // board refetches, not a moment later.
+    //
+    // The snapshot is `data` — the row as it stands AFTER the patch — so a
+    // condition like "now in diligence and over five million" is tested
+    // against what the deal became, not what it was. Its `updated_at` is also
+    // the firing's identity, which is why the re-read above has to come first.
+    //
+    // runEventAutomations never throws; a broken rule must not turn a
+    // successful stage move into a 500 for the person who made it.
+    const tally = await runEventAutomations(
+      { supabase, orgId: auth.ctx.orgId, actorId: auth.ctx.userId },
+      {
+        kind: "opportunity_stage_changed",
+        from,
+        to,
+        snapshot: opportunitySnapshot(data as Record<string, unknown>),
+      },
+    );
+    // A rule can reassign the owner, add a tag, or set a column on this very
+    // row. `data` was read before any of that, so returning it would answer
+    // the move with values the automation has already changed — and the board
+    // treats the response as authoritative for the card it just moved. Re-read
+    // only when something was actually applied, so the common case (no rules,
+    // or none that matched) still costs one round trip.
+    if (tally.applied > 0) {
+      const { data: after } = await supabase
+        .from("network_opportunities")
+        .select(OPPORTUNITY_SELECT)
+        .eq("organization_id", auth.ctx.orgId)
+        .eq("id", id)
+        .maybeSingle();
+      if (after) responseRow = after;
+    }
   }
 
   await recordNetworkAudit(supabase, {
@@ -197,7 +240,7 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
   });
 
   const owners = await loadOwnerNames(supabase, auth.ctx.orgId);
-  return NextResponse.json({ opportunity: mapOpportunity(data, owners) });
+  return NextResponse.json({ opportunity: mapOpportunity(responseRow, owners) });
 }
 
 export async function DELETE(_req: NextRequest, { params }: Ctx) {
