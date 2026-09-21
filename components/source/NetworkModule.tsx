@@ -15,6 +15,11 @@ import { WarmIntroPanel } from "./WarmIntroPanel";
 import { ActiveRoster } from "./ActiveRoster";
 import { NetworkActivityFeed } from "./NetworkActivityFeed";
 import { PipelineBoard, type StageSummary } from "./PipelineBoard";
+import { TaskQueue } from "./TaskQueue";
+import { NetworkCalendar } from "./NetworkCalendar";
+import { NewDealForm } from "./NewDealForm";
+import { useRouter } from "next/navigation";
+import { WorkspaceSummary } from "./WorkspaceSummary";
 import type {
   ActiveNetworkPerson,
   NetworkPulse,
@@ -28,7 +33,7 @@ import type { NetworkSearchResult } from "@/lib/network-search";
 import type { FieldDef } from "@/lib/network-fields";
 import type { Opportunity } from "@/lib/network-opportunities";
 
-type Tab = "network" | "pipeline" | "search" | "circles";
+type Tab = "network" | "pipeline" | "tasks" | "calendar" | "search" | "circles";
 
 /** Adapt a roster person to the shape the warm-intro drafter expects. */
 function personToContact(p: ActiveNetworkPerson): NetworkSearchResult {
@@ -102,6 +107,8 @@ export function NetworkModule({
   pipelineUnavailable = false,
 }: Props) {
   const [tab, setTab] = useState<Tab>("network");
+  const [newDeal, setNewDeal] = useState(false);
+  const router = useRouter();
   const [showAdd, setShowAdd] = useState(false);
   const [addedCount, setAddedCount] = useState(0);
   const [selectedContact, setSelectedContact] = useState<NetworkSearchResult | null>(null);
@@ -135,6 +142,8 @@ export function NetworkModule({
   const TABS: { key: Tab; label: string }[] = [
     { key: "network", label: "Active Network" },
     { key: "pipeline", label: "Pipeline" },
+    { key: "tasks", label: "Work" },
+    { key: "calendar", label: "Calendar" },
     { key: "search", label: "Search" },
     { key: "circles", label: "Circles" },
   ];
@@ -217,6 +226,12 @@ export function NetworkModule({
         </p>
       )}
 
+      {/* What needs somebody today, before anything else on the page. */}
+      <WorkspaceSummary
+        onOpenTasks={() => setTab("tasks")}
+        onOpenCalendar={() => setTab("calendar")}
+      />
+
       {/* Tab content */}
       {tab === "network" && (
         <div className="grid gap-6 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
@@ -230,6 +245,33 @@ export function NetworkModule({
           <div className="lg:sticky lg:top-6 lg:max-h-[calc(100vh-6rem)]">
             <NetworkActivityFeed initialEvents={activityEvents} initialLive={liveCounts} />
           </div>
+        </div>
+      )}
+
+      {tab === "pipeline" && !pipelineUnavailable && (
+        <div className="flex flex-col gap-3">
+          {newDeal ? (
+            <NewDealForm
+              owners={owners}
+              onCancel={() => setNewDeal(false)}
+              onCreated={() => {
+                setNewDeal(false);
+                // Re-renders the server component, which re-queries the
+                // pipeline. PipelineBoard re-seeds itself when that new page
+                // arrives, so the deal appears without a full reload — the
+                // refresh alone is not enough, and used to leave the board
+                // showing a pipeline that no longer matched the database.
+                router.refresh();
+              }}
+            />
+          ) : (
+            <button
+              onClick={() => setNewDeal(true)}
+              className="self-start rounded-md border border-hairline px-3 py-1.5 text-xs text-fg-secondary transition hover:border-hairline-strong hover:text-fg-primary"
+            >
+              + New allocation
+            </button>
+          )}
         </div>
       )}
 
@@ -252,6 +294,14 @@ export function NetworkModule({
             owners={owners}
           />
         ))}
+
+      {tab === "tasks" && (
+        <TaskQueue owners={owners} />
+      )}
+
+      {tab === "calendar" && (
+        <NetworkCalendar />
+      )}
 
       {tab === "search" && <NetworkSearch onSelectContact={(c) => setSelectedContact(c)} />}
 

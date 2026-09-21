@@ -12,7 +12,8 @@
 // Column headers show count, total and WEIGHTED total. The weighted number is
 // the one worth reading: $40m of pipeline at 10% is not $40m.
 
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
   OPPORTUNITY_STAGES,
@@ -57,7 +58,16 @@ function formatDay(iso: string | null): string | null {
   const ms = Date.parse(iso);
   if (Number.isNaN(ms)) return null;
   const d = new Date(ms);
-  return d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+  // `expectedClose` is a DATE, so it parses to midnight UTC. Formatted in the
+  // browser zone, a deal closing 2026-09-26 printed "Sep 25" on its card while
+  // the calendar drew it in the Sep 26 cell — one deal, two dates, depending
+  // on which tab you were looking at.
+  return d.toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    timeZone: "UTC",
+  });
 }
 
 interface Props {
@@ -77,6 +87,76 @@ export function PipelineBoard({ initialOpportunities, initialSummary }: Props) {
   const [moves, setMoves] = useState<Map<string, SummaryDelta>>(() => new Map());
   const [error, setError] = useState<string | null>(null);
   const liveRegion = useRef<HTMLParagraphElement | null>(null);
+  const router = useRouter();
+
+  // Re-seed when the server sends a different page.
+  //
+  // `useState(initialOpportunities)` runs its initializer ONCE. A
+  // `router.refresh()` re-renders the server component and hands down a new
+  // array, but React keeps this component mounted and `deals` keeps pointing at
+  // the page from first paint — so a deal created through the new-allocation
+  // form never appeared on the board until a full reload. The board could
+  // create work it then refused to show.
+  //
+  // Adjusting state during render rather than in an effect is deliberate: React
+  // re-runs this component immediately with the corrected state and never
+  // paints the stale board, where an effect would show the old page for a frame
+  // first.
+  const [seed, setSeed] = useState(initialOpportunities);
+  // Rows the server has confirmed but the page may not have caught up with.
+  //
+  // A snapshot arriving while a move is in flight tells you a read happened —
+  // not that your write was inside it. A `router.refresh()` fired by an
+  // unrelated action can have queried BEFORE the move committed, so its row
+  // carries the old stage. Deciding by arrival order gets this wrong in one
+  // direction or the other, which is what the previous two attempts did.
+  //
+  // `updated_at` settles it. It is the version the server already stamps on
+  // every row, so a snapshot older than the confirmed row demonstrably predates
+  // the write, and one at least as new demonstrably contains it. No guessing.
+  const [confirmed, setConfirmed] = useState<Map<string, Opportunity>>(() => new Map());
+
+  if (seed !== initialOpportunities) {
+    setSeed(initialOpportunities);
+
+    const outstanding = new Map<string, Opportunity>();
+    const merged = initialOpportunities.map((d) => {
+      const mine = confirmed.get(d.id);
+      if (mine && Date.parse(mine.updatedAt) > Date.parse(d.updatedAt)) {
+        // This page is older than the write. Keep the confirmed row on screen.
+        outstanding.set(d.id, mine);
+        return mine;
+      }
+      return d;
+    });
+
+    setConfirmed(outstanding);
+    setDeals(merged);
+    // A delta corrects a rollup computed BEFORE its move. Keep exactly the ones
+    // whose move this page has not caught up with; drop the rest, or each of
+    // them would be counted a second time.
+    setMoves((m) => new Map([...m].filter(([id]) => outstanding.has(id))));
+  }
+
+  // Which snapshot the board has actually COMMITTED to.
+  //
+  // A drag started against one server snapshot must not write into a newer
+  // one: clearing `moves` above only discards the deltas that exist at that
+  // moment, and a PATCH still in flight would re-add its delta afterwards, on
+  // top of a rollup that already counts the committed move.
+  //
+  // Recorded here rather than bumped in the block above, because that block
+  // runs during RENDER and React may discard or replay a render. A bump that
+  // leaked from work which never committed would make a FAILING patch believe
+  // the board had moved on and skip its rollback — leaving the optimistic
+  // stage on the card and a delta in the header for a move the server
+  // refused. A layout effect fires only after the render commits, and fires
+  // before any promise continuation can observe it, which a passive effect
+  // does not guarantee.
+  const committedSeed = useRef(initialOpportunities);
+  useLayoutEffect(() => {
+    committedSeed.current = seed;
+  }, [seed]);
 
   const byStage = useMemo(() => {
     const map = new Map<OpportunityStage, Opportunity[]>();
@@ -142,6 +222,8 @@ export function PipelineBoard({ initialOpportunities, initialSummary }: Props) {
         probability: deal.probability,
       };
 
+      const seedAtStart = committedSeed.current;
+
       setBusy((b) => new Set(b).add(dealId));
       // Optimistic: the card lands where it was dropped immediately, and the
       // header moves with it rather than waiting for the server's rollup.
@@ -172,9 +254,20 @@ export function PipelineBoard({ initialOpportunities, initialSummary }: Props) {
           | { opportunity?: Opportunity; error?: string }
           | null;
         if (!res.ok || !body?.opportunity) throw new Error(body?.error ?? "Move failed");
-        // Take the server's version: it decided status, close date and
-        // probability, and those are not guessable from the drop alone.
+
+        // The server's row for this deal is authoritative, always. An earlier
+        // version of this skipped it whenever any snapshot had committed while
+        // the request was in flight, on the assumption that a newer snapshot
+        // must contain this move. It does not: a refresh fired by an unrelated
+        // action — creating an allocation, say — can query BEFORE this PATCH
+        // commits, and that snapshot carries the deal at its old stage. The
+        // board then kept the old stage and the old rollup until something
+        // else happened to refresh it. A newer prop identity says a read
+        // happened, not that this write was in it.
         setDeals((prev) => prev.map((d) => (d.id === dealId ? body.opportunity! : d)));
+        // Hold it until a page arrives that is at least as new, so a snapshot
+        // still in flight from before the commit cannot put the old stage back.
+        setConfirmed((c) => new Map(c).set(dealId, body.opportunity!));
         // Reconcile the delta with what the server actually stored: the PATCH
         // decides status and probability, so the optimistic guess above can be
         // wrong about the weighted figure.
@@ -192,7 +285,27 @@ export function PipelineBoard({ initialOpportunities, initialSummary }: Props) {
           return next;
         });
         setError(null);
+
+        // Ask for a snapshot that is CAUSALLY AFTER this commit. Only a read
+        // issued once the PATCH has returned is guaranteed to contain it, and
+        // the re-seed drops the delta when that page lands — so the rollup
+        // stops being adjusted at exactly the moment it no longer needs to be.
+        //
+        // This is the part the client cannot work out on its own: with no
+        // version on the server's payload, nothing in a snapshot says whether
+        // a given write is inside it. Rather than guess, ask again. The cost
+        // is one extra fetch per move, and a brief window where the header
+        // over-counts if the snapshot did already include the move — a
+        // transient that the refresh then corrects, in place of an error that
+        // persisted.
+        router.refresh();
       } catch (err) {
+        if (committedSeed.current !== seedAtStart) {
+          // A newer snapshot already shows the deal where the server has it —
+          // un-moved, since the PATCH failed. Rolling back would restore a
+          // delta measured against a rollup that no longer exists.
+          return;
+        }
         setDeals((current) =>
           current.map((d) => (d.id === dealId ? { ...d, stage: previousStage } : d)),
         );
@@ -214,7 +327,7 @@ export function PipelineBoard({ initialOpportunities, initialSummary }: Props) {
         });
       }
     },
-    [deals, moves],
+    [deals, moves, router],
   );
 
   if (deals.length === 0) {

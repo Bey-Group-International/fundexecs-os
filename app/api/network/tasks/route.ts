@@ -14,6 +14,7 @@ import { createServerClient } from "@/lib/supabase/server";
 import { checkRateLimit, rateLimitHeaders } from "@/lib/rate-limit";
 import { loadPrincipalNames } from "@/lib/network-contact";
 import { recordNetworkAudit } from "@/lib/network-audit";
+import { daysBetween } from "@/lib/network-workspace";
 
 export const dynamic = "force-dynamic";
 
@@ -36,7 +37,7 @@ export async function GET(req: NextRequest) {
   let query = supabase
     .from("network_tasks")
     .select(
-      "id, title, notes, due_at, priority, status, assignee_id, contact_id, completed_at, created_at, network_contacts(full_name)",
+      "id, title, notes, due_at, priority, status, assignee_id, contact_id, opportunity_id, completed_at, created_at, network_contacts(full_name), network_opportunities(name)",
     )
     .eq("organization_id", auth.ctx.orgId)
     .eq("status", status);
@@ -59,10 +60,13 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "Failed to load tasks" }, { status: 500 });
   }
 
-  const now = Date.now();
+  const now = new Date();
   return NextResponse.json({
     tasks: (data ?? []).map((t: Record<string, any>) => {
       const joined = Array.isArray(t.network_contacts) ? t.network_contacts[0] : t.network_contacts;
+      const deal = Array.isArray(t.network_opportunities)
+        ? t.network_opportunities[0]
+        : t.network_opportunities;
       return {
         id: t.id,
         title: t.title,
@@ -74,9 +78,16 @@ export async function GET(req: NextRequest) {
         assigneeName: t.assignee_id ? (names.get(String(t.assignee_id)) ?? null) : null,
         contactId: t.contact_id ?? null,
         contactName: joined?.full_name ?? null,
+        opportunityId: t.opportunity_id ?? null,
+        opportunityName: deal?.name ?? null,
         completedAt: t.completed_at ?? null,
         createdAt: t.created_at,
-        overdue: t.status === "open" && t.due_at ? Date.parse(t.due_at) < now : false,
+        // Late by whole DAYS, matching how the queue buckets it. Comparing
+        // instants made a task due at 09:00 read "overdue" from 09:01 while the
+        // grouping beside it still said "Today" — two contradicting claims about
+        // the same task, on the same screen.
+        overdue:
+          t.status === "open" && t.due_at ? (daysBetween(now, t.due_at) ?? 0) < 0 : false,
       };
     }),
   });
