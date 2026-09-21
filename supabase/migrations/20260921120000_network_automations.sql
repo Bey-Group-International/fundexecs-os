@@ -31,7 +31,11 @@ create table if not exists public.network_automations (
 
   name             text not null,
   description      text,
-  enabled          boolean not null default true,
+  -- Defaults OFF. A rule acts on other people's work unattended, and the run
+  -- log only shows what it did after it has already done it, so the author
+  -- reads it back and switches it on. The API always sends this explicitly;
+  -- the default is what protects a direct PostgREST insert that omits it.
+  enabled          boolean not null default false,
 
   -- What makes the rule consider firing. Event triggers are evaluated inside
   -- the request that changed the row; the three time-based ones are evaluated
@@ -139,13 +143,28 @@ create table if not exists public.network_automation_runs (
   entity_id        uuid not null,
   entity_label     text,
 
-  -- 'applied'  — the actions ran.
-  -- 'skipped'  — the trigger matched but the conditions did not. Recorded so a
-  --              rule that never fires can be told apart from one that is not
-  --              being evaluated at all.
-  -- 'failed'   — an action errored. The rule stays enabled; the error is here.
-  status           text not null default 'applied'
-                     check (status in ('applied','skipped','failed')),
+  -- 'processing' — CLAIMED, nothing applied yet. Every run starts here.
+  -- 'applied'    — the actions ran.
+  -- 'skipped'    — the trigger matched but the conditions did not. Recorded so
+  --                a rule that never fires can be told apart from one that is
+  --                not being evaluated at all.
+  -- 'failed'     — an action errored. The rule stays enabled; the error is
+  --                here.
+  --
+  -- The claim is written BEFORE any action runs, so its initial value has to be
+  -- a state that does not assert anything happened. Defaulting to 'applied'
+  -- meant a process that died between the claim and the first action left a row
+  -- reading "applied" with an empty results list — the log asserting success for
+  -- work that never started, and the unique index below refusing every retry.
+  -- A stuck 'processing' row is still stuck, but it says so.
+  --
+  -- Deliberately NOT auto-reclaimed after a lease expires. Actions are not
+  -- individually idempotent — a create_task that succeeded before the crash
+  -- would run again — so reclaiming trades a visible stuck row for a silent
+  -- double-application. This engine's contract is "at most once"; an operator
+  -- deleting the stuck row is the recovery path, and it is a deliberate act.
+  status           text not null default 'processing'
+                     check (status in ('processing','applied','skipped','failed')),
 
   -- One entry per action, in order, each with its own outcome. A rule with
   -- three actions where the second fails is a partial run, and the log says so
@@ -159,8 +178,17 @@ create table if not exists public.network_automation_runs (
   -- Derived in one place: automationDedupeKey() in lib/network-automations.ts.
   dedupe_key       text not null,
 
+  -- Who claimed this run. Null for the scheduled sweep, which runs as the
+  -- service role on the organization's behalf rather than for any member.
+  -- This is what stops one member closing out another's run, or a member
+  -- writing a result onto a run they never claimed.
+  claimed_by       uuid references public.principals (id) on delete set null,
+
   created_at       timestamptz not null default now()
 );
+
+alter table public.network_automation_runs
+  add column if not exists claimed_by uuid references public.principals (id) on delete set null;
 
 -- This index is the idempotency guarantee. Inserting the run row is the CLAIM:
 -- the engine writes it before it applies anything, and a duplicate fire loses
@@ -185,14 +213,81 @@ create policy network_automation_runs_select on public.network_automation_runs
   for select to authenticated
   using (organization_id in (select public.current_principal_org_ids()));
 
--- Written by the engine running as the member whose edit triggered it, so the
--- insert policy is org membership. There is deliberately no update or delete
--- policy: like network_audit_log, the run history cannot be rewritten from the
--- client. The engine's own status update goes through the function below.
+-- There is deliberately NO insert, update or delete policy for members.
+--
+-- Org membership alone was the wrong gate. It let any authenticated member
+-- write an arbitrary run row: forge a history entry against a colleague's rule,
+-- attribute an action to a rule that never took it, or — worse — insert a row
+-- carrying a legitimate firing's dedupe key and take the claim, so the real
+-- firing lost the unique index and silently did nothing. The run log is
+-- supposed to be the trustworthy answer to "why did this appear on my queue?",
+-- and a log anybody can write is not that.
+--
+-- Members reach this table only through network_automation_claim_run() below,
+-- which decides what a row may say. Like network_audit_log, nothing here can be
+-- edited or deleted from the client afterwards.
 drop policy if exists network_automation_runs_insert on public.network_automation_runs;
-create policy network_automation_runs_insert on public.network_automation_runs
-  for insert to authenticated
-  with check (organization_id in (select public.current_principal_org_ids()));
+
+-- ── 2a. Claiming a firing ────────────────────────────────────────────────────
+--
+-- The insert IS the lock: it is written before any action runs, and the unique
+-- index refuses the second attempt. Returns the new run's id, or null when this
+-- exact firing has already been claimed.
+--
+-- SECURITY DEFINER because members have no insert policy. The checks below are
+-- what it buys back: the automation must exist, in the caller's own org, and
+-- the caller must be a member of that org. A member therefore cannot write a
+-- run against another tenant's rule, against a rule that does not exist, or
+-- with an entity_type the table would not otherwise accept.
+--
+-- claimed_by is taken from auth.uid() rather than from an argument, so a member
+-- cannot attribute their claim to somebody else.
+
+create or replace function public.network_automation_claim_run(
+  target_org uuid,
+  target_automation uuid,
+  run_entity_type text,
+  run_entity_id uuid,
+  run_entity_label text,
+  run_dedupe_key text
+)
+returns uuid
+language plpgsql
+volatile
+security definer
+set search_path = public
+as $$
+declare
+  new_id uuid;
+begin
+  if target_org is null or not exists (
+    select 1 from public.network_automations a
+     where a.id = target_automation
+       and a.organization_id = target_org
+  ) or target_org not in (select public.current_principal_org_ids()) then
+    return null;
+  end if;
+
+  insert into public.network_automation_runs (
+    organization_id, automation_id, entity_type, entity_id, entity_label,
+    status, dedupe_key, claimed_by
+  ) values (
+    target_org, target_automation, run_entity_type, run_entity_id, run_entity_label,
+    'processing', run_dedupe_key, (select auth.uid())
+  )
+  returning id into new_id;
+
+  return new_id;
+exception
+  -- Somebody else already holds this firing. That is a successful outcome, not
+  -- a failure: the caller does nothing and the work happens exactly once.
+  when unique_violation then
+    return null;
+end;
+$$;
+
+grant execute on function public.network_automation_claim_run(uuid, uuid, text, uuid, text, text)
+  to authenticated;
 
 -- ── 3. Closing out a run ─────────────────────────────────────────────────────
 --
@@ -225,6 +320,14 @@ as $$
    where r.id = target_run
      and r.organization_id = target_org
      and target_org in (select public.current_principal_org_ids())
+     -- Only the claimant closes out their own run. Org membership alone let any
+     -- member rewrite the result of any run in the workspace — enough to make
+     -- a rule that did nothing read as applied, or one that worked read as
+     -- failed. The run log has to be trustworthy or it is not worth keeping.
+     and r.claimed_by = (select auth.uid())
+     -- A run is finalised once. Without this a member could re-open somebody
+     -- else's finished run and overwrite its results.
+     and r.status = 'processing'
      and run_status in ('applied','skipped','failed');
 $$;
 
@@ -261,7 +364,17 @@ as $$
          last_error = run_error
    where a.id = target_automation
      and a.organization_id = target_org
-     and target_org in (select public.current_principal_org_ids());
+     and target_org in (select public.current_principal_org_ids())
+     -- Only for a rule this caller actually ran. Org membership alone let any
+     -- member inflate any rule's counter or stamp a fabricated last_error onto
+     -- it, which is the field an admin reads to decide whether a rule is
+     -- working.
+     and exists (
+       select 1 from public.network_automation_runs r
+        where r.automation_id = target_automation
+          and r.organization_id = target_org
+          and r.claimed_by = (select auth.uid())
+     );
 $$;
 
 grant execute on function public.network_automation_record_run(uuid, uuid, timestamptz, text)
@@ -279,9 +392,23 @@ grant execute on function public.network_automation_record_run(uuid, uuid, times
 -- service role it sees everything, which is correct — it is acting for the
 -- organization, not for a member — and it scopes every call to one org.
 --
--- Days are compared as plain UTC dates, matching network_workspace_summary and
--- the client's date formatting. "Idle for 30 days" has to mean the same thing
--- on the dashboard, in the sweep, and on the card.
+-- Two different day comparisons here, deliberately, each matching the Phase 2
+-- rollup it has to agree with:
+--
+--   • 'opportunity_idle' and 'contact_going_cold' compare ELAPSED TIME
+--     (`< now() - make_interval(days => n)`), which is exactly what
+--     network_workspace_summary's contacts_cold does
+--     (`last_activity_at < now() - interval '90 days'`). "Quiet for 21 days"
+--     therefore means the same thing in the sweep as on the dashboard tile.
+--     Converting these to a plain UTC-date comparison would make the two
+--     disagree by up to a day, which is the opposite of what is wanted.
+--
+--   • 'close_date_approaching' compares UTC DATES, because expected_close is a
+--     `date` and the client renders it as one. That is the same arithmetic
+--     network_workspace_summary uses for closing_soon.
+--
+-- An earlier version of this comment claimed all three used UTC dates. They do
+-- not, and the difference is load-bearing, so it is spelled out.
 
 create or replace function public.network_automation_candidates(
   target_org uuid,

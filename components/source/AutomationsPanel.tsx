@@ -526,9 +526,21 @@ function RuleBuilder({
               value={condition.op}
               onChange={(e) =>
                 setConditions((list) =>
-                  list.map((c, i) =>
-                    i === index ? { ...c, op: e.target.value as ConditionOp } : c,
-                  ),
+                  list.map((c, i) => {
+                    if (i !== index) return c;
+                    const op = e.target.value as ConditionOp;
+                    // The stored shape depends on the operator, so switching
+                    // between `in` and the rest has to convert what is already
+                    // typed rather than leave a string where an array belongs.
+                    if (op === "in" && !Array.isArray(c.value)) {
+                      const text = String(c.value ?? "").trim();
+                      return { ...c, op, value: text ? [text] : [] };
+                    }
+                    if (op !== "in" && Array.isArray(c.value)) {
+                      return { ...c, op, value: (c.value as unknown[]).join(", ") };
+                    }
+                    return { ...c, op };
+                  }),
                 )
               }
               aria-label="Test"
@@ -542,13 +554,36 @@ function RuleBuilder({
             </select>
             {condition.op !== "is_empty" && condition.op !== "is_not_empty" && (
               <input
-                value={String(condition.value ?? "")}
+                // `in` is stored as an array — the API refuses a string for it,
+                // so every "is one of" condition built here used to be rejected
+                // on save. Typed as a comma-separated list and split on the way
+                // into state; joined back for display so the field stays
+                // editable.
+                value={
+                  Array.isArray(condition.value)
+                    ? (condition.value as unknown[]).join(", ")
+                    : String(condition.value ?? "")
+                }
                 onChange={(e) =>
                   setConditions((list) =>
-                    list.map((c, i) => (i === index ? { ...c, value: e.target.value } : c)),
+                    list.map((c, i) =>
+                      i === index
+                        ? {
+                            ...c,
+                            value:
+                              c.op === "in"
+                                ? e.target.value
+                                    .split(",")
+                                    .map((v) => v.trim())
+                                    .filter(Boolean)
+                                : e.target.value,
+                          }
+                        : c,
+                    ),
                   )
                 }
                 aria-label="Value"
+                placeholder={condition.op === "in" ? "diligence, ic_review" : undefined}
                 className="min-w-[8rem] flex-1 rounded-md border border-border-subtle bg-surface-2 px-2 py-1.5 text-sm text-fg-primary"
               />
             )}
@@ -593,11 +628,17 @@ function RuleBuilder({
                 aria-label="Action"
                 className="rounded-md border border-border-subtle bg-surface-2 px-2 py-1.5 text-sm text-fg-primary"
               >
-                {options.actions.map((a) => (
-                  <option key={a.value} value={a.value}>
-                    {a.label}
-                  </option>
-                ))}
+                {options.actions
+                  // set_stage only moves a CONTACT's stage — the validator and
+                  // the engine both refuse it elsewhere. Offering it on a deal
+                  // rule meant picking it, getting no stage control, and being
+                  // told to choose a stage that was never on screen.
+                  .filter((a) => a.value !== "set_stage" || entity === "contact")
+                  .map((a) => (
+                    <option key={a.value} value={a.value}>
+                      {a.label}
+                    </option>
+                  ))}
               </select>
               {actions.length > 1 && (
                 <button

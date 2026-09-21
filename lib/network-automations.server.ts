@@ -106,27 +106,51 @@ async function claimRun(
   entityLabel: string | null,
   dedupeKey: string,
 ): Promise<string | null> {
-  const { data, error } = await ctx.supabase
-    .from("network_automation_runs")
-    .insert({
-      organization_id: ctx.orgId,
-      automation_id: automation.id,
-      entity_type: TRIGGER_ENTITY[automation.triggerType],
-      entity_id: entityId,
-      entity_label: entityLabel,
-      status: "applied",
-      dedupe_key: dedupeKey,
-    })
-    .select("id")
-    .maybeSingle();
+  const entityType = TRIGGER_ENTITY[automation.triggerType];
 
-  if (error) {
-    // 23505 — the unique index refused it, so somebody else already has this
-    // firing. That is a successful outcome, not a failure.
-    if ((error as { code?: string }).code === "23505") return null;
-    throw error;
+  if (ctx.serviceRole) {
+    // The sweep bypasses RLS, so it inserts directly. It has no principal, so
+    // claimed_by stays null: this run was made for the organization, not for
+    // any member.
+    const { data, error } = await ctx.supabase
+      .from("network_automation_runs")
+      .insert({
+        organization_id: ctx.orgId,
+        automation_id: automation.id,
+        entity_type: entityType,
+        entity_id: entityId,
+        entity_label: entityLabel,
+        status: "processing",
+        dedupe_key: dedupeKey,
+      })
+      .select("id")
+      .maybeSingle();
+
+    if (error) {
+      // 23505 — the unique index refused it, so somebody else already has this
+      // firing. That is a successful outcome, not a failure.
+      if ((error as { code?: string }).code === "23505") return null;
+      throw error;
+    }
+    return data ? String((data as { id: unknown }).id) : null;
   }
-  return data ? String((data as { id: unknown }).id) : null;
+
+  // Members have no insert policy on the run log — an open one let anyone forge
+  // a history entry, or take a real firing's dedupe key and make the genuine
+  // run lose the index and silently do nothing. The function decides what the
+  // row may say, stamps claimed_by from auth.uid(), and returns null when the
+  // firing is already claimed.
+  const { data, error } = await ctx.supabase.rpc("network_automation_claim_run", {
+    target_org: ctx.orgId,
+    target_automation: automation.id,
+    run_entity_type: entityType,
+    run_entity_id: entityId,
+    run_entity_label: entityLabel,
+    run_dedupe_key: dedupeKey,
+  });
+
+  if (error) throw error;
+  return data ? String(data) : null;
 }
 
 async function finishRun(
@@ -161,11 +185,17 @@ async function recordFiring(
   error: string | null,
 ): Promise<void> {
   if (ctx.serviceRole) {
-    // run_count is read-then-written here rather than incremented in SQL. The
-    // sweep is the only service-role caller and it processes one org's rules
-    // serially, so the read and the write are not racing each other; a
-    // concurrent member edit firing the same rule could cost one increment,
-    // which is a wrong count on a display field, not lost work.
+    // run_count is read-then-written here rather than incremented in SQL,
+    // because the service role cannot use the member-gated RPC below.
+    //
+    // The rule is loaded ONCE and then fired against many candidate rows, so
+    // the in-memory count has to advance with each write. Without that, fifty
+    // applied rows each wrote `loaded + 1` and the counter finished the sweep
+    // one higher than it started — a rule doing fifty things a night reporting
+    // that it had done one.
+    //
+    // A concurrent member edit firing the same rule can still cost one
+    // increment. That is a wrong number on a display field, not lost work.
     const { error: updateError } = await ctx.supabase
       .from("network_automations")
       .update({
@@ -177,7 +207,9 @@ async function recordFiring(
       .eq("id", automation.id);
     if (updateError) {
       console.warn("[network-automations] could not count the run", automation.id, updateError);
+      return;
     }
+    automation.runCount += 1;
     return;
   }
   const { error: rpcError } = await ctx.supabase.rpc("network_automation_record_run", {
@@ -349,6 +381,11 @@ async function applyAction(
           .eq("id", entity.id);
         if (error) throw error;
         if (!count) return { action: "add_tag", ok: false, detail: "The row could not be updated." };
+        // Keep the snapshot in step. planActions plans both tags of a two-tag
+        // rule because neither is in the snapshot; without this the second
+        // write sends [...existing, "B"] and erases the "A" the first one just
+        // added, while the run log reports both as successful.
+        (entity.snapshot as Record<string, unknown>).tags = [...existing, action.tag];
         return { action: "add_tag", ok: true, detail: action.tag };
       }
 

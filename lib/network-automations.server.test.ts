@@ -127,6 +127,14 @@ function stubClient(opts: {
     from: (table: string) => builder(table),
     rpc: (name: string, args: unknown) => {
       calls.push({ table: `rpc:${name}`, op: "rpc", payload: args });
+      if (name === "network_automation_claim_run") {
+        // The member path's claim. The function returns the new run's id, or
+        // null when the firing is already claimed — a unique violation is
+        // caught inside it rather than surfacing as a PostgREST error, so the
+        // "already taken" case is a null result, not a 23505.
+        if (opts.claimFails) return Promise.resolve({ data: null, error: null });
+        return Promise.resolve({ data: "run-1", error: null });
+      }
       if (name === "network_automation_candidates") {
         // The sweep asks once per scheduled trigger; only the kind the rule
         // watches has candidates, exactly as the SQL function behaves.
@@ -139,32 +147,48 @@ function stubClient(opts: {
   } as never;
 }
 
-const EVENT = {
-  kind: "opportunity_stage_changed" as const,
-  from: "qualified",
-  to: "diligence",
-  snapshot: DEAL_SNAPSHOT,
-};
+/**
+ * A fresh event per call, deliberately not a shared constant.
+ *
+ * applyAction now writes back to `snapshot.tags` after a successful add_tag —
+ * that is what stops a two-tag rule losing its first tag. A module-level event
+ * object would therefore carry one test's tags into the next, and the suite
+ * would pass or fail depending on the order jest happened to run it in.
+ */
+function makeEvent() {
+  return {
+    kind: "opportunity_stage_changed" as const,
+    from: "qualified",
+    to: "diligence",
+    snapshot: { ...DEAL_SNAPSHOT, tags: [] as unknown[], custom: {} },
+  };
+}
 
 describe("the event path", () => {
   it("claims a run, then creates the task the rule asked for", async () => {
     const calls: Call[] = [];
     const tally = await runEventAutomations(
       { supabase: stubClient({ rules: [RULE], calls }), orgId: "org-1", actorId: "user-b" },
-      EVENT,
+      makeEvent(),
     );
 
     expect(tally).toEqual({ applied: 1, skipped: 0, failed: 0 });
 
-    const claim = calls.find((c) => c.table === "network_automation_runs" && c.op === "insert");
+    // A member claims through the gated function, never by inserting into the
+    // run log directly — an open insert policy let anyone forge a history
+    // entry or steal a real firing's dedupe key.
+    const claim = calls.find((c) => c.table === "rpc:network_automation_claim_run");
     expect(claim?.payload).toMatchObject({
-      organization_id: "org-1",
-      automation_id: "rule-1",
-      entity_type: "opportunity",
-      entity_id: "op-1",
+      target_org: "org-1",
+      target_automation: "rule-1",
+      run_entity_type: "opportunity",
+      run_entity_id: "op-1",
       // The row's version, so the same mutation evaluated twice is one firing.
-      dedupe_key: "opportunity_stage_changed:2026-09-21T10:00:00.000Z",
+      run_dedupe_key: "opportunity_stage_changed:2026-09-21T10:00:00.000Z",
     });
+    expect(calls.some((c) => c.table === "network_automation_runs" && c.op === "insert")).toBe(
+      false,
+    );
 
     const task = calls.find((c) => c.table === "network_tasks");
     expect(task?.payload).toMatchObject({
@@ -186,7 +210,7 @@ describe("the event path", () => {
         orgId: "org-1",
         actorId: "user-b",
       },
-      EVENT,
+      makeEvent(),
     );
 
     // Not "applied and harmless" — the second firing must not write anything.
@@ -203,7 +227,7 @@ describe("the event path", () => {
     };
     const tally = await runEventAutomations(
       { supabase: stubClient({ rules: [rule], calls }), orgId: "org-1", actorId: "user-b" },
-      EVENT,
+      makeEvent(),
     );
 
     expect(tally).toEqual({ applied: 0, skipped: 1, failed: 0 });
@@ -217,10 +241,10 @@ describe("the event path", () => {
     const rule = { ...RULE, trigger_config: { toStage: "legal" } };
     const tally = await runEventAutomations(
       { supabase: stubClient({ rules: [rule], calls }), orgId: "org-1", actorId: "user-b" },
-      EVENT,
+      makeEvent(),
     );
     expect(tally).toEqual({ applied: 0, skipped: 0, failed: 0 });
-    expect(calls.some((c) => c.table === "network_automation_runs")).toBe(false);
+    expect(calls.some((c) => c.table === "rpc:network_automation_claim_run")).toBe(false);
   });
 
   it("swallows a broken rule rather than failing the edit that triggered it", async () => {
@@ -236,7 +260,7 @@ describe("the event path", () => {
     // Telling them it failed because an admin's rule is broken would be worse
     // than the rule silently not running.
     await expect(
-      runEventAutomations({ supabase: exploding, orgId: "org-1", actorId: "user-b" }, EVENT),
+      runEventAutomations({ supabase: exploding, orgId: "org-1", actorId: "user-b" }, makeEvent()),
     ).resolves.toEqual({ applied: 0, skipped: 0, failed: 0 });
     expect(calls).toHaveLength(0);
   });
@@ -267,10 +291,14 @@ describe("the scheduled path", () => {
     );
 
     expect(stats.applied).toBeGreaterThan(0);
+    // The sweep holds a service-role client and bypasses RLS, so it inserts
+    // directly — and claims as `processing`, not `applied`: the row is written
+    // before any action runs and must not assert that something happened.
     const claim = calls.find((c) => c.table === "network_automation_runs" && c.op === "insert");
     expect(claim?.payload).toMatchObject({
       entity_id: "op-9",
       dedupe_key: "opportunity_idle:2026-09-21",
+      status: "processing",
     });
 
     const task = calls.find((c) => c.table === "network_tasks");
@@ -332,10 +360,71 @@ describe("the scheduled path", () => {
     const calls: Call[] = [];
     await runEventAutomations(
       { supabase: stubClient({ rules: [RULE], calls }), orgId: "org-1", actorId: "user-b" },
-      EVENT,
+      makeEvent(),
     );
     expect(calls.some((c) => c.table === "rpc:network_automation_run_finish")).toBe(true);
     expect(calls.some((c) => c.table === "rpc:network_automation_record_run")).toBe(true);
+  });
+});
+
+describe("regressions", () => {
+  it("advances the rule's run count across the candidates of one sweep", () => {
+    // The rule is loaded once and fired against many rows. Writing
+    // `loaded + 1` every time left a rule that did fifty things reporting that
+    // it had done one.
+    const calls: Call[] = [];
+    const rule = {
+      ...RULE,
+      id: "rule-3",
+      trigger_type: "opportunity_idle",
+      trigger_config: { days: 21 },
+      run_count: 7,
+    };
+    const candidates = [
+      { entity_id: "op-a", entity_label: "A", snapshot: { ...DEAL_SNAPSHOT, id: "op-a" } },
+      { entity_id: "op-b", entity_label: "B", snapshot: { ...DEAL_SNAPSHOT, id: "op-b" } },
+      { entity_id: "op-c", entity_label: "C", snapshot: { ...DEAL_SNAPSHOT, id: "op-c" } },
+    ];
+    return runScheduledAutomationsForOrg(
+      {
+        supabase: stubClient({ rules: [rule], candidates, calls }),
+        orgId: "org-1",
+        actorId: null,
+        serviceRole: true,
+      },
+      new Date("2026-09-21T09:00:00.000Z"),
+    ).then(() => {
+      const counts = calls
+        .filter((c) => c.table === "network_automations" && c.op === "update")
+        .map((c) => (c.payload as { run_count: number }).run_count);
+      expect(counts).toEqual([8, 9, 10]);
+    });
+  });
+
+  it("accumulates two tags from one rule instead of losing the first", async () => {
+    // `existing` comes from the snapshot, so without updating it after a write
+    // the second tag's update sends [...existing, "B"] and erases "A" — while
+    // the run log reports both actions as successful.
+    const calls: Call[] = [];
+    const rule = {
+      ...RULE,
+      actions: [
+        { type: "add_tag", tag: "at-risk" },
+        { type: "add_tag", tag: "needs-ic" },
+      ],
+    };
+    await runEventAutomations(
+      {
+        supabase: stubClient({ rules: [rule], calls }),
+        orgId: "org-1",
+        actorId: "user-b",
+      },
+      makeEvent(),
+    );
+    const writes = calls
+      .filter((c) => c.table === "network_opportunities" && c.op === "update")
+      .map((c) => (c.payload as { tags: string[] }).tags);
+    expect(writes).toEqual([["at-risk"], ["at-risk", "needs-ic"]]);
   });
 });
 
@@ -349,7 +438,7 @@ describe("mapping guards", () => {
         orgId: "org-1",
         actorId: "user-b",
       },
-      EVENT,
+      makeEvent(),
     );
     // No actions to run, so the firing is recorded and nothing is written.
     expect(tally.failed + tally.applied).toBe(1);

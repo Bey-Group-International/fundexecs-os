@@ -33,6 +33,15 @@ const DEAL: Snapshot = {
   updated_at: "2026-09-21T10:00:00.000Z",
 };
 
+const CONTACT_STAGES = [
+  "prospect",
+  "engaged",
+  "diligence",
+  "committed",
+  "dormant",
+  "passed",
+] as const;
+
 const OPPORTUNITY_STAGES = [
   "sourced",
   "qualified",
@@ -462,6 +471,47 @@ describe("validation", () => {
       { customKeys: ["consultant"] },
     );
     expect(result.ok).toBe(true);
+  });
+
+  it("refuses set_stage on a rule that is not about contacts", () => {
+    // A deal's stage is tied to status, closed_at and probability by check
+    // constraints, so the engine refuses to write it. Accepting the action here
+    // meant an admin could save a deal rule that looked right, switch it on,
+    // and find every run carrying a failed action.
+    const result = validateAutomationBody(
+      "opportunity_stage_changed",
+      {},
+      [],
+      [{ type: "set_stage", stage: "committed" } as Action],
+      { stages: OPPORTUNITY_STAGES },
+    );
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.errors.join(" ")).toContain("Only a contact rule can move a stage");
+  });
+
+  it("still accepts set_stage on a contact rule", () => {
+    // The positive control: without it, a change that refused set_stage
+    // everywhere would pass the test above.
+    const result = validateAutomationBody(
+      "contact_stage_changed",
+      {},
+      [],
+      [{ type: "set_stage", stage: "engaged" } as Action],
+      { stages: CONTACT_STAGES },
+    );
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value.actions[0]).toEqual({ type: "set_stage", stage: "engaged" });
+  });
+
+  it("refuses set_stage on a scheduled deal rule too", () => {
+    const result = validateAutomationBody(
+      "opportunity_idle",
+      { days: 21 },
+      [],
+      [{ type: "set_stage", stage: "passed" } as Action],
+      { stages: OPPORTUNITY_STAGES },
+    );
+    expect(result.ok).toBe(false);
   });
 
   it("refuses an unknown action type", () => {

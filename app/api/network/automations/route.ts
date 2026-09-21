@@ -24,10 +24,11 @@ import {
   TRIGGER_ENTITY,
   TRIGGER_LABEL,
   TRIGGER_TYPES,
+  type TriggerType,
 } from "@/lib/network-automations";
 import { loadOwnerNames, OPPORTUNITY_STAGES } from "@/lib/network-opportunities";
 import { CONTACT_STAGES } from "@/lib/network-stages";
-import { loadAllFieldDefs } from "@/lib/network-field-defs.server";
+import { loadAllFieldDefs, loadFieldDefsStrict } from "@/lib/network-field-defs.server";
 import { recordNetworkAudit } from "@/lib/network-audit";
 
 export const dynamic = "force-dynamic";
@@ -46,6 +47,81 @@ function stagesFor(triggerType: string): readonly string[] {
   return TRIGGER_ENTITY[triggerType as keyof typeof TRIGGER_ENTITY] === "contact"
     ? CONTACT_STAGES
     : OPPORTUNITY_STAGES;
+}
+
+/**
+ * Every principal a `set_owner` action names must be a member of this org.
+ *
+ * The validator only checked that the id was non-empty, and the executor wrote
+ * it straight into the owner column. The organization filter on that write
+ * scopes the ROW, not the VALUE: a rule could therefore park every deal it
+ * touched on a uuid belonging to nobody in the workspace — or to a member of a
+ * different tenant — and the deals would quietly stop appearing under any real
+ * owner. The contacts PATCH route has enforced this invariant on the same
+ * column since Phase 1; rules were the way around it.
+ *
+ * Returns an error string, or null when every id checks out.
+ */
+/**
+ * The custom-column keys a rule on this trigger may name in a `set_field`.
+ *
+ * Tasks have none — network_field_defs only covers contacts and opportunities,
+ * and the engine refuses set_field on a task outright. An empty list is the
+ * honest answer, and it makes the validator reject such an action at save time
+ * rather than letting it fail on every firing.
+ *
+ * Strict, so a failed read is an error rather than looking like "this
+ * workspace has no columns of its own".
+ */
+async function customKeysFor(
+  supabase: any,
+  orgId: string,
+  triggerType: TriggerType,
+): Promise<string[]> {
+  const entity = TRIGGER_ENTITY[triggerType];
+  if (entity === "task") return [];
+  return (await loadFieldDefsStrict(supabase, orgId, entity)).map((f) => f.key);
+}
+
+async function checkOwnerIds(
+  supabase: any,
+  orgId: string,
+  actions: unknown,
+): Promise<string | null> {
+  const ids = [
+    ...new Set(
+      (Array.isArray(actions) ? actions : [])
+        .filter(
+          (a): a is { type: string; ownerId: string } =>
+            !!a &&
+            typeof a === "object" &&
+            (a as { type?: unknown }).type === "set_owner" &&
+            typeof (a as { ownerId?: unknown }).ownerId === "string" &&
+            (a as { ownerId: string }).ownerId.length > 0,
+        )
+        .map((a) => a.ownerId),
+    ),
+  ];
+  if (ids.length === 0) return null;
+
+  const { data, error } = await supabase
+    .from("organization_members")
+    .select("principal_id")
+    .eq("organization_id", orgId)
+    .in("principal_id", ids);
+
+  // A failed read must not read as "none of them are members", which would
+  // reject a correct rule, nor as "all fine", which would store a bad one.
+  if (error) throw error;
+
+  const members = new Set(
+    ((data ?? []) as { principal_id: string }[]).map((m) => m.principal_id),
+  );
+  const missing = ids.filter((id) => !members.has(id));
+  if (missing.length > 0) {
+    return "A rule can only reassign to a member of this organization.";
+  }
+  return null;
 }
 
 export async function GET() {
@@ -147,19 +223,28 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // Custom columns are read strictly: a set_field action naming a column that
-  // could not be read would be rejected as unknown, which is the right answer
-  // only if the read succeeded. Failing loudly beats storing a rule that
-  // silently does nothing.
+  // Read through the STRICT loader. loadAllFieldDefs swallows a failed read and
+  // returns empty arrays, so this try/catch could never fire and a transient
+  // failure looked identical to "this workspace has no columns of its own" —
+  // every set_field action in the rule rejected as naming an unknown column,
+  // with a message telling the admin their column does not exist. The comment
+  // here used to claim this was strict. It is now.
   let customKeys: string[];
   try {
-    const entity = TRIGGER_ENTITY[payload.triggerType];
-    const fields = await loadAllFieldDefs(supabase, auth.ctx.orgId);
-    customKeys = (entity === "contact" ? fields.contact : fields.opportunity).map((f) => f.key);
+    customKeys = await customKeysFor(supabase, auth.ctx.orgId, payload.triggerType);
   } catch (err) {
     console.error("[network/automations] field defs", err);
     return NextResponse.json({ error: "Failed to read this workspace's columns" }, { status: 503 });
   }
+
+  let ownerError: string | null;
+  try {
+    ownerError = await checkOwnerIds(supabase, auth.ctx.orgId, payload.actions);
+  } catch (err) {
+    console.error("[network/automations] owner check", err);
+    return NextResponse.json({ error: "Failed to create the rule" }, { status: 500 });
+  }
+  if (ownerError) return NextResponse.json({ error: ownerError }, { status: 400 });
 
   const validated = validateAutomationBody(
     payload.triggerType,
@@ -280,9 +365,7 @@ export async function PATCH(req: NextRequest) {
 
     let customKeys: string[];
     try {
-      const entity = TRIGGER_ENTITY[triggerType];
-      const fields = await loadAllFieldDefs(supabase, auth.ctx.orgId);
-      customKeys = (entity === "contact" ? fields.contact : fields.opportunity).map((f) => f.key);
+      customKeys = await customKeysFor(supabase, auth.ctx.orgId, triggerType);
     } catch (err) {
       console.error("[network/automations] field defs", err);
       return NextResponse.json(
@@ -291,11 +374,24 @@ export async function PATCH(req: NextRequest) {
       );
     }
 
+    // Against whichever action list will actually be stored, not only a
+    // supplied one: an edit that changes the trigger while keeping the stored
+    // actions still has to satisfy the invariant.
+    const nextActions = payload.actions === undefined ? before.actions : payload.actions;
+    let ownerError: string | null;
+    try {
+      ownerError = await checkOwnerIds(supabase, auth.ctx.orgId, nextActions);
+    } catch (err) {
+      console.error("[network/automations] owner check", err);
+      return NextResponse.json({ error: "Failed to update the rule" }, { status: 500 });
+    }
+    if (ownerError) return NextResponse.json({ error: ownerError }, { status: 400 });
+
     const validated = validateAutomationBody(
       triggerType,
       payload.triggerConfig === undefined ? before.trigger_config : payload.triggerConfig,
       payload.conditions === undefined ? before.conditions : payload.conditions,
-      payload.actions === undefined ? before.actions : payload.actions,
+      nextActions,
       { stages: stagesFor(triggerType), customKeys },
     );
     if (!validated.ok) {

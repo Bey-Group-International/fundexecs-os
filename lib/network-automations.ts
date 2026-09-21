@@ -816,6 +816,19 @@ export function validateAutomationBody(
         break;
       }
       case "set_stage": {
+        // Contact rules only. A deal's stage is tied to status, closed_at and
+        // probability by check constraints, so the engine refuses to write it
+        // and the route that maintains those invariants is buildOpportunityPatch.
+        // Until now the validator accepted the action anyway: an admin could
+        // save a deal rule that looked fine, watch it fire, and find every run
+        // carrying a failed action. A rule that can never do what it says
+        // should not be storable.
+        if (TRIGGER_ENTITY[triggerType] !== "contact") {
+          errors.push(
+            "Only a contact rule can move a stage — a deal's stage is tied to its status and close date, so those moves stay on the board.",
+          );
+          break;
+        }
         const stage = typeof a.stage === "string" ? a.stage : "";
         if (!stage) {
           errors.push("Choose the stage to move to.");
