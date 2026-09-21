@@ -157,7 +157,7 @@ export default async function WalletPage(
               <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-fg-muted">
                 Available balance
               </p>
-              <p className="mt-2 flex items-baseline gap-2 font-display text-5xl font-semibold tracking-tight text-fg-primary">
+              <p className="mt-2 flex flex-wrap items-baseline gap-x-2 gap-y-1 font-display text-4xl font-semibold tracking-tight text-fg-primary sm:text-5xl">
                 <span className="text-gold-300">◇</span>
                 <span className="tabular-nums">{formatCredits(balance)}</span>
                 <span className="font-mono text-[11px] font-normal uppercase tracking-[0.16em] text-fg-muted">
@@ -179,7 +179,7 @@ export default async function WalletPage(
                   : "no recent burn"}
               </p>
             </div>
-            <div className="grid grid-cols-3 gap-px overflow-hidden rounded-xl border border-line/50 bg-line/40 text-center">
+            <div className="grid w-full grid-cols-1 gap-px overflow-hidden rounded-xl border border-line/50 bg-line/40 text-center min-[430px]:grid-cols-3 sm:w-auto">
               <div className="bg-surface-1/40 px-4 py-3">
                 <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-fg-muted">
                   30-day burn

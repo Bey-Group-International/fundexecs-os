@@ -337,7 +337,89 @@ export function LibraryWorkspace({
             ) : null}
           </div>
         ) : (
-          <div className="overflow-x-auto rounded-xl border border-line bg-surface-0">
+          <>
+          <div className="space-y-2 md:hidden">
+            {rows.map((d) => (
+              <article key={d.id} className="rounded-2xl border border-line/70 bg-surface-0 p-3.5">
+                <div className="flex items-start gap-2.5">
+                  <span
+                    title={d.uploaded ? "Uploaded file" : d.storageKey ? "External link" : "Written here"}
+                    className="mt-0.5 shrink-0 font-mono text-[11px] text-fg-muted"
+                  >
+                    {d.uploaded ? "▤" : d.storageKey ? "↗" : "≡"}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <Link
+                      href={`/document/${d.id}`}
+                      className="block truncate text-[15px] font-semibold leading-tight text-fg-primary transition hover:text-gold-300"
+                    >
+                      {d.name}
+                    </Link>
+                    <p className="mt-0.5 truncate text-xs text-fg-muted">
+                      {sectionLabel.get(d.section) ?? "Other Materials"} · {d.updatedLabel}
+                    </p>
+                  </div>
+                </div>
+
+                <dl className="mt-3 grid grid-cols-2 gap-x-3 gap-y-2 text-xs">
+                  <div>
+                    <dt className="font-mono text-[11px] uppercase tracking-[0.16em] text-fg-muted">Kind</dt>
+                    <dd className="mt-0.5 font-mono uppercase tracking-wider text-fg-secondary">{d.kind}</dd>
+                  </div>
+                  <div>
+                    <dt className="font-mono text-[11px] uppercase tracking-[0.16em] text-fg-muted">Size</dt>
+                    <dd className="mt-0.5 text-fg-secondary">{d.sizeBytes != null ? formatBytes(d.sizeBytes) : "—"}</dd>
+                  </div>
+                </dl>
+
+                <div className="mt-3 flex flex-wrap items-center gap-2">
+                  <QualityBadges doc={d} />
+                  <StatusCycler doc={d} />
+                  <PublishControl doc={d} rooms={rooms} />
+                </div>
+
+                <div className="mt-3 flex flex-wrap items-center gap-1.5 border-t border-line/60 pt-3">
+                  {d.storageKey ? (
+                    <a
+                      href={`/api/documents/${d.id}/file`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      title={d.uploaded ? "Open the file" : "Open the linked document"}
+                      className="shrink-0 rounded-lg border border-line px-2 py-1 font-mono text-[11px] uppercase tracking-wider text-fg-muted transition hover:border-gold-500/40 hover:text-gold-300"
+                    >
+                      Open
+                    </a>
+                  ) : null}
+                  <ReplaceFileButton
+                    documentId={d.id}
+                    section={d.section}
+                    hasFile={d.uploaded}
+                  />
+                  {d.uploaded ? (
+                    <form
+                      action={(fd) =>
+                        startTransition(async () => {
+                          await removeDocumentFile(fd);
+                        })
+                      }
+                    >
+                      <input type="hidden" name="id" value={d.id} />
+                      <button
+                        type="submit"
+                        title="Detach the file — the document, its name and anything written stay"
+                        className="shrink-0 rounded-lg border border-line px-2 py-1 font-mono text-[11px] uppercase tracking-wider text-fg-muted transition hover:border-red-500/40 hover:text-red-400"
+                      >
+                        Detach
+                      </button>
+                    </form>
+                  ) : null}
+                  <DeleteDocumentButton id={d.id} name={d.name} />
+                </div>
+              </article>
+            ))}
+          </div>
+
+          <div className="hidden overflow-x-auto rounded-xl border border-line bg-surface-0 md:block">
             <table className="w-full min-w-[56rem] border-collapse text-sm">
               <thead>
                 <tr className="border-b border-line text-left font-mono text-[11px] uppercase tracking-wider text-fg-muted">
@@ -440,6 +522,7 @@ export function LibraryWorkspace({
               </tbody>
             </table>
           </div>
+          </>
         )}
 
         {current && current.docs.length === 0 && current.viaBuild ? (
