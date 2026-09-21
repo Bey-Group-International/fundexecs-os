@@ -61,7 +61,54 @@ export async function ExecuteOwnershipModule({ orgId }: { orgId: string }) {
         </Link>
       </div>
 
-      <div className="overflow-x-auto rounded-xl border border-line">
+      <div className="space-y-2 md:hidden">
+        {o.holders.map((h) => (
+          <article key={h.key} className="rounded-2xl border border-line/70 bg-surface-1 p-3.5">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="truncate text-[15px] font-semibold text-fg-primary">{h.name}</p>
+                <p className="mt-0.5 text-xs text-fg-secondary">{humanize(h.kind)}</p>
+              </div>
+              <span
+                className={`shrink-0 rounded-full border px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider ${
+                  h.linked
+                    ? "border-status-success/40 text-status-success"
+                    : h.hasFund
+                      ? "border-gold-500/40 text-gold-300"
+                      : "border-status-info/40 text-status-info"
+                }`}
+              >
+                {h.linked ? "Fund + Equity" : h.hasFund ? "Fund" : "Equity"}
+              </span>
+            </div>
+            <dl className="mt-3 grid grid-cols-2 gap-x-3 gap-y-2 text-xs">
+              <div>
+                <dt className="font-mono text-[11px] uppercase tracking-[0.16em] text-fg-muted">Committed</dt>
+                <dd className="mt-0.5 font-mono text-fg-secondary">{h.fund ? usd(h.fund.committed) : "—"}</dd>
+              </div>
+              <div>
+                <dt className="font-mono text-[11px] uppercase tracking-[0.16em] text-fg-muted">Called</dt>
+                <dd className="mt-0.5 font-mono text-fg-secondary">{h.fund ? usd(h.fund.called) : "—"}</dd>
+              </div>
+              <div>
+                <dt className="font-mono text-[11px] uppercase tracking-[0.16em] text-fg-muted">Distributed</dt>
+                <dd className="mt-0.5 font-mono text-fg-secondary">{h.fund ? usd(h.fund.distributed) : "—"}</dd>
+              </div>
+              <div>
+                <dt className="font-mono text-[11px] uppercase tracking-[0.16em] text-fg-muted">Direct equity</dt>
+                <dd className="mt-0.5 font-mono text-fg-primary">{h.hasEquity ? usd(h.equityInvested) : "—"}</dd>
+              </div>
+            </dl>
+            {h.hasEquity ? (
+              <p className="mt-3 line-clamp-2 text-xs text-fg-secondary">
+                Entities: {h.equity.map((e) => e.entityName).join(", ")}
+              </p>
+            ) : null}
+          </article>
+        ))}
+      </div>
+
+      <div className="hidden overflow-x-auto rounded-xl border border-line md:block">
         <table className="w-full border-collapse text-sm">
           <thead>
             <tr className="border-b border-line bg-surface-2/80 text-left">
@@ -101,7 +148,7 @@ export async function ExecuteOwnershipModule({ orgId }: { orgId: string }) {
                   <span
                     className={`rounded-full border px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider ${
                       h.linked
-                        ? "border-emerald-400/40 text-emerald-300"
+                        ? "border-status-success/40 text-status-success"
                         : h.hasFund
                           ? "border-gold-500/40 text-gold-300"
                           : "border-status-info/40 text-status-info"

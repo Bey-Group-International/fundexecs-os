@@ -177,7 +177,85 @@ export async function ExecuteCapTableModule({ orgId }: { orgId: string }) {
       ) : null}
 
       {/* Cap table / capital accounts */}
-      <div className="overflow-x-auto rounded-xl border border-line">
+      <div className="space-y-2 md:hidden">
+        {t.holders.map((h) => {
+          const share = shareByInvestor.get(h.investorId);
+          const eng = share ? engagement.get(share.id) : null;
+          const eq = equityByInvestor.get(h.investorId);
+          return (
+            <article key={h.investorId} className="rounded-2xl border border-line/70 bg-surface-1 p-3.5">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="truncate text-[15px] font-semibold text-fg-primary">{h.name}</p>
+                  <p className="mt-0.5 text-xs text-fg-secondary">{humanize(h.type)}</p>
+                </div>
+                <span className="shrink-0 font-mono text-sm text-gold-300">{h.ownershipPct}%</span>
+              </div>
+              {eq ? (
+                <p className="mt-2 rounded-lg border border-gold-500/30 bg-gold-500/5 px-2 py-1 text-[11px] text-gold-300">
+                  + equity ×{eq.equity.length}
+                </p>
+              ) : null}
+              <dl className="mt-3 grid grid-cols-2 gap-x-3 gap-y-2 text-xs">
+                <div>
+                  <dt className="font-mono text-[11px] uppercase tracking-[0.16em] text-fg-muted">Committed</dt>
+                  <dd className="mt-0.5 font-mono text-fg-primary">{usd(h.committed)}</dd>
+                </div>
+                <div>
+                  <dt className="font-mono text-[11px] uppercase tracking-[0.16em] text-fg-muted">NAV</dt>
+                  <dd className="mt-0.5 font-mono text-fg-primary">{usd(h.navShare)}</dd>
+                </div>
+                <div>
+                  <dt className="font-mono text-[11px] uppercase tracking-[0.16em] text-fg-muted">Called</dt>
+                  <dd className="mt-0.5 font-mono text-fg-secondary">{usd(h.called)}</dd>
+                </div>
+                <div>
+                  <dt className="font-mono text-[11px] uppercase tracking-[0.16em] text-fg-muted">Unfunded</dt>
+                  <dd className="mt-0.5 font-mono text-fg-secondary">{usd(h.unfunded)}</dd>
+                </div>
+                <div>
+                  <dt className="font-mono text-[11px] uppercase tracking-[0.16em] text-fg-muted">DPI</dt>
+                  <dd className="mt-0.5 font-mono text-fg-secondary">{multiple(h.dpi)}</dd>
+                </div>
+                <div>
+                  <dt className="font-mono text-[11px] uppercase tracking-[0.16em] text-fg-muted">TVPI</dt>
+                  <dd className={`mt-0.5 font-mono ${h.tvpi == null ? "text-fg-muted" : h.tvpi >= 1 ? "text-status-success" : "text-status-danger"}`}>
+                    {multiple(h.tvpi)}
+                  </dd>
+                </div>
+              </dl>
+              <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-line/60 pt-3">
+                {!share ? (
+                  <form action={createInvestorPortalShare}>
+                    <input type="hidden" name="investor_id" value={h.investorId} />
+                    <button className="inline-flex items-center gap-1.5 rounded-md border border-line px-2.5 py-1 font-mono text-[11px] uppercase tracking-wider text-fg-muted transition hover:border-gold-500/40 hover:text-gold-300">
+                      + Create link
+                    </button>
+                  </form>
+                ) : (
+                  <>
+                    <span className="font-mono text-[11px] text-fg-muted">
+                      {eng ? `opened ${eng.count}× · ${shortDate(eng.last)}` : "unopened"}
+                    </span>
+                    <CopyLink path={`/portal/${share.token}`} />
+                    <form action={revokeInvestorPortalShare}>
+                      <input type="hidden" name="id" value={share.id} />
+                      <button
+                        title="Revoke link"
+                        className="inline-flex items-center rounded-md border border-line px-2 py-1 font-mono text-[11px] uppercase tracking-wider text-fg-muted transition hover:border-status-danger/50 hover:text-status-danger"
+                      >
+                        Revoke
+                      </button>
+                    </form>
+                  </>
+                )}
+              </div>
+            </article>
+          );
+        })}
+      </div>
+
+      <div className="hidden overflow-x-auto rounded-xl border border-line md:block">
         <table className="w-full border-collapse text-sm">
           <thead>
             <tr className="border-b border-line bg-surface-2/80 text-left">
@@ -221,7 +299,7 @@ export async function ExecuteCapTableModule({ orgId }: { orgId: string }) {
                 <td className="whitespace-nowrap px-3 py-3 text-right font-mono text-fg-secondary">{multiple(h.dpi)}</td>
                 <td
                   className={`whitespace-nowrap px-3 py-3 text-right font-mono ${
-                    h.tvpi == null ? "text-fg-muted" : h.tvpi >= 1 ? "text-emerald-300" : "text-status-danger"
+                    h.tvpi == null ? "text-fg-muted" : h.tvpi >= 1 ? "text-status-success" : "text-status-danger"
                   }`}
                 >
                   {multiple(h.tvpi)}
