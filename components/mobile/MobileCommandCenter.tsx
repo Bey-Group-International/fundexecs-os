@@ -93,7 +93,7 @@ export function MobileCommandCenter({ data }: { data: CommandCenterData }) {
         <MobileNextAction {...data.nextAction} />
 
         {/* Snapshot */}
-        <section className="grid grid-cols-4 gap-2">
+        <section className="grid grid-cols-2 gap-2 min-[430px]:grid-cols-4">
           {stats.map((s) => (
             <MobileStatTile key={s.label} stat={s} />
           ))}
