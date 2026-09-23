@@ -23,7 +23,28 @@ export function DealPipelineTable({ deals }: { deals: Deal[] }) {
           No deals yet. Add a target from the quick action panel or open the Source hub.
         </p>
       ) : (
-        <div className="overflow-x-auto">
+        <>
+        <div className="divide-y divide-line/60 sm:hidden">
+          {deals.map((deal) => (
+            <article key={deal.id} className="px-4 py-3">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-semibold text-fg-primary">{deal.name}</p>
+                  <p className="mt-1 text-xs text-fg-secondary">
+                    {[deal.asset_class, deal.geography].filter(Boolean).join(" · ") || "—"}
+                  </p>
+                </div>
+                <span className="shrink-0 rounded-full border border-gold-500/35 px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider text-gold-300">
+                  {deal.stage.replace("_", " ")}
+                </span>
+              </div>
+              <p className="mt-2 font-mono text-[11px] uppercase tracking-[0.16em] text-fg-muted">
+                Target amount <span className="text-fg-secondary">{money(deal.target_amount)}</span>
+              </p>
+            </article>
+          ))}
+        </div>
+        <div className="hidden overflow-x-auto sm:block">
           <table className="min-w-full text-left text-sm">
             <thead className="bg-surface-0/70 font-mono text-[11px] uppercase tracking-wider text-fg-muted">
               <tr>
@@ -49,6 +70,7 @@ export function DealPipelineTable({ deals }: { deals: Deal[] }) {
             </tbody>
           </table>
         </div>
+        </>
       )}
     </section>
   );

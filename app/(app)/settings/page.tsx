@@ -176,6 +176,18 @@ export default async function SettingsPage(props: {
         </p>
       </header>
 
+      <nav aria-label="Settings sections" className="-mx-4 mb-6 flex gap-2 overflow-x-auto px-4 pb-1 md:hidden">
+        {SECTIONS.map((section) => (
+          <a
+            key={section.id}
+            href={`#${section.id}`}
+            className="fx-tap shrink-0 rounded-full border border-line bg-surface-1 px-3 py-1.5 text-xs font-medium text-fg-secondary"
+          >
+            {section.label}
+          </a>
+        ))}
+      </nav>
+
       <div className="grid grid-cols-1 gap-8 md:grid-cols-[180px_1fr]">
         {/* Sticky section rail */}
         <div className="hidden md:block">

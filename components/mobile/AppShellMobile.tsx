@@ -72,7 +72,7 @@ export function AppShellMobile({
           aria-label="Quick actions"
           aria-hidden={hidden}
           tabIndex={hidden ? -1 : 0}
-          className={`fx-fab fx-tap fixed bottom-[calc(4.75rem+env(safe-area-inset-bottom,0px))] right-4 z-40 flex h-14 w-14 items-center justify-center rounded-full border border-gold-300/40 bg-gradient-to-br from-gold-300 to-gold-500 text-surface-0 transition-all duration-300 active:scale-95 ${
+          className={`fx-fab fx-tap fixed bottom-[calc(var(--fx-mobile-nav-height)+var(--fx-mobile-chrome-gap)+env(safe-area-inset-bottom,0px))] right-4 z-40 flex h-14 w-14 items-center justify-center rounded-full border border-gold-300/40 bg-gradient-to-br from-gold-300 to-gold-500 text-surface-0 transition-all duration-300 active:scale-95 ${
             hidden ? "pointer-events-none translate-y-[140%] opacity-0" : "translate-y-0 opacity-100"
           }`}
         >

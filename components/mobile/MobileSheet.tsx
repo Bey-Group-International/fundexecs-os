@@ -46,7 +46,6 @@ export function MobileSheet({
 
   return (
     <div
-      ref={panelRef}
       tabIndex={-1}
       className="fixed inset-0 z-[70] md:hidden focus:outline-none"
       role="dialog"
@@ -62,7 +61,7 @@ export function MobileSheet({
       <div
         ref={panelRef}
         tabIndex={-1}
-        className="fx-sheet-enter absolute inset-x-0 bottom-0 max-h-[85dvh] overflow-y-auto rounded-t-3xl border-t border-line/70 bg-surface-1 pb-safe shadow-[0_-24px_60px_-30px_rgb(15_23_42/0.18)] outline-none"
+        className="fx-sheet-enter absolute inset-x-0 bottom-0 max-h-[min(85dvh,calc(100dvh-env(safe-area-inset-top,0px)-1rem))] overflow-y-auto overscroll-contain rounded-t-3xl border-t border-line/70 bg-surface-1 pb-safe shadow-[0_-24px_60px_-30px_rgb(15_23_42/0.18)] outline-none"
       >
         <span aria-hidden className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-gold-400/50 to-transparent" />
         {/* Drag handle */}

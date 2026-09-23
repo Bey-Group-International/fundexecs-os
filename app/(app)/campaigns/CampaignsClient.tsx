@@ -20,7 +20,7 @@ function Tile({ label, value, suffix }: { label: string; value: number; suffix?:
         {value}
         {suffix ?? ""}
       </div>
-      <div className="text-xs uppercase tracking-wide text-ink-400">{label}</div>
+      <div className="text-xs uppercase tracking-[0.16em] text-fg-muted">{label}</div>
     </div>
   );
 }
@@ -50,17 +50,17 @@ export default function CampaignsClient() {
   }, []);
 
   return (
-    <div className="mx-auto max-w-4xl space-y-6 p-6">
+    <div className="mx-auto max-w-4xl space-y-5 sm:space-y-6 sm:p-6">
       <header className="space-y-1">
-        <h1 className="text-2xl font-semibold text-surface-0">Campaigns</h1>
-        <p className="text-sm text-ink-400">
+        <h1 className="text-2xl font-semibold text-fg-primary">Campaigns</h1>
+        <p className="text-sm text-fg-secondary">
           Outreach analytics across your enrolled sequences — enrollments, completions, replies, and reply rate.
         </p>
       </header>
 
-      {loading && <div className="text-sm text-ink-400">Loading…</div>}
+      {loading && <div className="text-sm text-fg-muted">Loading…</div>}
       {error && (
-        <div className="rounded-xl border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-red-300">{error}</div>
+        <div className="rounded-xl border border-status-danger/40 bg-status-danger/[0.08] px-4 py-3 text-sm text-status-danger">{error}</div>
       )}
 
       {data && (
@@ -74,16 +74,16 @@ export default function CampaignsClient() {
           </div>
 
           <div className="overflow-hidden rounded-2xl border border-line/60 bg-surface-1">
-            <div className="border-b border-line/60 px-4 py-2.5 text-xs font-medium uppercase tracking-wide text-ink-400">
+            <div className="border-b border-line/60 px-4 py-2.5 font-mono text-[11px] font-medium uppercase tracking-[0.16em] text-fg-muted">
               Sequences
             </div>
             {data.campaigns.length === 0 ? (
-              <div className="px-4 py-6 text-sm text-ink-400">
+              <div className="px-4 py-6 text-sm text-fg-muted">
                 No sequences yet. Build a plan in Prospecting, save it, then enroll ready contacts.
               </div>
             ) : (
               <>
-                <div className="hidden grid-cols-12 gap-2 border-b border-line/40 px-4 py-2 text-xs uppercase tracking-wide text-ink-400 sm:grid">
+                <div className="hidden grid-cols-12 gap-2 border-b border-line/40 px-4 py-2 text-xs uppercase tracking-[0.16em] text-fg-muted sm:grid">
                   <div className="col-span-5">Cadence</div>
                   <div className="col-span-1 text-right">Enrolled</div>
                   <div className="col-span-2 text-right">Active</div>
@@ -93,11 +93,11 @@ export default function CampaignsClient() {
                 </div>
                 {data.campaigns.map((c) => (
                   <div key={c.id} className="grid grid-cols-2 gap-2 border-b border-line/40 px-4 py-3 text-sm sm:grid-cols-12">
-                    <div className="col-span-2 font-medium text-surface-0 sm:col-span-5">{c.name}</div>
-                    <div className="text-right text-surface-0 sm:col-span-1">{c.total}</div>
-                    <div className="text-right text-ink-400 sm:col-span-2">{c.active}</div>
-                    <div className="text-right text-ink-400 sm:col-span-1">{c.completed}</div>
-                    <div className="text-right text-ink-400 sm:col-span-1">{c.replied}</div>
+                    <div className="col-span-2 break-words font-medium text-fg-primary sm:col-span-5">{c.name}</div>
+                    <div className="text-right font-medium text-fg-primary sm:col-span-1">{c.total}</div>
+                    <div className="text-right text-fg-secondary sm:col-span-2">{c.active}</div>
+                    <div className="text-right text-fg-secondary sm:col-span-1">{c.completed}</div>
+                    <div className="text-right text-fg-secondary sm:col-span-1">{c.replied}</div>
                     <div className="text-right text-gold-300 sm:col-span-2">{c.replyRate}%</div>
                   </div>
                 ))}

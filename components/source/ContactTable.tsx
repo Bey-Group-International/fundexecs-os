@@ -124,6 +124,8 @@ export function ContactTable({ rows, fieldDefs, owners, onChanged }: Props) {
 
   const visible = useMemo(() => columns.filter((c) => !hidden.has(c.id)), [columns, hidden]);
   const template = useMemo(() => visible.map((c) => c.width).join(" "), [visible]);
+  const stageColumn = columns.find((c) => c.kind === "stage");
+  const ownerColumn = columns.find((c) => c.kind === "owner");
 
   const cellKey = (personId: string, columnId: string) => `${personId}::${columnId}`;
 
@@ -277,7 +279,105 @@ export function ContactTable({ rows, fieldDefs, owners, onChanged }: Props) {
         </div>
       </div>
 
-      <div className="overflow-x-auto rounded-xl border border-line/80">
+      <div className="space-y-2 md:hidden">
+        {people.map((person) => (
+          <article key={`${person.kind}:${person.id}`} className="rounded-2xl border border-line/70 bg-surface-1 p-3.5">
+            <div className="min-w-0">
+              {person.kind === "contact" ? (
+                <Link
+                  href={`/network/${person.id}`}
+                  className="block truncate text-[15px] font-semibold text-fg-primary underline-offset-2 hover:underline"
+                >
+                  {person.name}
+                </Link>
+              ) : (
+                <p className="truncate text-[15px] font-semibold text-fg-primary">{person.name}</p>
+              )}
+              <p className="mt-0.5 truncate text-xs text-fg-muted">
+                {[person.role, person.org].filter(Boolean).join(" · ") || "Relationship"}
+              </p>
+            </div>
+
+            <dl className="mt-3 grid grid-cols-2 gap-x-3 gap-y-2 text-xs">
+              <div>
+                <dt className="font-mono text-[11px] uppercase tracking-[0.16em] text-fg-muted">Warmth</dt>
+                <dd className="mt-0.5 font-mono text-fg-secondary">{person.warmth}</dd>
+              </div>
+              <div>
+                <dt className="font-mono text-[11px] uppercase tracking-[0.16em] text-fg-muted">Last touch</dt>
+                <dd className="mt-0.5 text-fg-secondary">{formatDay(person.lastActivityAt ?? person.lastContactAt)}</dd>
+              </div>
+            </dl>
+
+            <div className="mt-3 grid gap-2">
+              {stageColumn && person.kind === "contact" ? (
+                <label className="flex flex-col gap-1">
+                  <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-fg-muted">Stage</span>
+                  <select
+                    value={person.stage ?? "prospect"}
+                    disabled={pending.has(cellKey(person.id, stageColumn.id))}
+                    onChange={(e) => void save(person, stageColumn, e.target.value)}
+                    className="fx-focus w-full rounded-lg border border-line bg-surface-0 px-3 py-2 text-sm text-fg-primary"
+                  >
+                    {CONTACT_STAGES.map((s) => (
+                      <option key={s} value={s}>
+                        {STAGE_LABEL[s]}
+                      </option>
+                    ))}
+                  </select>
+                  {failed.get(cellKey(person.id, stageColumn.id)) && (
+                    <span className="text-[11px] text-status-danger">{failed.get(cellKey(person.id, stageColumn.id))}</span>
+                  )}
+                </label>
+              ) : (
+                <div>
+                  <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-fg-muted">Stage</span>
+                  <p className="mt-0.5 text-sm text-fg-secondary">{person.stage ? STAGE_LABEL[person.stage] : "—"}</p>
+                </div>
+              )}
+
+              {ownerColumn && person.kind === "contact" ? (
+                <label className="flex flex-col gap-1">
+                  <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-fg-muted">Owner</span>
+                  <select
+                    value={person.ownerId ?? ""}
+                    disabled={pending.has(cellKey(person.id, ownerColumn.id))}
+                    onChange={(e) => void save(person, ownerColumn, e.target.value || null)}
+                    className="fx-focus w-full rounded-lg border border-line bg-surface-0 px-3 py-2 text-sm text-fg-primary"
+                  >
+                    <option value="">Unassigned</option>
+                    {owners.map((o) => (
+                      <option key={o.id} value={o.id}>
+                        {o.name}
+                      </option>
+                    ))}
+                  </select>
+                  {failed.get(cellKey(person.id, ownerColumn.id)) && (
+                    <span className="text-[11px] text-status-danger">{failed.get(cellKey(person.id, ownerColumn.id))}</span>
+                  )}
+                </label>
+              ) : (
+                <div>
+                  <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-fg-muted">Owner</span>
+                  <p className="mt-0.5 text-sm text-fg-secondary">{person.ownerName ?? "—"}</p>
+                </div>
+              )}
+            </div>
+
+            {person.tags.length > 0 ? (
+              <div className="mt-3 flex flex-wrap gap-1.5">
+                {person.tags.map((tag) => (
+                  <span key={tag} className="rounded-full border border-line bg-surface-0 px-2 py-0.5 text-[11px] text-fg-secondary">
+                    {tag}
+                  </span>
+                ))}
+              </div>
+            ) : null}
+          </article>
+        ))}
+      </div>
+
+      <div className="hidden overflow-x-auto rounded-xl border border-line/80 md:block">
         <div role="table" className="min-w-full">
           <div
             role="row"
@@ -402,7 +502,7 @@ function Cell({
   const wrap = (children: React.ReactNode) => (
     <div role="cell" className={`${base} min-w-0`}>
       {children}
-      {error && <p className="mt-0.5 truncate text-[11px] text-rose-300" title={error}>{error}</p>}
+      {error && <p className="mt-0.5 truncate text-[11px] text-status-danger" title={error}>{error}</p>}
     </div>
   );
 

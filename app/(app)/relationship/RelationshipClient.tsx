@@ -16,7 +16,7 @@ function Tile({ label, value, href }: { label: string; value: number | string; h
   const inner = (
     <div className="rounded-xl border border-line/60 bg-surface-1 px-4 py-3 transition hover:border-gold-500/40">
       <div className="text-2xl font-semibold text-gold-300">{value}</div>
-      <div className="text-xs uppercase tracking-wide text-ink-400">{label}</div>
+      <div className="text-xs uppercase tracking-[0.16em] text-fg-muted">{label}</div>
     </div>
   );
   return href ? <Link href={href}>{inner}</Link> : inner;
@@ -47,24 +47,24 @@ export default function RelationshipClient() {
   }, []);
 
   return (
-    <div className="mx-auto max-w-4xl space-y-6 p-6">
+    <div className="mx-auto max-w-4xl space-y-5 sm:space-y-6 sm:p-6">
       <header className="space-y-1">
-        <h1 className="text-2xl font-semibold text-surface-0">Relationship Center</h1>
-        <p className="text-sm text-ink-400">
+        <h1 className="text-2xl font-semibold text-fg-primary">Relationship Center</h1>
+        <p className="text-sm text-fg-secondary">
           Your relationship intelligence at a glance — contacts, campaigns, and live intent, with Earn&apos;s
           recommended next moves.
         </p>
       </header>
 
-      {loading && <div className="text-sm text-ink-400">Loading…</div>}
+      {loading && <div className="text-sm text-fg-muted">Loading…</div>}
       {error && (
-        <div className="rounded-xl border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-red-300">{error}</div>
+        <div className="rounded-xl border border-status-danger/40 bg-status-danger/[0.08] px-4 py-3 text-sm text-status-danger">{error}</div>
       )}
 
       {data && (
         <div className="space-y-6">
           <section className="space-y-2">
-            <div className="text-xs font-medium uppercase tracking-wide text-ink-400">Network</div>
+            <div className="font-mono text-[11px] font-medium uppercase tracking-[0.16em] text-fg-muted">Network</div>
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
               <Tile label="Contacts" value={data.contacts.total} href="/prospecting" />
               <Tile label="High confidence" value={data.contacts.highConfidence} />
@@ -74,7 +74,7 @@ export default function RelationshipClient() {
           </section>
 
           <section className="space-y-2">
-            <div className="text-xs font-medium uppercase tracking-wide text-ink-400">Campaigns</div>
+            <div className="font-mono text-[11px] font-medium uppercase tracking-[0.16em] text-fg-muted">Campaigns</div>
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
               <Tile label="Enrolled" value={data.campaigns.total} href="/run/campaigns" />
               <Tile label="Active" value={data.campaigns.active} />
@@ -84,20 +84,20 @@ export default function RelationshipClient() {
           </section>
 
           <section className="space-y-2">
-            <div className="text-xs font-medium uppercase tracking-wide text-ink-400">Live intent</div>
+            <div className="font-mono text-[11px] font-medium uppercase tracking-[0.16em] text-fg-muted">Live intent</div>
             <div className="overflow-hidden rounded-2xl border border-line/60 bg-surface-1">
-              <div className="flex items-center justify-between border-b border-line/60 px-4 py-2.5 text-xs text-ink-400">
+              <div className="flex items-center justify-between border-b border-line/60 px-4 py-2.5 text-xs text-fg-muted">
                 <span>{data.signals.total} engagement event{data.signals.total === 1 ? "" : "s"}</span>
                 <Link href="/signals" className="text-gold-300 hover:text-gold-300">
                   View all →
                 </Link>
               </div>
               {data.signals.topParties.length === 0 ? (
-                <div className="px-4 py-4 text-sm text-ink-400">No identifiable engaging parties yet.</div>
+                <div className="px-4 py-4 text-sm text-fg-muted">No identifiable engaging parties yet.</div>
               ) : (
                 data.signals.topParties.map((p) => (
-                  <div key={p.party} className="flex items-center justify-between border-b border-line/40 px-4 py-2.5 text-sm">
-                    <span className="text-surface-0">{p.party}</span>
+                  <div key={p.party} className="flex flex-col gap-1 border-b border-line/40 px-4 py-3 text-sm sm:flex-row sm:items-center sm:justify-between sm:py-2.5">
+                    <span className="break-words font-medium text-fg-primary">{p.party}</span>
                     <span className="text-xs text-gold-300">intent {p.intent}</span>
                   </div>
                 ))
@@ -107,10 +107,10 @@ export default function RelationshipClient() {
 
           {data.recommendations.length > 0 && (
             <section className="rounded-2xl border border-gold-500/40 bg-gold-500/5 p-4">
-              <div className="text-xs font-medium uppercase tracking-wide text-gold-300">Earn recommends</div>
+              <div className="font-mono text-[11px] font-medium uppercase tracking-[0.16em] text-gold-300">Earn recommends</div>
               <ul className="mt-2 space-y-1.5">
                 {data.recommendations.map((r, i) => (
-                  <li key={i} className="flex gap-2 text-sm text-surface-0">
+                  <li key={i} className="flex gap-2 text-sm text-fg-primary">
                     <span className="text-gold-300">→</span>
                     <span>{r}</span>
                   </li>

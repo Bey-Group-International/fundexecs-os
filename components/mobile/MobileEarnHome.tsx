@@ -59,14 +59,25 @@ function Pulse({ c }: { c: CommandCenterData["counts"] }) {
         <span aria-hidden className="h-1.5 w-1.5 animate-pulse rounded-full bg-status-success" />
         <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-fg-muted">Live pulse</span>
       </div>
-      <div className="grid grid-cols-4 divide-x divide-line/50">
-        {items.map((it) => {
+      <div className="grid grid-cols-2 min-[430px]:grid-cols-4">
+        {items.map((it, index) => {
           const Icon = it.icon;
+          const border =
+            index === 0
+              ? "border-0"
+              : index === 1
+                ? "border-l border-line/50"
+                : index === 2
+                  ? "border-t border-line/50 min-[430px]:border-l min-[430px]:border-t-0"
+                  : "border-l border-t border-line/50 min-[430px]:border-t-0";
           return (
-            <Link key={it.label} href={it.href} onClick={() => haptic("tap")} className="fx-tap flex flex-col items-center gap-0.5 px-1 py-2.5 transition active:bg-surface-2">
-              <Icon width={15} height={15} className={it.tone} />
-              <span className="font-display text-lg font-semibold leading-none text-fg-primary">{it.value}</span>
-              <span className="text-[11px] leading-tight text-fg-muted">{it.sub}</span>
+            <Link key={it.label} href={it.href} onClick={() => haptic("tap")} className={`fx-tap flex min-h-[68px] items-center gap-2 px-3 py-2.5 transition active:bg-surface-2 min-[430px]:flex-col min-[430px]:justify-center min-[430px]:gap-0.5 min-[430px]:px-1 ${border}`}>
+              <Icon width={16} height={16} className={`shrink-0 ${it.tone}`} />
+              <span className="min-w-0 flex-1 min-[430px]:flex-none min-[430px]:text-center">
+                <span className="block truncate text-[11px] font-medium leading-tight text-fg-secondary">{it.label}</span>
+                <span className="block font-display text-lg font-semibold leading-none text-fg-primary">{it.value}</span>
+                <span className="block text-[11px] leading-tight text-fg-muted">{it.sub}</span>
+              </span>
             </Link>
           );
         })}
@@ -132,11 +143,12 @@ export function MobileEarnHome({ data }: { data: CommandCenterData }) {
 
   const hottest = data.deals[0];
   const nothing = data.approvals.length === 0 && data.workflows.length === 0 && data.deals.length === 0;
+  const composerStyle = keyboardInset ? { bottom: `${keyboardInset}px` } : undefined;
 
   return (
     <div className="mx-auto max-w-lg">
       <PullToRefresh>
-        <div className="space-y-4 pb-28" role="region" aria-label="Conversation with Earn">
+        <div className="space-y-4 pb-mobile-composer" role="region" aria-label="Conversation with Earn">
           {/* Conversation header */}
           <header className="flex items-center gap-2.5 pb-1 pt-1">
             <EarnAvatar size={38} />
@@ -228,8 +240,8 @@ export function MobileEarnHome({ data }: { data: CommandCenterData }) {
           e.preventDefault();
           send();
         }}
-        style={keyboardInset ? { transform: `translateY(-${keyboardInset}px)` } : undefined}
-        className="fx-appnav fixed inset-x-0 z-40 bottom-[calc(3.75rem+env(safe-area-inset-bottom,0px))] flex items-center gap-2 border-t border-line/60 px-3 py-2.5 transition-transform duration-200 md:hidden print:hidden"
+        style={composerStyle}
+        className="fx-appnav fixed inset-x-0 z-40 bottom-[calc(var(--fx-mobile-nav-height)+env(safe-area-inset-bottom,0px))] flex min-h-[var(--fx-mobile-composer-height)] items-center gap-2 border-t border-line/60 px-3 py-2.5 transition-[bottom,transform] duration-200 md:hidden print:hidden"
       >
         <div className="relative flex-1">
           <input

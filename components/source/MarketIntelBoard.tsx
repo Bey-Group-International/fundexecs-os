@@ -232,7 +232,57 @@ export function MarketIntelBoard({ records }: { records: IntelRecord[] }) {
       </p>
 
       {/* Directory table */}
-      <div className="overflow-x-auto rounded-xl border border-line bg-surface-1">
+      <div className="space-y-2 md:hidden">
+        {rows.length === 0 ? (
+          <div className="rounded-xl border border-line bg-surface-1 px-4 py-8 text-center text-xs text-fg-muted">
+            No records match the current filters.
+          </div>
+        ) : (
+          rows.map((rec) => {
+            const open = openId === rec.id;
+            return (
+              <article key={rec.id} className="overflow-hidden rounded-2xl border border-line/70 bg-surface-1">
+                <button
+                  type="button"
+                  aria-expanded={open}
+                  onClick={() => setOpenId((id) => (id === rec.id ? null : rec.id))}
+                  className="fx-tap flex w-full items-start justify-between gap-3 px-4 py-3 text-left"
+                >
+                  <span className="min-w-0">
+                    <span className="block truncate text-[15px] font-semibold text-fg-primary">{rec.name}</span>
+                    <span className="mt-1 flex flex-wrap items-center gap-1.5">
+                      <KindBadge kind={rec.kind} />
+                      <MomentumBadge momentum={rec.momentum} />
+                    </span>
+                  </span>
+                  <span className="shrink-0 font-mono text-[11px] text-fg-muted">{open ? "▾" : "▸"}</span>
+                </button>
+                <dl className="grid grid-cols-2 gap-x-3 gap-y-2 px-4 pb-3 text-xs">
+                  <div>
+                    <dt className="font-mono text-[11px] uppercase tracking-[0.16em] text-fg-muted">Sector</dt>
+                    <dd className="mt-0.5 text-fg-secondary">{rec.sector ?? "—"}</dd>
+                  </div>
+                  <div>
+                    <dt className="font-mono text-[11px] uppercase tracking-[0.16em] text-fg-muted">Size</dt>
+                    <dd className="mt-0.5 font-mono text-gold-300">{formatUsd(rec.size_usd)}</dd>
+                  </div>
+                  <div>
+                    <dt className="font-mono text-[11px] uppercase tracking-[0.16em] text-fg-muted">Relevance</dt>
+                    <dd className="mt-0.5 font-mono text-fg-primary">{rec.relevance}</dd>
+                  </div>
+                  <div>
+                    <dt className="font-mono text-[11px] uppercase tracking-[0.16em] text-fg-muted">Geography</dt>
+                    <dd className="mt-0.5 text-fg-secondary">{rec.geography ?? "—"}</dd>
+                  </div>
+                </dl>
+                {open ? <RecordDetail rec={rec} /> : null}
+              </article>
+            );
+          })
+        )}
+      </div>
+
+      <div className="hidden overflow-x-auto rounded-xl border border-line bg-surface-1 md:block">
         <table className="w-full min-w-[640px] border-collapse text-left">
           <thead>
             <tr className="border-b border-line bg-surface-2/30">

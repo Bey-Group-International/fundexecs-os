@@ -59,7 +59,7 @@ export function MobileBottomNav({
         hidden ? "translate-y-full" : "translate-y-0"
       }`}
     >
-      <div className="mx-auto grid h-[60px] max-w-lg grid-cols-5 items-center px-1">
+      <div className="mx-auto grid h-[var(--fx-mobile-nav-height)] max-w-lg grid-cols-5 items-center px-1">
         {TABS.map((tab) => {
           if (tab.key === "more") {
             return (

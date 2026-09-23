@@ -11,34 +11,34 @@ const REASON_META: Record<
   { label: string; colorClass: string; icon: string }
 > = {
   // Plans + packs
-  plan_grant:         { label: "Plan credits",       colorClass: "text-emerald-500", icon: "◇" },
-  pack_purchase:      { label: "Credit pack",         colorClass: "text-emerald-500", icon: "◇" },
+  plan_grant:         { label: "Plan credits",       colorClass: "text-status-success", icon: "◇" },
+  pack_purchase:      { label: "Credit pack",         colorClass: "text-status-success", icon: "◇" },
   // Referrals
-  referral_welcome:   { label: "Welcome bonus",       colorClass: "text-emerald-400", icon: "◇" },
-  referral_direct:    { label: "Referral reward",     colorClass: "text-emerald-500", icon: "◇" },
-  referral_override:  { label: "Network override",    colorClass: "text-emerald-400", icon: "◇" },
+  referral_welcome:   { label: "Welcome bonus",       colorClass: "text-status-success", icon: "◇" },
+  referral_direct:    { label: "Referral reward",     colorClass: "text-status-success", icon: "◇" },
+  referral_override:  { label: "Network override",    colorClass: "text-status-success", icon: "◇" },
   referral_milestone: { label: "Milestone bonus",     colorClass: "text-gold-300",    icon: "★" },
   // Gifts
-  gift_received:      { label: "Gift received",       colorClass: "text-emerald-500", icon: "◇" },
-  gift_sent:          { label: "Gift sent",           colorClass: "text-rose-400",    icon: "−" },
+  gift_received:      { label: "Gift received",       colorClass: "text-status-success", icon: "◇" },
+  gift_sent:          { label: "Gift sent",           colorClass: "text-status-danger",    icon: "−" },
   // Coupons
-  coupon_redemption:  { label: "Coupon redeemed",     colorClass: "text-emerald-500", icon: "◇" },
+  coupon_redemption:  { label: "Coupon redeemed",     colorClass: "text-status-success", icon: "◇" },
   // Loyalty
   loyalty:            { label: "Loyalty bonus",       colorClass: "text-gold-300",    icon: "◇" },
   // Gamification
-  task_complete:      { label: "Task reward",         colorClass: "text-emerald-400", icon: "◇" },
-  streak_bonus:       { label: "Streak bonus",        colorClass: "text-emerald-400", icon: "◇" },
+  task_complete:      { label: "Task reward",         colorClass: "text-status-success", icon: "◇" },
+  streak_bonus:       { label: "Streak bonus",        colorClass: "text-status-success", icon: "◇" },
   milestone_bonus:    { label: "Achievement",         colorClass: "text-gold-300",    icon: "★" },
   hub_achievement:    { label: "Hub achievement",     colorClass: "text-gold-300",    icon: "★" },
-  quest_complete:     { label: "Quest complete",      colorClass: "text-emerald-500", icon: "◇" },
+  quest_complete:     { label: "Quest complete",      colorClass: "text-status-success", icon: "◇" },
   // Stake
-  stake_lock:         { label: "Stake locked",        colorClass: "text-rose-400",    icon: "−" },
-  stake_release:      { label: "Stake released",      colorClass: "text-emerald-400", icon: "◇" },
+  stake_lock:         { label: "Stake locked",        colorClass: "text-status-danger",    icon: "−" },
+  stake_release:      { label: "Stake released",      colorClass: "text-status-success", icon: "◇" },
   // AI actions + admin
-  spend:              { label: "AI action",           colorClass: "text-rose-500",    icon: "−" },
+  spend:              { label: "AI action",           colorClass: "text-status-danger",    icon: "−" },
   manual:             { label: "Manual adjustment",   colorClass: "text-fg-muted",    icon: "○" },
   // Legacy keys kept for historical rows
-  free_tier:          { label: "Free-tier grant",     colorClass: "text-emerald-500", icon: "◇" },
+  free_tier:          { label: "Free-tier grant",     colorClass: "text-status-success", icon: "◇" },
 };
 
 function reasonMeta(reason: string | null) {
@@ -124,8 +124,32 @@ export async function CreditHistory() {
             </span>
           </summary>
 
-          <div className="overflow-x-auto border-t border-line/60">
-            <table className="w-full text-sm">
+          <div className="border-t border-line/60">
+            <div className="space-y-2 p-3 sm:hidden">
+              {entries.map((entry) => {
+                const meta = reasonMeta(entry.reason);
+                return (
+                  <article key={entry.id} className="rounded-xl border border-line/60 bg-surface-0/70 p-3">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="flex items-center gap-2 text-sm font-medium text-fg-primary">
+                          <span className={`font-mono text-base ${meta.colorClass}`}>{meta.icon}</span>
+                          <span className="truncate">{meta.label}</span>
+                        </p>
+                        <p className="mt-1 font-mono text-[11px] text-fg-muted">{formatDate(entry.created_at)}</p>
+                      </div>
+                      <span className={`shrink-0 font-display text-lg font-semibold tabular-nums ${meta.colorClass}`}>
+                        {formatAmount(entry.amount)}
+                      </span>
+                    </div>
+                    {entry.note ? (
+                      <p className="mt-2 line-clamp-2 text-xs leading-snug text-fg-secondary">{entry.note}</p>
+                    ) : null}
+                  </article>
+                );
+              })}
+            </div>
+            <table className="hidden w-full text-sm sm:table">
               <thead>
                 <tr className="border-b border-line/60 bg-surface-2/30">
                   <th className="px-4 py-3 text-left font-mono text-[11px] uppercase tracking-[0.16em] text-fg-muted">

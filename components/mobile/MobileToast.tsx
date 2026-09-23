@@ -67,7 +67,7 @@ export function MobileToastProvider({ children }: { children: React.ReactNode })
       <div
         aria-live="polite"
         aria-atomic="false"
-        className="pointer-events-none fixed inset-x-0 bottom-[calc(4.25rem+env(safe-area-inset-bottom,0px))] z-[55] flex flex-col items-center gap-2 px-3 md:hidden print:hidden"
+        className="pointer-events-none fixed inset-x-0 bottom-[calc(var(--fx-mobile-nav-height)+0.5rem+env(safe-area-inset-bottom,0px))] z-[55] flex flex-col items-center gap-2 px-3 md:hidden print:hidden"
       >
         {toasts.map((t) => (
           <div

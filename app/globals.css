@@ -4,6 +4,9 @@
 
 :root {
   --fx-color-scheme: light;
+  --fx-mobile-nav-height: 3.75rem;
+  --fx-mobile-composer-height: 4rem;
+  --fx-mobile-chrome-gap: 0.75rem;
   /* Surface ramp — bright, blue-tinted paper. 0 is the page, 1 the card, and
      2/3 the raised and pressed states. Kept clearly separated so panels read as
      panels on a light page instead of dissolving into it. */
@@ -455,7 +458,10 @@ body {
 /* Reserve room at the foot of scrollable app screens so content clears the
    fixed bottom tab bar + home indicator. */
 .pb-appnav {
-  padding-bottom: calc(5.25rem + env(safe-area-inset-bottom, 0px));
+  padding-bottom: calc(var(--fx-mobile-nav-height) + var(--fx-mobile-chrome-gap) + env(safe-area-inset-bottom, 0px));
+}
+.pb-mobile-composer {
+  padding-bottom: calc(var(--fx-mobile-composer-height) + 1rem);
 }
 
 /* Bottom tab bar — floating glass dock. */

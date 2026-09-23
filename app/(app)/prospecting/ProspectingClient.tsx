@@ -53,7 +53,7 @@ const EXAMPLES = [
 function bandClass(band: string): string {
   if (band === "high") return "bg-gold-500/20 text-gold-300 border-gold-500/50";
   if (band === "medium") return "bg-surface-2 text-gold-300 border-line";
-  return "bg-surface-2 text-ink-400 border-line/60";
+  return "bg-surface-2 text-fg-secondary border-line/60";
 }
 
 function humanAgent(key: string): string {
@@ -64,7 +64,7 @@ function Tile({ label, value }: { label: string; value: number }) {
   return (
     <div className="rounded-xl border border-line/60 bg-surface-1 px-4 py-3">
       <div className="text-2xl font-semibold text-gold-300">{value}</div>
-      <div className="text-xs uppercase tracking-wide text-ink-400">{label}</div>
+      <div className="text-xs uppercase tracking-[0.16em] text-fg-muted">{label}</div>
     </div>
   );
 }
@@ -72,10 +72,10 @@ function Tile({ label, value }: { label: string; value: number }) {
 function ProspectRow({ p }: { p: ScoredProspect }) {
   const c = p.candidate;
   return (
-    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-b border-line/40 px-4 py-3 text-sm">
-      <div className="min-w-[12rem] flex-1">
-        <div className="font-medium text-surface-0">{c.name}</div>
-        <div className="text-xs text-ink-400">
+    <div className="grid gap-3 border-b border-line/40 px-4 py-3 text-sm sm:grid-cols-[minmax(0,1fr)_4rem_5rem_10rem] sm:items-center">
+      <div className="min-w-0">
+        <div className="break-words font-medium text-fg-primary">{c.name}</div>
+        <div className="text-xs text-fg-secondary">
           {[c.title, c.company].filter(Boolean).join(" · ") || "—"}
           {c.location ? ` · ${c.location}` : ""}
         </div>
@@ -86,21 +86,21 @@ function ProspectRow({ p }: { p: ScoredProspect }) {
           </div>
         )}
       </div>
-      <div className="w-16 text-center">
-        <div className="text-xs text-ink-400">Fit</div>
-        <div className="font-semibold text-surface-0">{p.fit}</div>
+      <div className="flex items-center justify-between gap-3 sm:block sm:text-center">
+        <div className="text-xs text-fg-muted">Fit</div>
+        <div className="font-semibold text-fg-primary">{p.fit}</div>
       </div>
-      <div className="w-20 text-center">
-        <div className="text-xs text-ink-400">Priority</div>
+      <div className="flex items-center justify-between gap-3 sm:block sm:text-center">
+        <div className="text-xs text-fg-muted">Priority</div>
         <span className={`inline-block rounded-md border px-2 py-0.5 text-xs font-medium ${bandClass(p.band)}`}>
           {p.priority}
         </span>
       </div>
-      <div className="w-40 text-right">
+      <div className="text-left sm:text-right">
         {p.eligibleForOutreach ? (
-          <span className="text-xs font-medium text-emerald-400">✓ Outreach-ready</span>
+          <span className="text-xs font-medium text-status-success">✓ Outreach-ready</span>
         ) : (
-          <span className="text-xs text-amber-400" title={p.holdReason}>
+          <span className="text-xs text-status-warning" title={p.holdReason}>
             ⏳ {p.holdReason ?? "Held for review"}
           </span>
         )}
@@ -230,23 +230,23 @@ export default function ProspectingClient() {
   }
 
   return (
-    <div className="mx-auto max-w-4xl space-y-6 p-6">
+    <div className="mx-auto max-w-4xl space-y-5 sm:space-y-6 sm:p-6">
       <header className="space-y-1">
-        <h1 className="text-2xl font-semibold text-surface-0">Prospecting</h1>
-        <p className="text-sm text-ink-400">
+        <h1 className="text-2xl font-semibold text-fg-primary">Prospecting</h1>
+        <p className="text-sm text-fg-secondary">
           Tell Earn a goal. It sources, scores, and compliance-gates prospects, then routes an
           approval-ready outreach plan. Nothing is sent without your review.
         </p>
       </header>
 
-      <div className="rounded-2xl border border-line/60 bg-surface-1 p-4 shadow-2xl">
-        <div className="flex gap-2">
+      <div className="rounded-2xl border border-line/60 bg-surface-1 p-4 shadow-[0_16px_40px_-28px_rgb(15_23_42/0.24)]">
+        <div className="flex flex-col gap-2 sm:flex-row">
           <input
             value={goal}
             onChange={(e) => setGoal(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && run(goal)}
             placeholder="e.g. Raise capital for Fund I"
-            className="flex-1 rounded-xl border border-line bg-surface-0 px-4 py-2.5 text-sm text-surface-0 outline-none focus:border-gold-500/60"
+            className="min-w-0 flex-1 rounded-xl border border-line bg-surface-0 px-4 py-2.5 text-sm text-fg-primary outline-none placeholder:text-fg-muted focus:border-gold-500/60"
           />
           <button
             onClick={() => run(goal)}
@@ -264,7 +264,7 @@ export default function ProspectingClient() {
                 setGoal(ex);
                 run(ex);
               }}
-              className="rounded-full border border-line/60 bg-surface-2 px-3 py-1 text-xs text-ink-400 hover:text-gold-300"
+              className="rounded-full border border-line/60 bg-surface-2 px-3 py-1 text-xs text-fg-secondary hover:text-gold-300"
             >
               {ex}
             </button>
@@ -274,18 +274,18 @@ export default function ProspectingClient() {
 
       {history.length > 0 && (
         <div className="overflow-hidden rounded-2xl border border-line/60 bg-surface-1">
-          <div className="border-b border-line/60 px-4 py-2.5 text-xs font-medium uppercase tracking-wide text-ink-400">
+          <div className="border-b border-line/60 px-4 py-2.5 font-mono text-[11px] font-medium uppercase tracking-[0.16em] text-fg-muted">
             Recent runs
           </div>
           {history.map((h) => (
             <button
               key={h.id}
               onClick={() => loadPast(h.id)}
-              className="flex w-full flex-wrap items-center gap-x-3 gap-y-1 border-b border-line/40 px-4 py-2.5 text-left text-sm hover:bg-surface-2"
+              className="grid w-full gap-1 border-b border-line/40 px-4 py-3 text-left text-sm hover:bg-surface-2 sm:grid-cols-[minmax(0,1fr)_auto_auto] sm:items-center sm:gap-3 sm:py-2.5"
             >
-              <span className="min-w-[12rem] flex-1 truncate text-surface-0">{h.goalText}</span>
-              <span className="text-xs text-ink-400">{h.prospectCount} prospects · {h.readyCount} ready</span>
-              <span className="w-24 text-right text-xs text-ink-400">{h.createdAt.slice(0, 10)}</span>
+              <span className="min-w-0 truncate font-medium text-fg-primary">{h.goalText}</span>
+              <span className="text-xs text-fg-secondary">{h.prospectCount} prospects · {h.readyCount} ready</span>
+              <span className="text-xs text-fg-muted sm:text-right">{h.createdAt.slice(0, 10)}</span>
             </button>
           ))}
         </div>
@@ -300,12 +300,12 @@ export default function ProspectingClient() {
       {plan && (
         <div className="space-y-5">
           <div className="rounded-2xl border border-line/60 bg-surface-1 p-4">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <div className="text-xs uppercase tracking-wide text-ink-400">Target persona</div>
-                <div className="mt-1 text-surface-0">{plan.persona}</div>
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <div className="min-w-0">
+                <div className="font-mono text-[11px] uppercase tracking-[0.16em] text-fg-muted">Target persona</div>
+                <div className="mt-1 break-words text-fg-primary">{plan.persona}</div>
               </div>
-              <div className="flex shrink-0 gap-2">
+              <div className="flex shrink-0 flex-col gap-2 sm:flex-row">
                 <button
                   onClick={save}
                   disabled={saving || plan.prospects.length === 0}
@@ -328,12 +328,12 @@ export default function ProspectingClient() {
               <span className="rounded-md border border-gold-500/40 bg-gold-500/10 px-2 py-1 text-gold-300">
                 Routed to: {humanAgent(plan.routedAgent)}
               </span>
-              <span className="rounded-md border border-line bg-surface-2 px-2 py-1 text-ink-400">
+              <span className="rounded-md border border-line bg-surface-2 px-2 py-1 text-fg-secondary">
                 Sequence: {plan.sequenceKey}
               </span>
             </div>
-            {saveResult && <div className="mt-3 text-xs text-emerald-400">{saveResult}</div>}
-            {enrollResult && <div className="mt-1 text-xs text-emerald-400">{enrollResult}</div>}
+            {saveResult && <div className="mt-3 text-xs text-status-success">{saveResult}</div>}
+            {enrollResult && <div className="mt-1 text-xs text-status-success">{enrollResult}</div>}
           </div>
 
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
@@ -344,11 +344,11 @@ export default function ProspectingClient() {
           </div>
 
           <div className="overflow-hidden rounded-2xl border border-line/60 bg-surface-1">
-            <div className="border-b border-line/60 px-4 py-2.5 text-xs font-medium uppercase tracking-wide text-ink-400">
+            <div className="border-b border-line/60 px-4 py-2.5 font-mono text-[11px] font-medium uppercase tracking-[0.16em] text-fg-muted">
               Scored prospects
             </div>
             {plan.prospects.length === 0 ? (
-              <div className="px-4 py-6 text-sm text-ink-400">
+              <div className="px-4 py-6 text-sm text-fg-muted">
                 No prospects surfaced. Set an Apollo key and mandate geographies, or refine the goal.
               </div>
             ) : (
@@ -357,16 +357,16 @@ export default function ProspectingClient() {
           </div>
 
           <div className="rounded-2xl border border-line/60 bg-surface-1 p-4">
-            <div className="text-xs uppercase tracking-wide text-ink-400">Recommended next actions</div>
+            <div className="font-mono text-[11px] uppercase tracking-[0.16em] text-fg-muted">Recommended next actions</div>
             <ul className="mt-2 space-y-1.5">
               {plan.nextActions.map((a, i) => (
-                <li key={i} className="flex gap-2 text-sm text-surface-0">
+                <li key={i} className="flex gap-2 text-sm text-fg-primary">
                   <span className="text-gold-300">{i + 1}.</span>
                   <span>{a}</span>
                 </li>
               ))}
             </ul>
-            <div className="mt-3 border-t border-line/40 pt-3 text-xs text-ink-400">{plan.outreachAngle}</div>
+            <div className="mt-3 border-t border-line/40 pt-3 text-xs text-fg-secondary">{plan.outreachAngle}</div>
           </div>
         </div>
       )}
