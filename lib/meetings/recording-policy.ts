@@ -102,9 +102,19 @@ export function preferredMimeType(isSupported: (type: string) => boolean): strin
   return null;
 }
 
-/** The file extension a stored part should carry, from its recorded type. */
+/**
+ * The file extension a stored part should carry, from its recorded type.
+ *
+ * Audio containers are named too, because a one-way call is recorded audio
+ * only — at the video bitrate an hour of phone call would cost ~675MB of still
+ * picture. Existing types are unchanged, so the paths of everything already
+ * stored still resolve.
+ */
 export function extensionFor(mimeType: string): string {
-  return mimeType.startsWith("video/mp4") ? "mp4" : "webm";
+  if (mimeType.startsWith("video/mp4")) return "mp4";
+  if (mimeType.startsWith("audio/mp4")) return "m4a";
+  if (mimeType.startsWith("audio/ogg")) return "ogg";
+  return "webm";
 }
 
 /**

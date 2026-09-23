@@ -67,7 +67,7 @@ import {
 } from "@/lib/meetings/transcript-buffer";
 import { recordingNotice, type RecordingState } from "@/lib/meetings/recording-policy";
 import { useRecording } from "@/lib/meetings/use-recording";
-import type { RoomSnapshot } from "@/lib/meetings/recording-composer";
+import { RecordingComposer, type ComposerHandlers, type RoomSnapshot } from "@/lib/meetings/recording-composer";
 import { BackgroundProcessor } from "@/lib/meetings/background-processor";
 import { getBackground } from "@/lib/meetings/background-store";
 import {
@@ -4369,11 +4369,18 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     });
   }, []);
 
+  // The room's own capture: a canvas of the tiles plus a mix of everyone's
+  // audio. The one-way recorder passes a different source to the same hook.
+  const createRoomSource = useCallback(
+    (handlers: ComposerHandlers) => new RecordingComposer(recordingRoom, handlers),
+    [recordingRoom],
+  );
+
   const recorder = useRecording({
     supabase,
     meetingId,
     hostName: localName,
-    room: recordingRoom,
+    createSource: createRoomSource,
     announce: announceRecording,
   });
 

@@ -226,3 +226,48 @@ describe("action items become tasks", () => {
     expect(createTeamTask).not.toHaveBeenCalled();
   });
 });
+
+describe("a call with nothing transcribed", () => {
+  const silent = () =>
+    new Request("http://localhost/api/meetings/report", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ meetingId: "m1", transcript: "   ", duration: 240 }),
+    });
+
+  // A one-way call recorded in a browser with no speech recognition — or one
+  // where nobody said anything it caught — has audio and no words. That is an
+  // ordinary outcome, and this route is the ONLY thing that ever marks a
+  // session ended: refusing left the call open forever and sent the person to a
+  // report page that generated a summary which was never coming.
+  it("closes out a one-way call instead of refusing it", async () => {
+    wire({ meeting: { ...MEETING, kind: "one_way" } });
+    const res = await POST(silent());
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ ok: true, summarised: false });
+    expect(writes.meetingUpdate).toMatchObject({ status: "ended" });
+    // A report row exists, so the report page renders an empty report rather
+    // than waiting for one.
+    expect(writes.reports).toHaveLength(1);
+    expect(generateMeetingReport).not.toHaveBeenCalled();
+  });
+
+  // For a meeting the refusal stands: one with no transcript at all either did
+  // not happen or is a bug, and writing an empty report over it buries that.
+  it("still refuses a meeting with no transcript", async () => {
+    wire();
+    expect((await POST(silent())).status).toBe(400);
+    expect(writes.reports).toHaveLength(0);
+    expect(writes.meetingUpdate).toBeUndefined();
+  });
+
+  it("still refuses a request with no meeting at all", async () => {
+    wire();
+    const res = await POST(new Request("http://localhost/api/meetings/report", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ transcript: "words" }),
+    }));
+    expect(res.status).toBe(400);
+  });
+});

@@ -3469,6 +3469,80 @@ Deployed, monitoring               →  live, observability active
              |  "forty" does not find "40". Worth doing and deliberately not
              |  done here — number and homophone matching is its own pass, and
              |  guessing at it silently would make the count untrustworthy.
+
+2026-09-23  |  A call with nobody on the other end of the software  |  Asked
+             |  for a one-way meeting: record yourself on a phone call and get
+             |  analytics. Founder's answers set the shape — microphone with an
+             |  optional capture of the computer's own audio, ONE transcript
+             |  rather than separating the two voices, the existing meeting
+             |  report rather than new speaking metrics, a searchable archive,
+             |  and a consent acknowledgement stored with a disclosure to read
+             |  aloud.
+             |  THE ARCHITECTURAL DECISION, and the one worth keeping: a call is
+             |  a live_meetings ROW, not a table of its own. Recording objects
+             |  are keyed <meeting_id>/<recording_id>/…, the bucket's read
+             |  policy resolves through live_meetings, and both the expiry sweep
+             |  and the delete cleanup find a recording's bytes by way of that
+             |  table. A calls table would have sat outside every one of them
+             |  and orphaned its own audio the first time a call was deleted —
+             |  which is EXACTLY the defect the 2026-09-18 pass spent itself
+             |  fixing. Reusing the row means reusing the lifecycle that
+             |  already works. The cost is one column and a filter on four
+             |  lists; the review found two of those lists I had missed.
+             |  AUDIO ONLY, which is why audio-capture.ts exists beside
+             |  recording-policy.ts rather than reusing it. The meeting
+             |  recorder composites a canvas at 1.5Mbit: right for a room with
+             |  faces in it, and 675MB an hour of still picture for a phone
+             |  call. At the audio bitrate the same hour is ~57MB and every
+             |  part, player, sweep and cleanup works on it unchanged.
+             |  useRecording now takes a SOURCE rather than constructing a
+             |  composer. Not tidiness: everything downstream of the part
+             |  contract — the retrying upload, the part rows, the duration
+             |  taken from the parts — is where the 2026-09-18 duration bug
+             |  lived, and a second copy of it for calls would have re-created
+             |  that bug in a place nobody was looking.
+             |  WORTH KEEPING, from the review round: A RECORDING ENDS ONCE,
+             |  and that invariant belongs with the code that WRITES the row,
+             |  not with each source being well-behaved. MediaRecorder fires
+             |  onstop after onerror, so both recorders — the new one and the
+             |  meeting composer, which has had this since it was written —
+             |  reported an error and then a clean stop, and useRecording
+             |  finalized the same recording twice: failed, then complete. The
+             |  second one sticks, so a broken recording was filed as good and
+             |  the error banner was cleared. Fixed in all three places; the
+             |  test that proves it is at the HOOK, because that is where the
+             |  invariant lives.
+             |  Second: A ROUTE THAT REFUSES IS A ROUTE THAT STRANDS. The report
+             |  route is the only thing that ever marks a session ended, and it
+             |  400s on an empty transcript. A call recorded in a browser with
+             |  no speech recognition has audio and no words — an ordinary
+             |  outcome — so it stayed open forever while the person watched a
+             |  report page generate a summary that was never coming. One-way
+             |  calls close out without analysis now; for a meeting the refusal
+             |  stands, because a meeting with no transcript is a bug and an
+             |  empty report would bury it.
+             |  Third, and a repeat: A BLIND PATCH HITS THE WRONG THING. The
+             |  new columns were added to database.types.ts by finding
+             |  "meeting_type: string;" twice — and the second occurrence was
+             |  SchedulingEventType, a different table entirely. Same shape as
+             |  the blanket regex that rewrote the removals tests in September.
+             |  Review found it; nothing else would have, because extra
+             |  optional fields on a type compile perfectly.
+             |  Confidence: typecheck/eslint clean, production build passes,
+             |  Jest 6900 → 6972 green across 504 suites. Ten review findings,
+             |  all fixed, four of them in lists and lifecycles rather than in
+             |  the feature itself.
+             |  NOT COVERED, and this is the honest part: NOTHING HERE HAS MET A
+             |  REAL MICROPHONE. The pure rules are tested and the wiring is
+             |  not — no test opens getUserMedia, mixes two streams, or plays
+             |  back what was stored. Worth ten minutes with an actual phone
+             |  call before it is trusted: speakerphone for both sides, then a
+             |  tab share with the audio box ticked and with it unticked.
+             |  Also not covered: two-party diarization (the founder chose one
+             |  track), speaking metrics, and trends across calls. And consent
+             |  is an acknowledgement with a script, NOT legal advice — the
+             |  product records what somebody confirmed, it does not obtain
+             |  consent for them.
 ```
 
 ---

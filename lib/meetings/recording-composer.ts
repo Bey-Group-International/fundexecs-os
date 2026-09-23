@@ -183,6 +183,13 @@ export class RecordingComposer {
       }
     };
     this.recorder.onerror = (ev) => {
+      // Marked stopped BEFORE handing the error up. MediaRecorder fires onstop
+      // after onerror, and without this that second event reports the same
+      // recording as having stopped cleanly — so a failed recording is
+      // finalized twice: once as failed, then again as complete, which is the
+      // one that sticks.
+      if (this.stopped) return;
+      this.stopped = true;
       this.teardown();
       this.handlers.onStopped("error", (ev as unknown as { error?: unknown }).error);
     };

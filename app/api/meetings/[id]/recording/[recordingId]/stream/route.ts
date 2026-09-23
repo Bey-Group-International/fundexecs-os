@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerClient, createServiceClient, hasSupabaseServiceEnv } from "@/lib/supabase/server";
-import { RECORDING_BUCKET } from "@/lib/meetings/recording-policy";
+import { RECORDING_BUCKET, extensionFor } from "@/lib/meetings/recording-policy";
 import {
   contentRangeHeader,
   parseRange,
@@ -149,6 +149,11 @@ export async function GET(req: NextRequest, { params }: { params: Params }) {
 function downloadFilename(startedAt: string, mimeType: string): string {
   const at = new Date(startedAt);
   const day = isNaN(at.getTime()) ? "recording" : at.toISOString().slice(0, 10);
-  const ext = /mp4/i.test(mimeType || "") ? "mp4" : "webm";
-  return `meeting-recording-${day}.${ext}`;
+  // The same function the stored parts are named by, so a downloaded file and
+  // the objects behind it never disagree about what they hold. A one-way call
+  // is audio, and saving it as .webm when it is .m4a hands somebody a file
+  // their player refuses to open.
+  const ext = extensionFor(mimeType || "");
+  const what = mimeType.startsWith("audio/") ? "call-recording" : "meeting-recording";
+  return `${what}-${day}.${ext}`;
 }

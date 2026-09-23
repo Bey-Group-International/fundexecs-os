@@ -13,16 +13,21 @@ type Handlers = {
   onStopped: (reason: "stopped" | "error", error?: unknown) => void;
 };
 
-/** The live composer, captured so a test can drive it. */
+/** The live capture source, captured so a test can drive it. */
 let composer: { handlers: Handlers; start: jest.Mock; stop: jest.Mock } | null = null;
 
-jest.mock("@/lib/meetings/recording-composer", () => ({
-  RecordingComposer: jest.fn().mockImplementation((_room: unknown, handlers: Handlers) => {
-    const made = { handlers, start: jest.fn(), stop: jest.fn(), mimeType: "video/webm" };
-    composer = made;
-    return made;
-  }),
-}));
+/**
+ * A stand-in for whatever is capturing.
+ *
+ * Built here rather than mocked out of the composer module, because the hook
+ * no longer names a composer: it takes a source, and what these tests exercise
+ * is everything that happens to the parts AFTER one hands them over.
+ */
+function fakeSource(handlers: Handlers) {
+  const made = { handlers, start: jest.fn(), stop: jest.fn(), mimeType: "video/webm" };
+  composer = made;
+  return made;
+}
 
 import { useRecording } from "@/lib/meetings/use-recording";
 
@@ -94,7 +99,7 @@ function setup(sb: ReturnType<typeof fakeClient>) {
       supabase: sb.client as unknown as Parameters<typeof useRecording>[0]["supabase"],
       meetingId: "m1",
       hostName: "Host",
-      room: {} as unknown as Parameters<typeof useRecording>[0]["room"],
+      createSource: (handlers) => fakeSource(handlers as Handlers),
       announce: () => {},
     }),
   );
@@ -228,5 +233,30 @@ describe("how long the recording says it is", () => {
 
     const closed = sb.updates.find((u) => u.id === "r1" && u.patch.status === "complete");
     expect(closed?.patch.duration_seconds).toBe(0);
+  });
+});
+
+describe("a recording that errors", () => {
+  // MediaRecorder fires onstop AFTER onerror. A source that hands up "error"
+  // without marking itself stopped therefore hands up "stopped" a moment
+  // later, and the hook finalizes the same recording twice — failed, then
+  // complete. The second one is the one that sticks, so a recording that broke
+  // is filed as good and the error banner is replaced by a clean idle state.
+  it("is finalized once, as failed, even if a stop follows the error", async () => {
+    const sb = fakeClient();
+    const view = setup(sb);
+    await act(async () => { await view.result.current.start(); });
+
+    act(() => { composer!.handlers.onStopped("error", new Error("encoder died")); });
+    // Exactly what a real MediaRecorder does next.
+    act(() => { composer!.handlers.onStopped("stopped"); });
+    await flush();
+    await flush();
+
+    const closes = sb.updates.filter((u) => u.table === "live_meeting_recordings" && "status" in u.patch);
+    expect(closes).toHaveLength(1);
+    expect(closes[0].patch.status).toBe("failed");
+    expect(view.result.current.state).toBe("failed");
+    expect(view.result.current.error).toBeTruthy();
   });
 });

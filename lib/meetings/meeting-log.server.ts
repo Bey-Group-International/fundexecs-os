@@ -15,6 +15,7 @@
 
 import type { createServerClient } from "@/lib/supabase/server";
 import type { MeetingLogReport, MeetingLogSource } from "@/lib/meetings/meeting-log";
+import { MEETING_KIND } from "@/lib/meetings/one-way";
 
 type SupabaseClient = Awaited<ReturnType<typeof createServerClient>>;
 
@@ -67,6 +68,11 @@ export async function loadMeetingLog(
       .from("live_meetings")
       .select(LOG_SELECT)
       .eq("organization_id", orgId)
+      // Meetings only. A recorded call is a live_meetings row — it has to be,
+      // for its recording to be reachable and cleaned up — but it is not a
+      // meeting anybody held, and the log is a record of meetings. The call
+      // archive lists them.
+      .eq("kind", MEETING_KIND)
       .is("deleted_at", null)
       .order("created_at", { ascending: false })
       .order("created_at", { ascending: false, referencedTable: "live_meeting_reports" })

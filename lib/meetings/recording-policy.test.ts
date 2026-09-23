@@ -45,6 +45,21 @@ describe("preferredMimeType", () => {
   });
 });
 
+describe("extensionFor, on the audio a one-way call records", () => {
+  // The paths of everything already stored have to keep resolving, so the two
+  // video cases are pinned alongside the new ones.
+  it("is unchanged for the video containers", () => {
+    expect(extensionFor("video/webm;codecs=vp9,opus")).toBe("webm");
+    expect(extensionFor("video/mp4")).toBe("mp4");
+  });
+
+  it("names the audio containers", () => {
+    expect(extensionFor("audio/webm;codecs=opus")).toBe("webm");
+    expect(extensionFor("audio/mp4;codecs=mp4a.40.2")).toBe("m4a");
+    expect(extensionFor("audio/ogg;codecs=opus")).toBe("ogg");
+  });
+});
+
 describe("chunkPath", () => {
   // part-10 sorting before part-2 would reassemble the meeting in the wrong
   // order, and it would do it silently.

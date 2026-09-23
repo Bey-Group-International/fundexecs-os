@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { MEETING_KIND } from "@/lib/meetings/one-way";
 import { requireOrgContext } from "@/lib/auth";
 import { createServerClient } from "@/lib/supabase/server";
 
@@ -13,6 +14,11 @@ export async function GET() {
     .from("live_meetings")
     .select("id, room_code, title, description, location, meeting_url, status, scheduled_at, duration_minutes, timezone, meeting_type, priority, tags, attendees, source, sync_status, source_event_id, source_calendar_id, deal_id, related_contact_id, related_company_id, related_fund_id, objective, agenda, preparation_requirements, preparation_status, followup_status, assigned_copilot_agent, related_record_type, related_record_id, calendar_visibility, reminder_minutes, external_calendar_provider, external_calendar_sync_enabled, external_calendar_sync_status, is_draft, locked_at, updated_at, guest_quick_access")
     .eq("organization_id", auth.ctx.orgId)
+    // A one-way call has no scheduled_at, so the range filter below already
+    // excludes it. Said out loud anyway: a later change that relaxes the date
+    // range would otherwise silently start listing recorded calls as meetings
+    // waiting to happen.
+    .eq("kind", MEETING_KIND)
     .is("deleted_at", null)
     .eq("is_draft", false)
     .neq("status", "ended")

@@ -14,6 +14,7 @@ import { loadMeetingLog } from "@/lib/meetings/meeting-log.server";
 import { toLogEntry, sortLogEntries, type MeetingLogEntry } from "@/lib/meetings/meeting-log";
 import { isPastMeeting } from "@/lib/meetings/schedule";
 import { attendedButNotHosted } from "@/lib/meetings/attendance";
+import { MEETING_KIND } from "@/lib/meetings/one-way";
 
 export const metadata: Metadata = {
   title: "Meetings — FundExecs OS",
@@ -81,6 +82,12 @@ async function getMeetings(orgId: string, userId: string): Promise<LiveMeeting[]
       .from("live_meetings")
       .select(MEETING_SELECT)
       .eq("organization_id", orgId)
+      // Meetings only. A one-way call is a live_meetings row — it has to be,
+      // so that its recording is reachable by the same policy and cleaned up
+      // by the same sweep — but it is not a meeting anybody can join, and
+      // listing it here would put an un-enterable room in the calendar and in
+      // past meetings. The archive lists them instead.
+      .eq("kind", MEETING_KIND)
       .is("deleted_at", null)
       .order("scheduled_at", { ascending: false, nullsFirst: false })
       .order("created_at", { ascending: false })
@@ -102,6 +109,7 @@ async function getMeetings(orgId: string, userId: string): Promise<LiveMeeting[]
       .from("live_meetings")
       .select(MEETING_SELECT)
       .in("id", nonHostedIds)
+      .eq("kind", MEETING_KIND)
       .is("deleted_at", null)
       .order("created_at", { ascending: false })
       .limit(50);
