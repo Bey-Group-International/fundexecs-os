@@ -3604,11 +3604,21 @@ Deployed, monitoring               →  live, observability active
              |  exist; the recording's own duration stands in now.
              |  Confidence: typecheck/eslint clean, build passes, Jest 6972 →
              |  6980 across 504 suites.
-             |  NOT COVERED: the page still has no component test. Every fix
-             |  here is pinned in attendance.ts, where the decisions now live,
-             |  but the wiring that reads those decisions is unverified.
-             |  Reaching "unsummarised" by hand needs a meeting whose model
-             |  call failed — awkward to produce, and worth producing.
+             |  THE GAP IS NOW CLOSED. Having written "not covered: the page has
+             |  no component test" and noticed it was the SECOND report-page
+             |  state bug in a day, the test exists: 14 cases over the wiring,
+             |  8 of which fail against the previous commit — the unsummarised
+             |  render, the copy that must follow the transcript rather than the
+             |  session kind, the per-poll transcript re-read, the stall, and
+             |  the consent block. The other 6 are guards on behaviour that was
+             |  already right.
+             |  Method note worth keeping: the first attempt to prove the tests
+             |  bite used `git stash push` on files that were ALREADY COMMITTED,
+             |  so it stashed nothing and every test passed — which reads
+             |  exactly like "the tests do not bite". `git checkout HEAD~1 --
+             |  <paths>` is the check that actually reverts. A verification step
+             |  that silently does nothing is worse than none, because it
+             |  produces a confident green.
 ```
 
 ---
