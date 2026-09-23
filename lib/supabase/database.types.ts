@@ -2505,6 +2505,9 @@ export type LiveMeeting = {
   duration_minutes: number;
   timezone: string;
   meeting_type: string;
+  /** "meeting" or "one_way" — see lib/meetings/one-way.ts. */
+  kind: string;
+  recording_consent: Json | null;
   priority: string;
   tags: string[];
   attendees: Json;

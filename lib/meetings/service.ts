@@ -5,6 +5,7 @@ import type { MeetingAttendeeInput } from "@/lib/meetings/attendees";
 import { nextExternalSyncStatus, type ExternalSyncStatus } from "@/lib/meetings/schedule";
 import { pushMeetingToGoogle } from "@/lib/calendar/google-write.server";
 import type { WritableMeeting } from "@/lib/calendar/google-write";
+import { MEETING_KIND, type MeetingKind } from "@/lib/meetings/one-way";
 
 type ServerClient = Awaited<ReturnType<typeof createServerClient>>;
 
@@ -20,6 +21,17 @@ export interface CreateMeetingInput {
   durationMinutes?: number | null;
   timezone?: string | null;
   meetingType?: string | null;
+  /**
+   * "meeting" (the default) or "one_way" for a recorded call.
+   *
+   * A one-way call is the same row deliberately — the recording bucket's read
+   * policy, the expiry sweep and the delete cleanup all reach a recording's
+   * bytes through live_meetings, so a call kept anywhere else would orphan its
+   * own audio. See lib/meetings/one-way.ts.
+   */
+  kind?: MeetingKind;
+  /** The consent acknowledged before a one-way call could start recording. */
+  recordingConsent?: Json | null;
 }
 
 export interface CreatedMeeting {
@@ -149,6 +161,8 @@ export async function createMeeting(
         duration_minutes: duration,
         timezone: input.timezone?.trim() || "UTC",
         meeting_type: input.meetingType?.trim() || "internal_strategy",
+        kind: input.kind ?? MEETING_KIND,
+        recording_consent: input.recordingConsent ?? null,
         preparation_status: input.scheduledAt ? "prep_needed" : "ready",
         followup_status: "not_started",
       } as never,

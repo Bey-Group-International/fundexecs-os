@@ -5,6 +5,7 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { isPastMeeting } from "@/lib/meetings/schedule";
 import { attendedButNotHosted } from "@/lib/meetings/attendance";
+import { MEETING_KIND } from "@/lib/meetings/one-way";
 import { nextChannelName } from "./hooks";
 import { MeetingShareLink } from "./MeetingShareLink";
 
@@ -129,6 +130,10 @@ export function PastMeetingsList({ initialMeetings, userId, compact = false }: P
           .from("live_meetings")
           .select("id, room_code, title, status, host_id, created_at, started_at, ended_at, scheduled_at, duration_minutes, is_draft")
           .eq("host_id", userId)
+          // The server-rendered list filters these out; this refresh replaces
+          // that list on mount, so without the same filter a recorded call
+          // appears in Past meetings a moment after the page settles.
+          .eq("kind", MEETING_KIND)
           .is("deleted_at", null)
           .order("created_at", { ascending: false })
           .limit(50),

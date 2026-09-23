@@ -29,18 +29,56 @@ import {
   droppedPartsNotice,
   uploadRetryDelay,
 } from "@/lib/meetings/upload-retry";
-import { RecordingComposer, type PartTiming, type RoomSnapshot } from "@/lib/meetings/recording-composer";
+import type { ComposerHandlers, PartTiming } from "@/lib/meetings/recording-composer";
 import type { Database } from "@/lib/supabase/database.types";
 
 type Client = SupabaseClient<Database>;
+
+/**
+ * Anything that can encode a recording into parts.
+ *
+ * RecordingComposer is one — a canvas of the room plus a mix of its audio. The
+ * one-way recorder is another, with no picture at all. They differ entirely in
+ * what they capture and not at all in what happens to the parts afterwards,
+ * which is what this interface is for: the retrying upload, the part rows, the
+ * duration taken from the parts rather than the clock, and the notice telling
+ * the host what was lost all live here, once, for both.
+ *
+ * Writing that twice is not hypothetical harm. The duration used to be
+ * computed in two places that disagreed by exactly the parts that were
+ * dropped, and a recording was listed a minute longer than the video anyone
+ * could watch.
+ */
+export interface RecordingSource {
+  /** The container this browser chose. Null until `start` succeeds. */
+  readonly mimeType: string | null;
+  /** Begin. Throws rather than degrading into a silent no-op. */
+  start(): void;
+  /** End. Safe to call more than once. */
+  stop(): void;
+}
 
 export interface UseRecordingInput {
   supabase: Client;
   meetingId: string | null;
   /** The host's display name, stored so a recording can say who made it. */
   hostName: string;
-  /** Reads the live room, called every frame by the composer. */
-  room: RoomSnapshot;
+  /**
+   * Build the thing that captures. Called once per recording.
+   *
+   * A factory rather than an instance because a source owns a camera, an
+   * AudioContext and a MediaRecorder: one per recording, opened on start and
+   * closed on stop, never reused across two.
+   */
+  createSource: (handlers: ComposerHandlers) => RecordingSource;
+  /**
+   * What the row should say it holds before the browser has chosen a container.
+   *
+   * The column is NOT NULL and the row has to exist before the first part
+   * lands, so this is the honest placeholder for the kind of recording being
+   * made; the real value is written back as soon as `start` returns.
+   */
+  fallbackMimeType?: string;
   /** Tell the rest of the room. Everyone sees the badge, not just the host. */
   announce: (recording: boolean) => void;
 }
@@ -102,6 +140,17 @@ interface RecordingRun {
    */
   dropped: number;
   /**
+   * Whether this recording has already been closed out.
+   *
+   * The invariant "a recording is finalized exactly once" belongs here, with
+   * the code that writes the row, rather than with each source being
+   * well-behaved. MediaRecorder fires onstop after onerror, so a source that
+   * reports the error and then lets the stop through would have this hook write
+   * "failed" and then "complete" over it — and the second one is the one that
+   * sticks, filing a broken recording as good.
+   */
+  closed: boolean;
+  /**
    * Parts upload one at a time, in the order the encoder produced them.
    * Concurrent uploads would finish out of order, which does not corrupt the
    * file — each part knows its own index — but does mean a host who stops mid
@@ -117,7 +166,7 @@ export function useRecording(input: UseRecordingInput): UseRecordingResult {
   const [notice, setNotice] = useState<string | null>(null);
   const [elapsed, setElapsed] = useState(0);
 
-  const composerRef = useRef<RecordingComposer | null>(null);
+  const sourceRef = useRef<RecordingSource | null>(null);
   const tickRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   /**
@@ -143,7 +192,8 @@ export function useRecording(input: UseRecordingInput): UseRecordingResult {
    */
   const runRef = useRef<RecordingRun | null>(null);
 
-  const { supabase, meetingId, hostName, room, announce } = input;
+  const { supabase, meetingId, hostName, createSource, announce } = input;
+  const fallbackMime = input.fallbackMimeType ?? "video/webm";
 
   /**
    * Store one part, retrying the failures that are worth retrying.
@@ -219,6 +269,9 @@ export function useRecording(input: UseRecordingInput): UseRecordingResult {
   }, [supabase, meetingId]);
 
   const finalize = useCallback(async (run: RecordingRun, status: "complete" | "failed") => {
+    // First close wins, which is the one that knows why it ended.
+    if (run.closed) return;
+    run.closed = true;
     // Everything queued has to land before the row claims to be finished, or
     // the duration and size would describe a recording still being written.
     // Everything read after that await comes off `run`, which no later
@@ -246,14 +299,14 @@ export function useRecording(input: UseRecordingInput): UseRecordingResult {
   }, [supabase]);
 
   const stop = useCallback(() => {
-    const composer = composerRef.current;
-    if (!composer) return;
+    const source = sourceRef.current;
+    if (!source) return;
     setState("stopping");
-    composer.stop();
+    source.stop();
   }, []);
 
   const start = useCallback(async () => {
-    if (composerRef.current || !meetingId) return;
+    if (sourceRef.current || !meetingId) return;
     setError(null);
     setNotice(null);
     setState("starting");
@@ -271,7 +324,7 @@ export function useRecording(input: UseRecordingInput): UseRecordingResult {
           started_by_name: hostName,
           // mime_type is corrected below once the browser has chosen; the column
           // is NOT NULL and the row has to exist before the first part lands.
-          mime_type: "video/webm",
+          mime_type: fallbackMime,
         })
         .select("id")
         .single();
@@ -284,21 +337,29 @@ export function useRecording(input: UseRecordingInput): UseRecordingResult {
         count: 0,
         endMs: 0,
         dropped: 0,
+        closed: false,
         queue: Promise.resolve(),
       };
       runRef.current = run;
       started = run;
 
-      const composer = new RecordingComposer(room, {
+      const source = createSource({
         onChunk: (blob, index, timing) => {
-          const mime = composer.mimeType ?? "video/webm";
+          const mime = source.mimeType ?? fallbackMime;
           // Chained rather than awaited: this runs inside a MediaRecorder event
           // and must return immediately or it stalls the encoder.
           run.queue = run.queue.then(() => uploadChunk(run, blob, index, mime, timing));
         },
         onStopped: (reason, err) => {
+          // A recording ends once. MediaRecorder fires onstop after onerror, so
+          // without this the "stopped" that follows an "error" would run the
+          // success path over it: state back to idle, the error banner cleared,
+          // and a broken recording presented as a good one. `closed` is set
+          // synchronously by finalize, so the first report has already claimed
+          // this run by the time a second one arrives.
+          if (run.closed) return;
           if (tickRef.current) { clearInterval(tickRef.current); tickRef.current = null; }
-          composerRef.current = null;
+          sourceRef.current = null;
           announce(false);
           if (reason === "error") {
             console.error("[recording] stopped on error", err);
@@ -319,16 +380,16 @@ export function useRecording(input: UseRecordingInput): UseRecordingResult {
         },
       });
 
-      composer.start();
-      composerRef.current = composer;
+      source.start();
+      sourceRef.current = source;
 
-      if (composer.mimeType) {
+      if (source.mimeType) {
         // Best effort: the parts carry the real container in their extension
         // either way, and a failed update must not stop a recording that is
         // already running.
         void supabase
           .from("live_meeting_recordings")
-          .update({ mime_type: composer.mimeType })
+          .update({ mime_type: source.mimeType })
           .eq("id", run.id);
       }
 
@@ -345,7 +406,7 @@ export function useRecording(input: UseRecordingInput): UseRecordingResult {
       announce(true);
     } catch (err) {
       console.error("[recording] could not start", err);
-      composerRef.current = null;
+      sourceRef.current = null;
       setError(err instanceof Error ? err.message : "Recording could not be started.");
       setState("failed");
       // Only a run THIS call created. The id used to be a ref that outlived the
@@ -353,7 +414,7 @@ export function useRecording(input: UseRecordingInput): UseRecordingResult {
       // own row closed out the previous, finished recording as a failure.
       if (started) void finalize(started, "failed");
     }
-  }, [supabase, meetingId, hostName, room, announce, uploadChunk, finalize]);
+  }, [supabase, meetingId, hostName, createSource, fallbackMime, announce, uploadChunk, finalize]);
 
   const dismissNotice = useCallback(() => setNotice(null), []);
 

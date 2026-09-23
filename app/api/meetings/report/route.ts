@@ -10,6 +10,7 @@ import { normalizeNoteList, normalizeNoteText } from "@/lib/meetings/live-notes"
 import { EMPTY_REPORT, clampTranscript, generateMeetingReport } from "@/lib/meetings/report-analysis";
 import { mergeTranscripts, restoreTranscript, type StoredLine } from "@/lib/meetings/transcript-restore";
 import { readAllTranscriptRows } from "@/lib/meetings/transcript-read";
+import { ONE_WAY_KIND } from "@/lib/meetings/one-way";
 
 export const runtime = "nodejs";
 
@@ -71,19 +72,37 @@ export async function POST(req: Request) {
       duration?: number;
     };
 
-    if (!body.meetingId || !body.transcript?.trim()) {
-      return NextResponse.json({ error: "meetingId and transcript required" }, { status: 400 });
+    if (!body.meetingId) {
+      return NextResponse.json({ error: "meetingId required" }, { status: 400 });
     }
 
     // Verify caller is the meeting host
     const { data: meeting } = await supabase
       .from("live_meetings")
-      .select("id, host_id, organization_id, deal_id, title, started_at, scheduled_at")
+      .select("id, host_id, organization_id, deal_id, title, started_at, scheduled_at, kind")
       .eq("id", body.meetingId)
       .single();
 
     if (!meeting || meeting.host_id !== user.id) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+
+    if (!body.transcript?.trim()) {
+      // A ONE-WAY CALL with nothing transcribed is a real and ordinary outcome:
+      // this browser has no speech recognition, or nobody said anything it
+      // recognised. The audio still exists and the session still has to be
+      // closed out — this route is the only thing that ever marks a meeting
+      // ended, so refusing here left the call sitting open forever and sent the
+      // person to a report page that generated nothing, indefinitely.
+      //
+      // For a MEETING the refusal stands. A meeting with no transcript at all
+      // is a meeting that did not happen or a bug, and either way writing an
+      // empty report over it would bury the evidence.
+      if ((meeting as { kind?: string | null }).kind === ONE_WAY_KIND) {
+        await endWithoutAnalysis(supabase, body.meetingId, "");
+        return NextResponse.json({ ok: true, summarised: false });
+      }
+      return NextResponse.json({ error: "meetingId and transcript required" }, { status: 400 });
     }
 
     // The transcript on file, not just the one the browser posted.

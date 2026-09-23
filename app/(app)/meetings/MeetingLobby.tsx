@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, useTransition } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { MeetingEditScreen } from "./MeetingEditScreen";
 
@@ -122,9 +123,30 @@ export function MeetingLobby({ onOpenCalendar }: { onOpenCalendar?: () => void }
                     subtitle="Open the calendar to pick a time"
                     onClick={openCalendar}
                   />
+                  <div className="h-px bg-line" />
+                  {/* No room, no second participant: a call somebody is taking
+                      elsewhere, recorded for the transcript and the summary. It
+                      belongs in this menu because "I need a record of a
+                      conversation" is the same intent as the two above it. */}
+                  <MenuItem
+                    icon={<MicIcon />}
+                    title="Record a call"
+                    subtitle="For a phone call — recording, transcript and summary"
+                    onClick={() => { setMenuOpen(false); router.push("/meetings/record"); }}
+                  />
                 </div>
               ) : null}
             </div>
+
+            {/* The archive of recorded calls, beside the calendar: both are
+                "where is the thing that already happened". */}
+            <Link
+              href="/meetings/calls"
+              className="fx-btn flex shrink-0 items-center justify-center gap-2 rounded-lg border border-line bg-surface-1 px-4 py-2 text-sm font-semibold text-fg-secondary hover:border-gold-400/40 hover:bg-surface-2 hover:text-fg-primary"
+            >
+              <span className="text-[var(--gold-300)]"><MicIcon /></span>
+              Calls
+            </Link>
 
             {/* The calendar, one click from the page a member opens every day. */}
             <button
@@ -257,6 +279,16 @@ function KeyboardIcon() {
       <rect x="2" y="6" width="20" height="12" rx="2" ry="2" />
       <line x1="6" y1="10" x2="6" y2="10" /><line x1="10" y1="10" x2="10" y2="10" /><line x1="14" y1="10" x2="14" y2="10" /><line x1="18" y1="10" x2="18" y2="10" />
       <line x1="7" y1="14" x2="17" y2="14" />
+    </svg>
+  );
+}
+
+function MicIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 2a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z" />
+      <path d="M19 10v1a7 7 0 0 1-14 0v-1" />
+      <line x1="12" y1="19" x2="12" y2="22" />
     </svg>
   );
 }
