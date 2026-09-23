@@ -55,7 +55,16 @@ export function RecordingPanel({
   /** Handed to the first playable recording, so the transcript can drive it. */
   playerRef?: React.Ref<RecordingPlayerHandle>;
   /** When the recording the transcript should follow is known. */
-  onRecordingReady?: (startedAt: string) => void;
+  /**
+   * The recording the transcript is timed against: when it started, and how
+   * long it ran.
+   *
+   * The duration goes up because the page's header has no other source for it
+   * on a one-way call — nobody joins a room that does not exist, so the
+   * meeting has no started_at to subtract from, and a recorded call showed no
+   * length at all despite the recording knowing it exactly.
+   */
+  onRecordingReady?: (startedAt: string, durationSeconds: number | null) => void;
   /** Where that recording has got to, so the transcript can follow it back. */
   onTime?: (ms: number) => void;
 }) {
@@ -79,7 +88,7 @@ export function RecordingPanel({
       // played. A meeting with two recordings is rare; one whose only
       // recording was deleted or captured nothing is not.
       const playable = rows.find((r) => !r.deleted_at && r.status !== "abandoned");
-      if (playable) onRecordingReady?.(playable.started_at);
+      if (playable) onRecordingReady?.(playable.started_at, playable.duration_seconds ?? null);
     })();
     return () => { cancelled = true; };
   }, [meetingId, onRecordingReady]);

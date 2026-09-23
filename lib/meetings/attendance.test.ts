@@ -1,3 +1,4 @@
+import { LONG_RUN_TIMEOUT_MS } from "@/lib/anthropic-client";
 import {
   PARTICIPANT_CONFLICT_TARGET,
   PRESENCE_STALE_MS,
@@ -6,6 +7,8 @@ import {
   canViewReport,
   isPresent,
   presenceByMeeting,
+  REPORT_WAIT_LIMIT_MS,
+  reportIsReadable,
   reportViewState,
   shouldPollReport,
 } from "./attendance";
@@ -140,6 +143,7 @@ describe("reportViewState", () => {
     hostId: "host",
     viewerId: "host",
     attended: false,
+    hasReport: true,
     hasSummary: true,
   };
 
@@ -155,7 +159,7 @@ describe("reportViewState", () => {
     // The bug this ordering fixes: RLS hides the report row from a non-attendee,
     // which is byte-for-byte what an unwritten report looks like, so the page
     // sat on "Generating your report…" for a report it would never be shown.
-    expect(reportViewState({ ...base, viewerId: "someone-else", hasSummary: false })).toBe("forbidden");
+    expect(reportViewState({ ...base, viewerId: "someone-else", hasReport: false, hasSummary: false })).toBe("forbidden");
     expect(reportViewState({ ...base, viewerId: "someone-else", hasSummary: true })).toBe("forbidden");
   });
 
@@ -164,7 +168,56 @@ describe("reportViewState", () => {
   });
 
   it("waits on a report the attendee is entitled to but that isn't written yet", () => {
-    expect(reportViewState({ ...base, viewerId: "u2", attended: true, hasSummary: false })).toBe("generating");
+    expect(reportViewState({
+      ...base, viewerId: "u2", attended: true, hasReport: false, hasSummary: false,
+    })).toBe("generating");
+  });
+
+  // The defect this splits apart. The report route writes a row with an empty
+  // summary when the model fails, and again when a one-way call had nothing to
+  // transcribe — both finished outcomes. Keyed on the summary alone, the page
+  // called that "generating" and sat on a spinner forever, polling every five
+  // seconds, with the recording and the transcript readable behind it.
+  it("treats a report written without a summary as finished, not pending", () => {
+    expect(reportViewState({ ...base, hasReport: true, hasSummary: false })).toBe("unsummarised");
+  });
+
+  it("does not confuse an unsummarised report with a missing one", () => {
+    const missing = reportViewState({ ...base, hasReport: false, hasSummary: false });
+    const unsummarised = reportViewState({ ...base, hasReport: true, hasSummary: false });
+    expect(missing).not.toBe(unsummarised);
+  });
+
+  // A report that is genuinely never coming has to stop being awaited, or the
+  // page polls for the life of the tab.
+  it("gives up once it has waited long enough", () => {
+    const waiting = { ...base, hasReport: false, hasSummary: false };
+    expect(reportViewState({ ...waiting, waitedMs: 0 })).toBe("generating");
+    expect(reportViewState({ ...waiting, waitedMs: REPORT_WAIT_LIMIT_MS - 1 })).toBe("generating");
+    expect(reportViewState({ ...waiting, waitedMs: REPORT_WAIT_LIMIT_MS })).toBe("stalled");
+  });
+
+  // Waiting is not a reason to hide a report that did arrive.
+  it("never calls a report that exists stalled, however long the wait", () => {
+    expect(reportViewState({ ...base, waitedMs: REPORT_WAIT_LIMIT_MS * 10 })).toBe("ready");
+    expect(reportViewState({
+      ...base, hasSummary: false, waitedMs: REPORT_WAIT_LIMIT_MS * 10,
+    })).toBe("unsummarised");
+  });
+});
+
+describe("reportIsReadable", () => {
+  // Both of these have a page worth rendering; the difference is only whether
+  // there is a summary at the top of it.
+  it("is true for a report with or without a summary", () => {
+    expect(reportIsReadable("ready")).toBe(true);
+    expect(reportIsReadable("unsummarised")).toBe(true);
+  });
+
+  it("is false for every state with nothing to show", () => {
+    for (const state of ["loading", "missing", "forbidden", "generating", "stalled"] as const) {
+      expect(reportIsReadable(state)).toBe(false);
+    }
   });
 });
 
@@ -178,5 +231,25 @@ describe("shouldPollReport", () => {
     expect(shouldPollReport("ready")).toBe(false);
     expect(shouldPollReport("forbidden")).toBe(false);
     expect(shouldPollReport("missing")).toBe(false);
+    // The two that used to poll forever: a finished report with no summary,
+    // and a wait that has gone on long enough to be hopeless.
+    expect(shouldPollReport("unsummarised")).toBe(false);
+    expect(shouldPollReport("stalled")).toBe(false);
+  });
+});
+
+describe("the wait limit against the generation it waits for", () => {
+  // The two have to agree, and they live in different files. A limit shorter
+  // than the worst-case model call declares a report dead while it is still
+  // being written — and since giving up also stops the polling, the report
+  // that lands a moment later is never shown without a manual reload.
+  it("outlasts the worst case of the call it is waiting on", () => {
+    const worstCase = LONG_RUN_TIMEOUT_MS * 2; // maxRetries: 1
+    expect(REPORT_WAIT_LIMIT_MS).toBeGreaterThan(worstCase);
+  });
+
+  // And is still bounded: the whole point is that the page stops eventually.
+  it("is still a bound, not forever", () => {
+    expect(REPORT_WAIT_LIMIT_MS).toBeLessThan(15 * 60_000);
   });
 });
