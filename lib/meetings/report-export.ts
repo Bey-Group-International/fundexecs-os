@@ -15,6 +15,7 @@
 
 import { normalizeNoteList, normalizeNoteText } from "@/lib/meetings/live-notes";
 import { parseTranscript } from "@/lib/meetings/transcript-view";
+import { captureLabel, readAcknowledgement } from "@/lib/meetings/one-way";
 
 /** The report and its meeting, as the exporters need to see them. */
 export interface ReportExportInput {
@@ -37,6 +38,38 @@ export interface ReportExportInput {
    * column; `attendeeNames` is what makes it safe to read.
    */
   attendees?: unknown;
+  /**
+   * Who was actually in the room.
+   *
+   * The invite list above is who was ASKED. For every instant meeting — which
+   * is the product's commonest kind — it is empty, so a filed record of a
+   * forty-minute conversation named nobody who had it. This is the attendance
+   * the meeting recorded for itself, and the two are unioned: somebody invited
+   * who never came and somebody who walked in uninvited both belong in the
+   * record of what happened.
+   */
+  present?: ReadonlyArray<{ name: string }> | null;
+  /**
+   * A recorded call's consent acknowledgement, as stored.
+   *
+   * `unknown` because it comes out of a jsonb column; `readAcknowledgement` is
+   * what makes it safe to read, and refuses to invent one. The whole reason it
+   * is stored is so somebody can answer "should this have been recorded?"
+   * months later — and the exported document is the copy that survives longest,
+   * so leaving it out of the file was leaving it out of the only place it would
+   * eventually be looked for.
+   */
+  consent?: unknown;
+  /**
+   * Whether a report row exists at all, regardless of what is in it.
+   *
+   * The report route writes a row with an empty summary down two paths: a model
+   * call that failed, and a recorded call with nothing to transcribe. That row
+   * is FINISHED. Keyed on the summary alone, the export called it "not ready"
+   * and answered 409 forever — withholding the transcript and the recording it
+   * was holding, on a page that was already showing both.
+   */
+  hasReport?: boolean;
   /** The room code, which is the only stable human-quotable reference a meeting has. */
   roomCode?: string | null;
   /**
@@ -109,14 +142,31 @@ export function meetingDurationMinutes(
 }
 
 /**
+ * Whether the model actually wrote a summary.
+ *
+ * Separate from `hasExportableReport` because the two questions have different
+ * answers and different consequences: a document is worth downloading without a
+ * summary, and an email announcing a summary is not worth sending without one.
+ */
+export function hasReportSummary(input: ReportExportInput): boolean {
+  return typeof input.summary === "string" && input.summary.trim().length > 0;
+}
+
+/**
  * Whether there is anything worth exporting yet.
  *
- * The summary is the gate the report page already uses to tell "still
- * generating" from "done", so export answers the same way rather than handing
- * somebody a file with headings and nothing under them.
+ * A report ROW, not a non-empty summary. That distinction is the whole of a
+ * defect the report page was fixed for and this file was not: the route writes a
+ * row with an empty summary when the analysis fails and when a call had nothing
+ * to transcribe, the page renders that row with the recording and the transcript
+ * behind it — and every Export item on the same screen answered 409 "Report not
+ * ready", permanently, for a report that had arrived.
+ *
+ * Callers that pass no `hasReport` keep the old behaviour, which is correct for
+ * them: a summary is proof a row exists.
  */
 export function hasExportableReport(input: ReportExportInput): boolean {
-  return typeof input.summary === "string" && input.summary.trim().length > 0;
+  return hasReportSummary(input) || input.hasReport === true;
 }
 
 /** A date as the document header states it. Invalid or missing dates are omitted. */
@@ -192,6 +242,35 @@ export function attendeeNames(raw: unknown): string[] {
   return names;
 }
 
+/**
+ * Everybody the record should name: who was asked, and who turned up.
+ *
+ * Unioned rather than one or the other. The invite list is empty for every
+ * instant meeting, so on its own it produced a filed record of a conversation
+ * that did not say who had it; attendance on its own would lose the person who
+ * was invited, could not make it, and is reading this to find out what happened.
+ *
+ * De-duplicated case-insensitively, because the two sources do not agree on
+ * capitalisation: one is typed into an invite box and the other comes from a
+ * directory row.
+ */
+export function participantNames(
+  input: Pick<ReportExportInput, "attendees" | "present">,
+): string[] {
+  const names = attendeeNames(input.attendees);
+  const seen = new Set(names.map((name) => name.toLowerCase()));
+
+  for (const person of input.present ?? []) {
+    if (!person || typeof person !== "object") continue;
+    const name = typeof person.name === "string" ? person.name.trim() : "";
+    if (!name || seen.has(name.toLowerCase())) continue;
+    seen.add(name.toLowerCase());
+    names.push(name);
+  }
+
+  return names;
+}
+
 /** A time of day, for the record block. Omitted when the meeting never started. */
 function headerTime(iso: string | null): string | null {
   if (!iso) return null;
@@ -251,7 +330,7 @@ export function buildReportMarkdown(
 
   const title = (input.title ?? "").trim() || UNTITLED_MEETING;
   const duration = meetingDurationMinutes(input.startedAt, input.endedAt);
-  const attendees = attendeeNames(input.attendees);
+  const attendees = participantNames(input);
 
   const lines: string[] = options.titleHeading === false ? [] : [`# ${title}`, ""];
 
@@ -273,6 +352,14 @@ export function buildReportMarkdown(
 
   if (record.length) lines.push(...section("Meeting Record", record.join("\n")));
 
+  // Immediately after the record and before the recording, because it is a fact
+  // about the recording's standing rather than about its contents. Only present
+  // when an acknowledgement was actually stored: a "Consent" heading over the
+  // words "not recorded" would be on every ordinary meeting's export, and would
+  // read as an accusation rather than as an absence.
+  const consent = consentFacts(input.consent);
+  if (consent) lines.push(...section("Consent", consent));
+
   // The recording, stated with its expiry. A document that mentions a video
   // without saying it is being deleted invites somebody to rely on a link that
   // will stop working.
@@ -288,7 +375,7 @@ export function buildReportMarkdown(
   // that produced them. The old order opened on Key Points, which buries the
   // two sections anybody rereads this document for under the one they do not.
   lines.push(
-    ...section("Summary", normalizeNoteText(input.summary)),
+    ...section("Summary", normalizeNoteText(input.summary) || missingSummaryNote(input)),
     ...section("Decisions", numbered(decisions)),
     ...section("Action Items", numbered(actionItems)),
     ...section("Discussion", bullets(keyPoints)),
@@ -346,6 +433,55 @@ export function reportExportFilename(
 
   const base = [slug, date].filter(Boolean).join("-");
   return `${base}${suffix}.${extension}`;
+}
+
+/**
+ * What to say where the summary would have been.
+ *
+ * Empty when there is no report row at all — those callers are not exporting
+ * anything and never reach this. When there IS a row and no summary, the file
+ * has to say why, in the same terms the report page says it: a model that
+ * failed on a real transcript is a different thing from a session where nobody
+ * said anything, and the first one can be retried.
+ *
+ * Stated rather than left blank because a document whose Summary section is
+ * simply missing reads as a document that was generated wrong, and somebody
+ * would go looking for the bug instead of regenerating the report.
+ */
+function missingSummaryNote(input: ReportExportInput): string {
+  if (input.hasReport !== true) return "";
+  return (input.fullTranscript ?? "").trim()
+    ? "*No summary was written: the analysis did not complete. Everything that was captured is kept on the meeting report, and regenerating it will try again.*"
+    : "*No summary was written: nothing was transcribed in this session.*";
+}
+
+/**
+ * The consent block for a recorded call.
+ *
+ * Null for anything with no acknowledgement stored, which is every ordinary
+ * meeting. The disclosure is reproduced verbatim — the exact words somebody was
+ * shown, which is the only version of it worth keeping, since the wording can
+ * change in a later release and a paraphrase would quietly rewrite the record.
+ */
+function consentFacts(raw: unknown): string | null {
+  const consent = readAcknowledgement(raw);
+  if (!consent) return null;
+
+  const facts = [
+    fact("Disclosure", consent.disclosure),
+    fact("Acknowledged", acknowledgedAt(consent.at)),
+    fact("Captured", consent.sources.length ? captureLabel(consent.sources) : null),
+  ].filter(Boolean) as string[];
+
+  return facts.length ? facts.join("\n") : null;
+}
+
+/** The moment consent was acknowledged, to the minute. */
+function acknowledgedAt(iso: string): string | null {
+  const date = headerDate(iso);
+  const time = headerTime(iso);
+  if (!date) return null;
+  return time ? `${date} at ${time}` : date;
 }
 
 /**

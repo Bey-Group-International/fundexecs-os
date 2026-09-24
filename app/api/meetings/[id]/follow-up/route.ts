@@ -13,11 +13,16 @@ import { sendEmail } from "@/lib/email";
 import { mailboxFor } from "@/lib/meetings/mailbox.server";
 import { mailboxProblemMessage } from "@/lib/meetings/mailbox";
 import { normalizeNoteText } from "@/lib/meetings/live-notes";
-import type { MeetingAttendeeInput } from "@/lib/meetings/attendees";
+import {
+  deliveryOutcome,
+  everyoneReached,
+  meetingRecipients,
+  unreachableNotice,
+} from "@/lib/meetings/recipients";
+import { loadPresentPeople } from "@/lib/meetings/recipients.server";
 import {
   followUpBody,
   followUpHtml,
-  followUpRecipients,
   followUpSubject,
 } from "@/lib/meetings/follow-up";
 
@@ -80,13 +85,30 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     );
   }
 
-  const attendees = (Array.isArray(meeting.attendees) ? meeting.attendees : []) as MeetingAttendeeInput[];
-  const recipients = followUpRecipients(attendees, auth.ctx.email);
+  // The invitation AND the room. This walked only `attendees`, the list somebody
+  // typed before the meeting — which is empty for every instant meeting, so the
+  // commonest kind of meeting in the product answered 409 "Nobody on this
+  // meeting has an email address to send to." while the attendance table held a
+  // row for every person who had been in it.
+  const audience = meetingRecipients({
+    invited: meeting.attendees,
+    present: await loadPresentPeople(supabase, id),
+    senderEmail: auth.ctx.email,
+  });
+  const recipients = audience.recipients;
   if (recipients.length === 0) {
     // Said plainly rather than answering "sent 0", which reads as a failure of
-    // the mailbox rather than as a meeting whose attendees have no addresses.
+    // the mailbox rather than as a meeting whose attendees have no addresses —
+    // and naming the people who were there, because the host is the only one who
+    // can reach them and cannot if nobody says who they are.
+    const notice = unreachableNotice(audience.unreachable);
     return NextResponse.json(
-      { error: "Nobody on this meeting has an email address to send to." },
+      {
+        error: notice
+          ? `There is nobody to send this to. ${notice}`
+          : "Nobody on this meeting has an email address to send to.",
+        unreachable: audience.unreachable,
+      },
       { status: 409 },
     );
   }
@@ -116,11 +138,20 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     ),
   );
 
-  const sent = results.filter((r) => r.status === "fulfilled" && (r.value as { ok: boolean }).ok).length;
+  const { sent, failed } = deliveryOutcome(recipients, results);
+  // Whether the meeting can honestly be called followed up: everybody who was
+  // in it heard from the host. Computed once, and used for both the badge and
+  // what the panel says, so the two cannot disagree.
+  const complete = everyoneReached(audience, sent);
   if (sent === 0) {
     console.error("[/api/meetings/:id/follow-up] every send failed", { meetingId: logId(id) });
     return NextResponse.json(
-      { error: "The follow-up could not be sent. Check the connected mailbox and try again.", sent, total: recipients.length },
+      {
+        error: "The follow-up could not be sent. Check the connected mailbox and try again.",
+        sent,
+        total: recipients.length,
+        failed,
+      },
       { status: 502 },
     );
   }
@@ -133,7 +164,12 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   // Only when everyone was reached. A partial send is still outstanding for
   // whoever did not get it, and quietly closing it would hide exactly the
   // meetings that still need a person.
-  if (sent === recipients.length) {
+  //
+  // "Everyone" has to mean everyone who was in the meeting, not every address
+  // the send happened to have. Bounded by the addresses, this closed out a
+  // meeting whose three guests were never written to at all — the bound has to
+  // be derived from what it bounds, and what it bounds is the room.
+  if (complete) {
     const { error: statusError } = await supabase
       .from("live_meetings")
       .update({ followup_status: "done" } as never)
@@ -152,7 +188,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   return NextResponse.json({
     sent,
     total: recipients.length,
+    // Who was in the room and has no address here.
+    unreachable: audience.unreachable,
+    failed,
     mailboxConnected: true,
-    followUpComplete: sent === recipients.length,
+    followUpComplete: complete,
   });
 }

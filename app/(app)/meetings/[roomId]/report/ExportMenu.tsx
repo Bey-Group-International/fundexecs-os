@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { deliveryMessage } from "@/lib/meetings/recipients";
 
 // The export control for a meeting report: five file formats, an opt-in for
 // the verbatim transcript, and a send to the meeting's attendees.
@@ -68,15 +69,22 @@ export function ExportMenu({ roomId }: { roomId: string }) {
         setEmail({ status: "error", message: body?.error ?? "Could not send the summary." });
         return;
       }
-      const { sent = 0, total = 0 } = body as { sent?: number; total?: number };
+      const {
+        sent = 0,
+        total = 0,
+        unreachable = [],
+        failed = [],
+      } = body as { sent?: number; total?: number; unreachable?: string[]; failed?: string[] };
       setEmail({
         status: sent === 0 ? "error" : "done",
         message:
           sent === 0
             ? "The summary reached nobody. Check the connected mailbox and try again."
-            : sent === total
-              ? `Sent to ${total} ${total === 1 ? "attendee" : "attendees"}.`
-              : `Sent to ${sent} of ${total} attendees.`,
+            // Who bounced and who was never written to, not just how many went.
+            // The old line counted only the addressable people, so a meeting
+            // where two joined as guests reported "Sent to 2 attendees" — which
+            // reads as everybody.
+            : deliveryMessage({ sent, total, unreachable, failed }),
       });
     } catch {
       setEmail({ status: "error", message: "Could not reach the server." });

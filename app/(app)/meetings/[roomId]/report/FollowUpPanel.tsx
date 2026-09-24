@@ -11,12 +11,13 @@
 // their name is not a draft — and a host who has to copy it out to fix one
 // sentence is back where they started.
 import { useState } from "react";
+import { deliveryMessage } from "@/lib/meetings/recipients";
 import { CopyButton } from "./CopyButton";
 
 type SendState =
   | { kind: "idle" }
   | { kind: "sending" }
-  | { kind: "sent"; sent: number; total: number }
+  | { kind: "sent"; sent: number; total: number; unreachable: string[]; failed: string[] }
   | { kind: "failed"; message: string };
 
 export function FollowUpPanel({
@@ -44,13 +45,21 @@ export function FollowUpPanel({
       const json = (await res.json().catch(() => ({}))) as {
         sent?: number;
         total?: number;
+        unreachable?: string[];
+        failed?: string[];
         error?: string;
       };
       if (!res.ok) {
         setState({ kind: "failed", message: json.error ?? "The follow-up could not be sent." });
         return;
       }
-      setState({ kind: "sent", sent: json.sent ?? 0, total: json.total ?? 0 });
+      setState({
+        kind: "sent",
+        sent: json.sent ?? 0,
+        total: json.total ?? 0,
+        unreachable: json.unreachable ?? [],
+        failed: json.failed ?? [],
+      });
     } catch {
       setState({ kind: "failed", message: "The follow-up could not be sent. Check your connection." });
     }
@@ -97,13 +106,19 @@ export function FollowUpPanel({
           >
             {sending ? "Sending…" : state.kind === "sent" ? "Send again" : "Send to attendees"}
           </button>
-          {/* What actually happened, in the terms the host cares about: how
-              many of the people in the room heard from them. */}
+          {/* What actually happened, in the terms the host cares about: which of
+              the people in the room heard from them, which addresses bounced,
+              and who has no address here at all. The last of those was missing —
+              the count was of addresses, so a meeting where two people joined as
+              guests reported itself fully sent. */}
           {state.kind === "sent" && (
             <p className="text-xs text-[var(--fg-muted)]">
-              {state.sent === state.total
-                ? `Sent to ${state.total} ${state.total === 1 ? "attendee" : "attendees"}.`
-                : `Sent to ${state.sent} of ${state.total}. The rest could not be delivered.`}
+              {deliveryMessage({
+                sent: state.sent,
+                total: state.total,
+                unreachable: state.unreachable,
+                failed: state.failed,
+              })}
             </p>
           )}
           {state.kind === "failed" && (
@@ -111,7 +126,8 @@ export function FollowUpPanel({
           )}
           {state.kind === "idle" && (
             <p className="text-xs text-[var(--fg-muted)]">
-              Goes to everyone on the meeting who has an email address, from your connected mailbox.
+              Goes to everyone who was invited or in the room and has an email address here, from
+              your connected mailbox. Not to you.
             </p>
           )}
         </div>

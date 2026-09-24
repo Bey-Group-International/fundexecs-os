@@ -32,7 +32,7 @@ describe("REPORT_SELECTS", () => {
   it("asks for every meeting field the export puts in the document", () => {
     for (const column of [
       "room_code", "title", "created_at", "started_at", "ended_at",
-      "organization_id", "host_id", "attendees",
+      "organization_id", "host_id", "attendees", "kind", "recording_consent",
     ]) {
       expect(REPORT_SELECTS.summary).toContain(column);
     }
@@ -100,14 +100,18 @@ describe("loadReportForExport attendance", () => {
     expect(await loadReportForExport(client, "abc-def", { userId: "u1" })).toBeNull();
   });
 
-  it("counts the host without asking the participants table", async () => {
+  it("counts the host without asking whether they attended", async () => {
     const { client, queries } = fakeClient({ meeting: MEETING });
     const loaded = await loadReportForExport(client, "abc-def", { userId: "host-1" });
     expect(loaded?.attended).toBe(true);
-    // The claim is about the participants table specifically, not about the
-    // total set of queries: an attendee's export also reads what the document
-    // carries, and that is not what this test is pinning.
-    expect(queries.map((q) => q.table)).not.toContain("live_meeting_participants");
+    // The claim is about the attendance CHECK, which is the participants query
+    // filtered by user_id. An attendee's export also reads that table for who
+    // else was in the room — a different question, asked for the document and
+    // for who its email goes to, and not what this test is pinning.
+    const attendanceChecks = queries.filter(
+      (q) => q.table === "live_meeting_participants" && q.filters.some(([c]) => c === "user_id"),
+    );
+    expect(attendanceChecks).toEqual([]);
   });
 
   it("counts a member with an attendance row", async () => {
@@ -149,5 +153,59 @@ describe("loadReportForExport attendance", () => {
     // No user to look up, and nothing an anonymous caller may read: neither the
     // participant lookup nor the attendee-only blocks are fetched.
     expect(queries.map((q) => q.table)).toEqual(["live_meetings"]);
+  });
+});
+
+// ── What the loader tells the export about the report row ──────────────────
+
+describe("loadReportForExport report presence", () => {
+  it("reports a row with an empty summary as a report that exists", async () => {
+    // The distinction the export gate now turns on: a row the model wrote
+    // nothing into is FINISHED, and calling it "not ready" made every Export
+    // item on a readable report page answer 409 forever.
+    const { client } = fakeClient({
+      meeting: {
+        ...MEETING,
+        live_meeting_reports: [{ summary: "", key_points: [], action_items: [], analysis: null }],
+      },
+    });
+    const loaded = await loadReportForExport(client, "abc-def", { userId: "host-1" });
+    expect(loaded?.hasReport).toBe(true);
+    expect(loaded?.summary).toBe("");
+  });
+
+  it("reports no row when the report has not been written", async () => {
+    const { client } = fakeClient({ meeting: { ...MEETING, live_meeting_reports: [] } });
+    const loaded = await loadReportForExport(client, "abc-def", { userId: "host-1" });
+    expect(loaded?.hasReport).toBe(false);
+  });
+
+  it("reads who was in the room for somebody who was there", async () => {
+    const { client, queries } = fakeClient({ meeting: MEETING });
+    await loadReportForExport(client, "abc-def", { userId: "host-1" });
+    // Not the attendance check — a read of the whole room, which is what both
+    // the document's participant list and the summary email are built from.
+    const roomReads = queries.filter(
+      (q) => q.table === "live_meeting_participants" && !q.filters.some(([c]) => c === "user_id"),
+    );
+    expect(roomReads).toHaveLength(1);
+  });
+
+  it("does not read the room for a co-member who was never in it", async () => {
+    const { client, queries } = fakeClient({ meeting: MEETING, participant: null });
+    const loaded = await loadReportForExport(client, "abc-def", { userId: "u2" });
+    expect(loaded?.present).toEqual([]);
+    const roomReads = queries.filter(
+      (q) => q.table === "live_meeting_participants" && !q.filters.some(([c]) => c === "user_id"),
+    );
+    expect(roomReads).toEqual([]);
+  });
+
+  it("carries the meeting's kind and stored consent through", async () => {
+    const consent = { at: "2026-09-01T10:00:00.000Z", disclosure: "Recording.", sources: ["microphone"] };
+    const { client } = fakeClient({ meeting: { ...MEETING, kind: "one_way", recording_consent: consent } });
+    const loaded = await loadReportForExport(client, "abc-def", { userId: "host-1" });
+    expect(loaded?.kind).toBe("one_way");
+    expect(loaded?.consent).toEqual(consent);
   });
 });

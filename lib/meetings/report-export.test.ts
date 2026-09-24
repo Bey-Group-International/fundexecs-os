@@ -2,7 +2,9 @@ import {
   UNTITLED_MEETING,
   buildReportMarkdown,
   hasExportableReport,
+  hasReportSummary,
   meetingDurationMinutes,
+  participantNames,
   rendererDrawsTitle,
   reportExportFilename,
   type ReportExportInput,
@@ -49,11 +51,62 @@ describe("hasExportableReport", () => {
     expect(hasExportableReport(base)).toBe(true);
   });
 
-  // The report page uses the same gate to show "generating", so export must
-  // not hand somebody headings with nothing underneath them.
+  // No report row and no summary: nothing has been written yet, and a caller
+  // that says nothing about the row keeps the old reading.
   it("is false while the report is still generating", () => {
     expect(hasExportableReport({ ...base, summary: null })).toBe(false);
     expect(hasExportableReport({ ...base, summary: "   " })).toBe(false);
+  });
+
+  // The defect. The route writes a report row with an empty summary when the
+  // analysis fails and when a call had nothing to transcribe, and that row is
+  // finished: the report page renders it with the recording and the transcript
+  // behind it, while every Export item on the same screen answered 409 "Report
+  // not ready" — permanently, for a report that had already arrived.
+  it("is true for a finished report that has no summary", () => {
+    expect(hasExportableReport({ ...base, summary: "", hasReport: true })).toBe(true);
+  });
+});
+
+describe("hasReportSummary", () => {
+  // Distinct question, different consequence: the download is worth having
+  // without a summary, an email announcing one is not.
+  it("is false for a finished report with nothing in it", () => {
+    expect(hasReportSummary({ ...base, summary: "", hasReport: true })).toBe(false);
+    expect(hasReportSummary(base)).toBe(true);
+  });
+});
+
+describe("participantNames", () => {
+  // The invite list is empty for every instant meeting, so a filed record of a
+  // forty-minute conversation named nobody who had it.
+  it("names the room when nothing was ever on the invitation", () => {
+    expect(
+      participantNames({ attendees: [], present: [{ name: "Sarah Chen" }, { name: "Dana" }] }),
+    ).toEqual(["Sarah Chen", "Dana"]);
+  });
+
+  it("keeps somebody who was invited and did not come", () => {
+    expect(
+      participantNames({ attendees: [{ name: "Priya Raman", email: "p@f.test" }], present: [] }),
+    ).toEqual(["Priya Raman"]);
+  });
+
+  it("names somebody once when they were both invited and there", () => {
+    // The two sources do not agree on capitalisation: one is typed into an
+    // invite box, the other comes from a directory row.
+    expect(
+      participantNames({
+        attendees: [{ name: "Sarah Chen" }],
+        present: [{ name: "sarah chen" }, { name: "Walk In" }],
+      }),
+    ).toEqual(["Sarah Chen", "Walk In"]);
+  });
+
+  it("survives stored data of any shape", () => {
+    expect(participantNames({ attendees: "nonsense", present: null })).toEqual([]);
+    expect(participantNames({})).toEqual([]);
+    expect(participantNames({ present: [null as never, { name: "  " }] })).toEqual([]);
   });
 });
 
@@ -322,5 +375,81 @@ describe("the recording block", () => {
     });
     expect(md).toContain("## Recording");
     expect(md).not.toMatch(/Length/);
+  });
+});
+
+describe("the participants fact", () => {
+  it("names who was in the room, not only who was asked", () => {
+    const doc = buildReportMarkdown({
+      ...base,
+      attendees: [],
+      present: [{ name: "Sarah Chen" }, { name: "Dana (guest)" }],
+    });
+    expect(doc).toContain("**Participants:** Sarah Chen, Dana (guest)");
+  });
+
+  it("leaves the fact out when nobody is known either way", () => {
+    expect(buildReportMarkdown({ ...base, attendees: [], present: [] })).not.toContain("Participants");
+  });
+});
+
+describe("a report with no summary", () => {
+  const unsummarised: ReportExportInput = { ...base, summary: "", hasReport: true };
+
+  // A missing Summary section reads as a document that was generated wrong, and
+  // sends somebody looking for a bug instead of regenerating the report.
+  it("says the analysis did not complete when there are words", () => {
+    const doc = buildReportMarkdown(unsummarised);
+    expect(doc).toContain("## Summary");
+    expect(doc).toContain("the analysis did not complete");
+    expect(doc).not.toContain("nothing was transcribed");
+  });
+
+  it("says nothing was transcribed only when nothing was", () => {
+    const doc = buildReportMarkdown({ ...unsummarised, fullTranscript: "" });
+    expect(doc).toContain("nothing was transcribed");
+  });
+
+  // The transcript is what is worth having when the summary is missing, and the
+  // export refusing to produce the file was refusing to hand it over.
+  it("still carries the transcript when it was asked for", () => {
+    const doc = buildReportMarkdown(unsummarised, { includeTranscript: true });
+    expect(doc).toContain("## Transcript");
+    expect(doc).toContain("Morning.");
+  });
+
+  it("leaves the section out entirely when no report row exists", () => {
+    // Nothing has been written yet. There is no honest sentence to print.
+    expect(buildReportMarkdown({ ...base, summary: "" })).not.toContain("## Summary");
+  });
+});
+
+describe("the consent block", () => {
+  const consent = {
+    at: "2026-09-07T14:00:00.000Z",
+    disclosure: "I am recording this call. Is that all right?",
+    sources: ["microphone", "computer"],
+  };
+
+  // Stored so somebody can answer "should this have been recorded?" months
+  // later. The exported file is the copy that survives longest, so leaving it
+  // out was leaving it out of the only place it would eventually be looked for.
+  it("reproduces the disclosure that was actually shown", () => {
+    const doc = buildReportMarkdown({ ...base, consent });
+    expect(doc).toContain("## Consent");
+    expect(doc).toContain("I am recording this call. Is that all right?");
+    expect(doc).toContain("Microphone and computer audio");
+  });
+
+  it("is absent for an ordinary meeting", () => {
+    expect(buildReportMarkdown(base)).not.toContain("## Consent");
+    expect(buildReportMarkdown({ ...base, consent: null })).not.toContain("## Consent");
+  });
+
+  it("refuses to imply consent from a row that does not carry one", () => {
+    // readAcknowledgement never invents one, and a "Consent" heading over a
+    // half-written row would claim something the record does not say.
+    expect(buildReportMarkdown({ ...base, consent: { sources: ["microphone"] } }))
+      .not.toContain("## Consent");
   });
 });

@@ -13,6 +13,8 @@
 
 import type { createServerClient } from "@/lib/supabase/server";
 import type { ReportExportInput, ReportExportOptions } from "@/lib/meetings/report-export";
+import type { PresentPerson } from "@/lib/meetings/recipients";
+import { loadPresentPeople } from "@/lib/meetings/recipients.server";
 
 type SupabaseClient = Awaited<ReturnType<typeof createServerClient>>;
 
@@ -26,9 +28,9 @@ type SupabaseClient = Awaited<ReturnType<typeof createServerClient>>;
 // meant fetching all of that and discarding it on almost every call.
 //
 // The only difference between these two is that column, which a test pins.
-const SELECT_SUMMARY = "id, room_code, title, created_at, started_at, ended_at, organization_id, host_id, attendees, live_meeting_reports(summary, key_points, action_items, analysis, created_at)";
+const SELECT_SUMMARY = "id, room_code, title, created_at, started_at, ended_at, organization_id, host_id, attendees, kind, recording_consent, live_meeting_reports(summary, key_points, action_items, analysis, created_at)";
 
-const SELECT_WITH_TRANSCRIPT = "id, room_code, title, created_at, started_at, ended_at, organization_id, host_id, attendees, live_meeting_reports(summary, key_points, action_items, analysis, created_at, full_transcript)";
+const SELECT_WITH_TRANSCRIPT = "id, room_code, title, created_at, started_at, ended_at, organization_id, host_id, attendees, kind, recording_consent, live_meeting_reports(summary, key_points, action_items, analysis, created_at, full_transcript)";
 
 /** Exposed so a test can hold the two in the same place they are written. */
 export const REPORT_SELECTS = {
@@ -54,6 +56,26 @@ export interface LoadedReport extends ReportExportInput {
    * keep retrying something they will never be allowed to download.
    */
   attended: boolean;
+  /**
+   * Everybody who was in the room, with an address where there is one.
+   *
+   * The reason both email paths spent their lives addressing the invite list:
+   * this is the only place the product knows who was actually in an instant
+   * meeting, and neither of them was reading it. Empty for a caller who was not
+   * there, for the same reason the recording and the chat are null.
+   */
+  present: PresentPerson[];
+  /**
+   * Whether a report row exists at all.
+   *
+   * Distinct from having a summary. The report route writes a row with an empty
+   * summary when the model fails and when a one-way call had nothing to
+   * transcribe, and that row is FINISHED. The report page was taught to render
+   * it rather than spin forever; this is what lets the export agree.
+   */
+  hasReport: boolean;
+  /** 'meeting' or 'one_way'. What kind of session the document describes. */
+  kind: string | null;
 }
 
 /**
@@ -110,6 +132,23 @@ export async function loadReportForExport(
     | { summary?: unknown; key_points?: unknown; action_items?: unknown; analysis?: unknown; full_transcript?: unknown }
     | undefined;
 
+  // All three gated on attendance. RLS would refuse them anyway, but a caller
+  // who is about to be told this report is not theirs has no business costing
+  // the queries, and reading what somebody may not have is a habit worth not
+  // forming.
+  //
+  // Together rather than one after another. These were independent reads written
+  // as awaited properties of an object literal, which evaluates them in order:
+  // every export paid for serial round trips to assemble blocks that have
+  // nothing to do with each other.
+  const blocks = attended
+    ? await Promise.all([
+        loadRecordingForExport(supabase, meeting.id as string, options.origin),
+        loadChatForExport(supabase, meeting.id as string),
+        loadPresentPeople(supabase, meeting.id as string),
+      ]).then(([recording, chat, present]) => ({ recording, chat, present }))
+    : { recording: null, chat: null, present: [] as PresentPerson[] };
+
   return {
     meetingId: meeting.id as string,
     roomCode: meeting.room_code as string,
@@ -126,12 +165,10 @@ export async function loadReportForExport(
     actionItems: report?.action_items ?? null,
     analysis: (report?.analysis as Record<string, unknown> | null) ?? null,
     fullTranscript: (report?.full_transcript as string | null) ?? null,
-    // Both are gated on attendance. RLS would refuse them anyway, but a caller
-    // who is about to be told this report is not theirs has no business
-    // costing two more queries — and reading what somebody may not have is a
-    // habit worth not forming.
-    recording: attended ? await loadRecordingForExport(supabase, meeting.id as string, options.origin) : null,
-    chat: attended ? await loadChatForExport(supabase, meeting.id as string) : null,
+    consent: (meeting as { recording_consent?: unknown }).recording_consent ?? null,
+    kind: (meeting as { kind?: string | null }).kind ?? null,
+    hasReport: Boolean(report),
+    ...blocks,
   };
 }
 

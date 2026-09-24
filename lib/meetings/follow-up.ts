@@ -10,42 +10,16 @@
 //
 // Pure. The mailbox and the send live in the route.
 import { escapeHtml } from "@/lib/email";
-import type { MeetingAttendeeInput } from "@/lib/meetings/attendees";
 
 /** Longest body this will send. A follow-up is an email, not a document. */
 export const MAX_FOLLOW_UP_CHARS = 20_000;
 
-export interface FollowUpRecipient {
-  name: string;
-  email: string;
-}
-
-/**
- * Who the follow-up goes to.
- *
- * Everyone on the meeting who has an address, deduplicated, with the sender
- * left out — the host wrote it, and a copy of your own follow-up in your inbox
- * is noise. Anyone entered by name alone was never reachable and is not
- * silently counted as sent to.
- */
-export function followUpRecipients(
-  attendees: readonly MeetingAttendeeInput[] | null | undefined,
-  senderEmail: string | null | undefined,
-): FollowUpRecipient[] {
-  const sender = (senderEmail ?? "").trim().toLowerCase();
-  const seen = new Set<string>();
-  const out: FollowUpRecipient[] = [];
-
-  for (const attendee of attendees ?? []) {
-    if (!attendee || typeof attendee !== "object") continue;
-    const email = (attendee.email ?? "").trim().toLowerCase();
-    if (!email || email === sender || seen.has(email)) continue;
-    seen.add(email);
-    out.push({ name: (attendee.name ?? "").trim() || email, email });
-  }
-
-  return out;
-}
+// Who it goes to lives in lib/meetings/recipients.ts. It used to live here, and
+// walked the invite list alone: `attendees` is empty for every instant meeting,
+// so the commonest kind of meeting in the product could not send its own
+// follow-up to the people who had just been in it. Answering that needs the
+// attendance table as well as the invitation, and the report's "Email summary"
+// needed the same answer, so it is one shared rule rather than two that drift.
 
 /** The subject line. The meeting's own title, so the thread is findable. */
 export function followUpSubject(title: string | null | undefined): string {
