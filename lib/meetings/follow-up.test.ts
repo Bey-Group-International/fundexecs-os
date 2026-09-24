@@ -2,53 +2,11 @@ import {
   MAX_FOLLOW_UP_CHARS,
   followUpBody,
   followUpHtml,
-  followUpRecipients,
   followUpSubject,
 } from "@/lib/meetings/follow-up";
 
-describe("followUpRecipients", () => {
-  it("takes everyone on the meeting who has an address", () => {
-    expect(
-      followUpRecipients(
-        [
-          { name: "Sarah Chen", email: "sarah@fund.test" },
-          { name: "Mike", email: "mike@fund.test" },
-        ],
-        "host@fund.test",
-      ),
-    ).toEqual([
-      { name: "Sarah Chen", email: "sarah@fund.test" },
-      { name: "Mike", email: "mike@fund.test" },
-    ]);
-  });
-
-  it("leaves the sender out of their own follow-up", () => {
-    expect(followUpRecipients([{ name: "Host", email: "Host@Fund.test" }], "host@fund.test")).toEqual([]);
-  });
-
-  it("drops an attendee nobody could email", () => {
-    // Entered by name alone. Counting them as sent to would be a lie.
-    expect(followUpRecipients([{ name: "Priya" }], "host@fund.test")).toEqual([]);
-  });
-
-  it("sends once to somebody listed twice", () => {
-    expect(
-      followUpRecipients(
-        [{ name: "Sarah", email: "sarah@fund.test" }, { name: "S. Chen", email: "SARAH@fund.test" }],
-        null,
-      ),
-    ).toHaveLength(1);
-  });
-
-  it("falls back to the address when an attendee has no name", () => {
-    expect(followUpRecipients([{ name: "", email: "sarah@fund.test" }], null)[0].name).toBe("sarah@fund.test");
-  });
-
-  it("survives a malformed attendee list", () => {
-    expect(followUpRecipients([null as never, undefined as never], null)).toEqual([]);
-    expect(followUpRecipients(null, null)).toEqual([]);
-  });
-});
+// Who the follow-up goes to moved to lib/meetings/recipients.ts, where it is
+// tested against the attendance table as well as the invite list.
 
 describe("followUpSubject", () => {
   it("uses the meeting's own title so the thread is findable", () => {

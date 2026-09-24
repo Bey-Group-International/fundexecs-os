@@ -3619,6 +3619,76 @@ Deployed, monitoring               →  live, observability active
              |  <paths>` is the check that actually reverts. A verification step
              |  that silently does nothing is worse than none, because it
              |  produces a confident green.
+             |
+             |  MEETINGS VII — THE EXPORT AND THE FOLLOW-UP EMAIL
+             |  BOTH EMAIL PATHS WROTE TO THE GUEST LIST AND NEVER TO THE ROOM.
+             |  "Email to attendees" on the report and "Send to attendees" on
+             |  the follow-up both addressed live_meetings.attendees — the list
+             |  somebody types BEFORE a meeting. createMeeting writes
+             |  `attendees: []` for an instant meeting and nothing ever fills it
+             |  in, so the product's commonest kind of meeting answered 400
+             |  "This meeting has no attendees with email addresses." and 409
+             |  "Nobody on this meeting has an email address to send to." —
+             |  while live_meeting_participants held a row for every person who
+             |  had been in the room. The diagnostic that found it: FOLLOW WHAT
+             |  A FEATURE READS, AND ASK WHETHER IT IS THE SAME THING THE
+             |  FEATURE IS ABOUT. Attendance had been used as a boolean
+             |  everywhere ("was this person here?") and the identities thrown
+             |  away — loadReportForExport queried that table for a bool and
+             |  discarded the rows — so the only place in the schema with an
+             |  address on it was the invitation, and the invitation is not the
+             |  meeting. Recipients are the union now, sender excluded.
+             |  A DROPPED PERSON IS NOT A DELIVERED ONE. A guest who joins by
+             |  link has a display name and no address anywhere here. Both
+             |  routes dropped them and answered {sent, total} with total
+             |  counting only the ADDRESSABLE people — so a meeting of four
+             |  where two joined as guests reported "Sent to 2 attendees", a
+             |  complete-sounding answer to a send that reached half the room.
+             |  They come back named now, because the host is the only person
+             |  who can reach them and cannot if nobody says who they are. The
+             |  same went for bounces: "Sent to 1 of 9" never said WHICH eight.
+             |  THE BOUND AGAIN, in the same shape as yesterday's. followup_status
+             |  went to "done" when every ADDRESS succeeded — above a comment
+             |  that said closing it early "would hide exactly the meetings that
+             |  still need a person". It did: a meeting whose three guests were
+             |  never written to at all was marked followed up. A bound must be
+             |  derived from what it bounds, and what it bounds is the room.
+             |  A FIX IS NOT DONE UNTIL EVERY READER OF THE DATA AGREES. #1125
+             |  taught the report page that a report row with an empty summary is
+             |  FINISHED. The export was not taught: hasExportableReport was
+             |  still `summary.trim().length > 0`, so on a page rendering a
+             |  recording and a full transcript, all five Export items answered
+             |  409 "Report not ready" — permanently, withholding the very
+             |  transcript they were holding. Same defect, second reader, one day
+             |  later. The email keeps its own stronger gate (a message
+             |  announcing a summary needs one) but now tells "not yet" apart
+             |  from "never", because "try again in a minute" is the wrong advice
+             |  for a report that needs regenerating.
+             |  Also: the report email built a To: name out of the address
+             |  ("j.smith") while the follow-up, sending the same meeting to the
+             |  same people, used the real one. And the exported document, whose
+             |  own comment says an export that names nobody "was a record of a
+             |  conversation that did not say who had it", still named nobody for
+             |  an instant meeting — and omitted a recorded call's consent
+             |  acknowledgement, which is stored precisely so somebody can ask
+             |  "should this have been recorded?" months later, and the export is
+             |  the copy that survives longest.
+             |  REVIEW ROUND, on my own diff: routing the stored jsonb through
+             |  normalizeAttendees looked like tightening and was a regression —
+             |  that function answers "is this REQUEST BODY acceptable?" and
+             |  answers it by rejecting the WHOLE array, so one row written by an
+             |  older schema would have silently cost every other invited person
+             |  their copy. Validation written for a write path is not validation
+             |  for a read path. Two unused exports (accountedFor, NO_RECIPIENTS)
+             |  cut in the same pass: a number in a response that nothing reads
+             |  is one more thing that can drift away from the truth.
+             |  Method note: proving the tests bite with `git checkout HEAD --
+             |  <file>` DESTROYED the uncommitted work in that file and I had to
+             |  re-apply it from memory. Copy first, or check the bite before the
+             |  work is worth losing.
+             |  Confidence: typecheck/eslint clean, build passes, Jest 7052 →
+             |  7054 across 507 suites; 10 of the new report-export cases and 6
+             |  of the new loader cases fail against HEAD.
 ```
 
 ---

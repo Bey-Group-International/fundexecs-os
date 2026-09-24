@@ -5,13 +5,16 @@ import { mailboxFor } from "@/lib/meetings/mailbox.server";
 import { mailboxProblemMessage } from "@/lib/meetings/mailbox";
 import { sendEmail } from "@/lib/email";
 import { renderMarkdownToHtml } from "@/lib/artifacts/export";
-import { normalizeAttendees } from "@/lib/meetings/attendees";
-import { guestEmails } from "@/lib/meetings/invite";
+import {
+  deliveryOutcome,
+  meetingRecipients,
+  unreachableNotice,
+} from "@/lib/meetings/recipients";
 import { SITE_URL } from "@/lib/site";
 import {
   UNTITLED_MEETING,
   buildReportMarkdown,
-  hasExportableReport,
+  hasReportSummary,
 } from "@/lib/meetings/report-export";
 import { loadReportForExport } from "@/lib/meetings/report-export.server";
 
@@ -56,14 +59,42 @@ export async function POST(
       { status: 403 },
     );
   }
-  if (!hasExportableReport(loaded)) {
-    return NextResponse.json({ error: "Report not ready" }, { status: 409 });
+  // A summary, specifically — not merely a finished report. The download is
+  // worth having without one; a message announcing somebody's meeting summary is
+  // not. And the two failures are told apart, because "come back in a minute" is
+  // the wrong advice for a report whose analysis has already failed: that one
+  // needs regenerating and would otherwise never arrive however long they waited.
+  if (!hasReportSummary(loaded)) {
+    return NextResponse.json(
+      {
+        error: loaded.hasReport
+          ? "There is no summary to send: the analysis did not complete. Regenerate the report from the meeting log and try again."
+          : "Report not ready",
+      },
+      { status: 409 },
+    );
   }
 
-  const recipients = guestEmails(normalizeAttendees(loaded.attendees));
+  // The invitation AND the room. Addressing only the invitation meant an instant
+  // meeting — created with an empty attendee list, and the commonest kind there
+  // is — could never email its own summary to the people who were in it.
+  const audience = meetingRecipients({
+    invited: loaded.attendees,
+    present: loaded.present,
+    senderEmail: auth.ctx.email,
+  });
+  const recipients = audience.recipients;
   if (recipients.length === 0) {
+    // Which of the two things has happened, because the answer to each is
+    // different: invite somebody, or send it yourself to the people you know.
+    const notice = unreachableNotice(audience.unreachable);
     return NextResponse.json(
-      { error: "This meeting has no attendees with email addresses." },
+      {
+        error: notice
+          ? `There is nobody to send this to. ${notice}`
+          : "This meeting has no attendees with email addresses.",
+        unreachable: audience.unreachable,
+      },
       { status: 400 },
     );
   }
@@ -85,22 +116,32 @@ export async function POST(
   const html = renderMarkdownToHtml(markdown, title);
 
   // Settled, not raced: one bad address must not withhold the summary from
-  // everybody else on the invitation.
+  // everybody else who was invited or in the room.
   const results = await Promise.allSettled(
-    recipients.map((email) =>
+    recipients.map((recipient) =>
       sendEmail({
         orgId: auth.ctx.orgId,
         credentials: { gmailAccessToken: mailbox.token },
-        to: { name: email.split("@")[0] ?? email, email },
+        // The person's own name. This path built one out of the address —
+        // "Summary: Q3 review" arriving addressed to "j.smith" — while the
+        // follow-up, sending the same meeting to the same people, used the real
+        // one. Two paths through one meeting's data disagreed about what to call
+        // the people in it.
+        to: { name: recipient.name, email: recipient.email },
         subject: `Summary: ${title}`,
         htmlBody: html,
       }),
     ),
   );
 
-  const sent = results.filter(
-    (r) => r.status === "fulfilled" && (r.value as { ok: boolean }).ok,
-  ).length;
+  const { sent, failed } = deliveryOutcome(recipients, results);
 
-  return NextResponse.json({ sent, total: recipients.length });
+  return NextResponse.json({
+    sent,
+    total: recipients.length,
+    // Who was in the room and has no address here, so the caller can stop
+    // reporting a send of two as complete in a meeting of four.
+    unreachable: audience.unreachable,
+    failed,
+  });
 }
