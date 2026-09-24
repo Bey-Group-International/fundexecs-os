@@ -6,6 +6,7 @@
 // is what actually holds the gate.
 import { getSessionContext, type SessionContext } from "@/lib/auth";
 import { getWallet } from "@/lib/wallet";
+import { createServerClient } from "@/lib/supabase/server";
 import { isPlatformAdmin } from "@/lib/platform-admin";
 import {
   evaluateFeatureAccess,
@@ -17,15 +18,28 @@ import {
 /** The caller's feature access, given an already-resolved session. */
 export async function featureAccessFor(ctx: SessionContext): Promise<FeatureAccess> {
   const admin = isPlatformAdmin(ctx);
-  // An admin never needs the wallet read.
-  const wallet = !admin && ctx.orgId ? await getWallet(ctx.orgId) : null;
-  return evaluateFeatureAccess({ isPlatformAdmin: admin, plan: wallet?.plan ?? null });
+  // An admin never needs the wallet or org read.
+  if (admin || !ctx.orgId) {
+    return evaluateFeatureAccess({ isPlatformAdmin: admin, plan: null, orgCreatedAt: null });
+  }
+  const [wallet, orgCreatedAt] = await Promise.all([getWallet(ctx.orgId), orgCreatedAtFor(ctx.orgId)]);
+  return evaluateFeatureAccess({ isPlatformAdmin: false, plan: wallet?.plan ?? null, orgCreatedAt });
+}
+
+async function orgCreatedAtFor(orgId: string): Promise<string | null> {
+  const supabase = await createServerClient();
+  const { data } = await supabase
+    .from("organizations")
+    .select("created_at")
+    .eq("id", orgId)
+    .maybeSingle();
+  return (data as { created_at?: string | null } | null)?.created_at ?? null;
 }
 
 /** The current session's feature access; locked when there is no session. */
 export async function currentFeatureAccess(): Promise<FeatureAccess> {
   const ctx = await getSessionContext();
-  if (!ctx) return { unlocked: false, viaAdmin: false, plan: null };
+  if (!ctx) return { unlocked: false, viaAdmin: false, grandfathered: false, plan: null };
   return featureAccessFor(ctx);
 }
 
