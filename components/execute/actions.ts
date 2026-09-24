@@ -7,6 +7,7 @@ import { getSessionContext, requireOrgContext } from "@/lib/auth";
 import { handlePrompt } from "@/lib/engine";
 import { planRun, type CommitmentLike, type RunKind } from "@/lib/capital-ops";
 import type { AssetType, Json } from "@/lib/supabase/database.types";
+import { requireFeatureAccess } from "@/lib/feature-access.server";
 
 export interface CapitalOpResult {
   ok: boolean;
@@ -34,6 +35,8 @@ function assetTypeFor(assetClass: string | null): AssetType {
 // and the stage update used to leave a deal marked "owned" with no matching
 // holding, with nothing checking the Supabase client's error at either step.
 export async function promoteDealToAsset(formData: FormData): Promise<CapitalOpResult> {
+  const gate = await requireFeatureAccess("execute");
+  if (!gate.ok) return { ok: false, error: gate.error };
   const auth = await requireOrgContext();
   if (!auth.ok) return { ok: false, error: "Not authorized." };
   const dealId = String(formData.get("deal_id") ?? "");
@@ -87,6 +90,8 @@ const EARN_TASKS: Record<string, string> = {
 };
 
 export async function runWithEarn(formData: FormData): Promise<void> {
+  const gate = await requireFeatureAccess("execute");
+  if (!gate.ok) return;
   const ctx = await getSessionContext();
   if (!ctx?.orgId) return;
   const kind = String(formData.get("kind") ?? "");
@@ -110,6 +115,8 @@ export async function runWithEarn(formData: FormData): Promise<void> {
 // stakeholder's capital account, served by the public /portal/[token] route via
 // the service role. Native — no external dependency.
 export async function createInvestorPortalShare(formData: FormData): Promise<void> {
+  const gate = await requireFeatureAccess("execute");
+  if (!gate.ok) return;
   const ctx = await getSessionContext();
   if (!ctx?.orgId) return;
   const investorId = String(formData.get("investor_id") ?? "");
@@ -132,6 +139,8 @@ export async function createInvestorPortalShare(formData: FormData): Promise<voi
 }
 
 export async function revokeInvestorPortalShare(formData: FormData): Promise<void> {
+  const gate = await requireFeatureAccess("execute");
+  if (!gate.ok) return;
   const ctx = await getSessionContext();
   if (!ctx?.orgId) return;
   const id = String(formData.get("id") ?? "");
@@ -153,6 +162,8 @@ export async function revokeInvestorPortalShare(formData: FormData): Promise<voi
 // and the roll-up used to leave the audit trail and the asset's headline mark
 // out of sync, with nothing checking the Supabase client's error at either step.
 export async function recordValuationMark(formData: FormData): Promise<CapitalOpResult> {
+  const gate = await requireFeatureAccess("execute");
+  if (!gate.ok) return { ok: false, error: gate.error };
   const auth = await requireOrgContext();
   if (!auth.ok) return { ok: false, error: "Not authorized." };
   const assetId = String(formData.get("asset_id") ?? "");
@@ -196,6 +207,8 @@ export async function recordValuationMark(formData: FormData): Promise<CapitalOp
 // gate layer — never delegable — so this only runs on an explicit operator
 // confirm (the UI previews the allocation first).
 export async function recordCapitalRun(formData: FormData): Promise<CapitalOpResult> {
+  const gate = await requireFeatureAccess("execute");
+  if (!gate.ok) return { ok: false, error: gate.error };
   const auth = await requireOrgContext();
   if (!auth.ok) return { ok: false, error: "Not authorized." };
   const fundId = String(formData.get("fund_id") ?? "");
@@ -267,6 +280,8 @@ export async function recordCapitalRun(formData: FormData): Promise<CapitalOpRes
 // The negotiated price is informational here: it changes hands between LPs,
 // not on the fund's books.
 export async function recordSecondaryTransfer(formData: FormData): Promise<CapitalOpResult> {
+  const gate = await requireFeatureAccess("execute");
+  if (!gate.ok) return { ok: false, error: gate.error };
   const auth = await requireOrgContext();
   if (!auth.ok) return { ok: false, error: "Not authorized." };
   const sellerCommitmentId = String(formData.get("seller_commitment_id") ?? "");

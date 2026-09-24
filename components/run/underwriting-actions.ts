@@ -11,6 +11,7 @@ import { getSessionContext } from "@/lib/auth";
 import { recordConvictionSnapshot } from "@/lib/run-war-room";
 import { computeReturnsFromInputs } from "@/lib/underwriting-calc";
 import type { Underwriting, Json } from "@/lib/supabase/database.types";
+import { requireFeatureAccess } from "@/lib/feature-access.server";
 
 function num(formData: FormData, name: string): number | null {
   const v = String(formData.get(name) ?? "").trim();
@@ -56,6 +57,8 @@ export interface UnderwritingActionResult {
  * Merges into the existing model JSON so saved assumptions survive.
  */
 export async function setUnderwritingProbability(formData: FormData): Promise<UnderwritingActionResult> {
+  const gate = await requireFeatureAccess("run");
+  if (!gate.ok) return { ok: false, error: gate.error };
   const ctx = await getSessionContext();
   if (!ctx?.orgId) return { ok: false, error: "Not authorized." };
   const id = String(formData.get("id") ?? "");
@@ -93,6 +96,8 @@ export async function setUnderwritingProbability(formData: FormData): Promise<Un
  * the inputs. IRR is stored as a fraction (consistent with `toPercent`).
  */
 export async function saveUnderwritingInputs(formData: FormData): Promise<UnderwritingActionResult> {
+  const gate = await requireFeatureAccess("run");
+  if (!gate.ok) return { ok: false, error: gate.error };
   const ctx = await getSessionContext();
   if (!ctx?.orgId) return { ok: false, error: "Not authorized." };
   const id = String(formData.get("id") ?? "");
@@ -145,6 +150,8 @@ export async function saveUnderwritingInputs(formData: FormData): Promise<Underw
  * first-class column, not part of `model`.
  */
 export async function setUnderwritingEquity(formData: FormData): Promise<UnderwritingActionResult> {
+  const gate = await requireFeatureAccess("run");
+  if (!gate.ok) return { ok: false, error: gate.error };
   const ctx = await getSessionContext();
   if (!ctx?.orgId) return { ok: false, error: "Not authorized." };
   const id = String(formData.get("id") ?? "");

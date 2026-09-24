@@ -8,6 +8,11 @@
 // reaches the RPC, (2) a well-formed request calls the RPC with the correct
 // shape, (3) an RPC error surfaces as {ok:false} rather than being swallowed.
 
+const requireFeatureAccess = jest.fn();
+jest.mock("@/lib/feature-access.server", () => ({
+  requireFeatureAccess: (...a: unknown[]) => requireFeatureAccess(...a),
+}));
+
 jest.mock("next/cache", () => ({ revalidatePath: jest.fn() }));
 
 const requireOrgContext = jest.fn();
@@ -49,6 +54,7 @@ function makeFromStub(rows: Record<string, unknown>) {
 
 beforeEach(() => {
   jest.clearAllMocks();
+  requireFeatureAccess.mockResolvedValue({ ok: true });
   requireOrgContext.mockResolvedValue(AUTH_OK);
 });
 
@@ -181,5 +187,14 @@ describe("recordSecondaryTransfer", () => {
 
     expect(result.ok).toBe(false);
     expect(result.error).toContain("different investors");
+  });
+});
+
+describe("recordCapitalRun — plan gate", () => {
+  it("refuses with the lock message before touching the database when the org has no paid plan", async () => {
+    requireFeatureAccess.mockResolvedValue({ ok: false, status: 402, error: "locked" });
+    await expect(recordCapitalRun(new FormData())).resolves.toEqual({ ok: false, error: "locked" });
+    expect(requireFeatureAccess).toHaveBeenCalledWith("execute");
+    expect(from).not.toHaveBeenCalled();
   });
 });

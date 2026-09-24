@@ -7,6 +7,7 @@ import { planExecuteSearch } from "@/lib/execute-search";
 import { executeStep } from "@/lib/claude";
 import { AGENT_BY_KEY } from "@/lib/agents";
 import type { AgentKey, Json } from "@/lib/supabase/database.types";
+import { requireFeatureAccess } from "@/lib/feature-access.server";
 
 // A planned step enriched with display metadata so the client never needs the
 // (Anthropic-importing) engine module.
@@ -31,6 +32,8 @@ export interface StartExecuteResult {
 // stage one (pending) task per agent step. The client then runs the steps, which
 // stream the live timeline and return synthesized deliverables.
 export async function startExecuteSearch(prompt: string): Promise<StartExecuteResult> {
+  const gate = await requireFeatureAccess("execute");
+  if (!gate.ok) return { ok: false, error: gate.error };
   const auth = await requireOrgContext();
   if (!auth.ok) return { ok: false, error: "Not authorized." };
   const clean = String(prompt ?? "").trim().slice(0, 500);
@@ -129,6 +132,8 @@ export async function runExecuteStep(args: {
   title: string;
   instruction: string;
 }): Promise<RunStepResult> {
+  const gate = await requireFeatureAccess("execute");
+  if (!gate.ok) return { ok: false, error: gate.error };
   const auth = await requireOrgContext();
   if (!auth.ok) return { ok: false, error: "Not authorized." };
 
@@ -171,6 +176,8 @@ export async function runExecuteStep(args: {
 
 // Mark the workflow complete once the client has run every step.
 export async function completeExecuteSearch(workflowId: string): Promise<{ ok: boolean }> {
+  const gate = await requireFeatureAccess("execute");
+  if (!gate.ok) return { ok: false };
   const auth = await requireOrgContext();
   if (!auth.ok) return { ok: false };
   const supabase = await createServerClient();

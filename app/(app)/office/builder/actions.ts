@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { getSessionContext } from "@/lib/auth";
 import { createServerClient } from "@/lib/supabase/server";
 import { normalizeAvatarConfig, type AvatarConfig } from "@/lib/office/avatarConfig";
+import { requireFeatureAccess } from "@/lib/feature-access.server";
 
 // Persist the member's Virtual Office character onto their own
 // `office_member_prefs` row (avatar jsonb column, reserved for exactly this by
@@ -14,6 +15,8 @@ import { normalizeAvatarConfig, type AvatarConfig } from "@/lib/office/avatarCon
 export async function saveAvatarConfig(
   input: AvatarConfig,
 ): Promise<{ error?: string; config?: AvatarConfig }> {
+  const gate = await requireFeatureAccess("office");
+  if (!gate.ok) return { error: gate.error };
   const ctx = await getSessionContext();
   if (!ctx) return { error: "Not authenticated" };
   if (!ctx.orgId) return { error: "No active organization" };

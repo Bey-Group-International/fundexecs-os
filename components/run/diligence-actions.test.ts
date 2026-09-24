@@ -5,6 +5,11 @@
 // DiligenceDealGroup.tsx) use the shared ActionForm wrapper to surface a
 // failure inline instead of silently doing nothing.
 
+const requireFeatureAccess = jest.fn();
+jest.mock("@/lib/feature-access.server", () => ({
+  requireFeatureAccess: (...a: unknown[]) => requireFeatureAccess(...a),
+}));
+
 jest.mock("next/cache", () => ({ revalidatePath: jest.fn() }));
 
 const getSessionContext = jest.fn();
@@ -56,6 +61,7 @@ function makeFromStub(result: { data?: unknown; error?: { message: string } | nu
 
 beforeEach(() => {
   jest.clearAllMocks();
+  requireFeatureAccess.mockResolvedValue({ ok: true });
   getSessionContext.mockResolvedValue({ orgId: "org-1", userId: "user-1" });
   recordConvictionSnapshot.mockResolvedValue(undefined);
   from.mockImplementation(makeFromStub());
@@ -139,5 +145,14 @@ describe("bulkUpdateDiligence", () => {
     const result = await bulkUpdateDiligence(formData({ ids: ["item-1", "item-2", "item-3"], status: "cleared" }));
     expect(result).toEqual({ ok: true });
     expect(recordConvictionSnapshot).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("updateDiligenceFinding — plan gate", () => {
+  it("refuses with the lock message before touching the database when the org has no paid plan", async () => {
+    requireFeatureAccess.mockResolvedValue({ ok: false, status: 402, error: "locked" });
+    await expect(updateDiligenceFinding(new FormData())).resolves.toEqual({ ok: false, error: "locked" });
+    expect(requireFeatureAccess).toHaveBeenCalledWith("run");
+    expect(from).not.toHaveBeenCalled();
   });
 });

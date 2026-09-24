@@ -71,7 +71,11 @@ export async function signIn(formData: FormData) {
   // A principal who has not been approved gets no session, even with valid
   // credentials. The same gate runs on the OAuth callback.
   const blocked = data.user
-    ? await enforceAccessGate({ userId: data.user.id, email: data.user.email })
+    ? await enforceAccessGate({
+        userId: data.user.id,
+        email: data.user.email,
+        emailConfirmed: Boolean(data.user.email_confirmed_at),
+      })
     : null;
   if (blocked) {
     await supabase.auth.signOut();

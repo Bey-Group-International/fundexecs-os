@@ -15,6 +15,7 @@ import {
 import { queueNextAction } from "@/app/(app)/capital-map/actions";
 import type { AgentKey } from "@/lib/supabase/database.types";
 import type { MarketplaceStatus } from "@/lib/supabase/database.types";
+import { requireFeatureAccess } from "@/lib/feature-access.server";
 
 const STATUSES: MarketplaceStatus[] = ["draft", "listed", "paused", "closed"];
 
@@ -45,6 +46,8 @@ function parseHttpsUrl(raw: FormDataEntryValue | null): string | null {
 // everything else defaults sensibly (draft, private) so a listing can be filled
 // in over time before it goes public.
 export async function createListing(formData: FormData): Promise<{ error?: string }> {
+  const gate = await requireFeatureAccess("marketplace");
+  if (!gate.ok) return { error: gate.error };
   const ctx = await getSessionContext();
   if (!ctx?.orgId) return { error: "Not authenticated" };
 
@@ -155,6 +158,8 @@ export async function createListing(formData: FormData): Promise<{ error?: strin
 // counterparty, so it lands in approvals unless a mandate pre-authorizes it, and
 // it warms the relationship on the graph via the engagement feedback loop.
 export async function queueListingOutreach(formData: FormData): Promise<void> {
+  const gate = await requireFeatureAccess("marketplace");
+  if (!gate.ok) return;
   const investorId = String(formData.get("investor_id") ?? "").trim();
   const title = String(formData.get("listing_title") ?? "").trim() || "this listing";
   if (!investorId) return;
@@ -165,6 +170,8 @@ export async function queueListingOutreach(formData: FormData): Promise<void> {
 // Advance a listing through its lifecycle: draft → listed → paused → closed,
 // wrapping back to draft. A free-form `status` override is also accepted.
 export async function updateListingStatus(formData: FormData): Promise<void> {
+  const gate = await requireFeatureAccess("marketplace");
+  if (!gate.ok) return;
   const ctx = await getSessionContext();
   if (!ctx?.orgId) return;
   const id = String(formData.get("id") ?? "");
@@ -209,6 +216,8 @@ export async function updateListingStatus(formData: FormData): Promise<void> {
 export async function fileListingStakeDispute(
   formData: FormData,
 ): Promise<{ error?: string }> {
+  const gate = await requireFeatureAccess("marketplace");
+  if (!gate.ok) return { error: gate.error };
   const ctx = await getSessionContext();
   if (!ctx?.orgId) return { error: "Not authenticated" };
 
@@ -244,6 +253,8 @@ export async function fileListingStakeDispute(
 }
 
 export async function toggleListingPublic(formData: FormData): Promise<void> {
+  const gate = await requireFeatureAccess("marketplace");
+  if (!gate.ok) return;
   const ctx = await getSessionContext();
   if (!ctx?.orgId) return;
   const id = String(formData.get("id") ?? "");
@@ -264,6 +275,8 @@ export async function expressInterestInListing(
   listingId: string,
   listingTitle: string,
 ): Promise<{ error?: string }> {
+  const gate = await requireFeatureAccess("marketplace");
+  if (!gate.ok) return { error: gate.error };
   const ctx = await getSessionContext();
   if (!ctx?.orgId) return { error: "Not authenticated" };
 
@@ -314,6 +327,8 @@ export async function expressInterestInListing(
 }
 
 export async function updateListing(formData: FormData): Promise<{ error?: string }> {
+  const gate = await requireFeatureAccess("marketplace");
+  if (!gate.ok) return { error: gate.error };
   const ctx = await getSessionContext();
   if (!ctx?.orgId) return { error: "Not authenticated" };
 
@@ -380,6 +395,8 @@ export async function updateListing(formData: FormData): Promise<{ error?: strin
 }
 
 export async function deleteListing(formData: FormData): Promise<void> {
+  const gate = await requireFeatureAccess("marketplace");
+  if (!gate.ok) return;
   const ctx = await getSessionContext();
   if (!ctx?.orgId) return;
   const id = String(formData.get("id") ?? "");

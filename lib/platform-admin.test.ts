@@ -1,4 +1,5 @@
 import {
+  isPlatformAdmin,
   isPlatformAdminEmail,
   adminAlertRecipients,
 } from "@/lib/platform-admin";
@@ -69,5 +70,20 @@ describe("adminAlertRecipients", () => {
 
   it("returns empty when nothing is configured", () => {
     expect(adminAlertRecipients()).toEqual([]);
+  });
+});
+
+describe("isPlatformAdmin", () => {
+  it("requires a confirmed admin email", () => {
+    expect(isPlatformAdmin({ email: "ops@beygroupintl.com", emailConfirmed: true })).toBe(true);
+  });
+
+  it("rejects an unconfirmed admin-domain email — anyone can sign up with one", () => {
+    expect(isPlatformAdmin({ email: "ops@beygroupintl.com", emailConfirmed: false })).toBe(false);
+  });
+
+  it("rejects a confirmed non-admin email and a missing session", () => {
+    expect(isPlatformAdmin({ email: "ops@gmail.com", emailConfirmed: true })).toBe(false);
+    expect(isPlatformAdmin(null)).toBe(false);
   });
 });
