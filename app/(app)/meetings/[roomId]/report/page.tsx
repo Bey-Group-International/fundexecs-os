@@ -14,6 +14,7 @@ import { readAllTranscriptRows } from "@/lib/meetings/transcript-read";
 import { RecordingPanel } from "./RecordingPanel";
 import { normalizeNoteList, normalizeNoteText } from "@/lib/meetings/live-notes";
 import { reportViewState, shouldPollReport, type ReportViewState } from "@/lib/meetings/attendance";
+import { callClock, isOneWay, readAcknowledgement, type ConsentAcknowledgement } from "@/lib/meetings/one-way";
 import { TRUNCATED_KEY } from "@/lib/meetings/report-analysis";
 
 type Meeting = {
@@ -24,6 +25,8 @@ type Meeting = {
   started_at: string | null;
   ended_at: string | null;
   scheduled_at: string | null;
+  /** "meeting" or "one_way" — a recorded call has no room and no attendees. */
+  kind: string | null;
 };
 
 type Report = {
@@ -34,7 +37,14 @@ type Report = {
   full_transcript: string | null;
 };
 
-type Data = { meeting: Meeting; report: Report | null; attended: boolean; viewerId: string | null } | null;
+type Data = {
+  meeting: Meeting;
+  report: Report | null;
+  attended: boolean;
+  viewerId: string | null;
+  /** The consent acknowledged before a one-way call was recorded, if any. */
+  consent: ConsentAcknowledgement | null;
+} | null;
 
 const POLL_INTERVAL = 5000;
 
@@ -45,7 +55,25 @@ export default function MeetingReportPage() {
   // The rows the room wrote while people were speaking. Only these carry a
   // time, which is what lets a line in the transcript drive the recording.
   const [lines, setLines] = useState<CueRow[]>([]);
+  /**
+   * Whether the timed transcript rows have been asked for, and whether that
+   * read is the definitive one.
+   *
+   * Not simply "fetched once": participants are sent here the moment a meeting
+   * ends, while their own final flush and everyone else's backing-off retries
+   * are still in flight, so a read taken at mount can be missing the end of
+   * the meeting — and the end is what people came to check. Two reads: one on
+   * arrival so the page has something, and one once the report exists, which
+   * the server writes only after those flushes have landed.
+   */
+  const linesFetchedRef = useRef(false);
+  const linesFinalRef = useRef(false);
+  /** When this page started waiting, for deciding a report is not coming. */
+  const waitStartedRef = useRef<number>(Date.now());
+  const [waitedMs, setWaitedMs] = useState(0);
   const [recordingStartedAt, setRecordingStartedAt] = useState<string | null>(null);
+  /** The recording's own length, which is a one-way call's only clock. */
+  const [recordedSeconds, setRecordedSeconds] = useState<number | null>(null);
   const playerRef = useRef<RecordingPlayerHandle>(null);
   /**
    * Where the recording has got to, so the transcript can follow it.
@@ -79,7 +107,7 @@ export default function MeetingReportPage() {
       supabase.auth.getUser(),
       supabase
         .from("live_meetings")
-        .select("id, host_id, title, created_at, started_at, ended_at, scheduled_at")
+        .select("id, host_id, title, created_at, started_at, ended_at, scheduled_at, kind, recording_consent")
         .eq("room_code", roomId)
         .maybeSingle(),
     ]);
@@ -122,27 +150,54 @@ export default function MeetingReportPage() {
     // rows are ordered oldest first — so the cues simply stopped partway
     // through a long recording, at a point that looked like the end of the
     // meeting rather than the end of the page.
-    void readAllTranscriptRows((from, to) =>
-      supabase
-        .from("live_meeting_transcripts")
-        .select("speaker, text, ts, confidence, overlapped")
-        .eq("meeting_id", meeting.id)
-        .order("ts", { ascending: true })
-        .order("id", { ascending: true })
-        .range(from, to),
-    )
-      .then((rows) => setLines(rows as unknown as CueRow[]))
-      .catch(() => setLines([]));
+    // Twice at most, never once per poll. This pages every transcript row a
+    // meeting has — up to a thousand per request — and it used to sit inside
+    // the poll body, so a two-hour meeting re-fetched its whole transcript
+    // every five seconds for as long as the page waited.
+    //
+    // Twice rather than once because the rows ARE still arriving when this
+    // page first opens (see linesFinalRef). The second read is taken once the
+    // report row exists, which the route writes after the transcript it was
+    // built from.
+    const reportExists = Boolean(report);
+    if (!linesFetchedRef.current || (reportExists && !linesFinalRef.current)) {
+      linesFetchedRef.current = true;
+      if (reportExists) linesFinalRef.current = true;
+      void readAllTranscriptRows((from, to) =>
+        supabase
+          .from("live_meeting_transcripts")
+          .select("speaker, text, ts, confidence, overlapped")
+          .eq("meeting_id", meeting.id)
+          .order("ts", { ascending: true })
+          .order("id", { ascending: true })
+          .range(from, to),
+      )
+        .then((rows) => setLines(rows as unknown as CueRow[]))
+        .catch(() => {
+          // Cleared so a later poll retries, which only helps while one is
+          // still scheduled — polling stops as soon as the report exists. A
+          // read lost after that costs the TIMESTAMPS for the life of the
+          // page, not the transcript: it still renders from full_transcript,
+          // it just cannot drive or follow the recording.
+          linesFetchedRef.current = false;
+          linesFinalRef.current = false;
+        });
+    }
 
     const next: Data = {
       meeting: meeting as Meeting,
       report: (report as Report | null) ?? null,
       attended: Boolean(attendance),
       viewerId: user?.id ?? null,
+      consent: readAcknowledgement((meeting as { recording_consent?: unknown }).recording_consent),
     };
     setData(next);
 
-    if (!shouldPollReport(viewStateOf(next))) stopPolling();
+    // Read from a ref rather than the state that has only just been set: this
+    // runs in the same tick, and the next poll is five seconds away.
+    const waited = Date.now() - waitStartedRef.current;
+    setWaitedMs(waited);
+    if (!shouldPollReport(viewStateOf(next, waited))) stopPolling();
   }
 
   function stopPolling() {
@@ -153,6 +208,21 @@ export default function MeetingReportPage() {
   }
 
   useEffect(() => {
+    // Everything that describes the PREVIOUS report has to go, because this
+    // component survives a soft navigation from one report to another. Left
+    // behind, the transcript read would never run for the new meeting — its
+    // cues would seek the new recording to the old meeting's timings — and the
+    // stall clock would carry over, so an ordinary report could be declared
+    // dead on arrival.
+    linesFetchedRef.current = false;
+    linesFinalRef.current = false;
+    waitStartedRef.current = Date.now();
+    setWaitedMs(0);
+    setLines([]);
+    setRecordingStartedAt(null);
+    setRecordedSeconds(null);
+    setData(undefined);
+
     fetchReport();
 
     // Start polling; fetchReport will stop it when status is terminal
@@ -168,16 +238,18 @@ export default function MeetingReportPage() {
     () => transcriptCues(lines, recordingStartedAt),
     [lines, recordingStartedAt],
   );
-  const handleRecordingReady = useCallback((startedAt: string) => {
+  const handleRecordingReady = useCallback((startedAt: string, durationSeconds: number | null) => {
     setRecordingStartedAt(startedAt);
+    setRecordedSeconds(durationSeconds);
   }, []);
   const seekRecording = useCallback((ms: number) => {
     playerRef.current?.seekTo(ms);
   }, []);
 
-  const state = viewStateOf(data);
+  const state = viewStateOf(data, waitedMs);
 
   if (state === "loading" || state === "generating") return <GeneratingState />;
+  if (state === "stalled") return <StalledState title={data?.meeting.title ?? null} />;
   if (state === "missing") {
     return (
       <div className="flex flex-col items-center justify-center min-h-[50vh] gap-4">
@@ -190,8 +262,10 @@ export default function MeetingReportPage() {
   }
   if (state === "forbidden") return <NotAnAttendeeState title={data?.meeting.title ?? null} />;
 
-  // Narrowed by the states above: "ready" means both of these are present.
-  const { meeting, report, viewerId } = data!;
+  // Narrowed by the states above: the meeting is present and the viewer may
+  // read it. `report` is present too — "unsummarised" means a row with nothing
+  // in the summary, not the absence of a row.
+  const { meeting, report, viewerId, consent } = data!;
   if (!report) return <GeneratingState />;
 
   // Coerced, not cast. These are stored model output, and reports written before
@@ -209,6 +283,11 @@ export default function MeetingReportPage() {
   const truncated = analysis?.[TRUNCATED_KEY] === true;
   const isHost = Boolean(viewerId && viewerId === meeting.host_id);
 
+  const oneWay = isOneWay(meeting);
+
+  // Wall clock between joining and ending. A one-way call has no started_at —
+  // nobody joins a room that does not exist — so this is null for every
+  // recorded call, and the recording's own length stands in below.
   const duration = meeting.started_at && meeting.ended_at
     ? Math.round((new Date(meeting.ended_at).getTime() - new Date(meeting.started_at).getTime()) / 60000)
     : null;
@@ -236,7 +315,7 @@ export default function MeetingReportPage() {
             ).toLocaleDateString("en-US", {
               weekday: "long", year: "numeric", month: "long", day: "numeric",
             })}
-            {duration ? ` · ${duration} min` : ""}
+            {duration ? ` · ${duration} min` : recordedSeconds ? ` · ${callClock(recordedSeconds)}` : ""}
           </p>
         </div>
         <div className="flex items-center gap-2 shrink-0">
@@ -244,6 +323,44 @@ export default function MeetingReportPage() {
           <ExportMenu roomId={roomId} />
         </div>
       </div>
+
+      {state === "unsummarised" && (
+        <div className="rounded-xl border border-[var(--line)] bg-[var(--surface-2)] px-4 py-3">
+          <p className="text-xs font-medium text-[var(--fg-primary)]">No summary was written</p>
+          <p className="mt-0.5 text-xs text-[var(--fg-muted)]">
+            {/* Keyed on whether there are words, NOT on the kind of session.
+                The route writes an empty summary down two paths: a call with
+                nothing transcribed, and a model call that failed on a real
+                transcript. Saying "nothing was transcribed" above a full
+                transcript would be the page contradicting itself — and would
+                withhold the regenerate advice that actually fixes the row. */}
+            {report.full_transcript?.trim()
+              ? "The analysis could not be completed, so there is no summary. Everything that was captured is below, and regenerating the report from the meeting log will try again."
+              : oneWay
+                ? "Nothing was transcribed on this call, so there was nothing to summarise. The recording is below."
+                : "Nothing was transcribed in this meeting, so there was nothing to summarise."}
+          </p>
+        </div>
+      )}
+
+      {consent && (
+        // Stored precisely so that somebody can answer "should this have been
+        // recorded?" months later. The archive shows that consent exists; this
+        // is the page where the answer is actually needed, and until now it
+        // was the one place that held the record and never showed it.
+        <details className="rounded-xl border border-[var(--line)] bg-[var(--surface-1)] px-4 py-3">
+          <summary className="cursor-pointer text-xs font-medium text-[var(--fg-secondary)]">
+            Consent recorded {new Date(consent.at).toLocaleString("en-US", {
+              month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit",
+            })}
+          </summary>
+          <p className="mt-2 text-xs italic text-[var(--fg-primary)]">&ldquo;{consent.disclosure}&rdquo;</p>
+          <p className="mt-1.5 text-xs text-[var(--fg-muted)]">
+            The person recording confirmed they had consent from everyone on the call.
+            {consent.sources.length > 0 && ` Captured: ${consent.sources.join(" and ")}.`}
+          </p>
+        </details>
+      )}
 
       {truncated && (
         <div className="rounded-xl border border-[var(--status-warning,#f59e0b)]/40 bg-[var(--status-warning,#f59e0b)]/10 px-4 py-3">
@@ -351,14 +468,20 @@ export default function MeetingReportPage() {
  * poll has to stop for exactly the states the render treats as final,
  * and the two drifting apart is what a spinner over a forbidden report is.
  */
-function viewStateOf(data: Data | undefined): ReportViewState {
+function viewStateOf(data: Data | undefined, waitedMs: number): ReportViewState {
   return reportViewState({
     loaded: data !== undefined,
     meetingExists: data !== null && data !== undefined,
     hostId: data?.meeting.host_id ?? null,
     viewerId: data?.viewerId ?? null,
     attended: data?.attended ?? false,
-    hasSummary: Boolean(data?.report?.summary),
+    // Two questions, not one. A row exists and says nothing is a finished
+    // report; no row at all is one that may still be coming. Asking only
+    // whether the summary was non-empty conflated them, and put a permanent
+    // spinner over every report the model could not write.
+    hasReport: Boolean(data?.report),
+    hasSummary: Boolean(data?.report?.summary?.trim()),
+    waitedMs,
   });
 }
 
@@ -387,6 +510,31 @@ function NotAnAttendeeState({ title }: { title: string | null }) {
         Ask the host to share the summary if you need it.
       </p>
       <Link href="/meetings" className="mt-1 text-sm text-[var(--gold-400)] hover:underline">
+        Back to meetings
+      </Link>
+    </div>
+  );
+}
+
+/**
+ * A report that is not coming.
+ *
+ * The page used to poll for this one every five seconds for as long as the tab
+ * stayed open, showing a spinner the whole time. Nothing about that told
+ * anybody what had happened or what to do about it.
+ */
+function StalledState({ title }: { title: string | null }) {
+  return (
+    <div className="mx-auto flex min-h-[50vh] max-w-md flex-col items-center justify-center gap-3 px-4 text-center">
+      <p className="text-sm font-medium text-[var(--fg-primary)]">
+        {title ?? "This meeting"} has no report yet
+      </p>
+      <p className="text-xs text-[var(--fg-muted)]">
+        The summary has not arrived, and enough time has passed that it is probably not coming.
+        The recording and transcript, if there are any, are kept either way — regenerating the
+        report from the meeting log will try again.
+      </p>
+      <Link href="/meetings" className="text-sm text-[var(--gold-400)] hover:underline">
         Back to meetings
       </Link>
     </div>

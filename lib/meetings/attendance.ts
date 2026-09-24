@@ -145,10 +145,51 @@ export type ReportViewState =
   | "missing"
   /** The meeting exists, but the viewer was not in it. */
   | "forbidden"
-  /** Attended; the report has not been written (or summarised) yet. */
+  /** Attended; no report row exists yet, so one may still be coming. */
   | "generating"
+  /**
+   * A report exists and nobody has been waiting for it: it was written without
+   * a summary.
+   *
+   * This is a real and reachable outcome, not an error — the report route
+   * writes a row with an empty summary when the model fails, and again when a
+   * one-way call had nothing to transcribe. Everything else the report holds
+   * (the recording, the transcript, the chat) is still there and still worth
+   * reading, which is why this is a state of its own rather than a variant of
+   * "generating".
+   */
+  | "unsummarised"
+  /**
+   * Waited long enough that a report is not coming.
+   *
+   * Distinct from "generating" because the two want opposite treatment: one is
+   * a spinner, and the other is an explanation plus a way to act.
+   */
+  | "stalled"
   /** Attended, and there is a report to read. */
   | "ready";
+
+/**
+ * How long a report may be "on its way" before the page stops believing it.
+ *
+ * DERIVED, not guessed. The report route's model call runs on a long-run
+ * client: LONG_RUN_TIMEOUT_MS (120s) with maxRetries:1, so 240s of upstream
+ * time in the worst case, inside a 300s function envelope. A limit shorter
+ * than that declares a report dead while it is still being written — and
+ * because giving up also stops the polling, the report that arrived a moment
+ * later would never appear without a manual reload. So: the worst case, plus
+ * room for the rest of the route and one poll interval.
+ *
+ * attendance.test.ts pins this against LONG_RUN_TIMEOUT_MS. It is spelled as a
+ * literal rather than imported because this module is bundled into the report
+ * page, and importing the Anthropic client to read one number would ship the
+ * SDK to the browser.
+ *
+ * What it replaces is unbounded: the page polled every five seconds for as
+ * long as the tab stayed open, so a report that was never coming cost twelve
+ * requests a minute forever.
+ */
+export const REPORT_WAIT_LIMIT_MS = 360_000;
 
 /**
  * What the report page should show.
@@ -164,15 +205,35 @@ export function reportViewState(input: {
   hostId: string | null;
   viewerId: string | null;
   attended: boolean;
+  /** A report ROW exists. Not the same question as whether it says anything. */
+  hasReport: boolean;
+  /** That row carries a summary. */
   hasSummary: boolean;
+  /** Milliseconds spent waiting so far, for deciding a report is not coming. */
+  waitedMs?: number;
 }): ReportViewState {
   if (!input.loaded) return "loading";
   if (!input.meetingExists) return "missing";
   if (!canViewReport(input)) return "forbidden";
-  return input.hasSummary ? "ready" : "generating";
+
+  // A row with a summary is the ordinary case.
+  if (input.hasSummary) return "ready";
+
+  // A row WITHOUT one is finished, not pending. Conflating the two is what put
+  // a permanent spinner over every report the model could not write and every
+  // one-way call nobody spoke on — while the recording and the transcript sat
+  // behind it, fully readable, being polled for every five seconds forever.
+  if (input.hasReport) return "unsummarised";
+
+  return (input.waitedMs ?? 0) >= REPORT_WAIT_LIMIT_MS ? "stalled" : "generating";
 }
 
 /** Whether the page should keep polling for a report that is still being written. */
 export function shouldPollReport(state: ReportViewState): boolean {
   return state === "loading" || state === "generating";
+}
+
+/** Whether this state means there is something on the page worth rendering. */
+export function reportIsReadable(state: ReportViewState): boolean {
+  return state === "ready" || state === "unsummarised";
 }

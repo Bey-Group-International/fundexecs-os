@@ -3543,6 +3543,82 @@ Deployed, monitoring               →  live, observability active
              |  is an acknowledgement with a script, NOT legal advice — the
              |  product records what somebody confirmed, it does not obtain
              |  consent for them.
+
+2026-09-23  |  The report that was always about to arrive  |  Asked to optimize
+             |  the meeting report page. The worst thing on it was mine, from
+             |  the one-way call pass earlier the same day, and it was a fix
+             |  that did not land.
+             |  THE PAGE ASKED THE WRONG QUESTION. reportViewState keyed ready
+             |  on hasSummary: Boolean(report.summary). The report route writes
+             |  a row with summary: "" down two paths — a model call that
+             |  failed, and (new that morning) a one-way call with nothing
+             |  transcribed. Both are FINISHED. Keyed on the summary, both read
+             |  as "generating": a permanent spinner, polling every five
+             |  seconds for the life of the tab, over a recording and a
+             |  transcript sitting right there fully readable.
+             |  CodeRabbit had flagged the symptom on #1124 and I "fixed" it by
+             |  writing the report row — without checking what the page did
+             |  with a row it considered empty. WORTH KEEPING: A FIX IS NOT
+             |  DONE UNTIL THE READER OF THE DATA AGREES. Writing the row
+             |  satisfied the route; the PAGE decides what a row means, and
+             |  nobody asked it. "Follow what gets written and ask who reads
+             |  it" — already in this file — pointed straight at it, and I did
+             |  not run it on my own fix.
+             |  The state split is the repair: generating (no row, may still
+             |  come), unsummarised (a row that says nothing — render it, stop
+             |  polling), stalled (waited long enough that it is not coming).
+             |  THE TRANSCRIPT WAS RE-PAGED EVERY FIVE SECONDS.
+             |  readAllTranscriptRows sat in the poll body, so a two-hour
+             |  meeting re-fetched every transcript row it had, a thousand at a
+             |  time, every five seconds — forever, because of the bug above.
+             |  The two compounded: the state that never ended was also the
+             |  state that fetched most.
+             |  REVIEW ROUND, five findings, all mine from this change, two
+             |  worth recording:
+             |  A BOUND MUST BE DERIVED FROM WHAT IT BOUNDS. I picked three
+             |  minutes for "long enough that no report is coming" by
+             |  intuition. The route's client is LONG_RUN_TIMEOUT_MS (120s)
+             |  with maxRetries:1 — 240s worst case. My limit would have
+             |  declared a working report dead and, because giving up also
+             |  stops the polling, a report arriving at 250s would never have
+             |  appeared. 360s now, pinned in attendance.test.ts against
+             |  LONG_RUN_TIMEOUT_MS so the two cannot drift. The constant stays
+             |  a literal on purpose: that module is bundled into the page, and
+             |  importing the Anthropic client to read one number would ship
+             |  the SDK to the browser.
+             |  "THE ROWS CANNOT CHANGE" WAS FALSE EXACTLY WHEN IT MATTERED.
+             |  Fixing the re-paging, I read the transcript once at mount and
+             |  wrote that premise in a comment. Participants are sent to this
+             |  page the instant a meeting ends, while their own keepalive
+             |  flush and everybody else's backing-off retries are still in
+             |  flight — so the single read could permanently miss the END of
+             |  the meeting, which is the part people open the page to check.
+             |  Two reads now: one on arrival, one once the report row exists,
+             |  which the route writes after the transcript it was built from.
+             |  A confident comment was again the tell.
+             |  Also: the consent record a one-way call stores was displayed
+             |  NOWHERE — the audit trail existed and the page somebody would
+             |  bring the question to did not show it. And a recorded call's
+             |  header showed no length, because duration came from
+             |  started_at/ended_at and nobody joins a room that does not
+             |  exist; the recording's own duration stands in now.
+             |  Confidence: typecheck/eslint clean, build passes, Jest 6972 →
+             |  6980 across 504 suites.
+             |  THE GAP IS NOW CLOSED. Having written "not covered: the page has
+             |  no component test" and noticed it was the SECOND report-page
+             |  state bug in a day, the test exists: 14 cases over the wiring,
+             |  8 of which fail against the previous commit — the unsummarised
+             |  render, the copy that must follow the transcript rather than the
+             |  session kind, the per-poll transcript re-read, the stall, and
+             |  the consent block. The other 6 are guards on behaviour that was
+             |  already right.
+             |  Method note worth keeping: the first attempt to prove the tests
+             |  bite used `git stash push` on files that were ALREADY COMMITTED,
+             |  so it stashed nothing and every test passed — which reads
+             |  exactly like "the tests do not bite". `git checkout HEAD~1 --
+             |  <paths>` is the check that actually reverts. A verification step
+             |  that silently does nothing is worse than none, because it
+             |  produces a confident green.
 ```
 
 ---
