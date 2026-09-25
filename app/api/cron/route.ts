@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
 import { runAutomation } from "@/lib/engine";
+import { featureAccessForOrg } from "@/lib/feature-access.server";
 import { nextRun } from "@/lib/cron";
 import { findDueOrgsForScan, scanOrgRadarSignals } from "@/lib/radar-scan";
 import { runSlaEscalations } from "@/lib/sla-cron";
@@ -91,10 +92,18 @@ export async function GET(request: Request) {
     }
     let status = "ok";
     try {
-      await runAutomation(
-        { supabase, orgId: a.organization_id, actorId: a.created_by },
-        { id: a.id, prompt: a.prompt, auto_approve: a.auto_approve },
-      );
+      // Automations are plan-gated (lib/feature-access). A schedule set up while
+      // the org had access must not keep running — auto-approved or not — once
+      // it lapses; the run is skipped and the schedule still advances.
+      const access = await featureAccessForOrg(supabase, a.organization_id, a.created_by);
+      if (!access.unlocked) {
+        status = "skipped: plan required";
+      } else {
+        await runAutomation(
+          { supabase, orgId: a.organization_id, actorId: a.created_by },
+          { id: a.id, prompt: a.prompt, auto_approve: a.auto_approve },
+        );
+      }
     } catch (e) {
       status = `failed: ${e instanceof Error ? e.message : "unknown"}`;
       console.error("automation failed", a.id, e);

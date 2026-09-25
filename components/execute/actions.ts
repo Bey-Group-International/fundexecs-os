@@ -139,8 +139,8 @@ export async function createInvestorPortalShare(formData: FormData): Promise<voi
 }
 
 export async function revokeInvestorPortalShare(formData: FormData): Promise<void> {
-  const gate = await requireFeatureAccess("execute");
-  if (!gate.ok) return;
+  // Deliberately NOT plan-gated: an org whose plan lapsed must still be able to
+  // cut off a live investor share.
   const ctx = await getSessionContext();
   if (!ctx?.orgId) return;
   const id = String(formData.get("id") ?? "");

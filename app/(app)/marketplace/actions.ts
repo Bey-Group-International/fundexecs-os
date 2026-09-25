@@ -16,6 +16,7 @@ import { queueNextAction } from "@/app/(app)/capital-map/actions";
 import type { AgentKey } from "@/lib/supabase/database.types";
 import type { MarketplaceStatus } from "@/lib/supabase/database.types";
 import { requireFeatureAccess } from "@/lib/feature-access.server";
+import { isPlatformAdmin } from "@/lib/platform-admin";
 
 const STATUSES: MarketplaceStatus[] = ["draft", "listed", "paused", "closed"];
 
@@ -97,7 +98,8 @@ export async function createListing(formData: FormData): Promise<{ error?: strin
   // scaled credit stake.
   const wallet = await getWallet(ctx.orgId);
   const ent = await entitlements(ctx.orgId, wallet?.plan ?? null);
-  if (!ent.canList) {
+  // Platform admins are unrestricted; they still post the stake below.
+  if (!ent.canList && !isPlatformAdmin(ctx)) {
     return { error: "Your plan or standing doesn't allow listing yet." };
   }
 

@@ -28,8 +28,8 @@ export async function createInvoiceAction(
 
 // Void an open/draft invoice the caller owns.
 export async function voidInvoiceAction(id: string): Promise<{ ok?: boolean; error?: string }> {
-  const gate = await requireFeatureAccess("execute");
-  if (!gate.ok) return { ok: false, error: gate.error };
+  // Deliberately NOT plan-gated: an org whose plan lapsed must still be able to
+  // void an open invoice that is still payable through its public link.
   try {
     const ctx = await getSessionContext();
     if (!ctx?.orgId) return { error: "Not authenticated" };

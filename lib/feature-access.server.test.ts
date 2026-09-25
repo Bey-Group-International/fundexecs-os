@@ -1,4 +1,4 @@
-import { requireFeatureAccess } from "@/lib/feature-access.server";
+import { featureAccessForOrg, requireFeatureAccess } from "@/lib/feature-access.server";
 import { getSessionContext } from "@/lib/auth";
 import { getWallet } from "@/lib/wallet";
 
@@ -81,5 +81,65 @@ describe("requireFeatureAccess", () => {
     mockWallet.mockResolvedValue(null);
     const gate = await requireFeatureAccess("office");
     expect(gate.ok).toBe(false);
+  });
+});
+
+describe("featureAccessForOrg (cron, no session)", () => {
+  function service(opts: {
+    user?: { email: string; email_confirmed_at: string | null } | null;
+    plan?: string | null;
+    createdAt?: string | null;
+  }) {
+    const row = (data: unknown) => ({
+      select: () => ({ eq: () => ({ maybeSingle: async () => ({ data }) }) }),
+    });
+    return {
+      auth: { admin: { getUserById: async () => ({ data: { user: opts.user ?? null } }) } },
+      from: (table: string) =>
+        table === "wallets"
+          ? row(opts.plan !== undefined ? { plan: opts.plan } : null)
+          : row(opts.createdAt ? { created_at: opts.createdAt } : null),
+    } as never;
+  }
+
+  beforeEach(() => {
+    delete process.env.ADMIN_EMAILS;
+  });
+
+  it("locks a new org without a plan", async () => {
+    const access = await featureAccessForOrg(
+      service({ user: { email: "a@firm.com", email_confirmed_at: "x" }, plan: "free", createdAt: "2026-10-01T00:00:00Z" }),
+      "org1",
+      "u1",
+    );
+    expect(access.unlocked).toBe(false);
+  });
+
+  it("unlocks an org on a paid plan", async () => {
+    const access = await featureAccessForOrg(service({ plan: "pro", createdAt: "2026-10-01T00:00:00Z" }), "org1", "u1");
+    expect(access.unlocked).toBe(true);
+  });
+
+  it("grandfathers an org created before the paywall", async () => {
+    const access = await featureAccessForOrg(service({ plan: null, createdAt: "2026-08-01T00:00:00Z" }), "org1", null);
+    expect(access.grandfathered).toBe(true);
+  });
+
+  it("runs a confirmed admin's automation regardless of plan", async () => {
+    const access = await featureAccessForOrg(
+      service({ user: { email: "ops@beygroupintl.com", email_confirmed_at: "x" }, plan: null, createdAt: "2026-10-01T00:00:00Z" }),
+      "org1",
+      "u1",
+    );
+    expect(access.viaAdmin).toBe(true);
+  });
+
+  it("does not treat an unconfirmed admin-domain owner as an admin", async () => {
+    const access = await featureAccessForOrg(
+      service({ user: { email: "ops@beygroupintl.com", email_confirmed_at: null }, plan: null, createdAt: "2026-10-01T00:00:00Z" }),
+      "org1",
+      "u1",
+    );
+    expect(access.unlocked).toBe(false);
   });
 });
