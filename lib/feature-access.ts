@@ -47,7 +47,8 @@ export interface FeatureAccess {
 
 /** 'free' is the signup marker, not a paid plan; anything unknown is no plan. */
 export function paidPlan(plan: string | null | undefined): PlanKey | null {
-  return plan && plan in PLAN_BY_KEY ? (plan as PlanKey) : null;
+  // Own keys only: `in` would also accept inherited names like "constructor".
+  return plan && Object.hasOwn(PLAN_BY_KEY, plan) ? (plan as PlanKey) : null;
 }
 
 /**

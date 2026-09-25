@@ -172,8 +172,6 @@ export async function queueListingOutreach(formData: FormData): Promise<void> {
 // Advance a listing through its lifecycle: draft → listed → paused → closed,
 // wrapping back to draft. A free-form `status` override is also accepted.
 export async function updateListingStatus(formData: FormData): Promise<void> {
-  const gate = await requireFeatureAccess("marketplace");
-  if (!gate.ok) return;
   const ctx = await getSessionContext();
   if (!ctx?.orgId) return;
   const id = String(formData.get("id") ?? "");
@@ -189,6 +187,12 @@ export async function updateListingStatus(formData: FormData): Promise<void> {
     next = STATUSES[(idx + 1) % STATUSES.length];
   }
   if (!next) return;
+  // Only (re)publishing is plan-gated. Pausing, closing or returning a listing
+  // to draft stays open so an org whose plan lapsed can still take it down.
+  if (next === "listed") {
+    const gate = await requireFeatureAccess("marketplace");
+    if (!gate.ok) return;
+  }
 
   const supabase = await createServerClient();
   await supabase
@@ -255,18 +259,31 @@ export async function fileListingStakeDispute(
 }
 
 export async function toggleListingPublic(formData: FormData): Promise<void> {
-  const gate = await requireFeatureAccess("marketplace");
-  if (!gate.ok) return;
   const ctx = await getSessionContext();
   if (!ctx?.orgId) return;
   const id = String(formData.get("id") ?? "");
-  const isPublic = String(formData.get("is_public") ?? "") === "true";
   if (!id) return;
 
   const supabase = await createServerClient();
+  // Read the real current state rather than trusting the form: making a
+  // listing public is plan-gated, making it private is not (a lapsed org must
+  // still be able to take a listing out of view).
+  const { data: listing } = await supabase
+    .from("marketplace_listings")
+    .select("is_public")
+    .eq("id", id)
+    .eq("organization_id", ctx.orgId)
+    .maybeSingle();
+  if (!listing) return;
+  const makePublic = !listing.is_public;
+  if (makePublic) {
+    const gate = await requireFeatureAccess("marketplace");
+    if (!gate.ok) return;
+  }
+
   await supabase
     .from("marketplace_listings")
-    .update({ is_public: !isPublic })
+    .update({ is_public: makePublic })
     .eq("id", id)
     .eq("organization_id", ctx.orgId);
   revalidatePath("/marketplace");
@@ -397,8 +414,8 @@ export async function updateListing(formData: FormData): Promise<{ error?: strin
 }
 
 export async function deleteListing(formData: FormData): Promise<void> {
-  const gate = await requireFeatureAccess("marketplace");
-  if (!gate.ok) return;
+  // Deliberately NOT plan-gated: an org whose plan lapsed must still be able to
+  // remove its own listing.
   const ctx = await getSessionContext();
   if (!ctx?.orgId) return;
   const id = String(formData.get("id") ?? "");

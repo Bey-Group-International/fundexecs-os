@@ -65,6 +65,47 @@ export async function GET(request: Request) {
   const supabase = createServiceClient();
   const now = new Date();
 
+  // Runs BEFORE the automation sweep below: automations are plan-gated
+  // (lib/feature-access), so a payment that settles on this pass must start
+  // the plan before its org's due automations are checked, not after.
+  //
+  // Subscription renewals. This is what makes a plan actually recur: FundExecs
+  // owns the billing period, so nothing renews unless this sweep runs. Each due
+  // subscription is billed — an invoice to settle by transfer where remittance
+  // details are configured, a card charge where they are not — and the period's
+  // credits are granted once that settles. An overdue invoice falls back to the
+  // card on file; a failed charge goes past_due with a retry scheduled; a
+  // cancelled one is closed and its entitlement dropped. Best-effort like every block in this sweep — a payment processor outage
+  // never aborts the sweep, and the renewal is retried on the next pass because
+  // the period end has not moved.
+  let subscriptions: RenewalStats = {
+    due: 0, renewed: 0, failed: 0, ended: 0, credits: 0, invoiced: 0, awaiting: 0,
+  };
+  // Bank debits first: ACH clears days after it is submitted, so this is where
+  // an invoice actually becomes paid. Doing it before the two blocks below means
+  // a payment that landed overnight starts its plan (or renews it) on this pass.
+  let nativeCollections = { polled: 0, settled: 0, bounced: 0 };
+  try {
+    nativeCollections = await collectNativePayments(supabase, now);
+  } catch (e) {
+    console.error("native_payment_collection failed", e);
+  }
+
+  let settledInvoices = { applied: 0, started: 0, credits: 0 };
+  try {
+    // Settled invoices first: a transfer confirmed since the last sweep should
+    // start its plan (or be ready for the renewal below) in the same pass,
+    // rather than making the operator wait another hour for what they paid for.
+    settledInvoices = await applySettledInvoices(supabase, now);
+  } catch (e) {
+    console.error("subscription_invoice_apply failed", e);
+  }
+  try {
+    subscriptions = await runSubscriptionRenewals(supabase, now);
+  } catch (e) {
+    console.error("subscription_renewals failed", e);
+  }
+
   const { data, error } = await supabase
     .from("automations")
     .select("*")
@@ -256,43 +297,6 @@ export async function GET(request: Request) {
     recordings = await runRecordingSweep(supabase, now);
   } catch (e) {
     console.error("recording_sweep failed", e);
-  }
-
-  // Subscription renewals. This is what makes a plan actually recur: FundExecs
-  // owns the billing period, so nothing renews unless this sweep runs. Each due
-  // subscription is billed — an invoice to settle by transfer where remittance
-  // details are configured, a card charge where they are not — and the period's
-  // credits are granted once that settles. An overdue invoice falls back to the
-  // card on file; a failed charge goes past_due with a retry scheduled; a
-  // cancelled one is closed and its entitlement dropped. Best-effort like every block above — a payment processor outage
-  // never aborts the sweep, and the renewal is retried on the next pass because
-  // the period end has not moved.
-  let subscriptions: RenewalStats = {
-    due: 0, renewed: 0, failed: 0, ended: 0, credits: 0, invoiced: 0, awaiting: 0,
-  };
-  // Bank debits first: ACH clears days after it is submitted, so this is where
-  // an invoice actually becomes paid. Doing it before the two blocks below means
-  // a payment that landed overnight starts its plan (or renews it) on this pass.
-  let nativeCollections = { polled: 0, settled: 0, bounced: 0 };
-  try {
-    nativeCollections = await collectNativePayments(supabase, now);
-  } catch (e) {
-    console.error("native_payment_collection failed", e);
-  }
-
-  let settledInvoices = { applied: 0, started: 0, credits: 0 };
-  try {
-    // Settled invoices first: a transfer confirmed since the last sweep should
-    // start its plan (or be ready for the renewal below) in the same pass,
-    // rather than making the operator wait another hour for what they paid for.
-    settledInvoices = await applySettledInvoices(supabase, now);
-  } catch (e) {
-    console.error("subscription_invoice_apply failed", e);
-  }
-  try {
-    subscriptions = await runSubscriptionRenewals(supabase, now);
-  } catch (e) {
-    console.error("subscription_renewals failed", e);
   }
 
   // ---------------------------------------------------------------------------

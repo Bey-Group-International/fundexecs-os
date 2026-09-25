@@ -14,6 +14,10 @@ describe("paidPlan", () => {
     expect(paidPlan("free")).toBeNull();
     expect(paidPlan(null)).toBeNull();
     expect(paidPlan("enterprise")).toBeNull();
+    // Inherited object keys must not count as a plan.
+    expect(paidPlan("constructor")).toBeNull();
+    expect(paidPlan("toString")).toBeNull();
+    expect(paidPlan("__proto__")).toBeNull();
   });
 });
 
