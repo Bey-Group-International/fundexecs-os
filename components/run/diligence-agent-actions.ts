@@ -14,6 +14,7 @@ import {
   isValidFinding,
   type Finding,
 } from "@/lib/diligence-agent";
+import { requireFeatureAccess } from "@/lib/feature-access.server";
 
 const MODEL = process.env.CLAUDE_MODEL || "claude-sonnet-4-6";
 
@@ -43,6 +44,8 @@ export async function runDiligenceAnalysis(input: {
   dealName?: string;
   dataRoomText: string;
 }): Promise<{ findings: Finding[]; source: "ai" | "fallback" }> {
+  const gate = await requireFeatureAccess("run");
+  if (!gate.ok) throw new Error(gate.error);
   const text = (input?.dataRoomText ?? "").trim();
   const apiKey = process.env.ANTHROPIC_API_KEY;
 

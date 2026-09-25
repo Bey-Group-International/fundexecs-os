@@ -6,10 +6,13 @@ import { getSessionContext } from "@/lib/auth";
 import { runAutomation } from "@/lib/engine";
 import { isValidCron, nextRun } from "@/lib/cron";
 import type { TriggerType } from "@/lib/supabase/database.types";
+import { requireFeatureAccess } from "@/lib/feature-access.server";
 
 // Create a saved automation. Schedule triggers get an initial next_run_at so the
 // cron sweep can find them; the run is opt-in unattended via auto_approve.
 export async function createAutomation(formData: FormData): Promise<{ error?: string }> {
+  const gate = await requireFeatureAccess("automations");
+  if (!gate.ok) return { error: gate.error };
   const ctx = await getSessionContext();
   if (!ctx?.orgId) return { error: "Not authenticated" };
 
@@ -45,6 +48,8 @@ export async function createAutomation(formData: FormData): Promise<{ error?: st
 }
 
 export async function toggleAutomation(formData: FormData): Promise<void> {
+  const gate = await requireFeatureAccess("automations");
+  if (!gate.ok) return;
   const ctx = await getSessionContext();
   if (!ctx?.orgId) return;
   const id = String(formData.get("id") ?? "");
@@ -63,6 +68,8 @@ export async function toggleAutomation(formData: FormData): Promise<void> {
 // Edit a saved workflow in place — name, instruction, and unattended autonomy.
 // This is what makes an approved "Approve & automate" entry editable later.
 export async function updateAutomation(formData: FormData): Promise<void> {
+  const gate = await requireFeatureAccess("automations");
+  if (!gate.ok) return;
   const ctx = await getSessionContext();
   if (!ctx?.orgId) return;
   const id = String(formData.get("id") ?? "");
@@ -81,6 +88,8 @@ export async function updateAutomation(formData: FormData): Promise<void> {
 }
 
 export async function deleteAutomation(formData: FormData): Promise<void> {
+  const gate = await requireFeatureAccess("automations");
+  if (!gate.ok) return;
   const ctx = await getSessionContext();
   if (!ctx?.orgId) return;
   const id = String(formData.get("id") ?? "");
@@ -95,6 +104,8 @@ export async function deleteAutomation(formData: FormData): Promise<void> {
 // the operator's session (RLS-scoped), so it works in any environment without
 // the cron/service-role setup. Honors the automation's auto_approve setting.
 export async function runAutomationNow(formData: FormData): Promise<void> {
+  const gate = await requireFeatureAccess("automations");
+  if (!gate.ok) return;
   const ctx = await getSessionContext();
   if (!ctx?.orgId) return;
   const id = String(formData.get("id") ?? "");

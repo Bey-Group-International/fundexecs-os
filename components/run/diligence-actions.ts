@@ -15,6 +15,7 @@ import {
   isDiligenceCategory,
   type DiligenceCategory,
 } from "@/lib/diligence-templates";
+import { requireFeatureAccess } from "@/lib/feature-access.server";
 
 function text(formData: FormData, name: string): string | null {
   const v = String(formData.get(name) ?? "").trim();
@@ -38,6 +39,8 @@ export interface DiligenceActionResult {
  * for a deal — idempotent: titles already present on the deal are skipped.
  */
 export async function applyDiligenceTemplate(formData: FormData): Promise<DiligenceActionResult> {
+  const gate = await requireFeatureAccess("run");
+  if (!gate.ok) return { ok: false, error: gate.error };
   const ctx = await getSessionContext();
   if (!ctx?.orgId) return { ok: false, error: "Not authorized." };
   const dealId = String(formData.get("deal_id") ?? "");
@@ -79,6 +82,8 @@ export async function applyDiligenceTemplate(formData: FormData): Promise<Dilige
 
 /** Write/edit the free-text `finding` note on a single item. */
 export async function updateDiligenceFinding(formData: FormData): Promise<DiligenceActionResult> {
+  const gate = await requireFeatureAccess("run");
+  if (!gate.ok) return { ok: false, error: gate.error };
   const ctx = await getSessionContext();
   if (!ctx?.orgId) return { ok: false, error: "Not authorized." };
   const id = String(formData.get("id") ?? "");
@@ -102,6 +107,8 @@ export async function updateDiligenceFinding(formData: FormData): Promise<Dilige
 
 /** Set owner and/or due date on a single item. */
 export async function setDiligenceOwnerDue(formData: FormData): Promise<DiligenceActionResult> {
+  const gate = await requireFeatureAccess("run");
+  if (!gate.ok) return { ok: false, error: gate.error };
   const ctx = await getSessionContext();
   if (!ctx?.orgId) return { ok: false, error: "Not authorized." };
   const id = String(formData.get("id") ?? "");
@@ -133,6 +140,8 @@ export async function setDiligenceOwnerDue(formData: FormData): Promise<Diligenc
  * bulk). `ids` arrives as repeated form fields; `status` is the target.
  */
 export async function bulkUpdateDiligence(formData: FormData): Promise<DiligenceActionResult> {
+  const gate = await requireFeatureAccess("run");
+  if (!gate.ok) return { ok: false, error: gate.error };
   const ctx = await getSessionContext();
   if (!ctx?.orgId) return { ok: false, error: "Not authorized." };
   const ids = formData.getAll("ids").map((v) => String(v)).filter(Boolean);

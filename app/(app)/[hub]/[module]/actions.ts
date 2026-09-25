@@ -9,6 +9,8 @@ import { logLPContact } from "@/lib/lp-relationships";
 import { LP_DOCUMENT_TYPES, renderDocumentTemplate } from "@/lib/document-templates";
 import { DOCUMENT_TYPE_LABELS, CONTRACT_STATUS_META, type DocumentType, type ContractStatus } from "@/lib/contracts";
 import { gmailAdapter } from "@/lib/integrations/adapters/gmail";
+import { gatedFeatureForHub } from "@/lib/feature-access";
+import { requireFeatureAccess } from "@/lib/feature-access.server";
 import type { DealStage } from "@/lib/supabase/database.types";
 
 // Build › Profile edits are handled by `saveOrgProfile`
@@ -41,6 +43,11 @@ export async function createModuleRow(
 ): Promise<{ ok: boolean; error?: string }> {
   const auth = await requireOrgContext();
   if (!auth.ok) return { ok: false, error: "Not authorized." };
+  const feature = gatedFeatureForHub(hub);
+  if (feature) {
+    const gate = await requireFeatureAccess(feature);
+    if (!gate.ok) return { ok: false, error: gate.error };
+  }
 
   const key = `${hub}/${module}`;
   if (!(key in ADD_ROW_CONFIGS)) return { ok: false, error: "Unknown module." };

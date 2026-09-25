@@ -396,9 +396,11 @@ export function blockedRedirectPath(decision: AccessDecision, email: string): st
 export async function enforceAccessGate(args: {
   userId: string;
   email: string | null | undefined;
+  /** The address is confirmed. An unconfirmed admin-domain email queues like anyone else. */
+  emailConfirmed: boolean;
 }): Promise<string | null> {
   const email = normalizeEmail(args.email);
-  if (isPlatformAdminEmail(email)) return null;
+  if (args.emailConfirmed && isPlatformAdminEmail(email)) return null;
   if (!hasSupabaseServiceEnv()) return null;
 
   try {

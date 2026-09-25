@@ -17,6 +17,7 @@ import {
   type Finding,
   type RiskLevel,
 } from "@/lib/contract-review";
+import { requireFeatureAccess } from "@/lib/feature-access.server";
 
 const MODEL = process.env.CLAUDE_MODEL || "claude-sonnet-4-6";
 
@@ -73,6 +74,8 @@ export async function reviewContract(input: {
   title?: string;
   text: string;
 }): Promise<{ findings: Finding[]; source: "ai" | "fallback" }> {
+  const gate = await requireFeatureAccess("run");
+  if (!gate.ok) throw new Error(gate.error);
   const text = typeof input?.text === "string" ? input.text : "";
   // Guard empty text: nothing to review — return the deterministic all-missing set.
   if (text.trim().length === 0) {

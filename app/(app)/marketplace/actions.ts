@@ -15,6 +15,8 @@ import {
 import { queueNextAction } from "@/app/(app)/capital-map/actions";
 import type { AgentKey } from "@/lib/supabase/database.types";
 import type { MarketplaceStatus } from "@/lib/supabase/database.types";
+import { requireFeatureAccess } from "@/lib/feature-access.server";
+import { isPlatformAdmin } from "@/lib/platform-admin";
 
 const STATUSES: MarketplaceStatus[] = ["draft", "listed", "paused", "closed"];
 
@@ -45,6 +47,8 @@ function parseHttpsUrl(raw: FormDataEntryValue | null): string | null {
 // everything else defaults sensibly (draft, private) so a listing can be filled
 // in over time before it goes public.
 export async function createListing(formData: FormData): Promise<{ error?: string }> {
+  const gate = await requireFeatureAccess("marketplace");
+  if (!gate.ok) return { error: gate.error };
   const ctx = await getSessionContext();
   if (!ctx?.orgId) return { error: "Not authenticated" };
 
@@ -94,7 +98,8 @@ export async function createListing(formData: FormData): Promise<{ error?: strin
   // scaled credit stake.
   const wallet = await getWallet(ctx.orgId);
   const ent = await entitlements(ctx.orgId, wallet?.plan ?? null);
-  if (!ent.canList) {
+  // Platform admins are unrestricted; they still post the stake below.
+  if (!ent.canList && !isPlatformAdmin(ctx)) {
     return { error: "Your plan or standing doesn't allow listing yet." };
   }
 
@@ -155,6 +160,8 @@ export async function createListing(formData: FormData): Promise<{ error?: strin
 // counterparty, so it lands in approvals unless a mandate pre-authorizes it, and
 // it warms the relationship on the graph via the engagement feedback loop.
 export async function queueListingOutreach(formData: FormData): Promise<void> {
+  const gate = await requireFeatureAccess("marketplace");
+  if (!gate.ok) return;
   const investorId = String(formData.get("investor_id") ?? "").trim();
   const title = String(formData.get("listing_title") ?? "").trim() || "this listing";
   if (!investorId) return;
@@ -180,6 +187,12 @@ export async function updateListingStatus(formData: FormData): Promise<void> {
     next = STATUSES[(idx + 1) % STATUSES.length];
   }
   if (!next) return;
+  // Only (re)publishing is plan-gated. Pausing, closing or returning a listing
+  // to draft stays open so an org whose plan lapsed can still take it down.
+  if (next === "listed") {
+    const gate = await requireFeatureAccess("marketplace");
+    if (!gate.ok) return;
+  }
 
   const supabase = await createServerClient();
   await supabase
@@ -209,6 +222,8 @@ export async function updateListingStatus(formData: FormData): Promise<void> {
 export async function fileListingStakeDispute(
   formData: FormData,
 ): Promise<{ error?: string }> {
+  const gate = await requireFeatureAccess("marketplace");
+  if (!gate.ok) return { error: gate.error };
   const ctx = await getSessionContext();
   if (!ctx?.orgId) return { error: "Not authenticated" };
 
@@ -247,13 +262,28 @@ export async function toggleListingPublic(formData: FormData): Promise<void> {
   const ctx = await getSessionContext();
   if (!ctx?.orgId) return;
   const id = String(formData.get("id") ?? "");
-  const isPublic = String(formData.get("is_public") ?? "") === "true";
   if (!id) return;
 
   const supabase = await createServerClient();
+  // Read the real current state rather than trusting the form: making a
+  // listing public is plan-gated, making it private is not (a lapsed org must
+  // still be able to take a listing out of view).
+  const { data: listing } = await supabase
+    .from("marketplace_listings")
+    .select("is_public")
+    .eq("id", id)
+    .eq("organization_id", ctx.orgId)
+    .maybeSingle();
+  if (!listing) return;
+  const makePublic = !listing.is_public;
+  if (makePublic) {
+    const gate = await requireFeatureAccess("marketplace");
+    if (!gate.ok) return;
+  }
+
   await supabase
     .from("marketplace_listings")
-    .update({ is_public: !isPublic })
+    .update({ is_public: makePublic })
     .eq("id", id)
     .eq("organization_id", ctx.orgId);
   revalidatePath("/marketplace");
@@ -264,6 +294,8 @@ export async function expressInterestInListing(
   listingId: string,
   listingTitle: string,
 ): Promise<{ error?: string }> {
+  const gate = await requireFeatureAccess("marketplace");
+  if (!gate.ok) return { error: gate.error };
   const ctx = await getSessionContext();
   if (!ctx?.orgId) return { error: "Not authenticated" };
 
@@ -314,6 +346,8 @@ export async function expressInterestInListing(
 }
 
 export async function updateListing(formData: FormData): Promise<{ error?: string }> {
+  const gate = await requireFeatureAccess("marketplace");
+  if (!gate.ok) return { error: gate.error };
   const ctx = await getSessionContext();
   if (!ctx?.orgId) return { error: "Not authenticated" };
 
@@ -380,6 +414,8 @@ export async function updateListing(formData: FormData): Promise<{ error?: strin
 }
 
 export async function deleteListing(formData: FormData): Promise<void> {
+  // Deliberately NOT plan-gated: an org whose plan lapsed must still be able to
+  // remove its own listing.
   const ctx = await getSessionContext();
   if (!ctx?.orgId) return;
   const id = String(formData.get("id") ?? "");

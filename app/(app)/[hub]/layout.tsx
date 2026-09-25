@@ -16,6 +16,8 @@ import { ReadinessAlert } from "@/components/build/ReadinessAlert";
 import { RunCommandCenter } from "@/components/run/RunCommandCenter";
 import { SourceMomentumPanel } from "@/components/source/SourceMomentumPanel";
 import { ExecuteCommandCenter } from "@/components/execute/ExecuteCommandCenter";
+import { FeatureLockBanner } from "@/components/FeatureLockBanner";
+import { gatedFeatureForHub } from "@/lib/feature-access";
 import { HubTabs } from "./HubTabs";
 
 const HUB_KEYS: Hub[] = ["build", "source", "run", "execute"];
@@ -84,6 +86,7 @@ export default async function HubLayout(
   // The Build hub's Firm Identity page uses a two-column data-room layout, so
   // the Build hub gets a wider canvas; the other hubs keep the focused width.
   const containerWidth = hub.key === "build" ? "max-w-6xl" : "max-w-4xl";
+  const gatedFeature = gatedFeatureForHub(hub.key);
 
   return (
     <div className={`mx-auto ${containerWidth}`}>
@@ -101,6 +104,7 @@ export default async function HubLayout(
           {hub.purpose}
         </p>
       </header>
+      {gatedFeature && <FeatureLockBanner feature={gatedFeature} />}
       {hub.approvalGated && (
         <div className="mb-5 flex flex-wrap items-start gap-3 rounded-2xl border border-amber-500/25 bg-amber-500/[0.06] px-4 py-3.5">
           <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-amber-500/40 bg-amber-500/10 font-mono text-[11px] text-amber-400">

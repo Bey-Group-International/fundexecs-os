@@ -113,6 +113,7 @@ describe("enforceAccessGate — a decline reaches a stamped principal", () => {
     const blocked = await enforceAccessGate({
       userId: "user-1",
       email: "alex@firm.com",
+      emailConfirmed: true,
     });
 
     expect(blocked).toBe("/request-access?email=alex%40firm.com&status=declined");
@@ -126,7 +127,7 @@ describe("enforceAccessGate — a decline reaches a stamped principal", () => {
     createServiceClient.mockReturnValue(client);
 
     expect(
-      await enforceAccessGate({ userId: "user-1", email: "alex@firm.com" }),
+      await enforceAccessGate({ userId: "user-1", email: "alex@firm.com", emailConfirmed: true }),
     ).toBeNull();
   });
 
@@ -138,7 +139,7 @@ describe("enforceAccessGate — a decline reaches a stamped principal", () => {
     createServiceClient.mockReturnValue(client);
 
     expect(
-      await enforceAccessGate({ userId: "user-1", email: "alex@firm.com" }),
+      await enforceAccessGate({ userId: "user-1", email: "alex@firm.com", emailConfirmed: true }),
     ).toBeNull();
   });
 
@@ -150,7 +151,7 @@ describe("enforceAccessGate — a decline reaches a stamped principal", () => {
     createServiceClient.mockReturnValue(client);
 
     expect(
-      await enforceAccessGate({ userId: "user-1", email: "alex@firm.com" }),
+      await enforceAccessGate({ userId: "user-1", email: "alex@firm.com", emailConfirmed: true }),
     ).toBeNull();
 
     const stamp = writes.find((w) => w.table === "principals");
@@ -165,8 +166,21 @@ describe("enforceAccessGate — a decline reaches a stamped principal", () => {
     });
 
     expect(
-      await enforceAccessGate({ userId: "admin-1", email: "ops@fundexecs.com" }),
+      await enforceAccessGate({ userId: "admin-1", email: "ops@fundexecs.com", emailConfirmed: true }),
     ).toBeNull();
+  });
+
+  it("queues an unconfirmed admin-domain email like anyone else", async () => {
+    isPlatformAdminEmail.mockReturnValue(true);
+    const { client } = fakeClient({
+      principals: { access_approved_at: null },
+      access_requests: null,
+    });
+    createServiceClient.mockReturnValue(client);
+
+    expect(
+      await enforceAccessGate({ userId: "admin-1", email: "ops@beygroupintl.com", emailConfirmed: false }),
+    ).toBe("/request-access?email=ops%40beygroupintl.com&status=required");
   });
 
   it("fails OPEN when the read throws — a broken gate must not lock everyone out", async () => {
@@ -175,7 +189,7 @@ describe("enforceAccessGate — a decline reaches a stamped principal", () => {
     });
 
     expect(
-      await enforceAccessGate({ userId: "user-1", email: "alex@firm.com" }),
+      await enforceAccessGate({ userId: "user-1", email: "alex@firm.com", emailConfirmed: true }),
     ).toBeNull();
   });
 });

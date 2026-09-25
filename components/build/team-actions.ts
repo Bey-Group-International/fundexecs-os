@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { createServerClient, createServiceClient } from "@/lib/supabase/server";
 import { getSessionContext } from "@/lib/auth";
 import { planSeatLimit, seatLimitReached } from "@/lib/billing";
+import { isPlatformAdmin } from "@/lib/platform-admin";
 import {
   createTeamTask,
   normalizeTeamTaskPriority,
@@ -253,7 +254,8 @@ export async function inviteMember(
     .from("organization_members")
     .select("id", { count: "exact", head: true })
     .eq("organization_id", ctx.orgId);
-  if (seatLimitReached(wallet?.plan, memberCount ?? 0)) {
+  // Platform admins are not bound by the seat allotment.
+  if (!isPlatformAdmin(ctx) && seatLimitReached(wallet?.plan, memberCount ?? 0)) {
     const limit = planSeatLimit(wallet?.plan);
     return {
       error: `Your plan includes ${limit} seat${limit === 1 ? "" : "s"}. Upgrade your plan to add more members.`,

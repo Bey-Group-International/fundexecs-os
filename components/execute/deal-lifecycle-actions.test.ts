@@ -5,6 +5,11 @@
 // RPC (supabase/migrations/20260703200000_deal_lifecycle_atomic.sql) and
 // return {ok, error} instead of void.
 
+const requireFeatureAccess = jest.fn();
+jest.mock("@/lib/feature-access.server", () => ({
+  requireFeatureAccess: (...a: unknown[]) => requireFeatureAccess(...a),
+}));
+
 jest.mock("next/cache", () => ({ revalidatePath: jest.fn() }));
 
 const requireOrgContext = jest.fn();
@@ -41,6 +46,7 @@ function makeFromStub(rows: Record<string, unknown>) {
 
 beforeEach(() => {
   jest.clearAllMocks();
+  requireFeatureAccess.mockResolvedValue({ ok: true });
   requireOrgContext.mockResolvedValue(AUTH_OK);
 });
 
@@ -134,5 +140,14 @@ describe("recordValuationMark", () => {
 
     expect(result.ok).toBe(false);
     expect(result.error).toContain("not found");
+  });
+});
+
+describe("recordValuationMark — plan gate", () => {
+  it("refuses with the lock message before touching the database when the org has no paid plan", async () => {
+    requireFeatureAccess.mockResolvedValue({ ok: false, status: 402, error: "locked" });
+    await expect(recordValuationMark(new FormData())).resolves.toEqual({ ok: false, error: "locked" });
+    expect(requireFeatureAccess).toHaveBeenCalledWith("execute");
+    expect(from).not.toHaveBeenCalled();
   });
 });
