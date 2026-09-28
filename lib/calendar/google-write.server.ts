@@ -314,6 +314,27 @@ export async function findEventByMarker(
   calendarId: string,
   meetingId: string,
 ): Promise<string | null> {
+  const found = await lookupEventByMarker(accessToken, calendarId, meetingId);
+  // Flattened for the write path, which cannot act on the difference: recovery
+  // is best-effort here, and failing to find an orphan must not stop the write.
+  return found.ok ? found.eventId : null;
+}
+
+/**
+ * The same lookup, keeping "there is no event" apart from "I could not tell".
+ *
+ * `findEventByMarker` collapses both to null, which is right for the write path
+ * above and wrong for anything that REPORTS on what it found. The repair sweep
+ * counts these outcomes for a person to read, and "no event carries this
+ * meeting's marker" is a fact somebody might act on — going and creating one by
+ * hand — while "Google was unreachable" is a reason to look again in an hour.
+ * Collapsing them would turn an outage into a list of chores.
+ */
+export async function lookupEventByMarker(
+  accessToken: string,
+  calendarId: string,
+  meetingId: string,
+): Promise<{ ok: true; eventId: string | null } | { ok: false; error: string }> {
   const url = new URL(`${API}/calendars/${encodeURIComponent(calendarId)}/events`);
   url.searchParams.set("privateExtendedProperty", `${FUNDEXECS_MARKER_KEY}=${meetingId}`);
   url.searchParams.set("maxResults", "1");
@@ -325,13 +346,11 @@ export async function findEventByMarker(
       signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
       cache: "no-store",
     });
-    if (!res.ok) return null;
+    if (!res.ok) return { ok: false, error: `Google answered ${res.status}` };
     const body = (await res.json()) as { items?: Array<{ id?: string; status?: string }> };
     const found = (body.items ?? []).find((e) => e?.id && e.status !== "cancelled");
-    return found?.id ?? null;
-  } catch {
-    // Recovery is best-effort: failing to find an orphan must not stop the
-    // write, it just means this one may create a second copy.
-    return null;
+    return { ok: true, eventId: found?.id ?? null };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) };
   }
 }

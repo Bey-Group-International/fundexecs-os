@@ -7,7 +7,7 @@ jest.mock("@/lib/calendar/google.server", () => ({
   accessTokenFor: (...a: unknown[]) => accessTokenForMock(...a),
 }));
 
-import { pushMeetingToGoogle, writeTargetFor } from "./google-write.server";
+import { findEventByMarker, lookupEventByMarker, pushMeetingToGoogle, writeTargetFor } from "./google-write.server";
 import type { WritableMeeting } from "./google-write";
 
 const fetchMock = jest.fn();
@@ -428,5 +428,80 @@ describe("the provider written to live_meetings", () => {
     for (const written of providers) {
       expect(providersTheSchemaAccepts()).toContain(written);
     }
+  });
+});
+
+// ── Two answers the write path could not use, and a repair cannot do without ──
+//
+// findEventByMarker collapses "there is no such event" and "I could not reach
+// Google" to null. That is right where it is used: recovery before a write is
+// best-effort, and a failed lookup must not stop the write. It is wrong for
+// anything that REPORTS what it found — the repair sweep counts these for a
+// person to read, and "no event carries this marker" is a chore somebody might
+// go and do by hand, while "Google was unreachable" is a reason to look again.
+describe("lookupEventByMarker", () => {
+  it("finds the event the marker points at", async () => {
+    fetchMock.mockResolvedValue(respond(200, { items: [{ id: "evt-1", status: "confirmed" }] }));
+    await expect(lookupEventByMarker("tok", "primary@example.com", "mtg-1")).resolves.toEqual({
+      ok: true,
+      eventId: "evt-1",
+    });
+  });
+
+  it("says plainly that there is no event, rather than that it failed", async () => {
+    fetchMock.mockResolvedValue(respond(200, { items: [] }));
+    await expect(lookupEventByMarker("tok", "primary@example.com", "mtg-1")).resolves.toEqual({
+      ok: true,
+      eventId: null,
+    });
+  });
+
+  it("ignores a cancelled event, which is not one to reattach", async () => {
+    fetchMock.mockResolvedValue(respond(200, { items: [{ id: "evt-x", status: "cancelled" }] }));
+    await expect(lookupEventByMarker("tok", "primary@example.com", "mtg-1")).resolves.toEqual({
+      ok: true,
+      eventId: null,
+    });
+  });
+
+  it("reports a refusal as a failure, not as an absence", async () => {
+    fetchMock.mockResolvedValue(respond(403, { error: { message: "forbidden" } }));
+    const r = await lookupEventByMarker("tok", "primary@example.com", "mtg-1");
+    expect(r.ok).toBe(false);
+    expect(String((r as { error: string }).error)).toContain("403");
+  });
+
+  it("reports a network failure as a failure too", async () => {
+    fetchMock.mockRejectedValue(new Error("socket hang up"));
+    const r = await lookupEventByMarker("tok", "primary@example.com", "mtg-1");
+    expect(r.ok).toBe(false);
+    expect(String((r as { error: string }).error)).toContain("socket hang up");
+  });
+
+  it("queries by the meeting's private marker", async () => {
+    fetchMock.mockResolvedValue(respond(200, { items: [] }));
+    await lookupEventByMarker("tok", "primary@example.com", "mtg-abc");
+    expect(String(fetchMock.mock.calls[0][0])).toContain("privateExtendedProperty");
+    expect(String(fetchMock.mock.calls[0][0])).toContain("mtg-abc");
+  });
+});
+
+describe("findEventByMarker still flattens, for the write path", () => {
+  // The write path cannot act on the difference and must keep behaving exactly as
+  // it did, so splitting the lookup must not have changed what it sees.
+  it("gives the id when there is one", async () => {
+    fetchMock.mockResolvedValue(respond(200, { items: [{ id: "evt-1", status: "confirmed" }] }));
+    await expect(findEventByMarker("tok", "primary@example.com", "mtg-1")).resolves.toBe("evt-1");
+  });
+
+  it("gives null for an absence AND for a failure, as before", async () => {
+    fetchMock.mockResolvedValue(respond(200, { items: [] }));
+    await expect(findEventByMarker("tok", "primary@example.com", "mtg-1")).resolves.toBeNull();
+
+    fetchMock.mockResolvedValue(respond(500, {}));
+    await expect(findEventByMarker("tok", "primary@example.com", "mtg-1")).resolves.toBeNull();
+
+    fetchMock.mockRejectedValue(new Error("network"));
+    await expect(findEventByMarker("tok", "primary@example.com", "mtg-1")).resolves.toBeNull();
   });
 });
