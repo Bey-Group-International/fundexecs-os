@@ -181,23 +181,62 @@ export function everyoneReached(set: RecipientSet, sent: number): boolean {
  * host to work out which two of nine addresses bounced — which they cannot do,
  * and which is the only part of a partial send they can act on.
  */
+export interface DeliveryOutcome {
+  sent: number;
+  /** Addresses that did not get it. */
+  failed: string[];
+  /**
+   * What the mailer said about the failures, de-duplicated.
+   *
+   * The count alone is why scheduling a meeting could email nobody in complete
+   * silence: `sendEmail` answers `{ok, channel, detail}` and every caller kept
+   * the boolean and dropped the detail, so a rejected credential, a bad From
+   * address and a bounced recipient all arrived as the same `0`. One reason
+   * usually explains every failure in a batch — they share a mailbox.
+   */
+  reasons: string[];
+}
+
 export function deliveryOutcome(
-  recipients: readonly MeetingRecipient[],
+  recipients: readonly { email: string }[],
   results: readonly PromiseSettledResult<unknown>[],
-): { sent: number; failed: string[] } {
+): DeliveryOutcome {
   let sent = 0;
   const failed: string[] = [];
+  const reasons: string[] = [];
+
+  const note = (reason: string) => {
+    const clean = reason.trim();
+    if (clean && !reasons.includes(clean)) reasons.push(clean);
+  };
 
   recipients.forEach((recipient, i) => {
     const result = results[i];
-    const ok =
-      result?.status === "fulfilled" &&
-      (result.value as { ok?: unknown } | null)?.ok === true;
-    if (ok) sent += 1;
-    else failed.push(recipient.email);
+    if (result?.status === "fulfilled") {
+      const value = result.value as { ok?: unknown; detail?: unknown } | null;
+      if (value?.ok === true) {
+        sent += 1;
+        return;
+      }
+      failed.push(recipient.email);
+      // `detail` is the mailer's own words — "no mailbox connected", or what
+      // Gmail answered. It is the only thing in this function a person can act
+      // on, and it was the thing being thrown away.
+      if (typeof value?.detail === "string") note(value.detail);
+      return;
+    }
+
+    failed.push(recipient.email);
+    if (result?.status === "rejected") {
+      const reason = result.reason;
+      note(reason instanceof Error ? reason.message : String(reason ?? "the send threw"));
+    } else {
+      // No result at all: the fan-out did not cover this recipient.
+      note("the send was never attempted");
+    }
   });
 
-  return { sent, failed };
+  return { sent, failed, reasons };
 }
 
 /**
@@ -232,6 +271,18 @@ export function failedNotice(failed: readonly string[]): string | null {
 }
 
 /**
+ * The mailer's own explanation, as a sentence.
+ *
+ * One reason when they agree, which they usually do — a batch shares a mailbox,
+ * so a rejected credential fails every one of them the same way.
+ */
+export function whyNotice(reasons: readonly string[]): string | null {
+  if (reasons.length === 0) return null;
+  const said = reasons.slice(0, 2).join("; ");
+  return `The mail server said: ${said}.`;
+}
+
+/**
  * What to tell the host a send actually did.
  *
  * One function for both panels, because until now each wrote its own version of
@@ -248,6 +299,14 @@ export function deliveryMessage(input: {
   total: number;
   unreachable?: readonly string[];
   failed?: readonly string[];
+  /**
+   * What the mailer said, from `deliveryOutcome`.
+   *
+   * Named in the sentence because "could not deliver to 3 addresses" sends the
+   * host looking at the addresses, and the answer is almost never there — it is
+   * the mailbox the send went out through.
+   */
+  reasons?: readonly string[];
   /** What to call the people, in this screen's words. */
   noun?: string;
 }): string {
@@ -260,7 +319,12 @@ export function deliveryMessage(input: {
         ? `Sent to ${input.total} ${plural}.`
         : `Sent to ${input.sent} of ${input.total} ${plural}.`;
 
-  return [head, failedNotice(input.failed ?? []), unreachableNotice(input.unreachable ?? [])]
+  return [
+    head,
+    failedNotice(input.failed ?? []),
+    whyNotice(input.reasons ?? []),
+    unreachableNotice(input.unreachable ?? []),
+  ]
     .filter(Boolean)
     .join(" ");
 }

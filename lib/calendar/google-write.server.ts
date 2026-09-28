@@ -115,6 +115,31 @@ export async function writeTargetFor(
 }
 
 /**
+ * Whether this member has a calendar that can take a write — without throwing.
+ *
+ * `writeTargetFor` is the authority, and it talks to the database. Calling it on
+ * the meeting-save path means a transient lookup failure would otherwise
+ * propagate out of a `try` that surrounds the save itself, and cost the host
+ * their meeting over a question that was only ever about their calendar.
+ *
+ * `null` means the question could not be answered, which is deliberately NOT
+ * `false`: telling somebody no calendar is connected when the app simply could
+ * not look is the kind of wrong answer that sends them to reconnect something
+ * that was never disconnected.
+ */
+export async function canWriteCalendar(
+  client: ServiceClient,
+  userId: string,
+): Promise<boolean | null> {
+  try {
+    return Boolean(await writeTargetFor(client, userId));
+  } catch (err) {
+    console.warn("[calendar] write-target lookup failed", err);
+    return null;
+  }
+}
+
+/**
  * Bring one meeting's Google event in line with the meeting.
  *
  * Creates, updates or removes it depending on what the meeting now is —

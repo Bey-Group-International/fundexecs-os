@@ -104,7 +104,41 @@ describe("sendMeetingInvites — the host and the calendar", () => {
   it("emails the host as well as the guests", async () => {
     const res = await sendMeetingInvites(BASE);
     expect(to()).toEqual(["rae@fund.test", "ada@example.com"]);
-    expect(res).toEqual({ sent: 2, total: 2 });
+    expect(res).toEqual({ sent: 2, total: 2, attempted: 2, failed: [], reasons: [] });
+  });
+
+  // The defect the scheduling screen sat on top of: this used to return the
+  // success COUNT and nothing else, so a batch Gmail refused came back as a `0`
+  // the caller could not tell apart from "there was nobody to email" — and the
+  // screen, which only spoke when that number was above zero, said nothing at
+  // all. A host watched a meeting save cleanly and no invitation arrive.
+  it("reports a send that reached nobody, and why", async () => {
+    sendEmailMock.mockResolvedValue({ ok: false, channel: "in-app", detail: "no mailbox connected" });
+    const res = await sendMeetingInvites(BASE);
+    expect(res.sent).toBe(0);
+    // The fact that was missing: something WAS tried.
+    expect(res.attempted).toBe(2);
+    expect(res.failed).toEqual(["rae@fund.test", "ada@example.com"]);
+    expect(res.reasons).toEqual(["no mailbox connected"]);
+  });
+
+  it("reports a partial send as partial", async () => {
+    sendEmailMock
+      .mockResolvedValueOnce({ ok: true, channel: "gmail", detail: "sent" })
+      .mockResolvedValueOnce({ ok: false, channel: "gmail", detail: "Invalid Credentials" });
+    const res = await sendMeetingInvites(BASE);
+    expect(res.sent).toBe(1);
+    expect(res.attempted).toBe(2);
+    expect(res.failed).toEqual(["ada@example.com"]);
+    expect(res.reasons).toEqual(["Invalid Credentials"]);
+  });
+
+  it("does not lose the reason when a send throws", async () => {
+    sendEmailMock.mockRejectedValue(new Error("network down"));
+    const res = await sendMeetingInvites(BASE);
+    expect(res.sent).toBe(0);
+    expect(res.attempted).toBe(2);
+    expect(res.reasons).toEqual(["network down"]);
   });
 
   it("emails the host when nobody else is invited", async () => {
@@ -142,7 +176,7 @@ describe("sendMeetingInvites — the host and the calendar", () => {
     // they should not get a second "your meeting is scheduled" for it.
     const res = await sendMeetingInvites({ ...BASE, notifyHost: false });
     expect(to()).toEqual(["ada@example.com"]);
-    expect(res).toEqual({ sent: 1, total: 1 });
+    expect(res).toEqual({ sent: 1, total: 1, attempted: 1, failed: [], reasons: [] });
     const content = invites()[0].content.replace(/\r\n /g, "");
     expect(content).toContain("ORGANIZER;CN=\"rae@fund.test\":MAILTO:rae@fund.test");
   });
@@ -150,7 +184,7 @@ describe("sendMeetingInvites — the host and the calendar", () => {
   it("sends nothing when the host is the only recipient and is opted out", async () => {
     const res = await sendMeetingInvites({ ...BASE, emails: [], notifyHost: false });
     expect(sendEmailMock).not.toHaveBeenCalled();
-    expect(res).toEqual({ sent: 0, total: 0 });
+    expect(res).toEqual({ sent: 0, total: 0, attempted: 0, failed: [], reasons: [] });
   });
 
   it("uses a meeting UID that cannot collide with a booking's", async () => {

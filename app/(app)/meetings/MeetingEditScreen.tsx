@@ -5,12 +5,13 @@ import { AGENTS } from "@/lib/agents";
 import { parseAttendeeInput, type MeetingAttendeeInput } from "@/lib/meetings/attendees";
 import { AttendeePicker } from "./AttendeePicker";
 import { toAttendee, type SelectedAttendee } from "@/lib/meetings/people";
+import { failedNotice, whyNotice } from "@/lib/meetings/recipients";
+import { calendarSyncNote } from "@/lib/meetings/calendar-sync";
 import { MeetingShareLink } from "./MeetingShareLink";
 import {
   MEETING_TYPES,
   CALENDAR_VISIBILITIES,
   RELATED_RECORD_TYPES,
-  EXTERNAL_CALENDAR_PROVIDERS,
   validateMeetingDraft,
   durationMinutesFromTimes,
   localToIso,
@@ -203,8 +204,34 @@ export function MeetingEditScreen({
   const [reminderMinutes, setReminderMinutes] = useState(
     initial?.reminderMinutes === null ? "" : String(initial?.reminderMinutes ?? 15),
   );
-  const [syncEnabled, setSyncEnabled] = useState(initial?.externalCalendarSyncEnabled ?? false);
-  const [syncProvider, setSyncProvider] = useState(initial?.externalCalendarProvider ?? "");
+  // Whether this meeting goes on the host's Google Calendar. Default ON for a
+  // new meeting: the server decides from the connection, and this only has to
+  // agree with it so the box the host sees matches what will happen. An EDIT
+  // keeps whatever the meeting already carries, so opening and saving a meeting
+  // the host deliberately kept off their calendar does not put it back on.
+  const [syncEnabled, setSyncEnabled] = useState(
+    mode === "edit" ? (initial?.externalCalendarSyncEnabled ?? false) : true,
+  );
+  // Whether a calendar can be written to at all. Null until asked — the form
+  // must not claim either answer before it knows.
+  const [calendarConnected, setCalendarConnected] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    let live = true;
+    // providerSyncAvailable, not "is Google connected": a read-only grant 403s
+    // on every write, so it would promise a sync that cannot happen.
+    fetch("/api/meetings/calendar-status")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((json: { providerSyncAvailable?: boolean } | null) => {
+        if (live && json) setCalendarConnected(json.providerSyncAvailable === true);
+      })
+      .catch(() => {
+        // Unknown stays unknown. The save still reports what actually happened.
+      });
+    return () => {
+      live = false;
+    };
+  }, []);
 
   // Video conferencing is the built-in FundExecs room — no external service.
   // `meetingUrl` is still carried through the payload so an externally-imported
@@ -220,7 +247,11 @@ export function MeetingEditScreen({
           initial?.assignedCopilotAgent ||
           initial?.meetingUrl ||
           initial?.preparationRequirements ||
-          initial?.externalCalendarSyncEnabled ||
+          // Deliberately NOT externalCalendarSyncEnabled any more. Calendar sync
+          // used to be off unless somebody went looking for it, so its being on
+          // meant the meeting carried unusual configuration. It is now the
+          // ordinary state of every meeting with a connected calendar, and
+          // treating it as advanced would spring this panel open on every edit.
           // null reminder = "No reminder", a deliberate non-default (default 15).
           initial?.reminderMinutes !== 15 ||
           (initial?.calendarVisibility != null && initial.calendarVisibility !== "organization"),
@@ -303,7 +334,6 @@ export function MeetingEditScreen({
       reminderMinutes: reminderMinutes ? Number(reminderMinutes) : null,
       externalCalendarSyncEnabled: syncEnabled,
       guestQuickAccess,
-      externalCalendarProvider: syncProvider || null,
     };
   }
 
@@ -359,7 +389,9 @@ export function MeetingEditScreen({
                 meetingUrl: payload.meetingUrl,
                 calendarVisibility: payload.calendarVisibility,
                 reminderMinutes: payload.reminderMinutes,
-                externalCalendarProvider: payload.externalCalendarProvider,
+                // The provider is derived server-side from the connection, not
+                // chosen here: only Google has a writer, so offering a choice was
+                // offering three options that silently did nothing.
                 externalCalendarSyncEnabled: payload.externalCalendarSyncEnabled,
                 // Must be sent even when false. This is an explicit projection,
                 // not a spread, so a field left out is not "unchanged" — it is
@@ -402,6 +434,10 @@ export function MeetingEditScreen({
       const json = (await res.json().catch(() => ({}))) as MeetingSaveResult & {
         externalSyncError?: string;
         invited?: number;
+        attempted?: number;
+        calendarNote?: string;
+        inviteFailures?: string[];
+        inviteReasons?: string[];
         uninvited?: number;
         notified?: number;
         mailboxConnected?: boolean;
@@ -419,8 +455,33 @@ export function MeetingEditScreen({
       // sync failed); otherwise close immediately. The list refreshes either way
       // via its realtime subscription.
       const messages: string[] = [];
-      if (json.invited && json.invited > 0) {
-        messages.push(`invited ${json.invited} guest${json.invited === 1 ? "" : "s"} by email`);
+      const invited = json.invited ?? 0;
+      const attempted = json.attempted ?? 0;
+      if (invited > 0) {
+        messages.push(`invited ${invited} guest${invited === 1 ? "" : "s"} by email`);
+      }
+      // The defect this screen had: it spoke only when `invited > 0`, so a save
+      // whose entire invite batch was refused produced NO message — identical
+      // on screen to a meeting with nobody to email. That is the state a host
+      // sits in believing their guests were told.
+      //
+      // Reported with the mail server's own words, because the fault is almost
+      // never the addresses: it is the mailbox the send went out through, and
+      // an expired Google credential looks exactly like this.
+      if (attempted > invited) {
+        const missed = attempted - invited;
+        const people = `${missed} ${missed === 1 ? "person" : "people"}`;
+        messages.push(
+          [
+            invited === 0
+              ? `NO EMAIL REACHED ANYONE \u2014 all ${attempted} failed.`
+              : `${people} of ${attempted} were not emailed.`,
+            failedNotice(json.inviteFailures ?? []),
+            whyNotice(json.inviteReasons ?? []),
+          ]
+            .filter(Boolean)
+            .join(" "),
+        );
       }
       // Moving a meeting emails the people already on it. Say so, so the host
       // knows an edit reached their guests and isn't surprised by replies.
@@ -440,7 +501,11 @@ export function MeetingEditScreen({
       // No mailbox means nothing was sent to anyone, which otherwise looks
       // exactly like "there was nobody to send to". Say it first: it is the
       // reason the other counts are zero.
-      if (json.mailboxConnected === false) {
+      // Only when nothing actually went. `mailboxConnected` comes from a
+      // pre-check on the member's OWN grant, while the send itself falls back to
+      // the organization's mailbox — so this claim is false whenever that
+      // fallback worked, and it was being made anyway.
+      if (json.mailboxConnected === false && invited === 0) {
         messages.unshift(
           json.mailboxProblem
             ? `no email was sent — ${json.mailboxProblem.charAt(0).toLowerCase()}${json.mailboxProblem.slice(1)}`
@@ -449,6 +514,12 @@ export function MeetingEditScreen({
       }
       if (json.externalSyncError) {
         messages.push(`external calendar sync failed: ${json.externalSyncError}`);
+      }
+      // Not a failure — there is simply no calendar to write to. Reported all
+      // the same, because the absence is exactly what a host asking "why isn't
+      // this in my calendar?" needs told.
+      if (json.calendarNote) {
+        messages.push(json.calendarNote);
       }
       // Stay open after a real save. Previously the screen closed unless
       // something noteworthy had happened, which meant the moment you most want
@@ -751,24 +822,40 @@ export function MeetingEditScreen({
                   <TextArea label="Attachments / linked documents" value={attachments} onChange={setAttachments} hint="One per line. Name <https://link> or a plain label." />
                 </Section>
 
-                <Section title="External calendar sync">
-                  <label className="flex items-start gap-2 rounded-lg border border-[var(--line)] bg-[var(--surface-0)] px-3 py-2.5">
-                    <input type="checkbox" checked={syncEnabled} onChange={(e) => setSyncEnabled(e.target.checked)} className="mt-0.5" />
-                    <span className="text-xs text-[var(--fg-secondary)]">
-                      Sync to a third-party calendar after saving. The native FundExecs calendar always remains the source of truth.
-                    </span>
-                  </label>
-                  {syncEnabled ? (
-                    <SelectField
-                      label="Third-party provider"
-                      value={syncProvider}
-                      onChange={setSyncProvider}
-                      options={[
-                        { value: "", label: "Select provider" },
-                        ...EXTERNAL_CALENDAR_PROVIDERS.map((p) => ({ value: p, label: p.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()) })),
-                      ]}
-                    />
-                  ) : null}
+                <Section title="Your Google Calendar">
+                  {/* An opt-OUT, and only when there is something to opt out of.
+                      This was a "Sync to a third-party calendar" checkbox that
+                      defaulted to off, next to a provider dropdown offering
+                      Outlook, Calendly and iCal — none of which has a writer.
+                      Between them, the ordinary way of scheduling a meeting never
+                      pushed anything anywhere, and the one provider that works
+                      had to be found and chosen inside a collapsed section. */}
+                  {calendarConnected === false ? (
+                    <p className="rounded-lg border border-[var(--line)] bg-[var(--surface-0)] px-3 py-2.5 text-xs text-[var(--fg-muted)]">
+                      {calendarSyncNote({ connected: false, optedOut: false })}
+                    </p>
+                  ) : (
+                    <>
+                      <label className="flex items-start gap-2 rounded-lg border border-[var(--line)] bg-[var(--surface-0)] px-3 py-2.5">
+                        <input
+                          type="checkbox"
+                          checked={!syncEnabled}
+                          onChange={(e) => setSyncEnabled(!e.target.checked)}
+                          className="mt-0.5"
+                        />
+                        <span className="text-xs text-[var(--fg-secondary)]">
+                          Keep this meeting off my Google Calendar
+                        </span>
+                      </label>
+                      <p className="px-1 text-[11px] text-[var(--fg-muted)]">
+                        {/* `null` is "not asked yet", and it must not be read as
+                            a yes: promising "will be added" before the lookup
+                            answers is a claim that can turn out false a moment
+                            later. */}
+                        {calendarSyncNote({ connected: calendarConnected, optedOut: !syncEnabled })}
+                      </p>
+                    </>
+                  )}
                 </Section>
               </div>
             </div>
