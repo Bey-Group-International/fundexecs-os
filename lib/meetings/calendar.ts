@@ -126,12 +126,31 @@ export function eventSpanMinutes(m: CalendarMeeting): [number, number] {
 
 // ── Grouping / selection ───────────────────────────────────────────────────
 
-/** Meetings that have a scheduled time on the given day, sorted by start. */
+/**
+ * Day indexes, one per meetings array.
+ *
+ * The calendar asks for every visible day's meetings on every render — 42
+ * cells in a month, and the view re-renders each second for its clock — and
+ * filtering the whole list per cell made that 42 full scans a second. Callers
+ * pass memoized arrays, so the array itself is the cache key: a new list
+ * builds a new index, and an old one is collected with it.
+ */
+const dayIndexes = new WeakMap<CalendarMeeting[], Map<string, CalendarMeeting[]>>();
+const NO_MEETINGS: CalendarMeeting[] = [];
+
+/**
+ * Meetings that have a scheduled time on the given day, sorted by start.
+ *
+ * The returned array is shared between calls for the same list and day, so
+ * callers must not mutate it.
+ */
 export function eventsForDay(meetings: CalendarMeeting[], day: Date): CalendarMeeting[] {
-  const key = dayKey(day);
-  return meetings
-    .filter((m) => m.scheduled_at && dayKey(new Date(m.scheduled_at)) === key)
-    .sort((a, b) => new Date(a.scheduled_at!).getTime() - new Date(b.scheduled_at!).getTime());
+  let index = dayIndexes.get(meetings);
+  if (!index) {
+    index = groupByDay(meetings);
+    dayIndexes.set(meetings, index);
+  }
+  return index.get(dayKey(day)) ?? NO_MEETINGS;
 }
 
 /** Bucket every scheduled meeting by its local day key. */
@@ -155,7 +174,19 @@ export function groupByDay(meetings: CalendarMeeting[]): Map<string, CalendarMee
  * so a day/week column can render them without covering each other. Returns a
  * map of meeting id → { lane, lanes } where width = 1/lanes and left = lane/lanes.
  */
+const layouts = new WeakMap<CalendarMeeting[], Map<string, { lane: number; lanes: number }>>();
+
 export function layoutDayEvents(events: CalendarMeeting[]): Map<string, { lane: number; lanes: number }> {
+  // eventsForDay hands back the same array until the list changes, so the
+  // lanes of an unchanged day are worked out once, not on every clock tick.
+  const cached = layouts.get(events);
+  if (cached) return cached;
+  const result = computeDayLayout(events);
+  layouts.set(events, result);
+  return result;
+}
+
+function computeDayLayout(events: CalendarMeeting[]): Map<string, { lane: number; lanes: number }> {
   const items = events
     .map((m) => {
       const [s, e] = eventSpanMinutes(m);

@@ -66,6 +66,16 @@ import {
   transcriptRows,
 } from "@/lib/meetings/transcript-buffer";
 import { recordingNotice, type RecordingState } from "@/lib/meetings/recording-policy";
+import {
+  NO_ELAPSED,
+  elapsedSeconds,
+  formatElapsed,
+  monotonicNow,
+  startSpan,
+  stopSpan,
+  type ElapsedState,
+} from "@/lib/meetings/elapsed";
+import { MeetingClock } from "./MeetingClock";
 import { useRecording } from "@/lib/meetings/use-recording";
 import { RecordingComposer, type ComposerHandlers, type RoomSnapshot } from "@/lib/meetings/recording-composer";
 import { BackgroundProcessor } from "@/lib/meetings/background-processor";
@@ -167,11 +177,17 @@ import { isAdmissionLive, type AdmissionUiState } from "@/lib/meetings/admission
 import { REMOVAL_NUDGE, removalChannelName } from "@/lib/meetings/removal-channel";
 import { subjectFor, subjectKey, type RemovalSubject } from "@/lib/meetings/removal";
 import {
+  NO_DECISIONS,
   PRESENCE_GRACE_MS,
   applyAdmissionChange,
+  forgetDecided,
   presentOnly,
+  pruneDecided,
+  rememberDecided,
   toEntry,
+  withoutDecided,
   type AdmissionChange,
+  type DecidedIds,
   type WaitingRow,
 } from "@/lib/meetings/waiting-room";
 import {
@@ -527,13 +543,28 @@ function FloatingMenu({
 
 // ─── VideoTile ────────────────────────────────────────────────────────────────
 
-function VideoTile({
-  stream, label, muted = false, isLocal = false,
+/** The markup for one face. Exported memoised, as `VideoTile` below. */
+function VideoTileImpl({
+  stream, videoTrack, label, muted = false, isLocal = false,
   handRaised = false, reaction = "", large = false,
   micOn = true, speaking = false, camOn = true, videoPaused = false,
   status = "live",
 }: {
-  stream: MediaStream | null; label: string; muted?: boolean; isLocal?: boolean;
+  stream: MediaStream | null;
+  /**
+   * The stream's live video track, passed IN rather than read off `stream` here.
+   *
+   * This looks redundant and is the only thing making the memo below correct. A
+   * replaced track — a peer starting a screen share, switching camera, turning a
+   * background on — is swapped into the SAME MediaStream object, so `stream`
+   * compares equal across the update while its contents have changed. A memo
+   * comparator cannot see that: both sides hold one object, and reading the
+   * track from each gives the same answer, because there is no record of what
+   * was there before. A prop is that record — React snapshots it at render time,
+   * so the old track and the new one are two different values to compare.
+   */
+  videoTrack: MediaStreamTrack | null;
+  label: string; muted?: boolean; isLocal?: boolean;
   handRaised?: boolean; reaction?: string; large?: boolean;
   /** That participant's own report of their mic track. */
   micOn?: boolean;
@@ -547,7 +578,7 @@ function VideoTile({
   status?: PeerLinkStatus;
 }) {
   const videoRef = useRef<HTMLVideoElement>(null);
-  const track = stream?.getVideoTracks()[0] ?? null;
+  const track = videoTrack;
   // Re-render when the track's lifecycle changes (ends / mutes / unmutes) so the
   // placeholder appears/disappears in step with the real camera state.
   const [, bump] = useReducer((n: number) => n + 1, 0);
@@ -638,6 +669,38 @@ function VideoTile({
       )}
     </div>
   );
+}
+
+/** The live video track inside a stream, which is not the same as the stream. */
+export function videoTrackOf(stream: MediaStream | null): MediaStreamTrack | null {
+  return stream?.getVideoTracks()[0] ?? null;
+}
+
+/**
+ * One face in the room, re-rendered when something about THAT participant
+ * changed and not before.
+ *
+ * Without this, everything that re-renders MeetingRoom re-rendered every tile in
+ * the call: a transcript line landing, a chat message arriving, somebody
+ * starting or stopping talking — up to eight times a second, since the analyser
+ * samples at 120ms. None of those change most tiles, and all of them were
+ * reconciling all of them, on the same main thread that is decoding the video.
+ *
+ * The default shallow comparison is enough because every prop is a primitive
+ * except `stream` and `videoTrack`, and those two are compared by identity —
+ * which is exactly why the track is a prop. See the note on it above.
+ */
+export const VideoTile = React.memo(VideoTileImpl);
+
+/** One participant's audio, as the voice meter reads it. */
+interface VoiceTap {
+  id: string;
+  /** The track this tap reads; a replaced track means a new tap. */
+  track: MediaStreamTrack;
+  analyser: AnalyserNode;
+  source: MediaStreamAudioSourceNode;
+  buffer: Float32Array<ArrayBuffer>;
+  smoothed: number;
 }
 
 // ─── DeviceChevron ────────────────────────────────────────────────────────────
@@ -814,21 +877,10 @@ export function HostExitControl({
   );
 }
 
-/** Seconds as mm:ss, or h:mm:ss once a meeting has run past the hour. */
-function formatClock(seconds: number): string {
-  const total = Math.max(0, Math.floor(seconds));
-  const h = Math.floor(total / 3600);
-  const m = Math.floor((total % 3600) / 60);
-  const sec = total % 60;
-  const mm = String(m).padStart(2, "0");
-  const ss = String(sec).padStart(2, "0");
-  return h > 0 ? `${h}:${mm}:${ss}` : `${mm}:${ss}`;
-}
-
 // ─── ControlBar ───────────────────────────────────────────────────────────────
 
 function ControlBar({
-  micOn, camOn, shareOn, shareStarting, copilotOpen, isHost, handRaised, handsUp, handsUpNote, layout, layoutForced, chatUnread, waitingCount, duration, roomCode, bwMode,
+  micOn, camOn, shareOn, shareStarting, copilotOpen, isHost, handRaised, handsUp, handsUpNote, layout, layoutForced, chatUnread, waitingCount, elapsed, roomCode, bwMode,
   onToggleMic, onToggleCam, onToggleScreen, onToggleCopilot, onLeave, onEndForAll,
   onSwitchMic, onSwitchCam, onSwitchSpeaker, onRaiseHand, onReaction, onMuteAll, onToggleLayout, onFlipCamera,
   activeMicId, activeCamId, camStarting,
@@ -848,7 +900,12 @@ function ControlBar({
   /** The call is already being torn down — the exit controls must not re-fire. */
   leaving: boolean;
   micOn: boolean; camOn: boolean; shareOn: boolean; shareStarting: boolean; copilotOpen: boolean; isHost: boolean;
-  handRaised: boolean; layout: "grid" | "speaker"; chatUnread: number; waitingCount: number; duration: number;
+  handRaised: boolean; layout: "grid" | "speaker"; chatUnread: number; waitingCount: number;
+  /**
+   * Live-span bookkeeping for the meeting clock, passed as a ref so this bar's
+   * props do not change when a second passes. MeetingClock ticks itself.
+   */
+  elapsed: { readonly current: ElapsedState };
   /**
    * How many OTHER people have a hand up, and how to say it.
    *
@@ -869,15 +926,13 @@ function ControlBar({
   onRaiseHand: () => void; onReaction: (emoji: string) => void; onMuteAll: () => void; onToggleLayout: () => void;
   onFlipCamera: () => void;
 }) {
-  const mins = String(Math.floor(duration / 60)).padStart(2, "0");
-  const secs = String(duration % 60).padStart(2, "0");
   const [reactionOpen, setReactionOpen] = useState(false);
   const reactionBtnRef = useRef<HTMLButtonElement>(null);
 
   return (
     <div className="flex items-center justify-between px-3 sm:px-6 py-3 border-t border-[var(--line)] bg-[var(--surface-1)] shrink-0 gap-2">
       {/* Timer — hidden on very small screens to save space */}
-      <span className="hidden sm:block text-xs font-mono text-[var(--fg-muted)] tabular-nums w-16 shrink-0">{mins}:{secs}</span>
+      <MeetingClock elapsed={elapsed} className="hidden sm:block text-xs font-mono text-[var(--fg-muted)] tabular-nums w-16 shrink-0" />
 
       <div className="flex items-center gap-1.5 sm:gap-2 flex-1 justify-center">
         {/* Core controls — always visible */}
@@ -985,7 +1040,7 @@ function ControlBar({
             }`} />
             <span className="hidden sm:inline">
               {recordingState === "recording"
-                ? `Stop · ${formatClock(recordingElapsed)}`
+                ? `Stop · ${formatElapsed(recordingElapsed)}`
                 : recordingState === "starting" ? "Starting…"
                 : recordingState === "stopping" ? "Saving…"
                 : "Record"}
@@ -1631,8 +1686,10 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
   // room shows a share as ordinary video, but the recording gives it the frame.
   const sharingPeersRef = useRef<Set<string>>(new Set());
 
-  // Transcript
-  const [transcript, setTranscript] = useState<TranscriptLine[]>([]);
+  // Transcript. A ref, not state: nothing on screen shows it (the flush, the
+  // attribution and the report all read the ref), and as state every interim
+  // speech result — several a second while anyone talks — re-rendered the
+  // whole room to draw nothing.
   const transcriptRef = useRef<TranscriptLine[]>([]);
   const recognitionRef = useRef<any>(null);
   const interimIdRef = useRef<string>(crypto.randomUUID());
@@ -1706,6 +1763,24 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
 
   // Waiting room
   const [waitingPeers, setWaitingPeers] = useState<WaitingPeer[]>([]);
+  /**
+   * Admissions the host has decided but the table may not carry yet.
+   *
+   * A ref, because it guards writes to `waitingPeers` rather than being
+   * rendered: putting it in state would re-render the room on every decision for
+   * something nothing displays. See lib/meetings/waiting-room.ts for why the
+   * screen has to outrank the database for a moment.
+   */
+  const decidedRef = useRef<DecidedIds>(NO_DECISIONS);
+  /**
+   * The panel's current contents, for the handlers that need to read them.
+   *
+   * "Admit all" is a decision about the people the host can SEE, so it has to
+   * name them — and it cannot read them out of a setState updater, because an
+   * updater has to be pure and React is free to run it more than once.
+   */
+  const waitingPeersRef = useRef<WaitingPeer[]>([]);
+  waitingPeersRef.current = waitingPeers;
   /**
    * Who the host has removed from this meeting.
    *
@@ -1791,7 +1866,18 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
   const [copilotOpen, setCopilotOpen] = useState(true);
   const [copilotMounted, setCopilotMounted] = useState(true);
   const copilotUnmountRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const [duration, setDuration] = useState(0);
+  /**
+   * How long the meeting has been live, as spans rather than a running count.
+   *
+   * A ref, not state: nothing in this component needs to re-render when a second
+   * passes. The clock in the control bar is its own leaf and ticks itself, and
+   * the report reads the total once, at the end. It used to be
+   * `useState(0)` advanced by a one-second interval, which re-rendered this
+   * entire component and every video tile in the call once a second for the
+   * length of the meeting — and undercounted, because a counter lands on the
+   * number of callbacks rather than on the time.
+   */
+  const elapsedRef = useRef<ElapsedState>(NO_ELAPSED);
   const [ready, setReady] = useState(false);
   // Leaving is a lifecycle, not an instant. Ending posts a transcript to a model
   // that can take up to two minutes, and the call is already torn down by then —
@@ -2803,8 +2889,8 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
       // Order by when the words were spoken, not when the packet landed. Two
       // people talking at once reach us out of order otherwise, and the notes
       // model then reads a conversation whose turns are shuffled.
-      setTranscript((prev) => {
-        const next = [...prev];
+      {
+        const next = [...transcriptRef.current];
         // Step past the in-progress interim line, which always trails the
         // finals, then back through any final spoken after this one.
         let at = next.length;
@@ -2812,8 +2898,7 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
         while (at > 0 && next[at - 1].ts > line.ts) at--;
         next.splice(at, 0, line);
         transcriptRef.current = next;
-        return next;
-      });
+      }
     }
 
     if (msg.type === "recording" && msg.from !== myId) {
@@ -3587,7 +3672,13 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
       // where it stops.
       .limit(WAITING_CAP);
     const rows = (data ?? []) as WaitingRow[];
-    setWaitingPeers(rows.map(toEntry));
+    // Anything the host has just decided on is held back, however the table
+    // still describes it. This read is scheduled off ANY admission event — a
+    // second guest's presence write will do — so it routinely lands inside the
+    // window where an admit is still in flight.
+    const now = Date.now();
+    decidedRef.current = pruneDecided(decidedRef.current, now);
+    setWaitingPeers(withoutDecided(rows.map(toEntry), decidedRef.current, now));
   }, [meetingId, supabase]);
 
   /** Everyone the host has removed, for the panel that can let them back in. */
@@ -3662,7 +3753,16 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
         "postgres_changes",
         { event: "*", schema: "public", table: "live_meeting_admissions", filter: `meeting_id=eq.${meetingId}` },
         (payload: unknown) => {
-          setWaitingPeers((prev) => applyAdmissionChange(prev, payload as AdmissionChange));
+          // Same guard on the event path: a presence write on a just-admitted
+          // row arrives as an UPDATE whose status is still `waiting`, which
+          // would put the person the host removed straight back.
+          setWaitingPeers((prev) =>
+            withoutDecided(
+              applyAdmissionChange(prev, payload as AdmissionChange),
+              decidedRef.current,
+              Date.now(),
+            ),
+          );
           scheduleReconcile();
         },
       )
@@ -3707,14 +3807,21 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
    * carries its own tick.
    */
   const [presenceNowMs, setPresenceNowMs] = useState(() => Date.now());
+  // Only while somebody is waiting: with an empty queue there is nothing to
+  // expire, and the tick was re-rendering the whole room for the entire call.
+  const anyoneWaiting = waitingPeers.length > 0;
   useEffect(() => {
-    if (!isHost || !sessionLive) return;
+    if (!isHost || !sessionLive || !anyoneWaiting) return;
+    setPresenceNowMs(Date.now());
     const timer = setInterval(() => setPresenceNowMs(Date.now()), PRESENCE_TICK_MS);
     return () => clearInterval(timer);
-  }, [isHost, sessionLive]);
+  }, [isHost, sessionLive, anyoneWaiting]);
 
+  // The current time, not the last tick's: the tick is paused while nobody is
+  // waiting, and filtering a newly arrived list against a clock frozen minutes
+  // ago would briefly count a stale knock as present — and chime for it.
   const livePeers = useMemo(
-    () => presentOnly(waitingPeers, presenceNowMs),
+    () => presentOnly(waitingPeers, Math.max(presenceNowMs, Date.now())),
     [waitingPeers, presenceNowMs],
   );
 
@@ -3794,12 +3901,18 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     void applySpeakerSink(selectedSpeakerId);
   }, [ready, selectedSpeakerId, peers, applySpeakerSink]);
 
-  // ── Duration timer ────────────────────────────────────────────────────────
+  // ── How long the meeting has been live ────────────────────────────────────
 
+  // Open a live span while the session is live and bank it when it is not, so a
+  // call that drops and recovers counts the stretches it was actually running
+  // and not the gap between them. No interval: the total is arithmetic on these
+  // two timestamps, asked whenever somebody wants it.
   useEffect(() => {
     if (!sessionLive) return;
-    const t = setInterval(() => setDuration((d) => d + 1), 1000);
-    return () => clearInterval(t);
+    elapsedRef.current = startSpan(elapsedRef.current, monotonicNow());
+    return () => {
+      elapsedRef.current = stopSpan(elapsedRef.current, monotonicNow());
+    };
   }, [sessionLive]);
 
   // ── Speech recognition ────────────────────────────────────────────────────
@@ -3857,16 +3970,12 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
       // under their own name, and publishing our copy as well would put the same
       // sentence in the transcript twice.
       if (attribution && !attribution.publish) {
-        setTranscript((prev) => {
-          const next = prev.filter((l) => l.final);
-          transcriptRef.current = next;
-          return next;
-        });
+        transcriptRef.current = transcriptRef.current.filter((l) => l.final);
         return;
       }
 
-      setTranscript((prev) => {
-        const next = [...prev.filter((l) => l.final)];
+      {
+        const next = transcriptRef.current.filter((l) => l.final);
         if (settled && attribution) {
           const ts = now;
           next.push({
@@ -3910,8 +4019,7 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
           });
         }
         transcriptRef.current = next;
-        return next;
-      });
+      }
     };
 
     recognition.onerror = (ev: any) => {
@@ -3941,6 +4049,13 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
   // This runs in every layout, unlike the old speaker-view-only meter. It has to:
   // attribution needs to know whose voice was in the room during an utterance
   // regardless of which tiles the user happens to be looking at.
+  // One AudioContext for the whole live call, with a tap per participant added
+  // and removed as people come and go. It used to be rebuilt from scratch on
+  // every change to `peers` or the local stream — each join changes `peers`
+  // about three times — which re-created the context and every analyser and
+  // reset every level to zero each time.
+  const meterRef = useRef<{ ctx: AudioContext; taps: Map<string, VoiceTap> } | null>(null);
+
   useEffect(() => {
     if (!sessionLive) return;
 
@@ -3955,40 +4070,16 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     // like a room where nobody is talking. Nudge it back.
     if (ctx.state === "suspended") void ctx.resume().catch(() => {});
 
-    const streams = [
-      ...(localStream ? [{ id: LOCAL_SPEAKER_ID, stream: localStream }] : []),
-      ...[...peers.values()].filter((p) => p.stream).map((p) => ({ id: p.id, stream: p.stream! })),
-    ];
-
-    const taps: {
-      id: string;
-      analyser: AnalyserNode;
-      source: MediaStreamAudioSourceNode;
-      buffer: Float32Array<ArrayBuffer>;
-      smoothed: number;
-    }[] = [];
-    for (const { id, stream } of streams) {
-      const audio = stream.getAudioTracks();
-      if (audio.length === 0) continue;
-      try {
-        // Tap a copy holding only the audio tracks — feeding a source node a
-        // stream whose video track is later replaced (screen share) can drop the
-        // tap on some browsers.
-        const source = ctx.createMediaStreamSource(new MediaStream(audio));
-        const analyser = ctx.createAnalyser();
-        analyser.fftSize = 1024;
-        source.connect(analyser);
-        taps.push({ id, analyser, source, buffer: new Float32Array(analyser.fftSize), smoothed: 0 });
-      } catch { /* a stream can end between render and tap */ }
-    }
-    if (taps.length === 0) { void ctx.close().catch(() => {}); return; }
+    const taps = new Map<string, VoiceTap>();
+    meterRef.current = { ctx, taps };
 
     const interval = setInterval(() => {
+      if (taps.size === 0) return;
       const now = Date.now();
       let loudest = 0;
       let loudestId: string | null = null;
 
-      for (const tap of taps) {
+      for (const tap of taps.values()) {
         tap.analyser.getFloatTimeDomainData(tap.buffer);
         tap.smoothed = smoothLevel(tap.smoothed, levelFromSamples(tap.buffer));
 
@@ -4014,8 +4105,47 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     return () => {
       clearInterval(interval);
       taps.forEach((t) => { try { t.source.disconnect(); } catch { /* context already gone */ } });
+      taps.clear();
+      meterRef.current = null;
       void ctx.close().catch(() => {});
     };
+  }, [sessionLive]);
+
+  // Keep the taps in step with who is in the call. Declared after the effect
+  // above so, in the commit that makes the call live, the context exists by the
+  // time this runs.
+  useEffect(() => {
+    const meter = meterRef.current;
+    if (!sessionLive || !meter) return;
+
+    const wanted = new Map<string, MediaStreamTrack>();
+    const add = (id: string, stream: MediaStream | null | undefined) => {
+      const track = stream?.getAudioTracks()[0];
+      if (track) wanted.set(id, track);
+    };
+    add(LOCAL_SPEAKER_ID, localStream);
+    for (const p of peers.values()) add(p.id, p.stream);
+
+    // Drop taps for people who left, or whose audio track was replaced.
+    for (const [id, tap] of meter.taps) {
+      if (wanted.get(id) === tap.track) continue;
+      try { tap.source.disconnect(); } catch { /* already gone */ }
+      meter.taps.delete(id);
+    }
+
+    for (const [id, track] of wanted) {
+      if (meter.taps.has(id)) continue;
+      try {
+        // Tap a stream holding only the audio track — feeding a source node a
+        // stream whose video track is later replaced (screen share) can drop the
+        // tap on some browsers.
+        const source = meter.ctx.createMediaStreamSource(new MediaStream([track]));
+        const analyser = meter.ctx.createAnalyser();
+        analyser.fftSize = 1024;
+        source.connect(analyser);
+        meter.taps.set(id, { id, track, analyser, source, buffer: new Float32Array(analyser.fftSize), smoothed: 0 });
+      } catch { /* a stream can end between render and tap */ }
+    }
   }, [sessionLive, localStream, peers]);
 
   // Someone who leaves stops being "speaking" — otherwise their dot stays lit on
@@ -5474,8 +5604,18 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
   // guest then vanished from the host's panel while still standing outside, and
   // the host had every reason to think they had let them in. So a failed decision
   // re-reads the list and puts them back, where they can be admitted again.
-  const decideAdmission = useCallback(async (body: Record<string, unknown>) => {
+  /**
+   * Send a decision, and hold the panel to it until the table catches up.
+   *
+   * `ids` is what was removed from the screen optimistically. Remembering it
+   * stops the coalesced re-read and the Realtime events putting those people
+   * back while the POST is in flight; forgetting it on failure is what lets the
+   * re-read below actually restore them, which is the whole point of that
+   * re-read and would otherwise be silently swallowed.
+   */
+  const decideAdmission = useCallback(async (body: Record<string, unknown>, ids: readonly string[]) => {
     if (!meetingId) return;
+    decidedRef.current = rememberDecided(decidedRef.current, ids, Date.now());
     let ok = false;
     try {
       const res = await fetch(`/api/meetings/${meetingId}/admissions`, {
@@ -5486,22 +5626,28 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
       ok = res.ok;
       if (!ok) console.warn("[meeting] admission decision rejected", res.status);
     } catch (e) { console.warn("[meeting] admission decision failed", e); }
-    if (!ok) await loadWaiting();
+    if (!ok) {
+      decidedRef.current = forgetDecided(decidedRef.current, ids);
+      await loadWaiting();
+    }
   }, [meetingId, loadWaiting]);
 
   const admitPeer = useCallback((admissionId: string) => {
     setWaitingPeers((prev) => prev.filter((w) => w.id !== admissionId));
-    void decideAdmission({ decision: "admit", admissionId });
+    void decideAdmission({ decision: "admit", admissionId }, [admissionId]);
   }, [decideAdmission]);
 
   const denyPeer = useCallback((admissionId: string) => {
     setWaitingPeers((prev) => prev.filter((w) => w.id !== admissionId));
-    void decideAdmission({ decision: "deny", admissionId });
+    void decideAdmission({ decision: "deny", admissionId }, [admissionId]);
   }, [decideAdmission]);
 
   const admitAll = useCallback(() => {
+    // Every id on the panel right now: "all" is a decision about the people the
+    // host can see, and those are the ones the table must not hand back.
+    const ids = waitingPeersRef.current.map((w) => w.id);
     setWaitingPeers([]);
-    void decideAdmission({ decision: "admit", all: true });
+    void decideAdmission({ decision: "admit", all: true }, ids);
   }, [decideAdmission]);
 
   /**
@@ -5681,7 +5827,11 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
           title: meetingTitleRef.current,
           participants,
           transcript: fullText,
-          duration,
+          // Read once, here, from the spans — not a counter that has been
+          // accumulating since the call began. This number IS the meeting's
+          // recorded length, and a tick-counter version of it was short by
+          // however late every one of its callbacks had been.
+          duration: elapsedSeconds(elapsedRef.current, monotonicNow()),
         }),
       });
       if (res.ok) { router.push(`/meetings/${roomCode}/report`); return; }
@@ -5694,7 +5844,7 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     endingRef.current = false;
     callPhaseRef.current = nextPhase(callPhaseRef.current, "report_failed");
     setCallPhase(callPhaseRef.current);
-  }, [sendSignal, teardownCall, meetingId, duration, roomCode, router, drainTranscript]);
+  }, [sendSignal, teardownCall, meetingId, roomCode, router, drainTranscript]);
 
   const endForAll = useCallback(async () => {
     await endMeeting();
@@ -5912,9 +6062,9 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
           )}
           {stageLayout === "grid" ? (
             <div className={`flex-1 grid ${gridClass} gap-3 p-4 content-center`}>
-              <VideoTile stream={localStream} label={localName} muted isLocal handRaised={handRaised} reaction={getReaction("local")} micOn={micOn} speaking={speaking.has(LOCAL_SPEAKER_ID)} camOn={camOn} videoPaused={bwMode === "audio-only"} />
+              <VideoTile stream={localStream} videoTrack={videoTrackOf(localStream)} label={localName} muted isLocal handRaised={handRaised} reaction={getReaction("local")} micOn={micOn} speaking={speaking.has(LOCAL_SPEAKER_ID)} camOn={camOn} videoPaused={bwMode === "audio-only"} />
               {allPeers.map((peer: Peer) => (
-                <VideoTile key={peer.id} stream={peer.stream} label={peer.displayName} handRaised={raisedHands.has(peer.id)} reaction={getReaction(peer.id)} micOn={peerMicOn.get(peer.id) ?? true} speaking={speaking.has(peer.id)} camOn={videoOf(peer.id).camOn} videoPaused={videoOf(peer.id).paused} status={statusOf(peer.id)} />
+                <VideoTile key={peer.id} stream={peer.stream} videoTrack={videoTrackOf(peer.stream)} label={peer.displayName} handRaised={raisedHands.has(peer.id)} reaction={getReaction(peer.id)} micOn={peerMicOn.get(peer.id) ?? true} speaking={speaking.has(peer.id)} camOn={videoOf(peer.id).camOn} videoPaused={videoOf(peer.id).paused} status={statusOf(peer.id)} />
               ))}
             </div>
           ) : (
@@ -5922,11 +6072,11 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
               {/* Main speaker tile */}
               <div className="flex-1 min-h-0">
                 {speakerIsLocal ? (
-                  <VideoTile stream={localStream} label={localName} muted isLocal handRaised={handRaised} reaction={getReaction("local")} micOn={micOn} speaking={speaking.has(LOCAL_SPEAKER_ID)} camOn={camOn} videoPaused={bwMode === "audio-only"} large />
+                  <VideoTile stream={localStream} videoTrack={videoTrackOf(localStream)} label={localName} muted isLocal handRaised={handRaised} reaction={getReaction("local")} micOn={micOn} speaking={speaking.has(LOCAL_SPEAKER_ID)} camOn={camOn} videoPaused={bwMode === "audio-only"} large />
                 ) : speakerPeer ? (
-                  <VideoTile stream={speakerPeer.stream} label={speakerPeer.displayName} handRaised={isHandRaised(speakerPeer.id)} reaction={getReaction(speakerPeer.id)} micOn={peerMicOn.get(speakerPeer.id) ?? true} speaking={speaking.has(speakerPeer.id)} camOn={videoOf(speakerPeer.id).camOn} videoPaused={videoOf(speakerPeer.id).paused} status={statusOf(speakerPeer.id)} large />
+                  <VideoTile stream={speakerPeer.stream} videoTrack={videoTrackOf(speakerPeer.stream)} label={speakerPeer.displayName} handRaised={isHandRaised(speakerPeer.id)} reaction={getReaction(speakerPeer.id)} micOn={peerMicOn.get(speakerPeer.id) ?? true} speaking={speaking.has(speakerPeer.id)} camOn={videoOf(speakerPeer.id).camOn} videoPaused={videoOf(speakerPeer.id).paused} status={statusOf(speakerPeer.id)} large />
                 ) : (
-                  <VideoTile stream={localStream} label={localName} muted isLocal handRaised={handRaised} reaction={getReaction("local")} micOn={micOn} speaking={speaking.has(LOCAL_SPEAKER_ID)} camOn={camOn} videoPaused={bwMode === "audio-only"} large />
+                  <VideoTile stream={localStream} videoTrack={videoTrackOf(localStream)} label={localName} muted isLocal handRaised={handRaised} reaction={getReaction("local")} micOn={micOn} speaking={speaking.has(LOCAL_SPEAKER_ID)} camOn={camOn} videoPaused={bwMode === "audio-only"} large />
                 )}
               </div>
               {/* Thumbnail strip */}
@@ -5934,7 +6084,7 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
                 <div className="flex gap-2 h-24 shrink-0 overflow-x-auto">
                   {stripItems.map((item) => (
                     <div key={item.id} className="h-full aspect-video shrink-0">
-                      <VideoTile stream={item.stream} label={item.displayName} muted={item.isLocal} isLocal={item.isLocal} handRaised={isHandRaised(item.id)} reaction={getReaction(item.id)} micOn={item.isLocal ? micOn : (peerMicOn.get(item.id) ?? true)} speaking={speaking.has(item.id)} camOn={item.isLocal ? camOn : videoOf(item.id).camOn} videoPaused={item.isLocal ? bwMode === "audio-only" : videoOf(item.id).paused} status={item.isLocal ? "live" : statusOf(item.id)} />
+                      <VideoTile stream={item.stream} videoTrack={videoTrackOf(item.stream)} label={item.displayName} muted={item.isLocal} isLocal={item.isLocal} handRaised={isHandRaised(item.id)} reaction={getReaction(item.id)} micOn={item.isLocal ? micOn : (peerMicOn.get(item.id) ?? true)} speaking={speaking.has(item.id)} camOn={item.isLocal ? camOn : videoOf(item.id).camOn} videoPaused={item.isLocal ? bwMode === "audio-only" : videoOf(item.id).paused} status={item.isLocal ? "live" : statusOf(item.id)} />
                     </div>
                   ))}
                 </div>
@@ -6006,7 +6156,7 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
         micOn={micOn} camOn={camOn} shareOn={shareOn} shareStarting={shareStarting} copilotOpen={copilotOpen}
         isHost={isHost} handRaised={handRaised} layout={layout} chatUnread={chatUnread}
         handsUp={handsUpPeople.length} handsUpNote={handsUpNote}
-        waitingCount={isHost ? livePeers.length : 0} duration={duration}
+        waitingCount={isHost ? livePeers.length : 0} elapsed={elapsedRef}
         roomCode={roomCode} bwMode={bwMode} layoutForced={layoutIsForced(layout, sharerId)}
         recordingState={recordingBanner?.state ?? "idle"}
         recordingBy={recordingBanner?.by ?? ""}

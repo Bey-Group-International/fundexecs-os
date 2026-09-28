@@ -3689,6 +3689,408 @@ Deployed, monitoring               →  live, observability active
              |  Confidence: typecheck/eslint clean, build passes, Jest 7052 →
              |  7054 across 507 suites; 10 of the new report-export cases and 6
              |  of the new loader cases fail against HEAD.
+             |
+             |  MEETINGS VIII — THE CONFIRMATION EMAIL AND THE CALENDAR
+             |  Reported from production: scheduling a meeting sends no
+             |  confirmation and puts nothing on a calendar. Asked which email
+             |  and what the app SAYS when you save; the answer — "nothing
+             |  either way" — was the diagnosis, because the product has a
+             |  message for every other outcome.
+             |  A COUNT IS NOT AN OUTCOME. sendMeetingInvites sent per recipient
+             |  through Promise.allSettled, counted the successes, and discarded
+             |  every failure — `{sent, total}`. The route kept `sent` and
+             |  dropped `total`. The screen spoke only when `sent > 0`. So a
+             |  batch Gmail refused arrived as a bare zero that was
+             |  INDISTINGUISHABLE ON SCREEN from a meeting with nobody to email,
+             |  and a host watched the save succeed and no invitation arrive with
+             |  nothing anywhere saying why. Three layers each dropped one fact;
+             |  no layer was wrong on its own.
+             |  AND THE PRE-CHECK LIED IN THE OTHER DIRECTION. mailboxFor reports
+             |  ok for a credential that merely EXISTS, including the deploy-wide
+             |  GMAIL_ACCESS_TOKEN that its own comment says Google expires after
+             |  about an hour. A stale token reports a healthy mailbox. Worse,
+             |  the screen then claimed "no email was sent — no Google account
+             |  is connected" off that pre-check, while the SEND falls back to
+             |  the org mailbox independently — so the message was also false
+             |  whenever the fallback worked. The truth was always in
+             |  sendEmail's `detail`, which nobody read. It is read now.
+             |  NOTHING EVER ASKED THE CALENDAR. syncMeetingExternal required the
+             |  REQUEST to carry externalCalendarSyncEnabled AND
+             |  externalCalendarProvider, both from a checkbox and a dropdown
+             |  inside a COLLAPSED "Advanced options" section defaulting to off.
+             |  The ordinary way of scheduling never attempted a push. No error,
+             |  no failed sync, no row: a feature that worked and was never
+             |  invoked. The connection is the better signal and the app already
+             |  computed it — providerSyncAvailable, a grant PLUS a writable
+             |  calendar — so the server decides now and the checkbox became an
+             |  opt-OUT. A CAPABILITY NOBODY CAN FIND IS INDISTINGUISHABLE FROM
+             |  ONE THAT DOES NOT EXIST, and the bug report says so.
+             |  The dropdown also offered Outlook, Calendly and iCal while
+             |  pushMeetingToGoogle is the only writer in the codebase — pick
+             |  one of the three and you enabled a sync that wrote to Google or
+             |  skipped. The provider is derived now, never chosen.
+             |  REVIEW ROUND, on my own diff, three findings:
+             |  I put the calendar lookup INSIDE the try that wraps the save, so
+             |  a transient two-query failure would have answered 500 and lost
+             |  the meeting — the exact fault the surrounding comments keep
+             |  guarding against. canWriteCalendar never throws, and answers null
+             |  rather than false: telling somebody to connect a calendar they
+             |  already connected sends them to fix what was never broken.
+             |  On the PATCH path I made "unstated" mean "follow the connection",
+             |  which would have switched sync on for every meeting saved before
+             |  this existed, during an edit about something else. A create
+             |  default is not an update default.
+             |  And the form's advanced panel auto-opens when a meeting carries
+             |  "unusual configuration", which included sync being on — now the
+             |  ordinary state, so it would have sprung open on every edit.
+             |  Confidence: typecheck/eslint clean, build passes, Jest 7054 →
+             |  7092 across 508 suites; 11 of the new invite and schedule-route
+             |  cases fail against HEAD. Not fixed here: whether THIS deployment
+             |  has a working Gmail credential at all — that is configuration,
+             |  and /api/meetings/email-health POSTs a real test to prove it.
+             |
+             |  MEETINGS IX — THE MEETINGS PAGE, WHERE THREE ANSWERS DISAGREED
+             |  THE SAME QUESTION WAS ASKED THREE TIMES AND ANSWERED TWO WAYS.
+             |  "Is this meeting upcoming?" was written once in the page, once in
+             |  /api/meetings/upcoming's SQL, and once in that route's filter —
+             |  and the SQL said `scheduled_at >= now`, a START-TIME rule standing
+             |  in for an END-TIME one. The page keyed off the end and included a
+             |  meeting already in progress; the route excluded it; the list
+             |  refetches the route on mount. So a meeting that was RUNNING
+             |  rendered on first paint and vanished about a second later, taking
+             |  its Join button with it, at the exact moment somebody was trying
+             |  to join. TWO THINGS COMPUTE THE SAME NUMBER; DO THEY AGREE? —
+             |  they did not, and the disagreement was invisible in each half.
+             |  isUpcomingMeeting is now the single predicate both use, and
+             |  upcomingWindowStart reaches BACK by MAX_MEETING_MINUTES rather
+             |  than forward from now, because SQL cannot compare against
+             |  scheduled_at + duration without a generated column. A BOUND MUST
+             |  BE DERIVED FROM WHAT IT BOUNDS: the 480 that two services each
+             |  spelled out locally is one exported constant, so widening the
+             |  longest allowed meeting widens the window that has to contain it.
+             |  AN ORDERING THAT FOUGHT ITS OWN LIMIT. One query served both
+             |  lists, ordered `scheduled_at DESC NULLS LAST, created_at DESC`,
+             |  limited to 50. Nulls last puts every INSTANT meeting at the END
+             |  of the result and the limit cuts from the end — so an org with
+             |  fifty scheduled meetings showed NONE of its instant ones, which
+             |  is the product's commonest kind. The client refresh orders by
+             |  created_at, finds them, and the list changed content a moment
+             |  after the page settled. Two windows now, asked in parallel: what
+             |  is coming up, and what happened recently.
+             |  AND PAST WAS DEFINED BY SUBTRACTION. `!upcoming.some(...)` inside
+             |  a filter both scanned the upcoming list once per meeting and made
+             |  Past mean "whatever Upcoming rejected" — which quietly swept up
+             |  drafts and ad-hoc rooms that belong in neither. isPastMeeting is
+             |  asked directly, and it now answers for a room nobody ever ended:
+             |  an unclosed ad-hoc meeting is past once PRESENCE_STALE_MS has
+             |  gone by, the same ceiling attendance already uses for "a killed
+             |  tab wrote nothing", rather than sitting in Upcoming forever.
+             |  A READ WITH NO CEILING IS A READ THAT WILL BE TRUNCATED SILENTLY.
+             |  Both attendance queries were unbounded, and
+             |  live_meeting_participants grows by a row per meeting a person
+             |  attends for the life of their account — so they were heading for
+             |  PostgREST's max_rows, which cuts at a thousand and says nothing.
+             |  Bounded to the newest 200, which is more than a fifty-meeting
+             |  snapshot can use.
+             |  DEAD PAYLOAD ON EVERY VISIT. initialMeetings and initialPast are
+             |  passed to exactly ONE component — MeetingsCalendar — which is
+             |  code-split behind ?view=, is not mounted on first paint, and
+             |  refetches its own five hundred rows the moment it does. So every
+             |  meetings load ran a forty-one-column history query and serialised
+             |  the result into the HTML for a reader that would not read it.
+             |  The history is read only when the URL actually asks for the
+             |  calendar. FOLLOW WHAT GETS READ AND ASK WHAT IT COULD HAVE TOLD
+             |  US — here the answer was nothing, to anyone.
+             |  The scheduling modal was in the landing bundle for the same
+             |  reason: two lists imported it statically for a dialog behind a
+             |  button. next/dynamic puts it in its own 33 KiB chunk.
+             |  AND THE CLOCK NEVER SLEPT. useNow ticked once a second for the
+             |  life of the tab — a render of every Upcoming card and, once the
+             |  calendar had been opened, of the whole month grid, including the
+             |  hours a background tab shows nobody anything. Browsers throttle
+             |  background timers; they do not stop them. It stops on
+             |  visibilitychange and READS THE CLOCK ON THE WAY BACK, before
+             |  resuming: a countdown nobody can see does not need to be right,
+             |  it needs to be right the moment they look, and without that read
+             |  the first thing they see on returning is the countdown they left.
+             |  Method note: the first version of that test passed against HEAD,
+             |  because the old unconditional interval kept ticking and the
+             |  assertion only checked that the clock had moved. It had to assert
+             |  the delta ACROSS the visibilitychange to bite.
+             |  Confidence: typecheck/eslint clean, build passes, Jest 7092 →
+             |  7115 across 508 suites; 15 of the 62 schedule cases and 2 of the
+             |  8 useNow cases fail against HEAD. Not covered by tests: the page
+             |  and route query shapes themselves — the two windows, the
+             |  attendance ceilings and the history skip are server-component
+             |  reads with no harness here, verified by reading and by build.
+             |
+             |  MEETINGS X — THE MEETING ROOM, AND A DURATION THAT COUNTED
+             |  INSTEAD OF MEASURING
+             |  THE SAME FILE HELD BOTH ANSWERS. useRecording asks how long a
+             |  recording has run with `Date.now() - run.startedAt`. The meeting's
+             |  own clock, four thousand lines away in the same component, did
+             |  `setDuration((d) => d + 1)` on a one-second interval. One reads a
+             |  clock; the other counts callbacks — and setInterval promises a
+             |  callback no EARLIER than its delay, never on time. Every late fire
+             |  is time the counter never gets back, and this particular main
+             |  thread is already carrying WebRTC decode, an analyser sampling
+             |  every 120ms, speech recognition, and a canvas composite per frame
+             |  once somebody turns a background on. So the number ran slow by an
+             |  unpredictable margin — and that number is posted to the report as
+             |  the meeting's LENGTH. The institutional record of a call, short by
+             |  an amount nobody could name. TWO THINGS COMPUTE THE SAME NUMBER;
+             |  DO THEY AGREE? — one was right and the other was the one that
+             |  got written down.
+             |  lib/meetings/elapsed.ts keeps live SPANS and subtracts, on a
+             |  monotonic clock (performance.now, because wall time can move
+             |  backwards mid-call and a duration that goes down is worse than one
+             |  that drifts). Spans rather than a total because a call that drops
+             |  and recovers is live, then not, then live again, and only the live
+             |  stretches are the meeting. A late callback now costs nothing,
+             |  because the callbacks never held the answer — they only decide
+             |  when to look.
+             |  AND THAT TICK WAS RE-RENDERING EVERY FACE IN THE ROOM. `duration`
+             |  was state in MeetingRoom, which is a 4,655-line component that
+             |  renders every video tile in the call — so a second hand in the
+             |  control bar reconciled the whole room, once a second, for the
+             |  length of the meeting, on the thread decoding the video. Nothing
+             |  else on screen had changed. The clock is its own leaf now and
+             |  takes the spans as a REF, so the bar's props do not change when
+             |  time passes; the per-second render is one <span>. It also sleeps
+             |  while the tab is hidden — which it could not have afforded as a
+             |  counter, and can now, because on return it reads the real elapsed
+             |  time instead of resuming something that fell behind.
+             |  The control bar's inline mm:ss had no hour case either, so a
+             |  meeting past sixty minutes read "77:03" while the recording clock
+             |  beside it read "1:17:03". Two clocks, one file, three spellings of
+             |  the same function; there is one now, and it is tested.
+             |  NOTHING IN THE FILE WAS MEMOISED — zero React.memo across 6,200
+             |  lines. Every transcript line, every chat message and every change
+             |  of who is talking (up to eight times a second) reconciled every
+             |  tile in the grid. VideoTile is memoised now.
+             |  WHICH ALMOST SHIPPED A BUG, and the code's own comment was the
+             |  warning. `pc.ontrack` publishes a new peers Map even when the
+             |  stream object is UNCHANGED, because a replaced track — screen
+             |  share, camera switch, background on — is swapped into that same
+             |  MediaStream, and the tile can only learn about it by looking
+             |  again; the comment says in as many words that skipping that
+             |  re-render leaves a working camera behind the "Camera off"
+             |  placeholder for the rest of the call. A shallow memo skips exactly
+             |  that. My first fix was a custom comparator that read the track off
+             |  each side — and the test caught that it is ALWAYS EQUAL: both
+             |  sides hold one object, so there is no record of what was there
+             |  before. A COMPARATOR CANNOT DETECT MUTATION OF A SHARED OBJECT.
+             |  The track is a prop now; React snapshots it at render time, and
+             |  that snapshot is the record. It looks redundant beside `stream`
+             |  and is the only thing making the memo correct, so it says so.
+             |  Method note, twice over. The first bite-check reverted the track's
+             |  USE inside the component and all nine tests still passed —
+             |  correctly, because the prop's job is the memo gate, not the
+             |  internal read. Reverting the wrong half of a change reads exactly
+             |  like a test that does not bite. And of the three cases that do
+             |  bite, the "replaced in place" one does not: the tile keeps
+             |  rendering the OLD track's picture, which is stale but produces no
+             |  placeholder text to assert on. Worth saying rather than counting
+             |  it.
+             |  Confidence: typecheck/eslint clean, build passes, Jest 7115 →
+             |  7152 across 511 suites; 8 of the 10 clock cases and 2 of the 9
+             |  tile cases fail against a naive implementation. Not addressed
+             |  here: the component is still 4,655 lines with 59 useState, 106
+             |  useRef and 74 useEffect in one function, and every OTHER state
+             |  change still re-renders all of it — the tiles are merely no longer
+             |  reconciled with it. Splitting it is the next piece of work and a
+             |  much larger one.
+             |
+             |  MEETINGS XI — THE WAITING ROOM FLICKER, AND THE MASK
+             |  A CHIP THAT VANISHED, CAME BACK, AND VANISHED AGAIN. Admit and
+             |  Deny take somebody off the host's panel before the server answers,
+             |  which is right — letting a guest in should cost one click and the
+             |  round trip is not the host's to wait through. But it puts the
+             |  screen ahead of the database, and TWO things then read the database
+             |  and put it back. loadWaiting replaces the whole list from the
+             |  table, and it is scheduled 400ms after ANY admission event, so it
+             |  does not need to be the admit's own event to fire — a second
+             |  guest's presence write will do. And a presence write ON the
+             |  just-admitted row arrives as an UPDATE whose status is still
+             |  `waiting`, so applyAdmissionChange re-inserts the person the host
+             |  removed. In that window the host can press Admit a second time on
+             |  somebody already in the room.
+             |  A decision is now remembered by row id for as long as it might
+             |  still be in flight, and nothing the table says can undo it. The
+             |  half that is easy to leave out is the FORGETTING: the rejected-POST
+             |  path re-reads precisely to put the person back, and a suppression
+             |  left in place would swallow that correction — the guest would
+             |  disappear from the panel and stay gone, which is worse than the
+             |  flicker. Suppression is by row id and a fresh knock is a fresh row,
+             |  so nobody is ever caught by it twice.
+             |  Also: "Admit all" wanted the ids of everyone on the panel, and I
+             |  first read them inside a setWaitingPeers updater. An updater has to
+             |  be pure; React is free to run it more than once. A ref.
+             |  THE MASKING LOOP RAN AT THE DISPLAY'S REFRESH RATE AND WAS CAPTURED
+             |  AT 24FPS. requestAnimationFrame fires at 60Hz, or 120 on a recent
+             |  laptop or phone; canvas.captureStream(OUTPUT_FPS) samples at 24. So
+             |  a MediaPipe inference, a mask upscale, a putImageData and two blurs
+             |  ran two to five times for every frame anybody would ever see, and
+             |  the rest was thrown away. FRAME_BUDGET_MS = 45 was the tell and I
+             |  read past it twice: 45ms is longer than one animation frame at any
+             |  refresh rate in use, because it was always a budget against the
+             |  OUTPUT rate. Three numbers describing the same cadence, one of them
+             |  five times wrong. Pacing is a cheap return inside the same rAF, so
+             |  the loop still stops with the tab and stays synced to compositing.
+             |  THEN THE REAL ASK ARRIVED — smooth and seamless, no bleeds, no
+             |  headwear cutoff — and the pacing turned out to be what paid for it.
+             |  THE BLEED AND THE CUTOFF ARE ONE MECHANISM POINTED TWO WAYS. Growth
+             |  reached equally in all four directions, and the old comment named
+             |  the price out loud: "a faint ring of the real room travelling with
+             |  the silhouette". Most of that ring bought nothing, because the
+             |  thing growth exists to save is headwear and headwear is ABOVE a
+             |  head. Up reaches furthest now, sideways a little (a headwrap is
+             |  wider than the head in it), downward not at all — growing down
+             |  drags the desk up into somebody.
+             |  AND GROWTH COULD NOT TELL FABRIC FROM WALL. Both are merely "not
+             |  yet covered", and the wall is the commoner neighbour. But the model
+             |  already knows the difference and the confidence ramp already
+             |  carries it: uncertain lands between 0 and 255, confident background
+             |  lands exactly 0. So growth may now FILL uncertainty and may not
+             |  INVENT coverage. Headwear fills; the wall does not.
+             |  A TEST STOPPED ME TRADING A COSMETIC FAULT FOR A DIGNITY ONE. I
+             |  also raised CONFIDENCE_PERSON from 0.30 to 0.45, reasoning that a
+             |  pixel the model is 30% sure of should not be fully opaque. The
+             |  headwear suite refused it: at 0.28 confidence — squarely where a
+             |  cap or a headwrap lands — that raise took the fabric from opaque to
+             |  58%, which is the room showing THROUGH the top of someone's head.
+             |  A faint halo is cosmetic; a semi-transparent head covering is not,
+             |  and a threshold is the wrong place to pay for tidiness. Reverted.
+             |  The halo is fixed where it is caused, not by making people
+             |  translucent. THE TWO MISTAKES ARE NOT THE SAME SIZE — the file said
+             |  so already, and the tests held me to it when I forgot.
+             |  THE SEAM WAS SOFT BECAUSE IT WAS BLURRED, WHICH IS NOT THE SAME AS
+             |  ACCURATE. Alpha crossed from room to person over roughly eight
+             |  pixels at 720p: right along hair, a visible ring everywhere else.
+             |  Tightening the ramp before the upscale halves the band and keeps
+             |  the softness, and it improves BOTH faults at once — headwear at
+             |  0.28 goes fully opaque, a halo pixel the model barely saw goes to
+             |  nothing. That it helps both is the reason to believe it is the
+             |  mechanism rather than a trade. It writes to a separate buffer on
+             |  purpose: sharpening the temporal history in place would compound
+             |  each frame until the mask was binary, leaving the smoothing running
+             |  with nothing left to smooth.
+             |  A BOUND SHOULD MEASURE WHAT IT COSTS. The mask grid was a fixed
+             |  320px WIDTH, and my first move was to raise it to 480 — which would
+             |  have given a 640x480 webcam a 173k-pixel mask while a 1280x720
+             |  camera got 130k. The cheap old camera paying more per frame than
+             |  the good new one, which is the opposite of what a frame budget is
+             |  for. It is a pixel budget now: constant cost whatever the camera,
+             |  never finer than the frame, and the upscale falls from 4x to 2.7x
+             |  at 720p and 6x to 4x at 1080p.
+             |  Confidence: typecheck/eslint clean, build passes, Jest 7152 → 7190
+             |  across 511 suites; every change bites against a reverted version —
+             |  6 waiting-room cases, 5 pacing, 2 each for the directional radii,
+             |  the growth ceiling and the edge. NOT VERIFIED: any of the masking
+             |  by eye. These are reasoned from the model's documented behaviour
+             |  and the pipeline's own numbers, and the arithmetic is tested, but
+             |  nobody has looked at a face. Matching Meet or Zoom is finally
+             |  limited by the segmenter — selfie_segmenter.tflite is a small
+             |  single-label model — and the next real step is guided upsampling
+             |  against the frame's own luma, so the boundary snaps to the picture
+             |  instead of being positioned by a blur.
+             |
+             |  MEETINGS XII — THE PROVIDER THE DATABASE WOULD NOT ACCEPT
+             |  A HOST REPORTED IT FROM PRODUCTION: "Meeting saved — invited 2
+             |  guests by email; external calendar sync failed: The calendar event
+             |  was written but could not be recorded: new row for relation
+             |  live_meetings violates check constraint
+             |  live_meetings_external_provider_check."
+             |  recordSync wrote `external_calendar_provider: "google"`. The
+             |  constraint allows 'google_calendar', 'outlook', 'calendly', 'ical'.
+             |  Postgres rejected EVERY call — and recordSync runs on both
+             |  outcomes, so the damage was two-sided: on success the event went
+             |  onto the calendar and the row never learned its id or its status,
+             |  and on failure the row could not even record that it had failed.
+             |  The whole error trail MEETINGS VIII built was writing into a
+             |  statement that never committed.
+             |  THE LITERAL WAS OLDER THAN THE BUG REPORT. It sat in
+             |  google-write.server.ts before MEETINGS VIII, and nothing had ever
+             |  called it — that WAS the MEETINGS VIII finding, "a capability
+             |  nobody can find is indistinguishable from one that does not
+             |  exist". Making the path reachable is what turned a dormant wrong
+             |  literal into a host's error message. Shipping a feature over
+             |  untested code makes you the author of everything it does.
+             |  WHY NOTHING CAUGHT IT, which is the part worth keeping. A mocked
+             |  Supabase client has no constraints to violate, so no amount of
+             |  unit-testing the write could see this: the assertion would have to
+             |  know what the schema accepts, and it did not. Worse, the FIXTURE
+             |  said `external_calendar_provider: "google"` — describing a row the
+             |  database could never have produced. A test agreeing with a bug is
+             |  how the bug survives a suite that looks thorough. The guard now
+             |  reads the migration, parses the constraint's allowed set, and
+             |  asserts the constant the writer uses is in it; a constraint
+             |  narrowed later fails in Jest instead of in somebody's meeting.
+             |  And the constant is SYNCABLE_PROVIDER, the one the planner already
+             |  used — so there is no longer a second spelling to disagree with.
+             |  TWO THINGS COMPUTE THE SAME NUMBER; DO THEY AGREE? has a sibling:
+             |  two things NAME the same thing, and only one of them is talking to
+             |  the database.
+             |  No data migration: the constraint refused every write, so no row
+             |  ever carried the bad value. The events are on the calendars,
+             |  though, with rows that do not know their ids — findEventByMarker
+             |  recovers those rather than duplicating them, which is the one part
+             |  of this that was built for exactly this failure.
+             |  Confidence: typecheck/eslint clean, build passes, Jest 7190 →
+             |  7194 across 511 suites; both new behavioural cases fail against
+             |  the literal that shipped.
+             |
+             |  MEETINGS XIII — REPAIRING THE ROWS WITHOUT EMAILING ANYBODY
+             |  MEETINGS XII fixed the provider so future syncs record their event
+             |  id. It did nothing for the meetings already synced, whose events sit
+             |  on real calendars attached to rows that do not know they exist. The
+             |  ask was to backfill them, and what I had offered was to re-push.
+             |  RE-PUSHING WOULD HAVE BEEN THE HARM, NOT THE FIX. Every write in
+             |  google-write.server.ts carries `sendUpdates: "all"` — Google's
+             |  instruction to notify every attendee. A backlog re-pushed is an
+             |  "event updated" email to every guest of every affected meeting, for
+             |  a change none of them made and none of them could explain. I found
+             |  this by reading the write path before writing the sweep, and it
+             |  inverted the design: THE EVENT IS ALREADY CORRECT. Only the row is
+             |  wrong. So the repair is a READ — findEventByMarker's private marker
+             |  locates the event, and the id is the one missing fact. Nothing here
+             |  touches a calendar's contents, and the test that says so is the most
+             |  important assertion in the change (it catches a single injected
+             |  POST). THE OBVIOUS REPAIR AND THE RIGHT ONE ARE NOT ALWAYS THE SAME
+             |  SHAPE, and the difference here was whose inbox it landed in.
+             |  That marker exists because an earlier change anticipated exactly
+             |  this — an event written whose id was never stored. A guard built for
+             |  a hypothetical turned out to be the whole recovery path.
+             |  AND THE LOOKUP COULD NOT TELL "NO EVENT" FROM "NO ANSWER".
+             |  findEventByMarker returns null for both, deliberately: on the write
+             |  path a failed lookup must not block the write. For a sweep that
+             |  REPORTS, that collapse is a lie waiting to happen — a Google outage
+             |  would come back as "forty meetings have no calendar event", which is
+             |  a number somebody acts on by going and making forty events by hand.
+             |  lookupEventByMarker keeps them apart; findEventByMarker is now a
+             |  thin flattening of it, so the write path sees exactly what it always
+             |  did. A NUMBER THAT CANNOT DISTINGUISH ITS OWN FAILURE MODE IS NOT A
+             |  MEASUREMENT.
+             |  A sweep, not a script. Idempotent by construction — a row with its
+             |  id recorded no longer matches the query — so it is safe on the hour
+             |  forever, and a host who reconnects a calendar months from now gets
+             |  their rows healed on the next pass instead of never. Bounded at
+             |  fifty, which is also the Google rate limit, and it asks for one more
+             |  than the bound purely to report whether a backlog remains.
+             |  A meeting with no event at all is LEFT ALONE. Creating one is
+             |  probably right eventually, and it would notify, so it is a person's
+             |  decision rather than a sweep's.
+             |  Checked and deliberately not changed: the recording sweep's stats are
+             |  absent from the cron response but present in recordCronRun's detail,
+             |  so liveness is observable and there is no defect to fix. Worth the
+             |  look rather than the assumption.
+             |  Confidence: typecheck/eslint clean, build passes, Jest 7194 → 7238
+             |  across 514 suites; the never-writes assertion catches one injected
+             |  POST, 5 cases fail if needsEventId stops excluding drafts, deleted
+             |  and hostless meetings, and 5 more if the lookup re-collapses its two
+             |  answers. NOT verified: that any real orphaned row exists to repair —
+             |  the sweep reports what it finds and reports nothing when it finds
+             |  nothing, which is the only honest thing it can do from here.
 ```
 
 ---

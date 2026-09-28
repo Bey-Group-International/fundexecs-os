@@ -17,6 +17,7 @@ import {
   type WritableMeeting,
   type WriteOutcome,
 } from "@/lib/calendar/google-write";
+import { SYNCABLE_PROVIDER } from "@/lib/meetings/calendar-sync";
 
 const API = "https://www.googleapis.com/calendar/v3";
 const FETCH_TIMEOUT_MS = 10_000;
@@ -112,6 +113,31 @@ export async function writeTargetFor(
   if (!calendarId) return null;
 
   return { conn: conn as unknown as ConnectionRow, calendarId };
+}
+
+/**
+ * Whether this member has a calendar that can take a write — without throwing.
+ *
+ * `writeTargetFor` is the authority, and it talks to the database. Calling it on
+ * the meeting-save path means a transient lookup failure would otherwise
+ * propagate out of a `try` that surrounds the save itself, and cost the host
+ * their meeting over a question that was only ever about their calendar.
+ *
+ * `null` means the question could not be answered, which is deliberately NOT
+ * `false`: telling somebody no calendar is connected when the app simply could
+ * not look is the kind of wrong answer that sends them to reconnect something
+ * that was never disconnected.
+ */
+export async function canWriteCalendar(
+  client: ServiceClient,
+  userId: string,
+): Promise<boolean | null> {
+  try {
+    return Boolean(await writeTargetFor(client, userId));
+  } catch (err) {
+    console.warn("[calendar] write-target lookup failed", err);
+    return null;
+  }
 }
 
 /**
@@ -244,7 +270,19 @@ export async function recordSync(
     const { error } = await client
       .from("live_meetings")
       .update({
-        external_calendar_provider: "google",
+        // The one spelling the schema accepts. This said "google", which the
+        // `live_meetings_external_provider_check` constraint rejects — it allows
+        // 'google_calendar', 'outlook', 'calendly' and 'ical' — so EVERY call
+        // here failed, on success and on failure alike. A meeting's event went
+        // onto the calendar and its row never learned the event id or the status,
+        // and a sync that failed never recorded that either.
+        //
+        // Nothing caught it because the write is the only place the two spellings
+        // could disagree: a mocked Supabase client has no constraints to violate,
+        // and the fixtures asserted the wrong value. So the constant is shared
+        // with the code that decides the provider, and a test ties it to the
+        // migration that accepts it.
+        external_calendar_provider: SYNCABLE_PROVIDER,
         external_calendar_sync_status: next.status,
         external_calendar_event_id: next.eventId,
         external_calendar_last_error: next.error,
@@ -276,6 +314,27 @@ export async function findEventByMarker(
   calendarId: string,
   meetingId: string,
 ): Promise<string | null> {
+  const found = await lookupEventByMarker(accessToken, calendarId, meetingId);
+  // Flattened for the write path, which cannot act on the difference: recovery
+  // is best-effort here, and failing to find an orphan must not stop the write.
+  return found.ok ? found.eventId : null;
+}
+
+/**
+ * The same lookup, keeping "there is no event" apart from "I could not tell".
+ *
+ * `findEventByMarker` collapses both to null, which is right for the write path
+ * above and wrong for anything that REPORTS on what it found. The repair sweep
+ * counts these outcomes for a person to read, and "no event carries this
+ * meeting's marker" is a fact somebody might act on — going and creating one by
+ * hand — while "Google was unreachable" is a reason to look again in an hour.
+ * Collapsing them would turn an outage into a list of chores.
+ */
+export async function lookupEventByMarker(
+  accessToken: string,
+  calendarId: string,
+  meetingId: string,
+): Promise<{ ok: true; eventId: string | null } | { ok: false; error: string }> {
   const url = new URL(`${API}/calendars/${encodeURIComponent(calendarId)}/events`);
   url.searchParams.set("privateExtendedProperty", `${FUNDEXECS_MARKER_KEY}=${meetingId}`);
   url.searchParams.set("maxResults", "1");
@@ -287,13 +346,11 @@ export async function findEventByMarker(
       signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
       cache: "no-store",
     });
-    if (!res.ok) return null;
+    if (!res.ok) return { ok: false, error: `Google answered ${res.status}` };
     const body = (await res.json()) as { items?: Array<{ id?: string; status?: string }> };
     const found = (body.items ?? []).find((e) => e?.id && e.status !== "cancelled");
-    return found?.id ?? null;
-  } catch {
-    // Recovery is best-effort: failing to find an orphan must not stop the
-    // write, it just means this one may create a second copy.
-    return null;
+    return { ok: true, eventId: found?.id ?? null };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) };
   }
 }

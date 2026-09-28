@@ -4,6 +4,8 @@ const saveScheduledMeetingMock = jest.fn();
 const sendMeetingInvitesMock = jest.fn();
 const loadBlockConflictsMock = jest.fn();
 const mailboxForMock = jest.fn();
+const canWriteCalendarMock = jest.fn();
+const syncMeetingExternalMock = jest.fn();
 
 jest.mock("@/lib/auth", () => ({
   requireOrgContext: () => authMock(),
@@ -13,9 +15,16 @@ jest.mock("@/lib/supabase/server", () => ({
   createServerClient: () => ({ from, auth: { getUser: async () => ({ data: { user: { email: "u@test" } } }) } }),
 }));
 
+// Mocked rather than driven through the fake client: the route asks whether the
+// host has a calendar it can write to, and that is a two-query lookup whose
+// shape has nothing to do with what these tests are about.
+jest.mock("@/lib/calendar/google-write.server", () => ({
+  canWriteCalendar: (...args: unknown[]) => canWriteCalendarMock(...args),
+}));
+
 jest.mock("@/lib/meetings/service", () => ({
   saveScheduledMeeting: (...args: unknown[]) => saveScheduledMeetingMock(...args),
-  syncMeetingExternal: jest.fn(),
+  syncMeetingExternal: (...args: unknown[]) => syncMeetingExternalMock(...args),
   buildMeetingInviteUrl: (origin: string, code: string) => `${origin}/meeting-invite/${code}`,
   buildMeetingRoomUrl: (origin: string, code: string) => `${origin}/meetings/${code}`,
 }));
@@ -89,7 +98,10 @@ beforeEach(() => {
   from.mockImplementation(withTeam([]));
   loadBlockConflictsMock.mockResolvedValue([]);
   mailboxForMock.mockResolvedValue({ ok: true, token: "tok", email: "host@fund.test", source: "member" });
-  sendMeetingInvitesMock.mockResolvedValue({ sent: 0, total: 0 });
+  sendMeetingInvitesMock.mockResolvedValue({ sent: 0, total: 0, attempted: 0, failed: [], reasons: [] });
+  // No calendar unless a test says otherwise.
+  canWriteCalendarMock.mockResolvedValue(false);
+  syncMeetingExternalMock.mockResolvedValue({ ok: true, status: "synced" });
   saveScheduledMeetingMock.mockResolvedValue({
     id: "m1",
     roomCode: "abc-def",
@@ -103,7 +115,7 @@ beforeEach(() => {
 
 describe("POST /api/meetings/schedule", () => {
   it("emails every attendee who has an address, and the host", async () => {
-    sendMeetingInvitesMock.mockResolvedValue({ sent: 3, total: 3 });
+    sendMeetingInvitesMock.mockResolvedValue({ sent: 3, total: 3, attempted: 3, failed: [], reasons: [] });
 
     const res = await POST(
       req({
@@ -207,5 +219,125 @@ describe("POST /api/meetings/schedule", () => {
   it("does not go looking for a directory when every attendee has an address", async () => {
     await POST(req({ ...VALID, attendees: [{ name: "Ada", email: "ada@lp.test", type: "external" }] }));
     expect(from).not.toHaveBeenCalledWith("organization_members");
+  });
+});
+
+// ── The host's own calendar ─────────────────────────────────────────────────
+//
+// The defect: syncing needed the REQUEST to carry both
+// externalCalendarSyncEnabled and externalCalendarProvider, and both came from a
+// checkbox and a dropdown inside a collapsed "Advanced options" section that
+// defaults to off. So scheduling a meeting the ordinary way never attempted a
+// push, and a host with a working Google connection never saw one arrive.
+
+describe("putting a scheduled meeting on the host's calendar", () => {
+  it("pushes it when a calendar is connected, without being asked to", async () => {
+    canWriteCalendarMock.mockResolvedValue(true);
+
+    const res = await POST(req({ ...VALID }));
+
+    expect(res.status).toBe(200);
+    expect(syncMeetingExternalMock).toHaveBeenCalledTimes(1);
+    // And the row carries the flag `decideWrite` reads, so later edits keep it.
+    expect(saveScheduledMeetingMock).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        externalCalendarSyncEnabled: true,
+        externalCalendarProvider: "google_calendar",
+      }),
+    );
+  });
+
+  it("does not push when no calendar can be written to, and says so", async () => {
+    canWriteCalendarMock.mockResolvedValue(false);
+
+    const res = await POST(req({ ...VALID }));
+
+    expect(syncMeetingExternalMock).not.toHaveBeenCalled();
+    const json = (await res.json()) as { calendarNote?: string; calendarConnected?: boolean };
+    expect(json.calendarConnected).toBe(false);
+    // Reported as an absence, not as a failure: nothing went wrong.
+    expect(json.calendarNote).toMatch(/no Google Calendar/i);
+  });
+
+  it("keeps a meeting off the calendar when the host said to", async () => {
+    canWriteCalendarMock.mockResolvedValue(true);
+
+    await POST(req({ ...VALID, externalCalendarSyncEnabled: false }));
+
+    expect(syncMeetingExternalMock).not.toHaveBeenCalled();
+    expect(saveScheduledMeetingMock).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ externalCalendarSyncEnabled: false, externalCalendarProvider: null }),
+    );
+  });
+
+  it("never pushes a draft", async () => {
+    canWriteCalendarMock.mockResolvedValue(true);
+    saveScheduledMeetingMock.mockResolvedValue({
+      id: "m1",
+      roomCode: "abc-def",
+      scheduledAt: "2026-09-10T14:00:00.000Z",
+      durationMinutes: 60,
+      isDraft: true,
+      lockedAt: null,
+      internalCalendarEventId: null,
+    });
+
+    await POST(req({ ...VALID, draft: true }));
+
+    expect(syncMeetingExternalMock).not.toHaveBeenCalled();
+  });
+
+  // A calendar lookup is not worth a meeting. This one sits inside the same try
+  // that surrounds the save, so a throw here used to be a 500 and a lost meeting.
+  it("saves the meeting even when the calendar cannot be checked", async () => {
+    canWriteCalendarMock.mockResolvedValue(null);
+
+    const res = await POST(req({ ...VALID }));
+
+    expect(res.status).toBe(200);
+    expect(syncMeetingExternalMock).not.toHaveBeenCalled();
+    const json = (await res.json()) as { calendarNote?: string };
+    // And it does not blame a connection it could not read.
+    expect(json.calendarNote).toMatch(/Could not check/i);
+  });
+});
+
+// ── An invite send that reached nobody ──────────────────────────────────────
+
+describe("reporting what the invite send achieved", () => {
+  it("says something was attempted even when nothing was sent", async () => {
+    // Previously the route kept only `sent`, so this was a bare `invited: 0` —
+    // which the scheduling screen renders as no message at all, identical to a
+    // meeting with nobody to email.
+    sendMeetingInvitesMock.mockResolvedValue({
+      sent: 0,
+      total: 2,
+      attempted: 2,
+      failed: ["ada@lp.test", "host@fund.test"],
+      reasons: ["Invalid Credentials"],
+    });
+
+    const res = await POST(
+      req({ ...VALID, attendees: [{ name: "Ada", email: "ada@lp.test", type: "external" }] }),
+    );
+
+    expect(await res.json()).toMatchObject({
+      invited: 0,
+      attempted: 2,
+      inviteFailures: ["ada@lp.test", "host@fund.test"],
+      inviteReasons: ["Invalid Credentials"],
+    });
+  });
+
+  it("reports a throw as an attempt, not as nothing to do", async () => {
+    sendMeetingInvitesMock.mockRejectedValue(new Error("network down"));
+
+    const res = await POST(req({ ...VALID }));
+
+    const json = (await res.json()) as { attempted?: number; inviteReasons?: string[] };
+    expect(json.attempted).toBeGreaterThan(0);
+    expect(json.inviteReasons).toEqual(["network down"]);
   });
 });

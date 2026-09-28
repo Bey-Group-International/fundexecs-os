@@ -123,7 +123,47 @@ const DAY_MINUTES = 24 * 60;
  * banner above the rail, not on it.
  */
 export function eventSpansForDay(events: ExternalEvent[], day: Date): EventSpan[] {
+  return cachedForDay(spanCache, events, day, computeSpans);
+}
+
+/** All-day external events touching a day, for the banner row. */
+export function allDayEventsForDay(events: ExternalEvent[], day: Date): ExternalEvent[] {
+  return cachedForDay(allDayCache, events, day, computeAllDay);
+}
+
+/*
+ * Per-list, per-day results.
+ *
+ * The calendar redraws every second for its clock and asks for each visible
+ * day's events on every redraw — 42 days in a month view, each scanning the
+ * whole feed twice. The feed array is memoized by the caller, so it keys the
+ * cache: a refreshed feed starts a fresh cache, and results are shared, so
+ * callers must not mutate them.
+ */
+const spanCache = new WeakMap<ExternalEvent[], Map<number, EventSpan[]>>();
+const allDayCache = new WeakMap<ExternalEvent[], Map<number, ExternalEvent[]>>();
+
+function cachedForDay<T>(
+  cache: WeakMap<ExternalEvent[], Map<number, T>>,
+  events: ExternalEvent[],
+  day: Date,
+  compute: (events: ExternalEvent[], dayStart: number) => T,
+): T {
   const dayStart = new Date(day.getFullYear(), day.getMonth(), day.getDate()).getTime();
+  let byDay = cache.get(events);
+  if (!byDay) {
+    byDay = new Map();
+    cache.set(events, byDay);
+  }
+  let result = byDay.get(dayStart);
+  if (result === undefined) {
+    result = compute(events, dayStart);
+    byDay.set(dayStart, result);
+  }
+  return result;
+}
+
+function computeSpans(events: ExternalEvent[], dayStart: number): EventSpan[] {
   const dayEnd = dayStart + DAY_MINUTES * 60_000;
 
   const out: EventSpan[] = [];
@@ -143,9 +183,7 @@ export function eventSpansForDay(events: ExternalEvent[], day: Date): EventSpan[
   return out.sort((a, b) => a.startMinute - b.startMinute);
 }
 
-/** All-day external events touching a day, for the banner row. */
-export function allDayEventsForDay(events: ExternalEvent[], day: Date): ExternalEvent[] {
-  const dayStart = new Date(day.getFullYear(), day.getMonth(), day.getDate()).getTime();
+function computeAllDay(events: ExternalEvent[], dayStart: number): ExternalEvent[] {
   const dayEnd = dayStart + DAY_MINUTES * 60_000;
 
   return events.filter((e) => {

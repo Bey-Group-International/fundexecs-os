@@ -109,6 +109,14 @@ function CopyRoomCode({ code }: { code: string }) {
   );
 }
 
+/**
+ * Attendance rows one refresh reads.
+ *
+ * Generous against the ten meetings this list shows, and stated so the ceiling
+ * is a decision rather than whatever PostgREST happens to allow.
+ */
+const ATTENDANCE_LIMIT = 200;
+
 export function PastMeetingsList({ initialMeetings, userId, compact = false }: Props) {
   const [meetings, setMeetings] = useState<LiveMeeting[]>(initialMeetings);
   const [expanded, setExpanded] = useState<string | null>(null);
@@ -117,6 +125,7 @@ export function PastMeetingsList({ initialMeetings, userId, compact = false }: P
   const [busy, setBusy] = useState<string | null>(null);
   const supabaseRef = useRef(createClient());
   const [channelName] = useState(() => nextChannelName("past-meetings"));
+  const refreshTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Live updates
   useEffect(() => {
@@ -139,8 +148,14 @@ export function PastMeetingsList({ initialMeetings, userId, compact = false }: P
           .limit(50),
         supabase
           .from("live_meeting_participants")
-          .select("meeting_id")
-          .eq("user_id", userId),
+          .select("meeting_id, joined_at")
+          .eq("user_id", userId)
+          // Bounded and ordered. This read was open-ended, and the table grows
+          // by a row per meeting attended for the life of an account — so it was
+          // heading for PostgREST's `max_rows` ceiling, which truncates with
+          // nothing to say. The newest are the only ones a ten-row list can use.
+          .order("joined_at", { ascending: false })
+          .limit(ATTENDANCE_LIMIT),
       ]);
 
       const nonHostedIds = attendedButNotHosted(
@@ -176,11 +191,20 @@ export function PastMeetingsList({ initialMeetings, userId, compact = false }: P
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "live_meetings" },
-        () => { void refresh(); }
+        // Coalesced, as the upcoming list and the calendar already are: one
+        // save fires several row events, and each refresh here is two or three
+        // queries.
+        () => {
+          if (refreshTimer.current) clearTimeout(refreshTimer.current);
+          refreshTimer.current = setTimeout(() => { void refresh(); }, 350);
+        }
       )
       .subscribe();
 
-    return () => { void supabase.removeChannel(channel); };
+    return () => {
+      if (refreshTimer.current) clearTimeout(refreshTimer.current);
+      void supabase.removeChannel(channel);
+    };
   }, [userId, channelName]);
 
   async function softHide(id: string) {

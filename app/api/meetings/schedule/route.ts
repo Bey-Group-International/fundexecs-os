@@ -9,6 +9,8 @@ import { normalizeAttendees, parseAttendeeInput, type MeetingAttendeeInput } fro
 import { needsDirectory, resolveAttendeeDirectory } from "@/lib/meetings/directory";
 import { loadOrgDirectory } from "@/lib/meetings/directory.server";
 import { sendMeetingInvites, guestEmails } from "@/lib/meetings/invite";
+import { planCalendarSync } from "@/lib/meetings/calendar-sync";
+import { canWriteCalendar } from "@/lib/calendar/google-write.server";
 import { loadBlockConflicts } from "@/lib/meetings/blocks.server";
 import { loadExternalConflicts } from "@/lib/meetings/conflicts.server";
 import { conflictMessage } from "@/lib/meetings/schedule";
@@ -169,6 +171,26 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    // Whether this meeting goes on the host's own calendar — decided here, from
+    // the connection, rather than taken from the request.
+    //
+    // It used to require the client to send `externalCalendarSyncEnabled` AND
+    // `externalCalendarProvider`, both of which came from a checkbox and a
+    // dropdown inside a collapsed "Advanced options" section that defaults to
+    // off. So the ordinary way of scheduling a meeting never attempted a push at
+    // all, and a host with a working Google connection never saw a meeting
+    // arrive. `canWriteCalendar` answers the only question that matters: is there
+    // a calendar this member can actually write to — read access 403s on a write,
+    // so it does not count. It never throws, because a calendar lookup must not
+    // cost the host their meeting, and it answers null rather than false when it
+    // could not find out, so the reason given below is not invented.
+    const calendarConnected = await canWriteCalendar(supabase, auth.ctx.userId);
+    const calendarPlan = planCalendarSync({
+      connected: calendarConnected,
+      requested: typeof body.externalCalendarSyncEnabled === "boolean" ? body.externalCalendarSyncEnabled : undefined,
+      isDraft,
+    });
+
     const saved = await saveScheduledMeeting(supabase, {
       meetingId: body.meetingId ?? null,
       orgId: auth.ctx.orgId,
@@ -195,17 +217,25 @@ export async function POST(req: NextRequest) {
       reminderMinutes: body.reminderMinutes ?? null,
       priority: body.priority ?? "normal",
       tags: body.tags ?? [],
-      externalCalendarSyncEnabled: body.externalCalendarSyncEnabled ?? false,
+      externalCalendarSyncEnabled: calendarPlan.enabled,
       // Coerced, not passed through: this decides whether a stranger with the
       // link walks straight into the room, so a truthy string must not enable it.
       guestQuickAccess: body.guestQuickAccess === true,
-      externalCalendarProvider: body.externalCalendarProvider ?? null,
+      // Derived, never taken from the request. The form used to offer Outlook,
+      // Calendly and iCal, none of which has a writer — so a meeting could be
+      // stored as syncing to Outlook and then pushed to Google or skipped.
+      externalCalendarProvider: calendarPlan.provider,
     });
 
     // Third-party sync happens only after the native meeting is saved, and its
     // failure must not break meeting creation.
     let externalSyncError: string | undefined;
-    if (!saved.isDraft && body.externalCalendarSyncEnabled && body.externalCalendarProvider) {
+    // Not an error: a meeting that cannot reach a calendar nobody connected is
+    // working correctly, and reporting it as a failure would send the host
+    // looking for a fault. It is still worth saying, because the absence is
+    // exactly what they are asking about.
+    const calendarNote = calendarPlan.reason ?? undefined;
+    if (calendarPlan.push && !saved.isDraft) {
       try {
         const result = await syncMeetingExternal(supabase, { orgId: auth.ctx.orgId, userId: auth.ctx.userId }, saved.id);
         if (!result.ok) externalSyncError = result.error;
@@ -221,6 +251,13 @@ export async function POST(req: NextRequest) {
     // so this runs even with no guests, because the host's own confirmation is
     // what puts the meeting in their calendar.
     let invited = 0;
+    // How many messages the send TRIED to write. Without this the caller cannot
+    // tell "nobody had an address" from "every send was refused", and the
+    // scheduling screen only spoke when `invited > 0` — so a meeting whose
+    // entire invite batch failed saved in complete silence.
+    let attempted = 0;
+    let inviteFailures: string[] = [];
+    let inviteReasons: string[] = [];
     // Whether anything CAN be emailed, resolved once. Without a mailbox the
     // send degrades silently to nothing, and a host who is told "invited 0"
     // reads that as "nobody had an address" rather than "your org cannot send".
@@ -259,8 +296,23 @@ export async function POST(req: NextRequest) {
             whenLabel: saved.scheduledAt ? formatSlotFull(saved.scheduledAt, timezone) : null,
           });
           invited = result.sent;
+          attempted = result.attempted;
+          inviteFailures = result.failed;
+          inviteReasons = result.reasons;
+          if (result.sent === 0 && result.attempted > 0) {
+            // Loud in the server log too. A send that reached nobody is an
+            // operational fault — usually a credential Google has expired —
+            // and it was previously invisible on both sides.
+            console.error("[/api/meetings/schedule] invite send reached nobody", {
+              attempted: result.attempted,
+              reasons: result.reasons,
+            });
+          }
         } catch (err) {
           console.error("[/api/meetings/schedule] invite send failed", err);
+          // A throw is not "nothing to send": the host has to hear about it.
+          attempted = attempted || 1;
+          inviteReasons = [err instanceof Error ? err.message : "the send failed"];
         }
       }
     }
@@ -275,7 +327,13 @@ export async function POST(req: NextRequest) {
       internalCalendarEventId: saved.internalCalendarEventId,
       externalCalendarSyncStatus: saved.externalCalendarSyncStatus,
       externalSyncError,
+      calendarNote,
+      calendarConnected,
       invited,
+      // Everything the send is answerable for, so a zero is never ambiguous.
+      attempted,
+      inviteFailures,
+      inviteReasons,
       uninvited,
       mailboxConnected,
       mailboxProblem,

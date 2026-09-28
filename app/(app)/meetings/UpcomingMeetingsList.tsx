@@ -11,9 +11,36 @@ import {
   type ExternalSyncStatus,
 } from "@/lib/meetings/schedule";
 import { CARD, COUNTDOWN_TONE, EYEBROW, STATUS_TONE, chip } from "./tone";
-import { MeetingEditScreen, type MeetingEditInitial } from "./MeetingEditScreen";
+import nextDynamic from "next/dynamic";
+import type { MeetingEditInitial } from "./MeetingEditScreen";
 import { MeetingShareLink } from "./MeetingShareLink";
 import { useNow, useLivePresence, nextChannelName } from "./hooks";
+import { fetchUpcoming, forgetUpcoming, recentUpcoming } from "./upcoming-cache";
+
+/**
+ * A placeholder while the scheduling form arrives.
+ *
+ * It is opened by a click, so the click has to be answered by something —
+ * otherwise the Edit button looks dead for as long as the chunk takes.
+ */
+function ScheduleFormLoading() {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm">
+      <p className="rounded-xl border border-[var(--line)] bg-[var(--surface-1)] px-4 py-3 text-xs text-[var(--fg-muted)]">
+        Opening the scheduler…
+      </p>
+    </div>
+  );
+}
+
+// Split out of the landing bundle, for the reason the calendar already is: this
+// form is the second-largest component on the page and renders only once
+// somebody opens it, so shipping it with the initial payload charged every visit
+// for a modal most visits never see.
+const MeetingEditScreen = nextDynamic(
+  () => import("./MeetingEditScreen").then((m) => m.MeetingEditScreen),
+  { ssr: false, loading: () => <ScheduleFormLoading /> },
+);
 
 export interface UpcomingMeeting {
   id: string;
@@ -58,25 +85,33 @@ export interface UpcomingMeeting {
 }
 
 function formatScheduled(iso: string) {
-  return new Date(iso).toLocaleString("en-US", {
-    weekday: "short",
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  });
+  return LONG_FORMAT.format(new Date(iso));
 }
+
+const LONG_FORMAT = new Intl.DateTimeFormat("en-US", {
+  weekday: "short",
+  month: "short",
+  day: "numeric",
+  hour: "numeric",
+  minute: "2-digit",
+});
 
 /** The collapsed row's time column: short enough to sit on one line beside the
  * title without pushing the status chip and Join button off the end. */
 function formatScheduledShort(iso: string) {
-  return new Date(iso).toLocaleString("en-US", {
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  });
+  return SHORT_FORMAT.format(new Date(iso));
 }
+
+// Built once. toLocaleString with options constructs a new Intl.DateTimeFormat
+// on every call, and the list re-renders every second for its countdowns — up
+// to a hundred rows, so a hundred formatters a second for text that never
+// changes.
+const SHORT_FORMAT = new Intl.DateTimeFormat("en-US", {
+  month: "short",
+  day: "numeric",
+  hour: "numeric",
+  minute: "2-digit",
+});
 
 function copilotName(key: string | null): string | null {
   if (!key) return null;
@@ -130,10 +165,19 @@ function toEditInitial(m: UpcomingMeeting): MeetingEditInitial {
 export function UpcomingMeetingsList({
   initialMeetings,
   compact = false,
+  reuseRecent = false,
 }: {
   initialMeetings: UpcomingMeeting[];
   /** Rail variant: drop the row's time column so it fits a narrow sidebar. */
   compact?: boolean;
+  /**
+   * Start from another copy's answer when it is only seconds old, instead of
+   * fetching the same list again. For the calendar's rail, which mounts beside
+   * the landing list. The landing list always fetches on mount: its server
+   * data can be a cached page restored by Back, and changes made while it was
+   * unmounted arrive through no realtime event.
+   */
+  reuseRecent?: boolean;
 }) {
   const [meetings, setMeetings] = useState(initialMeetings);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -157,15 +201,15 @@ export function UpcomingMeetingsList({
   const { presence, recentJoins } = useLivePresence(meetingIds);
 
   async function refresh() {
-    const res = await fetch("/api/meetings/upcoming", { cache: "no-store" });
-    if (!res.ok) return;
-    const json = (await res.json()) as { data?: UpcomingMeeting[] };
-    setMeetings(json.data ?? []);
+    const data = await fetchUpcoming();
+    if (data) setMeetings(data);
   }
 
   useEffect(() => {
     const supabase = createClient();
-    void refresh();
+    const recent = reuseRecent ? recentUpcoming() : null;
+    if (recent) setMeetings(recent);
+    else void refresh();
 
     // Coalesce bursts of postgres changes into a single refetch so a save that
     // fires several row events doesn't trigger a refetch storm.
@@ -184,6 +228,9 @@ export function UpcomingMeetingsList({
       if (refreshTimer.current) clearTimeout(refreshTimer.current);
       void supabase.removeChannel(channel);
     };
+    // Mount-time only: reuseRecent describes the first render, and realtime
+    // keeps the list current after it.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [channelName]);
 
   async function deleteMeeting(id: string) {
@@ -195,6 +242,8 @@ export function UpcomingMeetingsList({
       setError(json.error ?? "Failed to delete meeting");
     } else {
       setMeetings((prev) => prev.filter((m) => m.id !== id));
+      // The shared answer still lists it; a copy mounting next must not.
+      forgetUpcoming();
     }
     setDeleteId(null);
     setBusy(null);

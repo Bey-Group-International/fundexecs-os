@@ -115,6 +115,56 @@ export function blendCoverage(
   return previous;
 }
 
+// ── The width of the seam ────────────────────────────────────────────────────
+
+/**
+ * How much to tighten the alpha ramp before compositing.
+ *
+ * The seam is currently soft because it is BLURRED, which is not the same as
+ * being accurate, and the difference is the bleed. The mask is upscaled from the
+ * grid (bilinear, so a couple of pixels of ramp) and then feathered by a blur of
+ * a few more, so the alpha crosses from background to person over roughly eight
+ * pixels at 720p. Every pixel in that band is part room and part person — which
+ * is exactly right along hair, and is a visible ring of the real room everywhere
+ * else.
+ *
+ * Narrowing the band before it is upscaled keeps the softness and loses the ring.
+ * A factor of two halves it: a pixel already most of the way to covered goes
+ * fully covered, a pixel barely covered goes clear, and the genuinely undecided
+ * middle still crosses gradually. The upscale and the feather then soften what is
+ * left, so there is no staircase to come back.
+ *
+ * It helps both faults at once, which is the reason to believe it. Headwear the
+ * model put at 0.28 confidence sits high in the band and is pushed to fully
+ * opaque; a halo pixel the model barely saw sits low and is pushed to nothing.
+ */
+export const EDGE_CONTRAST = 2;
+
+/**
+ * Tighten the ramp, writing into `out`.
+ *
+ * Deliberately NOT in place, and the reason is easy to get wrong: this runs after
+ * the temporal blend, and the blend's running history has to keep its graded
+ * values. Sharpening the history would compound every frame until the mask was
+ * binary, which is the crawling staircase the blend exists to prevent — the
+ * smoothing would still be running and would have nothing left to smooth.
+ */
+export function sharpenEdge(
+  out: Uint8ClampedArray,
+  coverage: Uint8ClampedArray,
+  contrast: number = EDGE_CONTRAST,
+): Uint8ClampedArray {
+  const k = Number.isFinite(contrast) && contrast > 0 ? contrast : 1;
+  const n = Math.min(out.length, coverage.length);
+  // Around the midpoint, so full coverage and no coverage are both fixed points.
+  const mid = 127.5;
+  for (let i = 0; i < n; i++) {
+    const v = (coverage[i] - mid) * k + mid;
+    out[i] = v < 0 ? 0 : v > 255 ? 255 : v;
+  }
+  return out;
+}
+
 // ── Headwear ─────────────────────────────────────────────────────────────────
 
 // The model is called selfie_segmenter and it was trained on selfies: faces,
@@ -136,11 +186,37 @@ export function blendCoverage(
 // cost of under-including is erasing part of someone. Those are not the same
 // size of mistake.
 
-/** At or above this confidence a pixel is fully the person. */
+/**
+ * At or above this confidence a pixel is fully the person.
+ *
+ * Deliberately low, and it stays low. Raising it to 0.45 was tried as a way to
+ * narrow the halo, on the reasoning that a pixel the model is only 30% sure about
+ * should not be painted as solidly part of someone. The headwear tests refused
+ * it, and they were right: at 0.28 confidence — squarely the case a cap or a
+ * headwrap lands in — that raise took the fabric from fully opaque to 58%, which
+ * is the room showing THROUGH the top of somebody's head.
+ *
+ * The two mistakes are not the same size. A faint halo is cosmetic. A
+ * semi-transparent head covering is not, and a threshold is the wrong place to
+ * pay for tidiness. The halo is dealt with where it is actually caused — growth
+ * that used to reach equally in all directions and into pixels the model was
+ * confident were background. See `maskDilatePx` and `dilateCeiling`.
+ */
 export const CONFIDENCE_PERSON = 0.30;
 
-/** At or below this confidence a pixel is fully background. */
-export const CONFIDENCE_BACKGROUND = 0.08;
+/**
+ * At or below this confidence a pixel is fully background.
+ *
+ * Lowered alongside the raise above, which widens the uncertainty band from both
+ * ends. That is deliberate: the band is what growth is allowed to fill, so faint
+ * headwear needs to be IN it rather than clamped to nothing.
+ *
+ * At 0.04 a pixel reaching the band at all is under a twentieth of full
+ * coverage, so nothing becomes visible that was not; what changes is that
+ * constrained growth now has a foothold there, and faint headwear can be filled
+ * rather than clamped to nothing before growth ever sees it.
+ */
+export const CONFIDENCE_BACKGROUND = 0.04;
 
 /**
  * Coverage for one pixel of the segmenter's confidence mask.
@@ -172,8 +248,23 @@ export function coverageFromConfidence(confidence: number): number {
 // On the grid it is a fraction of a millisecond. A widened mask that made modest
 // laptops drop frames would have traded one visible fault for another.
 
-/** Roughly this wide, whatever the camera is. */
-const MASK_GRID_WIDTH = 320;
+/**
+ * How many pixels of mask one frame is allowed to cost.
+ *
+ * A budget, not a width, and the difference matters. This was `MASK_GRID_WIDTH =
+ * 320` — a fixed width, which makes the mask's cost depend on the camera's
+ * ASPECT and, worse, backwards on its size: raising that width to 480 would have
+ * given a 640x480 webcam a 480x360 mask, 173k pixels, while a 1280x720 camera got
+ * 480x270, 130k. The cheap old camera would have paid more per frame than the
+ * good new one, which is the opposite of what a frame budget is for.
+ *
+ * Bounding the pixel count instead makes the per-frame cost the same whatever
+ * the camera, and spends it on as fine a mask as that buys. ~130k is 480x270,
+ * measured at a fraction of a millisecond for the sampling and growth passes
+ * against a 45ms budget — and reachable now because pacing the loop to the rate
+ * the canvas is captured at freed two to five times the budget it used to waste.
+ */
+const MASK_GRID_PIXELS = 130_000;
 
 export interface MaskGrid {
   width: number;
@@ -182,14 +273,23 @@ export interface MaskGrid {
   scale: number;
 }
 
-/** The grid to carry the mask on for a given frame. */
+/**
+ * The grid to carry the mask on for a given frame.
+ *
+ * A silhouette is the lowest-frequency thing in the picture — it has no fine
+ * detail to lose — so it is carried coarse and the canvas scales it back up when
+ * it composites, which costs nothing because that scale was already happening.
+ * How coarse is whatever `MASK_GRID_PIXELS` allows, so the cost is constant and
+ * the resolution is as good as that cost buys.
+ */
 export function maskGrid(frameWidth: number, frameHeight: number): MaskGrid {
   const fw = Number.isFinite(frameWidth) && frameWidth > 0 ? Math.round(frameWidth) : 640;
   const fh = Number.isFinite(frameHeight) && frameHeight > 0 ? Math.round(frameHeight) : 480;
-  // Never upscale: a camera already smaller than the grid is worked as it is.
-  const width = Math.min(fw, MASK_GRID_WIDTH);
-  const scale = fw / width;
-  return { width, height: Math.max(1, Math.round(fh / scale)), scale };
+  // Never upscale: a camera already inside the budget is worked as it is. There
+  // is nothing to gain from a mask finer than the frame it came from.
+  const scale = Math.max(1, Math.sqrt((fw * fh) / MASK_GRID_PIXELS));
+  const width = Math.max(1, Math.round(fw / scale));
+  return { width, height: Math.max(1, Math.round(fh / scale)), scale: fw / width };
 }
 
 /**
@@ -256,80 +356,165 @@ function sampleInto(
 }
 
 /**
- * How far to grow the mask outward, as a fraction of frame width.
+ * How far to grow the mask, as a fraction of frame width, per direction.
  *
- * Modest on purpose. Enough to carry the boundary from inside a cap's brim to
- * outside it, not enough to drag a visible slab of room along with the
- * shoulders. Very tall headwear is beyond what growing a silhouette can fix and
- * wants a model that classifies accessories; this is the cheap 90%.
+ * Growth used to be one number applied equally in all four directions, and its
+ * own comment named the price: "a faint ring of the real room travelling with
+ * the silhouette". That ring is the bleed, and most of it was being paid for
+ * nothing — because the thing the growth exists to save is headwear, and
+ * headwear is ABOVE a head.
+ *
+ * So the directions are not equal any more:
+ *
+ * `up` is the one that matters. A cap's brim, a headwrap's crown, a helmet, the
+ * top of a lot of hair — the model's boundary tends to sit inside the fabric,
+ * and this carries it across.
+ *
+ * `side` is small but not zero: a headwrap or a pair of over-ear headphones is
+ * wider than the head inside it, so some sideways reach is part of the same
+ * fix. Kept small because this is also the direction that hangs a halo off
+ * somebody's arms.
+ *
+ * `down` is zero. Nothing sits under a person that growing the silhouette
+ * recovers, and growing downward drags the desk and the floor up into them.
  */
-const DILATE_FRACTION = 0.010;
+const DILATE_FRACTION = { up: 0.012, side: 0.004, down: 0 } as const;
+
+/** Growth in GRID pixels, per direction. */
+export interface DilateRadii {
+  up: number;
+  down: number;
+  side: number;
+}
 
 /**
  * How far to grow the mask, in GRID pixels, for a given frame.
  *
  * Expressed against the frame and then converted, so the widening is the same
- * share of a face whatever the camera resolution and whatever grid it is
- * carried on.
+ * share of a face whatever the camera resolution and whatever grid it is carried
+ * on. A direction whose fraction is zero stays zero rather than being floored to
+ * one: "do not grow downward" has to survive the conversion.
  */
-export function maskDilatePx(frameWidth: number, grid: MaskGrid): number {
+export function maskDilatePx(frameWidth: number, grid: MaskGrid): DilateRadii {
   const width = Number.isFinite(frameWidth) && frameWidth > 0 ? frameWidth : 640;
   const scale = Number.isFinite(grid.scale) && grid.scale > 0 ? grid.scale : 1;
-  return Math.max(1, Math.round((width * DILATE_FRACTION) / scale));
+  const inGrid = (fraction: number) =>
+    fraction <= 0 ? 0 : Math.max(1, Math.round((width * fraction) / scale));
+  return {
+    up: inGrid(DILATE_FRACTION.up),
+    side: inGrid(DILATE_FRACTION.side),
+    down: inGrid(DILATE_FRACTION.down),
+  };
 }
 
 /**
- * Grow covered regions outward by roughly `radiusPx`, in place.
+ * The limit on what growth may claim, one value per pixel.
+ *
+ * This is the other half of the bleed, and the more important half. Growing a
+ * silhouette outward cannot tell the fabric of a headwrap from the wall behind
+ * a shoulder — both are simply "not yet covered" — so an unconstrained grow
+ * widens the mask into whichever it meets, and the wall is the commoner
+ * neighbour.
+ *
+ * The model already knows the difference and the ramp in
+ * `coverageFromConfidence` already carries it: a pixel it is unsure about lands
+ * somewhere between 0 and 255, and a pixel it is confident is background lands
+ * exactly 0. So growth is allowed to FILL uncertainty and forbidden to invent
+ * coverage where there is none. Headwear is uncertain; the wall is not.
+ *
+ * Built before the grow, from the sampled coverage, because the grow overwrites
+ * it in place.
+ */
+export function dilateCeiling(
+  out: Uint8ClampedArray,
+  coverage: Uint8ClampedArray,
+): Uint8ClampedArray {
+  const n = Math.min(out.length, coverage.length);
+  for (let i = 0; i < n; i++) out[i] = coverage[i] > 0 ? 255 : 0;
+  return out;
+}
+
+/**
+ * Grow covered regions outward, in place.
  *
  * A chamfer dilation rather than a true one: each pass carries a running value
  * forward that decays with distance, so coverage bleeds out of a covered region
- * and fades over the radius instead of ending at a hard new edge. Four passes —
- * left, right, up, down — approximate growing in every direction.
+ * and fades over the radius instead of ending at a hard new edge. The passes run
+ * per direction, so `up` can reach further than `side` and `down` need not run
+ * at all.
  *
  * Linear in the number of pixels and independent of the radius, which is the
  * only reason this can run on every frame. A true morphological dilation costs
- * the radius again per pixel, and at 720p24 that is the whole frame budget.
+ * the radius again per pixel, and at 720p that is the whole frame budget.
+ *
+ * `ceiling`, when given, caps every pixel — see `dilateCeiling`. It is omitted
+ * on the category-mask fallback path, where coverage is only ever 0 or 255 and
+ * there is no uncertainty band to fill: constraining growth there would grow
+ * nothing at all and give back the missing headwear this exists to keep.
  */
 export function dilateCoverage(
   coverage: Uint8ClampedArray,
   width: number,
   height: number,
-  radiusPx: number,
+  radii: DilateRadii,
+  ceiling?: Uint8ClampedArray | null,
 ): Uint8ClampedArray {
-  const r = Math.floor(radiusPx);
-  if (!(r > 0) || !(width > 0) || !(height > 0)) return coverage;
+  if (!(width > 0) || !(height > 0)) return coverage;
   if (coverage.length < width * height) return coverage;
 
-  const falloff = 255 / r;
+  const up = Math.floor(radii.up);
+  const down = Math.floor(radii.down);
+  const side = Math.floor(radii.side);
 
-  for (let y = 0; y < height; y++) {
-    const row = y * width;
-    let m = 0;
-    for (let x = 0; x < width; x++) {
-      const i = row + x;
-      m -= falloff;
-      if (coverage[i] > m) m = coverage[i]; else coverage[i] = m;
-    }
-    m = 0;
-    for (let x = width - 1; x >= 0; x--) {
-      const i = row + x;
-      m -= falloff;
-      if (coverage[i] > m) m = coverage[i]; else coverage[i] = m;
+  if (side > 0) {
+    const falloff = 255 / side;
+    for (let y = 0; y < height; y++) {
+      const row = y * width;
+      let m = 0;
+      for (let x = 0; x < width; x++) {
+        const i = row + x;
+        m -= falloff;
+        if (coverage[i] > m) m = coverage[i]; else coverage[i] = m;
+      }
+      m = 0;
+      for (let x = width - 1; x >= 0; x--) {
+        const i = row + x;
+        m -= falloff;
+        if (coverage[i] > m) m = coverage[i]; else coverage[i] = m;
+      }
     }
   }
 
-  for (let x = 0; x < width; x++) {
-    let m = 0;
-    for (let y = 0; y < height; y++) {
-      const i = y * width + x;
-      m -= falloff;
-      if (coverage[i] > m) m = coverage[i]; else coverage[i] = m;
+  // Upward means toward y = 0, so the sweep that carries coverage up the image
+  // runs from the bottom row to the top.
+  if (up > 0) {
+    const falloff = 255 / up;
+    for (let x = 0; x < width; x++) {
+      let m = 0;
+      for (let y = height - 1; y >= 0; y--) {
+        const i = y * width + x;
+        m -= falloff;
+        if (coverage[i] > m) m = coverage[i]; else coverage[i] = m;
+      }
     }
-    m = 0;
-    for (let y = height - 1; y >= 0; y--) {
-      const i = y * width + x;
-      m -= falloff;
-      if (coverage[i] > m) m = coverage[i]; else coverage[i] = m;
+  }
+
+  if (down > 0) {
+    const falloff = 255 / down;
+    for (let x = 0; x < width; x++) {
+      let m = 0;
+      for (let y = 0; y < height; y++) {
+        const i = y * width + x;
+        m -= falloff;
+        if (coverage[i] > m) m = coverage[i]; else coverage[i] = m;
+      }
+    }
+  }
+
+  if (ceiling) {
+    const n = Math.min(coverage.length, ceiling.length);
+    for (let i = 0; i < n; i++) {
+      if (coverage[i] > ceiling[i]) coverage[i] = ceiling[i];
     }
   }
 
@@ -450,8 +635,67 @@ export function validateBackgroundUpload(file: { type: string; size: number }): 
 
 // ── Cost ─────────────────────────────────────────────────────────────────────
 
+/**
+ * The frame rate the composited canvas is captured at, and therefore the rate
+ * worth compositing at.
+ *
+ * The processor's loop is driven by requestAnimationFrame, which fires at the
+ * DISPLAY's refresh rate — 60Hz on most screens, 120Hz on a recent laptop or
+ * phone. The canvas it draws into is captured as a track at this rate. So the
+ * loop was running a MediaPipe inference, a mask upscale, a putImageData and two
+ * blurs somewhere between two and five times for every frame anybody would ever
+ * see, and throwing the rest away.
+ *
+ * That is also why FRAME_BUDGET_MS below reads oddly at first: 45ms is longer
+ * than one animation frame at any refresh rate in use, because it was always a
+ * budget against the OUTPUT rate. Pacing the loop here is what makes the three
+ * numbers — the loop, the capture and the budget — describe the same thing.
+ */
+export const OUTPUT_FPS = 24;
+
 /** Above this per-frame cost the effect is not keeping up with the camera. */
 export const FRAME_BUDGET_MS = 45;
+
+/**
+ * How early a frame may be drawn and still count as on time.
+ *
+ * Pacing has to be forgiving in one direction. A strict `elapsed >= interval`
+ * against a 60Hz animation frame can only ever land on multiples of 16.7ms, so
+ * a 41.7ms target would wait for 50ms and settle at 20fps — BELOW the capture
+ * rate, which makes the track repeat frames and look worse than the waste it
+ * replaced. Allowing a frame that is due within a quarter of an interval lets
+ * 33.3ms count, so a 60Hz display composites at 30fps and a 120Hz one at 24.
+ *
+ * Never slower than the capture rate; as close to it as the display allows.
+ */
+const EARLY_TOLERANCE = 0.25;
+
+/** Milliseconds between output frames at a given rate. */
+export function frameIntervalMs(fps: number = OUTPUT_FPS): number {
+  if (!Number.isFinite(fps) || fps <= 0) return 1000 / OUTPUT_FPS;
+  return 1000 / fps;
+}
+
+/**
+ * Whether this animation frame is the one to do the work on.
+ *
+ * `lastDrawnAt` is null before the first frame, which always draws: the canvas
+ * is captured the instant an effect is chosen, and waiting even one interval
+ * would put a black frame on the wire.
+ */
+export function shouldDrawFrame(
+  lastDrawnAt: number | null,
+  now: number,
+  fps: number = OUTPUT_FPS,
+): boolean {
+  if (lastDrawnAt === null) return true;
+  const interval = frameIntervalMs(fps);
+  // A clock that has gone backwards — or a first frame stamped later than now —
+  // draws rather than stalls. Skipping work is only ever an optimisation, and it
+  // must not be able to freeze the picture.
+  if (now <= lastDrawnAt) return true;
+  return now - lastDrawnAt >= interval * (1 - EARLY_TOLERANCE);
+}
 
 /** How many consecutive over-budget frames count as "not keeping up". */
 export const SLOW_FRAME_RUN = 45;

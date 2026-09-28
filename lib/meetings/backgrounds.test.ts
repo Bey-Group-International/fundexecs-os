@@ -27,7 +27,13 @@ import {
   suspensionMessage,
   templateById,
   validateBackgroundUpload,
+  dilateCeiling,
+  sharpenEdge,
+  OUTPUT_FPS,
+  frameIntervalMs,
+  shouldDrawFrame,
   type BackgroundEffect,
+  type DilateRadii,
 } from "@/lib/meetings/backgrounds";
 
 describe("blurRadiusPx", () => {
@@ -182,8 +188,44 @@ describe("coverageFromConfidence", () => {
 describe("maskGrid and maskDilatePx", () => {
   it("carries the mask on a grid far smaller than the frame", () => {
     const g = maskGrid(1280, 720);
-    expect(g.width).toBeLessThan(1280 / 3);
-    expect(g.scale).toBeGreaterThan(3);
+    expect(g.width * g.height).toBeLessThan(1280 * 720 * 0.2);
+    expect(g.scale).toBeGreaterThan(2);
+  });
+
+  it("costs the same per frame whatever the camera is", () => {
+    // The reason the bound is a pixel count and not a width. A fixed width makes
+    // the cost depend on the camera's aspect and, backwards, on its size: at a
+    // fixed 480 a 640x480 webcam would carry 173k mask pixels while a 1280x720
+    // camera carried 130k — the cheap old camera paying more per frame than the
+    // good new one.
+    const sizes: Array<[number, number]> = [
+      [1280, 720], [1920, 1080], [640, 480], [3840, 2160], [1080, 1920],
+    ];
+    const costs = sizes.map(([w, h]) => {
+      const g = maskGrid(w, h);
+      return g.width * g.height;
+    });
+    for (const cost of costs) {
+      expect(cost).toBeLessThanOrEqual(135_000);
+      expect(cost).toBeGreaterThan(120_000);
+    }
+  });
+
+  it("never carries a mask finer than the frame it came from", () => {
+    // Nothing to gain, and it would cost more than the frame.
+    for (const [w, h] of [[320, 240], [160, 120], [64, 48]] as const) {
+      const g = maskGrid(w, h);
+      expect(g.width).toBeLessThanOrEqual(w);
+      expect(g.height).toBeLessThanOrEqual(h);
+      expect(g.scale).toBeGreaterThanOrEqual(1);
+    }
+  });
+
+  it("is finer than the grid it replaced at every resolution anybody uses", () => {
+    // The old rule was a flat 320 wide. This is what the freed frame budget buys.
+    for (const [w, h] of [[640, 480], [1280, 720], [1920, 1080]] as const) {
+      expect(maskGrid(w, h).scale).toBeLessThan(w / 320);
+    }
   });
 
   it("keeps the frame's aspect, so the silhouette is not stretched", () => {
@@ -209,14 +251,32 @@ describe("maskGrid and maskDilatePx", () => {
     const fhd = maskGrid(1920, 1080);
     // As a share of the picture, not as a pixel count: one grid pixel is worth
     // more frame pixels on a bigger camera, which is the point of the grid.
-    const shareHd = (maskDilatePx(1280, hd) * hd.scale) / 1280;
-    const shareFhd = (maskDilatePx(1920, fhd) * fhd.scale) / 1920;
+    const shareHd = (maskDilatePx(1280, hd).up * hd.scale) / 1280;
+    const shareFhd = (maskDilatePx(1920, fhd).up * fhd.scale) / 1920;
     expect(shareHd).toBeCloseTo(shareFhd, 3);
   });
 
-  it("always widens by at least something", () => {
+  it("always widens upward by at least something", () => {
     const g = maskGrid(160, 120);
-    expect(maskDilatePx(160, g)).toBeGreaterThanOrEqual(1);
+    expect(maskDilatePx(160, g).up).toBeGreaterThanOrEqual(1);
+  });
+
+  it("reaches furthest upward, barely sideways, and never downward", () => {
+    // Headwear is above a head. Sideways growth is the halo off somebody's arms
+    // and downward growth drags the desk up into them, so only one direction
+    // earns its full reach.
+    const r = maskDilatePx(1280, maskGrid(1280, 720));
+    expect(r.up).toBeGreaterThan(r.side);
+    expect(r.side).toBeGreaterThan(0);
+    expect(r.down).toBe(0);
+  });
+
+  it("keeps 'do not grow downward' through the conversion to grid pixels", () => {
+    // A blanket Math.max(1, ...) would floor zero to one and quietly reinstate
+    // the growth this stopped.
+    for (const width of [160, 640, 1280, 1920, 3840]) {
+      expect(maskDilatePx(width, maskGrid(width, Math.round(width * 0.5625))).down).toBe(0);
+    }
   });
 
   it("falls back to a sane frame for a garbage one", () => {
@@ -226,12 +286,13 @@ describe("maskGrid and maskDilatePx", () => {
 
 describe("dilateCoverage", () => {
   const gridOf = (w: number, h: number, fill = 0) => new Uint8ClampedArray(w * h).fill(fill);
+  const evenly = (r: number): DilateRadii => ({ up: r, down: r, side: r });
 
   it("spreads coverage outward from a covered pixel", () => {
     const w = 21, h = 1;
     const g = gridOf(w, h);
     g[10] = 255;
-    dilateCoverage(g, w, h, 4);
+    dilateCoverage(g, w, h, evenly(4));
     expect(g[10]).toBe(255);
     expect(g[8]).toBeGreaterThan(0);
     expect(g[12]).toBeGreaterThan(0);
@@ -241,18 +302,32 @@ describe("dilateCoverage", () => {
     const w = 21, h = 1;
     const g = gridOf(w, h);
     g[10] = 255;
-    dilateCoverage(g, w, h, 4);
+    dilateCoverage(g, w, h, evenly(4));
     expect(g[9]).toBeGreaterThan(g[8]);
     expect(g[8]).toBeGreaterThan(g[7]);
   });
 
-  it("spreads vertically as well as horizontally", () => {
+  it("grows upward and not downward", () => {
+    // The bleed and the headwear are the same mechanism pointed two ways. Up is
+    // where a cap, a headwrap or a helmet sits; down is the desk.
     const w = 9, h = 9;
     const g = gridOf(w, h);
     g[4 * w + 4] = 255;
-    dilateCoverage(g, w, h, 3);
+    dilateCoverage(g, w, h, { up: 3, down: 0, side: 0 });
     expect(g[2 * w + 4]).toBeGreaterThan(0);
-    expect(g[6 * w + 4]).toBeGreaterThan(0);
+    expect(g[6 * w + 4]).toBe(0);
+  });
+
+  it("reaches further up than sideways for the real radii", () => {
+    const w = 41, h = 41;
+    const g = gridOf(w, h);
+    const centre = 20 * w + 20;
+    g[centre] = 255;
+    const r = maskDilatePx(1280, maskGrid(1280, 720));
+    dilateCoverage(g, w, h, r);
+    // Same distance from the centre, one up and one across.
+    const d = r.up;
+    expect(g[(20 - d) * w + 20]).toBeGreaterThanOrEqual(g[20 * w + (20 - d)]);
   });
 
   it("never shrinks anything", () => {
@@ -260,26 +335,83 @@ describe("dilateCoverage", () => {
     const g = gridOf(w, h);
     for (let i = 0; i < g.length; i++) g[i] = i % 7 === 0 ? 255 : 0;
     const before = Uint8ClampedArray.from(g);
-    dilateCoverage(g, w, h, 3);
+    dilateCoverage(g, w, h, evenly(3));
     for (let i = 0; i < g.length; i++) expect(g[i]).toBeGreaterThanOrEqual(before[i]);
   });
 
   it("leaves an empty mask empty, so a frame with nobody in it stays that way", () => {
     const w = 12, h = 12;
     const g = gridOf(w, h);
-    dilateCoverage(g, w, h, 4);
+    dilateCoverage(g, w, h, evenly(4));
     expect([...g].every((v) => v === 0)).toBe(true);
   });
 
   it("writes in place, like everything else on the frame path", () => {
     const g = gridOf(4, 4);
-    expect(dilateCoverage(g, 4, 4, 2)).toBe(g);
+    expect(dilateCoverage(g, 4, 4, evenly(2))).toBe(g);
   });
 
   it("does nothing for a zero radius or a buffer that does not fit", () => {
     const g = gridOf(4, 4); g[5] = 255;
-    expect([...dilateCoverage(Uint8ClampedArray.from(g), 4, 4, 0)]).toEqual([...g]);
-    expect([...dilateCoverage(Uint8ClampedArray.from(g), 9, 9, 2)]).toEqual([...g]);
+    expect([...dilateCoverage(Uint8ClampedArray.from(g), 4, 4, evenly(0))]).toEqual([...g]);
+    expect([...dilateCoverage(Uint8ClampedArray.from(g), 9, 9, evenly(2))]).toEqual([...g]);
+  });
+});
+
+// ── What growth may claim ────────────────────────────────────────────────────
+//
+// The more important half of the bleed. Growing a silhouette cannot tell the
+// fabric of a headwrap from the wall behind a shoulder — both are only "not yet
+// covered" — and the wall is the commoner neighbour. The model already knows the
+// difference, and the confidence ramp already carries it.
+describe("dilateCeiling", () => {
+  it("permits growth wherever the model is unsure and nowhere else", () => {
+    const coverage = new Uint8ClampedArray([0, 1, 128, 254, 255]);
+    const ceiling = dilateCeiling(new Uint8ClampedArray(coverage.length), coverage);
+    expect([...ceiling]).toEqual([0, 255, 255, 255, 255]);
+  });
+
+  it("stops growth inventing coverage in confident background", () => {
+    // The halo, in miniature: a covered pixel beside a run the model is certain
+    // is the room.
+    const w = 9, h = 1;
+    const coverage = new Uint8ClampedArray(w);
+    coverage[4] = 255;
+    const ceiling = dilateCeiling(new Uint8ClampedArray(w), coverage);
+
+    const unconstrained = Uint8ClampedArray.from(coverage);
+    dilateCoverage(unconstrained, w, h, { up: 0, down: 0, side: 4 });
+    expect(unconstrained[2]).toBeGreaterThan(0);
+
+    const constrained = Uint8ClampedArray.from(coverage);
+    dilateCoverage(constrained, w, h, { up: 0, down: 0, side: 4 }, ceiling);
+    expect(constrained[2]).toBe(0);
+    expect(constrained[4]).toBe(255);
+  });
+
+  it("fills the uncertainty a headwrap lands in", () => {
+    // What the constraint is FOR. The model gives fabric middling confidence, so
+    // those pixels sit in the ramp — and growth is allowed to carry them to
+    // opaque, which is the top of somebody's head staying attached.
+    const w = 9, h = 1;
+    const coverage = new Uint8ClampedArray(w);
+    coverage[4] = 255;
+    coverage[3] = 40;  // the edge of a headwrap: unsure, not absent
+    coverage[2] = 20;
+    const ceiling = dilateCeiling(new Uint8ClampedArray(w), coverage);
+
+    dilateCoverage(coverage, w, h, { up: 0, down: 0, side: 4 }, ceiling);
+    expect(coverage[3]).toBeGreaterThan(40);
+    expect(coverage[2]).toBeGreaterThan(20);
+    // And still nothing beyond where the model saw anything at all.
+    expect(coverage[0]).toBe(0);
+  });
+
+  it("caps nothing above what was already opaque", () => {
+    const coverage = new Uint8ClampedArray([255, 255, 255]);
+    const ceiling = dilateCeiling(new Uint8ClampedArray(3), coverage);
+    dilateCoverage(coverage, 3, 1, { up: 0, down: 0, side: 2 }, ceiling);
+    expect([...coverage]).toEqual([255, 255, 255]);
   });
 });
 
@@ -318,12 +450,21 @@ function frameWithHeadwear(headwearConfidence: number): Frame {
   return { confidence, width, height };
 }
 
-/** Run a built frame through the real mask pipeline and hand back grid coverage. */
+/**
+ * Run a built frame through the real mask pipeline and hand back grid coverage.
+ *
+ * The ceiling is part of that pipeline now, and building it here is the point:
+ * growth is allowed to fill what the model was unsure about and forbidden to
+ * invent coverage where it was not. A harness that skipped it would be testing
+ * the unconstrained grow the processor no longer performs — and would report
+ * headwear as half-recovered when the real path recovers it completely.
+ */
 function maskFor(frame: Frame): { coverage: Uint8ClampedArray; grid: ReturnType<typeof maskGrid> } {
   const grid = maskGrid(frame.width, frame.height);
   const coverage = new Uint8ClampedArray(grid.width * grid.height);
   sampleCoverageFromConfidence(coverage, frame.confidence, frame.width, frame.height, grid);
-  dilateCoverage(coverage, grid.width, grid.height, maskDilatePx(frame.width, grid));
+  const ceiling = dilateCeiling(new Uint8ClampedArray(coverage.length), coverage);
+  dilateCoverage(coverage, grid.width, grid.height, maskDilatePx(frame.width, grid), ceiling);
   return { coverage, grid };
 }
 
@@ -584,5 +725,160 @@ describe("sameEffect", () => {
 
   it("separates different kinds that share an id", () => {
     expect(sameEffect({ kind: "template", id: "x" }, { kind: "custom", id: "x" })).toBe(false);
+  });
+});
+
+// ── Pacing ───────────────────────────────────────────────────────────────────
+//
+// The processor's loop runs on requestAnimationFrame, at the display's refresh
+// rate, while the canvas it draws into is captured at OUTPUT_FPS. So a MediaPipe
+// inference, a mask upscale, a putImageData and two blurs ran two to five times
+// per frame anybody would ever see, and the rest was thrown away.
+describe("frameIntervalMs", () => {
+  it("is the gap between output frames", () => {
+    expect(frameIntervalMs(24)).toBeCloseTo(41.667, 2);
+    expect(frameIntervalMs(30)).toBeCloseTo(33.333, 2);
+    expect(frameIntervalMs()).toBeCloseTo(1000 / OUTPUT_FPS, 5);
+  });
+
+  it("falls back to the output rate for a nonsense one", () => {
+    // A zero here would make every frame "due", which is the waste this fixes.
+    for (const bad of [0, -24, Number.NaN, Number.POSITIVE_INFINITY]) {
+      expect(frameIntervalMs(bad)).toBeCloseTo(1000 / OUTPUT_FPS, 5);
+    }
+  });
+});
+
+describe("shouldDrawFrame", () => {
+  it("always draws the first frame", () => {
+    // The canvas is captured the instant an effect is chosen; waiting even one
+    // interval would put a black frame on the wire.
+    expect(shouldDrawFrame(null, 0)).toBe(true);
+    expect(shouldDrawFrame(null, 999_999)).toBe(true);
+  });
+
+  it("skips the frames a 60Hz display offers in between", () => {
+    // 16.7ms steps. Two of every three animation frames did full segmentation
+    // work for nothing.
+    expect(shouldDrawFrame(0, 16.7)).toBe(false);
+    expect(shouldDrawFrame(0, 33.3)).toBe(true);
+  });
+
+  it("skips more of them on a 120Hz display", () => {
+    // 8.3ms steps, where four in five were waste.
+    expect(shouldDrawFrame(0, 8.3)).toBe(false);
+    expect(shouldDrawFrame(0, 16.7)).toBe(false);
+    expect(shouldDrawFrame(0, 25)).toBe(false);
+    expect(shouldDrawFrame(0, 41.7)).toBe(true);
+  });
+
+  it("never paces below the rate the track is captured at", () => {
+    // The failure a strict comparison would cause. At 60Hz a `>= 41.7` rule can
+    // only land on 50ms, which is 20fps — under the capture rate, so the track
+    // repeats frames and looks worse than the waste being removed.
+    const drawnAt: number[] = [];
+    let last: number | null = null;
+    // Two seconds of a 60Hz display.
+    for (let i = 1; i <= 120; i += 1) {
+      const now = (i * 1000) / 60;
+      if (shouldDrawFrame(last, now)) { drawnAt.push(now); last = now; }
+    }
+    const fps = drawnAt.length / 2;
+    expect(fps).toBeGreaterThanOrEqual(OUTPUT_FPS);
+    // And it is still a real saving: half the frames, not all of them.
+    expect(drawnAt.length).toBeLessThan(120 * 0.6);
+  });
+
+  it("settles at the capture rate on a 120Hz display", () => {
+    let last: number | null = null;
+    let drawn = 0;
+    for (let i = 1; i <= 240; i += 1) {
+      const now = (i * 1000) / 120;
+      if (shouldDrawFrame(last, now)) { drawn += 1; last = now; }
+    }
+    const fps = drawn / 2;
+    expect(fps).toBeGreaterThanOrEqual(OUTPUT_FPS);
+    expect(fps).toBeLessThanOrEqual(OUTPUT_FPS + 6);
+  });
+
+  it("draws rather than stalling when the clock does not move forward", () => {
+    // Skipping work is only ever an optimisation. It must not be able to freeze
+    // the picture.
+    expect(shouldDrawFrame(1_000, 1_000)).toBe(true);
+    expect(shouldDrawFrame(1_000, 500)).toBe(true);
+  });
+
+  it("keeps up with a slower requested rate", () => {
+    expect(shouldDrawFrame(0, 60, 15)).toBe(true);
+    expect(shouldDrawFrame(0, 30, 15)).toBe(false);
+  });
+});
+
+// ── The width of the seam ────────────────────────────────────────────────────
+//
+// The seam was soft because it was blurred, which is not the same as accurate.
+// The mask is upscaled from the grid and then feathered, so alpha crosses from
+// room to person over roughly eight pixels at 720p — right along hair, and a
+// visible ring of the real room everywhere else.
+describe("sharpenEdge", () => {
+  const buf = (...v: number[]) => new Uint8ClampedArray(v);
+
+  it("clears a halo pixel the model barely saw", () => {
+    const out = sharpenEdge(new Uint8ClampedArray(1), buf(40));
+    expect(out[0]).toBe(0);
+  });
+
+  it("makes headwear the model put at 0.28 fully opaque", () => {
+    // The same change that removes the ring completes the head covering, which
+    // is the reason to believe it is the right mechanism rather than a trade.
+    const coverage = buf(coverageFromConfidence(0.28));
+    const out = sharpenEdge(new Uint8ClampedArray(1), coverage);
+    expect(out[0]).toBe(255);
+  });
+
+  it("leaves the decided ends exactly where they were", () => {
+    const out = sharpenEdge(new Uint8ClampedArray(2), buf(0, 255));
+    expect([...out]).toEqual([0, 255]);
+  });
+
+  it("still crosses gradually through the genuinely undecided middle", () => {
+    // Narrower, not binary: hair has to keep a ramp or it comes back as a
+    // staircase.
+    const coverage = buf(96, 112, 128, 144, 160);
+    const out = sharpenEdge(new Uint8ClampedArray(coverage.length), coverage);
+    const values = [...out];
+    expect(new Set(values).size).toBeGreaterThan(3);
+    for (let i = 1; i < values.length; i++) expect(values[i]).toBeGreaterThan(values[i - 1]);
+  });
+
+  it("narrows the band rather than moving it", () => {
+    // The midpoint is a fixed point, so the silhouette does not creep inward or
+    // outward — only the width of the transition changes.
+    const out = sharpenEdge(new Uint8ClampedArray(1), buf(128));
+    expect(out[0]).toBeGreaterThanOrEqual(127);
+    expect(out[0]).toBeLessThanOrEqual(129);
+  });
+
+  it("writes to the output and never touches the history it was given", () => {
+    // The trap this signature exists to prevent: sharpening the temporal
+    // history in place compounds every frame until the mask is binary, and the
+    // smoothing is left with nothing to smooth.
+    const history = buf(40, 96, 200);
+    const before = [...history];
+    const out = new Uint8ClampedArray(history.length);
+    expect(sharpenEdge(out, history)).toBe(out);
+    expect([...history]).toEqual(before);
+  });
+
+  it("is a no-op at a contrast of one, and survives a nonsense one", () => {
+    const coverage = buf(40, 128, 200);
+    expect([...sharpenEdge(new Uint8ClampedArray(3), coverage, 1)]).toEqual([40, 128, 200]);
+    for (const bad of [0, -2, Number.NaN]) {
+      expect([...sharpenEdge(new Uint8ClampedArray(3), coverage, bad)]).toEqual([40, 128, 200]);
+    }
+  });
+
+  it("does not read past a shorter output", () => {
+    expect(() => sharpenEdge(new Uint8ClampedArray(2), buf(1, 2, 3, 4))).not.toThrow();
   });
 });

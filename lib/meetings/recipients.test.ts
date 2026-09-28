@@ -1,6 +1,7 @@
 import {
   deliveryMessage,
   deliveryOutcome,
+  whyNotice,
   everyoneReached,
   failedNotice,
   meetingRecipients,
@@ -279,6 +280,7 @@ describe("deliveryOutcome", () => {
     expect(deliveryOutcome(recipients, settled({ ok: true }, { ok: true }, { ok: true }))).toEqual({
       sent: 3,
       failed: [],
+      reasons: [],
     });
   });
 
@@ -286,7 +288,7 @@ describe("deliveryOutcome", () => {
   it("names the addresses that did not", () => {
     expect(
       deliveryOutcome(recipients, settled({ ok: true }, { ok: false }, new Error("bounced"))),
-    ).toEqual({ sent: 1, failed: ["b@fund.test", "c@fund.test"] });
+    ).toEqual({ sent: 1, failed: ["b@fund.test", "c@fund.test"], reasons: ["bounced"] });
   });
 
   it("treats a missing result as a failure rather than a success", () => {
@@ -295,7 +297,46 @@ describe("deliveryOutcome", () => {
     expect(deliveryOutcome(recipients, settled({ ok: true }))).toEqual({
       sent: 1,
       failed: ["b@fund.test", "c@fund.test"],
+      reasons: ["the send was never attempted"],
     });
+  });
+
+  // The defect this exists for: scheduling a meeting emailed nobody in total
+  // silence, because every caller kept `ok` and dropped `detail` — so a stale
+  // credential, a refused From address and a bad recipient all arrived as 0.
+  it("keeps what the mailer said about the failure", () => {
+    const outcome = deliveryOutcome(
+      recipients.slice(0, 1),
+      settled({ ok: false, detail: "no mailbox connected" }),
+    );
+    expect(outcome.reasons).toEqual(["no mailbox connected"]);
+  });
+
+  it("says one reason once, however many sends it explains", () => {
+    // A batch shares a mailbox, so a rejected credential fails all of them the
+    // same way. Three copies of one sentence is not three facts.
+    const outcome = deliveryOutcome(
+      recipients,
+      settled(
+        { ok: false, detail: "Invalid Credentials" },
+        { ok: false, detail: "Invalid Credentials" },
+        { ok: false, detail: "Invalid Credentials" },
+      ),
+    );
+    expect(outcome.sent).toBe(0);
+    expect(outcome.reasons).toEqual(["Invalid Credentials"]);
+  });
+
+  it("keeps two different reasons apart", () => {
+    const outcome = deliveryOutcome(
+      recipients.slice(0, 2),
+      settled({ ok: false, detail: "Invalid Credentials" }, { ok: false, detail: "bad address" }),
+    );
+    expect(outcome.reasons).toEqual(["Invalid Credentials", "bad address"]);
+  });
+
+  it("has no reason to give when the mailer gave none", () => {
+    expect(deliveryOutcome(recipients.slice(0, 1), settled({ ok: false })).reasons).toEqual([]);
   });
 
   it("does not read a send with no ok as having worked", () => {
@@ -342,5 +383,33 @@ describe("failedNotice", () => {
 
   it("stops naming and starts counting", () => {
     expect(failedNotice(["a", "b", "c", "d"])).toBe("Could not deliver to a, b, c and 1 other.");
+  });
+});
+
+describe("whyNotice", () => {
+  it("says nothing when the mailer said nothing", () => {
+    expect(whyNotice([])).toBeNull();
+  });
+
+  // Pointed at the mailbox, not at the addresses: "could not deliver to 3
+  // addresses" sends the host looking in the wrong place.
+  it("repeats what the mail server said", () => {
+    expect(whyNotice(["Invalid Credentials"])).toBe("The mail server said: Invalid Credentials.");
+  });
+
+  it("stops at two", () => {
+    const notice = whyNotice(["one", "two", "three"]) ?? "";
+    expect(notice).toContain("one; two");
+    expect(notice).not.toContain("three");
+  });
+});
+
+describe("deliveryMessage with a reason", () => {
+  it("carries the reason a send failed", () => {
+    expect(
+      deliveryMessage({ sent: 0, total: 2, failed: ["a@f.test", "b@f.test"], reasons: ["Invalid Credentials"] }),
+    ).toBe(
+      "It reached nobody. Could not deliver to a@f.test, b@f.test. The mail server said: Invalid Credentials.",
+    );
   });
 });
