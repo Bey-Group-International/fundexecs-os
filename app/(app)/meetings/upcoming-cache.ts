@@ -1,10 +1,9 @@
 // The upcoming-meetings list, shared by every copy of it on the page.
 //
-// The meetings page renders the list from the server, and then the list used
-// to fetch /api/meetings/upcoming again the moment it mounted — the same query
-// the server had just run. Opening the calendar mounts a second copy in its
-// rail, which fetched a third time, and every realtime change to a meeting then
-// refetched once per copy. This keeps one answer and one request in flight.
+// Opening the calendar mounts a second copy of the list in its rail, which
+// fetched the same list the landing copy had just fetched, and every realtime
+// change to a meeting then refetched once per copy. This keeps the latest
+// answer for a copy mounting seconds later, and one request in flight.
 
 import type { UpcomingMeeting } from "./UpcomingMeetingsList";
 
@@ -14,9 +13,9 @@ export const UPCOMING_FRESH_MS = 30_000;
 let latest: { at: number; data: UpcomingMeeting[] } | null = null;
 let inflight: Promise<UpcomingMeeting[] | null> | null = null;
 
-/** Record an answer obtained elsewhere — the server render the page arrived with. */
-export function seedUpcoming(data: UpcomingMeeting[]): void {
-  latest = { at: Date.now(), data };
+/** Drop the shared answer after a change made here, so no copy reuses it. */
+export function forgetUpcoming(): void {
+  latest = null;
 }
 
 /** The last answer, if it is recent enough to use instead of asking again. */

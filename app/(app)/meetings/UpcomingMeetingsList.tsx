@@ -15,7 +15,7 @@ import nextDynamic from "next/dynamic";
 import type { MeetingEditInitial } from "./MeetingEditScreen";
 import { MeetingShareLink } from "./MeetingShareLink";
 import { useNow, useLivePresence, nextChannelName } from "./hooks";
-import { fetchUpcoming, recentUpcoming, seedUpcoming } from "./upcoming-cache";
+import { fetchUpcoming, forgetUpcoming, recentUpcoming } from "./upcoming-cache";
 
 /**
  * A placeholder while the scheduling form arrives.
@@ -165,18 +165,19 @@ function toEditInitial(m: UpcomingMeeting): MeetingEditInitial {
 export function UpcomingMeetingsList({
   initialMeetings,
   compact = false,
-  initialIsFresh = false,
+  reuseRecent = false,
 }: {
   initialMeetings: UpcomingMeeting[];
   /** Rail variant: drop the row's time column so it fits a narrow sidebar. */
   compact?: boolean;
   /**
-   * The initial list was rendered by the server in the same response that is
-   * mounting this, so it is already current and need not be fetched again.
-   * False for a copy that mounts later (the calendar's rail), whose server
-   * data may be minutes old.
+   * Start from another copy's answer when it is only seconds old, instead of
+   * fetching the same list again. For the calendar's rail, which mounts beside
+   * the landing list. The landing list always fetches on mount: its server
+   * data can be a cached page restored by Back, and changes made while it was
+   * unmounted arrive through no realtime event.
    */
-  initialIsFresh?: boolean;
+  reuseRecent?: boolean;
 }) {
   const [meetings, setMeetings] = useState(initialMeetings);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -206,15 +207,9 @@ export function UpcomingMeetingsList({
 
   useEffect(() => {
     const supabase = createClient();
-    // Only fetch on mount when there is no current answer to start from: the
-    // server's own render of this list, or another copy's recent fetch.
-    if (initialIsFresh) {
-      seedUpcoming(initialMeetings);
-    } else {
-      const recent = recentUpcoming();
-      if (recent) setMeetings(recent);
-      else void refresh();
-    }
+    const recent = reuseRecent ? recentUpcoming() : null;
+    if (recent) setMeetings(recent);
+    else void refresh();
 
     // Coalesce bursts of postgres changes into a single refetch so a save that
     // fires several row events doesn't trigger a refetch storm.
@@ -233,8 +228,8 @@ export function UpcomingMeetingsList({
       if (refreshTimer.current) clearTimeout(refreshTimer.current);
       void supabase.removeChannel(channel);
     };
-    // Mount-time only: initialMeetings and initialIsFresh describe the first
-    // render, and realtime keeps the list current after it.
+    // Mount-time only: reuseRecent describes the first render, and realtime
+    // keeps the list current after it.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [channelName]);
 
@@ -247,6 +242,8 @@ export function UpcomingMeetingsList({
       setError(json.error ?? "Failed to delete meeting");
     } else {
       setMeetings((prev) => prev.filter((m) => m.id !== id));
+      // The shared answer still lists it; a copy mounting next must not.
+      forgetUpcoming();
     }
     setDeleteId(null);
     setBusy(null);

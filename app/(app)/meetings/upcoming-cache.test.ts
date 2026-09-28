@@ -1,4 +1,4 @@
-import { fetchUpcoming, recentUpcoming, resetUpcomingCache, seedUpcoming, UPCOMING_FRESH_MS } from "./upcoming-cache";
+import { fetchUpcoming, forgetUpcoming, recentUpcoming, resetUpcomingCache, UPCOMING_FRESH_MS } from "./upcoming-cache";
 import type { UpcomingMeeting } from "./UpcomingMeetingsList";
 
 const row = (id: string) => ({ id }) as unknown as UpcomingMeeting;
@@ -25,15 +25,30 @@ describe("upcoming-cache", () => {
     expect(b).toBe(a);
   });
 
-  it("hands a copy mounting soon after the server's answer that answer", () => {
-    seedUpcoming([row("s")]);
+  function okFetch(ids: string[]) {
+    global.fetch = jest.fn(async () =>
+      ({ ok: true, json: async () => ({ data: ids.map(row) }) }) as Response,
+    ) as unknown as typeof fetch;
+  }
+
+  it("hands a copy mounting seconds later the last answer", async () => {
+    okFetch(["s"]);
+    await fetchUpcoming();
     expect(recentUpcoming()).toEqual([row("s")]);
   });
 
-  it("stops trusting an answer once it is old", () => {
+  it("stops trusting an answer once it is old", async () => {
+    okFetch(["s"]);
+    await fetchUpcoming();
     jest.useFakeTimers();
-    seedUpcoming([row("s")]);
-    jest.advanceTimersByTime(UPCOMING_FRESH_MS + 1);
+    jest.setSystemTime(Date.now() + UPCOMING_FRESH_MS + 1);
+    expect(recentUpcoming()).toBeNull();
+  });
+
+  it("forgets the answer after a local change", async () => {
+    okFetch(["s"]);
+    await fetchUpcoming();
+    forgetUpcoming();
     expect(recentUpcoming()).toBeNull();
   });
 

@@ -190,7 +190,7 @@ export function MeetingsLanding({
         {/* Both panes stay mounted: Logs holds a search box and an open row,
             and switching to Upcoming and back should not throw either away. */}
         <div id="panel-upcoming" role="tabpanel" aria-labelledby="tab-upcoming" hidden={tab !== "upcoming"}>
-          <UpcomingMeetingsList initialMeetings={initialUpcoming} initialIsFresh />
+          <UpcomingMeetingsList initialMeetings={initialUpcoming} />
         </div>
         <div id="panel-logs" role="tabpanel" aria-labelledby="tab-logs" hidden={tab !== "logs"}>
           <MeetingLogs entries={initialLogs} />

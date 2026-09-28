@@ -212,7 +212,10 @@ export function MeetingsCalendar({
   // there were more than that, the months anybody would look at fell off the
   // end. Keyed to the month so moving between days and weeks inside it costs
   // nothing; wide enough for the month grid's spill and a 21-day agenda.
-  const monthStartMs = new Date(anchor.getFullYear(), anchor.getMonth(), 1).getTime();
+  // The agenda starts from today when the anchor is in the past, so its window
+  // follows the day it actually draws from rather than the anchor's month.
+  const windowBase = view === "agenda" && anchor < today ? today : anchor;
+  const monthStartMs = new Date(windowBase.getFullYear(), windowBase.getMonth(), 1).getTime();
   const meetingWindow = useMemo(() => {
     const monthStart = new Date(monthStartMs);
     return {
@@ -636,7 +639,7 @@ export function MeetingsCalendar({
 
         {/* Side rail */}
         <aside className="flex flex-col gap-6">
-          <MiniMonth anchor={anchor} onPick={(d) => { setAnchor(startOfDay(d)); }} today={today} meetings={meetings} />
+          <MiniMonth anchor={anchor} onPick={(d) => { setAnchor(startOfDay(d)); }} today={today} meetings={meetings} orgId={orgId} loaded={meetingWindow} />
           <CalendarLayers
             layers={layers}
             connectedAs={connectedAs}
@@ -650,7 +653,7 @@ export function MeetingsCalendar({
           />
           <Legend meetings={meetings} />
           <div className="rounded-2xl border border-[var(--line)] bg-[var(--surface-1)] p-4">
-            <UpcomingMeetingsList compact initialMeetings={initialUpcoming} />
+            <UpcomingMeetingsList compact initialMeetings={initialUpcoming} reuseRecent />
           </div>
           <div className="rounded-2xl border border-[var(--line)] bg-[var(--surface-1)] p-4">
             <PastMeetingsList compact initialMeetings={initialPast} userId={userId} />
@@ -2082,15 +2085,55 @@ function AgendaView({ anchor, meetings, now, today, presence, statusOf, onSelect
 }
 
 // ── Mini month navigator ────────────────────────────────────────────────────
-function MiniMonth({ anchor, onPick, today, meetings }: { anchor: Date; onPick: (d: Date) => void; today: Date; meetings: CalendarMeeting[] }) {
+function MiniMonth({
+  anchor, onPick, today, meetings, orgId, loaded,
+}: {
+  anchor: Date; onPick: (d: Date) => void; today: Date; meetings: CalendarMeeting[];
+  orgId: string;
+  /** The range `meetings` covers. The navigator pages independently of it. */
+  loaded: { from: string; to: string };
+}) {
   const [cursor, setCursor] = useState<Date>(startOfDay(anchor));
   useEffect(() => setCursor(startOfDay(anchor)), [anchor]);
   const weeks = monthMatrix(cursor);
+
+  // The grid only holds the months around the one on screen, and this
+  // navigator can page well beyond them. For a month outside that range it
+  // reads just the dates it needs to draw its dots.
+  const gridFrom = weeks[0][0];
+  const gridTo = addDays(weeks[weeks.length - 1][6], 1);
+  const covered = gridFrom.toISOString() >= loaded.from && gridTo.toISOString() <= loaded.to;
+  const gridKey = gridFrom.getTime();
+  const [extra, setExtra] = useState<{ key: number; days: Set<string> } | null>(null);
+  useEffect(() => {
+    if (covered) return;
+    let cancelled = false;
+    void (async () => {
+      const { data } = await createClient()
+        .from("live_meetings")
+        .select("scheduled_at")
+        .eq("organization_id", orgId)
+        .eq("kind", MEETING_KIND)
+        .is("deleted_at", null)
+        .gte("scheduled_at", new Date(gridKey).toISOString())
+        .lt("scheduled_at", addDays(new Date(gridKey), 42).toISOString())
+        .limit(500);
+      if (cancelled) return;
+      const days = new Set<string>();
+      for (const r of (data ?? []) as { scheduled_at: string | null }[]) {
+        if (r.scheduled_at) days.add(dayKey(new Date(r.scheduled_at)));
+      }
+      setExtra({ key: gridKey, days });
+    })();
+    return () => { cancelled = true; };
+  }, [covered, gridKey, orgId]);
+
   const daysWithEvents = useMemo(() => {
+    if (!covered) return extra?.key === gridKey ? extra.days : new Set<string>();
     const s = new Set<string>();
     for (const m of meetings) if (m.scheduled_at) s.add(dayKey(new Date(m.scheduled_at)));
     return s;
-  }, [meetings]);
+  }, [covered, extra, gridKey, meetings]);
 
   return (
     <div className="rounded-2xl border border-[var(--line)] bg-[var(--surface-1)] p-3">
