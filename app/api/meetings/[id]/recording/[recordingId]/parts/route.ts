@@ -14,6 +14,7 @@ import { NextResponse } from "next/server";
 import { createServerClient } from "@/lib/supabase/server";
 import { buildTimeline, timelineBytes, timelineDuration } from "@/lib/meetings/recording-timeline";
 import type { StoredPart } from "@/lib/meetings/recording-timeline";
+import { readAllRecordingParts } from "@/lib/meetings/recording-parts";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -43,13 +44,18 @@ export async function GET(_req: Request, { params }: { params: Params }) {
     );
   }
 
-  const { data: rows } = await rls
-    .from("live_meeting_recording_chunks")
-    .select("idx, path, size, offset_ms, duration_ms")
-    .eq("recording_id", recordingId)
-    .order("idx", { ascending: true });
+  // Paged: an unpaged read stops at the API's row cap, so the timeline of a
+  // recording longer than about 83 minutes ended there and the rest could not
+  // be played or seeked to.
+  let rows: StoredPart[];
+  try {
+    rows = await readAllRecordingParts<StoredPart>(rls, recordingId, "idx, path, size, offset_ms, duration_ms");
+  } catch (err) {
+    console.error("[recording/parts] could not read parts", recordingId, err);
+    return NextResponse.json({ error: "Could not read the recording" }, { status: 500 });
+  }
 
-  const parts = buildTimeline((rows ?? []) as StoredPart[]);
+  const parts = buildTimeline(rows);
   if (parts.length === 0) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
   return NextResponse.json({

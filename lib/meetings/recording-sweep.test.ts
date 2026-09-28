@@ -57,6 +57,7 @@ function client(h: Harness) {
       is: () => chain,
       lte: () => chain,
       order: () => chain,
+      range: () => chain,
       eq: (col: string, val: unknown) => { filters[col] = val; return chain; },
       in: (col: string, vals: unknown[]) => { filters[col] = vals; return chain; },
       update: (p: Row) => { mode = "update"; patch = p; return chain; },
