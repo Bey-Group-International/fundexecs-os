@@ -64,7 +64,7 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
 
   // Newest report first — the transcript to work from is the one the latest
   // report was built on, not whichever row the database happens to return.
-  const { data: existing } = await supabase
+  const existingRead = supabase
     .from("live_meeting_reports")
     .select("id, full_transcript")
     .eq("meeting_id", id)
@@ -87,21 +87,25 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
   // part a host is regenerating the report to get right. `id` gives rows that
   // share a timestamp a total order, so a page boundary cannot fall inside a
   // tie and lose or repeat one.
-  let stored = "";
-  try {
-    const rows = await readAllTranscriptRows((from, to) =>
-      supabase
-        .from("live_meeting_transcripts")
-        .select("speaker, text, ts, confidence, overlapped")
-        .eq("meeting_id", id)
-        .order("ts", { ascending: true })
-        .order("id", { ascending: true })
-        .range(from, to),
-    );
-    if (rows.length) stored = restoreTranscript(rows as unknown as StoredLine[]);
-  } catch (err) {
-    console.warn("[regenerate] stored transcript unavailable", err);
-  }
+  //
+  // Both read at once: neither depends on the other, and the paged read is
+  // several round trips on its own for a long meeting.
+  const storedRead = readAllTranscriptRows((from, to) =>
+    supabase
+      .from("live_meeting_transcripts")
+      .select("speaker, text, ts, confidence, overlapped")
+      .eq("meeting_id", id)
+      .order("ts", { ascending: true })
+      .order("id", { ascending: true })
+      .range(from, to),
+  ).then(
+    (rows) => (rows.length ? restoreTranscript(rows as unknown as StoredLine[]) : ""),
+    (err) => {
+      console.warn("[regenerate] stored transcript unavailable", err);
+      return "";
+    },
+  );
+  const [{ data: existing }, stored] = await Promise.all([existingRead, storedRead]);
 
   const transcript = mergeTranscripts((existing?.full_transcript ?? "").trim(), stored).trim();
   if (!transcript) {

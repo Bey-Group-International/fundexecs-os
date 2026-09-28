@@ -28,6 +28,9 @@ type SupabaseClient = Awaited<ReturnType<typeof createServerClient>>;
  */
 export const MEETING_LOG_LIMIT = 200;
 
+/** Meeting ids per attendance lookup; they travel in the request URL. */
+const ATTENDANCE_BATCH = 100;
+
 // Written out rather than assembled: supabase-js parses the select string at
 // the type level to check the columns exist, and a string it cannot read as a
 // literal takes those checks with it.
@@ -60,32 +63,45 @@ export async function loadMeetingLog(
   userId: string,
   limit: number = MEETING_LOG_LIMIT,
 ): Promise<MeetingLogRow[]> {
-  // Two independent reads, so both go out at once. The attendance read is
-  // narrow — one column, already indexed on user_id — and it is what turns an
-  // unreadable report into an explained one.
-  const [{ data }, { data: attendance }] = await Promise.all([
-    supabase
-      .from("live_meetings")
-      .select(LOG_SELECT)
-      .eq("organization_id", orgId)
-      // Meetings only. A recorded call is a live_meetings row — it has to be,
-      // for its recording to be reachable and cleaned up — but it is not a
-      // meeting anybody held, and the log is a record of meetings. The call
-      // archive lists them.
-      .eq("kind", MEETING_KIND)
-      .is("deleted_at", null)
-      .order("created_at", { ascending: false })
-      .order("created_at", { ascending: false, referencedTable: "live_meeting_reports" })
-      .limit(1, { referencedTable: "live_meeting_reports" })
-      .limit(limit),
-    supabase
-      .from("live_meeting_participants")
-      .select("meeting_id")
-      .eq("user_id", userId),
-  ]);
+  const { data } = await supabase
+    .from("live_meetings")
+    .select(LOG_SELECT)
+    .eq("organization_id", orgId)
+    // Meetings only. A recorded call is a live_meetings row — it has to be,
+    // for its recording to be reachable and cleaned up — but it is not a
+    // meeting anybody held, and the log is a record of meetings. The call
+    // archive lists them.
+    .eq("kind", MEETING_KIND)
+    .is("deleted_at", null)
+    .order("created_at", { ascending: false })
+    .order("created_at", { ascending: false, referencedTable: "live_meeting_reports" })
+    .limit(1, { referencedTable: "live_meeting_reports" })
+    .limit(limit);
+
+  // Attendance for just these meetings. It used to read every attendance row
+  // the user had ever had, which grows by one per meeting for the life of the
+  // account — and past PostgREST's 1000-row cap was silently cut, so a heavy
+  // user's older meetings in the log read as ones they did not attend. It is
+  // what turns an unreadable report into an explained one, so it has to be
+  // right for exactly the rows on the page.
+  //
+  // In batches, read together: an id list goes in the URL, and two hundred
+  // UUIDs in one filter is close to what a proxy will accept in a request line.
+  const ids = (data ?? []).map((row) => (row as { id: string }).id);
+  const batches: string[][] = [];
+  for (let i = 0; i < ids.length; i += ATTENDANCE_BATCH) batches.push(ids.slice(i, i + ATTENDANCE_BATCH));
+  const attendance = await Promise.all(
+    batches.map((batch) =>
+      supabase
+        .from("live_meeting_participants")
+        .select("meeting_id")
+        .eq("user_id", userId)
+        .in("meeting_id", batch),
+    ),
+  );
 
   const attendedIds = new Set(
-    (attendance ?? []).map((row: { meeting_id: string }) => row.meeting_id),
+    attendance.flatMap(({ data: rows }) => (rows ?? []).map((row: { meeting_id: string }) => row.meeting_id)),
   );
 
   return (data ?? []).map((row) => {

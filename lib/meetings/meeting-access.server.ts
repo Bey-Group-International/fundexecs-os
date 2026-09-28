@@ -56,23 +56,26 @@ export async function authorizeMeetingCaller(
     if (!meeting) return DENIED;
     if (meeting.host_id === user.id) return { ok: true, userId: user.id };
 
-    const { data: participant } = await svc
-      .from("live_meeting_participants")
-      .select("id")
-      .eq("meeting_id", meetingId)
-      .eq("user_id", user.id)
-      .maybeSingle();
-    if (participant) return { ok: true, userId: user.id };
-
-    if (meeting.organization_id) {
-      const { data: member } = await svc
-        .from("organization_members")
+    // Either one lets them in, so both are asked at once. This runs before every
+    // transcript flush and chat message, and asking them in turn made a
+    // teammate who is not the host wait on both round trips every time.
+    const [{ data: participant }, memberResult] = await Promise.all([
+      svc
+        .from("live_meeting_participants")
         .select("id")
-        .eq("organization_id", meeting.organization_id)
-        .eq("principal_id", user.id)
-        .maybeSingle();
-      if (member) return { ok: true, userId: user.id };
-    }
+        .eq("meeting_id", meetingId)
+        .eq("user_id", user.id)
+        .maybeSingle(),
+      meeting.organization_id
+        ? svc
+            .from("organization_members")
+            .select("id")
+            .eq("organization_id", meeting.organization_id)
+            .eq("principal_id", user.id)
+            .maybeSingle()
+        : Promise.resolve({ data: null }),
+    ]);
+    if (participant || memberResult.data) return { ok: true, userId: user.id };
     return DENIED;
   }
 
