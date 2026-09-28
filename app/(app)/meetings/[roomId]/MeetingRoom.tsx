@@ -686,6 +686,17 @@ export function videoTrackOf(stream: MediaStream | null): MediaStreamTrack | nul
  */
 export const VideoTile = React.memo(VideoTileImpl);
 
+/** One participant's audio, as the voice meter reads it. */
+interface VoiceTap {
+  id: string;
+  /** The track this tap reads; a replaced track means a new tap. */
+  track: MediaStreamTrack;
+  analyser: AnalyserNode;
+  source: MediaStreamAudioSourceNode;
+  buffer: Float32Array<ArrayBuffer>;
+  smoothed: number;
+}
+
 // ─── DeviceChevron ────────────────────────────────────────────────────────────
 
 /**
@@ -1669,8 +1680,10 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
   // room shows a share as ordinary video, but the recording gives it the frame.
   const sharingPeersRef = useRef<Set<string>>(new Set());
 
-  // Transcript
-  const [transcript, setTranscript] = useState<TranscriptLine[]>([]);
+  // Transcript. A ref, not state: nothing on screen shows it (the flush, the
+  // attribution and the report all read the ref), and as state every interim
+  // speech result — several a second while anyone talks — re-rendered the
+  // whole room to draw nothing.
   const transcriptRef = useRef<TranscriptLine[]>([]);
   const recognitionRef = useRef<any>(null);
   const interimIdRef = useRef<string>(crypto.randomUUID());
@@ -2852,8 +2865,8 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
       // Order by when the words were spoken, not when the packet landed. Two
       // people talking at once reach us out of order otherwise, and the notes
       // model then reads a conversation whose turns are shuffled.
-      setTranscript((prev) => {
-        const next = [...prev];
+      {
+        const next = [...transcriptRef.current];
         // Step past the in-progress interim line, which always trails the
         // finals, then back through any final spoken after this one.
         let at = next.length;
@@ -2861,8 +2874,7 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
         while (at > 0 && next[at - 1].ts > line.ts) at--;
         next.splice(at, 0, line);
         transcriptRef.current = next;
-        return next;
-      });
+      }
     }
 
     if (msg.type === "recording" && msg.from !== myId) {
@@ -3756,14 +3768,21 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
    * carries its own tick.
    */
   const [presenceNowMs, setPresenceNowMs] = useState(() => Date.now());
+  // Only while somebody is waiting: with an empty queue there is nothing to
+  // expire, and the tick was re-rendering the whole room for the entire call.
+  const anyoneWaiting = waitingPeers.length > 0;
   useEffect(() => {
-    if (!isHost || !sessionLive) return;
+    if (!isHost || !sessionLive || !anyoneWaiting) return;
+    setPresenceNowMs(Date.now());
     const timer = setInterval(() => setPresenceNowMs(Date.now()), PRESENCE_TICK_MS);
     return () => clearInterval(timer);
-  }, [isHost, sessionLive]);
+  }, [isHost, sessionLive, anyoneWaiting]);
 
+  // The current time, not the last tick's: the tick is paused while nobody is
+  // waiting, and filtering a newly arrived list against a clock frozen minutes
+  // ago would briefly count a stale knock as present — and chime for it.
   const livePeers = useMemo(
-    () => presentOnly(waitingPeers, presenceNowMs),
+    () => presentOnly(waitingPeers, Math.max(presenceNowMs, Date.now())),
     [waitingPeers, presenceNowMs],
   );
 
@@ -3912,16 +3931,12 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
       // under their own name, and publishing our copy as well would put the same
       // sentence in the transcript twice.
       if (attribution && !attribution.publish) {
-        setTranscript((prev) => {
-          const next = prev.filter((l) => l.final);
-          transcriptRef.current = next;
-          return next;
-        });
+        transcriptRef.current = transcriptRef.current.filter((l) => l.final);
         return;
       }
 
-      setTranscript((prev) => {
-        const next = [...prev.filter((l) => l.final)];
+      {
+        const next = transcriptRef.current.filter((l) => l.final);
         if (settled && attribution) {
           const ts = now;
           next.push({
@@ -3965,8 +3980,7 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
           });
         }
         transcriptRef.current = next;
-        return next;
-      });
+      }
     };
 
     recognition.onerror = (ev: any) => {
@@ -3996,6 +4010,13 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
   // This runs in every layout, unlike the old speaker-view-only meter. It has to:
   // attribution needs to know whose voice was in the room during an utterance
   // regardless of which tiles the user happens to be looking at.
+  // One AudioContext for the whole live call, with a tap per participant added
+  // and removed as people come and go. It used to be rebuilt from scratch on
+  // every change to `peers` or the local stream — each join changes `peers`
+  // about three times — which re-created the context and every analyser and
+  // reset every level to zero each time.
+  const meterRef = useRef<{ ctx: AudioContext; taps: Map<string, VoiceTap> } | null>(null);
+
   useEffect(() => {
     if (!sessionLive) return;
 
@@ -4010,40 +4031,16 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     // like a room where nobody is talking. Nudge it back.
     if (ctx.state === "suspended") void ctx.resume().catch(() => {});
 
-    const streams = [
-      ...(localStream ? [{ id: LOCAL_SPEAKER_ID, stream: localStream }] : []),
-      ...[...peers.values()].filter((p) => p.stream).map((p) => ({ id: p.id, stream: p.stream! })),
-    ];
-
-    const taps: {
-      id: string;
-      analyser: AnalyserNode;
-      source: MediaStreamAudioSourceNode;
-      buffer: Float32Array<ArrayBuffer>;
-      smoothed: number;
-    }[] = [];
-    for (const { id, stream } of streams) {
-      const audio = stream.getAudioTracks();
-      if (audio.length === 0) continue;
-      try {
-        // Tap a copy holding only the audio tracks — feeding a source node a
-        // stream whose video track is later replaced (screen share) can drop the
-        // tap on some browsers.
-        const source = ctx.createMediaStreamSource(new MediaStream(audio));
-        const analyser = ctx.createAnalyser();
-        analyser.fftSize = 1024;
-        source.connect(analyser);
-        taps.push({ id, analyser, source, buffer: new Float32Array(analyser.fftSize), smoothed: 0 });
-      } catch { /* a stream can end between render and tap */ }
-    }
-    if (taps.length === 0) { void ctx.close().catch(() => {}); return; }
+    const taps = new Map<string, VoiceTap>();
+    meterRef.current = { ctx, taps };
 
     const interval = setInterval(() => {
+      if (taps.size === 0) return;
       const now = Date.now();
       let loudest = 0;
       let loudestId: string | null = null;
 
-      for (const tap of taps) {
+      for (const tap of taps.values()) {
         tap.analyser.getFloatTimeDomainData(tap.buffer);
         tap.smoothed = smoothLevel(tap.smoothed, levelFromSamples(tap.buffer));
 
@@ -4069,8 +4066,47 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     return () => {
       clearInterval(interval);
       taps.forEach((t) => { try { t.source.disconnect(); } catch { /* context already gone */ } });
+      taps.clear();
+      meterRef.current = null;
       void ctx.close().catch(() => {});
     };
+  }, [sessionLive]);
+
+  // Keep the taps in step with who is in the call. Declared after the effect
+  // above so, in the commit that makes the call live, the context exists by the
+  // time this runs.
+  useEffect(() => {
+    const meter = meterRef.current;
+    if (!sessionLive || !meter) return;
+
+    const wanted = new Map<string, MediaStreamTrack>();
+    const add = (id: string, stream: MediaStream | null | undefined) => {
+      const track = stream?.getAudioTracks()[0];
+      if (track) wanted.set(id, track);
+    };
+    add(LOCAL_SPEAKER_ID, localStream);
+    for (const p of peers.values()) add(p.id, p.stream);
+
+    // Drop taps for people who left, or whose audio track was replaced.
+    for (const [id, tap] of meter.taps) {
+      if (wanted.get(id) === tap.track) continue;
+      try { tap.source.disconnect(); } catch { /* already gone */ }
+      meter.taps.delete(id);
+    }
+
+    for (const [id, track] of wanted) {
+      if (meter.taps.has(id)) continue;
+      try {
+        // Tap a stream holding only the audio track — feeding a source node a
+        // stream whose video track is later replaced (screen share) can drop the
+        // tap on some browsers.
+        const source = meter.ctx.createMediaStreamSource(new MediaStream([track]));
+        const analyser = meter.ctx.createAnalyser();
+        analyser.fftSize = 1024;
+        source.connect(analyser);
+        meter.taps.set(id, { id, track, analyser, source, buffer: new Float32Array(analyser.fftSize), smoothed: 0 });
+      } catch { /* a stream can end between render and tap */ }
+    }
   }, [sessionLive, localStream, peers]);
 
   // Someone who leaves stops being "speaking" — otherwise their dot stays lit on

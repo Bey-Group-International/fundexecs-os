@@ -46,7 +46,10 @@ export async function GET(req: NextRequest) {
     .select(
       "id, room_code, title, created_at, recording_consent, " +
       "live_meeting_recordings(duration_seconds, status, deleted_at), " +
-      "live_meeting_reports(summary, full_transcript)",
+      // Transcripts only when searching. Each is up to 120,000 characters, and
+      // the plain list shows the summary — so reading them for every page load
+      // moved megabytes nobody looked at.
+      (searching ? "live_meeting_reports(summary, full_transcript)" : "live_meeting_reports(summary)"),
     )
     .eq("organization_id", auth.ctx.orgId)
     .eq("host_id", auth.ctx.userId)
