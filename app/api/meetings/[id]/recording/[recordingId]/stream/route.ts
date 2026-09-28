@@ -9,6 +9,7 @@ import {
   totalSize,
   type RecordingChunk,
 } from "@/lib/meetings/recording-range";
+import { readAllRecordingParts } from "@/lib/meetings/recording-parts";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -68,13 +69,15 @@ export async function GET(req: NextRequest, { params }: { params: Params }) {
     );
   }
 
-  const { data: rows } = await rls
-    .from("live_meeting_recording_chunks")
-    .select("path, size")
-    .eq("recording_id", recordingId)
-    .order("idx", { ascending: true });
-
-  const chunks = (rows ?? []) as RecordingChunk[];
+  // Paged: an unpaged read stops at the API's row cap, which cut every
+  // recording longer than about 83 minutes off at that point.
+  let chunks: RecordingChunk[];
+  try {
+    chunks = await readAllRecordingParts<RecordingChunk>(rls, recordingId, "path, size");
+  } catch (err) {
+    console.error("[recording/stream] could not read parts", recordingId, err);
+    return NextResponse.json({ error: "Could not read the recording" }, { status: 500 });
+  }
   if (!chunks.length) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
   const size = totalSize(chunks);

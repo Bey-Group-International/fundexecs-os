@@ -20,6 +20,7 @@
 // suffix is this repo's marker, and the guard would put this module — the only
 // code that deletes a recording — beyond the reach of a unit test.
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { readAllRecordingParts } from "@/lib/meetings/recording-parts";
 import { RECORDING_BUCKET, recordingPrefix } from "@/lib/meetings/recording-policy";
 import { buildTimeline, timelineDuration, type StoredPart } from "@/lib/meetings/recording-timeline";
 import type { Database } from "@/lib/supabase/database.types";
@@ -172,11 +173,13 @@ export async function runRecordingSweep(
       // Everything below is counted from what actually landed, never from
       // wall-clock time since the host pressed Record: a tab that died at
       // minute four did not record the five hours that followed.
-      const { data: chunks } = await supabase
-        .from("live_meeting_recording_chunks")
-        .select("idx, size, offset_ms, duration_ms")
-        .eq("recording_id", row.id);
-      const parts = (chunks ?? []) as StoredPart[];
+      // Paged, so a long recording is closed with its whole length and size
+      // rather than the first thousand parts' worth.
+      const parts = await readAllRecordingParts<StoredPart>(
+        supabase,
+        row.id,
+        "idx, size, offset_ms, duration_ms",
+      );
       const bytes = parts.reduce((n, c) => n + (c.size ?? 0), 0);
       // The same figure the player's scrubber shows, from the same rows. This
       // used to be left unset, so a recording the sweep closed was listed with
