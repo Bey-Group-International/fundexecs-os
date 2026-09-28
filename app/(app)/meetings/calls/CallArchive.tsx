@@ -19,6 +19,13 @@ export function CallArchive({ initial }: { initial: CallHit[] }) {
   const [calls, setCalls] = useState<CallHit[]>(initial);
   const [partial, setPartial] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [confirming, setConfirming] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  // Calls deleted on this page. A search already in flight when the delete
+  // lands was answered before it, and must not put the call back.
+  const deleted = useRef<Set<string>>(new Set());
 
   // The search that is in flight. A slow request for "val" must not land after
   // a fast one for "valuation" and replace its results with the earlier ones.
@@ -31,7 +38,7 @@ export function CallArchive({ initial }: { initial: CallHit[] }) {
       const res = await fetch(`/api/meetings/calls?q=${encodeURIComponent(q)}`);
       const body = (await res.json().catch(() => ({}))) as { calls?: CallHit[]; partial?: boolean };
       if (ticket !== latest.current) return;
-      setCalls(body.calls ?? []);
+      setCalls((body.calls ?? []).filter((c) => !deleted.current.has(c.id)));
       setPartial(body.partial === true);
     } finally {
       if (ticket === latest.current) setLoading(false);
@@ -46,6 +53,30 @@ export function CallArchive({ initial }: { initial: CallHit[] }) {
     const timer = setTimeout(() => { void run(q); }, 250);
     return () => clearTimeout(timer);
   }, [query, run]);
+
+  // A hard delete: the route removes the meeting, its transcript and report,
+  // and the recording's stored parts. Removed from the list only once the
+  // server says so — a row that vanished on a failed delete would have
+  // somebody believing a recording was gone when it was not.
+  async function remove(id: string) {
+    setConfirming(null);
+    setDeleting(id);
+    setDeleteError(null);
+    try {
+      const res = await fetch("/api/meetings/delete", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ meetingId: id }),
+      });
+      if (!res.ok) throw new Error(String(res.status));
+      deleted.current.add(id);
+      setCalls((prev) => prev.filter((c) => c.id !== id));
+    } catch {
+      setDeleteError("That call could not be deleted. Try again.");
+    } finally {
+      setDeleting(null);
+    }
+  }
 
   const summary = archiveSummary(query, calls.length);
 
@@ -90,6 +121,12 @@ export function CallArchive({ initial }: { initial: CallHit[] }) {
         )}
       </div>
 
+      {deleteError && (
+        <p role="alert" className="mt-3 text-xs text-[var(--status-danger)]">
+          {deleteError}
+        </p>
+      )}
+
       {calls.length === 0 ? (
         <p className="mt-10 text-center text-sm text-[var(--fg-muted)]">
           {query.trim()
@@ -99,8 +136,8 @@ export function CallArchive({ initial }: { initial: CallHit[] }) {
       ) : (
         <ol className="mt-4 divide-y divide-[var(--line)] rounded-xl border border-[var(--line)] bg-[var(--surface-1)]">
           {calls.map((call) => (
-            <li key={call.id}>
-              <Link href={`/meetings/${call.roomCode}/report`} className="block px-4 py-3.5 hover:bg-[var(--surface-2)]">
+            <li key={call.id} className="flex items-start hover:bg-[var(--surface-2)]">
+              <Link href={`/meetings/${call.roomCode}/report`} className="block min-w-0 flex-1 px-4 py-3.5">
                 <div className="flex items-baseline justify-between gap-3">
                   <span className="truncate text-sm font-medium text-[var(--fg-primary)]">{call.title}</span>
                   <span className="shrink-0 font-mono text-xs tabular-nums text-[var(--fg-muted)]">
@@ -137,6 +174,45 @@ export function CallArchive({ initial }: { initial: CallHit[] }) {
                   <p className="mt-1.5 line-clamp-2 text-xs text-[var(--fg-secondary)]">{call.summary}</p>
                 ) : null}
               </Link>
+
+              {/* Outside the link, so pressing it never opens the report. */}
+              <div className="flex shrink-0 items-center py-3.5 pr-4">
+                {confirming === call.id ? (
+                  <div className="flex items-center gap-2 text-xs">
+                    <span className="text-[var(--fg-muted)]">Delete call and recording?</span>
+                    <button
+                      type="button"
+                      onClick={() => void remove(call.id)}
+                      className="rounded bg-status-danger/15 px-2 py-0.5 font-medium text-[var(--status-danger)] hover:bg-status-danger/25"
+                    >
+                      Yes, delete
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setConfirming(null)}
+                      className="rounded bg-[var(--surface-2)] px-2 py-0.5 font-medium text-[var(--fg-secondary)] hover:bg-[var(--surface-3)]"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setConfirming(call.id)}
+                    disabled={deleting === call.id}
+                    title="Delete permanently"
+                    aria-label={`Delete ${call.title} permanently`}
+                    className="text-[var(--fg-muted)] transition-colors hover:text-[var(--status-danger)] disabled:opacity-40"
+                  >
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+                      <polyline points="3 6 5 6 21 6" />
+                      <path d="M19 6l-1 14H6L5 6" />
+                      <path d="M10 11v6M14 11v6" />
+                      <path d="M9 6V4h6v2" />
+                    </svg>
+                  </button>
+                )}
+              </div>
             </li>
           ))}
         </ol>
