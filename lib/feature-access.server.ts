@@ -43,6 +43,10 @@ type ServiceClient = ReturnType<typeof createServiceClient>;
  * service-role client. `actorId` is the principal the work runs as: when that
  * principal is a platform admin the work is unrestricted, exactly as it would be
  * if they were signed in.
+ *
+ * Throws when a read fails, rather than resolving to "locked": a caller that
+ * acts on a locked result (skipping a scheduled run) must not do so because of
+ * a transient database error.
  */
 export async function featureAccessForOrg(
   service: ServiceClient,
@@ -50,7 +54,8 @@ export async function featureAccessForOrg(
   actorId: string | null,
 ): Promise<FeatureAccess> {
   if (actorId) {
-    const { data } = await service.auth.admin.getUserById(actorId);
+    const { data, error } = await service.auth.admin.getUserById(actorId);
+    if (error) throw new Error(`feature access: owner lookup failed: ${error.message}`);
     const user = data?.user;
     if (user && isPlatformAdmin({ email: user.email, emailConfirmed: Boolean(user.email_confirmed_at) })) {
       return evaluateFeatureAccess({ isPlatformAdmin: true, plan: null, orgCreatedAt: null });
@@ -60,6 +65,8 @@ export async function featureAccessForOrg(
     service.from("wallets").select("plan").eq("organization_id", orgId).maybeSingle(),
     service.from("organizations").select("created_at").eq("id", orgId).maybeSingle(),
   ]);
+  if (walletRes.error) throw new Error(`feature access: wallet read failed: ${walletRes.error.message}`);
+  if (orgRes.error) throw new Error(`feature access: organization read failed: ${orgRes.error.message}`);
   return evaluateFeatureAccess({
     isPlatformAdmin: false,
     plan: (walletRes.data as { plan?: string | null } | null)?.plan ?? null,

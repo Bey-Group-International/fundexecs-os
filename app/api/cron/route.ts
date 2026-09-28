@@ -133,12 +133,21 @@ export async function GET(request: Request) {
       results.push({ id: a.id, status: "skipped: no owner" });
       continue;
     }
+    // Automations are plan-gated (lib/feature-access). A schedule set up while
+    // the org had access must not keep running — auto-approved or not — once
+    // it lapses; the run is skipped and the schedule still advances. If the
+    // entitlement read itself fails, the run is left untouched and still due,
+    // so a transient error never costs a paying org its run.
+    let access;
+    try {
+      access = await featureAccessForOrg(supabase, a.organization_id, a.created_by);
+    } catch (e) {
+      console.error("automation access check failed", a.id, e);
+      results.push({ id: a.id, status: "deferred: access check failed" });
+      continue;
+    }
     let status = "ok";
     try {
-      // Automations are plan-gated (lib/feature-access). A schedule set up while
-      // the org had access must not keep running — auto-approved or not — once
-      // it lapses; the run is skipped and the schedule still advances.
-      const access = await featureAccessForOrg(supabase, a.organization_id, a.created_by);
       if (!access.unlocked) {
         status = "skipped: plan required";
       } else {

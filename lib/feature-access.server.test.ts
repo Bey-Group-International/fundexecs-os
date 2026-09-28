@@ -89,16 +89,22 @@ describe("featureAccessForOrg (cron, no session)", () => {
     user?: { email: string; email_confirmed_at: string | null } | null;
     plan?: string | null;
     createdAt?: string | null;
+    fail?: "wallets" | "organizations" | "user";
   }) {
-    const row = (data: unknown) => ({
-      select: () => ({ eq: () => ({ maybeSingle: async () => ({ data }) }) }),
+    const err = (what: string) => (opts.fail === what ? { message: "boom" } : null);
+    const row = (data: unknown, error: unknown) => ({
+      select: () => ({ eq: () => ({ maybeSingle: async () => ({ data: error ? null : data, error }) }) }),
     });
     return {
-      auth: { admin: { getUserById: async () => ({ data: { user: opts.user ?? null } }) } },
+      auth: {
+        admin: {
+          getUserById: async () => ({ data: { user: err("user") ? null : (opts.user ?? null) }, error: err("user") }),
+        },
+      },
       from: (table: string) =>
         table === "wallets"
-          ? row(opts.plan !== undefined ? { plan: opts.plan } : null)
-          : row(opts.createdAt ? { created_at: opts.createdAt } : null),
+          ? row(opts.plan !== undefined ? { plan: opts.plan } : null, err("wallets"))
+          : row(opts.createdAt ? { created_at: opts.createdAt } : null, err("organizations")),
     } as never;
   }
 
@@ -141,5 +147,11 @@ describe("featureAccessForOrg (cron, no session)", () => {
       "u1",
     );
     expect(access.unlocked).toBe(false);
+  });
+
+  it.each(["wallets", "organizations", "user"] as const)("throws instead of locking when the %s read fails", async (fail) => {
+    await expect(
+      featureAccessForOrg(service({ plan: "pro", createdAt: "2026-10-01T00:00:00Z", fail }), "org1", "u1"),
+    ).rejects.toThrow(/feature access/);
   });
 });
