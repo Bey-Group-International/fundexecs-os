@@ -66,6 +66,16 @@ import {
   transcriptRows,
 } from "@/lib/meetings/transcript-buffer";
 import { recordingNotice, type RecordingState } from "@/lib/meetings/recording-policy";
+import {
+  NO_ELAPSED,
+  elapsedSeconds,
+  formatElapsed,
+  monotonicNow,
+  startSpan,
+  stopSpan,
+  type ElapsedState,
+} from "@/lib/meetings/elapsed";
+import { MeetingClock } from "./MeetingClock";
 import { useRecording } from "@/lib/meetings/use-recording";
 import { RecordingComposer, type ComposerHandlers, type RoomSnapshot } from "@/lib/meetings/recording-composer";
 import { BackgroundProcessor } from "@/lib/meetings/background-processor";
@@ -527,20 +537,27 @@ function FloatingMenu({
 
 // ─── VideoTile ────────────────────────────────────────────────────────────────
 
+/** The markup for one face. Exported memoised, as `VideoTile` below. */
 function VideoTileImpl({
-  stream, label, muted = false, isLocal = false,
+  stream, videoTrack, label, muted = false, isLocal = false,
   handRaised = false, reaction = "", large = false,
   micOn = true, speaking = false, camOn = true, videoPaused = false,
   status = "live",
 }: {
   stream: MediaStream | null;
   /**
-   * The stream's track ids. Unused inside; it is here for React.memo. A remote
-   * peer's tracks are added to the SAME MediaStream object as they arrive, so
-   * without this a memoized tile never re-renders when their camera lands and
-   * shows "Camera off" for the rest of the call.
+   * The stream's live video track, passed IN rather than read off `stream` here.
+   *
+   * This looks redundant and is the only thing making the memo below correct. A
+   * replaced track — a peer starting a screen share, switching camera, turning a
+   * background on — is swapped into the SAME MediaStream object, so `stream`
+   * compares equal across the update while its contents have changed. A memo
+   * comparator cannot see that: both sides hold one object, and reading the
+   * track from each gives the same answer, because there is no record of what
+   * was there before. A prop is that record — React snapshots it at render time,
+   * so the old track and the new one are two different values to compare.
    */
-  tracksKey: string;
+  videoTrack: MediaStreamTrack | null;
   label: string; muted?: boolean; isLocal?: boolean;
   handRaised?: boolean; reaction?: string; large?: boolean;
   /** That participant's own report of their mic track. */
@@ -555,7 +572,7 @@ function VideoTileImpl({
   status?: PeerLinkStatus;
 }) {
   const videoRef = useRef<HTMLVideoElement>(null);
-  const track = stream?.getVideoTracks()[0] ?? null;
+  const track = videoTrack;
   // Re-render when the track's lifecycle changes (ends / mutes / unmutes) so the
   // placeholder appears/disappears in step with the real camera state.
   const [, bump] = useReducer((n: number) => n + 1, 0);
@@ -648,15 +665,26 @@ function VideoTileImpl({
   );
 }
 
-// Memoized: every prop is a primitive or a stable MediaStream, and the room
-// re-renders for reasons that have nothing to do with a given tile. Without
-// this, each of those re-renders reconciled every tile in the grid.
-const VideoTile = React.memo(VideoTileImpl);
-
-/** What `tracksKey` is made from: the ids of the stream's current tracks. */
-function tracksKeyOf(stream: MediaStream | null | undefined): string {
-  return stream ? stream.getTracks().map((t) => t.id).join(",") : "";
+/** The live video track inside a stream, which is not the same as the stream. */
+export function videoTrackOf(stream: MediaStream | null): MediaStreamTrack | null {
+  return stream?.getVideoTracks()[0] ?? null;
 }
+
+/**
+ * One face in the room, re-rendered when something about THAT participant
+ * changed and not before.
+ *
+ * Without this, everything that re-renders MeetingRoom re-rendered every tile in
+ * the call: a transcript line landing, a chat message arriving, somebody
+ * starting or stopping talking — up to eight times a second, since the analyser
+ * samples at 120ms. None of those change most tiles, and all of them were
+ * reconciling all of them, on the same main thread that is decoding the video.
+ *
+ * The default shallow comparison is enough because every prop is a primitive
+ * except `stream` and `videoTrack`, and those two are compared by identity —
+ * which is exactly why the track is a prop. See the note on it above.
+ */
+export const VideoTile = React.memo(VideoTileImpl);
 
 /** One participant's audio, as the voice meter reads it. */
 interface VoiceTap {
@@ -843,41 +871,10 @@ export function HostExitControl({
   );
 }
 
-/** Seconds as mm:ss, or h:mm:ss once a meeting has run past the hour. */
-function formatClock(seconds: number): string {
-  const total = Math.max(0, Math.floor(seconds));
-  const h = Math.floor(total / 3600);
-  const m = Math.floor((total % 3600) / 60);
-  const sec = total % 60;
-  const mm = String(m).padStart(2, "0");
-  const ss = String(sec).padStart(2, "0");
-  return h > 0 ? `${h}:${mm}:${ss}` : `${mm}:${ss}`;
-}
-
 // ─── ControlBar ───────────────────────────────────────────────────────────────
 
-/**
- * mm:ss since the call went live.
- *
- * Its own component so its once-a-second tick re-renders two characters, not
- * the room. Worked out from the start time rather than counted up, so a tab the
- * browser throttled in the background shows the real length when it returns.
- */
-function CallClock({ startedAt }: { startedAt: number | null }) {
-  const [now, setNow] = useState(() => Date.now());
-  useEffect(() => {
-    if (startedAt === null) return;
-    const t = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(t);
-  }, [startedAt]);
-  const total = startedAt === null ? 0 : Math.max(0, Math.floor((now - startedAt) / 1000));
-  const mins = String(Math.floor(total / 60)).padStart(2, "0");
-  const secs = String(total % 60).padStart(2, "0");
-  return <>{mins}:{secs}</>;
-}
-
 function ControlBar({
-  micOn, camOn, shareOn, shareStarting, copilotOpen, isHost, handRaised, handsUp, handsUpNote, layout, layoutForced, chatUnread, waitingCount, callStartedAt, roomCode, bwMode,
+  micOn, camOn, shareOn, shareStarting, copilotOpen, isHost, handRaised, handsUp, handsUpNote, layout, layoutForced, chatUnread, waitingCount, elapsed, roomCode, bwMode,
   onToggleMic, onToggleCam, onToggleScreen, onToggleCopilot, onLeave, onEndForAll,
   onSwitchMic, onSwitchCam, onSwitchSpeaker, onRaiseHand, onReaction, onMuteAll, onToggleLayout, onFlipCamera,
   activeMicId, activeCamId, camStarting,
@@ -897,7 +894,12 @@ function ControlBar({
   /** The call is already being torn down — the exit controls must not re-fire. */
   leaving: boolean;
   micOn: boolean; camOn: boolean; shareOn: boolean; shareStarting: boolean; copilotOpen: boolean; isHost: boolean;
-  handRaised: boolean; layout: "grid" | "speaker"; chatUnread: number; waitingCount: number; callStartedAt: number | null;
+  handRaised: boolean; layout: "grid" | "speaker"; chatUnread: number; waitingCount: number;
+  /**
+   * Live-span bookkeeping for the meeting clock, passed as a ref so this bar's
+   * props do not change when a second passes. MeetingClock ticks itself.
+   */
+  elapsed: { readonly current: ElapsedState };
   /**
    * How many OTHER people have a hand up, and how to say it.
    *
@@ -924,7 +926,7 @@ function ControlBar({
   return (
     <div className="flex items-center justify-between px-3 sm:px-6 py-3 border-t border-[var(--line)] bg-[var(--surface-1)] shrink-0 gap-2">
       {/* Timer — hidden on very small screens to save space */}
-      <span className="hidden sm:block text-xs font-mono text-[var(--fg-muted)] tabular-nums w-16 shrink-0"><CallClock startedAt={callStartedAt} /></span>
+      <MeetingClock elapsed={elapsed} className="hidden sm:block text-xs font-mono text-[var(--fg-muted)] tabular-nums w-16 shrink-0" />
 
       <div className="flex items-center gap-1.5 sm:gap-2 flex-1 justify-center">
         {/* Core controls — always visible */}
@@ -1032,7 +1034,7 @@ function ControlBar({
             }`} />
             <span className="hidden sm:inline">
               {recordingState === "recording"
-                ? `Stop · ${formatClock(recordingElapsed)}`
+                ? `Stop · ${formatElapsed(recordingElapsed)}`
                 : recordingState === "starting" ? "Starting…"
                 : recordingState === "stopping" ? "Saving…"
                 : "Record"}
@@ -1840,11 +1842,18 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
   const [copilotOpen, setCopilotOpen] = useState(true);
   const [copilotMounted, setCopilotMounted] = useState(true);
   const copilotUnmountRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  // When the call went live. The clock is drawn by <CallClock>, which ticks on
-  // its own: a per-second state here re-rendered the whole room — every tile,
-  // the chat, the copilot — once a second for the length of the call.
-  const [callStartedAt, setCallStartedAt] = useState<number | null>(null);
-  const callEndedAtRef = useRef<number | null>(null);
+  /**
+   * How long the meeting has been live, as spans rather than a running count.
+   *
+   * A ref, not state: nothing in this component needs to re-render when a second
+   * passes. The clock in the control bar is its own leaf and ticks itself, and
+   * the report reads the total once, at the end. It used to be
+   * `useState(0)` advanced by a one-second interval, which re-rendered this
+   * entire component and every video tile in the call once a second for the
+   * length of the meeting — and undercounted, because a counter lands on the
+   * number of callbacks rather than on the time.
+   */
+  const elapsedRef = useRef<ElapsedState>(NO_ELAPSED);
   const [ready, setReady] = useState(false);
   // Leaving is a lifecycle, not an instant. Ending posts a transcript to a model
   // that can take up to two minutes, and the call is already torn down by then —
@@ -3853,10 +3862,18 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     void applySpeakerSink(selectedSpeakerId);
   }, [ready, selectedSpeakerId, peers, applySpeakerSink]);
 
-  // ── Duration timer ────────────────────────────────────────────────────────
+  // ── How long the meeting has been live ────────────────────────────────────
 
+  // Open a live span while the session is live and bank it when it is not, so a
+  // call that drops and recovers counts the stretches it was actually running
+  // and not the gap between them. No interval: the total is arithmetic on these
+  // two timestamps, asked whenever somebody wants it.
   useEffect(() => {
-    if (sessionLive) setCallStartedAt((at) => at ?? Date.now());
+    if (!sessionLive) return;
+    elapsedRef.current = startSpan(elapsedRef.current, monotonicNow());
+    return () => {
+      elapsedRef.current = stopSpan(elapsedRef.current, monotonicNow());
+    };
   }, [sessionLive]);
 
   // ── Speech recognition ────────────────────────────────────────────────────
@@ -5723,10 +5740,6 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     // batch of auto-created tasks for the same meeting.
     if (endingRef.current || !canExit(callPhaseRef.current)) return;
     endingRef.current = true;
-    // Taken once, when the call is ended — not after the transcript drains, and
-    // not again on a Retry from the failed screen, either of which would make
-    // the report's duration longer than the call.
-    callEndedAtRef.current ??= Date.now();
     callPhaseRef.current = nextPhase(callPhaseRef.current, "end");
     setCallPhase(callPhaseRef.current);
     sendSignal({ type: "end", from: myIdRef.current });
@@ -5759,9 +5772,11 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
           title: meetingTitleRef.current,
           participants,
           transcript: fullText,
-          duration: callStartedAt === null
-            ? 0
-            : Math.round(((callEndedAtRef.current ?? Date.now()) - callStartedAt) / 1000),
+          // Read once, here, from the spans — not a counter that has been
+          // accumulating since the call began. This number IS the meeting's
+          // recorded length, and a tick-counter version of it was short by
+          // however late every one of its callbacks had been.
+          duration: elapsedSeconds(elapsedRef.current, monotonicNow()),
         }),
       });
       if (res.ok) { router.push(`/meetings/${roomCode}/report`); return; }
@@ -5774,7 +5789,7 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     endingRef.current = false;
     callPhaseRef.current = nextPhase(callPhaseRef.current, "report_failed");
     setCallPhase(callPhaseRef.current);
-  }, [sendSignal, teardownCall, meetingId, callStartedAt, roomCode, router, drainTranscript]);
+  }, [sendSignal, teardownCall, meetingId, roomCode, router, drainTranscript]);
 
   const endForAll = useCallback(async () => {
     await endMeeting();
@@ -5992,9 +6007,9 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
           )}
           {stageLayout === "grid" ? (
             <div className={`flex-1 grid ${gridClass} gap-3 p-4 content-center`}>
-              <VideoTile stream={localStream} tracksKey={tracksKeyOf(localStream)} label={localName} muted isLocal handRaised={handRaised} reaction={getReaction("local")} micOn={micOn} speaking={speaking.has(LOCAL_SPEAKER_ID)} camOn={camOn} videoPaused={bwMode === "audio-only"} />
+              <VideoTile stream={localStream} videoTrack={videoTrackOf(localStream)} label={localName} muted isLocal handRaised={handRaised} reaction={getReaction("local")} micOn={micOn} speaking={speaking.has(LOCAL_SPEAKER_ID)} camOn={camOn} videoPaused={bwMode === "audio-only"} />
               {allPeers.map((peer: Peer) => (
-                <VideoTile key={peer.id} stream={peer.stream} tracksKey={tracksKeyOf(peer.stream)} label={peer.displayName} handRaised={raisedHands.has(peer.id)} reaction={getReaction(peer.id)} micOn={peerMicOn.get(peer.id) ?? true} speaking={speaking.has(peer.id)} camOn={videoOf(peer.id).camOn} videoPaused={videoOf(peer.id).paused} status={statusOf(peer.id)} />
+                <VideoTile key={peer.id} stream={peer.stream} videoTrack={videoTrackOf(peer.stream)} label={peer.displayName} handRaised={raisedHands.has(peer.id)} reaction={getReaction(peer.id)} micOn={peerMicOn.get(peer.id) ?? true} speaking={speaking.has(peer.id)} camOn={videoOf(peer.id).camOn} videoPaused={videoOf(peer.id).paused} status={statusOf(peer.id)} />
               ))}
             </div>
           ) : (
@@ -6002,11 +6017,11 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
               {/* Main speaker tile */}
               <div className="flex-1 min-h-0">
                 {speakerIsLocal ? (
-                  <VideoTile stream={localStream} tracksKey={tracksKeyOf(localStream)} label={localName} muted isLocal handRaised={handRaised} reaction={getReaction("local")} micOn={micOn} speaking={speaking.has(LOCAL_SPEAKER_ID)} camOn={camOn} videoPaused={bwMode === "audio-only"} large />
+                  <VideoTile stream={localStream} videoTrack={videoTrackOf(localStream)} label={localName} muted isLocal handRaised={handRaised} reaction={getReaction("local")} micOn={micOn} speaking={speaking.has(LOCAL_SPEAKER_ID)} camOn={camOn} videoPaused={bwMode === "audio-only"} large />
                 ) : speakerPeer ? (
-                  <VideoTile stream={speakerPeer.stream} tracksKey={tracksKeyOf(speakerPeer.stream)} label={speakerPeer.displayName} handRaised={isHandRaised(speakerPeer.id)} reaction={getReaction(speakerPeer.id)} micOn={peerMicOn.get(speakerPeer.id) ?? true} speaking={speaking.has(speakerPeer.id)} camOn={videoOf(speakerPeer.id).camOn} videoPaused={videoOf(speakerPeer.id).paused} status={statusOf(speakerPeer.id)} large />
+                  <VideoTile stream={speakerPeer.stream} videoTrack={videoTrackOf(speakerPeer.stream)} label={speakerPeer.displayName} handRaised={isHandRaised(speakerPeer.id)} reaction={getReaction(speakerPeer.id)} micOn={peerMicOn.get(speakerPeer.id) ?? true} speaking={speaking.has(speakerPeer.id)} camOn={videoOf(speakerPeer.id).camOn} videoPaused={videoOf(speakerPeer.id).paused} status={statusOf(speakerPeer.id)} large />
                 ) : (
-                  <VideoTile stream={localStream} tracksKey={tracksKeyOf(localStream)} label={localName} muted isLocal handRaised={handRaised} reaction={getReaction("local")} micOn={micOn} speaking={speaking.has(LOCAL_SPEAKER_ID)} camOn={camOn} videoPaused={bwMode === "audio-only"} large />
+                  <VideoTile stream={localStream} videoTrack={videoTrackOf(localStream)} label={localName} muted isLocal handRaised={handRaised} reaction={getReaction("local")} micOn={micOn} speaking={speaking.has(LOCAL_SPEAKER_ID)} camOn={camOn} videoPaused={bwMode === "audio-only"} large />
                 )}
               </div>
               {/* Thumbnail strip */}
@@ -6014,7 +6029,7 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
                 <div className="flex gap-2 h-24 shrink-0 overflow-x-auto">
                   {stripItems.map((item) => (
                     <div key={item.id} className="h-full aspect-video shrink-0">
-                      <VideoTile stream={item.stream} tracksKey={tracksKeyOf(item.stream)} label={item.displayName} muted={item.isLocal} isLocal={item.isLocal} handRaised={isHandRaised(item.id)} reaction={getReaction(item.id)} micOn={item.isLocal ? micOn : (peerMicOn.get(item.id) ?? true)} speaking={speaking.has(item.id)} camOn={item.isLocal ? camOn : videoOf(item.id).camOn} videoPaused={item.isLocal ? bwMode === "audio-only" : videoOf(item.id).paused} status={item.isLocal ? "live" : statusOf(item.id)} />
+                      <VideoTile stream={item.stream} videoTrack={videoTrackOf(item.stream)} label={item.displayName} muted={item.isLocal} isLocal={item.isLocal} handRaised={isHandRaised(item.id)} reaction={getReaction(item.id)} micOn={item.isLocal ? micOn : (peerMicOn.get(item.id) ?? true)} speaking={speaking.has(item.id)} camOn={item.isLocal ? camOn : videoOf(item.id).camOn} videoPaused={item.isLocal ? bwMode === "audio-only" : videoOf(item.id).paused} status={item.isLocal ? "live" : statusOf(item.id)} />
                     </div>
                   ))}
                 </div>
@@ -6086,7 +6101,7 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
         micOn={micOn} camOn={camOn} shareOn={shareOn} shareStarting={shareStarting} copilotOpen={copilotOpen}
         isHost={isHost} handRaised={handRaised} layout={layout} chatUnread={chatUnread}
         handsUp={handsUpPeople.length} handsUpNote={handsUpNote}
-        waitingCount={isHost ? livePeers.length : 0} callStartedAt={callStartedAt}
+        waitingCount={isHost ? livePeers.length : 0} elapsed={elapsedRef}
         roomCode={roomCode} bwMode={bwMode} layoutForced={layoutIsForced(layout, sharerId)}
         recordingState={recordingBanner?.state ?? "idle"}
         recordingBy={recordingBanner?.by ?? ""}

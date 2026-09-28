@@ -3823,6 +3823,83 @@ Deployed, monitoring               →  live, observability active
              |  and route query shapes themselves — the two windows, the
              |  attendance ceilings and the history skip are server-component
              |  reads with no harness here, verified by reading and by build.
+             |
+             |  MEETINGS X — THE MEETING ROOM, AND A DURATION THAT COUNTED
+             |  INSTEAD OF MEASURING
+             |  THE SAME FILE HELD BOTH ANSWERS. useRecording asks how long a
+             |  recording has run with `Date.now() - run.startedAt`. The meeting's
+             |  own clock, four thousand lines away in the same component, did
+             |  `setDuration((d) => d + 1)` on a one-second interval. One reads a
+             |  clock; the other counts callbacks — and setInterval promises a
+             |  callback no EARLIER than its delay, never on time. Every late fire
+             |  is time the counter never gets back, and this particular main
+             |  thread is already carrying WebRTC decode, an analyser sampling
+             |  every 120ms, speech recognition, and a canvas composite per frame
+             |  once somebody turns a background on. So the number ran slow by an
+             |  unpredictable margin — and that number is posted to the report as
+             |  the meeting's LENGTH. The institutional record of a call, short by
+             |  an amount nobody could name. TWO THINGS COMPUTE THE SAME NUMBER;
+             |  DO THEY AGREE? — one was right and the other was the one that
+             |  got written down.
+             |  lib/meetings/elapsed.ts keeps live SPANS and subtracts, on a
+             |  monotonic clock (performance.now, because wall time can move
+             |  backwards mid-call and a duration that goes down is worse than one
+             |  that drifts). Spans rather than a total because a call that drops
+             |  and recovers is live, then not, then live again, and only the live
+             |  stretches are the meeting. A late callback now costs nothing,
+             |  because the callbacks never held the answer — they only decide
+             |  when to look.
+             |  AND THAT TICK WAS RE-RENDERING EVERY FACE IN THE ROOM. `duration`
+             |  was state in MeetingRoom, which is a 4,655-line component that
+             |  renders every video tile in the call — so a second hand in the
+             |  control bar reconciled the whole room, once a second, for the
+             |  length of the meeting, on the thread decoding the video. Nothing
+             |  else on screen had changed. The clock is its own leaf now and
+             |  takes the spans as a REF, so the bar's props do not change when
+             |  time passes; the per-second render is one <span>. It also sleeps
+             |  while the tab is hidden — which it could not have afforded as a
+             |  counter, and can now, because on return it reads the real elapsed
+             |  time instead of resuming something that fell behind.
+             |  The control bar's inline mm:ss had no hour case either, so a
+             |  meeting past sixty minutes read "77:03" while the recording clock
+             |  beside it read "1:17:03". Two clocks, one file, three spellings of
+             |  the same function; there is one now, and it is tested.
+             |  NOTHING IN THE FILE WAS MEMOISED — zero React.memo across 6,200
+             |  lines. Every transcript line, every chat message and every change
+             |  of who is talking (up to eight times a second) reconciled every
+             |  tile in the grid. VideoTile is memoised now.
+             |  WHICH ALMOST SHIPPED A BUG, and the code's own comment was the
+             |  warning. `pc.ontrack` publishes a new peers Map even when the
+             |  stream object is UNCHANGED, because a replaced track — screen
+             |  share, camera switch, background on — is swapped into that same
+             |  MediaStream, and the tile can only learn about it by looking
+             |  again; the comment says in as many words that skipping that
+             |  re-render leaves a working camera behind the "Camera off"
+             |  placeholder for the rest of the call. A shallow memo skips exactly
+             |  that. My first fix was a custom comparator that read the track off
+             |  each side — and the test caught that it is ALWAYS EQUAL: both
+             |  sides hold one object, so there is no record of what was there
+             |  before. A COMPARATOR CANNOT DETECT MUTATION OF A SHARED OBJECT.
+             |  The track is a prop now; React snapshots it at render time, and
+             |  that snapshot is the record. It looks redundant beside `stream`
+             |  and is the only thing making the memo correct, so it says so.
+             |  Method note, twice over. The first bite-check reverted the track's
+             |  USE inside the component and all nine tests still passed —
+             |  correctly, because the prop's job is the memo gate, not the
+             |  internal read. Reverting the wrong half of a change reads exactly
+             |  like a test that does not bite. And of the three cases that do
+             |  bite, the "replaced in place" one does not: the tile keeps
+             |  rendering the OLD track's picture, which is stale but produces no
+             |  placeholder text to assert on. Worth saying rather than counting
+             |  it.
+             |  Confidence: typecheck/eslint clean, build passes, Jest 7115 →
+             |  7152 across 511 suites; 8 of the 10 clock cases and 2 of the 9
+             |  tile cases fail against a naive implementation. Not addressed
+             |  here: the component is still 4,655 lines with 59 useState, 106
+             |  useRef and 74 useEffect in one function, and every OTHER state
+             |  change still re-renders all of it — the tiles are merely no longer
+             |  reconciled with it. Splitting it is the next piece of work and a
+             |  much larger one.
 ```
 
 ---
