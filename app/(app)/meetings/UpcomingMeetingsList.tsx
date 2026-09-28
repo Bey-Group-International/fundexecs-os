@@ -84,25 +84,33 @@ export interface UpcomingMeeting {
 }
 
 function formatScheduled(iso: string) {
-  return new Date(iso).toLocaleString("en-US", {
-    weekday: "short",
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  });
+  return LONG_FORMAT.format(new Date(iso));
 }
+
+const LONG_FORMAT = new Intl.DateTimeFormat("en-US", {
+  weekday: "short",
+  month: "short",
+  day: "numeric",
+  hour: "numeric",
+  minute: "2-digit",
+});
 
 /** The collapsed row's time column: short enough to sit on one line beside the
  * title without pushing the status chip and Join button off the end. */
 function formatScheduledShort(iso: string) {
-  return new Date(iso).toLocaleString("en-US", {
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  });
+  return SHORT_FORMAT.format(new Date(iso));
 }
+
+// Built once. toLocaleString with options constructs a new Intl.DateTimeFormat
+// on every call, and the list re-renders every second for its countdowns — up
+// to a hundred rows, so a hundred formatters a second for text that never
+// changes.
+const SHORT_FORMAT = new Intl.DateTimeFormat("en-US", {
+  month: "short",
+  day: "numeric",
+  hour: "numeric",
+  minute: "2-digit",
+});
 
 function copilotName(key: string | null): string | null {
   if (!key) return null;

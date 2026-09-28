@@ -111,7 +111,14 @@ export class VoiceActivityLog {
     if (!Number.isFinite(level)) return;
     this.samples.push({ speakerId, level: Math.max(0, Math.min(1, level)), ts });
     const cutoff = ts - this.windowMs;
-    if (this.samples.length > 0 && this.samples[0].ts < cutoff) {
+    // Pruned in batches, not on every write. Once the window is full the oldest
+    // sample is past the cutoff on nearly every call, and filtering then meant
+    // copying the whole window — thousands of samples, once per participant
+    // every 120ms, for the length of the meeting. Letting a little slack build
+    // up first makes the copy rare; summarize() bounds by time anyway, so the
+    // extra samples are never read.
+    const slack = Math.max(1000, this.windowMs / 10);
+    if (this.samples.length > 0 && this.samples[0].ts < cutoff - slack) {
       this.samples = this.samples.filter((s) => s.ts >= cutoff);
     }
   }

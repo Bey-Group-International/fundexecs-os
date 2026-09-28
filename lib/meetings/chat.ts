@@ -155,7 +155,8 @@ export function insertMessage(
   list: readonly ChatMessage[],
   msg: ChatMessage,
 ): ChatMessage[] {
-  if (list.some((m) => m.id === msg.id)) return [...list];
+  // The same array back, so a duplicate does not re-render the room.
+  if (list.some((m) => m.id === msg.id)) return list as ChatMessage[];
   const out = [...list];
   let i = out.length;
   while (i > 0 && isAfter(out[i - 1], msg)) i -= 1;
