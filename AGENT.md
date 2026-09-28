@@ -4091,6 +4091,65 @@ Deployed, monitoring               →  live, observability active
              |  answers. NOT verified: that any real orphaned row exists to repair —
              |  the sweep reports what it finds and reports nothing when it finds
              |  nothing, which is the only honest thing it can do from here.
+             |
+             |  MEETINGS XIV — THE REPORT PAGE, AND A TEST I WAS WRONG ABOUT
+             |  THE SAME DEFECT AS THE MEETING ROOM'S CLOCK, IN ANOTHER FILE.
+             |  `playheadMs` is state in the report page's root and exactly ONE
+             |  child reads it — the transcript. So every second of playback
+             |  re-rendered the recording panel (which holds the <video>), the
+             |  chat, the follow-up draft, the export menu and all the summary
+             |  markup, to move one highlight. Having just fixed this shape in
+             |  MeetingRoom I went looking for it here, which is the only reason
+             |  it was quick to find. THE SECOND TIME A SHAPE APPEARS IT IS NOT A
+             |  COINCIDENCE, IT IS A HABIT.
+             |  AND INSIDE THE TRANSCRIPT IT WAS WORSE. `playing` is a single
+             |  index, so `turns.map` rebuilt EVERY turn once a second so that
+             |  `i === playing` could move one row's background — and a turn is
+             |  not a cheap row: a speaker chip, a clock button, and a nested map
+             |  over paragraphs and search-match parts. An hour of two people
+             |  talking is hundreds of them, per second, on the thread decoding
+             |  the video. The turn is its own memoised component now; `active`
+             |  moves for exactly two rows per second.
+             |  The per-row match lookup had to move INSIDE it. `matchesIn`
+             |  allocates, so computing it in the parent and passing the result
+             |  would hand every row a fresh array and defeat the memo silently —
+             |  the same trap as `colorFor`, a closure recreated every render,
+             |  which is now module scope for the same reason.
+             |  I WAS WRONG ABOUT THE TESTS AND THE BITE-CHECK CAUGHT ME. I said
+             |  in this session that the 20 existing transcript tests already
+             |  covered the refactor's risk because they exercise the playhead,
+             |  the search stepping and the seek. They do not. A memo that ignores
+             |  `at` leaves the old search hit lit while the counter reads "2 of
+             |  2" — and ALL TWENTY STILL PASSED, because every one of them
+             |  asserts the counter, which the panel renders, and none of them
+             |  asserts the highlight, which the row renders. A suite can exercise
+             |  a feature thoroughly and still have no opinion about the half of
+             |  it you are changing. The test that bites now asserts which <mark>
+             |  is lit, and that it moves both ways.
+             |  Two smaller things. `supabase.auth.getUser()` sat inside the
+             |  five-second poll, so a report that took a minute to generate asked
+             |  the auth server who the reader was twelve times for an answer that
+             |  cannot change while the page is open; it is read once. And
+             |  RecordingPlayer was imported statically although the page's own
+             |  comment says most meetings are not recorded — it is a 4.5 KiB
+             |  on-demand chunk now, and the thing that made that safe rather than
+             |  clever is that React 19 passes refs as ordinary props, so the ref
+             |  the transcript seeks through survives the split. A lazy wrapper
+             |  that swallowed it would have left every timestamp clickable and
+             |  inert, which is worse than the bytes.
+             |  Confidence: typecheck/eslint clean, build passes, Jest 7243 →
+             |  7245 across 515 suites; the new highlight test fails against a row
+             |  memo that ignores `at`. Thin on tests for the size of the change —
+             |  two new cases for four changes — and honestly so: the memoised
+             |  panels and the read-once viewer are covered only by the 162
+             |  existing report cases still passing, and the lazy player's ref
+             |  path is REASONED from React 19 semantics, not exercised.
+             |  NOT DONE, and it is the largest thing left: this page is entirely
+             |  client-side. Seven browser round trips — auth, meeting, report,
+             |  attendance, transcript, recording, chat — gated behind JS before
+             |  anything renders. A report is a DOCUMENT; the meetings page beside
+             |  it is a server component. Moving it would beat every render saving
+             |  in this entry put together, and it is a different change.
 ```
 
 ---

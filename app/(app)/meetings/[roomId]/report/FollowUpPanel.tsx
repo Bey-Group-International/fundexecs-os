@@ -10,7 +10,7 @@
 // Editable because a draft somebody cannot change before it goes out under
 // their name is not a draft — and a host who has to copy it out to fix one
 // sentence is back where they started.
-import { useState } from "react";
+import { memo, useState } from "react";
 import { deliveryMessage } from "@/lib/meetings/recipients";
 import { CopyButton } from "./CopyButton";
 
@@ -20,7 +20,14 @@ type SendState =
   | { kind: "sent"; sent: number; total: number; unreachable: string[]; failed: string[] }
   | { kind: "failed"; message: string };
 
-export function FollowUpPanel({
+/**
+ * Memoised because the report page holds the recording's playhead in its own
+ * state, and only the transcript reads it. Without this, every second of
+ * playback re-rendered this component for nothing.
+ *
+ * Its props are the meeting id, the draft text and whether the viewer may send — none of which the playhead touches.
+ */
+export const FollowUpPanel = memo(function FollowUpPanel({
   meetingId,
   draft,
   canSend,
@@ -134,4 +141,4 @@ export function FollowUpPanel({
       )}
     </section>
   );
-}
+});

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { memo, useEffect, useRef, useState } from "react";
 import { deliveryMessage } from "@/lib/meetings/recipients";
 
 // The export control for a meeting report: five file formats, an opt-in for
@@ -28,7 +28,14 @@ type EmailState =
   | { status: "done"; message: string }
   | { status: "error"; message: string };
 
-export function ExportMenu({ roomId }: { roomId: string }) {
+/**
+ * Memoised because the report page holds the recording's playhead in its own
+ * state, and only the transcript reads it. Without this, every second of
+ * playback re-rendered this component for nothing.
+ *
+ * Its one prop is the room code, which does not change while the page is open.
+ */
+export const ExportMenu = memo(function ExportMenu({ roomId }: { roomId: string }) {
   const [open, setOpen] = useState(false);
   const [withTranscript, setWithTranscript] = useState(false);
   const [email, setEmail] = useState<EmailState>({ status: "idle" });
@@ -165,4 +172,4 @@ export function ExportMenu({ roomId }: { roomId: string }) {
       )}
     </div>
   );
-}
+});

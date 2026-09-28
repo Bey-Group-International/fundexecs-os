@@ -12,7 +12,7 @@
 // Now the rows survive, so the record can show them — read through the
 // viewer's own client, under the same attendees-only rule the report obeys.
 
-import { useEffect, useMemo, useState } from "react";
+import { memo, useEffect, useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { chatClock, groupChat, type ChatMessage } from "@/lib/meetings/chat";
 import { speakerColorIndex } from "@/lib/meetings/speaker-attribution";
@@ -32,7 +32,14 @@ const SPEAKER_COLORS = [
 /** As many as the panel will read. Chat is short; this is a guard, not a page. */
 const CHAT_LIMIT = 500;
 
-export function ChatPanel({ meetingId }: { meetingId: string }) {
+/**
+ * Memoised because the report page holds the recording's playhead in its own
+ * state, and only the transcript reads it. Without this, every second of
+ * playback re-rendered this component for nothing.
+ *
+ * Its one prop is the meeting id, and it loads the chat once on mount.
+ */
+export const ChatPanel = memo(function ChatPanel({ meetingId }: { meetingId: string }) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [open, setOpen] = useState(false);
 
@@ -140,7 +147,7 @@ export function ChatPanel({ meetingId }: { meetingId: string }) {
       )}
     </div>
   );
-}
+});
 
 function ChevronIcon() {
   return (

@@ -52,6 +52,16 @@ export default function MeetingReportPage() {
   const { roomId } = useParams<{ roomId: string }>();
   const [data, setData] = useState<Data | undefined>(undefined);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  /**
+   * Who is reading, asked once.
+   *
+   * `supabase.auth.getUser()` is a round trip, and it sat inside the poll — so a
+   * report that took a minute to generate asked the auth server who the viewer
+   * was twelve times, for an answer that cannot change while the page is open.
+   * A sign-out navigates away; it does not turn this reader into a different
+   * one mid-poll.
+   */
+  const viewerRef = useRef<{ id: string } | null | undefined>(undefined);
   // The rows the room wrote while people were speaking. Only these carry a
   // time, which is what lets a line in the transcript drive the recording.
   const [lines, setLines] = useState<CueRow[]>([]);
@@ -103,14 +113,20 @@ export default function MeetingReportPage() {
   async function fetchReport() {
     const supabase = createClient();
 
-    const [{ data: { user } }, { data: meeting }] = await Promise.all([
-      supabase.auth.getUser(),
+    // The viewer on the first pass only; the meeting on every one, because the
+    // poll is waiting for its report to appear.
+    const [viewer, { data: meeting }] = await Promise.all([
+      viewerRef.current !== undefined
+        ? Promise.resolve(viewerRef.current)
+        : supabase.auth.getUser().then(({ data }) => data.user ?? null),
       supabase
         .from("live_meetings")
         .select("id, host_id, title, created_at, started_at, ended_at, scheduled_at, kind, recording_consent")
         .eq("room_code", roomId)
         .maybeSingle(),
     ]);
+    viewerRef.current = viewer;
+    const user = viewer;
 
     if (!meeting) {
       setData(null);
@@ -216,6 +232,7 @@ export default function MeetingReportPage() {
     // dead on arrival.
     linesFetchedRef.current = false;
     linesFinalRef.current = false;
+    // Not the viewer — a soft navigation to another report is the same reader.
     waitStartedRef.current = Date.now();
     setWaitedMs(0);
     setLines([]);

@@ -90,6 +90,44 @@ describe("search", () => {
     expect(screen.getByRole("status")).toHaveTextContent("2 of 2");
   });
 
+  it("moves the highlight onto the hit, not just the counter", async () => {
+    // The counter is rendered by the panel; the highlight is rendered by the
+    // turn, which is memoised. A row that stops taking `at` keeps the old mark
+    // lit while the counter reads "2 of 2" — the number and the page
+    // disagreeing about where the reader is. Nothing else in this file catches
+    // that, because everything else asserts the counter.
+    const { user } = setup();
+    await openPanel(user);
+    await user.type(screen.getByLabelText("Search the transcript"), "valuation");
+
+    const litIndex = () =>
+      [...document.querySelectorAll("mark")].findIndex((m) =>
+        m.className.includes("bg-[var(--gold-400)]"),
+      );
+
+    const first = litIndex();
+    expect(first).toBeGreaterThanOrEqual(0);
+
+    await user.click(screen.getByRole("button", { name: "Next match" }));
+    expect(screen.getByRole("status")).toHaveTextContent("2 of 2");
+    expect(litIndex()).not.toBe(first);
+
+    // And back, so this cannot pass on a highlight that only ever moves forward.
+    await user.click(screen.getByRole("button", { name: "Previous match" }));
+    expect(litIndex()).toBe(first);
+  });
+
+  it("lights exactly one hit at a time", async () => {
+    const { user } = setup();
+    await openPanel(user);
+    await user.type(screen.getByLabelText("Search the transcript"), "valuation");
+
+    const lit = [...document.querySelectorAll("mark")].filter((m) =>
+      m.className.includes("bg-[var(--gold-400)]"),
+    );
+    expect(lit).toHaveLength(1);
+  });
+
   it("steps with the keyboard, the way every find box does", async () => {
     const { user } = setup();
     await openPanel(user);
