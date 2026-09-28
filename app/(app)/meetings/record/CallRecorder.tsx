@@ -179,6 +179,7 @@ export function CallRecorder({
     let restartTimer: ReturnType<typeof setTimeout> | null = null;
     let settle: (() => void) | null = null;
 
+    /** Start (or restart) a recognition session, unless the call has ended. */
     const begin = () => {
       restartTimer = null;
       if (stopped) return;
@@ -414,6 +415,13 @@ export function CallRecorder({
     releaseCapture();
   }, [releaseCapture]);
 
+  /**
+   * End the call: stop recording, keep the last words, write the report.
+   *
+   * Waits for the recogniser's final result before draining the transcript,
+   * then goes to the report page — or, if the report could not be written,
+   * stays here and says the call is saved in the archive.
+   */
   const end = useCallback(async () => {
     if (!meeting) return;
     // Asked for before the phase changes, because that change tears the
