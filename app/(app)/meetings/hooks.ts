@@ -27,15 +27,59 @@ export function nextChannelName(prefix: string): string {
 
 /**
  * A ticking clock for live countdowns. Re-renders the consumer every
- * `intervalMs` with a fresh `Date.now()`. One shared interval per hook usage;
- * cheap enough at the Upcoming Meetings scale (a handful of cards).
+ * `intervalMs` with a fresh `Date.now()`.
+ *
+ * Stops while the tab is hidden, and reads the clock once on the way back.
+ *
+ * It used to tick unconditionally for the life of the tab, which is a render of
+ * every Upcoming card and — once the calendar overlay has been opened — of the
+ * whole month grid, once a second, forever, including for the hours a
+ * background tab spends showing nobody anything. A countdown nobody can see does
+ * not need to be right; it needs to be right the moment they look, which is what
+ * the visibility change does.
+ *
+ * Browsers throttle background timers but do not stop them, so this is not
+ * something the platform was already handling.
  */
 export function useNow(intervalMs = 1000): number {
   const [now, setNow] = useState(() => Date.now());
+
   useEffect(() => {
-    const id = setInterval(() => setNow(Date.now()), intervalMs);
-    return () => clearInterval(id);
+    let id: ReturnType<typeof setInterval> | null = null;
+
+    const hidden = () => typeof document !== "undefined" && document.visibilityState === "hidden";
+
+    function start() {
+      if (id !== null) return;
+      id = setInterval(() => setNow(Date.now()), intervalMs);
+    }
+
+    function stop() {
+      if (id === null) return;
+      clearInterval(id);
+      id = null;
+    }
+
+    function onVisibility() {
+      if (hidden()) {
+        stop();
+        return;
+      }
+      // The clock is stale by however long the tab was away, so it is read
+      // before the interval resumes rather than after the next tick — otherwise
+      // the first thing somebody sees on returning is the countdown they left.
+      setNow(Date.now());
+      start();
+    }
+
+    if (!hidden()) start();
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      stop();
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
   }, [intervalMs]);
+
   return now;
 }
 

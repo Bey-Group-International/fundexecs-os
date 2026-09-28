@@ -5,11 +5,15 @@ import {
   localToIso,
   deriveMeetingStatus,
   isPastMeeting,
+  isUpcomingMeeting,
+  upcomingWindowStart,
+  MAX_MEETING_MINUTES,
   wasEditedAfterSave,
   findConflicts,
   nextExternalSyncStatus,
   meetingTimeState,
 } from "./schedule";
+import { PRESENCE_STALE_MS } from "./attendance";
 
 describe("validateMeetingDraft", () => {
   const valid = {
@@ -156,6 +160,151 @@ describe("isPastMeeting", () => {
   it("treats an ad-hoc room with no scheduled time as Past only once ended", () => {
     expect(isPastMeeting({ status: "active", scheduled_at: null }, now)).toBe(false);
     expect(isPastMeeting({ status: "ended", scheduled_at: null }, now)).toBe(true);
+  });
+
+  // `status: "ended"` is written by exactly one thing — the report route, when a
+  // meeting is closed down properly. A host who shuts the tab leaves the row
+  // `active` forever, and with no scheduled_at there is no window to have passed
+  // either. Such a meeting was in NO list anywhere: it existed, it held its
+  // recording and its report, and the product showed it nowhere.
+  describe("an ad-hoc room nobody ever ended", () => {
+    const stale = new Date(now - PRESENCE_STALE_MS - 60_000).toISOString();
+    const fresh = new Date(now - 5 * 60_000).toISOString();
+
+    it("is Past once it is older than attendance would believe anyone is in it", () => {
+      expect(isPastMeeting({ status: "active", scheduled_at: null, started_at: stale }, now)).toBe(true);
+    });
+
+    it("is not Past while it could still be happening", () => {
+      // Somebody may be about to join the room they just opened.
+      expect(isPastMeeting({ status: "active", scheduled_at: null, started_at: fresh }, now)).toBe(false);
+    });
+
+    it("falls back to when the row was created if the room never started", () => {
+      expect(isPastMeeting({ status: "waiting", scheduled_at: null, created_at: stale }, now)).toBe(true);
+      expect(isPastMeeting({ status: "waiting", scheduled_at: null, created_at: fresh }, now)).toBe(false);
+    });
+
+    it("prefers when the room opened over when the row was made", () => {
+      expect(
+        isPastMeeting({ status: "active", scheduled_at: null, started_at: fresh, created_at: stale }, now),
+      ).toBe(false);
+    });
+
+    it("stays out of Past when there is no timestamp to judge by", () => {
+      // Better left out than dropped in on a guess.
+      expect(isPastMeeting({ status: "active", scheduled_at: null, started_at: null, created_at: null }, now)).toBe(false);
+    });
+
+    it("is never Upcoming either way", () => {
+      // There is nothing to count down to, fresh or stale.
+      expect(isUpcomingMeeting({ status: "active", scheduled_at: null, started_at: stale }, now)).toBe(false);
+      expect(isUpcomingMeeting({ status: "active", scheduled_at: null, started_at: fresh }, now)).toBe(false);
+    });
+  });
+});
+
+describe("isUpcomingMeeting", () => {
+  const now = new Date("2026-07-11T12:00:00.000Z").getTime();
+
+  // The defect this exists for. The meetings page keyed Upcoming off the
+  // meeting's END, /api/meetings/upcoming keyed it off the START in SQL, and the
+  // list refetches that route on mount — so a meeting already running rendered
+  // on first paint and vanished a second later, taking its Join button with it.
+  it("keeps a meeting that is already running in Upcoming", () => {
+    const running = { status: "active" as const, scheduled_at: "2026-07-11T11:30:00.000Z", duration_minutes: 60 };
+    expect(isUpcomingMeeting(running, now)).toBe(true);
+    // In progress is where the live state and the presence count render, so it
+    // is the row somebody acts on.
+    expect(isPastMeeting(running, now)).toBe(false);
+  });
+
+  it("keeps a future meeting in Upcoming", () => {
+    expect(isUpcomingMeeting({ status: "waiting", scheduled_at: "2026-07-12T10:00:00.000Z", duration_minutes: 60 }, now)).toBe(true);
+  });
+
+  it("drops a meeting whose scheduled end has passed", () => {
+    expect(isUpcomingMeeting({ status: "waiting", scheduled_at: "2026-07-11T10:00:00.000Z", duration_minutes: 60 }, now)).toBe(false);
+  });
+
+  it("drops an ended room even while its scheduled window is still open", () => {
+    // A meeting that finished early should not sit in Upcoming until its
+    // scheduled end passes.
+    expect(isUpcomingMeeting({ status: "ended", scheduled_at: "2026-07-11T11:30:00.000Z", duration_minutes: 60 }, now)).toBe(false);
+  });
+
+  it("never lists a draft", () => {
+    expect(isUpcomingMeeting({ status: "waiting", scheduled_at: "2026-07-12T10:00:00.000Z", duration_minutes: 60, is_draft: true }, now)).toBe(false);
+  });
+
+  it("does not count an ad-hoc room with no scheduled time", () => {
+    // There is nothing to count down to, and isPastMeeting says the same.
+    expect(isUpcomingMeeting({ status: "active", scheduled_at: null }, now)).toBe(false);
+  });
+
+  it("defaults a missing duration to an hour, like isPastMeeting", () => {
+    expect(isUpcomingMeeting({ status: "waiting", scheduled_at: "2026-07-11T11:30:00.000Z" }, now)).toBe(true);
+    expect(isUpcomingMeeting({ status: "waiting", scheduled_at: "2026-07-11T10:30:00.000Z" }, now)).toBe(false);
+  });
+
+  // The claim isPastMeeting's docstring has always made, now checkable: a
+  // meeting lands in exactly one list. Three separate expressions of this
+  // partition existed and two disagreed; the point of the pair is that they
+  // cannot.
+  describe("as the complement of isPastMeeting", () => {
+    const cases = [
+      { status: "waiting" as const, scheduled_at: "2026-07-12T10:00:00.000Z", duration_minutes: 60 },
+      { status: "active" as const, scheduled_at: "2026-07-11T11:30:00.000Z", duration_minutes: 60 },
+      { status: "waiting" as const, scheduled_at: "2026-07-11T10:00:00.000Z", duration_minutes: 60 },
+      { status: "ended" as const, scheduled_at: "2026-07-12T10:00:00.000Z", duration_minutes: 60 },
+      { status: "ended" as const, scheduled_at: "2026-07-11T11:30:00.000Z", duration_minutes: 60 },
+      { status: "waiting" as const, scheduled_at: "2026-07-11T11:59:00.000Z", duration_minutes: 15 },
+      { status: "active" as const, scheduled_at: null },
+      { status: "ended" as const, scheduled_at: null },
+    ];
+
+    it("never puts one meeting in both lists", () => {
+      for (const c of cases) {
+        expect(isUpcomingMeeting(c, now) && isPastMeeting(c, now)).toBe(false);
+      }
+    });
+
+    it("places every scheduled, non-draft meeting in one of them", () => {
+      // The only remaining gap is an ad-hoc room young enough that it could
+      // still be happening: it is neither coming up nor over, and both functions
+      // agree on that. Once it is stale, isPastMeeting claims it.
+      for (const c of cases.filter((x) => x.scheduled_at !== null)) {
+        expect(isUpcomingMeeting(c, now) || isPastMeeting(c, now)).toBe(true);
+      }
+    });
+
+    it("puts a draft in neither", () => {
+      const draft = { status: "waiting" as const, scheduled_at: "2026-07-12T10:00:00.000Z", is_draft: true };
+      expect(isUpcomingMeeting(draft, now)).toBe(false);
+      expect(isPastMeeting(draft, now)).toBe(false);
+    });
+  });
+});
+
+describe("upcomingWindowStart", () => {
+  // What lets a SQL query express an end-time rule: fetch everything that could
+  // still be running, then narrow with isUpcomingMeeting.
+  it("reaches back the longest a meeting can run", () => {
+    const now = new Date("2026-07-11T12:00:00.000Z").getTime();
+    expect(upcomingWindowStart(now).toISOString()).toBe("2026-07-11T04:00:00.000Z");
+  });
+
+  it("covers the longest meeting the platform allows", () => {
+    // Derived from the clamp rather than picked, so raising the maximum meeting
+    // length cannot quietly start dropping long meetings out of the fetch.
+    const now = Date.now();
+    const longest = {
+      status: "waiting" as const,
+      scheduled_at: new Date(now - (MAX_MEETING_MINUTES - 1) * 60_000).toISOString(),
+      duration_minutes: MAX_MEETING_MINUTES,
+    };
+    expect(isUpcomingMeeting(longest, now)).toBe(true);
+    expect(new Date(longest.scheduled_at).getTime()).toBeGreaterThanOrEqual(upcomingWindowStart(now).getTime());
   });
 });
 

@@ -2,7 +2,7 @@ import type { createServerClient } from "@/lib/supabase/server";
 import type { Json, LiveMeeting } from "@/lib/supabase/database.types";
 import { writeDashboardAudit } from "@/lib/dashboard/audit";
 import type { MeetingAttendeeInput } from "@/lib/meetings/attendees";
-import { nextExternalSyncStatus, type ExternalSyncStatus } from "@/lib/meetings/schedule";
+import { MAX_MEETING_MINUTES, nextExternalSyncStatus, type ExternalSyncStatus } from "@/lib/meetings/schedule";
 import { pushMeetingToGoogle } from "@/lib/calendar/google-write.server";
 import type { WritableMeeting } from "@/lib/calendar/google-write";
 import { MEETING_KIND, type MeetingKind } from "@/lib/meetings/one-way";
@@ -122,7 +122,9 @@ function sameInstant(a: string | null | undefined, b: string | null | undefined)
 
 function cleanDuration(value: number | null | undefined): number {
   if (!Number.isFinite(value ?? NaN)) return 60;
-  return Math.min(480, Math.max(15, Math.trunc(value!)));
+  // The same ceiling every "is it still running?" lookback is derived from, so
+  // raising it cannot leave long meetings out of those windows.
+  return Math.min(MAX_MEETING_MINUTES, Math.max(15, Math.trunc(value!)));
 }
 
 export function buildMeetingInviteUrl(origin: string, roomCode: string): string {

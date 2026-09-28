@@ -3748,6 +3748,81 @@ Deployed, monitoring               →  live, observability active
              |  cases fail against HEAD. Not fixed here: whether THIS deployment
              |  has a working Gmail credential at all — that is configuration,
              |  and /api/meetings/email-health POSTs a real test to prove it.
+             |
+             |  MEETINGS IX — THE MEETINGS PAGE, WHERE THREE ANSWERS DISAGREED
+             |  THE SAME QUESTION WAS ASKED THREE TIMES AND ANSWERED TWO WAYS.
+             |  "Is this meeting upcoming?" was written once in the page, once in
+             |  /api/meetings/upcoming's SQL, and once in that route's filter —
+             |  and the SQL said `scheduled_at >= now`, a START-TIME rule standing
+             |  in for an END-TIME one. The page keyed off the end and included a
+             |  meeting already in progress; the route excluded it; the list
+             |  refetches the route on mount. So a meeting that was RUNNING
+             |  rendered on first paint and vanished about a second later, taking
+             |  its Join button with it, at the exact moment somebody was trying
+             |  to join. TWO THINGS COMPUTE THE SAME NUMBER; DO THEY AGREE? —
+             |  they did not, and the disagreement was invisible in each half.
+             |  isUpcomingMeeting is now the single predicate both use, and
+             |  upcomingWindowStart reaches BACK by MAX_MEETING_MINUTES rather
+             |  than forward from now, because SQL cannot compare against
+             |  scheduled_at + duration without a generated column. A BOUND MUST
+             |  BE DERIVED FROM WHAT IT BOUNDS: the 480 that two services each
+             |  spelled out locally is one exported constant, so widening the
+             |  longest allowed meeting widens the window that has to contain it.
+             |  AN ORDERING THAT FOUGHT ITS OWN LIMIT. One query served both
+             |  lists, ordered `scheduled_at DESC NULLS LAST, created_at DESC`,
+             |  limited to 50. Nulls last puts every INSTANT meeting at the END
+             |  of the result and the limit cuts from the end — so an org with
+             |  fifty scheduled meetings showed NONE of its instant ones, which
+             |  is the product's commonest kind. The client refresh orders by
+             |  created_at, finds them, and the list changed content a moment
+             |  after the page settled. Two windows now, asked in parallel: what
+             |  is coming up, and what happened recently.
+             |  AND PAST WAS DEFINED BY SUBTRACTION. `!upcoming.some(...)` inside
+             |  a filter both scanned the upcoming list once per meeting and made
+             |  Past mean "whatever Upcoming rejected" — which quietly swept up
+             |  drafts and ad-hoc rooms that belong in neither. isPastMeeting is
+             |  asked directly, and it now answers for a room nobody ever ended:
+             |  an unclosed ad-hoc meeting is past once PRESENCE_STALE_MS has
+             |  gone by, the same ceiling attendance already uses for "a killed
+             |  tab wrote nothing", rather than sitting in Upcoming forever.
+             |  A READ WITH NO CEILING IS A READ THAT WILL BE TRUNCATED SILENTLY.
+             |  Both attendance queries were unbounded, and
+             |  live_meeting_participants grows by a row per meeting a person
+             |  attends for the life of their account — so they were heading for
+             |  PostgREST's max_rows, which cuts at a thousand and says nothing.
+             |  Bounded to the newest 200, which is more than a fifty-meeting
+             |  snapshot can use.
+             |  DEAD PAYLOAD ON EVERY VISIT. initialMeetings and initialPast are
+             |  passed to exactly ONE component — MeetingsCalendar — which is
+             |  code-split behind ?view=, is not mounted on first paint, and
+             |  refetches its own five hundred rows the moment it does. So every
+             |  meetings load ran a forty-one-column history query and serialised
+             |  the result into the HTML for a reader that would not read it.
+             |  The history is read only when the URL actually asks for the
+             |  calendar. FOLLOW WHAT GETS READ AND ASK WHAT IT COULD HAVE TOLD
+             |  US — here the answer was nothing, to anyone.
+             |  The scheduling modal was in the landing bundle for the same
+             |  reason: two lists imported it statically for a dialog behind a
+             |  button. next/dynamic puts it in its own 33 KiB chunk.
+             |  AND THE CLOCK NEVER SLEPT. useNow ticked once a second for the
+             |  life of the tab — a render of every Upcoming card and, once the
+             |  calendar had been opened, of the whole month grid, including the
+             |  hours a background tab shows nobody anything. Browsers throttle
+             |  background timers; they do not stop them. It stops on
+             |  visibilitychange and READS THE CLOCK ON THE WAY BACK, before
+             |  resuming: a countdown nobody can see does not need to be right,
+             |  it needs to be right the moment they look, and without that read
+             |  the first thing they see on returning is the countdown they left.
+             |  Method note: the first version of that test passed against HEAD,
+             |  because the old unconditional interval kept ticking and the
+             |  assertion only checked that the clock had moved. It had to assert
+             |  the delta ACROSS the visibilitychange to bite.
+             |  Confidence: typecheck/eslint clean, build passes, Jest 7092 →
+             |  7115 across 508 suites; 15 of the 62 schedule cases and 2 of the
+             |  8 useNow cases fail against HEAD. Not covered by tests: the page
+             |  and route query shapes themselves — the two windows, the
+             |  attendance ceilings and the history skip are server-component
+             |  reads with no harness here, verified by reading and by build.
 ```
 
 ---

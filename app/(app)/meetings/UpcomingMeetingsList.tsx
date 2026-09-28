@@ -11,9 +11,35 @@ import {
   type ExternalSyncStatus,
 } from "@/lib/meetings/schedule";
 import { CARD, COUNTDOWN_TONE, EYEBROW, STATUS_TONE, chip } from "./tone";
-import { MeetingEditScreen, type MeetingEditInitial } from "./MeetingEditScreen";
+import nextDynamic from "next/dynamic";
+import type { MeetingEditInitial } from "./MeetingEditScreen";
 import { MeetingShareLink } from "./MeetingShareLink";
 import { useNow, useLivePresence, nextChannelName } from "./hooks";
+
+/**
+ * A placeholder while the scheduling form arrives.
+ *
+ * It is opened by a click, so the click has to be answered by something —
+ * otherwise the Edit button looks dead for as long as the chunk takes.
+ */
+function ScheduleFormLoading() {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm">
+      <p className="rounded-xl border border-[var(--line)] bg-[var(--surface-1)] px-4 py-3 text-xs text-[var(--fg-muted)]">
+        Opening the scheduler…
+      </p>
+    </div>
+  );
+}
+
+// Split out of the landing bundle, for the reason the calendar already is: this
+// form is the second-largest component on the page and renders only once
+// somebody opens it, so shipping it with the initial payload charged every visit
+// for a modal most visits never see.
+const MeetingEditScreen = nextDynamic(
+  () => import("./MeetingEditScreen").then((m) => m.MeetingEditScreen),
+  { ssr: false, loading: () => <ScheduleFormLoading /> },
+);
 
 export interface UpcomingMeeting {
   id: string;
