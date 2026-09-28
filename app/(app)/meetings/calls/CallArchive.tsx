@@ -54,10 +54,14 @@ export function CallArchive({ initial }: { initial: CallHit[] }) {
     return () => clearTimeout(timer);
   }, [query, run]);
 
-  // A hard delete: the route removes the meeting, its transcript and report,
-  // and the recording's stored parts. Removed from the list only once the
-  // server says so — a row that vanished on a failed delete would have
-  // somebody believing a recording was gone when it was not.
+  /**
+   * Permanently delete one call.
+   *
+   * A hard delete: the route removes the meeting, its transcript and report,
+   * and the recording's stored parts. Removed from the list only once the
+   * server says so — a row that vanished on a failed delete would have
+   * somebody believing a recording was gone when it was not.
+   */
   async function remove(id: string) {
     setConfirming(null);
     setDeleting(id);
