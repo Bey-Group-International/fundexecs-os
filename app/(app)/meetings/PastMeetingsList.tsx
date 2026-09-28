@@ -125,6 +125,7 @@ export function PastMeetingsList({ initialMeetings, userId, compact = false }: P
   const [busy, setBusy] = useState<string | null>(null);
   const supabaseRef = useRef(createClient());
   const [channelName] = useState(() => nextChannelName("past-meetings"));
+  const refreshTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Live updates
   useEffect(() => {
@@ -190,11 +191,20 @@ export function PastMeetingsList({ initialMeetings, userId, compact = false }: P
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "live_meetings" },
-        () => { void refresh(); }
+        // Coalesced, as the upcoming list and the calendar already are: one
+        // save fires several row events, and each refresh here is two or three
+        // queries.
+        () => {
+          if (refreshTimer.current) clearTimeout(refreshTimer.current);
+          refreshTimer.current = setTimeout(() => { void refresh(); }, 350);
+        }
       )
       .subscribe();
 
-    return () => { void supabase.removeChannel(channel); };
+    return () => {
+      if (refreshTimer.current) clearTimeout(refreshTimer.current);
+      void supabase.removeChannel(channel);
+    };
   }, [userId, channelName]);
 
   async function softHide(id: string) {
