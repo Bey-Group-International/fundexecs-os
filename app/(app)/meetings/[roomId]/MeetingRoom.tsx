@@ -533,7 +533,15 @@ function VideoTileImpl({
   micOn = true, speaking = false, camOn = true, videoPaused = false,
   status = "live",
 }: {
-  stream: MediaStream | null; label: string; muted?: boolean; isLocal?: boolean;
+  stream: MediaStream | null;
+  /**
+   * The stream's track ids. Unused inside; it is here for React.memo. A remote
+   * peer's tracks are added to the SAME MediaStream object as they arrive, so
+   * without this a memoized tile never re-renders when their camera lands and
+   * shows "Camera off" for the rest of the call.
+   */
+  tracksKey: string;
+  label: string; muted?: boolean; isLocal?: boolean;
   handRaised?: boolean; reaction?: string; large?: boolean;
   /** That participant's own report of their mic track. */
   micOn?: boolean;
@@ -644,6 +652,11 @@ function VideoTileImpl({
 // re-renders for reasons that have nothing to do with a given tile. Without
 // this, each of those re-renders reconciled every tile in the grid.
 const VideoTile = React.memo(VideoTileImpl);
+
+/** What `tracksKey` is made from: the ids of the stream's current tracks. */
+function tracksKeyOf(stream: MediaStream | null | undefined): string {
+  return stream ? stream.getTracks().map((t) => t.id).join(",") : "";
+}
 
 /** One participant's audio, as the voice meter reads it. */
 interface VoiceTap {
@@ -1831,6 +1844,7 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
   // its own: a per-second state here re-rendered the whole room — every tile,
   // the chat, the copilot — once a second for the length of the call.
   const [callStartedAt, setCallStartedAt] = useState<number | null>(null);
+  const callEndedAtRef = useRef<number | null>(null);
   const [ready, setReady] = useState(false);
   // Leaving is a lifecycle, not an instant. Ending posts a transcript to a model
   // that can take up to two minutes, and the call is already torn down by then —
@@ -3755,8 +3769,11 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     return () => clearInterval(timer);
   }, [isHost, sessionLive, anyoneWaiting]);
 
+  // The current time, not the last tick's: the tick is paused while nobody is
+  // waiting, and filtering a newly arrived list against a clock frozen minutes
+  // ago would briefly count a stale knock as present — and chime for it.
   const livePeers = useMemo(
-    () => presentOnly(waitingPeers, presenceNowMs),
+    () => presentOnly(waitingPeers, Math.max(presenceNowMs, Date.now())),
     [waitingPeers, presenceNowMs],
   );
 
@@ -5706,6 +5723,10 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     // batch of auto-created tasks for the same meeting.
     if (endingRef.current || !canExit(callPhaseRef.current)) return;
     endingRef.current = true;
+    // Taken once, when the call is ended — not after the transcript drains, and
+    // not again on a Retry from the failed screen, either of which would make
+    // the report's duration longer than the call.
+    callEndedAtRef.current ??= Date.now();
     callPhaseRef.current = nextPhase(callPhaseRef.current, "end");
     setCallPhase(callPhaseRef.current);
     sendSignal({ type: "end", from: myIdRef.current });
@@ -5738,7 +5759,9 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
           title: meetingTitleRef.current,
           participants,
           transcript: fullText,
-          duration: callStartedAt === null ? 0 : Math.round((Date.now() - callStartedAt) / 1000),
+          duration: callStartedAt === null
+            ? 0
+            : Math.round(((callEndedAtRef.current ?? Date.now()) - callStartedAt) / 1000),
         }),
       });
       if (res.ok) { router.push(`/meetings/${roomCode}/report`); return; }
@@ -5969,9 +5992,9 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
           )}
           {stageLayout === "grid" ? (
             <div className={`flex-1 grid ${gridClass} gap-3 p-4 content-center`}>
-              <VideoTile stream={localStream} label={localName} muted isLocal handRaised={handRaised} reaction={getReaction("local")} micOn={micOn} speaking={speaking.has(LOCAL_SPEAKER_ID)} camOn={camOn} videoPaused={bwMode === "audio-only"} />
+              <VideoTile stream={localStream} tracksKey={tracksKeyOf(localStream)} label={localName} muted isLocal handRaised={handRaised} reaction={getReaction("local")} micOn={micOn} speaking={speaking.has(LOCAL_SPEAKER_ID)} camOn={camOn} videoPaused={bwMode === "audio-only"} />
               {allPeers.map((peer: Peer) => (
-                <VideoTile key={peer.id} stream={peer.stream} label={peer.displayName} handRaised={raisedHands.has(peer.id)} reaction={getReaction(peer.id)} micOn={peerMicOn.get(peer.id) ?? true} speaking={speaking.has(peer.id)} camOn={videoOf(peer.id).camOn} videoPaused={videoOf(peer.id).paused} status={statusOf(peer.id)} />
+                <VideoTile key={peer.id} stream={peer.stream} tracksKey={tracksKeyOf(peer.stream)} label={peer.displayName} handRaised={raisedHands.has(peer.id)} reaction={getReaction(peer.id)} micOn={peerMicOn.get(peer.id) ?? true} speaking={speaking.has(peer.id)} camOn={videoOf(peer.id).camOn} videoPaused={videoOf(peer.id).paused} status={statusOf(peer.id)} />
               ))}
             </div>
           ) : (
@@ -5979,11 +6002,11 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
               {/* Main speaker tile */}
               <div className="flex-1 min-h-0">
                 {speakerIsLocal ? (
-                  <VideoTile stream={localStream} label={localName} muted isLocal handRaised={handRaised} reaction={getReaction("local")} micOn={micOn} speaking={speaking.has(LOCAL_SPEAKER_ID)} camOn={camOn} videoPaused={bwMode === "audio-only"} large />
+                  <VideoTile stream={localStream} tracksKey={tracksKeyOf(localStream)} label={localName} muted isLocal handRaised={handRaised} reaction={getReaction("local")} micOn={micOn} speaking={speaking.has(LOCAL_SPEAKER_ID)} camOn={camOn} videoPaused={bwMode === "audio-only"} large />
                 ) : speakerPeer ? (
-                  <VideoTile stream={speakerPeer.stream} label={speakerPeer.displayName} handRaised={isHandRaised(speakerPeer.id)} reaction={getReaction(speakerPeer.id)} micOn={peerMicOn.get(speakerPeer.id) ?? true} speaking={speaking.has(speakerPeer.id)} camOn={videoOf(speakerPeer.id).camOn} videoPaused={videoOf(speakerPeer.id).paused} status={statusOf(speakerPeer.id)} large />
+                  <VideoTile stream={speakerPeer.stream} tracksKey={tracksKeyOf(speakerPeer.stream)} label={speakerPeer.displayName} handRaised={isHandRaised(speakerPeer.id)} reaction={getReaction(speakerPeer.id)} micOn={peerMicOn.get(speakerPeer.id) ?? true} speaking={speaking.has(speakerPeer.id)} camOn={videoOf(speakerPeer.id).camOn} videoPaused={videoOf(speakerPeer.id).paused} status={statusOf(speakerPeer.id)} large />
                 ) : (
-                  <VideoTile stream={localStream} label={localName} muted isLocal handRaised={handRaised} reaction={getReaction("local")} micOn={micOn} speaking={speaking.has(LOCAL_SPEAKER_ID)} camOn={camOn} videoPaused={bwMode === "audio-only"} large />
+                  <VideoTile stream={localStream} tracksKey={tracksKeyOf(localStream)} label={localName} muted isLocal handRaised={handRaised} reaction={getReaction("local")} micOn={micOn} speaking={speaking.has(LOCAL_SPEAKER_ID)} camOn={camOn} videoPaused={bwMode === "audio-only"} large />
                 )}
               </div>
               {/* Thumbnail strip */}
@@ -5991,7 +6014,7 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
                 <div className="flex gap-2 h-24 shrink-0 overflow-x-auto">
                   {stripItems.map((item) => (
                     <div key={item.id} className="h-full aspect-video shrink-0">
-                      <VideoTile stream={item.stream} label={item.displayName} muted={item.isLocal} isLocal={item.isLocal} handRaised={isHandRaised(item.id)} reaction={getReaction(item.id)} micOn={item.isLocal ? micOn : (peerMicOn.get(item.id) ?? true)} speaking={speaking.has(item.id)} camOn={item.isLocal ? camOn : videoOf(item.id).camOn} videoPaused={item.isLocal ? bwMode === "audio-only" : videoOf(item.id).paused} status={item.isLocal ? "live" : statusOf(item.id)} />
+                      <VideoTile stream={item.stream} tracksKey={tracksKeyOf(item.stream)} label={item.displayName} muted={item.isLocal} isLocal={item.isLocal} handRaised={isHandRaised(item.id)} reaction={getReaction(item.id)} micOn={item.isLocal ? micOn : (peerMicOn.get(item.id) ?? true)} speaking={speaking.has(item.id)} camOn={item.isLocal ? camOn : videoOf(item.id).camOn} videoPaused={item.isLocal ? bwMode === "audio-only" : videoOf(item.id).paused} status={item.isLocal ? "live" : statusOf(item.id)} />
                     </div>
                   ))}
                 </div>
