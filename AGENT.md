@@ -3689,6 +3689,65 @@ Deployed, monitoring               →  live, observability active
              |  Confidence: typecheck/eslint clean, build passes, Jest 7052 →
              |  7054 across 507 suites; 10 of the new report-export cases and 6
              |  of the new loader cases fail against HEAD.
+             |
+             |  MEETINGS VIII — THE CONFIRMATION EMAIL AND THE CALENDAR
+             |  Reported from production: scheduling a meeting sends no
+             |  confirmation and puts nothing on a calendar. Asked which email
+             |  and what the app SAYS when you save; the answer — "nothing
+             |  either way" — was the diagnosis, because the product has a
+             |  message for every other outcome.
+             |  A COUNT IS NOT AN OUTCOME. sendMeetingInvites sent per recipient
+             |  through Promise.allSettled, counted the successes, and discarded
+             |  every failure — `{sent, total}`. The route kept `sent` and
+             |  dropped `total`. The screen spoke only when `sent > 0`. So a
+             |  batch Gmail refused arrived as a bare zero that was
+             |  INDISTINGUISHABLE ON SCREEN from a meeting with nobody to email,
+             |  and a host watched the save succeed and no invitation arrive with
+             |  nothing anywhere saying why. Three layers each dropped one fact;
+             |  no layer was wrong on its own.
+             |  AND THE PRE-CHECK LIED IN THE OTHER DIRECTION. mailboxFor reports
+             |  ok for a credential that merely EXISTS, including the deploy-wide
+             |  GMAIL_ACCESS_TOKEN that its own comment says Google expires after
+             |  about an hour. A stale token reports a healthy mailbox. Worse,
+             |  the screen then claimed "no email was sent — no Google account
+             |  is connected" off that pre-check, while the SEND falls back to
+             |  the org mailbox independently — so the message was also false
+             |  whenever the fallback worked. The truth was always in
+             |  sendEmail's `detail`, which nobody read. It is read now.
+             |  NOTHING EVER ASKED THE CALENDAR. syncMeetingExternal required the
+             |  REQUEST to carry externalCalendarSyncEnabled AND
+             |  externalCalendarProvider, both from a checkbox and a dropdown
+             |  inside a COLLAPSED "Advanced options" section defaulting to off.
+             |  The ordinary way of scheduling never attempted a push. No error,
+             |  no failed sync, no row: a feature that worked and was never
+             |  invoked. The connection is the better signal and the app already
+             |  computed it — providerSyncAvailable, a grant PLUS a writable
+             |  calendar — so the server decides now and the checkbox became an
+             |  opt-OUT. A CAPABILITY NOBODY CAN FIND IS INDISTINGUISHABLE FROM
+             |  ONE THAT DOES NOT EXIST, and the bug report says so.
+             |  The dropdown also offered Outlook, Calendly and iCal while
+             |  pushMeetingToGoogle is the only writer in the codebase — pick
+             |  one of the three and you enabled a sync that wrote to Google or
+             |  skipped. The provider is derived now, never chosen.
+             |  REVIEW ROUND, on my own diff, three findings:
+             |  I put the calendar lookup INSIDE the try that wraps the save, so
+             |  a transient two-query failure would have answered 500 and lost
+             |  the meeting — the exact fault the surrounding comments keep
+             |  guarding against. canWriteCalendar never throws, and answers null
+             |  rather than false: telling somebody to connect a calendar they
+             |  already connected sends them to fix what was never broken.
+             |  On the PATCH path I made "unstated" mean "follow the connection",
+             |  which would have switched sync on for every meeting saved before
+             |  this existed, during an edit about something else. A create
+             |  default is not an update default.
+             |  And the form's advanced panel auto-opens when a meeting carries
+             |  "unusual configuration", which included sync being on — now the
+             |  ordinary state, so it would have sprung open on every edit.
+             |  Confidence: typecheck/eslint clean, build passes, Jest 7054 →
+             |  7092 across 508 suites; 11 of the new invite and schedule-route
+             |  cases fail against HEAD. Not fixed here: whether THIS deployment
+             |  has a working Gmail credential at all — that is configuration,
+             |  and /api/meetings/email-health POSTs a real test to prove it.
 ```
 
 ---

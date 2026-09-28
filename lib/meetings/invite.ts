@@ -3,6 +3,7 @@
 // (/api/meetings/invite) and the schedule/edit flows, so adding a guest email
 // to a scheduled meeting actually reaches them.
 import { sendEmail, escapeHtml, type SendEmailCredentials } from "@/lib/email";
+import { deliveryOutcome, type DeliveryOutcome } from "@/lib/meetings/recipients";
 import type { MeetingAttendeeInput } from "@/lib/meetings/attendees";
 import { buildInviteIcs, meetingInviteUid } from "@/lib/calendar/invite";
 import {
@@ -71,9 +72,25 @@ export function buildMeetingInviteHtml({
 }
 
 /**
+ * What one invite send achieved.
+ *
+ * `attempted` is the fact that was missing. Without it a caller cannot tell a
+ * send that reached nobody from a meeting that had nobody to reach — and the
+ * scheduling screen, which only spoke when `sent > 0`, said nothing at all in
+ * the first case.
+ */
+export interface InviteSendOutcome extends DeliveryOutcome {
+  /** How many messages this tried to send. */
+  attempted: number;
+  /** The same number, under the name earlier callers used. */
+  total: number;
+}
+
+/**
  * Send meeting invites to a set of email addresses. Never throws — an
  * unconnected mailbox or a per-recipient failure just lowers the `sent` count,
- * so the caller's core flow (saving the meeting) is never blocked.
+ * so the caller's core flow (saving the meeting) is never blocked. What went
+ * wrong comes back in the outcome rather than being swallowed.
  */
 export async function sendMeetingInvites(args: {
   origin: string;
@@ -116,13 +133,13 @@ export async function sendMeetingInvites(args: {
    * meeting again.
    */
   notifyHost?: boolean;
-}): Promise<{ sent: number; total: number }> {
+}): Promise<InviteSendOutcome> {
   const guests = [...new Set(args.emails.map((e) => e.trim().toLowerCase()).filter(Boolean))];
   // Everyone on the meeting — the organizer and the attendee list the calendar
   // entry carries — which is not always everyone this send writes to.
   const recipients = scheduledRecipients(args.hostEmail, args.senderName, guests);
   const mailTo = args.notifyHost === false ? recipients.filter((r) => r.role !== "host") : recipients;
-  if (mailTo.length === 0) return { sent: 0, total: 0 };
+  if (mailTo.length === 0) return { sent: 0, total: 0, attempted: 0, failed: [], reasons: [] };
 
   const origin = (args.origin || "").replace(/\/$/, "");
   const inviteUrl = `${origin}/meeting-invite/${args.roomCode}`;
@@ -157,8 +174,19 @@ export async function sendMeetingInvites(args: {
     ),
   );
 
-  const sent = results.filter((r) => r.status === "fulfilled" && (r.value as { ok: boolean }).ok).length;
-  return { sent, total: mailTo.length };
+  // What actually happened, per recipient, with the mailer's own words.
+  //
+  // This used to be `results.filter(ok).length` and nothing else, which is how
+  // scheduling a meeting could email nobody and say nothing: the caller got a
+  // zero it could not tell apart from "there was nobody to email", and the
+  // reason Gmail gave was discarded inside this function.
+  const outcome = deliveryOutcome(mailTo, results);
+  return {
+    ...outcome,
+    attempted: mailTo.length,
+    // Kept for callers that only ever wanted the denominator.
+    total: mailTo.length,
+  };
 }
 
 /** The .ics for a newly scheduled meeting, or undefined when it has no time. */

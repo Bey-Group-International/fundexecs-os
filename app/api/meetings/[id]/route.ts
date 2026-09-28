@@ -5,6 +5,8 @@ import { mailboxFor } from "@/lib/meetings/mailbox.server";
 import { mailboxProblemMessage } from "@/lib/meetings/mailbox";
 import { deleteMeetingLocal, updateMeeting, buildMeetingInviteUrl } from "@/lib/meetings/service";
 import { sendMeetingInvites, guestEmails } from "@/lib/meetings/invite";
+import { planCalendarSync } from "@/lib/meetings/calendar-sync";
+import { canWriteCalendar } from "@/lib/calendar/google-write.server";
 import { diffMeetingPlace, diffMeetingTiming, sendMeetingUpdates } from "@/lib/meetings/meeting-updates";
 import { conflictMessage, findConflicts, type ConflictCandidate } from "@/lib/meetings/schedule";
 import { loadBlockConflicts } from "@/lib/meetings/blocks.server";
@@ -205,6 +207,25 @@ export async function PATCH(request: NextRequest, { params }: { params: Params }
     }
   }
 
+  // Where this meeting stands with the host's own calendar, decided from the
+  // connection rather than from the request — the same rule the create path
+  // uses, so editing a meeting cannot silently drop it off a calendar that
+  // scheduling put it on.
+  //
+  // Unlike the create path, silence here means LEAVE IT ALONE. This is a PATCH:
+  // `updateMeeting` treats undefined as "column untouched", and following the
+  // connection on an unstated field would switch sync on for every meeting
+  // saved before this existed — putting old meetings on a calendar during an
+  // edit that was about something else entirely.
+  const calendarStated = typeof body.externalCalendarSyncEnabled === "boolean";
+  const editCalendarPlan = calendarStated
+    ? planCalendarSync({
+        connected: await canWriteCalendar(supabase, auth.ctx.userId),
+        requested: body.externalCalendarSyncEnabled as boolean,
+        isDraft,
+      })
+    : null;
+
   try {
     const result = await updateMeeting(
       supabase,
@@ -236,8 +257,12 @@ export async function PATCH(request: NextRequest, { params }: { params: Params }
         assignedCopilotAgent: cleanString(body.assignedCopilotAgent),
         relatedRecordType: cleanString(body.relatedRecordType),
         relatedRecordId: cleanString(body.relatedRecordId),
-        externalCalendarProvider: cleanString(body.externalCalendarProvider),
-        externalCalendarSyncEnabled: typeof body.externalCalendarSyncEnabled === "boolean" ? body.externalCalendarSyncEnabled : undefined,
+        // Derived from the connection, never read off the request. The form used
+        // to offer Outlook, Calendly and iCal alongside Google, and
+        // pushMeetingToGoogle is the only writer — so a meeting could be stored
+        // as syncing to Outlook and then be pushed to Google or skipped.
+        externalCalendarProvider: editCalendarPlan?.provider,
+        externalCalendarSyncEnabled: editCalendarPlan?.enabled,
         // Only an explicit boolean changes it — anything else leaves the
         // meeting's current admission policy exactly as the host set it.
         guestQuickAccess: typeof body.guestQuickAccess === "boolean" ? body.guestQuickAccess : undefined,
@@ -280,6 +305,12 @@ export async function PATCH(request: NextRequest, { params }: { params: Params }
 
     // Invite guests that were just added to a real (non-draft) meeting.
     let invited = 0;
+    // Same reason as the create path: a caller cannot read a zero without
+    // knowing whether anything was tried, and the screen stayed silent on the
+    // case that matters most.
+    let attempted = 0;
+    let inviteFailures: string[] = [];
+    let inviteReasons: string[] = [];
     if (notifiable && newEmails.length > 0) {
       try {
         const sendResult = await sendMeetingInvites({
@@ -307,8 +338,19 @@ export async function PATCH(request: NextRequest, { params }: { params: Params }
           notifyHost: false,
         });
         invited = sendResult.sent;
+        attempted = sendResult.attempted;
+        inviteFailures = sendResult.failed;
+        inviteReasons = sendResult.reasons;
+        if (sendResult.sent === 0 && sendResult.attempted > 0) {
+          console.error("[/api/meetings/[id]] invite send reached nobody", {
+            attempted: sendResult.attempted,
+            reasons: sendResult.reasons,
+          });
+        }
       } catch (err) {
         console.error("[/api/meetings/[id]] invite send failed", err);
+        attempted = attempted || newEmails.length;
+        inviteReasons = [err instanceof Error ? err.message : "the send failed"];
       }
     }
 
@@ -412,7 +454,17 @@ export async function PATCH(request: NextRequest, { params }: { params: Params }
       notified += res.sent;
     }
 
-    return NextResponse.json({ ...result, invited, uninvited, notified, mailboxConnected, mailboxProblem });
+    return NextResponse.json({
+      ...result,
+      invited,
+      attempted,
+      inviteFailures,
+      inviteReasons,
+      uninvited,
+      notified,
+      mailboxConnected,
+      mailboxProblem,
+    });
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "Failed to update meeting" }, { status: 500 });
   }
