@@ -17,6 +17,7 @@ import {
   type WritableMeeting,
   type WriteOutcome,
 } from "@/lib/calendar/google-write";
+import { SYNCABLE_PROVIDER } from "@/lib/meetings/calendar-sync";
 
 const API = "https://www.googleapis.com/calendar/v3";
 const FETCH_TIMEOUT_MS = 10_000;
@@ -269,7 +270,19 @@ export async function recordSync(
     const { error } = await client
       .from("live_meetings")
       .update({
-        external_calendar_provider: "google",
+        // The one spelling the schema accepts. This said "google", which the
+        // `live_meetings_external_provider_check` constraint rejects — it allows
+        // 'google_calendar', 'outlook', 'calendly' and 'ical' — so EVERY call
+        // here failed, on success and on failure alike. A meeting's event went
+        // onto the calendar and its row never learned the event id or the status,
+        // and a sync that failed never recorded that either.
+        //
+        // Nothing caught it because the write is the only place the two spellings
+        // could disagree: a mocked Supabase client has no constraints to violate,
+        // and the fixtures asserted the wrong value. So the constant is shared
+        // with the code that decides the provider, and a test ties it to the
+        // migration that accepts it.
+        external_calendar_provider: SYNCABLE_PROVIDER,
         external_calendar_sync_status: next.status,
         external_calendar_event_id: next.eventId,
         external_calendar_last_error: next.error,

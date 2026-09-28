@@ -32,7 +32,12 @@ function meeting(over: Partial<WritableMeeting> = {}): WritableMeeting {
     deleted_at: null,
     external_calendar_event_id: null,
     external_calendar_sync_enabled: true,
-    external_calendar_provider: "google",
+    // "google_calendar", because that is the only spelling the
+    // live_meetings_external_provider_check constraint allows — so a row
+    // carrying "google" is one the database could never have produced. The
+    // fixture said "google" while the writer wrote "google" and every write was
+    // rejected in production; a fixture agreeing with a bug is how it survived.
+    external_calendar_provider: "google_calendar",
     ...over,
   };
 }
@@ -344,5 +349,84 @@ describe("pushMeetingToGoogle — failures", () => {
     const r = await pushMeetingToGoogle(api, meeting({ scheduled_at: "not-a-date" }), "u1");
     expect(r.status).toBe("sync_failed");
     expect(recorded.updates.at(-1)!.external_calendar_sync_status).toBe("sync_failed");
+  });
+});
+
+// ── The provider the row is stamped with ─────────────────────────────────────
+//
+// This shipped broken. recordSync wrote `external_calendar_provider: "google"`,
+// and the schema's `live_meetings_external_provider_check` accepts only
+// 'google_calendar', 'outlook', 'calendly' and 'ical' — so EVERY write here was
+// rejected by Postgres: on success, so a meeting's event went onto the calendar
+// and its row never learned the event id; and on failure, so a sync that failed
+// never recorded that either. What a host saw was "external calendar sync
+// failed: ... violates check constraint".
+//
+// Nothing caught it, and the reason is the point of these two tests. A mocked
+// Supabase client has no constraints to violate, so no amount of unit testing
+// the write could see it — and the fixture above asserted "google" too, which
+// is a test agreeing with the bug. The only real guard is to tie the value the
+// code writes to the schema that has to accept it.
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import { SYNCABLE_PROVIDER } from "@/lib/meetings/calendar-sync";
+
+/** The provider values the live_meetings check constraint actually permits. */
+function providersTheSchemaAccepts(): string[] {
+  const sql = readFileSync(
+    join(process.cwd(), "supabase/migrations/20260705170000_schedule_meeting_flow.sql"),
+    "utf8",
+  );
+  const match = sql.match(/external_calendar_provider in \(([^)]*)\)/);
+  if (!match) throw new Error("could not find the external provider check constraint");
+  return match[1].split(",").map((v) => v.trim().replace(/^'|'$/g, ""));
+}
+
+describe("the provider written to live_meetings", () => {
+  it("is one the schema's check constraint accepts", () => {
+    // The assertion that was missing. It reads the migration rather than
+    // restating a list, so a constraint narrowed later fails here instead of in
+    // production.
+    expect(providersTheSchemaAccepts()).toContain(SYNCABLE_PROVIDER);
+  });
+
+  it("is not the value that used to be written", () => {
+    // Pinned explicitly, because "google" is the obvious thing to type and the
+    // constraint is four files away.
+    expect(providersTheSchemaAccepts()).not.toContain("google");
+    expect(SYNCABLE_PROVIDER).not.toBe("google");
+  });
+
+  it("is what a successful push stamps on the row", async () => {
+    fetchMock.mockImplementation(routeFetch({ existing: null, write: respond(200, { id: "gcal-new" }) }));
+    const { api, recorded } = client();
+
+    const r = await pushMeetingToGoogle(api, meeting(), "u1");
+
+    expect(r.ok).toBe(true);
+    const providers = recorded.updates.map((u) => u.external_calendar_provider);
+    expect(providers.length).toBeGreaterThan(0);
+    for (const written of providers) {
+      expect(providersTheSchemaAccepts()).toContain(written);
+    }
+  });
+
+  it("is what a FAILED push stamps too, which is the half that was silent", async () => {
+    // recordSync runs on both outcomes, so the constraint violation took the
+    // error trail down with it: a sync that failed could not even record that
+    // it had failed.
+    fetchMock.mockImplementation(
+      routeFetch({ existing: null, write: respond(500, { error: { message: "boom" } }) }),
+    );
+    const { api, recorded } = client();
+
+    const r = await pushMeetingToGoogle(api, meeting(), "u1");
+
+    expect(r.ok).toBe(false);
+    const providers = recorded.updates.map((u) => u.external_calendar_provider);
+    expect(providers.length).toBeGreaterThan(0);
+    for (const written of providers) {
+      expect(providersTheSchemaAccepts()).toContain(written);
+    }
   });
 });
