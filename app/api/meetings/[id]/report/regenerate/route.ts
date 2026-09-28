@@ -98,13 +98,12 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
       .order("ts", { ascending: true })
       .order("id", { ascending: true })
       .range(from, to),
-  ).then(
-    (rows) => (rows.length ? restoreTranscript(rows as unknown as StoredLine[]) : ""),
-    (err) => {
+  )
+    .then((rows) => (rows.length ? restoreTranscript(rows as unknown as StoredLine[]) : ""))
+    .catch((err) => {
       console.warn("[regenerate] stored transcript unavailable", err);
       return "";
-    },
-  );
+    });
   const [{ data: existing }, stored] = await Promise.all([existingRead, storedRead]);
 
   const transcript = mergeTranscripts((existing?.full_transcript ?? "").trim(), stored).trim();
