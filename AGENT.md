@@ -3900,6 +3900,100 @@ Deployed, monitoring               →  live, observability active
              |  change still re-renders all of it — the tiles are merely no longer
              |  reconciled with it. Splitting it is the next piece of work and a
              |  much larger one.
+             |
+             |  MEETINGS XI — THE WAITING ROOM FLICKER, AND THE MASK
+             |  A CHIP THAT VANISHED, CAME BACK, AND VANISHED AGAIN. Admit and
+             |  Deny take somebody off the host's panel before the server answers,
+             |  which is right — letting a guest in should cost one click and the
+             |  round trip is not the host's to wait through. But it puts the
+             |  screen ahead of the database, and TWO things then read the database
+             |  and put it back. loadWaiting replaces the whole list from the
+             |  table, and it is scheduled 400ms after ANY admission event, so it
+             |  does not need to be the admit's own event to fire — a second
+             |  guest's presence write will do. And a presence write ON the
+             |  just-admitted row arrives as an UPDATE whose status is still
+             |  `waiting`, so applyAdmissionChange re-inserts the person the host
+             |  removed. In that window the host can press Admit a second time on
+             |  somebody already in the room.
+             |  A decision is now remembered by row id for as long as it might
+             |  still be in flight, and nothing the table says can undo it. The
+             |  half that is easy to leave out is the FORGETTING: the rejected-POST
+             |  path re-reads precisely to put the person back, and a suppression
+             |  left in place would swallow that correction — the guest would
+             |  disappear from the panel and stay gone, which is worse than the
+             |  flicker. Suppression is by row id and a fresh knock is a fresh row,
+             |  so nobody is ever caught by it twice.
+             |  Also: "Admit all" wanted the ids of everyone on the panel, and I
+             |  first read them inside a setWaitingPeers updater. An updater has to
+             |  be pure; React is free to run it more than once. A ref.
+             |  THE MASKING LOOP RAN AT THE DISPLAY'S REFRESH RATE AND WAS CAPTURED
+             |  AT 24FPS. requestAnimationFrame fires at 60Hz, or 120 on a recent
+             |  laptop or phone; canvas.captureStream(OUTPUT_FPS) samples at 24. So
+             |  a MediaPipe inference, a mask upscale, a putImageData and two blurs
+             |  ran two to five times for every frame anybody would ever see, and
+             |  the rest was thrown away. FRAME_BUDGET_MS = 45 was the tell and I
+             |  read past it twice: 45ms is longer than one animation frame at any
+             |  refresh rate in use, because it was always a budget against the
+             |  OUTPUT rate. Three numbers describing the same cadence, one of them
+             |  five times wrong. Pacing is a cheap return inside the same rAF, so
+             |  the loop still stops with the tab and stays synced to compositing.
+             |  THEN THE REAL ASK ARRIVED — smooth and seamless, no bleeds, no
+             |  headwear cutoff — and the pacing turned out to be what paid for it.
+             |  THE BLEED AND THE CUTOFF ARE ONE MECHANISM POINTED TWO WAYS. Growth
+             |  reached equally in all four directions, and the old comment named
+             |  the price out loud: "a faint ring of the real room travelling with
+             |  the silhouette". Most of that ring bought nothing, because the
+             |  thing growth exists to save is headwear and headwear is ABOVE a
+             |  head. Up reaches furthest now, sideways a little (a headwrap is
+             |  wider than the head in it), downward not at all — growing down
+             |  drags the desk up into somebody.
+             |  AND GROWTH COULD NOT TELL FABRIC FROM WALL. Both are merely "not
+             |  yet covered", and the wall is the commoner neighbour. But the model
+             |  already knows the difference and the confidence ramp already
+             |  carries it: uncertain lands between 0 and 255, confident background
+             |  lands exactly 0. So growth may now FILL uncertainty and may not
+             |  INVENT coverage. Headwear fills; the wall does not.
+             |  A TEST STOPPED ME TRADING A COSMETIC FAULT FOR A DIGNITY ONE. I
+             |  also raised CONFIDENCE_PERSON from 0.30 to 0.45, reasoning that a
+             |  pixel the model is 30% sure of should not be fully opaque. The
+             |  headwear suite refused it: at 0.28 confidence — squarely where a
+             |  cap or a headwrap lands — that raise took the fabric from opaque to
+             |  58%, which is the room showing THROUGH the top of someone's head.
+             |  A faint halo is cosmetic; a semi-transparent head covering is not,
+             |  and a threshold is the wrong place to pay for tidiness. Reverted.
+             |  The halo is fixed where it is caused, not by making people
+             |  translucent. THE TWO MISTAKES ARE NOT THE SAME SIZE — the file said
+             |  so already, and the tests held me to it when I forgot.
+             |  THE SEAM WAS SOFT BECAUSE IT WAS BLURRED, WHICH IS NOT THE SAME AS
+             |  ACCURATE. Alpha crossed from room to person over roughly eight
+             |  pixels at 720p: right along hair, a visible ring everywhere else.
+             |  Tightening the ramp before the upscale halves the band and keeps
+             |  the softness, and it improves BOTH faults at once — headwear at
+             |  0.28 goes fully opaque, a halo pixel the model barely saw goes to
+             |  nothing. That it helps both is the reason to believe it is the
+             |  mechanism rather than a trade. It writes to a separate buffer on
+             |  purpose: sharpening the temporal history in place would compound
+             |  each frame until the mask was binary, leaving the smoothing running
+             |  with nothing left to smooth.
+             |  A BOUND SHOULD MEASURE WHAT IT COSTS. The mask grid was a fixed
+             |  320px WIDTH, and my first move was to raise it to 480 — which would
+             |  have given a 640x480 webcam a 173k-pixel mask while a 1280x720
+             |  camera got 130k. The cheap old camera paying more per frame than
+             |  the good new one, which is the opposite of what a frame budget is
+             |  for. It is a pixel budget now: constant cost whatever the camera,
+             |  never finer than the frame, and the upscale falls from 4x to 2.7x
+             |  at 720p and 6x to 4x at 1080p.
+             |  Confidence: typecheck/eslint clean, build passes, Jest 7152 → 7190
+             |  across 511 suites; every change bites against a reverted version —
+             |  6 waiting-room cases, 5 pacing, 2 each for the directional radii,
+             |  the growth ceiling and the edge. NOT VERIFIED: any of the masking
+             |  by eye. These are reasoned from the model's documented behaviour
+             |  and the pipeline's own numbers, and the arithmetic is tested, but
+             |  nobody has looked at a face. Matching Meet or Zoom is finally
+             |  limited by the segmenter — selfie_segmenter.tflite is a small
+             |  single-label model — and the next real step is guided upsampling
+             |  against the frame's own luma, so the boundary snaps to the picture
+             |  instead of being positioned by a blur.
 ```
 
 ---
