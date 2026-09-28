@@ -35,19 +35,21 @@ import {
   maskFeatherPx,
   maskGrid,
   needsSegmentation,
+  dilateCeiling,
+  sharpenEdge,
+  OUTPUT_FPS,
+  shouldDrawFrame,
   sampleCoverageFromCategory,
   sampleCoverageFromConfidence,
   templateById,
   type BackgroundEffect,
   type BackgroundTemplate,
+  type DilateRadii,
   type MaskGrid,
 } from "@/lib/meetings/backgrounds";
 
 const WASM_PATH = "/mediapipe";
 const MODEL_PATH = "/mediapipe/selfie_segmenter.tflite";
-
-/** The frame rate the composited track is captured at. */
-const OUTPUT_FPS = 24;
 
 /** A mask MediaPipe hands back, which must be closed once read. */
 interface CategoryMask { getAsUint8Array: () => Uint8Array; close: () => void }
@@ -124,7 +126,11 @@ export class BackgroundProcessor {
   /** This frame's coverage, before it is blended into the history. */
   private maskTarget: Uint8ClampedArray | null = null;
   private grid: MaskGrid = maskGrid(640, 480);
-  private dilateRadius = 1;
+  private dilateRadii: DilateRadii = { up: 1, down: 0, side: 1 };
+  /** What growth may claim, rebuilt from each frame's own coverage. */
+  private dilateLimit: Uint8ClampedArray | null = null;
+  /** The smoothed mask with its ramp tightened — never the history itself. */
+  private maskEdge: Uint8ClampedArray | null = null;
   private readonly outputTrack: MediaStreamTrack;
   private readonly stream: MediaStream;
 
@@ -136,6 +142,8 @@ export class BackgroundProcessor {
   private raf = 0;
   private slowFrames = 0;
   private lastTimestamp = -1;
+  /** When the last composite actually ran, for pacing. Null before the first. */
+  private lastDrawnAt: number | null = null;
   /** The camera this was built on has stopped. Nothing left to composite. */
   private sourceEnded = false;
   /** Detaches the `ended` listener on that camera. */
@@ -302,6 +310,9 @@ export class BackgroundProcessor {
 
   private stop(): void {
     this.running = false;
+    // So a resumed effect draws immediately rather than waiting out an interval
+    // measured from before it paused.
+    this.lastDrawnAt = null;
     // Dropped so a resumed effect starts from the live mask rather than blending
     // out of wherever the person was standing when it paused.
     this.maskHistory = null;
@@ -313,6 +324,19 @@ export class BackgroundProcessor {
   private tick = (): void => {
     if (!this.running) return;
     const started = performance.now();
+
+    // requestAnimationFrame fires at the DISPLAY's refresh rate; the canvas this
+    // draws into is captured at OUTPUT_FPS. Without this the segmentation, the
+    // mask upscale, the putImageData and both blurs ran two to five times for
+    // every frame anybody would ever see. Skipping is a cheap return, and the
+    // animation frame is still what keeps the loop synced to compositing and
+    // stopped while the tab is hidden.
+    if (!shouldDrawFrame(this.lastDrawnAt, started, OUTPUT_FPS)) {
+      this.raf = requestAnimationFrame(this.tick);
+      return;
+    }
+    this.lastDrawnAt = started;
+
     try {
       this.drawFrame(started);
     } catch (err) {
@@ -400,18 +424,36 @@ export class BackgroundProcessor {
     // verdict is usually "no". The confidence behind it is not zero, and reading
     // it is what keeps the top of someone's head attached to them.
     const confidence = result.confidenceMasks?.[0];
+    let graded = false;
     if (confidence) {
       sampleCoverageFromConfidence(target, confidence.getAsFloat32Array(), width, height, grid);
+      graded = true;
     } else if (result.categoryMask) {
       sampleCoverageFromCategory(target, result.categoryMask.getAsUint8Array(), width, height, grid);
     } else {
       return;
     }
 
-    // Grow it outward. Believing the model sooner recovers most of a head
-    // covering; the boundary it does draw still tends to sit inside the fabric
-    // rather than outside it, and this carries it across.
-    dilateCoverage(target, grid.width, grid.height, this.dilateRadius);
+    // Grow it, upward mostly, and only into pixels the model was unsure about.
+    //
+    // Two separate things stop this becoming the halo it used to be. The radii
+    // are directional, because a head covering sits ABOVE a head and growth
+    // sideways or downward only hangs room off somebody's arms and desk. And the
+    // ceiling forbids growth from inventing coverage where the model was
+    // confident there is none — so the fabric of a headwrap fills in and the
+    // wall behind a shoulder does not.
+    //
+    // The ceiling is only meaningful on the graded path. A category mask is 0 or
+    // 255 with no uncertainty band, so constraining growth there would grow
+    // nothing and hand back the missing headwear this exists to keep.
+    let limit: Uint8ClampedArray | null = null;
+    if (graded) {
+      if (!this.dilateLimit || this.dilateLimit.length !== target.length) {
+        this.dilateLimit = new Uint8ClampedArray(target.length);
+      }
+      limit = dilateCeiling(this.dilateLimit, target);
+    }
+    dilateCoverage(target, grid.width, grid.height, this.dilateRadii, limit);
 
     ctx.save();
     ctx.filter = "none";
@@ -431,9 +473,17 @@ export class BackgroundProcessor {
     if (!this.maskImage || this.maskImage.width !== grid.width || this.maskImage.height !== grid.height) {
       this.maskImage = maskCtx.createImageData(grid.width, grid.height);
     }
+    // Tighten the ramp on the way out, into a separate buffer. The blend's
+    // history must keep its graded values: sharpening it would compound frame on
+    // frame until the mask was binary, and the smoothing above would be running
+    // with nothing left to smooth.
+    if (!this.maskEdge || this.maskEdge.length !== this.maskHistory.length) {
+      this.maskEdge = new Uint8ClampedArray(this.maskHistory.length);
+    }
+    const edge = sharpenEdge(this.maskEdge, this.maskHistory);
+
     const maskPixels = this.maskImage.data;
-    const history = this.maskHistory;
-    for (let i = 0, p = 3; i < history.length; i++, p += 4) maskPixels[p] = history[i];
+    for (let i = 0, p = 3; i < edge.length; i++, p += 4) maskPixels[p] = edge[i];
     maskCtx.putImageData(this.maskImage, 0, 0);
 
     // The camera frame, kept only where the mask covers. The mask is drawn
@@ -461,12 +511,14 @@ export class BackgroundProcessor {
    */
   private resizeMask(frameWidth: number, frameHeight: number): void {
     this.grid = maskGrid(frameWidth, frameHeight);
-    this.dilateRadius = maskDilatePx(frameWidth, this.grid);
+    this.dilateRadii = maskDilatePx(frameWidth, this.grid);
     this.mask.width = this.grid.width;
     this.mask.height = this.grid.height;
     this.maskTarget = new Uint8ClampedArray(this.grid.width * this.grid.height);
     this.maskImage = null;
     this.maskHistory = null;
+    this.dilateLimit = null;
+    this.maskEdge = null;
   }
 
   private paintBackground(ctx: CanvasRenderingContext2D, width: number, height: number): void {

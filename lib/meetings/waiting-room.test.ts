@@ -1,9 +1,15 @@
 import {
+  DECISION_SETTLE_MS,
+  NO_DECISIONS,
   PRESENCE_GRACE_MS,
   applyAdmissionChange,
+  forgetDecided,
   presentOnly,
+  pruneDecided,
+  rememberDecided,
   stillWaiting,
   toEntry,
+  withoutDecided,
   type AdmissionChange,
   type WaitingEntry,
   type WaitingRow,
@@ -163,5 +169,108 @@ describe("presentOnly", () => {
 
   it("survives an empty panel", () => {
     expect(presentOnly([], now)).toEqual([]);
+  });
+});
+
+// ── The chip that came back ──────────────────────────────────────────────────
+//
+// Admit and Deny take somebody off the panel before the server answers, and two
+// things then read the database and put them back: the coalesced full re-read
+// (scheduled 400ms after ANY Realtime event, so a second guest's presence write
+// is enough to trigger it) and a presence UPDATE on the just-decided row, whose
+// status is still `waiting`. The host saw the chip vanish, reappear and vanish
+// again — and could press Admit twice on somebody already in the room.
+describe("decisions the host has already made", () => {
+  const entry = (id: string, seenAtMs = 1_000): WaitingEntry => ({
+    id, from: `guest-${id}`, displayName: `Guest ${id}`, seenAtMs,
+  });
+
+  it("keeps a just-admitted person out of a re-read that still lists them", () => {
+    const list = [entry("a"), entry("b")];
+    const decided = rememberDecided(NO_DECISIONS, ["a"], 5_000);
+    expect(withoutDecided(list, decided, 5_100).map((p) => p.id)).toEqual(["b"]);
+  });
+
+  it("keeps them out of a Realtime event that re-inserts them", () => {
+    // A presence write on the admitted row: an UPDATE whose status is still
+    // `waiting`, because the decision has not committed.
+    const afterEvent = applyAdmissionChange([entry("b")], {
+      eventType: "UPDATE",
+      new: { id: "a", guest_key: "g-a", display_name: "Guest a", status: "waiting", last_seen_at: null },
+    });
+    expect(afterEvent.map((p) => p.id)).toEqual(["b", "a"]);
+
+    const decided = rememberDecided(NO_DECISIONS, ["a"], 5_000);
+    expect(withoutDecided(afterEvent, decided, 5_100).map((p) => p.id)).toEqual(["b"]);
+  });
+
+  it("covers Admit all, which decides on everybody at once", () => {
+    const list = [entry("a"), entry("b"), entry("c")];
+    const decided = rememberDecided(NO_DECISIONS, ["a", "b", "c"], 5_000);
+    expect(withoutDecided(list, decided, 5_100)).toEqual([]);
+  });
+
+  it("believes the table again once the decision has had time to settle", () => {
+    const list = [entry("a")];
+    const decided = rememberDecided(NO_DECISIONS, ["a"], 0);
+    expect(withoutDecided(list, decided, DECISION_SETTLE_MS - 1)).toEqual([]);
+    expect(withoutDecided(list, decided, DECISION_SETTLE_MS).map((p) => p.id)).toEqual(["a"]);
+  });
+
+  it("puts the person back when the decision failed", () => {
+    // The whole reason forgetting exists. A rejected POST re-reads to restore
+    // them, and a suppression left in place would swallow that correction —
+    // the guest would vanish from the panel and stay gone, which is worse than
+    // the flicker.
+    const list = [entry("a")];
+    let decided = rememberDecided(NO_DECISIONS, ["a"], 5_000);
+    expect(withoutDecided(list, decided, 5_100)).toEqual([]);
+
+    decided = forgetDecided(decided, ["a"]);
+    expect(withoutDecided(list, decided, 5_100).map((p) => p.id)).toEqual(["a"]);
+  });
+
+  it("never suppresses a guest who knocks again", () => {
+    // Suppression is by row id, and a fresh knock is a fresh row.
+    const decided = rememberDecided(NO_DECISIONS, ["old-row"], 5_000);
+    const reknock = [{ ...entry("new-row"), from: "guest-old-row" }];
+    expect(withoutDecided(reknock, decided, 5_100).map((p) => p.id)).toEqual(["new-row"]);
+  });
+
+  it("leaves the list alone when nothing has been decided", () => {
+    const list = [entry("a"), entry("b")];
+    expect(withoutDecided(list, NO_DECISIONS, 9_999)).toEqual(list);
+  });
+
+  it("treats a decision stamped in the future as fresh rather than expired", () => {
+    // A clock that disagrees, not a decision from later. Believing the table
+    // immediately is the flicker this exists to stop.
+    const decided = rememberDecided(NO_DECISIONS, ["a"], 10_000);
+    expect(withoutDecided([entry("a")], decided, 1_000)).toEqual([]);
+  });
+
+  it("forgets settled decisions so the map cannot grow all meeting", () => {
+    let decided = rememberDecided(NO_DECISIONS, ["old"], 0);
+    decided = rememberDecided(decided, ["new"], DECISION_SETTLE_MS);
+    expect(decided.size).toBe(2);
+
+    const pruned = pruneDecided(decided, DECISION_SETTLE_MS);
+    expect([...pruned.keys()]).toEqual(["new"]);
+  });
+
+  it("returns the same map when a prune would change nothing", () => {
+    // So a prune on every tick is not a new object and a new render.
+    const decided = rememberDecided(NO_DECISIONS, ["a"], 5_000);
+    expect(pruneDecided(decided, 5_100)).toBe(decided);
+    expect(pruneDecided(NO_DECISIONS, 99_999)).toBe(NO_DECISIONS);
+  });
+
+  it("does not mutate the map it is given", () => {
+    const first = rememberDecided(NO_DECISIONS, ["a"], 1_000);
+    const second = rememberDecided(first, ["b"], 2_000);
+    expect([...first.keys()]).toEqual(["a"]);
+    expect([...second.keys()]).toEqual(["a", "b"]);
+    expect(forgetDecided(second, ["a"])).not.toBe(second);
+    expect([...second.keys()]).toEqual(["a", "b"]);
   });
 });

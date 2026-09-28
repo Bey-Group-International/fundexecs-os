@@ -178,3 +178,123 @@ export function shouldRecordPresence(
   // be wrong, and the next honest write will pass it.
   return nowMs - seen >= writeEveryMs;
 }
+
+// ── Decisions the host has already made ─────────────────────────────────────
+//
+// Admit and Deny take the person off the panel immediately, before the server
+// has answered. That is right — letting somebody in should feel like one click,
+// and the round trip is not the host's to wait through — but it puts the screen
+// ahead of the database, and two things then read the database and put it back.
+//
+// `loadWaiting` replaces the whole list with what the table says. It is
+// scheduled 400ms after any Realtime event and also runs every ten seconds
+// while the subscription is down, so it does not have to be the admit's own
+// event that triggers it: a second guest's presence write is enough. If the
+// decision has not committed by the time that read lands, the person the host
+// just admitted is still `waiting`, and their chip comes back.
+//
+// `applyAdmissionChange` does the same from the other direction. A presence
+// write on the just-admitted row is an UPDATE whose status is still `waiting`,
+// so it re-inserts the entry the host removed.
+//
+// Either way the host sees the chip vanish, reappear, and vanish again — and in
+// that window they can press Admit a second time on somebody who is already in.
+//
+// So a decision is remembered for as long as it might still be in flight, and
+// nothing the database says can put that person back during it. Remembered by
+// row id, which is unique per knock: a guest who knocks again gets a new row and
+// is never caught by this.
+
+/**
+ * Decisions made locally but not yet confirmed: row id → when it was made.
+ *
+ * A Map rather than a Set because the entries have to expire. Without a clock on
+ * them, a suppression that was never confirmed would hide that row for the rest
+ * of the meeting.
+ */
+export type DecidedIds = ReadonlyMap<string, number>;
+
+export const NO_DECISIONS: DecidedIds = new Map();
+
+/**
+ * How long a local decision outranks the table.
+ *
+ * Generous against the round trip it covers — a cold serverless invocation and a
+ * write, against a 400ms reconcile — and short enough that a decision which
+ * somehow never landed corrects itself while the host is still looking at the
+ * meeting. Being wrong for ten seconds in the direction of "they are in" is the
+ * cheaper error: the alternative is a chip that flickers and can be
+ * double-pressed.
+ */
+export const DECISION_SETTLE_MS = 10_000;
+
+/** Remember decisions just made, so the table cannot undo them yet. */
+export function rememberDecided(
+  decided: DecidedIds,
+  ids: readonly string[],
+  nowMs: number,
+): DecidedIds {
+  if (ids.length === 0) return decided;
+  const next = new Map(decided);
+  for (const id of ids) next.set(id, nowMs);
+  return next;
+}
+
+/**
+ * Forget decisions, because they did not happen.
+ *
+ * The failure path needs this and it is the reason `rememberDecided` is not the
+ * whole story: when the POST is rejected the caller re-reads to put the person
+ * back, and a suppression left in place would swallow exactly that correction.
+ * A guest whose admit failed would disappear from the panel and stay gone,
+ * which is worse than the flicker being fixed.
+ */
+export function forgetDecided(decided: DecidedIds, ids: readonly string[]): DecidedIds {
+  if (ids.length === 0 || decided.size === 0) return decided;
+  const next = new Map(decided);
+  for (const id of ids) next.delete(id);
+  return next;
+}
+
+/** Drop decisions old enough to have settled, so the map cannot grow all meeting. */
+export function pruneDecided(
+  decided: DecidedIds,
+  nowMs: number,
+  settleMs = DECISION_SETTLE_MS,
+): DecidedIds {
+  if (decided.size === 0) return decided;
+  const next = new Map<string, number>();
+  for (const [id, at] of decided) {
+    if (!settled(at, nowMs, settleMs)) next.set(id, at);
+  }
+  return next.size === decided.size ? decided : next;
+}
+
+/** Whether a decision is old enough that the table should be believed again. */
+function settled(decidedAtMs: number, nowMs: number, settleMs: number): boolean {
+  // A decision stamped in the future is a clock that disagrees, not one from
+  // later. Treated as fresh: it expires on its own, and the alternative is
+  // trusting the table immediately, which is the flicker.
+  if (nowMs < decidedAtMs) return false;
+  return nowMs - decidedAtMs >= settleMs;
+}
+
+/**
+ * The list with people the host has just decided on taken out.
+ *
+ * Applied to anything sourced from the database — the full re-read and each
+ * Realtime event alike — because both can carry a row whose decision has not
+ * committed yet.
+ */
+export function withoutDecided(
+  peers: readonly WaitingEntry[],
+  decided: DecidedIds,
+  nowMs: number,
+  settleMs = DECISION_SETTLE_MS,
+): WaitingEntry[] {
+  if (decided.size === 0) return [...peers];
+  return peers.filter((p) => {
+    const at = decided.get(p.id);
+    return at === undefined || settled(at, nowMs, settleMs);
+  });
+}

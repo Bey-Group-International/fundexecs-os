@@ -177,11 +177,17 @@ import { isAdmissionLive, type AdmissionUiState } from "@/lib/meetings/admission
 import { REMOVAL_NUDGE, removalChannelName } from "@/lib/meetings/removal-channel";
 import { subjectFor, subjectKey, type RemovalSubject } from "@/lib/meetings/removal";
 import {
+  NO_DECISIONS,
   PRESENCE_GRACE_MS,
   applyAdmissionChange,
+  forgetDecided,
   presentOnly,
+  pruneDecided,
+  rememberDecided,
   toEntry,
+  withoutDecided,
   type AdmissionChange,
+  type DecidedIds,
   type WaitingRow,
 } from "@/lib/meetings/waiting-room";
 import {
@@ -1757,6 +1763,24 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
 
   // Waiting room
   const [waitingPeers, setWaitingPeers] = useState<WaitingPeer[]>([]);
+  /**
+   * Admissions the host has decided but the table may not carry yet.
+   *
+   * A ref, because it guards writes to `waitingPeers` rather than being
+   * rendered: putting it in state would re-render the room on every decision for
+   * something nothing displays. See lib/meetings/waiting-room.ts for why the
+   * screen has to outrank the database for a moment.
+   */
+  const decidedRef = useRef<DecidedIds>(NO_DECISIONS);
+  /**
+   * The panel's current contents, for the handlers that need to read them.
+   *
+   * "Admit all" is a decision about the people the host can SEE, so it has to
+   * name them — and it cannot read them out of a setState updater, because an
+   * updater has to be pure and React is free to run it more than once.
+   */
+  const waitingPeersRef = useRef<WaitingPeer[]>([]);
+  waitingPeersRef.current = waitingPeers;
   /**
    * Who the host has removed from this meeting.
    *
@@ -3648,7 +3672,13 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
       // where it stops.
       .limit(WAITING_CAP);
     const rows = (data ?? []) as WaitingRow[];
-    setWaitingPeers(rows.map(toEntry));
+    // Anything the host has just decided on is held back, however the table
+    // still describes it. This read is scheduled off ANY admission event — a
+    // second guest's presence write will do — so it routinely lands inside the
+    // window where an admit is still in flight.
+    const now = Date.now();
+    decidedRef.current = pruneDecided(decidedRef.current, now);
+    setWaitingPeers(withoutDecided(rows.map(toEntry), decidedRef.current, now));
   }, [meetingId, supabase]);
 
   /** Everyone the host has removed, for the panel that can let them back in. */
@@ -3723,7 +3753,16 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
         "postgres_changes",
         { event: "*", schema: "public", table: "live_meeting_admissions", filter: `meeting_id=eq.${meetingId}` },
         (payload: unknown) => {
-          setWaitingPeers((prev) => applyAdmissionChange(prev, payload as AdmissionChange));
+          // Same guard on the event path: a presence write on a just-admitted
+          // row arrives as an UPDATE whose status is still `waiting`, which
+          // would put the person the host removed straight back.
+          setWaitingPeers((prev) =>
+            withoutDecided(
+              applyAdmissionChange(prev, payload as AdmissionChange),
+              decidedRef.current,
+              Date.now(),
+            ),
+          );
           scheduleReconcile();
         },
       )
@@ -5565,8 +5604,18 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
   // guest then vanished from the host's panel while still standing outside, and
   // the host had every reason to think they had let them in. So a failed decision
   // re-reads the list and puts them back, where they can be admitted again.
-  const decideAdmission = useCallback(async (body: Record<string, unknown>) => {
+  /**
+   * Send a decision, and hold the panel to it until the table catches up.
+   *
+   * `ids` is what was removed from the screen optimistically. Remembering it
+   * stops the coalesced re-read and the Realtime events putting those people
+   * back while the POST is in flight; forgetting it on failure is what lets the
+   * re-read below actually restore them, which is the whole point of that
+   * re-read and would otherwise be silently swallowed.
+   */
+  const decideAdmission = useCallback(async (body: Record<string, unknown>, ids: readonly string[]) => {
     if (!meetingId) return;
+    decidedRef.current = rememberDecided(decidedRef.current, ids, Date.now());
     let ok = false;
     try {
       const res = await fetch(`/api/meetings/${meetingId}/admissions`, {
@@ -5577,22 +5626,28 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
       ok = res.ok;
       if (!ok) console.warn("[meeting] admission decision rejected", res.status);
     } catch (e) { console.warn("[meeting] admission decision failed", e); }
-    if (!ok) await loadWaiting();
+    if (!ok) {
+      decidedRef.current = forgetDecided(decidedRef.current, ids);
+      await loadWaiting();
+    }
   }, [meetingId, loadWaiting]);
 
   const admitPeer = useCallback((admissionId: string) => {
     setWaitingPeers((prev) => prev.filter((w) => w.id !== admissionId));
-    void decideAdmission({ decision: "admit", admissionId });
+    void decideAdmission({ decision: "admit", admissionId }, [admissionId]);
   }, [decideAdmission]);
 
   const denyPeer = useCallback((admissionId: string) => {
     setWaitingPeers((prev) => prev.filter((w) => w.id !== admissionId));
-    void decideAdmission({ decision: "deny", admissionId });
+    void decideAdmission({ decision: "deny", admissionId }, [admissionId]);
   }, [decideAdmission]);
 
   const admitAll = useCallback(() => {
+    // Every id on the panel right now: "all" is a decision about the people the
+    // host can see, and those are the ones the table must not hand back.
+    const ids = waitingPeersRef.current.map((w) => w.id);
     setWaitingPeers([]);
-    void decideAdmission({ decision: "admit", all: true });
+    void decideAdmission({ decision: "admit", all: true }, ids);
   }, [decideAdmission]);
 
   /**
