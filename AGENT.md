@@ -3994,6 +3994,51 @@ Deployed, monitoring               →  live, observability active
              |  single-label model — and the next real step is guided upsampling
              |  against the frame's own luma, so the boundary snaps to the picture
              |  instead of being positioned by a blur.
+             |
+             |  MEETINGS XII — THE PROVIDER THE DATABASE WOULD NOT ACCEPT
+             |  A HOST REPORTED IT FROM PRODUCTION: "Meeting saved — invited 2
+             |  guests by email; external calendar sync failed: The calendar event
+             |  was written but could not be recorded: new row for relation
+             |  live_meetings violates check constraint
+             |  live_meetings_external_provider_check."
+             |  recordSync wrote `external_calendar_provider: "google"`. The
+             |  constraint allows 'google_calendar', 'outlook', 'calendly', 'ical'.
+             |  Postgres rejected EVERY call — and recordSync runs on both
+             |  outcomes, so the damage was two-sided: on success the event went
+             |  onto the calendar and the row never learned its id or its status,
+             |  and on failure the row could not even record that it had failed.
+             |  The whole error trail MEETINGS VIII built was writing into a
+             |  statement that never committed.
+             |  THE LITERAL WAS OLDER THAN THE BUG REPORT. It sat in
+             |  google-write.server.ts before MEETINGS VIII, and nothing had ever
+             |  called it — that WAS the MEETINGS VIII finding, "a capability
+             |  nobody can find is indistinguishable from one that does not
+             |  exist". Making the path reachable is what turned a dormant wrong
+             |  literal into a host's error message. Shipping a feature over
+             |  untested code makes you the author of everything it does.
+             |  WHY NOTHING CAUGHT IT, which is the part worth keeping. A mocked
+             |  Supabase client has no constraints to violate, so no amount of
+             |  unit-testing the write could see this: the assertion would have to
+             |  know what the schema accepts, and it did not. Worse, the FIXTURE
+             |  said `external_calendar_provider: "google"` — describing a row the
+             |  database could never have produced. A test agreeing with a bug is
+             |  how the bug survives a suite that looks thorough. The guard now
+             |  reads the migration, parses the constraint's allowed set, and
+             |  asserts the constant the writer uses is in it; a constraint
+             |  narrowed later fails in Jest instead of in somebody's meeting.
+             |  And the constant is SYNCABLE_PROVIDER, the one the planner already
+             |  used — so there is no longer a second spelling to disagree with.
+             |  TWO THINGS COMPUTE THE SAME NUMBER; DO THEY AGREE? has a sibling:
+             |  two things NAME the same thing, and only one of them is talking to
+             |  the database.
+             |  No data migration: the constraint refused every write, so no row
+             |  ever carried the bad value. The events are on the calendars,
+             |  though, with rows that do not know their ids — findEventByMarker
+             |  recovers those rather than duplicating them, which is the one part
+             |  of this that was built for exactly this failure.
+             |  Confidence: typecheck/eslint clean, build passes, Jest 7190 →
+             |  7194 across 511 suites; both new behavioural cases fail against
+             |  the literal that shipped.
 ```
 
 ---

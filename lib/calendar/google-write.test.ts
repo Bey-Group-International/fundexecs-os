@@ -33,7 +33,12 @@ function meeting(over: Partial<WritableMeeting> = {}): WritableMeeting {
     deleted_at: null,
     external_calendar_event_id: null,
     external_calendar_sync_enabled: true,
-    external_calendar_provider: "google",
+    // "google_calendar", because that is the only spelling the
+    // live_meetings_external_provider_check constraint allows — so a row
+    // carrying "google" is one the database could never have produced. The
+    // fixture said "google" while the writer wrote "google" and every write was
+    // rejected in production; a fixture agreeing with a bug is how it survived.
+    external_calendar_provider: "google_calendar",
     ...over,
   };
 }
