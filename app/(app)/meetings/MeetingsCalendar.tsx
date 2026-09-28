@@ -50,6 +50,7 @@ import {
   type CalendarView,
 } from "@/lib/meetings/calendar";
 import { defaultBlockEnd } from "@/lib/meetings/blocks";
+import { MEETING_KIND } from "@/lib/meetings/one-way";
 import {
   buildDayAgenda,
   summarizeDayAgenda,
@@ -204,16 +205,42 @@ export function MeetingsCalendar({
   const today = useMemo(() => new Date(dayStartMs), [dayStartMs]);
 
   // ── Realtime refresh of the scheduled meetings that populate the grid ──────
+  //
+  // The months around the one on screen, not the organisation's whole history.
+  // This read had no date bound and sorted ascending with a limit of 500, so it
+  // fetched the OLDEST 500 meetings the organisation ever scheduled — and once
+  // there were more than that, the months anybody would look at fell off the
+  // end. Keyed to the month so moving between days and weeks inside it costs
+  // nothing; wide enough for the month grid's spill and a 21-day agenda.
+  const monthStartMs = new Date(anchor.getFullYear(), anchor.getMonth(), 1).getTime();
+  const meetingWindow = useMemo(() => {
+    const monthStart = new Date(monthStartMs);
+    return {
+      from: addDays(monthStart, -45).toISOString(),
+      to: addDays(monthStart, 75).toISOString(),
+    };
+  }, [monthStartMs]);
+  const meetingWindowRef = useRef(meetingWindow);
+  meetingWindowRef.current = meetingWindow;
+
   async function refresh() {
     const supabase = createClient();
+    const { from, to } = meetingWindowRef.current;
     const { data } = await supabase
       .from("live_meetings")
       .select(CAL_SELECT)
       .eq("organization_id", orgId)
+      // Meetings only, as every other meetings read filters: a recorded call is
+      // a live_meetings row too, and is not something to put on a calendar.
+      .eq("kind", MEETING_KIND)
       .is("deleted_at", null)
-      .not("scheduled_at", "is", null)
+      .gte("scheduled_at", from)
+      .lt("scheduled_at", to)
       .order("scheduled_at", { ascending: true })
       .limit(500);
+    // A response for a window the member has already moved away from is
+    // dropped rather than painted over the one they are looking at.
+    if (meetingWindowRef.current.from !== from) return;
     setMeetings((data ?? []) as unknown as CalendarMeeting[]);
   }
 
@@ -231,9 +258,14 @@ export function MeetingsCalendar({
     }
   }
 
+  // Re-read when the window moves to another month.
+  useEffect(() => {
+    void refresh();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [meetingWindow.from, meetingWindow.to]);
+
   useEffect(() => {
     const supabase = createClient();
-    void refresh();
     void refreshBlocks();
     function scheduleRefresh() {
       if (refreshTimer.current) clearTimeout(refreshTimer.current);
