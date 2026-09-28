@@ -12,9 +12,10 @@ import { mailboxConfigured } from "@/lib/meetings/mailbox.server";
 import { MailboxWarning } from "./MailboxWarning";
 import { loadMeetingLog } from "@/lib/meetings/meeting-log.server";
 import { toLogEntry, sortLogEntries, type MeetingLogEntry } from "@/lib/meetings/meeting-log";
-import { isPastMeeting } from "@/lib/meetings/schedule";
+import { isPastMeeting, isUpcomingMeeting, upcomingWindowStart } from "@/lib/meetings/schedule";
 import { attendedButNotHosted } from "@/lib/meetings/attendance";
 import { MEETING_KIND } from "@/lib/meetings/one-way";
+import { CALENDAR_VIEW_PARAM, parseCalendarView } from "./calendar-view";
 
 export const metadata: Metadata = {
   title: "Meetings — FundExecs OS",
@@ -72,12 +73,69 @@ interface LiveMeeting {
 const MEETING_SELECT =
   "id, room_code, title, description, location, meeting_url, status, host_id, created_at, started_at, ended_at, scheduled_at, duration_minutes, timezone, meeting_type, priority, tags, attendees, source, sync_status, source_event_id, source_calendar_id, deal_id, related_contact_id, related_company_id, related_fund_id, objective, agenda, preparation_requirements, preparation_status, followup_status, assigned_copilot_agent, related_record_type, related_record_id, calendar_visibility, reminder_minutes, external_calendar_provider, external_calendar_sync_enabled, external_calendar_sync_status, is_draft, locked_at, updated_at, guest_quick_access";
 
-async function getMeetings(orgId: string, userId: string): Promise<LiveMeeting[]> {
+/**
+ * Meetings this page renders at once.
+ *
+ * The list views replace this snapshot from their own endpoints moments later,
+ * so its job is to be RIGHT on first paint rather than complete.
+ */
+const RECENT_LIMIT = 50;
+
+/**
+ * Attendance rows read to recover a meeting the org window missed.
+ *
+ * This was unbounded, and `live_meeting_participants` grows by one row per
+ * meeting a person attends for the life of their account — so it was heading for
+ * PostgREST's `max_rows` ceiling, which truncates silently. Bounded to the
+ * newest, because a snapshot of fifty meetings cannot use more: an older
+ * attendance can only recover a meeting the sort below then drops.
+ */
+const ATTENDANCE_LIMIT = 200;
+
+async function getMeetings(
+  orgId: string,
+  userId: string,
+  /**
+   * One clock for the whole render.
+   *
+   * Passed in rather than read here: the page partitions Past with its own
+   * `Date.now()`, and two readings milliseconds apart can put a meeting whose
+   * window closes between them into neither list.
+   */
+  now: number,
+  opts: {
+    /**
+     * Whether to read the history the calendar draws from.
+     *
+     * Off for an ordinary visit. `initialMeetings` and `initialPast` are passed
+     * to exactly one component — MeetingsCalendar — which is code-split behind
+     * `?view=`, is not mounted on first paint, and refetches its own five
+     * hundred rows the moment it does mount. So every meetings page load was
+     * running a forty-one-column history query and serialising the result into
+     * the HTML for a component that would not read it.
+     */
+    withHistory: boolean;
+  },
+): Promise<{
+  all: LiveMeeting[];
+  upcoming: LiveMeeting[];
+}> {
   const supabase = await createServerClient();
 
-  // Both reads at once: neither depends on the other, and running them in
-  // series put a whole round trip in front of the meetings page for nothing.
-  const [{ data: hosted }, { data: participantRows }] = await Promise.all([
+  // Two windows, because one cannot serve both lists.
+  //
+  // There used to be a single query ordered `scheduled_at DESC NULLS LAST,
+  // created_at DESC` with a 50-row limit, and the two halves of that ordering
+  // fought each other: nulls last puts every INSTANT meeting at the end of the
+  // result, and the limit then cuts from the end. An organisation with fifty
+  // scheduled meetings showed none of its instant ones — which is the product's
+  // commonest kind — while the client-side refresh ordered by `created_at` and
+  // found them, so the list also changed content a moment after the page
+  // settled.
+  //
+  // Asking the two questions separately costs one more round trip in parallel
+  // and answers both exactly: what is coming up, and what happened recently.
+  const [{ data: soon }, { data: recent }, { data: attendance }] = await Promise.all([
     supabase
       .from("live_meetings")
       .select(MEETING_SELECT)
@@ -89,36 +147,71 @@ async function getMeetings(orgId: string, userId: string): Promise<LiveMeeting[]
       // past meetings. The archive lists them instead.
       .eq("kind", MEETING_KIND)
       .is("deleted_at", null)
-      .order("scheduled_at", { ascending: false, nullsFirst: false })
-      .order("created_at", { ascending: false })
-      .limit(50),
-    supabase
-      .from("live_meeting_participants")
-      .select("meeting_id")
-      .eq("user_id", userId),
+      .eq("is_draft", false)
+      .neq("status", "ended")
+      // The same window /api/meetings/upcoming uses, so the snapshot this page
+      // paints and the list that replaces it cannot disagree about whether a
+      // meeting already in progress belongs here.
+      .gte("scheduled_at", upcomingWindowStart(now).toISOString())
+      .order("scheduled_at", { ascending: true })
+      .limit(100),
+    opts.withHistory
+      ? supabase
+          .from("live_meetings")
+          .select(MEETING_SELECT)
+          .eq("organization_id", orgId)
+          .eq("kind", MEETING_KIND)
+          .is("deleted_at", null)
+          // By recency, full stop. Instant meetings carry no `scheduled_at` and
+          // belong in this window on the same terms as everything else.
+          .order("created_at", { ascending: false })
+          .limit(RECENT_LIMIT)
+      : { data: null },
+    opts.withHistory
+      ? supabase
+          .from("live_meeting_participants")
+          .select("meeting_id, joined_at")
+          .eq("user_id", userId)
+          .order("joined_at", { ascending: false })
+          .limit(ATTENDANCE_LIMIT)
+      : { data: null },
   ]);
 
-  const nonHostedIds = attendedButNotHosted(
-    (participantRows ?? []).map((r: { meeting_id: string }) => r.meeting_id),
-    (hosted ?? []).map((m: { id: string }) => m.id),
-  );
+  const byId = new Map<string, LiveMeeting>();
+  for (const row of [...((soon ?? []) as LiveMeeting[]), ...((recent ?? []) as LiveMeeting[])]) {
+    byId.set(row.id, row);
+  }
 
-  let participated: LiveMeeting[] = [];
-  if (nonHostedIds.length > 0) {
+  // A meeting somebody attended that neither window caught — one held in
+  // another organisation, or older than the recent window. Rare, and the only
+  // reason this read exists.
+  const missingIds = attendedButNotHosted(
+    (attendance ?? []).map((r: { meeting_id: string }) => r.meeting_id),
+    [...byId.keys()],
+  );
+  if (opts.withHistory && missingIds.length > 0) {
     const { data } = await supabase
       .from("live_meetings")
       .select(MEETING_SELECT)
-      .in("id", nonHostedIds)
+      .in("id", missingIds)
       .eq("kind", MEETING_KIND)
       .is("deleted_at", null)
       .order("created_at", { ascending: false })
-      .limit(50);
-    participated = (data ?? []) as LiveMeeting[];
+      .limit(RECENT_LIMIT);
+    for (const row of (data ?? []) as LiveMeeting[]) byId.set(row.id, row);
   }
 
-  const all = [...(hosted ?? []), ...participated] as LiveMeeting[];
-  all.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
-  return all.slice(0, 50);
+  const all = [...byId.values()].sort(
+    (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
+  );
+
+  // Upcoming is taken from its own window rather than sliced out of `all`, so a
+  // meeting scheduled months ahead is never pushed out of it by recent activity.
+  const upcoming = all
+    .filter((m) => isUpcomingMeeting(m, now))
+    .sort((a, b) => new Date(a.scheduled_at!).getTime() - new Date(b.scheduled_at!).getTime());
+
+  return { all, upcoming };
 }
 
 export default async function MeetingsPage(props: {
@@ -127,7 +220,14 @@ export default async function MeetingsPage(props: {
   // Google Calendar's connect routes report back here as `?google_calendar=…`.
   // Nothing read it, so connecting a calendar looked identical whether it
   // succeeded, was declined, or died on a missing vault key.
-  const oauthOutcome = readOAuthOutcome(await props.searchParams);
+  const searchParams = await props.searchParams;
+  const oauthOutcome = readOAuthOutcome(searchParams);
+  // Whether this visit is actually opening the calendar. The overlay reads its
+  // pane from `?view=`, so the same param that decides whether the grid mounts
+  // decides whether the history it draws from is worth reading at all.
+  const viewParam = searchParams[CALENDAR_VIEW_PARAM];
+  const calendarRequested =
+    parseCalendarView(Array.isArray(viewParam) ? viewParam[0] : viewParam) !== null;
   const ctx = await getSessionContext();
   if (!ctx) redirect("/login");
   if (!ctx.orgId) redirect("/onboarding");
@@ -140,24 +240,27 @@ export default async function MeetingsPage(props: {
   // logRows: the log is its own query rather than a slice of `meetings`. That
   // one stops at 50 rows and carries no reports, and the whole point of a log
   // is that a meeting from months ago is still in it, with what it produced.
-  const logClient = await createServerClient();
-  const [meetings, canSendEmail, logRows] = await Promise.all([
-    getMeetings(ctx.orgId, userId),
-    mailboxConfigured(await createServerClient(), userId, ctx.orgId),
-    loadMeetingLog(logClient, ctx.orgId, userId),
-  ]);
+  // One client, awaited once. The `await createServerClient()` used to sit INSIDE
+  // this array, and array elements evaluate left to right — so it blocked
+  // between the first read starting and the other two, putting a round trip in
+  // front of the page for nothing.
+  const client = await createServerClient();
   const now = Date.now();
-  // "Upcoming" keys off the meeting's END, not its start — a meeting that's
-  // currently in progress (start passed, room not ended) belongs in Upcoming
-  // (where the live "In progress" state + presence render), not Past.
-  const upcoming = meetings
-    .filter((m) => {
-      if (m.is_draft || !m.scheduled_at || m.status === "ended") return false;
-      const end = new Date(m.scheduled_at).getTime() + (m.duration_minutes ?? 60) * 60_000;
-      return end >= now;
-    })
-    .sort((a, b) => new Date(a.scheduled_at!).getTime() - new Date(b.scheduled_at!).getTime());
-  const past = meetings.filter((m) => !m.is_draft && !upcoming.some((u) => u.id === m.id));
+  const [{ all: meetings, upcoming }, canSendEmail, logRows] = await Promise.all([
+    getMeetings(ctx.orgId, userId, now, { withHistory: calendarRequested }),
+    mailboxConfigured(client, userId, ctx.orgId),
+    loadMeetingLog(client, ctx.orgId, userId),
+  ]);
+  // Past is the complement of Upcoming, asked directly rather than derived by
+  // subtraction. `!upcoming.some(...)` inside a filter both scanned the upcoming
+  // list once per meeting and defined Past as "whatever Upcoming rejected",
+  // which quietly swept up drafts and ad-hoc rooms that belong in neither.
+  //
+  // Both of these go to the calendar overlay and nowhere else, so on a visit
+  // that is not opening it they are sent empty rather than sent unread: the
+  // overlay only exists at `?view=`, and it reloads its own window on mount.
+  const history = calendarRequested ? meetings : [];
+  const past = history.filter((m) => isPastMeeting(m, now));
 
   // Only meetings that have actually happened. A meeting scheduled for next
   // week has no post-meeting detail to hold, and listing it under "Logs" would
@@ -183,7 +286,7 @@ export default async function MeetingsPage(props: {
       )}
       {!canSendEmail && <MailboxWarning />}
       <MeetingsLanding
-        initialMeetings={meetings as unknown as CalendarMeeting[]}
+        initialMeetings={history as unknown as CalendarMeeting[]}
         initialUpcoming={upcoming as unknown as UpcomingMeeting[]}
         initialPast={past as unknown as PastMeeting[]}
         initialLogs={logs}

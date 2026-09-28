@@ -6,6 +6,8 @@
 // Everything here is side-effect free so it can be unit tested and shared
 // between the API layer, the service layer, and the client UI.
 
+import { PRESENCE_STALE_MS } from "@/lib/meetings/attendance";
+
 export const MEETING_TYPES = [
   "internal_strategy",
   "investor_update",
@@ -266,7 +268,12 @@ export function deriveMeetingStatus(
  * one list (an ad-hoc room with no scheduled time is only "past" once ended).
  */
 export function isPastMeeting(
-  meeting: Pick<ScheduledMeetingShape, "status" | "scheduled_at" | "duration_minutes"> & { is_draft?: boolean | null },
+  meeting: Pick<ScheduledMeetingShape, "status" | "scheduled_at" | "duration_minutes"> & {
+    is_draft?: boolean | null;
+    /** When the room opened, for an ad-hoc meeting that carries no schedule. */
+    started_at?: string | null;
+    created_at?: string | null;
+  },
   now: number = Date.now(),
 ): boolean {
   if (meeting.is_draft) return false;
@@ -275,7 +282,94 @@ export function isPastMeeting(
     const end = new Date(meeting.scheduled_at).getTime() + (meeting.duration_minutes ?? 60) * 60_000;
     return end < now;
   }
+  // An ad-hoc room with no schedule and no end recorded.
+  //
+  // `status: "ended"` is written by one thing — the report route, when a meeting
+  // is closed down properly. A host who simply shuts the tab leaves the row
+  // `waiting` or `active` forever, and with no scheduled_at there is no window to
+  // have passed either. Read literally that meeting is neither coming up nor
+  // over, so it appeared in NO list: it existed, held its recording and its
+  // report, and the product showed it nowhere.
+  //
+  // Stale is the honest reading. The ceiling is the one attendance already uses
+  // to stop a killed tab being counted as sitting in the room — the same
+  // evidence, the same conclusion — rather than a second number invented here.
+  const opened = meeting.started_at ?? meeting.created_at ?? null;
+  if (opened) {
+    const ms = new Date(opened).getTime();
+    if (Number.isFinite(ms)) return now - ms >= PRESENCE_STALE_MS;
+  }
+  // No timestamp to judge by. Not past: a room nobody can date is better left
+  // out of Past than dropped into it on a guess.
   return false;
+}
+
+/**
+ * Longest meeting the platform allows.
+ *
+ * `cleanDuration` clamps every stored duration to this, which is what makes it
+ * usable as a lookback: a meeting that is still running cannot have started
+ * more than this long ago. Anything asking "which meetings might still be in
+ * progress?" needs that bound to turn an end-time question into a range the
+ * database can answer.
+ */
+export const MAX_MEETING_MINUTES = 480;
+
+/**
+ * Whether a meeting belongs in the "Upcoming" list.
+ *
+ * The complement `isPastMeeting` has claimed to mirror since it was written —
+ * and which did not exist. The partition was instead spelled out three times:
+ * here in the meetings page (keyed on the meeting's END), in
+ * /api/meetings/upcoming (keyed on its START, in SQL), and implicitly by
+ * isPastMeeting. Two of those three disagreed, and the one that ran second won:
+ * the page rendered a meeting that was already running, then the list refetched
+ * on mount and the route's `scheduled_at >= now` dropped it — so the meeting a
+ * person was most likely trying to JOIN disappeared about a second after the
+ * page settled, taking its Join button with it.
+ *
+ * In progress counts as upcoming on purpose: that is where the live state and
+ * the presence count render, and it is the row somebody acts on.
+ */
+export function isUpcomingMeeting(
+  meeting: Pick<ScheduledMeetingShape, "status" | "scheduled_at" | "duration_minutes"> & {
+    is_draft?: boolean | null;
+    /**
+     * Accepted and ignored, so one meeting row can be handed to both halves of
+     * the partition. `isPastMeeting` needs these to date an ad-hoc room; nothing
+     * without a schedule is ever upcoming, so they cannot change this answer.
+     */
+    started_at?: string | null;
+    created_at?: string | null;
+  },
+  now: number = Date.now(),
+): boolean {
+  // A draft is in neither list: it has no time anybody has committed to.
+  if (meeting.is_draft) return false;
+  // An ended room is over however its schedule reads. Checked before the
+  // window, so a meeting that finished early does not sit in Upcoming until
+  // its scheduled end passes.
+  if (meeting.status === "ended") return false;
+  // An ad-hoc room with no scheduled time is not "coming up" — there is
+  // nothing to count down to. It is upcoming to nobody and past only once
+  // ended, which is exactly what isPastMeeting says about it.
+  if (!meeting.scheduled_at) return false;
+  const end = new Date(meeting.scheduled_at).getTime() + (meeting.duration_minutes ?? 60) * 60_000;
+  return end >= now;
+}
+
+/**
+ * The earliest start time a meeting could have and still be running.
+ *
+ * What lets a database query express an END-time rule: rows are filtered on
+ * `scheduled_at >= upcomingWindowStart(now)` and then narrowed by
+ * `isUpcomingMeeting`, so nothing still in progress is left out of the fetch in
+ * the first place. Derived from the duration clamp rather than picked, so
+ * raising the maximum meeting length cannot quietly start dropping long
+ * meetings from the list.
+ */
+export function upcomingWindowStart(now: number = Date.now()): Date {
+  return new Date(now - MAX_MEETING_MINUTES * 60_000);
 }
 
 /** True when updated_at is meaningfully after locked_at (a deliberate edit). */

@@ -3,7 +3,34 @@
 import { useEffect, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { MeetingEditScreen } from "./MeetingEditScreen";
+import nextDynamic from "next/dynamic";
+
+
+/**
+ * A placeholder while the scheduling form arrives.
+ *
+ * It is opened by a click, so the click has to be answered by something —
+ * otherwise the button looks dead for as long as the chunk takes.
+ */
+function ScheduleFormLoading() {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm">
+      <p className="rounded-xl border border-[var(--line)] bg-[var(--surface-1)] px-4 py-3 text-xs text-[var(--fg-muted)]">
+        Opening the scheduler…
+      </p>
+    </div>
+  );
+}
+
+// Split out of the landing bundle. This form is the second-largest component on
+// the page and renders only once somebody opens it, so shipping it with the
+// initial payload charged every visit for a modal most visits never see — the
+// same reason the calendar and its settings pane are already loaded this way.
+// `ssr: false` is right: it is a client component behind a click.
+const MeetingEditScreen = nextDynamic(
+  () => import("./MeetingEditScreen").then((m) => m.MeetingEditScreen),
+  { ssr: false, loading: () => <ScheduleFormLoading /> },
+);
 
 /**
  * The one action bar at the top of Meetings: start a meeting, open the

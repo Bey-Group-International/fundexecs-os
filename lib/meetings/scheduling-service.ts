@@ -11,6 +11,7 @@
 // writing, so a stale or hand-crafted request can't claim a time the page never
 // offered.
 import type { createServerClient } from "@/lib/supabase/server";
+import { MAX_MEETING_MINUTES } from "@/lib/meetings/schedule";
 import { createServiceClient, hasSupabaseServiceEnv } from "@/lib/supabase/server";
 import type {
   Database,
@@ -52,8 +53,6 @@ const EVENT_TYPE_COLUMNS =
 const BOOKING_COLUMNS =
   "id, page_id, event_type_id, host_user_id, organization_id, meeting_id, invitee_name, invitee_email, invitee_notes, invitee_timezone, starts_at, ends_at, status, cancelled_by, cancellation_reason, manage_token, rescheduled_at, decided_at, calendar_sequence, created_at, updated_at";
 
-/** Longest meeting the platform allows — bounds every "started before" lookback. */
-const MAX_MEETING_MINUTES = 480;
 
 /**
  * Ceiling on rows read per busy lookup. Sized well above any plausible number
