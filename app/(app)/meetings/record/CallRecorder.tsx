@@ -69,6 +69,8 @@ export function CallRecorder({
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [lines, setLines] = useState<Line[]>([]);
+  /** Words still being recognised — shown, never saved. */
+  const [interim, setInterim] = useState("");
   const [meeting, setMeeting] = useState<{ id: string; roomCode: string } | null>(null);
   /**
    * What is actually being captured, as opposed to what was asked for.
@@ -108,7 +110,6 @@ export function CallRecorder({
   const linesRef = useRef<Line[]>([]);
   const savedIdsRef = useRef<Set<string>>(new Set());
   const meetingIdRef = useRef<string | null>(null);
-  useEffect(() => { linesRef.current = lines; }, [lines]);
 
   const flushTranscript = useCallback(async (opts: { keepalive?: boolean } = {}): Promise<boolean> => {
     const id = meetingIdRef.current;
@@ -153,6 +154,9 @@ export function CallRecorder({
     };
   }, [phase, flushTranscript]);
 
+  /** Resolves once the recogniser has handed over its last words. Set while recording. */
+  const finishRecognitionRef = useRef<(() => Promise<void>) | null>(null);
+
   /** Speech recognition, running only while the call is being recorded. */
   useEffect(() => {
     if (phase !== "recording") return;
@@ -171,14 +175,31 @@ export function CallRecorder({
     recognition.interimResults = true;
     recognition.lang = "en-US";
     let stopped = false;
+    let startedAt = 0;
+    let restartTimer: ReturnType<typeof setTimeout> | null = null;
+    let settle: (() => void) | null = null;
+
+    const begin = () => {
+      restartTimer = null;
+      if (stopped) return;
+      startedAt = performance.now();
+      try { recognition.start(); } catch { /* already going */ }
+    };
 
     recognition.onresult = (ev: SpeechRecognitionEventLike) => {
+      let pending = "";
       for (let i = ev.resultIndex; i < ev.results.length; i++) {
         const result = ev.results[i];
-        if (!result.isFinal) continue;
+        if (!result.isFinal) {
+          pending += result[0]?.transcript ?? "";
+          continue;
+        }
         const text = (result[0]?.transcript ?? "").trim();
         if (!text) continue;
-        setLines((prev) => [...prev, {
+        // Written to the ref in the same tick, not after the next render: the
+        // last sentence arrives just after End is pressed, and the drain that
+        // follows reads the ref, not the state.
+        linesRef.current = [...linesRef.current, {
           id: crypto.randomUUID(),
           // One speaker, and the row wants a signalling id. There is no
           // signalling here, so the account is the identity — which is also
@@ -193,25 +214,61 @@ export function CallRecorder({
           confidence: typeof result[0]?.confidence === "number" ? result[0].confidence : 1,
           // Nobody to speak over. A one-way call has one microphone.
           overlapped: false,
-        }]);
+        }];
+        setLines(linesRef.current);
       }
+      setInterim(pending.trim());
     };
     // Recognition stops itself on silence, which a phone call has plenty of.
-    // Restarting is what keeps the back half of a call transcribed at all.
-    recognition.onend = () => { if (!stopped) { try { recognition.start(); } catch { /* already going */ } } };
-    recognition.onerror = () => { /* handled by the restart above */ };
+    // Restarting is what keeps the back half of a call transcribed at all —
+    // but not instantly when it died instantly: a session that ends within a
+    // second of starting is failing, and restarting it at once spins the CPU
+    // for the rest of the call.
+    recognition.onend = () => {
+      if (stopped) { settle?.(); return; }
+      const quick = performance.now() - startedAt < SR_MIN_RUN_MS;
+      restartTimer = setTimeout(begin, quick ? SR_RETRY_MS : 0);
+    };
+    recognition.onerror = (ev: unknown) => {
+      const code = (ev as { error?: string } | null)?.error ?? "";
+      // Permanent refusals. Restarting cannot fix them, so stop trying and say
+      // so — the audio is unaffected.
+      if (SR_FATAL.has(code)) {
+        stopped = true;
+        setInterim("");
+        setNotice("Live transcription is not available in this browser session; the call is still being recorded.");
+      }
+    };
 
-    try {
-      recognition.start();
-    } catch {
-      setNotice("Live transcription could not be started; the call is still being recorded.");
-    }
+    // End asks for this so the words spoken just before it are kept: stop()
+    // hands back the last result asynchronously, then fires onend.
+    finishRecognitionRef.current = () => new Promise<void>((resolve) => {
+      if (stopped) { resolve(); return; }
+      stopped = true;
+      if (restartTimer) clearTimeout(restartTimer);
+      settle = resolve;
+      setTimeout(resolve, SR_FINISH_MS);
+      try { recognition.stop(); } catch { resolve(); }
+    });
+
+    begin();
 
     return () => {
       stopped = true;
+      finishRecognitionRef.current = null;
+      if (restartTimer) clearTimeout(restartTimer);
+      setInterim("");
       try { recognition.stop(); } catch { /* already stopped */ }
     };
   }, [phase, userName, userId]);
+
+  // Follow the newest words, unless the person has scrolled up to read.
+  const transcriptRef = useRef<HTMLOListElement | null>(null);
+  const pinnedRef = useRef(true);
+  useEffect(() => {
+    const el = transcriptRef.current;
+    if (el && pinnedRef.current) el.scrollTop = el.scrollHeight;
+  }, [lines, interim]);
 
   // ── Recording ─────────────────────────────────────────────────────────────
 
@@ -258,7 +315,9 @@ export function CallRecorder({
     let computer: MediaStream | null = null;
     if (computerAudio) {
       try {
-        const shared = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
+        // Chrome will not share audio without video, so video is asked for —
+        // at one frame a second, since it is stopped the moment it arrives.
+        const shared = await navigator.mediaDevices.getDisplayMedia({ video: { frameRate: 1 }, audio: true });
         if (shared.getAudioTracks().length === 0) {
           // The common mistake: the tab was shared with "Also share tab audio"
           // left unticked. Said now, because the alternative is discovering it
@@ -357,8 +416,12 @@ export function CallRecorder({
 
   const end = useCallback(async () => {
     if (!meeting) return;
+    // Asked for before the phase changes, because that change tears the
+    // recogniser down — and with it the sentence still being finished.
+    const heard = finishRecognitionRef.current?.() ?? Promise.resolve();
     setPhase("ending");
     recorder.stop();
+    await heard;
     await drainTranscript();
 
     const transcript = linesRef.current.map((l) => `${l.speaker}: ${l.text}`).join("\n");
@@ -448,15 +511,25 @@ export function CallRecorder({
           <p className="border-b border-[var(--line)] px-4 py-2.5 text-xs font-medium uppercase tracking-wide text-[var(--fg-secondary)]">
             Transcript
           </p>
-          {lines.length === 0 ? (
+          {lines.length === 0 && !interim ? (
             <p className="px-4 py-8 text-center text-xs text-[var(--fg-muted)]">
               Words appear here as they are recognised.
             </p>
           ) : (
-            <ol className="max-h-[24rem] divide-y divide-[var(--line)] overflow-y-auto">
+            <ol
+              ref={transcriptRef}
+              onScroll={(e) => {
+                const el = e.currentTarget;
+                pinnedRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 48;
+              }}
+              className="max-h-[24rem] divide-y divide-[var(--line)] overflow-y-auto"
+            >
               {lines.map((line) => (
                 <li key={line.id} className="px-4 py-2.5 text-sm text-[var(--fg-primary)]">{line.text}</li>
               ))}
+              {interim && (
+                <li className="px-4 py-2.5 text-sm italic text-[var(--fg-muted)]">{interim}</li>
+              )}
             </ol>
           )}
         </div>
@@ -556,6 +629,15 @@ export function CallRecorder({
     </div>
   );
 }
+
+/** A recognition session shorter than this is treated as failing, not finished. */
+const SR_MIN_RUN_MS = 1_000;
+/** How long to wait before restarting a session that is failing. */
+const SR_RETRY_MS = 3_000;
+/** The longest End waits for the last sentence before moving on without it. */
+const SR_FINISH_MS = 2_000;
+/** Errors a restart cannot fix. */
+const SR_FATAL = new Set(["not-allowed", "service-not-allowed", "language-not-supported", "audio-capture"]);
 
 /** The slice of the SpeechRecognition API this uses. Not in lib.dom for all targets. */
 interface SpeechRecognitionLike {
