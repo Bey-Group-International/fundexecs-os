@@ -11,6 +11,8 @@ import { refreshStaleFeeds } from "@/lib/calendar/feeds.server";
 import { syncStaleGoogleConnections } from "@/lib/calendar/google.server";
 import { runMeetingReminders, type ReminderSweepStats } from "@/lib/meetings/reminder-sweep.server";
 import { runRecordingSweep, type RecordingSweepStats } from "@/lib/meetings/recording-sweep.server";
+import { runEventIdRepair } from "@/lib/calendar/event-id-repair.server";
+import { NO_REPAIRS, summarize, worthReporting, type RepairStats } from "@/lib/calendar/event-id-repair";
 import {
   runSubscriptionRenewals,
   applySettledInvoices,
@@ -249,6 +251,31 @@ export async function GET(request: Request) {
     console.error("recording_sweep failed", e);
   }
 
+  // Reattach calendar events to the meetings that lost them. For as long as the
+  // sync write named a provider the check constraint rejected, every push did
+  // half its job: the event landed on the host's calendar and the UPDATE that
+  // would have stored its id was thrown out. Those rows do not know their event
+  // exists.
+  //
+  // This looks the event up by the private marker the app stamps on everything
+  // it creates and records the id. It does NOT re-push: every write in
+  // google-write.server.ts carries `sendUpdates: "all"`, so re-pushing a backlog
+  // would email every attendee of every affected meeting about a change none of
+  // them made.
+  //
+  // Left on the schedule rather than run once, because it is idempotent — a row
+  // with its id recorded no longer matches — and because a host who reconnects a
+  // calendar months from now gets their rows healed on the next pass.
+  let calendarRepair: RepairStats = NO_REPAIRS;
+  try {
+    calendarRepair = await runEventIdRepair(supabase);
+    if (worthReporting(calendarRepair)) {
+      console.log("[cron] calendar event id repair:", summarize(calendarRepair));
+    }
+  } catch (e) {
+    console.error("calendar_event_id_repair failed", e);
+  }
+
   // Subscription renewals. This is what makes a plan actually recur: FundExecs
   // owns the billing period, so nothing renews unless this sweep runs. Each due
   // subscription is billed — an invoice to settle by transfer where remittance
@@ -339,6 +366,9 @@ export async function GET(request: Request) {
         recordingsClosedOut: recordings.abandoned,
         recordingsOrphaned: recordings.orphaned,
         recordingObjectsDeleted: recordings.objectsDeleted,
+        calendarEventIdsReattached: calendarRepair.reattached,
+        calendarEventIdsMissing: calendarRepair.noEvent,
+        calendarEventIdRepairFailures: calendarRepair.failed,
         subscriptionsDue: subscriptions.due,
         subscriptionsRenewed: subscriptions.renewed,
         subscriptionsFailed: subscriptions.failed,
@@ -360,5 +390,5 @@ export async function GET(request: Request) {
     // best-effort: never let health tracking break the cron response
   }
 
-  return NextResponse.json({ swept: due.length, results, radar, escalated, webhooks, proactive, reminders, subscriptions, settledInvoices, nativeCollections, networkAutomations });
+  return NextResponse.json({ swept: due.length, results, radar, escalated, webhooks, proactive, reminders, calendarRepair, subscriptions, settledInvoices, nativeCollections, networkAutomations });
 }

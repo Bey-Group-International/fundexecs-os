@@ -4039,6 +4039,58 @@ Deployed, monitoring               →  live, observability active
              |  Confidence: typecheck/eslint clean, build passes, Jest 7190 →
              |  7194 across 511 suites; both new behavioural cases fail against
              |  the literal that shipped.
+             |
+             |  MEETINGS XIII — REPAIRING THE ROWS WITHOUT EMAILING ANYBODY
+             |  MEETINGS XII fixed the provider so future syncs record their event
+             |  id. It did nothing for the meetings already synced, whose events sit
+             |  on real calendars attached to rows that do not know they exist. The
+             |  ask was to backfill them, and what I had offered was to re-push.
+             |  RE-PUSHING WOULD HAVE BEEN THE HARM, NOT THE FIX. Every write in
+             |  google-write.server.ts carries `sendUpdates: "all"` — Google's
+             |  instruction to notify every attendee. A backlog re-pushed is an
+             |  "event updated" email to every guest of every affected meeting, for
+             |  a change none of them made and none of them could explain. I found
+             |  this by reading the write path before writing the sweep, and it
+             |  inverted the design: THE EVENT IS ALREADY CORRECT. Only the row is
+             |  wrong. So the repair is a READ — findEventByMarker's private marker
+             |  locates the event, and the id is the one missing fact. Nothing here
+             |  touches a calendar's contents, and the test that says so is the most
+             |  important assertion in the change (it catches a single injected
+             |  POST). THE OBVIOUS REPAIR AND THE RIGHT ONE ARE NOT ALWAYS THE SAME
+             |  SHAPE, and the difference here was whose inbox it landed in.
+             |  That marker exists because an earlier change anticipated exactly
+             |  this — an event written whose id was never stored. A guard built for
+             |  a hypothetical turned out to be the whole recovery path.
+             |  AND THE LOOKUP COULD NOT TELL "NO EVENT" FROM "NO ANSWER".
+             |  findEventByMarker returns null for both, deliberately: on the write
+             |  path a failed lookup must not block the write. For a sweep that
+             |  REPORTS, that collapse is a lie waiting to happen — a Google outage
+             |  would come back as "forty meetings have no calendar event", which is
+             |  a number somebody acts on by going and making forty events by hand.
+             |  lookupEventByMarker keeps them apart; findEventByMarker is now a
+             |  thin flattening of it, so the write path sees exactly what it always
+             |  did. A NUMBER THAT CANNOT DISTINGUISH ITS OWN FAILURE MODE IS NOT A
+             |  MEASUREMENT.
+             |  A sweep, not a script. Idempotent by construction — a row with its
+             |  id recorded no longer matches the query — so it is safe on the hour
+             |  forever, and a host who reconnects a calendar months from now gets
+             |  their rows healed on the next pass instead of never. Bounded at
+             |  fifty, which is also the Google rate limit, and it asks for one more
+             |  than the bound purely to report whether a backlog remains.
+             |  A meeting with no event at all is LEFT ALONE. Creating one is
+             |  probably right eventually, and it would notify, so it is a person's
+             |  decision rather than a sweep's.
+             |  Checked and deliberately not changed: the recording sweep's stats are
+             |  absent from the cron response but present in recordCronRun's detail,
+             |  so liveness is observable and there is no defect to fix. Worth the
+             |  look rather than the assumption.
+             |  Confidence: typecheck/eslint clean, build passes, Jest 7194 → 7238
+             |  across 514 suites; the never-writes assertion catches one injected
+             |  POST, 5 cases fail if needsEventId stops excluding drafts, deleted
+             |  and hostless meetings, and 5 more if the lookup re-collapses its two
+             |  answers. NOT verified: that any real orphaned row exists to repair —
+             |  the sweep reports what it finds and reports nothing when it finds
+             |  nothing, which is the only honest thing it can do from here.
 ```
 
 ---
