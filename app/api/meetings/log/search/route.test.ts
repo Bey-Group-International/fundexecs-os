@@ -38,6 +38,7 @@ jest.mock("@/lib/meetings/meeting-log.server", () => ({
 }));
 
 import { NextRequest } from "next/server";
+import { clearRateLimitBucketsForTests } from "@/lib/rate-limit";
 import { GET } from "./route";
 
 const HOUR = 3_600_000;
@@ -95,6 +96,7 @@ function req(q: string) {
 }
 
 beforeEach(() => {
+  clearRateLimitBucketsForTests();
   auth = { ok: true, ctx: { orgId: "org-1", userId: "user-1" } };
   searched = null;
   found = { rows: [], scanned: 0, bounded: false };
@@ -135,25 +137,37 @@ describe("GET /api/meetings/log/search", () => {
     expect(hit.snippet.parts.some((p) => p.match && p.value === "modelled")).toBe(true);
   });
 
-  it("does not return a meeting that has not happened yet", async () => {
-    // The list filters these out, so a search that returned one would put a
-    // meeting on screen in exactly one place in the product — and it would read
-    // as a record of something that has not occurred.
-    found = {
-      rows: [
-        row({ id: "past" }),
-        row({
-          id: "future",
-          status: "waiting",
-          ended_at: null,
-          scheduled_at: new Date(Date.now() + 72 * HOUR).toISOString(),
-        }),
-      ],
-      scanned: 2,
-      bounded: false,
+  it("leaves the log's membership rule to the search, rather than keeping a copy", async () => {
+    // It used to filter here as well. The rule moved into searchMeetingLog for a
+    // reason that is not tidiness: only the search can see the rows it REJECTED,
+    // and that count is what "in the most recent N meetings" reports. A second
+    // copy here would filter the hits and leave the number describing something
+    // else.
+    found = { rows: [row({ id: "past" })], scanned: 7, bounded: false };
+    const body = (await (await GET(req("dunbar"))).json()) as {
+      meetings: Array<{ id: string }>;
+      scanned: number;
     };
-    const body = (await (await GET(req("dunbar"))).json()) as { meetings: Array<{ id: string }> };
     expect(body.meetings.map((m) => m.id)).toEqual(["past"]);
+    expect(body.scanned).toBe(7);
+  });
+
+  it("limits how often one person can start a two-hundred-transcript scan", async () => {
+    // Raised by CodeRabbit's architecture pass: this reads every meeting in the
+    // organisation, not just the caller's own, and any member can ask.
+    found = { rows: [], scanned: 0, bounded: false };
+    let last: Response | null = null;
+    for (let i = 0; i < 40; i++) last = await GET(req(`dunbar ${i}`));
+    expect(last!.status).toBe(429);
+  });
+
+  it("does not spend a signed-out flood against somebody's budget", async () => {
+    // The limit sits after the auth gate on purpose: an unauthenticated caller
+    // is refused at 401 and never touches a bucket, and there is no user id to
+    // key one on anyway.
+    auth = { ok: false, status: 401, error: "Not authenticated" };
+    const res = await GET(req("dunbar"));
+    expect(res.status).toBe(401);
   });
 
   it("says how far it looked, so the UI can admit the bound", async () => {

@@ -4409,6 +4409,36 @@ Deployed, monitoring               →  live, observability active
              |  Confidence: Jest 7426 -> 7429 across 525 suites. Proved both ways —
              |  restoring the old predicate fails 2, taking the literal suggestion
              |  fails the one that guards against the flash.
+             |
+             |  2026-09-29  Two more from the same review, past the inline comment.
+             |  CodeRabbit's merge-risk line and architecture pass raised two
+             |  things its inline comment did not, and both were right.
+             |  (1) "Search can miss older logged meetings." The scan takes the most
+             |  recent 200 ROWS and the log filter runs after, so an organisation
+             |  with sixty bookings in the next fortnight had a search that read 200
+             |  rows, considered 140 meetings, and then said "in the most recent 200
+             |  meetings". Overstating reach in the one sentence whose entire job is
+             |  to admit reach. `scanned` now counts what was CONSIDERED; `bounded`
+             |  still comes from the raw count, because the bound is about the query
+             |  stopping and it stopped either way. The log-membership rule moved
+             |  into searchMeetingLog, because only the search can see the rows it
+             |  rejected — the route filtering a second time would have filtered the
+             |  hits and left the number describing something else. Drafts are now
+             |  excluded in SQL: one that reaches the loop has already spent a row of
+             |  the bound and a read of up to 120,000 characters, to be dropped.
+             |  (2) Medium, security: any member can start a 200-transcript scan of
+             |  the whole organisation, where the calls archive only ever scanned
+             |  what one person recorded. Rate limited, 30 a minute, keyed on the
+             |  USER rather than the IP — the caller is authenticated, an office
+             |  shares an address, and a user id cannot be varied per request. The
+             |  limit sits after the auth gate so a signed-out flood is refused at
+             |  401 without spending anybody's budget.
+             |  Worth noting what found these: not the inline comment, which was a
+             |  UI nit, but the two summary paragraphs underneath it that are easy
+             |  to scroll past.
+             |  Confidence: Jest 7429 -> 7435 across 525 suites. Each proved by
+             |  injection — removing the limit fails 1, counting raw rows again
+             |  fails 2, dropping the membership skip fails 3.
 ```
 
 ---

@@ -23,7 +23,7 @@ import {
   type SessionHit,
   type SessionMetadata,
 } from "@/lib/meetings/session-archive";
-import { toLogEntry } from "@/lib/meetings/meeting-log";
+import { belongsInLog, toLogEntry } from "@/lib/meetings/meeting-log";
 
 type SupabaseClient = Awaited<ReturnType<typeof createServerClient>>;
 
@@ -219,7 +219,16 @@ async function attendanceFor(
 /** What one log search found, and how far it looked. */
 export interface MeetingLogSearch {
   rows: MeetingLogRow[];
-  /** Meetings whose transcripts this search actually read. */
+  /**
+   * Meetings the search actually considered — the ones that are IN the log.
+   *
+   * Not the number of rows read. The scan takes the most recent rows of the
+   * table, and some of them are meetings that have not happened yet or drafts:
+   * they are never in the log, so a search that read two hundred rows of which
+   * sixty were future bookings looked at a hundred and forty logged meetings.
+   * Saying two hundred would overstate how far back it reached, in the one
+   * sentence whose job is to admit how far back it reached.
+   */
   scanned: number;
   /** The scan bound was reached, so there may be older matches unseen. */
   bounded: boolean;
@@ -248,13 +257,21 @@ export async function searchMeetingLog(
   userId: string,
   query: string,
   scan: number = SEARCH_SCAN,
+  now: number = Date.now(),
 ): Promise<MeetingLogSearch> {
-  const { data } = await narrowArchive(supabase.from("live_meetings").select(LOG_SEARCH_SELECT), {
-    kind: MEETING_KIND,
-    visibility: { scope: "org", organizationId: orgId },
-    searching: true,
-    scan,
-  });
+  // Drafts are excluded in the QUERY rather than only in the loop below. They
+  // can never appear in the log, so a draft that reaches this far has spent a
+  // row of the scan bound and a read of a transcript up to 120,000 characters
+  // long, to be dropped.
+  const { data } = await narrowArchive(
+    supabase.from("live_meetings").select(LOG_SEARCH_SELECT).not("is_draft", "is", true),
+    {
+      kind: MEETING_KIND,
+      visibility: { scope: "org", organizationId: orgId },
+      searching: true,
+      scan,
+    },
+  );
 
   const raw = data ?? [];
   const attendedIds = await attendanceFor(
@@ -264,11 +281,16 @@ export async function searchMeetingLog(
   );
 
   const rows: MeetingLogRow[] = [];
+  // Meetings that are actually in the log, which is what `scanned` reports.
+  let considered = 0;
   for (const row of raw) {
     const shaped = shapeLogRow(row as Record<string, unknown>, userId, attendedIds);
-    // Drafts are not part of the record yet, and the list drops them too — a
-    // search that surfaced one would be the only place they appear.
-    if (shaped.meeting.is_draft === true) continue;
+    // The same rule the page applies to the list — drafts, and meetings that
+    // have not happened yet. A search that surfaced one would be the only place
+    // in the product it appears, and it would be a record of something that has
+    // not occurred.
+    if (!belongsInLog(shaped.meeting, now)) continue;
+    considered += 1;
 
     const entry = toLogEntry(shaped.meeting, shaped.report, shaped.attended, shaped.isHost);
     const meta: SessionMetadata = {
@@ -308,7 +330,13 @@ export async function searchMeetingLog(
     });
   }
 
-  return { rows, scanned: raw.length, bounded: hitScanBound(raw.length, { searching: true, scan }) };
+  return {
+    rows,
+    scanned: considered,
+    // From the RAW count, not from `considered`: the bound is about how deep the
+    // query went, and it bit whether or not the rows it returned were loggable.
+    bounded: hitScanBound(raw.length, { searching: true, scan }),
+  };
 }
 
 /** The stored transcript on the embedded report, when the select asked for one. */

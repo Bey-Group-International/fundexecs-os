@@ -21,6 +21,8 @@ const MEETING = {
 
 /** The select string the meetings query was built with. */
 let selectArg = "";
+/** Clauses the meetings query was narrowed with, beyond the shared ones. */
+let notCalls: unknown[][] = [];
 /** Meetings the caller has an attendance row for, and the id lists asked about. */
 let attended: string[] = [];
 let attendanceAsked: string[][] = [];
@@ -42,6 +44,7 @@ function wire(reports: unknown) {
       select: (s: string) => { selectArg = s; return b; },
       eq: () => b,
       is: () => b,
+      not: (...args: unknown[]) => { notCalls.push(args); return b; },
       order: () => b,
       limit: () => b,
       then: (res: (v: unknown) => unknown) =>
@@ -55,6 +58,7 @@ function wire(reports: unknown) {
 beforeEach(() => {
   jest.clearAllMocks();
   selectArg = "";
+  notCalls = [];
   attended = [];
   attendanceAsked = [];
 });
@@ -225,6 +229,91 @@ describe("searchMeetingLog", () => {
     } finally {
       MEETING.is_draft = false;
     }
+  });
+
+  /** A database returning exactly these rows, for the counting tests below. */
+  function wireRows(rows: Record<string, unknown>[]) {
+    from.mockImplementation((table: string) => {
+      if (table === "live_meeting_participants") {
+        const p: Record<string, unknown> = {
+          select: () => p, eq: () => p,
+          in: async (_col: string, ids: string[]) => ({
+            data: attended.filter((id) => ids.includes(id)).map((meeting_id) => ({ meeting_id })),
+          }),
+        };
+        return p;
+      }
+      const b: Record<string, unknown> = {
+        select: () => b, eq: () => b, is: () => b,
+        not: (...args: unknown[]) => { notCalls.push(args); return b; },
+        order: () => b, limit: () => b,
+        then: (res: (v: unknown) => unknown) => res({ data: rows }),
+      };
+      return b;
+    });
+    return { from: (t: string) => from(t) } as unknown as Parameters<typeof searchMeetingLog>[0];
+  }
+
+  const soon = () => new Date(Date.now() + 72 * 3_600_000).toISOString();
+
+  it("counts how many LOGGED meetings it looked at, not how many rows it read", async () => {
+    // The sentence this feeds is "in the most recent N meetings". The scan takes
+    // the most recent ROWS, and a row can be a meeting next Tuesday — never in
+    // the log, so counting it overstates how far back the search reached, in the
+    // one statement whose job is to admit how far back it reached.
+    attended = ["past", "future"];
+    const found = await searchMeetingLog(
+      wireRows([
+        { ...MEETING, id: "future", status: "waiting", ended_at: null, started_at: null, scheduled_at: soon(), live_meeting_reports: report() },
+        { ...MEETING, id: "past", live_meeting_reports: report() },
+      ]),
+      "org-1",
+      "host-1",
+      "dunbar",
+    );
+
+    expect(found.rows.map((r) => r.meeting.id)).toEqual(["past"]);
+    expect(found.scanned).toBe(1);
+  });
+
+  it("still reports the bound from how deep the query went", async () => {
+    // `bounded` is about the QUERY stopping, which it did whether or not the
+    // rows it came back with were loggable. Counting only the loggable ones here
+    // would have a full scan of future bookings report that it saw everything.
+    attended = ["future"];
+    const found = await searchMeetingLog(
+      wireRows([
+        { ...MEETING, id: "future", status: "waiting", ended_at: null, started_at: null, scheduled_at: soon(), live_meeting_reports: report() },
+      ]),
+      "org-1",
+      "host-1",
+      "dunbar",
+      1,
+    );
+
+    expect(found.scanned).toBe(0);
+    expect(found.bounded).toBe(true);
+  });
+
+  it("does not return a meeting that has not happened yet", async () => {
+    attended = ["future"];
+    const found = await searchMeetingLog(
+      wireRows([
+        { ...MEETING, id: "future", status: "waiting", ended_at: null, started_at: null, scheduled_at: soon(), live_meeting_reports: report() },
+      ]),
+      "org-1",
+      "host-1",
+      "dunbar",
+    );
+    expect(found.rows).toEqual([]);
+  });
+
+  it("asks the database to leave drafts out, rather than paying to read them", async () => {
+    // A draft that reaches the loop has already spent a row of the scan bound
+    // and a read of a transcript up to 120,000 characters long, to be dropped.
+    attended = ["m1"];
+    await searchMeetingLog(wire(report()), "org-1", "host-1", "dunbar");
+    expect(notCalls).toContainEqual(["is_draft", "is", true]);
   });
 
   it("asks about attendance only for the rows it read", async () => {
