@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { archiveSummary, callWhen, type CallHit } from "@/lib/meetings/call-archive";
+import { callWhen, type CallHit } from "@/lib/meetings/call-archive";
+import { searchSummary } from "@/lib/meetings/session-archive";
 import { callClock } from "@/lib/meetings/one-way";
 import { MIN_QUERY } from "@/lib/meetings/transcript-search";
 
@@ -17,7 +18,9 @@ import { MIN_QUERY } from "@/lib/meetings/transcript-search";
 export function CallArchive({ initial }: { initial: CallHit[] }) {
   const [query, setQuery] = useState("");
   const [calls, setCalls] = useState<CallHit[]>(initial);
-  const [partial, setPartial] = useState(false);
+  // How far the last search read, and whether that was everything.
+  const [scanned, setScanned] = useState(0);
+  const [bounded, setBounded] = useState(false);
   const [loading, setLoading] = useState(false);
   const [confirming, setConfirming] = useState<string | null>(null);
   const [deleting, setDeleting] = useState<string | null>(null);
@@ -31,15 +34,24 @@ export function CallArchive({ initial }: { initial: CallHit[] }) {
   // a fast one for "valuation" and replace its results with the earlier ones.
   const latest = useRef(0);
 
+  // Whether anything has been searched yet. The list on screen at that point is
+  // the one the server rendered — see the effect below.
+  const searched = useRef(false);
+
   const run = useCallback(async (q: string) => {
     const ticket = ++latest.current;
     setLoading(true);
     try {
       const res = await fetch(`/api/meetings/calls?q=${encodeURIComponent(q)}`);
-      const body = (await res.json().catch(() => ({}))) as { calls?: CallHit[]; partial?: boolean };
+      const body = (await res.json().catch(() => ({}))) as {
+        calls?: CallHit[];
+        scanned?: number;
+        bounded?: boolean;
+      };
       if (ticket !== latest.current) return;
       setCalls((body.calls ?? []).filter((c) => !deleted.current.has(c.id)));
-      setPartial(body.partial === true);
+      setScanned(body.scanned ?? 0);
+      setBounded(body.bounded === true);
     } finally {
       if (ticket === latest.current) setLoading(false);
     }
@@ -47,9 +59,19 @@ export function CallArchive({ initial }: { initial: CallHit[] }) {
 
   // Debounced, because this reads transcripts: a request per keystroke would
   // have the server scanning the archive five times to answer one question.
+  //
+  // And NOT run on arrival. This used to fire with an empty query on mount, so
+  // every visit to the page ran the same fifty-row query twice — once in the
+  // server render that drew the list, and again 250ms later to replace it with an
+  // identical one. The list is already on screen; the first request worth making
+  // is the first one somebody asks for.
   useEffect(() => {
     const q = query.trim();
     if (q.length > 0 && q.length < MIN_QUERY) return;
+    // A cleared box after a search DOES need the full list back — it is no longer
+    // the one the server rendered.
+    if (q.length === 0 && !searched.current) return;
+    if (q.length > 0) searched.current = true;
     const timer = setTimeout(() => { void run(q); }, 250);
     return () => clearTimeout(timer);
   }, [query, run]);
@@ -82,7 +104,18 @@ export function CallArchive({ initial }: { initial: CallHit[] }) {
     }
   }
 
-  const summary = archiveSummary(query, calls.length);
+  const trimmed = query.trim();
+  const isSearch = trimmed.length >= MIN_QUERY;
+  // The same sentence the meeting log shows, from the same function, in this
+  // page's own noun — including the bound, which used to be a second paragraph
+  // underneath. One statement about what was read is harder to read past than
+  // two.
+  //
+  // Nothing at rest: the count would be a claim about the archive, and what is on
+  // screen is the first page of it.
+  const summary = isSearch
+    ? searchSummary({ query: trimmed, hits: calls.length, scanned, bounded, noun: "call" })
+    : "";
 
   return (
     <div className="mx-auto max-w-3xl px-4 py-10">
@@ -110,17 +143,14 @@ export function CallArchive({ initial }: { initial: CallHit[] }) {
           aria-label="Search what was said in your calls"
           className="w-full rounded-lg border border-[var(--line)] bg-[var(--surface-0)] px-3 py-2 text-sm text-[var(--fg-primary)] placeholder:text-[var(--fg-muted)] focus:border-[var(--gold-400)] focus:outline-none"
         />
-        {summary && (
+        {(summary || loading) && (
           <p role="status" aria-live="polite" className="mt-2 text-xs text-[var(--fg-muted)]">
             {loading ? "Searching…" : summary}
           </p>
         )}
-        {partial && !loading && (
-          // Said plainly rather than implying the whole archive was read. A
-          // search that quietly saw only part of it would have somebody
-          // concluding a call does not exist.
-          <p className="mt-1 text-xs text-[var(--fg-muted)]">
-            Only your most recent calls were searched.
+        {trimmed.length > 0 && !isSearch && (
+          <p className="mt-2 text-xs text-[var(--fg-muted)]">
+            Keep typing — a search needs at least {MIN_QUERY} characters.
           </p>
         )}
       </div>

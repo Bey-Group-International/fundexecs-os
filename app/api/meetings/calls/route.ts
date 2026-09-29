@@ -12,23 +12,16 @@ import { createServerClient } from "@/lib/supabase/server";
 import { ONE_WAY_KIND, readAcknowledgement } from "@/lib/meetings/one-way";
 import { searchCall, type ArchivedCall, type CallHit } from "@/lib/meetings/call-archive";
 import { MIN_QUERY } from "@/lib/meetings/transcript-search";
+import { hitScanBound, narrowArchive } from "@/lib/meetings/session-archive.server";
+import { LIST_PAGE, SEARCH_SCAN } from "@/lib/meetings/session-archive";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-/** Calls listed at once. A page of history, not the whole archive. */
-const PAGE = 50;
-
-/**
- * Calls whose transcripts one search reads.
- *
- * Bounded because each is up to 120,000 characters and the narrowing below is
- * a substring match, not an index — a search across ten thousand calls would
- * be a table scan carrying a novel per row. What it does NOT do is cap
- * silently: a search that hits this says so, so nobody concludes a call is
- * missing when it was only unexamined.
- */
-const SEARCH_SCAN = 200;
+// The page size and the scan bound live in session-archive.ts, with the rules
+// that use them: the meeting log searches the same table with the same bound,
+// and two numbers meaning "how deep is a search" is how the two halves start
+// disagreeing about what "no results" means.
 
 export async function GET(req: NextRequest) {
   const auth = await requireOrgContext();
@@ -41,27 +34,38 @@ export async function GET(req: NextRequest) {
   // Recordings and reports come with the call in one round trip, through the
   // foreign keys — this is a list view and three queries per row is how a list
   // view becomes slow.
-  const { data, error } = await supabase
-    .from("live_meetings")
-    .select(
-      "id, room_code, title, created_at, recording_consent, " +
-      "live_meeting_recordings(duration_seconds, status, deleted_at), " +
-      // Transcripts only when searching. Each is up to 120,000 characters, and
-      // the plain list shows the summary — so reading them for every page load
-      // moved megabytes nobody looked at.
-      (searching ? "live_meeting_reports(summary, full_transcript)" : "live_meeting_reports(summary)"),
-    )
-    .eq("organization_id", auth.ctx.orgId)
-    .eq("host_id", auth.ctx.userId)
-    .eq("kind", ONE_WAY_KIND)
-    .is("deleted_at", null)
-    .order("created_at", { ascending: false })
-    // The newest report, explicitly. Regenerating a report INSERTS another row
-    // rather than updating the old one, so an unordered embed can hand back a
-    // superseded summary — and, worse, a superseded transcript to search.
-    .order("created_at", { ascending: false, referencedTable: "live_meeting_reports" })
-    .limit(1, { referencedTable: "live_meeting_reports" })
-    .limit(searching ? SEARCH_SCAN : PAGE);
+  //
+  // Narrowed through the shared clauses rather than written out again. The one
+  // that matters is the report embed's own order: regenerating a report INSERTS
+  // another row, so an unordered embed can hand back a superseded summary — and,
+  // worse, a superseded transcript to search. It used to be remembered here, in
+  // the page's own query, and nowhere else. See session-archive.server.ts.
+  //
+  // The SELECT stays local, and deliberately: a call needs its consent record and
+  // its recording's length, which a meeting has no column for, and it needs the
+  // summary and nothing else of the report. Sharing the embed would mean reading
+  // key points and action items that no row here draws.
+  const { data, error } = await narrowArchive(
+    supabase
+      .from("live_meetings")
+      .select(
+        "id, room_code, title, created_at, recording_consent, " +
+        "live_meeting_recordings(duration_seconds, status, deleted_at), " +
+        // Transcripts only when searching. Each is up to 120,000 characters, and
+        // the plain list shows the summary — so reading them for every page load
+        // moved megabytes nobody looked at.
+        (searching ? "live_meeting_reports(summary, full_transcript)" : "live_meeting_reports(summary)"),
+      ),
+    {
+      kind: ONE_WAY_KIND,
+      // A call belongs to whoever recorded it, in the organisation they recorded
+      // it in — not to the organisation at large, which is what a meeting is.
+      visibility: { scope: "host", hostId: auth.ctx.userId, organizationId: auth.ctx.orgId },
+      searching,
+      scan: SEARCH_SCAN,
+      page: LIST_PAGE,
+    },
+  );
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
@@ -107,10 +111,13 @@ export async function GET(req: NextRequest) {
   }
 
   return NextResponse.json({
-    calls: calls.slice(0, PAGE),
-    // True when the scan bound was reached, so the UI can say the search saw
-    // only the most recent calls rather than implying it saw everything.
-    partial: searching && rows.length >= SEARCH_SCAN,
+    calls: calls.slice(0, LIST_PAGE),
+    // What was read, and whether that was everything — so the UI can say the
+    // search saw only the most recent calls rather than implying it saw the
+    // archive. Sent even when there are hits: the reader may be looking for an
+    // older one.
+    scanned: rows.length,
+    bounded: hitScanBound(rows.length, { searching, scan: SEARCH_SCAN }),
   });
 }
 

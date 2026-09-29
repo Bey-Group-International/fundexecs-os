@@ -122,20 +122,14 @@ export function snippetFor(
   return { speaker: turn.speaker, parts };
 }
 
-/**
- * What the archive says about a search.
- *
- * Says how many CALLS matched rather than how many times the word appears,
- * because that is the question being asked — "which call was that in" — and a
- * count of 214 mentions across three calls answers a question nobody asked.
- */
-export function archiveSummary(query: string, calls: number): string {
-  const q = query.trim();
-  if (q.length === 0) return "";
-  if (q.length < MIN_QUERY) return `Type at least ${MIN_QUERY} characters`;
-  if (calls === 0) return `No calls mention “${q}”`;
-  return `${calls} call${calls === 1 ? "" : "s"} mention${calls === 1 ? "s" : ""} “${q}”`;
-}
+// WHERE THE SUMMARY WENT. `archiveSummary` lived here and said "3 calls mention
+// “valuation”" — counting calls rather than mentions, because "which call was
+// that in" is the question and 214 mentions answers one nobody asked. It could
+// not say that the search had stopped early, so the page carried a second
+// sentence underneath for that, which is a caveat somebody can read past.
+//
+// It is now `searchSummary` in session-archive.ts, shared with the meeting log,
+// which folds the bound into the same statement.
 
 /**
  * When a call happened, as a person would say it.

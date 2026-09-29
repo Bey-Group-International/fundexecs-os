@@ -90,6 +90,38 @@ describe("narrowArchive", () => {
     expect(find(calls, "eq").some((c) => c.args[0] === "organization_id")).toBe(false);
   });
 
+  it("keeps a host's calls inside the organisation they were recorded in", () => {
+    // Both clauses, not either: ownership says whose the call is, and the
+    // organisation says which of their working contexts it belongs to. Somebody
+    // in two organisations should not find one's calls in the other's archive.
+    const { q, calls } = recorder();
+    narrowArchive(q, {
+      kind: "one_way",
+      visibility: { scope: "host", hostId: "host-1", organizationId: "org-1" },
+      searching: false,
+    });
+
+    expect(find(calls, "eq")).toEqual(
+      expect.arrayContaining([
+        { method: "eq", args: ["host_id", "host-1"] },
+        { method: "eq", args: ["organization_id", "org-1"] },
+      ]),
+    );
+  });
+
+  it("still scopes by the host when no organisation is given", () => {
+    // The optional half must not become the only half: a missing organisation
+    // widens the list to the same person's other work, never to anybody else's.
+    const { q, calls } = recorder();
+    narrowArchive(q, {
+      kind: "one_way",
+      visibility: { scope: "host", hostId: "host-1" },
+      searching: false,
+    });
+    expect(find(calls, "eq").some((c) => c.args[0] === "host_id")).toBe(true);
+    expect(find(calls, "eq").some((c) => c.args[0] === "organization_id")).toBe(false);
+  });
+
   it("scopes a meeting to its organisation", () => {
     const { q, calls } = recorder();
     narrowArchive(q, {

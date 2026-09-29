@@ -4331,6 +4331,37 @@ Deployed, monitoring               →  live, observability active
              |  sharing one detail slot between rows fails two.
              |  Confidence: Jest 7375 -> 7417 across 524 suites, typecheck and
              |  eslint clean. Nobody has opened it in a browser.
+             |
+             |  2026-09-29  The calls archive joins the same engine, and stops
+             |  fetching the list it was just handed.
+             |  Three copies of the archive narrowing existed — the calls page, the
+             |  calls route, and the log — each remembering the report-embed order
+             |  separately. Two of them now call narrowArchive. The SELECTs stay
+             |  local and that is the line: a call carries a consent record and a
+             |  recording length a meeting has no column for, and it draws the
+             |  summary and nothing else of the report, so sharing the embed would
+             |  mean reading key points no row here shows.
+             |  SessionVisibility's host scope gained an optional organizationId,
+             |  because the calls query filters by both and the shared type only
+             |  said one. Written as a second rule on top of ownership: forgetting
+             |  it widens the list to the same person's other work, never to
+             |  somebody else's.
+             |  The waste: CallArchive's debounced search effect fired on mount with
+             |  an empty query, so every visit to /meetings/calls ran the same
+             |  fifty-row query twice — once in the server render that drew the
+             |  list, once 250ms later to replace it with an identical one.
+             |  And archiveSummary is gone: the bound used to be a second paragraph
+             |  under the count, which is a caveat a reader finishes the sentence
+             |  before reaching. searchSummary folds it in, in the page's own noun.
+             |  What the tests taught, twice in one sitting and worth saying once
+             |  more: a test that asserts "no request was made" without waiting past
+             |  the debounce asserts nothing — it passes because the request has not
+             |  had time to happen yet, and it passes just as happily against the
+             |  version that makes it. Both such tests here were toothless until
+             |  they waited; then putting the mount fetch back failed one and
+             |  letting the log search an empty box failed two.
+             |  Confidence: Jest 7417 -> 7426 across 525 suites, typecheck and
+             |  eslint clean. Still nobody has opened it in a browser.
 ```
 
 ---

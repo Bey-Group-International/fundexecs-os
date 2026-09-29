@@ -78,6 +78,21 @@ async function settle() {
   });
 }
 
+/**
+ * Wait past the debounce.
+ *
+ * A test that asserts "no request was made" sooner than the debounce asserts
+ * nothing at all — it passes because the request has not had time to happen yet,
+ * and it would pass just as happily against the version that does make it.
+ */
+const PAST_DEBOUNCE_MS = 400;
+
+async function settleDebounce() {
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, PAST_DEBOUNCE_MS));
+  });
+}
+
 /** A promise somebody else decides when to settle. */
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -106,7 +121,8 @@ describe("the list", () => {
     // would be a worse bargain than the payload it replaced.
     const calls = mockFetch(async () => ({ body: {} }));
     render(<MeetingLogs meetings={[row(), row({ id: "m2", title: "Second" })]} />);
-    await waitFor(() => expect(screen.getByText("Second")).toBeInTheDocument());
+    expect(screen.getByText("Second")).toBeInTheDocument();
+    await settleDebounce();
     expect(calls).toEqual([]);
   });
 
@@ -287,6 +303,7 @@ describe("searching", () => {
     await userEvent.type(screen.getByRole("searchbox"), "m");
 
     expect(await screen.findByText(/Keep typing/)).toBeInTheDocument();
+    await settleDebounce();
     expect(calls).toEqual([]);
     // And the full list is still there, rather than being filtered by a request
     // that was never made.

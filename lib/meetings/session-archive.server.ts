@@ -65,6 +65,11 @@ export function narrowArchive<Q extends Narrowable>(query: Q, opts: ArchiveNarro
   // quietly share a permission rule between a private call and a listed meeting.
   if (opts.visibility.scope === "host") {
     q = q.eq("host_id", opts.visibility.hostId);
+    // Both, when both are given: whose it is, and which organisation they were
+    // working in when they recorded it.
+    if (opts.visibility.organizationId) {
+      q = q.eq("organization_id", opts.visibility.organizationId);
+    }
   } else {
     q = q.eq("organization_id", opts.visibility.organizationId);
   }

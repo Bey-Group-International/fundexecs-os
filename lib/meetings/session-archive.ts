@@ -34,8 +34,17 @@ import { snippetFor, type Snippet } from "@/lib/meetings/call-archive";
  * implies what.
  */
 export type SessionVisibility =
-  /** Only sessions this person hosted. What a recorded call is. */
-  | { scope: "host"; hostId: string }
+  /**
+   * Only sessions this person hosted. What a recorded call is.
+   *
+   * `organizationId` narrows it further, and the recorded-call archive passes it:
+   * a call was recorded while its host was working in one organisation, and
+   * somebody who belongs to two should not find the other one's calls in this
+   * one's archive. Optional because it is a second rule on top of ownership, not
+   * a replacement for it — forgetting it widens the list to the same person's
+   * other work, never to somebody else's.
+   */
+  | { scope: "host"; hostId: string; organizationId?: string }
   /** Every session in the organisation. What a meeting is. */
   | { scope: "org"; organizationId: string };
 
