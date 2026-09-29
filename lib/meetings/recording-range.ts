@@ -134,3 +134,35 @@ export function rangeLength(range: ByteRange): number {
 export function inPlaybackOrder<T extends { path: string }>(chunks: readonly T[]): T[] {
   return [...chunks].sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
 }
+
+/**
+ * How much of a recording one playback response carries.
+ *
+ * A <video> asks for `bytes=0-` — everything from here to the end — and then
+ * reads only as fast as it plays, or not at all while paused. Answering that
+ * literally held a function open for the length of the meeting: pausing an
+ * hour-long recording kept the stream alive until the platform killed it at
+ * 300 seconds, which is exactly what production recorded. Browsers take a
+ * short 206 in their stride and ask for the next window as playback reaches
+ * it, so capping each answer costs a request every ~45 seconds of video and
+ * keeps every invocation short.
+ */
+export const PLAYBACK_WINDOW_BYTES = 8 * 1024 * 1024;
+
+/** A range trimmed to at most `maxBytes`, keeping its start. */
+export function capRange(range: ByteRange, maxBytes: number): ByteRange {
+  if (maxBytes <= 0) return range;
+  return { start: range.start, end: Math.min(range.end, range.start + maxBytes - 1) };
+}
+
+/**
+ * Whether a `Range` header asked for "from here to the end" (`bytes=N-`).
+ *
+ * Only that form is capped. A bounded range is a caller that knows exactly
+ * which bytes it needs — the MediaSource player asks for the precise run of
+ * parts it is about to append, and appends whatever comes back as those parts
+ * — so answering it short would hand the decoder half a part.
+ */
+export function isOpenEndedRange(header: string | null): boolean {
+  return !!header && /^bytes=\d+-$/.test(header.trim());
+}

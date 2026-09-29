@@ -2,8 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { createServerClient, createServiceClient, hasSupabaseServiceEnv } from "@/lib/supabase/server";
 import { RECORDING_BUCKET, extensionFor } from "@/lib/meetings/recording-policy";
 import {
+  capRange,
   contentRangeHeader,
+  isOpenEndedRange,
   parseRange,
+  PLAYBACK_WINDOW_BYTES,
   rangeLength,
   slicesForRange,
   totalSize,
@@ -38,6 +41,9 @@ type Params = Promise<{ id: string; recordingId: string }>;
 
 /** Bytes pulled per part. Parts are ~940KB; this is the ceiling, not the norm. */
 const MAX_PART_BYTES = 33_554_432;
+
+/** Parts fetched ahead of the one being sent. */
+const READ_AHEAD = 3;
 
 export async function GET(req: NextRequest, { params }: { params: Params }) {
   const { id, recordingId } = await params;
@@ -81,7 +87,17 @@ export async function GET(req: NextRequest, { params }: { params: Params }) {
   if (!chunks.length) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
   const size = totalSize(chunks);
-  const range = parseRange(req.headers.get("range"), size);
+  const download = new URL(req.url).searchParams.get("download") === "1";
+  // A player's open-ended "from here on" is answered a window at a time (see
+  // PLAYBACK_WINDOW_BYTES). A bounded range is answered exactly as asked, and
+  // saving a copy is answered whole, because a download is one request that
+  // has to carry the file.
+  const rangeHeader = req.headers.get("range");
+  const asked = parseRange(rangeHeader, size);
+  const range =
+    asked && !download && isOpenEndedRange(rangeHeader)
+      ? capRange(asked, PLAYBACK_WINDOW_BYTES)
+      : asked;
   const wanted = range ?? { start: 0, end: size - 1 };
   const slices = slicesForRange(chunks, wanted);
 
@@ -92,25 +108,53 @@ export async function GET(req: NextRequest, { params }: { params: Params }) {
     ? createServiceClient().storage.from(RECORDING_BUCKET)
     : rls.storage.from(RECORDING_BUCKET);
 
-  // Pull-based: one part is in memory at a time, however long the meeting was
-  // and however much of it the viewer asked for.
+  // Pull-based, with a short read-ahead. Parts used to be fetched strictly one
+  // after another, so a download paid a full storage round trip per five
+  // seconds of video — seven hundred of them for an hour — and ran into the
+  // function's time limit. Now up to READ_AHEAD parts are in flight while the
+  // current one is sent: memory stays bounded at a few parts, however long the
+  // meeting was, and the round trips overlap instead of adding up.
+  const fetchSlice = async (slice: (typeof slices)[number]) => {
+    const { data, error } = await storage.download(slice.path);
+    if (error || !data) throw error ?? new Error(`missing part ${slice.path}`);
+    const buffer = new Uint8Array(await data.arrayBuffer());
+    if (buffer.byteLength > MAX_PART_BYTES) throw new Error("part exceeds the bucket limit");
+    return buffer.subarray(slice.start, Math.min(slice.end, buffer.byteLength));
+  };
+  const inflight: { path: string; bytes: Promise<Uint8Array> }[] = [];
+  const fill = () => {
+    while (inflight.length < READ_AHEAD && slices.length) {
+      const slice = slices.shift()!;
+      const bytes = fetchSlice(slice);
+      // Observed here so a part that fails after the viewer has gone is not an
+      // unhandled rejection; the failure is still thrown where it is awaited.
+      bytes.catch(() => {});
+      inflight.push({ path: slice.path, bytes });
+    }
+  };
+
   const stream = new ReadableStream<Uint8Array>({
     async pull(controller) {
-      const slice = slices.shift();
-      if (!slice) { controller.close(); return; }
+      fill();
+      const next = inflight.shift();
+      if (!next) { controller.close(); return; }
       try {
-        const { data, error } = await storage.download(slice.path);
-        if (error || !data) throw error ?? new Error(`missing part ${slice.path}`);
-        const buffer = new Uint8Array(await data.arrayBuffer());
-        if (buffer.byteLength > MAX_PART_BYTES) throw new Error("part exceeds the bucket limit");
-        controller.enqueue(buffer.subarray(slice.start, Math.min(slice.end, buffer.byteLength)));
+        controller.enqueue(await next.bytes);
+        fill();
       } catch (err) {
-        console.error("[recording/stream] part unavailable", slice.path, err);
+        console.error("[recording/stream] part unavailable", next.path, err);
         // Ending the stream mid-file leaves the player with a truncated video
         // rather than a wrong one. There is no way to signal a mid-body failure
         // over HTTP that a <video> element will report usefully.
+        inflight.length = 0;
+        slices.length = 0;
         controller.close();
       }
+    },
+    cancel() {
+      // The viewer went away: stop queuing parts nobody will read.
+      inflight.length = 0;
+      slices.length = 0;
     },
   });
 
@@ -130,7 +174,7 @@ export async function GET(req: NextRequest, { params }: { params: Params }) {
   // was in the meeting, and a recording you may watch in full is one you may
   // keep. The filename carries the meeting date so a folder of them is
   // navigable.
-  if (new URL(req.url).searchParams.get("download") === "1") {
+  if (download) {
     headers["Content-Disposition"] = `attachment; filename="${downloadFilename(rec.started_at, rec.mime_type)}"`;
   }
 
