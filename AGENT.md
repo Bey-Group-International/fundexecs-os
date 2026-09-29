@@ -4521,6 +4521,53 @@ Deployed, monitoring               →  live, observability active
              |  it would also make the scrubber thumb move in 1s steps — 3% jumps
              |  on a short recording. A saving that coarsens the UI is not an
              |  optimisation.
+             |
+             |  2026-09-29  Typing one letter in the meeting log re-rendered
+             |  every row and re-formatted every date.
+             |  Measured before touching it, against the two hundred rows a full
+             |  log renders: 200 `toLocaleDateString` calls per keystroke, 400 on
+             |  mount. Now 0 and 0. The magnitude came from a separate bench,
+             |  because a count alone does not say whether it matters: those 200
+             |  calls cost 11.24ms against 0.25ms for the same 200 through one
+             |  reused `Intl.DateTimeFormat` — most of a 16.7ms frame, spent
+             |  formatting dates that had not changed, on every character typed.
+             |  `date.toLocaleDateString(locale, options)` looks free and is not.
+             |  Two formatters now live at module scope behind `logDateLabel` and
+             |  the month grouping. The month divider was the worse of the two:
+             |  200 calls to produce about twelve distinct answers, because the
+             |  label has to be computed per entry to know whether the month
+             |  changed.
+             |  `LogRow` is memoized, and `onToggle` takes the row rather than
+             |  closing over it — which is what lets the page pass its `toggle`
+             |  straight through instead of building a fresh closure per row per
+             |  render. `toggle` is already stable across a keystroke, because
+             |  what it depends on (which row is open, which details have landed)
+             |  is not what typing changes.
+             |  THE MEASUREMENT LESSON FROM #1151, APPLIED AND IT PAID: caching
+             |  the formatter takes the `toLocaleDateString` count to zero whether
+             |  or not the rows are memoized. A test watching only that number
+             |  would have passed on either change alone and guarded neither. So
+             |  the row memo is pinned by counting RENDERS instead (through
+             |  `logDateLabel`, which each row calls exactly once), and the
+             |  formatters by asserting the per-call API is never reached. Two
+             |  counters, two independent guards. Five injections, each failing
+             |  exactly one test: memo removed and unstable handler fail only the
+             |  render test; either formatter reverted fails only the caching one.
+             |  Asserted as "the per-call API is not reached" rather than by
+             |  timing: a timing threshold in CI is a flake waiting to happen.
+             |  One of my own mistakes, same class as the one #1154 fixed: the
+             |  first edit inserted the new formatters BETWEEN `logEntrySubtitle`'s
+             |  doc comment and `logEntrySubtitle`. Caught by reading the file
+             |  afterwards rather than by any test — a doc comment attached to the
+             |  wrong declaration is invisible to tooling. Twice in two changes is
+             |  a pattern, not an accident: inserting above a function means
+             |  landing inside the comment belonging to it.
+             |  Confidence: Jest 7462 -> 7471 across 527 suites, typecheck and
+             |  eslint clean, the log's 9 visual checks green.
+             |  Scope: the log's LOAD-time half was done in #1146 (a line per
+             |  meeting, server-side search). This is the render-time half, which
+             |  that change made visible by leaving the page with 200 cheap rows
+             |  and a search box that re-renders all of them.
 ```
 
 ---

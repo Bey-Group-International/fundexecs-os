@@ -15,6 +15,8 @@ import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MeetingLogs } from "./MeetingLogs";
 import { loggedMeeting, toLogEntry, type LoggedMeeting } from "@/lib/meetings/meeting-log";
+import * as log from "@/lib/meetings/meeting-log";
+import { fireEvent } from "@testing-library/dom";
 
 function row(over: Partial<LoggedMeeting> = {}): LoggedMeeting {
   return {
@@ -492,5 +494,80 @@ describe("the server's own list", () => {
     const sections = screen.getAllByRole("heading", { level: 3 }).map((h) => h.textContent);
     expect(sections).toHaveLength(2);
     expect(within(screen.getAllByRole("heading", { level: 3 })[0].parentElement!).getByText("Dunbar Capital — Series B")).toBeInTheDocument();
+  });
+});
+
+// ── Typing re-rendered every row in the log ─────────────────────────────────
+
+describe("what a keystroke costs", () => {
+  /**
+   * Row renders, counted through `logDateLabel` — which each row calls exactly
+   * once as it renders.
+   *
+   * Deliberately NOT counted by watching `toLocaleDateString`. Caching the
+   * formatter takes that number to zero whether or not the rows are memoized,
+   * so a test watching it would pass on either change alone and guard neither.
+   * This counts renders, which only the memo can change.
+   */
+  function countRowRenders() {
+    const real = log.logDateLabel;
+    let renders = 0;
+    jest.spyOn(log, "logDateLabel").mockImplementation((iso: string) => {
+      renders += 1;
+      return real(iso);
+    });
+    return {
+      get value() {
+        return renders;
+      },
+      reset() {
+        renders = 0;
+      },
+    };
+  }
+
+  const manyRows = Array.from({ length: 30 }, (_, i) =>
+    row({
+      id: `m${i}`,
+      title: `Meeting ${i}`,
+      occurredAt: new Date(Date.UTC(2026, i % 12, (i % 27) + 1, 14, 0)).toISOString(),
+    }),
+  );
+
+  afterEach(() => jest.restoreAllMocks());
+
+  // The defect: one character re-rendered every row in the log, each of them
+  // re-deriving a date that had not changed. Two hundred of them, on a full page.
+  it("does not re-render rows that did not change", async () => {
+    mockFetch(async () => ({ body: {} }));
+    const renders = countRowRenders();
+    const { container } = render(<MeetingLogs meetings={manyRows} />);
+    expect(renders.value).toBe(manyRows.length);
+
+    renders.reset();
+    const box = container.querySelector('input[type="search"]')!;
+    // One character: below MIN_QUERY, so no search runs and this is purely the
+    // re-render the keystroke causes.
+    await act(async () => {
+      fireEvent.change(box, { target: { value: "d" } });
+    });
+    expect(renders.value).toBe(0);
+
+    renders.reset();
+    await act(async () => {
+      fireEvent.change(box, { target: { value: "du" } });
+    });
+    expect(renders.value).toBe(0);
+  });
+
+  // The memo must not cost correctness: opening a row still re-renders THAT row.
+  it("still re-renders the row that was opened", async () => {
+    mockFetch(async () => ({ body: { detail: DETAIL } }));
+    const user = userEvent.setup();
+    render(<MeetingLogs meetings={[row()]} />);
+    const renders = countRowRenders();
+    await user.click(screen.getByRole("button", { name: /Dunbar Capital/ }));
+    expect(renders.value).toBeGreaterThan(0);
+    expect(await screen.findByText(DETAIL.summary)).toBeInTheDocument();
   });
 });

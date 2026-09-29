@@ -1,9 +1,10 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import {
   groupLogsByMonth,
+  logDateLabel,
   logEntrySubtitle,
   loggedMeeting,
   meetingLogDetail,
@@ -300,7 +301,7 @@ export function MeetingLogs({ meetings: initialMeetings }: { meetings: LoggedMee
                   loading={detailBusy === row.id}
                   error={openId === row.id ? detailError : null}
                   open={openId === row.id}
-                  onToggle={() => toggle(row)}
+                  onToggle={toggle}
                   onRegenerated={replaceEntry}
                 />
               ))}
@@ -312,7 +313,23 @@ export function MeetingLogs({ meetings: initialMeetings }: { meetings: LoggedMee
   );
 }
 
-function LogRow({
+/**
+ * One meeting, collapsed to a line.
+ *
+ * MEMOIZED, and the reason is the search box above it. Every character typed
+ * re-renders this component, and a full log is two hundred of them — each one
+ * formatting a date that had not changed. Measured at 200 `toLocaleDateString`
+ * calls and 11.24ms of Intl work per keystroke; the memo takes the rows that
+ * did not change out of the render entirely, and `logDateLabel` makes the ones
+ * that do remain cheap.
+ *
+ * `onToggle` takes the row rather than closing over it, which is what lets the
+ * page pass its `toggle` straight through. A fresh `() => toggle(row)` per row
+ * per render would have made this memo a comment — and `toggle` itself is
+ * stable across a keystroke, because what it depends on (which row is open,
+ * which details have landed) is not what typing changes.
+ */
+const LogRow = memo(function LogRow({
   row, detail, loading, error, open, onToggle, onRegenerated,
 }: {
   row: LogRowData;
@@ -320,7 +337,7 @@ function LogRow({
   loading: boolean;
   error: string | null;
   open: boolean;
-  onToggle: () => void;
+  onToggle: (row: LogRowData) => void;
   onRegenerated: (entry: MeetingLogEntry) => void;
 }) {
   const [busy, setBusy] = useState(false);
@@ -343,16 +360,13 @@ function LogRow({
       setBusy(false);
     }
   }
-  const when = new Date(row.occurredAt);
-  const dateLabel = Number.isFinite(when.getTime())
-    ? when.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })
-    : "Undated";
+  const dateLabel = logDateLabel(row.occurredAt);
 
   return (
     <div className={`${CARD} overflow-hidden transition duration-200`}>
       <button
         type="button"
-        onClick={onToggle}
+        onClick={() => onToggle(row)}
         aria-expanded={open}
         className="fx-focus flex w-full items-center gap-3 rounded-2xl px-4 py-2.5 text-left transition-colors hover:bg-surface-2/70"
       >
@@ -490,7 +504,7 @@ function LogRow({
       )}
     </div>
   );
-}
+});
 
 function Detail({ label, children }: { label: string; children: React.ReactNode }) {
   return (
