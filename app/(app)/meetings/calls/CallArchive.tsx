@@ -1,6 +1,6 @@
 "use client";
 
-import { memo, useCallback, useEffect, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { callWhen, type CallHit } from "@/lib/meetings/call-archive";
 import { searchSummary } from "@/lib/meetings/session-archive";
@@ -109,6 +109,23 @@ export function CallArchive({ initial }: { initial: CallHit[] }) {
   const confirm = useCallback((id: string) => setConfirming(id), []);
   const cancelConfirm = useCallback(() => setConfirming(null), []);
 
+  /**
+   * The day the rows' dates are relative to.
+   *
+   * `callWhen` says "Today, 2:15 PM" by comparing against the moment it is
+   * CALLED, so a memoized row that does not re-render keeps whatever it said
+   * when it last did. Left open across midnight, yesterday's last call went on
+   * claiming to be today's — a staleness the memo introduced, because before it
+   * every parent render recomputed every label.
+   *
+   * So the day is passed in rather than read inside. Keyed on `toDateString`,
+   * which is cheap and has no Intl in it, the identity is stable for as long as
+   * the date is: memoized rows ignore a keystroke, and the first render after
+   * midnight re-labels all of them.
+   */
+  const todayKey = new Date().toDateString();
+  const today = useMemo(() => new Date(todayKey), [todayKey]);
+
   const trimmed = query.trim();
   const isSearch = trimmed.length >= MIN_QUERY;
   // The same sentence the meeting log shows, from the same function, in this
@@ -178,6 +195,7 @@ export function CallArchive({ initial }: { initial: CallHit[] }) {
             <CallRow
               key={call.id}
               call={call}
+              today={today}
               confirming={confirming === call.id}
               deleting={deleting === call.id}
               onConfirm={confirm}
@@ -205,11 +223,16 @@ export function CallArchive({ initial }: { initial: CallHit[] }) {
  * Takes `confirming` and `deleting` as booleans rather than the parent's
  * selected id, so pressing delete on one row re-renders that row instead of
  * all of them. The three handlers are stable by construction — see `remove`.
+ *
+ * And it takes the DAY rather than reading the clock, because a memo that skips
+ * a render also skips re-deriving "Today" — see `today` in the parent.
  */
 const CallRow = memo(function CallRow({
-  call, confirming, deleting, onConfirm, onCancel, onDelete,
+  call, today, confirming, deleting, onConfirm, onCancel, onDelete,
 }: {
   call: CallHit;
+  /** The day "Today" is measured against — see the parent. */
+  today: Date;
   confirming: boolean;
   deleting: boolean;
   onConfirm: (id: string) => void;
@@ -235,7 +258,7 @@ const CallRow = memo(function CallRow({
           data-call-meta
           className="mt-0.5 flex flex-wrap items-center gap-x-2 text-xs text-[var(--fg-muted)]"
         >
-          <span>{callWhen(call.at)}</span>
+          <span>{callWhen(call.at, today)}</span>
           {call.consented && (
             <span title="Consent was acknowledged before this call was recorded.">· consent recorded</span>
           )}
