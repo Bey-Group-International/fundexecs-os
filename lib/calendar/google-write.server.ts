@@ -167,7 +167,7 @@ export async function pushMeetingToGoogle(
 
   // Non-null past this point: a non-skip decision requires a connection.
   const { conn, calendarId } = target!;
-  const token = await accessTokenFor(conn);
+  const token = await accessTokenFor(conn, { reuse: true });
   if (!token.ok || !token.data) {
     const error = token.error ?? "Could not authenticate with Google.";
     await recordSync(client, meeting.id, { status: "sync_failed", eventId: meeting.external_calendar_event_id, error });

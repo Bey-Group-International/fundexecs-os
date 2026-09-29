@@ -32,21 +32,21 @@ export async function POST() {
     if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: auth.status });
 
     const supabase = await createServerClient();
-    const result = await syncStaleGoogleConnections(supabase, {
-      userId: auth.ctx.userId,
-      budgetMs: SYNC_BUDGET_MS,
-    });
-
     // Subscribed ICS feeds refresh alongside: from the member's side "Sync now"
     // means every connected calendar, not the Google half of them. Best-effort
     // — one unreachable third-party URL must not fail a Google sync that
-    // worked.
-    let feeds = { refreshed: 0, failed: 0, skipped: 0 };
-    try {
-      feeds = await refreshStaleFeeds(supabase, { userId: auth.ctx.userId, force: true });
-    } catch (err) {
-      console.error("[/api/meetings/calendars/sync] feeds", err);
-    }
+    // worked. Run at the same time as the Google sync rather than after it:
+    // the two share nothing, and the member is watching a spinner.
+    const [result, feeds] = await Promise.all([
+      syncStaleGoogleConnections(supabase, {
+        userId: auth.ctx.userId,
+        budgetMs: SYNC_BUDGET_MS,
+      }),
+      refreshStaleFeeds(supabase, { userId: auth.ctx.userId, force: true }).catch((err) => {
+        console.error("[/api/meetings/calendars/sync] feeds", err);
+        return { refreshed: 0, failed: 0, skipped: 0 };
+      }),
+    ]);
 
     return NextResponse.json({
       // No connection is not an error: a member with only ICS feeds, or none at
