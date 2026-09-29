@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useLayoutEffect, useMemo, useReducer, useRef, useState, useCallback } from "react";
+import React, { memo, useEffect, useLayoutEffect, useMemo, useReducer, useRef, useState, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
@@ -41,6 +41,7 @@ import {
   resolveTimestamp,
   type ChatDelivery,
   type ChatMessage,
+  type ChatTurn,
 } from "@/lib/meetings/chat";
 import { MeetingShareLink } from "@/app/(app)/meetings/MeetingShareLink";
 import { CopilotErrorBoundary } from "./CopilotErrorBoundary";
@@ -1192,6 +1193,112 @@ function ControlBarImpl({
 // through MeetingRoom means entering a room, which opens a camera, an ICE
 // negotiation and a Realtime channel, and a test that mocked all of that would
 // be testing its own mocks.
+/**
+ * One person's turn in the chat.
+ *
+ * Module scope and memoized, and both halves matter. The room re-renders
+ * several times a second for the whole call — the voice meter samples every
+ * 120ms and `speaking` changes at every pause in conversation — and without
+ * this every message in the log was rebuilt on each one, re-parsing its text
+ * for links to produce the same nodes again.
+ *
+ * `turn` is safe to compare by identity: `groupChat` is memoized on the
+ * messages, so the turn objects only change when the chat does. `onRetry` has
+ * to be stable or the comparison never holds — see the stable handlers below.
+ *
+ * Declared out here rather than inside the sidebar because a component defined
+ * during a render is a NEW type on every render, which remounts the subtree and
+ * makes the memo worse than useless.
+ */
+const ChatTurnRow = memo(function ChatTurnRow({
+  turn, onRetry,
+}: {
+  turn: ChatTurn;
+  onRetry: (id: string) => void;
+}) {
+  return (
+    // `min-w-0` and `break-words` together are what stop a pasted URL — the
+    // most common thing anybody pastes into a meeting chat — from forcing this
+    // column wider than the panel, which only scrolls vertically.
+    <div className="flex flex-col gap-0.5 min-w-0">
+      <span className="flex items-baseline gap-2">
+        <span className="text-xs font-medium text-[var(--gold-400)] break-words">{turn.displayName}</span>
+        <span className="font-mono text-[10px] tabular-nums text-[var(--fg-muted)]">
+          {chatClock(turn.ts)}
+        </span>
+      </span>
+      {turn.messages.map((msg) => (
+        <div key={msg.id} className="flex flex-col gap-0.5 min-w-0">
+          <div className="rounded-lg bg-[var(--surface-0)] border border-[var(--line)] px-3 py-2 text-sm text-[var(--fg-primary)] break-words whitespace-pre-wrap">
+            <ChatText text={msg.text} />
+          </div>
+          {msg.delivery === "sending" && (
+            <span className="text-[10px] text-[var(--fg-muted)]">Sending…</span>
+          )}
+          {msg.delivery === "failed" && (
+            <span className="text-[10px] text-[var(--status-danger)] flex items-center gap-1.5">
+              Not delivered
+              <button onClick={() => onRetry(msg.id)} className="underline hover:no-underline font-semibold">
+                Retry
+              </button>
+            </span>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+});
+
+/**
+ * One person in the "In this call" list.
+ *
+ * Takes the flags rather than the participant object, so the comparison does
+ * not depend on whether the caller rebuilt its array this render — and so a
+ * speaking change re-renders the one row whose dot moved instead of all of
+ * them. `speaking` is the only prop here that changes on the fast path.
+ */
+const PersonRow = memo(function PersonRow({
+  id, displayName, micOn, isLocal, speaking, handRaised, color, isHost, onKick,
+}: {
+  id: string;
+  displayName: string;
+  micOn: boolean;
+  isLocal: boolean;
+  speaking: boolean;
+  handRaised: boolean;
+  color: string;
+  isHost: boolean;
+  onKick: (id: string) => void;
+}) {
+  return (
+    <div className="flex items-center gap-2.5 rounded-lg px-2 py-2">
+      <div
+        className={`w-7 h-7 rounded-full bg-gold-400/20 flex items-center justify-center text-xs font-semibold transition-colors ${speaking ? "border-2" : "border border-gold-400/30"}`}
+        style={speaking ? { borderColor: color, color } : { color: "var(--gold-400)" }}
+      >
+        {displayName.slice(0, 1).toUpperCase()}
+      </div>
+      <span className="text-sm text-[var(--fg-primary)] flex-1">{displayName}</span>
+      {/* Muted vs. merely quiet is the difference between "they chose not to
+          speak" and "nothing they say is reaching the transcript" — worth
+          stating, not leaving to inference. */}
+      <span
+        title={micOn ? (speaking ? "Speaking now" : "Mic live") : "Muted — not being transcribed"}
+        className={`text-xs ${micOn ? (speaking ? "" : "text-[var(--fg-muted)]") : "text-[var(--status-danger)]"}`}
+        style={micOn && speaking ? { color } : undefined}
+      >
+        {micOn ? (speaking ? "◉ speaking" : "mic on") : "muted"}
+      </span>
+      {handRaised && <span className="text-sm">✋</span>}
+      {isLocal ? (
+        <span className="text-xs text-[var(--fg-muted)]">You</span>
+      ) : isHost ? (
+        <button onClick={() => onKick(id)} className="text-xs text-[var(--status-danger)] hover:underline">Remove</button>
+      ) : null}
+    </div>
+  );
+});
+
 export function CopilotSidebar({
   srStatus, participants, roomCode, meetingTitle,
   chatMessages, chatUnread, onSendChat, onRetryChat, isHost, raisedHands, onKick, onAdmit, onDeny, onAdmitAll, waitingPeers, onChatVisibility,
@@ -1238,6 +1345,15 @@ export function CopilotSidebar({
   // Regrouped when the messages change, not every time the room re-renders —
   // which, with someone talking, is several times a second.
   const chatTurns = useMemo(() => groupChat(chatMessages), [chatMessages]);
+
+  // The handlers the memoized rows below receive. The room passes these as
+  // inline arrows, so they are new functions on every render and comparing them
+  // would fail every time — which is the whole memo. Wrapped here rather than at
+  // the call site so the rows hold whatever the caller does with its own props.
+  const rowHandlers = useStableHandlers({ onRetryChat, onKick });
+
+  // Sorted when the hands or the people change, not on the fast path.
+  const orderedPeople = useMemo(() => handsFirst(participants, raisedHands), [participants, raisedHands]);
 
   const sendChat = () => {
     const text = chatInput.trim();
@@ -1329,36 +1445,7 @@ export function CopilotSidebar({
               // repeating their name above each is how a short exchange
               // becomes a wall.
               chatTurns.map((turn) => (
-                // `min-w-0` and `break-words` together are what stop a pasted
-                // URL — the most common thing anybody pastes into a meeting
-                // chat — from forcing this column wider than the panel, which
-                // only scrolls vertically.
-                <div key={turn.id} className="flex flex-col gap-0.5 min-w-0">
-                  <span className="flex items-baseline gap-2">
-                    <span className="text-xs font-medium text-[var(--gold-400)] break-words">{turn.displayName}</span>
-                    <span className="font-mono text-[10px] tabular-nums text-[var(--fg-muted)]">
-                      {chatClock(turn.ts)}
-                    </span>
-                  </span>
-                  {turn.messages.map((msg) => (
-                    <div key={msg.id} className="flex flex-col gap-0.5 min-w-0">
-                      <div className="rounded-lg bg-[var(--surface-0)] border border-[var(--line)] px-3 py-2 text-sm text-[var(--fg-primary)] break-words whitespace-pre-wrap">
-                        <ChatText text={msg.text} />
-                      </div>
-                      {msg.delivery === "sending" && (
-                        <span className="text-[10px] text-[var(--fg-muted)]">Sending…</span>
-                      )}
-                      {msg.delivery === "failed" && (
-                        <span className="text-[10px] text-[var(--status-danger)] flex items-center gap-1.5">
-                          Not delivered
-                          <button onClick={() => onRetryChat(msg.id)} className="underline hover:no-underline font-semibold">
-                            Retry
-                          </button>
-                        </span>
-                      )}
-                    </div>
-                  ))}
-                </div>
+                <ChatTurnRow key={turn.id} turn={turn} onRetry={rowHandlers.onRetryChat} />
               ))
             )}
             <div ref={chatBottomRef} />
@@ -1414,37 +1501,20 @@ export function CopilotSidebar({
             {/* Participant list */}
             <div className="flex flex-col gap-1">
               <p className="text-xs font-medium text-[var(--fg-secondary)] uppercase tracking-wide px-1">In this call</p>
-              {handsFirst(participants, raisedHands).map((p) => {
-                const isSpeaking = speaking.has(p.id);
-                const color = colorFor(p.id);
-                return (
-                  <div key={p.id} className="flex items-center gap-2.5 rounded-lg px-2 py-2">
-                    <div
-                      className={`w-7 h-7 rounded-full bg-gold-400/20 flex items-center justify-center text-xs font-semibold transition-colors ${isSpeaking ? "border-2" : "border border-gold-400/30"}`}
-                      style={isSpeaking ? { borderColor: color, color } : { color: "var(--gold-400)" }}
-                    >
-                      {p.displayName.slice(0, 1).toUpperCase()}
-                    </div>
-                    <span className="text-sm text-[var(--fg-primary)] flex-1">{p.displayName}</span>
-                    {/* Muted vs. merely quiet is the difference between "they
-                        chose not to speak" and "nothing they say is reaching the
-                        transcript" — worth stating, not leaving to inference. */}
-                    <span
-                      title={p.micOn ? (isSpeaking ? "Speaking now" : "Mic live") : "Muted — not being transcribed"}
-                      className={`text-xs ${p.micOn ? (isSpeaking ? "" : "text-[var(--fg-muted)]") : "text-[var(--status-danger)]"}`}
-                      style={p.micOn && isSpeaking ? { color } : undefined}
-                    >
-                      {p.micOn ? (isSpeaking ? "◉ speaking" : "mic on") : "muted"}
-                    </span>
-                    {raisedHands.has(p.id) && <span className="text-sm">✋</span>}
-                    {p.isLocal ? (
-                      <span className="text-xs text-[var(--fg-muted)]">You</span>
-                    ) : isHost ? (
-                      <button onClick={() => onKick(p.id)} className="text-xs text-[var(--status-danger)] hover:underline">Remove</button>
-                    ) : null}
-                  </div>
-                );
-              })}
+              {orderedPeople.map((p) => (
+                <PersonRow
+                  key={p.id}
+                  id={p.id}
+                  displayName={p.displayName}
+                  micOn={p.micOn}
+                  isLocal={p.isLocal}
+                  speaking={speaking.has(p.id)}
+                  handRaised={raisedHands.has(p.id)}
+                  color={colorFor(p.id)}
+                  isHost={isHost}
+                  onKick={rowHandlers.onKick}
+                />
+              ))}
             </div>
 
             {/* Removed — and how to undo it.
@@ -5991,6 +6061,33 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     onFlipCamera: () => void flipCamera(),
   });
 
+  /**
+   * Who is in the call, as the panels want them.
+   *
+   * Memoized for its IDENTITY rather than for the cost of building it — a
+   * handful of objects is nothing. It is handed to the copilot sidebar, which
+   * memoizes work on it, and a fresh array every render makes every such memo a
+   * comment: it recomputes each time while reading as though it does not. The
+   * room re-renders several times a second whenever anybody is talking, so that
+   * is the common case, not the rare one.
+   *
+   * Declared HERE, above the early returns below, because these are hooks: the
+   * active-meeting section further down is past a `return`, and a hook after a
+   * conditional return does not run in the same order every render.
+   */
+  const allPeers = useMemo(() => [...peers.values()] as Peer[], [peers]);
+  const participantList = useMemo(() => [
+    { id: LOCAL_SPEAKER_ID, displayName: localName, micOn, isLocal: true },
+    ...allPeers.map((p) => ({
+      id: p.id,
+      displayName: p.displayName,
+      // A peer who has not announced yet is assumed live: everyone joins
+      // unmuted, and showing a real speaker as muted is the worse error.
+      micOn: peerMicOn.get(p.id) ?? true,
+      isLocal: false,
+    })),
+  ], [allPeers, localName, micOn, peerMicOn]);
+
   if (deniedByHost) {
     return (
       <BodyPortal>
@@ -6039,26 +6136,12 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
 
   // ── Active meeting ────────────────────────────────────────────────────────
 
-  const allPeers = [...peers.values()] as Peer[];
   const totalCount = 1 + allPeers.length;
   const gridClass = totalCount === 1 ? "grid-cols-1" : totalCount === 2 ? "grid-cols-2" : totalCount <= 4 ? "grid-cols-2" : "grid-cols-3";
-
-  const participantList = [
-    { id: LOCAL_SPEAKER_ID, displayName: localName, micOn, isLocal: true },
-    ...allPeers.map((p) => ({
-      id: p.id,
-      displayName: p.displayName,
-      // A peer who has not announced yet is assumed live: everyone joins
-      // unmuted, and showing a real speaker as muted is the worse error.
-      micOn: peerMicOn.get(p.id) ?? true,
-      isLocal: false,
-    })),
-  ];
 
   // The others' hands, oldest first — the order a chair would take them in.
   const handsUpPeople = raisedBy(raisedHands, participantList, LOCAL_SPEAKER_ID);
   const handsUpNote = handsUpLabel(handsUpPeople);
-
 
   // Reactions with a name attached, oldest first — the same shape raisedBy
   // gives for hands, and for the same reason: the tile is not a reliable place

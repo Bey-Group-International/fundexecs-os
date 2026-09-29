@@ -1,5 +1,6 @@
 "use client";
 
+import { memo } from "react";
 import { chatParts } from "@/lib/meetings/chat";
 
 /**
@@ -12,8 +13,15 @@ import { chatParts } from "@/lib/meetings/chat";
  *
  * Shared by the room and the report, so a link that was followable during the
  * call is still followable in the record of it.
+ *
+ * MEMOIZED, because `chatParts` scans the text with a regex and the room around
+ * it re-renders several times a second: the voice meter samples every 120ms and
+ * `speaking` changes at every pause in conversation. Measured before the memo,
+ * a fifty-message chat re-parsed all fifty messages on each of those — for the
+ * length of the call, to produce identical output. The prop is a string, so
+ * there is nothing for the comparison to get wrong.
  */
-export function ChatText({ text }: { text: string }) {
+export const ChatText = memo(function ChatText({ text }: { text: string }) {
   return (
     <>
       {chatParts(text).map((part, i) =>
@@ -33,4 +41,4 @@ export function ChatText({ text }: { text: string }) {
       )}
     </>
   );
-}
+});

@@ -4439,6 +4439,41 @@ Deployed, monitoring               →  live, observability active
              |  Confidence: Jest 7429 -> 7435 across 525 suites. Each proved by
              |  injection — removing the limit fails 1, counting raw rows again
              |  fails 2, dropping the membership skip fails 3.
+             |
+             |  2026-09-29  The copilot sidebar was rebuilt several times a
+             |  second, for the length of every call.
+             |  The voice meter samples every 120ms and `speaking` turns over
+             |  whenever a voice crosses the 900ms hold — which is every pause in
+             |  ordinary conversation. Each of those re-rendered the whole panel:
+             |  every chat turn, every message, re-running the regex that finds
+             |  links in text to produce nodes identical to the ones on screen.
+             |  Measured before touching anything, which is the only reason the
+             |  number means something: a fifty-message chat ran chatParts fifty
+             |  times per speaking change. After: zero.
+             |  Two memos and a stable handler, the same shape as the transcript
+             |  panel in #1140: a module-scope ChatTurnRow, ChatText memoized, and
+             |  useStableHandlers so the rows are not handed a new onRetry every
+             |  render — which would have made the memo a comment.
+             |  What the injections taught. Removing EITHER memo alone changed
+             |  nothing measurable: each is independently sufficient for the
+             |  chatParts count, so a test watching only chatParts guards the pair
+             |  and neither. Counting chatClock, which runs once per TURN, is what
+             |  pins the row memo on its own. A test that cannot fail for one of
+             |  two redundant reasons is testing neither of them.
+             |  And the fixture lied once: it built `new Set()` for raisedHands on
+             |  every render, so the ordering memo looked broken when it was the
+             |  test changing the input. React state keeps its identity; a fixture
+             |  standing in for state has to as well.
+             |  Also memoized participantList in the room — not for the cost of
+             |  building it, which is nothing, but for its identity: a fresh array
+             |  each render makes every memo downstream a comment. It had to be
+             |  hoisted above the early returns, because the active-meeting section
+             |  of that component is past a `return` and hooks cannot live there.
+             |  Confidence: Jest 7435 -> 7447 across 526 suites, typecheck and
+             |  eslint clean. Four injections, each failing the test that names it.
+             |  Not covered: whether the ROOM hands the panel a stable array, which
+             |  is a property of a component no test can render — reaching it means
+             |  opening a camera, an ICE negotiation and a Realtime channel.
 ```
 
 ---
