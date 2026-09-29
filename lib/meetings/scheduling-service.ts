@@ -272,6 +272,36 @@ export async function busyIntervals(
   // scan bounded instead of reading the host's whole history.
   const lookback = new Date(new Date(opts.fromIso).getTime() - MAX_MEETING_MINUTES * 60_000).toISOString();
 
+  // Time already taken in a connected calendar: a subscribed ICS feed
+  // (Outlook, Apple, Calendly) or Google Calendar itself. Served from what the
+  // last sync stored — never fetched here, because this runs inside a public
+  // slot lookup and must not wait on a third party.
+  //
+  // Both resolve to an empty list rather than throwing, and both fail
+  // independently: a broken Google connection must not also stop an ICS feed
+  // from blocking time, and neither may take the booking page down. The cost
+  // of a miss is a double-booking, so each logs loudly on the way through.
+  //
+  // Started here, alongside the reads below, not after them: neither depends on
+  // the host's own meetings, bookings or blocks, and waiting for those first put
+  // a second database round trip in front of every slot lookup on a public
+  // booking page — and every booking, reschedule and approval that re-checks
+  // its slot through here.
+  const externalBusy = Promise.all([
+    externalBusyForUser(client as never, opts.hostUserId, {
+      fromIso: opts.fromIso,
+      toIso: opts.toIso,
+      timezone: opts.timezone,
+    }),
+    googleBusyForUser(
+      client as never,
+      opts.hostUserId,
+      new Date(opts.fromIso),
+      new Date(opts.toIso),
+      opts.timezone,
+    ),
+  ]);
+
   const [meetings, bookings, blocks] = await Promise.all([
     table(client, "live_meetings")
       .select("scheduled_at, duration_minutes")
@@ -343,29 +373,7 @@ export async function busyIntervals(
     ),
   );
 
-  // Time already taken in a connected calendar: a subscribed ICS feed
-  // (Outlook, Apple, Calendly) or Google Calendar itself. Served from what the
-  // last sync stored — never fetched here, because this runs inside a public
-  // slot lookup and must not wait on a third party.
-  //
-  // Both resolve to an empty list rather than throwing, and both fail
-  // independently: a broken Google connection must not also stop an ICS feed
-  // from blocking time, and neither may take the booking page down. The cost
-  // of a miss is a double-booking, so each logs loudly on the way through.
-  const [feedBusy, googleBusy] = await Promise.all([
-    externalBusyForUser(client as never, opts.hostUserId, {
-      fromIso: opts.fromIso,
-      toIso: opts.toIso,
-      timezone: opts.timezone,
-    }),
-    googleBusyForUser(
-      client as never,
-      opts.hostUserId,
-      new Date(opts.fromIso),
-      new Date(opts.toIso),
-      opts.timezone,
-    ),
-  ]);
+  const [feedBusy, googleBusy] = await externalBusy;
   out.push(...feedBusy, ...googleBusy);
 
   return out;
