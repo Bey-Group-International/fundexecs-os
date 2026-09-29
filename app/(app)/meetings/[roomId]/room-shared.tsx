@@ -178,6 +178,26 @@ export function videoTrackOf(stream: MediaStream | null): MediaStreamTrack | nul
   return stream?.getVideoTracks()[0] ?? null;
 }
 
+/**
+ * Wrap a set of handlers in functions whose identity never changes and which
+ * always call the handlers from the latest render.
+ *
+ * For props handed to a memoized child: passing the handlers directly would
+ * give it new functions every render and defeat the memo, and freezing the
+ * first render's would act on stale state.
+ */
+export function useStableHandlers<T extends Record<string, (...args: any[]) => unknown>>(handlers: T): T {
+  const latest = useRef(handlers);
+  useLayoutEffect(() => { latest.current = handlers; });
+  const [stable] = useState(() => {
+    const out = {} as Record<string, (...args: unknown[]) => unknown>;
+    for (const key of Object.keys(handlers)) {
+      out[key] = (...args: unknown[]) => latest.current[key](...args);
+    }
+    return out as T;
+  });
+  return stable;
+}
 
 /** Somebody the host removed, and the name they had when it happened. */
 export interface RemovedPerson { subject: RemovalSubject; displayName: string }

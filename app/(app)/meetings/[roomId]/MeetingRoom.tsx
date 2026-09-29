@@ -44,6 +44,7 @@ import {
   resolveTimestamp,
   type ChatDelivery,
   type ChatMessage,
+  type ChatTurn,
 } from "@/lib/meetings/chat";
 import { CopilotErrorBoundary } from "./CopilotErrorBoundary";
 import {
@@ -193,6 +194,7 @@ import {
   notificationPermission,
   playChime,
   requestHostNotifications,
+  useStableHandlers,
   videoTrackOf,
   type RemovedPerson,
 } from "./room-shared";
@@ -420,26 +422,6 @@ interface VoiceTap {
   smoothed: number;
 }
 
-/**
- * Wrap a set of handlers in functions whose identity never changes and which
- * always call the handlers from the latest render.
- *
- * For props handed to a memoized child: passing the handlers directly would
- * give it new functions every render and defeat the memo, and freezing the
- * first render's would act on stale state.
- */
-function useStableHandlers<T extends Record<string, (...args: any[]) => unknown>>(handlers: T): T {
-  const latest = useRef(handlers);
-  useLayoutEffect(() => { latest.current = handlers; });
-  const [stable] = useState(() => {
-    const out = {} as Record<string, (...args: unknown[]) => unknown>;
-    for (const key of Object.keys(handlers)) {
-      out[key] = (...args: unknown[]) => latest.current[key](...args);
-    }
-    return out as T;
-  });
-  return stable;
-}
 
 // ─── Main component ───────────────────────────────────────────────────────────
 
@@ -4903,6 +4885,33 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     onFlipCamera: () => void flipCamera(),
   });
 
+  /**
+   * Who is in the call, as the panels want them.
+   *
+   * Memoized for its IDENTITY rather than for the cost of building it — a
+   * handful of objects is nothing. It is handed to the copilot sidebar, which
+   * memoizes work on it, and a fresh array every render makes every such memo a
+   * comment: it recomputes each time while reading as though it does not. The
+   * room re-renders several times a second whenever anybody is talking, so that
+   * is the common case, not the rare one.
+   *
+   * Declared HERE, above the early returns below, because these are hooks: the
+   * active-meeting section further down is past a `return`, and a hook after a
+   * conditional return does not run in the same order every render.
+   */
+  const allPeers = useMemo(() => [...peers.values()] as Peer[], [peers]);
+  const participantList = useMemo(() => [
+    { id: LOCAL_SPEAKER_ID, displayName: localName, micOn, isLocal: true },
+    ...allPeers.map((p) => ({
+      id: p.id,
+      displayName: p.displayName,
+      // A peer who has not announced yet is assumed live: everyone joins
+      // unmuted, and showing a real speaker as muted is the worse error.
+      micOn: peerMicOn.get(p.id) ?? true,
+      isLocal: false,
+    })),
+  ], [allPeers, localName, micOn, peerMicOn]);
+
   if (deniedByHost) {
     return (
       <BodyPortal>
@@ -4978,26 +4987,12 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
   }
   const { VideoTile, CopilotSidebar, ControlBar, ReactionTicker } = callParts;
 
-  const allPeers = [...peers.values()] as Peer[];
   const totalCount = 1 + allPeers.length;
   const gridClass = totalCount === 1 ? "grid-cols-1" : totalCount === 2 ? "grid-cols-2" : totalCount <= 4 ? "grid-cols-2" : "grid-cols-3";
-
-  const participantList = [
-    { id: LOCAL_SPEAKER_ID, displayName: localName, micOn, isLocal: true },
-    ...allPeers.map((p) => ({
-      id: p.id,
-      displayName: p.displayName,
-      // A peer who has not announced yet is assumed live: everyone joins
-      // unmuted, and showing a real speaker as muted is the worse error.
-      micOn: peerMicOn.get(p.id) ?? true,
-      isLocal: false,
-    })),
-  ];
 
   // The others' hands, oldest first — the order a chair would take them in.
   const handsUpPeople = raisedBy(raisedHands, participantList, LOCAL_SPEAKER_ID);
   const handsUpNote = handsUpLabel(handsUpPeople);
-
 
   // Reactions with a name attached, oldest first — the same shape raisedBy
   // gives for hands, and for the same reason: the tile is not a reliable place
