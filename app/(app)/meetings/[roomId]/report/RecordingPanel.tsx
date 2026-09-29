@@ -3,6 +3,7 @@
 import { memo } from "react";
 import { formatSize } from "@/lib/meetings/recording-policy";
 import { playableRecording, type ReportRecording } from "@/lib/meetings/report-page";
+import { ExpiresIn, LocalTime } from "./LocalTime";
 import nextDynamic from "next/dynamic";
 import type { RecordingPlayerHandle } from "./RecordingPlayer";
 
@@ -51,10 +52,6 @@ function clock(seconds: number | null): string {
   const mm = String(m).padStart(2, "0");
   const ss = String(s).padStart(2, "0");
   return h > 0 ? `${h}:${mm}:${ss}` : `${mm}:${ss}`;
-}
-
-function daysUntil(iso: string): number {
-  return Math.ceil((Date.parse(iso) - Date.now()) / 86_400_000);
 }
 
 /**
@@ -112,7 +109,8 @@ export const RecordingPanel = memo(function RecordingPanel({
           if (rec.deleted_at) {
             return (
               <div key={rec.id} className="text-xs text-[var(--fg-muted)]">
-                A recording from {new Date(rec.started_at).toLocaleDateString()} was deleted
+                A recording from{" "}
+                <LocalTime iso={rec.started_at} options={{ dateStyle: "medium" }} /> was deleted
                 after its 90-day retention period.
               </div>
             );
@@ -121,13 +119,12 @@ export const RecordingPanel = memo(function RecordingPanel({
           if (rec.status === "abandoned") {
             return (
               <div key={rec.id} className="text-xs text-[var(--fg-muted)]">
-                A recording was started on {new Date(rec.started_at).toLocaleDateString()} but
+                A recording was started on{" "}
+                <LocalTime iso={rec.started_at} options={{ dateStyle: "medium" }} /> but
                 nothing was captured.
               </div>
             );
           }
-
-          const expiringIn = daysUntil(rec.expires_at);
 
           return (
             <div key={rec.id} className="flex flex-col gap-2">
@@ -158,10 +155,11 @@ export const RecordingPanel = memo(function RecordingPanel({
                 {rec.duration_seconds ? <span>{clock(rec.duration_seconds)}</span> : null}
                 {rec.size_bytes > 0 && <span>{formatSize(rec.size_bytes)}</span>}
                 {/* The expiry is stated, not implied. A recording that vanishes
-                    without warning is worse than one that was never made. */}
-                <span className={expiringIn <= 7 ? "text-[var(--status-warning)]" : undefined}>
-                  {expiringIn > 0 ? `Deleted in ${expiringIn} day${expiringIn === 1 ? "" : "s"}` : "Deleted soon"}
-                </span>
+                    without warning is worse than one that was never made.
+                    Counted from the BROWSER's clock: this panel is rendered on
+                    the server now, and a countdown computed there differs from
+                    the reader's own day. */}
+                <ExpiresIn iso={rec.expires_at} />
                 {/* Until this there was nothing anybody could do about that
                     expiry, which makes stating it worse than not stating it.
                     A plain anchor: the route sets Content-Disposition, so the

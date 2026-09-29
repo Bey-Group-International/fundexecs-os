@@ -74,6 +74,78 @@ const EMPTY: ReportPageData = {
   cueRows: [],
 };
 
+/** The meeting columns the state decision needs, and nothing else. */
+const STATE_COLUMNS = "id, host_id, ended_at, started_at, scheduled_at, created_at";
+
+/**
+ * Just the state: has this room's report arrived, for whoever is asking.
+ *
+ * This exists because the obvious thing was wrong. The waiting poll asked
+ * `loadReportPage` — the full load — every five seconds, to read three booleans
+ * off the end of it. That meant, per tick: every page of the transcript through
+ * `readAllTranscriptRows`, up to 500 chat rows, every recording, and the report
+ * row with its whole `full_transcript` and `analysis`. A tab waiting the full six
+ * minutes did that about seventy times, on a meeting whose transcript is at its
+ * longest precisely when the wait is longest.
+ *
+ * Worse than the client page it replaced, which read the transcript twice.
+ *
+ * So the poll gets its own reads: the viewer, four meeting columns, whether a
+ * report row exists and whether it has a summary, and the attendance row. No
+ * transcript, no chat, no recordings, no report body.
+ *
+ * The DECISION is still shared — both this and `loadReportPage` end at the same
+ * `reportViewState` call — so the poll and the render cannot disagree about what
+ * the page should be showing. That is the part that had to stay common; the reads
+ * are what had to differ.
+ */
+export async function loadReportState(
+  supabase: Client,
+  roomCode: string,
+  now: number = Date.now(),
+): Promise<ReportViewState> {
+  const [viewerResult, meetingResult] = await Promise.all([
+    supabase.auth.getUser(),
+    supabase.from("live_meetings").select(STATE_COLUMNS).eq("room_code", roomCode).maybeSingle(),
+  ]);
+
+  const viewerId = viewerResult?.data?.user?.id ?? null;
+  const meeting = meetingResult?.data as ReportMeeting | null | undefined;
+  if (!meeting) return "missing";
+
+  const [reportResult, attendanceResult] = await Promise.all([
+    // `summary` alone: enough to answer both "is there a row" (the row came back)
+    // and "does it say anything" — without dragging an hour of transcript along.
+    supabase
+      .from("live_meeting_reports")
+      .select("summary")
+      .eq("meeting_id", meeting.id)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+    viewerId
+      ? supabase
+          .from("live_meeting_participants")
+          .select("meeting_id")
+          .eq("meeting_id", meeting.id)
+          .eq("user_id", viewerId)
+          .maybeSingle()
+      : Promise.resolve({ data: null }),
+  ]);
+
+  const report = reportResult?.data as { summary: string | null } | null;
+  return reportViewState({
+    loaded: true,
+    meetingExists: true,
+    hostId: meeting.host_id,
+    viewerId,
+    attended: Boolean(attendanceResult?.data),
+    hasReport: Boolean(report),
+    hasSummary: Boolean(report?.summary?.trim()),
+    waitedMs: reportOwedForMs(meeting, now),
+  });
+}
+
 /**
  * Load a report page for whoever the request's cookies say is asking.
  *

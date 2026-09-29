@@ -48,17 +48,31 @@ export interface ReportRow {
  * it. The stall was a property of the visit rather than of the report.
  *
  * Measured from the meeting instead, which is the thing that is actually late.
- * A report is owed once the meeting is over; if there is no ended_at — a room
- * nobody closed, or a one-way call that has no room at all — then the row's own
- * creation is when the clock starts. Either way the answer is the same on every
- * visit and on every device, which is what "this report is not coming" ought to
- * mean.
  *
- * Never negative: a clock skewed into the future would otherwise read as a
- * report that has been late since before the meeting happened.
+ * The fallback ORDER matters, and the obvious version of it was wrong: reaching
+ * straight for `created_at` when there is no `ended_at` dates the clock to when
+ * the ROW was made, and for anything booked in advance that is days before the
+ * meeting. A meeting booked last week and not yet closed would be declared
+ * "probably not coming" the first time anybody opened it — the same gap
+ * `meetingHappenedAt` below exists for. So: when it ended, else when it started,
+ * else when it was booked for, and only then the row itself, which is all a
+ * one-way call has.
+ *
+ * Never negative, so a meeting still in the future reads as nothing owed rather
+ * than as a report late since before it was due.
+ *
+ * KNOWN LIMIT, shared with the version this replaces: a meeting that is still
+ * running has no `ended_at`, so this measures from when it started and will call
+ * a long call's absent report stalled while the call is still going. Returning
+ * zero for that case was the tempting fix and is worse — a room nobody ever
+ * closes would then wait for a report forever, which is the permanent spinner
+ * the wait limit exists to prevent. Distinguishing "running" from "abandoned"
+ * needs the meeting's status, which is a wider change than this one.
  */
 export function reportOwedForMs(meeting: ReportMeeting, now: number): number {
-  const owedSince = Date.parse(meeting.ended_at ?? meeting.created_at);
+  const owedSince = Date.parse(
+    meeting.ended_at ?? meeting.started_at ?? meeting.scheduled_at ?? meeting.created_at,
+  );
   if (!Number.isFinite(owedSince)) return 0;
   return Math.max(0, now - owedSince);
 }

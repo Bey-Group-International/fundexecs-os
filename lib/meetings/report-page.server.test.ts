@@ -11,7 +11,7 @@
 //     payload. RLS already returns nothing for them, but a payload is serialized
 //     into the HTML, and "the database would have refused" is not a reason to
 //     put a meeting's contents in a page that says the reader may not read it.
-import { loadReportPage } from "./report-page.server";
+import { loadReportPage, loadReportState } from "./report-page.server";
 import { REPORT_WAIT_LIMIT_MS } from "./attendance";
 
 interface Rows {
@@ -45,10 +45,20 @@ const NOW = Date.parse("2026-09-23T14:41:00.000Z");
 function client(rows: Rows = {}) {
   const started: string[] = [];
   const settled: string[] = [];
+  /**
+   * How many reads had already FINISHED when each read began.
+   *
+   * This is the field that makes concurrency observable. Names and order of
+   * starts do not: a loader that awaits five reads one at a time starts the same
+   * five in the same order, so any assertion over `started` alone passes for the
+   * sequential version too.
+   */
+  const settledAtStart: number[] = [];
   let tick = 0;
   /** Resolves on a later microtask, so a sequential loader visibly serializes. */
   const later = async <T>(table: string, value: T): Promise<T> => {
     started.push(table);
+    settledAtStart.push(settled.length);
     await Promise.resolve();
     await Promise.resolve();
     settled.push(table);
@@ -94,7 +104,7 @@ function client(rows: Rows = {}) {
       return chain;
     },
   };
-  return { api, started, settled, ticks: () => tick };
+  return { api, started, settled, settledAtStart, ticks: () => tick };
 }
 
 describe("loadReportPage", () => {
@@ -137,17 +147,22 @@ describe("loadReportPage", () => {
 
   it("runs the reads that do not depend on each other together", async () => {
     // The point of the change. Five reads hang off the meeting's id and none of
-    // them needs another's answer, so they start together. A loader that awaited
-    // them one at a time would return exactly the same payload — which is why
-    // this is asserted on the ORDER, not the result.
-    const { api, started } = client({ report: { summary: "x", full_transcript: "y" } });
+    // them needs another's answer, so they start together.
+    //
+    // Asserted on WHAT HAD FINISHED when each one began, not on the order the
+    // names arrive in. The first version of this test checked only which tables
+    // appeared, and a sequential loader pushes the same names in the same order —
+    // so it passed for the very thing it claimed to rule out. Same shape as a
+    // test asserting "the highlight moved" that also accepts it vanishing.
+    const { api, started, settledAtStart } = client({
+      report: { summary: "x", full_transcript: "y" },
+    });
 
     await loadReportPage(api as never, "abc-def-gh", NOW);
 
     // Wave one: the viewer and the meeting, before anything that needs the id.
     expect(started.slice(0, 2).sort()).toEqual(["auth", "live_meetings"]);
 
-    // Wave two: all five began before any of them had to finish.
     const waveTwo = started.slice(2);
     expect(waveTwo.sort()).toEqual([
       "live_meeting_chat",
@@ -156,6 +171,11 @@ describe("loadReportPage", () => {
       "live_meeting_reports",
       "live_meeting_transcripts",
     ]);
+
+    // Exactly one read had settled — the meeting, from wave one — when every one
+    // of the five started. `auth` does not go through `later`, so it never counts
+    // as settled. Awaited one at a time these would read 1, 2, 3, 4, 5.
+    expect(settledAtStart.slice(1)).toEqual([1, 1, 1, 1, 1]);
   });
 
   it("does not ask for the meeting's contents before it knows the meeting exists", async () => {
@@ -270,5 +290,71 @@ describe("loadReportPage", () => {
     expect(data.state).toBe("ready");
     expect(data.cueRows).toEqual([]);
     expect(data.report?.full_transcript).toBe("Ana: Friday.");
+  });
+});
+
+describe("loadReportState", () => {
+  /**
+   * The poll's own loader, and the reason it exists.
+   *
+   * The waiting island asks every five seconds for three booleans. Pointing that
+   * at the full page load meant re-reading every page of the transcript, up to
+   * 500 chat rows, every recording and the whole report body — about seventy
+   * times over a six-minute wait, on a meeting whose transcript is longest
+   * exactly when the wait is longest.
+   *
+   * So the first test here is a NEGATIVE one: it must not touch those tables.
+   */
+  it("reads nothing it does not need", async () => {
+    const { api, started } = client({ report: { summary: "x" } });
+
+    await loadReportState(api as never, "abc-def-gh", NOW);
+
+    expect(started).not.toContain("live_meeting_transcripts");
+    expect(started).not.toContain("live_meeting_chat");
+    expect(started).not.toContain("live_meeting_recordings");
+    expect(started.sort()).toEqual([
+      "auth",
+      "live_meeting_participants",
+      "live_meeting_reports",
+      "live_meetings",
+    ]);
+  });
+
+  it("agrees with the full load about what the page should show", async () => {
+    // The decision is shared even though the reads are not. If these two ever
+    // disagree, a poll either stops on a page still waiting or keeps asking about
+    // a page that has settled.
+    const cases: Array<Rows> = [
+      { report: { summary: "They agreed to wire on Friday." } },
+      { report: { summary: "" } },
+      { report: null },
+      { viewer: { id: "outsider" }, attended: false, report: null },
+      { viewer: null, report: null },
+    ];
+
+    for (const rows of cases) {
+      const full = await loadReportPage(client(rows).api as never, "abc-def-gh", NOW);
+      const light = await loadReportState(client(rows).api as never, "abc-def-gh", NOW);
+      expect(light).toBe(full.state);
+    }
+  });
+
+  it("is missing for a room that does not exist, without asking anything further", async () => {
+    const { api, started } = client({ meeting: null });
+    expect(await loadReportState(api as never, "nope", NOW)).toBe("missing");
+    expect(started).toEqual(["auth", "live_meetings"]);
+  });
+
+  it("uses the meeting's own age for the stall, like the page does", async () => {
+    const { api } = client({ report: null });
+    const late = Date.parse("2026-09-23T14:40:00.000Z") + REPORT_WAIT_LIMIT_MS;
+    expect(await loadReportState(api as never, "abc-def-gh", late)).toBe("stalled");
+  });
+
+  it("skips the attendance read with no viewer to ask about", async () => {
+    const { api, started } = client({ viewer: null, report: null });
+    await loadReportState(api as never, "abc-def-gh", NOW);
+    expect(started).not.toContain("live_meeting_participants");
   });
 });

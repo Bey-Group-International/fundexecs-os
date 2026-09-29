@@ -4235,6 +4235,66 @@ Deployed, monitoring               →  live, observability active
              |  NOT DONE: nobody has looked at this page in a browser. The bundle
              |  number is measured; that it LOOKS right is reasoned from the markup
              |  being unchanged, which is not the same thing.
+             |
+             |  MEETINGS XV (b) — FOUR FINDINGS, AND TWO COMMENTS THAT LIED
+             |  A review bot read the change above and found four things. All four
+             |  were real. Two of them were cases of an ASSERTION standing in for
+             |  the work:
+             |  ONE. The waiting poll asked the FULL page loader every five seconds
+             |  for three booleans — so every tick re-paged the whole transcript,
+             |  500 chat rows, every recording and the report body, about seventy
+             |  times over a six-minute wait, on a meeting whose transcript is
+             |  longest exactly when the wait is longest. Worse than the client page
+             |  it replaced, which read the transcript twice. And the comment above
+             |  it called it "a cheap request rather than a full re-read of
+             |  everything above". The comment was the only thing making it cheap.
+             |  Now loadReportState: four meeting columns, the report's summary, the
+             |  attendance row. The DECISION stays shared (both end at the same
+             |  reportViewState call) so the poll and the render cannot disagree;
+             |  the READS are what had to differ. Guarded by a negative test — it
+             |  asserts the heavy tables are never touched — because the obvious
+             |  test, "does it return the right state", passes for the expensive
+             |  version too.
+             |  TWO. The concurrency test claimed to assert ORDER and asserted
+             |  membership. A sequential loader pushes the same table names in the
+             |  same order, so it passed for the exact thing it was written to rule
+             |  out. It recorded a `settled` array and never looked at it: the tell.
+             |  Now it asserts how many reads had FINISHED when each one started —
+             |  1,1,1,1,1 concurrent, 1,2,3,4,5 sequential.
+             |  And the bite-check for it nearly lied too. The first injected
+             |  "sequential" loader wrapped the same array literal, which evaluates
+             |  eagerly — so the reads still STARTED together and only the awaiting
+             |  changed. It failed in 2 positions instead of 4, which looked like
+             |  success. A defect has to be injected where the mechanism actually
+             |  is, not where the keyword is.
+             |  THREE. Dates moved to the server, so they formatted in the SERVER's
+             |  zone. A meeting at 20:00 in New York is 00:00 UTC the next day: the
+             |  line under the title showed the wrong weekday. The consent timestamp
+             |  was worse — it exists to answer "recorded with consent, and when",
+             |  and a UTC hour with no label is a quietly wrong answer. Plus a
+             |  hydration mismatch in RecordingPanel, whose toLocaleDateString and
+             |  Date.now() countdown now render once on each side. Fixed with
+             |  LocalTime/ExpiresIn: formatted after mount, first paint explicitly
+             |  labelled UTC, which is the honest fallback rather than a
+             |  local-looking time in the wrong zone.
+             |  THIS IS THE ONE THAT PUNCTURES "the markup is byte-for-byte
+             |  unchanged" — the sentence used to argue the page did not need
+             |  looking at. For dates it was false, and that was the argument for
+             |  not checking.
+             |  FOUR. reportOwedForMs fell back to created_at, which for a meeting
+             |  booked in advance is days before it happens — so a meeting booked
+             |  last week and not yet closed was "probably not coming" the first
+             |  time anybody opened it. Now ended_at, then started_at, then
+             |  scheduled_at, then the row. Took half the suggestion and declined
+             |  the other half with a reason: returning 0 for a meeting with no
+             |  ended_at would make a room nobody closes wait forever, which is the
+             |  permanent spinner the wait limit exists to prevent.
+             |  Bundle after the fixes: 400.2 -> 401.1 KiB, because LocalTime is new
+             |  client code. Still 252.5 KiB under main. Re-measured rather than
+             |  assumed, since the fix added to the thing being counted.
+             |  Confidence: Jest 7305 -> 7326 across 519 suites, typecheck/eslint/
+             |  build clean. Each fix has a test that fails against the version
+             |  before it.
 ```
 
 ---

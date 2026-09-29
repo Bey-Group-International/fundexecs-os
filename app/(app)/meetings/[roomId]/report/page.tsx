@@ -6,6 +6,7 @@ import { ExportMenu } from "./ExportMenu";
 import { ChatPanel } from "./ChatPanel";
 import { ReportMedia } from "./ReportMedia";
 import { ReportWaiting } from "./ReportWaiting";
+import { LocalTime } from "./LocalTime";
 import { loadReportPage } from "@/lib/meetings/report-page.server";
 import {
   meetingHappenedAt,
@@ -116,9 +117,13 @@ export default async function MeetingReportPage({
             {meeting.title ?? "Meeting"}
           </h1>
           <p className="text-sm text-[var(--fg-muted)] mt-0.5">
-            {new Date(meetingHappenedAt(meeting)).toLocaleDateString("en-US", {
-              weekday: "long", year: "numeric", month: "long", day: "numeric",
-            })}
+            {/* In the READER's time zone, not the server's. A meeting at 20:00
+                in New York is 00:00 UTC the next day, so formatting this here
+                would print the wrong weekday and the wrong date. */}
+            <LocalTime
+              iso={meetingHappenedAt(meeting)}
+              options={{ weekday: "long", year: "numeric", month: "long", day: "numeric" }}
+            />
             {duration ? ` · ${duration} min` : recordedSeconds ? ` · ${callClock(recordedSeconds)}` : ""}
           </p>
         </div>
@@ -154,9 +159,18 @@ export default async function MeetingReportPage({
         // was the one place that held the record and never showed it.
         <details className="rounded-xl border border-[var(--line)] bg-[var(--surface-1)] px-4 py-3">
           <summary className="cursor-pointer text-xs font-medium text-[var(--fg-secondary)]">
-            Consent recorded {new Date(data.consent.at).toLocaleString("en-US", {
-              month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit",
-            })}
+            {/* The hour matters most here and is the easiest to get wrong: this
+                record exists so somebody can answer "was this recorded with
+                consent, and when". A UTC hour wearing no label is a quietly
+                wrong answer to that. */}
+            Consent recorded{" "}
+            <LocalTime
+              iso={data.consent.at}
+              options={{
+                month: "short", day: "numeric", year: "numeric",
+                hour: "numeric", minute: "2-digit",
+              }}
+            />
           </summary>
           <p className="mt-2 text-xs italic text-[var(--fg-primary)]">&ldquo;{data.consent.disclosure}&rdquo;</p>
           <p className="mt-1.5 text-xs text-[var(--fg-muted)]">

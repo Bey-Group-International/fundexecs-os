@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { createServerClient } from "@/lib/supabase/server";
 import { getSessionContext } from "@/lib/auth";
-import { loadReportPage } from "@/lib/meetings/report-page.server";
+import { loadReportState } from "@/lib/meetings/report-page.server";
 import { shouldPollReport } from "@/lib/meetings/attendance";
 
 // GET /api/meetings/rooms/[roomCode]/report/status
@@ -31,18 +31,22 @@ export async function GET(
   if (!ctx) return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
 
   const supabase = await createServerClient();
-  const data = await loadReportPage(supabase, roomCode);
+  const state = await loadReportState(supabase, roomCode);
 
-  // The same function the page renders from, so "ready" here and "ready" there
-  // cannot disagree. `waiting` is the one the poll acts on: it is false for a
-  // finished report AND for every terminal state, so a poll stops on
-  // "forbidden" or "stalled" rather than asking forever about an answer that
-  // will not change.
+  // `loadReportState`, not the full page load: this answers three booleans, and
+  // asking the page loader for them re-read the whole transcript, the chat and
+  // every recording on every tick. It still ends at the same `reportViewState`
+  // call the page renders from, so "ready" here and "ready" there cannot
+  // disagree — the decision is shared even though the reads are not.
+  //
+  // `waiting` is the one the poll acts on: false for a finished report AND for
+  // every terminal state, so a poll stops on "forbidden" or "stalled" rather
+  // than asking forever about an answer that will not change.
   return NextResponse.json(
     {
-      state: data.state,
-      waiting: shouldPollReport(data.state),
-      ready: data.state === "ready" || data.state === "unsummarised",
+      state,
+      waiting: shouldPollReport(state),
+      ready: state === "ready" || state === "unsummarised",
     },
     // Never cached: the entire point is to observe a change.
     { headers: { "Cache-Control": "no-store" } },

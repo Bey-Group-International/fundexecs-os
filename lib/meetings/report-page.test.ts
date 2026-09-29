@@ -38,6 +38,40 @@ describe("reportOwedForMs", () => {
     expect(owed).toBe(7 * 86_400_000);
   });
 
+  it("dates a booked meeting to when it was BOOKED FOR, not when the row was made", () => {
+    // The bug: created_at can be days before a meeting booked in advance, so a
+    // meeting booked last week and not yet closed was declared "probably not
+    // coming" the first time anybody opened its report.
+    const booked = meeting({
+      ended_at: null,
+      started_at: null,
+      scheduled_at: "2026-09-29T09:00:00.000Z",
+      created_at: "2026-09-22T10:00:00.000Z",
+    });
+    expect(reportOwedForMs(booked, at("2026-09-29T09:05:00.000Z"))).toBe(300_000);
+  });
+
+  it("owes nothing for a meeting that has not happened yet", () => {
+    const booked = meeting({
+      ended_at: null,
+      started_at: null,
+      scheduled_at: "2026-10-05T09:00:00.000Z",
+      created_at: "2026-09-22T10:00:00.000Z",
+    });
+    expect(reportOwedForMs(booked, at("2026-09-29T09:00:00.000Z"))).toBe(0);
+  });
+
+  it("prefers when it started over when it was booked", () => {
+    // A meeting that ran late: the report is owed from the real start, not the
+    // slot it was booked into.
+    const ran = meeting({
+      ended_at: null,
+      started_at: "2026-09-29T09:30:00.000Z",
+      scheduled_at: "2026-09-29T09:00:00.000Z",
+    });
+    expect(reportOwedForMs(ran, at("2026-09-29T09:35:00.000Z"))).toBe(300_000);
+  });
+
   it("falls back to the row's creation when nobody ended the meeting", () => {
     // An abandoned room, or a one-way call that never had one. A report is still
     // owed; there is just no ended_at to owe it from.
