@@ -84,6 +84,35 @@ describe("busyIntervals", () => {
     );
   });
 
+  // A public slot lookup waits on this. The connected-calendar reads do not
+  // depend on the host's own rows, so they must not queue behind them.
+  it("starts the connected-calendar reads without waiting for the host's own rows", async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((r) => { release = r; });
+    const slow = fakeClient({});
+    const from = slow.from.bind(slow);
+    slow.from = (table: string) => {
+      const b = from(table) as Record<string, unknown>;
+      return new Proxy(b, {
+        get(target, prop: string) {
+          if (prop === "then") {
+            return (res: (v: unknown) => unknown, rej: (e: unknown) => unknown) =>
+              gate.then(() => ({ data: [], error: null })).then(res, rej);
+          }
+          return target[prop];
+        },
+      });
+    };
+
+    const pending = busyIntervals(slow as never, WINDOW);
+    await Promise.resolve();
+    expect(externalBusyForUserMock).toHaveBeenCalled();
+    expect(googleBusyForUserMock).toHaveBeenCalled();
+
+    release();
+    await pending;
+  });
+
   it("keeps blocking internal time when a third-party lookup comes back empty", async () => {
     const busy = await busyIntervals(
       fakeClient({
