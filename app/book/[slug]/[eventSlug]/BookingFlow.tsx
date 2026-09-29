@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { SlotPicker } from "@/components/scheduling/SlotPicker";
 import { TimezoneSelect } from "@/components/scheduling/TimezoneSelect";
@@ -32,14 +32,21 @@ export function BookingFlow({
   slug,
   hostName,
   eventType,
+  initialSlots,
 }: {
   slug: string;
   hostName: string;
   eventType: PublicEventType;
+  /**
+   * The open times the server already worked out while rendering the page.
+   * With them the picker paints at once; without them (the server read failed)
+   * it fetches as it always did.
+   */
+  initialSlots?: SlotWindow[];
 }) {
   const [timezone, setTimezone] = useState("UTC");
-  const [slots, setSlots] = useState<SlotWindow[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [slots, setSlots] = useState<SlotWindow[]>(initialSlots ?? []);
+  const [loading, setLoading] = useState(initialSlots === undefined);
   const [selected, setSelected] = useState<string | null>(null);
 
   const [name, setName] = useState("");
@@ -68,7 +75,16 @@ export function BookingFlow({
     }
   }, [slug, eventType.slug]);
 
+  // The first load is skipped when the server sent the slots with the page.
+  // It used to be the only load: render, hydrate, THEN ask for times — so every
+  // visitor watched a spinner for a round trip the server had already made.
+  // Later reloads (a 409 on submit) still go through `loadSlots`.
+  const serverSlots = useRef(initialSlots !== undefined);
   useEffect(() => {
+    if (serverSlots.current) {
+      serverSlots.current = false;
+      return;
+    }
     void loadSlots();
   }, [loadSlots]);
 

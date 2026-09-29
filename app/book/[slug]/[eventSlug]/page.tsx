@@ -4,7 +4,8 @@ import { notFound } from "next/navigation";
 import { cache } from "react";
 import { Logo } from "@/components/Logo";
 import { createServiceClient, hasSupabaseServiceEnv } from "@/lib/supabase/server";
-import { resolvePublicPage } from "@/lib/meetings/scheduling-service";
+import { openSlots, resolvePublicPage } from "@/lib/meetings/scheduling-service";
+import type { SlotWindow } from "@/lib/meetings/scheduling";
 import { SITE_NAME } from "@/lib/site";
 import { BookingFlow } from "./BookingFlow";
 
@@ -50,6 +51,17 @@ export default async function EventTypeBookingPage({
 
   const { page, eventType } = found;
 
+  // The first screen of open times, worked out here rather than by the browser
+  // after it hydrates: the page already has the host and the event type in
+  // hand, and the default window is exactly what the client would have asked
+  // /slots for. A failure falls back to the client fetch, never to an error.
+  let initialSlots: SlotWindow[] | undefined;
+  try {
+    initialSlots = (await openSlots(createServiceClient(), page, eventType, { fromDate: null, toDate: null })).slots;
+  } catch (err) {
+    console.error("[book/[slug]/[eventSlug]] initial slots", err);
+  }
+
   return (
     <div className="fx-blueprint min-h-screen bg-surface-0 px-4 py-12">
       <div className="mx-auto flex w-full max-w-2xl flex-col gap-8">
@@ -80,6 +92,7 @@ export default async function EventTypeBookingPage({
             durationMinutes: eventType.duration_minutes,
             requiresApproval: eventType.requires_approval,
           }}
+          initialSlots={initialSlots}
         />
       </div>
     </div>
