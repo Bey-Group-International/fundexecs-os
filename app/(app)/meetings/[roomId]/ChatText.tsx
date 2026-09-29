@@ -1,5 +1,6 @@
 "use client";
 
+import { memo } from "react";
 import { chatParts } from "@/lib/meetings/chat";
 
 /**
@@ -13,7 +14,12 @@ import { chatParts } from "@/lib/meetings/chat";
  * Shared by the room and the report, so a link that was followable during the
  * call is still followable in the record of it.
  */
-export function ChatText({ text }: { text: string }) {
+export const ChatText = memo(ChatTextImpl);
+
+// Memoised on the text: the room re-renders several times a second while
+// people talk, and without it every message in a long chat was re-scanned for
+// links on each of those renders.
+function ChatTextImpl({ text }: { text: string }) {
   return (
     <>
       {chatParts(text).map((part, i) =>

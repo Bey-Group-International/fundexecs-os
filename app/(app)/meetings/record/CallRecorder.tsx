@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
@@ -46,6 +46,23 @@ import {
 // what is being captured.
 
 type Line = BufferableLine;
+
+/**
+ * The finished lines of the transcript, re-rendered only when a line is added.
+ *
+ * The in-progress words update several times a second while anyone speaks, and
+ * they used to re-render every finished line with them — thousands of rows by
+ * the end of a long call, all re-checked on every word.
+ */
+const FinishedLines = memo(function FinishedLines({ lines }: { lines: Line[] }) {
+  return (
+    <>
+      {lines.map((line) => (
+        <li key={line.id} className="px-4 py-2.5 text-sm text-[var(--fg-primary)]">{line.text}</li>
+      ))}
+    </>
+  );
+});
 
 /** "failed" is reached only after the audio is safely stored. */
 type Phase = "setup" | "recording" | "ending" | "failed";
@@ -532,9 +549,7 @@ export function CallRecorder({
               }}
               className="max-h-[24rem] divide-y divide-[var(--line)] overflow-y-auto"
             >
-              {lines.map((line) => (
-                <li key={line.id} className="px-4 py-2.5 text-sm text-[var(--fg-primary)]">{line.text}</li>
-              ))}
+              <FinishedLines lines={lines} />
               {interim && (
                 <li className="px-4 py-2.5 text-sm italic text-[var(--fg-muted)]">{interim}</li>
               )}
