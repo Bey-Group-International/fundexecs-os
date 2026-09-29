@@ -23,6 +23,7 @@
 // renders nothing at all on an older browser would be the bigger regression.
 import { useCallback, useEffect, useImperativeHandle, useRef, useState } from "react";
 import {
+  evictionFor,
   formatClock,
   partAtTime,
   partsToAppend,
@@ -208,6 +209,61 @@ export function RecordingPlayer({
     };
   }, [meta, native, append]);
 
+  /**
+   * Hand back the video the viewer has already watched.
+   *
+   * Nothing was ever removed before this, so a recording watched through was a
+   * recording held entire: measured against an hour-long meeting, 677MB
+   * resident by the end — the whole call kept for somebody on the last minute.
+   * Whether that becomes a stall is up to the browser's own eviction, which is
+   * not a thing to leave to chance: MediaSource throws `QuotaExceededError`
+   * when it cannot free enough itself, and an append that throws is a hole in
+   * the video.
+   *
+   * On the same queue as the appends, because a SourceBuffer rejects a second
+   * operation while one is in flight — and `remove` is one of those operations,
+   * not an exception to it.
+   */
+  const evict = useCallback((playheadMs: number) => {
+    const s = state.current;
+    const plan = evictionFor(s.parts, s.appended, playheadMs);
+    if (!plan || !s.buffer) return;
+
+    s.queue = s.queue
+      .then(async () => {
+        const buffer = s.buffer;
+        if (!buffer || s.source?.readyState !== "open") return;
+        const removed = await new Promise<boolean>((resolve) => {
+          const ok = () => {
+            buffer.removeEventListener("updateend", ok);
+            buffer.removeEventListener("error", bad);
+            resolve(true);
+          };
+          const bad = () => {
+            buffer.removeEventListener("updateend", ok);
+            buffer.removeEventListener("error", bad);
+            resolve(false);
+          };
+          buffer.addEventListener("updateend", ok);
+          buffer.addEventListener("error", bad);
+          try {
+            buffer.remove(0, plan.untilMs / 1000);
+          } catch {
+            bad();
+          }
+        });
+        // Only once the bytes are actually gone. Forgetting them while they are
+        // still resident would let a refill fetch a part the browser already
+        // has; keeping the marks after a successful remove is the worse half —
+        // a seek back past the kept window would find every part it needs
+        // "already appended", append nothing, and play nothing.
+        if (removed) for (const idx of plan.dropped) s.appended.delete(idx);
+      })
+      .catch((err) => {
+        console.warn("[recording] could not release watched video", err);
+      });
+  }, []);
+
   // ── Keep the buffer ahead of the viewer ───────────────────────────────────
   const refill = useCallback(() => {
     const video = videoRef.current;
@@ -223,9 +279,14 @@ export function RecordingPlayer({
     }
     if (bufferedTo - nowMs > REFILL_AT_MS) return;
 
+    // Before growing, not on a timer: the moment the buffer needs more is the
+    // moment it is worth giving back what nobody is going to watch again, and
+    // tying the two together means a paused player queues neither.
+    evict(nowMs);
+
     const next = partAtTime(s.parts, bufferedTo);
     if (next >= 0) append(partsToAppend(s.parts, next, BUFFER_AHEAD_MS));
-  }, [append, native]);
+  }, [append, evict, native]);
 
   const seekTo = useCallback(
     (ms: number) => {

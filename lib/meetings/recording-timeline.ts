@@ -136,6 +136,81 @@ export function partsToAppend(
 }
 
 /**
+ * How much already-watched video to keep behind the playhead.
+ *
+ * Not zero, and the reason is the difference between a seek and a scrub. A
+ * viewer who nudges the scrubber back a few seconds — the commonest thing
+ * anybody does while watching a meeting, to hear a sentence again — must not
+ * pay a refetch for it. Thirty seconds mirrors `BUFFER_AHEAD_MS` on the other
+ * side of the playhead, so the resident window is symmetrical.
+ */
+export const KEEP_BEHIND_MS = 30_000;
+
+/** What to give back to the browser, and what the player must then forget. */
+export interface Eviction {
+  /**
+   * Remove `[0, untilMs)` from the source buffer.
+   *
+   * Always a part boundary. A removal that landed mid-part would leave the
+   * browser holding a cluster with no beginning, which is not decodable — the
+   * same reason a byte offset into a WebM is not a valid place to start.
+   */
+  untilMs: number;
+  /**
+   * The parts that are no longer resident.
+   *
+   * The player marks a part as appended so two refills cannot fetch it twice.
+   * Evicting without clearing those marks is worse than not evicting at all: a
+   * seek back past the kept window finds every part it needs "already
+   * appended", appends nothing, and plays nothing. The two have to move
+   * together, so the rule returns them together.
+   */
+  dropped: number[];
+}
+
+/**
+ * What the player can stop holding, given where the viewer has got to.
+ *
+ * A meeting recording is appended part by part as it is watched and, until
+ * this, never handed back: an hour-long call measured at 677MB resident by the
+ * end, all of it kept for a viewer who is on the last minute. Whether that
+ * becomes a stall depends on the browser's own eviction, which is exactly the
+ * kind of thing not to leave to chance — MediaSource throws `QuotaExceededError`
+ * when it cannot free enough itself, and an append that throws is a hole in the
+ * video.
+ *
+ * Returns null when there is nothing worth removing, so the caller does not
+ * queue a no-op operation against a SourceBuffer that could be appending.
+ */
+export function evictionFor(
+  parts: readonly TimelinePart[],
+  appended: ReadonlySet<number>,
+  playheadMs: number,
+  keepBehindMs: number = KEEP_BEHIND_MS,
+): Eviction | null {
+  if (parts.length === 0 || appended.size === 0) return null;
+  if (!Number.isFinite(playheadMs)) return null;
+
+  const cutoff = playheadMs - Math.max(0, keepBehindMs);
+  if (cutoff <= 0) return null;
+
+  // Whole parts only, and only a prefix: `[0, untilMs)` takes everything before
+  // the boundary, so the boundary has to be the end of a part that is itself
+  // entirely behind the cutoff. Parts are in order, so the first one that ends
+  // past the cutoff ends the run — and the part holding the playhead always
+  // does, which is what keeps it from being removed out from under the viewer.
+  let untilMs = 0;
+  const dropped: number[] = [];
+  for (const part of parts) {
+    if (part.offsetMs + part.durationMs > cutoff) break;
+    untilMs = part.offsetMs + part.durationMs;
+    if (appended.has(part.idx)) dropped.push(part.idx);
+  }
+
+  return dropped.length === 0 ? null : { untilMs, dropped };
+}
+
+/**
  * The byte range covering a run of parts, as an HTTP Range header value.
  *
  * Contiguous by construction — callers append in order — so one request fetches

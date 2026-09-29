@@ -4474,6 +4474,53 @@ Deployed, monitoring               →  live, observability active
              |  Not covered: whether the ROOM hands the panel a stable array, which
              |  is a property of a component no test can render — reaching it means
              |  opening a camera, an ICE negotiation and a Realtime channel.
+             |
+             |  2026-09-29  The recording player appended an hour of video and
+             |  never gave any of it back.
+             |  A meeting recording is a live WebM written in five-second parts,
+             |  and the player feeds those parts to MediaSource so the thing can
+             |  be seeked at all. It appended every part it passed and called
+             |  `SourceBuffer.remove` nowhere: measured by driving the real
+             |  component through a 60-minute recording with a fake MediaSource,
+             |  120 appends, 676.8MB appended, 0 removes, all 720 parts still
+             |  resident at the end. The repo's own constants agree — ~1.5 Mbps
+             |  video plus 128 kbps audio is the ~675MB/hour that
+             |  recording-policy.ts already states — which is how the harness was
+             |  checked rather than trusted. Now 6.6MB resident: the 30s
+             |  keep-behind window plus the part being watched.
+             |  Whether the old behaviour STALLED depended on the browser's own
+             |  eviction, which is exactly the thing not to leave to chance:
+             |  MediaSource throws QuotaExceededError when it cannot free enough
+             |  itself, and the append path treats a throw as a hole in the video.
+             |  The rule is `evictionFor` in recording-timeline.ts, and it returns
+             |  two things on purpose: a removal boundary that is always a part
+             |  boundary, and the part indices to forget. Whole parts because a
+             |  removal landing mid-part leaves a cluster with no beginning, which
+             |  is the same reason a byte offset into a WebM is not a place to
+             |  start. The indices because the player marks a part as appended so
+             |  two refills cannot fetch it twice — evicting without clearing
+             |  those marks is WORSE than not evicting: a seek back past the kept
+             |  window finds everything it needs "already appended", appends
+             |  nothing, and plays nothing. Eviction and the appended set have to
+             |  move together, so the rule hands them over together.
+             |  Eviction runs before a refill rather than on a timer. The moment
+             |  the buffer needs more is the moment it is worth releasing what
+             |  nobody will watch again, and tying the two means a paused player
+             |  queues neither.
+             |  RecordingPlayer had no test at all before this — the largest
+             |  client component on the report. It has one now, with a fake
+             |  MediaSource, because the rules were already testable and the
+             |  WIRING was what nothing checked. A correct eviction rule that
+             |  nothing invokes bounds nothing.
+             |  Confidence: Jest 7447 -> 7462 across 527 suites, typecheck and
+             |  eslint clean. Six injections. The one that matters: evicting but
+             |  keeping the appended marks fails exactly one test, the one written
+             |  for it. Not done, and named rather than shipped: throttling the
+             |  player's own clock to the second the way ReportMedia already
+             |  throttles the transcript. It would save three renders in four, and
+             |  it would also make the scrubber thumb move in 1s steps — 3% jumps
+             |  on a short recording. A saving that coarsens the UI is not an
+             |  optimisation.
 ```
 
 ---
