@@ -62,21 +62,36 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   const payload = (await req.json().catch(() => ({}))) as FollowUpRequest;
 
+  // The draft, the people who were there and the mailbox to send from are
+  // three independent lookups — the last one a Google token exchange when the
+  // grant has aged out — and they ran one after another while the host watched
+  // the Send button spin. They start together now. The mailbox is only
+  // AWAITED after the checks below, so a meeting with no draft or nobody to
+  // send to still answers exactly what it did; the caught copy only keeps an
+  // early return from leaving its rejection unhandled.
+  const mailboxLookup = mailboxFor(supabase, auth.ctx.userId, auth.ctx.orgId);
+  mailboxLookup.catch(() => {});
+
   // The host's edit wins; the stored draft is the fallback. Read the newest
   // report, the same ordering the report page and the log use, so a
   // regenerated follow-up is the one that gets sent.
-  let draft = followUpBody(typeof payload.body === "string" ? payload.body : "");
-  if (!draft) {
-    const { data: report } = await supabase
-      .from("live_meeting_reports")
-      .select("analysis")
-      .eq("meeting_id", id)
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-    const analysis = (report?.analysis ?? null) as Record<string, unknown> | null;
-    draft = followUpBody(normalizeNoteText(analysis?.follow_up_draft));
-  }
+  const edited = followUpBody(typeof payload.body === "string" ? payload.body : "");
+  const [draft, present] = await Promise.all([
+    edited
+      ? edited
+      : supabase
+          .from("live_meeting_reports")
+          .select("analysis")
+          .eq("meeting_id", id)
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle()
+          .then(({ data: report }) => {
+            const analysis = (report?.analysis ?? null) as Record<string, unknown> | null;
+            return followUpBody(normalizeNoteText(analysis?.follow_up_draft));
+          }),
+    loadPresentPeople(supabase, id),
+  ]);
 
   if (!draft) {
     return NextResponse.json(
@@ -92,7 +107,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   // row for every person who had been in it.
   const audience = meetingRecipients({
     invited: meeting.attendees,
-    present: await loadPresentPeople(supabase, id),
+    present,
     senderEmail: auth.ctx.email,
   });
   const recipients = audience.recipients;
@@ -113,7 +128,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     );
   }
 
-  const mailbox = await mailboxFor(supabase, auth.ctx.userId, auth.ctx.orgId);
+  const mailbox = await mailboxLookup;
   if (!mailbox.ok) {
     return NextResponse.json(
       { error: mailboxProblemMessage(mailbox.problem), mailboxConnected: false },

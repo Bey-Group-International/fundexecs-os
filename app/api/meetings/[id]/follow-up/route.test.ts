@@ -216,3 +216,35 @@ describe("closing out \"Follow-Up Needed\"", () => {
     spy.mockRestore();
   });
 });
+
+describe("lookups", () => {
+  it("starts the mailbox lookup without waiting for the stored draft", async () => {
+    wire();
+    let release!: () => void;
+    const gate = new Promise<void>((r) => { release = r; });
+    const base = from.getMockImplementation()!;
+    from.mockImplementation((table: string) => {
+      const b = base(table) as Record<string, unknown>;
+      if (table === "live_meeting_reports") {
+        b.maybeSingle = async () => { await gate; return { data: REPORT, error: null }; };
+      }
+      return b;
+    });
+
+    const pending = POST(req(), { params });
+    for (let i = 0; i < 20 && mailboxFor.mock.calls.length === 0; i++) {
+      await new Promise((r) => setTimeout(r, 0));
+    }
+    expect(mailboxFor).toHaveBeenCalled();
+
+    release();
+    expect((await pending).status).toBe(200);
+  });
+
+  it("still answers 409 for a missing draft when the mailbox lookup fails", async () => {
+    wire({ report: { analysis: {} } });
+    mailboxFor.mockRejectedValue(new Error("google down"));
+    const res = await POST(req(), { params });
+    expect(res.status).toBe(409);
+  });
+});
