@@ -18,6 +18,7 @@
 // Pure: no DOM, no Supabase, no model calls.
 
 import { normalizeNoteList, normalizeNoteText } from "@/lib/meetings/live-notes";
+import { isPastMeeting } from "@/lib/meetings/schedule";
 
 /** A meeting row, as the log needs to see one. */
 export interface MeetingLogSource {
@@ -166,39 +167,139 @@ export function toLogEntry(
   };
 }
 
-/** Newest first — a log is read from the top. */
-export function sortLogEntries(entries: MeetingLogEntry[]): MeetingLogEntry[] {
+/**
+ * One line of the log: enough to identify a meeting, and nothing more.
+ *
+ * THE REASON THIS TYPE EXISTS. The log used to ship a full `MeetingLogEntry` for
+ * every meeting in the organisation — summary, key points, decisions, action
+ * items, attendee names — two hundred rows of prose, so that the browser could
+ * filter them with `String.includes` and so that ONE open row could show its
+ * detail. Everything in that payload beyond this shape was read by nobody in the
+ * common case.
+ *
+ * Counts rather than lists: a collapsed row says "2 key points · 1 decision",
+ * which is three numbers, not three paragraphs. `attendeeCount` for the same
+ * reason — the row shows how many, the opened row shows who.
+ */
+export interface LoggedMeeting {
+  id: string;
+  roomCode: string;
+  title: string;
+  /** When the meeting happened, for sorting and for the date shown. */
+  occurredAt: string;
+  durationMinutes: number | null;
+  attendeeCount: number;
+  /** What the report produced, as numbers. See logEntrySubtitle. */
+  counts: { keyPoints: number; decisions: number; actionItems: number };
+  hasReport: boolean;
+  canRegenerate: boolean;
+  attended: boolean;
+  isHost: boolean;
+}
+
+/**
+ * The prose a row shows once it is opened, fetched then rather than shipped.
+ *
+ * Carries its own `id` so a response cannot be filed against the wrong row —
+ * a detail fetch is asynchronous and the reader can open another meeting while
+ * it is in flight.
+ */
+export interface MeetingLogDetail {
+  id: string;
+  summary: string;
+  keyPoints: string[];
+  decisions: string[];
+  actionItems: string[];
+  attendeeNames: string[];
+  sentiment: string;
+}
+
+/** The light row for a full entry. */
+export function loggedMeeting(entry: MeetingLogEntry): LoggedMeeting {
+  return {
+    id: entry.id,
+    roomCode: entry.roomCode,
+    title: entry.title,
+    occurredAt: entry.occurredAt,
+    durationMinutes: entry.durationMinutes,
+    attendeeCount: entry.attendeeNames.length,
+    counts: {
+      keyPoints: entry.keyPoints.length,
+      decisions: entry.decisions.length,
+      actionItems: entry.actionItems.length,
+    },
+    hasReport: entry.hasReport,
+    canRegenerate: entry.canRegenerate,
+    attended: entry.attended,
+    isHost: entry.isHost,
+  };
+}
+
+/** The prose half of a full entry. */
+export function meetingLogDetail(entry: MeetingLogEntry): MeetingLogDetail {
+  return {
+    id: entry.id,
+    summary: entry.summary,
+    keyPoints: entry.keyPoints,
+    decisions: entry.decisions,
+    actionItems: entry.actionItems,
+    attendeeNames: entry.attendeeNames,
+    sentiment: entry.sentiment,
+  };
+}
+
+/**
+ * Whether a meeting belongs in the log yet.
+ *
+ * A meeting scheduled for next week has no record to hold, and listing it under
+ * "Logs" would promise one. Drafts are not part of the record at all.
+ *
+ * Shared rather than applied at each call site: the page lists the log and the
+ * search route searches it, and a search that returned a meeting the list does
+ * not show would be the only place that meeting appears.
+ */
+export function belongsInLog(
+  meeting: MeetingLogSource & { is_draft?: boolean | null },
+  now: number = Date.now(),
+): boolean {
+  return isPastMeeting(
+    {
+      status: meeting.status as "waiting" | "active" | "ended" | null,
+      scheduled_at: meeting.scheduled_at,
+      duration_minutes: meeting.duration_minutes,
+      is_draft: meeting.is_draft ?? null,
+      started_at: meeting.started_at,
+      created_at: meeting.created_at,
+    },
+    now,
+  );
+}
+
+/**
+ * Newest first — a log is read from the top.
+ *
+ * Generic over anything dated, because the list sorts the light rows it renders
+ * while tests and callers holding full entries sort those.
+ */
+export function sortLogEntries<T extends { occurredAt: string }>(entries: readonly T[]): T[] {
   return [...entries].sort(
     (a, b) => Date.parse(b.occurredAt) - Date.parse(a.occurredAt),
   );
 }
 
-/**
- * Whether an entry matches a search.
- *
- * Searches what the meeting was about, not just what it was called: somebody
- * looking for "the one where we agreed to hold the close" has the decision in
- * their head, not the title. Attendee names count too, because "the meeting
- * with Alina" is how people actually remember them.
- */
-export function matchesLogSearch(entry: MeetingLogEntry, query: string): boolean {
-  const q = query.trim().toLowerCase();
-  if (!q) return true;
-  const haystack = [
-    entry.title,
-    entry.summary,
-    ...entry.keyPoints,
-    ...entry.decisions,
-    ...entry.actionItems,
-    ...entry.attendeeNames,
-  ].join(" ").toLowerCase();
-  return q.split(/\s+/).every((term) => haystack.includes(term));
-}
+// WHERE THE SEARCH WENT. This file used to hold `matchesLogSearch`, a
+// `String.includes` over an entry's own prose, run in the browser against every
+// entry the page had shipped it. It could not search a transcript — the one place
+// the words people actually remember are written down — and it needed every
+// summary in the initial payload to search the fields it could.
+//
+// That rule now lives once, as `matchesMetadata` in session-archive.ts, and runs
+// in Postgres alongside a transcript scan. See meeting-log.server.ts.
 
-export interface MeetingLogGroup {
+export interface MeetingLogGroup<T = MeetingLogEntry> {
   /** e.g. "September 2026". */
   label: string;
-  entries: MeetingLogEntry[];
+  entries: T[];
 }
 
 /**
@@ -207,8 +308,10 @@ export interface MeetingLogGroup {
  * A log without dividers is a wall. Months are the unit people navigate
  * meetings by, and the grouping preserves the newest-first order within each.
  */
-export function groupLogsByMonth(entries: MeetingLogEntry[]): MeetingLogGroup[] {
-  const groups: MeetingLogGroup[] = [];
+export function groupLogsByMonth<T extends { occurredAt: string }>(
+  entries: readonly T[],
+): MeetingLogGroup<T>[] {
+  const groups: MeetingLogGroup<T>[] = [];
   for (const entry of sortLogEntries(entries)) {
     const ms = Date.parse(entry.occurredAt);
     const label = Number.isFinite(ms)
@@ -221,15 +324,24 @@ export function groupLogsByMonth(entries: MeetingLogEntry[]): MeetingLogGroup[] 
   return groups;
 }
 
-/** A one-line count of what the meeting produced, for a collapsed row. */
-export function logEntrySubtitle(entry: MeetingLogEntry): string {
+/**
+ * A one-line count of what the meeting produced, for a collapsed row.
+ *
+ * Takes the COUNTS rather than the prose, because a collapsed row is the reason
+ * the prose is not on the page: the list ships three numbers per meeting and
+ * fetches the sentences when a row is opened.
+ */
+export function logEntrySubtitle(
+  row: Pick<LoggedMeeting, "attended" | "hasReport" | "counts">,
+): string {
   // Order matters: a non-attendee reads every report as absent, so checking
   // hasReport first would label a report they simply cannot see "No report".
-  if (!entry.attended) return "Attendees only";
-  if (!entry.hasReport) return "No report";
+  if (!row.attended) return "Attendees only";
+  if (!row.hasReport) return "No report";
   const parts: string[] = [];
-  if (entry.keyPoints.length) parts.push(`${entry.keyPoints.length} key point${entry.keyPoints.length === 1 ? "" : "s"}`);
-  if (entry.decisions.length) parts.push(`${entry.decisions.length} decision${entry.decisions.length === 1 ? "" : "s"}`);
-  if (entry.actionItems.length) parts.push(`${entry.actionItems.length} action${entry.actionItems.length === 1 ? "" : "s"}`);
+  const { keyPoints, decisions, actionItems } = row.counts;
+  if (keyPoints) parts.push(`${keyPoints} key point${keyPoints === 1 ? "" : "s"}`);
+  if (decisions) parts.push(`${decisions} decision${decisions === 1 ? "" : "s"}`);
+  if (actionItems) parts.push(`${actionItems} action${actionItems === 1 ? "" : "s"}`);
   return parts.length ? parts.join(" · ") : "Summary only";
 }

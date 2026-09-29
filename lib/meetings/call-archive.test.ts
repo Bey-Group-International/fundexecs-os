@@ -1,7 +1,6 @@
 import {
   SNIPPET_AFTER,
   SNIPPET_BEFORE,
-  archiveSummary,
   callWhen,
   searchCall,
   snippetFor,
@@ -103,28 +102,6 @@ describe("snippetFor", () => {
       expect(part.value).not.toMatch(/<[^>]/);
       expect(typeof part.match).toBe("boolean");
     }
-  });
-});
-
-describe("archiveSummary", () => {
-  // The question is "which call was that in", so the count is of calls. A
-  // count of 214 mentions answers a question nobody asked.
-  it("counts calls, not mentions", () => {
-    expect(archiveSummary("valuation", 3)).toBe("3 calls mention “valuation”");
-    expect(archiveSummary("valuation", 1)).toBe("1 call mentions “valuation”");
-  });
-
-  it("says plainly when nothing matched", () => {
-    expect(archiveSummary("diligence", 0)).toMatch(/No calls mention/);
-  });
-
-  it("asks for more characters rather than reporting nothing found", () => {
-    expect(archiveSummary("v", 0)).toMatch(/at least 2/);
-  });
-
-  it("is silent when nothing was typed", () => {
-    expect(archiveSummary("", 0)).toBe("");
-    expect(archiveSummary("   ", 0)).toBe("");
   });
 });
 

@@ -4295,6 +4295,150 @@ Deployed, monitoring               →  live, observability active
              |  Confidence: Jest 7305 -> 7326 across 519 suites, typecheck/eslint/
              |  build clean. Each fix has a test that fails against the version
              |  before it.
+             |
+             |  2026-09-29  The meeting log searches what was said, and stops
+             |  shipping prose to do it.
+             |  The log and the recorded-call archive were the same table split on
+             |  `kind`, answering the same question in opposite ways: the archive
+             |  read transcripts in Postgres, bounded, and said when the bound bit;
+             |  the log matched titles and summaries with String.includes in the
+             |  browser and could not read a transcript at all. So "what did we
+             |  agree with Dunbar in March" was unanswerable unless somebody had
+             |  written Dunbar in a title.
+             |  One engine now: session-archive.ts holds the rules (metadata match,
+             |  transcript match, the bound and how to admit it) and
+             |  session-archive.server.ts holds the clauses. Visibility travels as
+             |  DATA rather than being inferred from the kind — a call belongs to
+             |  whoever recorded it and a meeting is listed across the org, and
+             |  sharing an engine must not quietly share a permission rule.
+             |  The clause that bites: a regenerated report INSERTS a row, so an
+             |  embed with no order on it returns an arbitrary one. In a list that
+             |  is a stale summary, which somebody notices; in a SEARCH it is a
+             |  stale transcript, which nobody notices — the search reads words
+             |  nobody said any more and misses the ones they did.
+             |  Payload: the page now ships a LINE per meeting (title, date,
+             |  counts) and fetches the prose when a row opens. Modelled on a report
+             |  matching the analysis schema's own description, uncompressed JSON:
+             |  1,118 -> 317 bytes a row, so a 200-meeting page carries 218.4 ->
+             |  61.9 KiB and one open row costs 0.9 KiB. Modelled, not measured:
+             |  real reports vary and the wire is compressed.
+             |  What the tests taught, and it is the third time this week: a race
+             |  test that resolves a stale promise and asserts on the next line
+             |  passes whether or not the stale answer is discarded, because the
+             |  assertion runs before the answer has been processed at all. Both
+             |  race guards here were toothless until the assertions waited. Proved
+             |  by injection afterwards: dropping the search ticket fails one test,
+             |  sharing one detail slot between rows fails two.
+             |  Confidence: Jest 7375 -> 7417 across 524 suites, typecheck and
+             |  eslint clean. Nobody has opened it in a browser.
+             |
+             |  2026-09-29  The calls archive joins the same engine, and stops
+             |  fetching the list it was just handed.
+             |  Three copies of the archive narrowing existed — the calls page, the
+             |  calls route, and the log — each remembering the report-embed order
+             |  separately. Two of them now call narrowArchive. The SELECTs stay
+             |  local and that is the line: a call carries a consent record and a
+             |  recording length a meeting has no column for, and it draws the
+             |  summary and nothing else of the report, so sharing the embed would
+             |  mean reading key points no row here shows.
+             |  SessionVisibility's host scope gained an optional organizationId,
+             |  because the calls query filters by both and the shared type only
+             |  said one. Written as a second rule on top of ownership: forgetting
+             |  it widens the list to the same person's other work, never to
+             |  somebody else's.
+             |  The waste: CallArchive's debounced search effect fired on mount with
+             |  an empty query, so every visit to /meetings/calls ran the same
+             |  fifty-row query twice — once in the server render that drew the
+             |  list, once 250ms later to replace it with an identical one.
+             |  And archiveSummary is gone: the bound used to be a second paragraph
+             |  under the count, which is a caveat a reader finishes the sentence
+             |  before reaching. searchSummary folds it in, in the page's own noun.
+             |  What the tests taught, twice in one sitting and worth saying once
+             |  more: a test that asserts "no request was made" without waiting past
+             |  the debounce asserts nothing — it passes because the request has not
+             |  had time to happen yet, and it passes just as happily against the
+             |  version that makes it. Both such tests here were toothless until
+             |  they waited; then putting the mount fetch back failed one and
+             |  letting the log search an empty box failed two.
+             |  Confidence: Jest 7417 -> 7426 across 525 suites, typecheck and
+             |  eslint clean.
+             |
+             |  2026-09-29  Opened it in a browser. Found something.
+             |  The standing caveat on three PRs this week has been "nobody has
+             |  looked at it". So both changed lists were rendered in headless
+             |  Chromium with the app's real compiled stylesheet, screenshotted at
+             |  400px and 1280px, and looked at.
+             |  The log held up. The recorded-call archive did not: its meta line
+             |  is a flex row with no wrapping, so at phone width the items SHRANK
+             |  instead of moving, and a call read as a ragged three-column block —
+             |  "Sep 7, 2:47 / PM", "· consent / recorded", "· 14 / mentions".
+             |  Nothing in the shared layout checks fires on that. Nothing escapes
+             |  the viewport, nothing overlaps, no two controls read alike. It is
+             |  simply wrong, and only a layout engine can say so.
+             |  Two things learned turning it into a test. getClientRects().length
+             |  does not detect a folded flex item: flex children are blockified
+             |  and a block whose text wraps still reports one rect. Height against
+             |  the element's own line-height does — 32px on a 16px line.
+             |  And the width mattered more than the check: measured on the broken
+             |  version, the items folded at 320, 360 and 375 and fit at 400. The
+             |  shared VIEWPORTS start at 400, which is the WIDE end of a phone, so
+             |  a check written against them would have watched this ship on every
+             |  iPhone SE, every 13 mini and most Android handsets. The new checks
+             |  add 360.
+             |  Confidence: 19 -> 22 visual checks, and the fix is proved by
+             |  removing it: three items report 32px on a 16px line at 360.
+             |
+             |  2026-09-29  A review bot found the one thing the tests did not.
+             |  CodeRabbit on #1146: the log's count line was keyed on the last
+             |  ANSWERED query and nothing on the current one, so "1 match for
+             |  “dunbar”" stood over a box that already said "dunbar x" — for the
+             |  debounce plus the request, about a third of a second per keystroke.
+             |  Labelled Minor. It was right, and the fix is one predicate.
+             |  Took half of its suggestion and declined the other half with a
+             |  reason. It proposed falling back to the unfiltered list while the
+             |  next answer is pending, which would flash all two hundred meetings
+             |  up between two keystrokes — the reader watches their results vanish
+             |  and come back on every letter. So the ROWS stay standing and the
+             |  CLAIM goes: stale rows under a "Searching…" label are honest, a
+             |  stale count is not. The same predicate silences "Nothing matches
+             |  “dunbar x”" during a window in which nothing has looked.
+             |  The general shape, and it is the third time: the bug lived in the
+             |  gap between two clocks. `searching` starts when the REQUEST starts;
+             |  the query stops being answered when the KEY is pressed. Everything
+             |  between those two instants was the defect.
+             |  Confidence: Jest 7426 -> 7429 across 525 suites. Proved both ways —
+             |  restoring the old predicate fails 2, taking the literal suggestion
+             |  fails the one that guards against the flash.
+             |
+             |  2026-09-29  Two more from the same review, past the inline comment.
+             |  CodeRabbit's merge-risk line and architecture pass raised two
+             |  things its inline comment did not, and both were right.
+             |  (1) "Search can miss older logged meetings." The scan takes the most
+             |  recent 200 ROWS and the log filter runs after, so an organisation
+             |  with sixty bookings in the next fortnight had a search that read 200
+             |  rows, considered 140 meetings, and then said "in the most recent 200
+             |  meetings". Overstating reach in the one sentence whose entire job is
+             |  to admit reach. `scanned` now counts what was CONSIDERED; `bounded`
+             |  still comes from the raw count, because the bound is about the query
+             |  stopping and it stopped either way. The log-membership rule moved
+             |  into searchMeetingLog, because only the search can see the rows it
+             |  rejected — the route filtering a second time would have filtered the
+             |  hits and left the number describing something else. Drafts are now
+             |  excluded in SQL: one that reaches the loop has already spent a row of
+             |  the bound and a read of up to 120,000 characters, to be dropped.
+             |  (2) Medium, security: any member can start a 200-transcript scan of
+             |  the whole organisation, where the calls archive only ever scanned
+             |  what one person recorded. Rate limited, 30 a minute, keyed on the
+             |  USER rather than the IP — the caller is authenticated, an office
+             |  shares an address, and a user id cannot be varied per request. The
+             |  limit sits after the auth gate so a signed-out flood is refused at
+             |  401 without spending anybody's budget.
+             |  Worth noting what found these: not the inline comment, which was a
+             |  UI nit, but the two summary paragraphs underneath it that are easy
+             |  to scroll past.
+             |  Confidence: Jest 7429 -> 7435 across 525 suites. Each proved by
+             |  injection — removing the limit fails 1, counting raw rows again
+             |  fails 2, dropping the membership skip fails 3.
 ```
 
 ---

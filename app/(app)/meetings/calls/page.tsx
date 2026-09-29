@@ -3,6 +3,8 @@ import { getSessionContext } from "@/lib/auth";
 import { createServerClient } from "@/lib/supabase/server";
 import { ONE_WAY_KIND, readAcknowledgement } from "@/lib/meetings/one-way";
 import type { CallHit } from "@/lib/meetings/call-archive";
+import { narrowArchive } from "@/lib/meetings/session-archive.server";
+import { LIST_PAGE } from "@/lib/meetings/session-archive";
 import { CallArchive } from "./CallArchive";
 
 export const dynamic = "force-dynamic";
@@ -20,24 +22,28 @@ export default async function CallsPage() {
   if (!ctx.orgId) redirect("/onboarding");
 
   const supabase = await createServerClient();
-  const { data } = await supabase
-    .from("live_meetings")
-    .select(
-      "id, room_code, title, created_at, recording_consent, " +
-      "live_meeting_recordings(duration_seconds, deleted_at), " +
-      "live_meeting_reports(summary)",
-    )
-    .eq("organization_id", ctx.orgId)
-    .eq("host_id", ctx.userId)
-    .eq("kind", ONE_WAY_KIND)
-    .is("deleted_at", null)
-    .order("created_at", { ascending: false })
-    // The newest report, explicitly. Regenerating a report INSERTS another row
-    // rather than updating the old one, so an unordered embed can hand back a
-    // superseded summary — and, worse, a superseded transcript to search.
-    .order("created_at", { ascending: false, referencedTable: "live_meeting_reports" })
-    .limit(1, { referencedTable: "live_meeting_reports" })
-    .limit(50);
+  // The same clauses the search route applies, from one place. Three copies of
+  // this narrowing existed — here, in the route, and in the meeting log — and one
+  // of the five clauses is wrong in a way no happy-path test notices: a
+  // regenerated report INSERTS a row, so an embed with no order on it hands back
+  // an arbitrary one, which is a superseded summary in this list and a superseded
+  // transcript for the route to search. See session-archive.server.ts.
+  const { data } = await narrowArchive(
+    supabase
+      .from("live_meetings")
+      .select(
+        "id, room_code, title, created_at, recording_consent, " +
+        "live_meeting_recordings(duration_seconds, deleted_at), " +
+        // No transcript: this is the first page, and it shows the summary.
+        "live_meeting_reports(summary)",
+      ),
+    {
+      kind: ONE_WAY_KIND,
+      visibility: { scope: "host", hostId: ctx.userId, organizationId: ctx.orgId },
+      searching: false,
+      page: LIST_PAGE,
+    },
+  );
 
   type Row = {
     id: string;

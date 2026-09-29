@@ -1,9 +1,11 @@
 import {
   UNTITLED_MEETING,
   attendeeNames,
+  belongsInLog,
   groupLogsByMonth,
   logEntrySubtitle,
-  matchesLogSearch,
+  loggedMeeting,
+  meetingLogDetail,
   meetingLogDuration,
   meetingOccurredAt,
   sortLogEntries,
@@ -157,37 +159,116 @@ describe("toLogEntry", () => {
   });
 });
 
-describe("matchesLogSearch", () => {
+// ── The split between a row and its detail ─────────────────────────────────
+//
+// The log used to ship every entry's prose so the browser could filter it. The
+// filtering moved to the server (see session-archive.ts and
+// meeting-log.server.ts) and the prose moved with it, which leaves the list
+// shipping these two shapes: one per row, one per OPEN row.
+
+describe("loggedMeeting", () => {
   const entry = toLogEntry(meeting, report);
 
-  it("matches nothing away", () => {
-    expect(matchesLogSearch(entry, "")).toBe(true);
-    expect(matchesLogSearch(entry, "   ")).toBe(true);
+  it("carries no prose at all, which is the point", () => {
+    const row = loggedMeeting(entry);
+    // Asserted over the serialised row rather than field by field: the payload
+    // is what this exists to shrink, and a field added later that happens to
+    // hold a sentence would pass an assertion written as a list of keys.
+    const json = JSON.stringify(row);
+    expect(json).not.toContain("Walked the LPs through");
+    expect(json).not.toContain("NAV up 4.2%");
+    expect(json).not.toContain("Hold the close");
+    expect(json).not.toContain("Send the deck");
+    expect(json).not.toContain("Alina");
   });
 
-  it("finds a meeting by its title", () => {
-    expect(matchesLogSearch(entry, "q3 lp")).toBe(true);
+  it("keeps what a collapsed row actually draws", () => {
+    const row = loggedMeeting(entry);
+    expect(row.id).toBe("m1");
+    expect(row.roomCode).toBe("abc-123");
+    expect(row.title).toBe("Q3 LP Update");
+    expect(row.occurredAt).toBe(meeting.ended_at);
+    expect(row.durationMinutes).toBe(47);
+    expect(row.attendeeCount).toBe(2);
+    expect(row.counts).toEqual({ keyPoints: 2, decisions: 1, actionItems: 1 });
+    expect(row.hasReport).toBe(true);
   });
 
-  // Somebody looking for "the one where we agreed to hold the close" has the
-  // decision in their head, not the title.
-  it("searches the summary, points, decisions and actions", () => {
-    expect(matchesLogSearch(entry, "hold the close")).toBe(true);
-    expect(matchesLogSearch(entry, "nav")).toBe(true);
-    expect(matchesLogSearch(entry, "send the deck")).toBe(true);
+  it("keeps the flags the row's own actions are gated on", () => {
+    // Dropping either of these would be a payload saving that costs the
+    // regenerate button and the attendees-only explanation.
+    const row = loggedMeeting(toLogEntry(meeting, { ...report, has_transcript: true }, false, true));
+    expect(row.canRegenerate).toBe(true);
+    expect(row.attended).toBe(false);
+    expect(row.isHost).toBe(true);
+  });
+});
+
+describe("meetingLogDetail", () => {
+  it("is the prose the row left behind", () => {
+    const detail = meetingLogDetail(toLogEntry(meeting, report));
+    expect(detail.summary).toBe("Walked the LPs through Q3 marks.");
+    expect(detail.keyPoints).toEqual(["NAV up 4.2%", "Two new commitments"]);
+    expect(detail.decisions).toEqual(["Hold the close until October"]);
+    expect(detail.actionItems).toEqual(["Send the deck to Alina"]);
+    expect(detail.attendeeNames).toEqual(["Alina Reyes", "Ray"]);
   });
 
-  it("searches attendee names, which is how people remember meetings", () => {
-    expect(matchesLogSearch(entry, "alina")).toBe(true);
+  it("carries its own id, so a slow response cannot fill in another row", () => {
+    // The reader can open a second meeting while the first detail is in flight.
+    expect(meetingLogDetail(toLogEntry(meeting, report)).id).toBe("m1");
   });
 
-  it("requires every term, so a second word narrows rather than widens", () => {
-    expect(matchesLogSearch(entry, "q3 nav")).toBe(true);
-    expect(matchesLogSearch(entry, "q3 helicopter")).toBe(false);
+  it("together with the row, loses nothing the entry held", () => {
+    // The split is a move, not a cut: every field of an entry is in one half or
+    // the other. Without this, dropping a field from both halves reads as a
+    // payload win.
+    const entry = toLogEntry(meeting, report);
+    const covered = new Set([
+      ...Object.keys(loggedMeeting(entry)),
+      ...Object.keys(meetingLogDetail(entry)),
+      // The counts stand in for the lists they count.
+      "keyPoints", "decisions", "actionItems", "attendeeNames",
+    ]);
+    for (const key of Object.keys(entry)) expect(covered.has(key)).toBe(true);
+  });
+});
+
+describe("belongsInLog", () => {
+  const now = Date.parse("2026-09-20T12:00:00.000Z");
+
+  it("keeps a meeting that ended", () => {
+    expect(belongsInLog({ ...meeting, is_draft: false }, now)).toBe(true);
   });
 
-  it("does not match what is not there", () => {
-    expect(matchesLogSearch(entry, "budget")).toBe(false);
+  it("drops a meeting still to come", () => {
+    // It has no record to hold yet, and listing it under "Logs" promises one.
+    expect(belongsInLog({
+      ...meeting,
+      status: "waiting",
+      ended_at: null,
+      started_at: null,
+      scheduled_at: "2026-09-28T09:00:00.000Z",
+    }, now)).toBe(false);
+  });
+
+  it("drops a draft", () => {
+    expect(belongsInLog({ ...meeting, is_draft: true }, now)).toBe(false);
+  });
+
+  it("is the same rule the search route and the page both apply", () => {
+    // Stated as a test because the failure is invisible from either side alone:
+    // a search hit the list does not show is the only place that meeting
+    // appears, and it looks like a search bug rather than two rules.
+    const future = {
+      ...meeting,
+      status: "waiting",
+      ended_at: null,
+      started_at: null,
+      scheduled_at: "2026-09-28T09:00:00.000Z",
+    };
+    expect(belongsInLog(future, now)).toBe(false);
+    expect(belongsInLog({ ...future, status: "ended" }, now)).toBe(true);
   });
 });
 
@@ -245,22 +326,22 @@ describe("groupLogsByMonth", () => {
 
 describe("logEntrySubtitle", () => {
   it("counts what the meeting produced", () => {
-    expect(logEntrySubtitle(toLogEntry(meeting, report)))
+    expect(logEntrySubtitle(loggedMeeting(toLogEntry(meeting, report))))
       .toBe("2 key points · 1 decision · 1 action");
   });
 
   it("says so when there is no report", () => {
-    expect(logEntrySubtitle(toLogEntry(meeting, null))).toBe("No report");
+    expect(logEntrySubtitle(loggedMeeting(toLogEntry(meeting, null)))).toBe("No report");
   });
 
   it("says so when the report is only a summary", () => {
-    expect(logEntrySubtitle(toLogEntry(meeting, {
+    expect(logEntrySubtitle(loggedMeeting(toLogEntry(meeting, {
       summary: "Short one.", key_points: [], action_items: [], analysis: null,
-    }))).toBe("Summary only");
+    })))).toBe("Summary only");
   });
 
   it("singularises a count of one", () => {
-    expect(logEntrySubtitle(toLogEntry(meeting, { ...report, key_points: ["Only one"] })))
+    expect(logEntrySubtitle(loggedMeeting(toLogEntry(meeting, { ...report, key_points: ["Only one"] }))))
       .toContain("1 key point ·");
   });
 });
@@ -293,12 +374,12 @@ describe("log entries for a meeting the viewer was not in", () => {
     // RLS empties the report for a non-attendee, so hasReport is false for a
     // report that very much exists. Labelling that "No report" would have the
     // log misreport its own contents.
-    expect(logEntrySubtitle(toLogEntry(meeting, null, false))).toBe("Attendees only");
-    expect(logEntrySubtitle(toLogEntry(meeting, null, true))).toBe("No report");
+    expect(logEntrySubtitle(loggedMeeting(toLogEntry(meeting, null, false)))).toBe("Attendees only");
+    expect(logEntrySubtitle(loggedMeeting(toLogEntry(meeting, null, true)))).toBe("No report");
   });
 
   it("still describes a report the viewer did attend", () => {
     const report = { summary: "Discussed the raise.", key_points: ["a", "b"], action_items: null, analysis: null };
-    expect(logEntrySubtitle(toLogEntry(meeting, report, true))).toBe("2 key points");
+    expect(logEntrySubtitle(loggedMeeting(toLogEntry(meeting, report, true)))).toBe("2 key points");
   });
 });
