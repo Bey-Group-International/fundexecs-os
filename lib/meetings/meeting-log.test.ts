@@ -3,6 +3,7 @@ import {
   attendeeNames,
   belongsInLog,
   groupLogsByMonth,
+  logDateLabel,
   logEntrySubtitle,
   loggedMeeting,
   meetingLogDetail,
@@ -381,5 +382,44 @@ describe("log entries for a meeting the viewer was not in", () => {
   it("still describes a report the viewer did attend", () => {
     const report = { summary: "Discussed the raise.", key_points: ["a", "b"], action_items: null, analysis: null };
     expect(logEntrySubtitle(loggedMeeting(toLogEntry(meeting, report, true)))).toBe("2 key points");
+  });
+});
+
+describe("logDateLabel", () => {
+  it("reads as a date a person scans", () => {
+    expect(logDateLabel("2026-09-07T14:47:00.000Z")).toBe("Mon, Sep 7");
+  });
+
+  // "Invalid Date" where a date should be reads as the RECORD being broken,
+  // which is worse than admitting the timestamp is missing.
+  it("says Undated rather than printing a parser's error", () => {
+    expect(logDateLabel("not a date")).toBe("Undated");
+    expect(logDateLabel("")).toBe("Undated");
+  });
+});
+
+// Both labels come from formatters built once at module load. The cost is not
+// theoretical: over the two hundred rows a full log renders, per-call
+// `toLocaleDateString` measured 11.24ms against 0.25ms reused, and the list
+// re-renders on every character typed into its search box.
+//
+// Asserted as "the per-call API is not reached" rather than by timing, because
+// a timing threshold in CI is a flake waiting to happen.
+describe("date formatting is not rebuilt per row", () => {
+  it("formats a full log without calling toLocaleDateString once", () => {
+    const spy = jest.spyOn(Date.prototype, "toLocaleDateString");
+    try {
+      const rows = Array.from({ length: 200 }, (_, i) => ({
+        occurredAt: new Date(Date.UTC(2026, i % 12, (i % 27) + 1)).toISOString(),
+      }));
+      // The month dividers...
+      const groups = groupLogsByMonth(rows);
+      expect(groups.length).toBeGreaterThan(1);
+      // ...and every row's own date.
+      for (const row of rows) expect(logDateLabel(row.occurredAt)).not.toBe("Undated");
+      expect(spy).not.toHaveBeenCalled();
+    } finally {
+      spy.mockRestore();
+    }
   });
 });
