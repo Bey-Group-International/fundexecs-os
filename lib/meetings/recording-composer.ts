@@ -233,7 +233,8 @@ export class RecordingComposer {
   /**
    * Keep the audio graph in step with who is in the room.
    *
-   * Called every frame, and cheap because it only acts on a difference. Someone
+   * Called about once a second (see HOUSEKEEPING_MS), and cheap because it only
+   * acts on a difference. Someone
    * joining mid-recording has to be connected or they are silent in the file;
    * someone leaving has to be disconnected or their node leaks for the rest of
    * the meeting.
@@ -253,7 +254,7 @@ export class RecordingComposer {
         node.connect(dest);
         this.connected.set(stream, node);
       } catch {
-        // A stream with no decodable audio yet; it will be retried next frame.
+        // A stream with no decodable audio yet; retried on the next pass.
       }
     }
 

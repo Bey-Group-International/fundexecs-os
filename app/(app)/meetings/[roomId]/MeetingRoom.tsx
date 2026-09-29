@@ -342,6 +342,9 @@ const VOICE_SAMPLE_MS = 120;
  * and asked the new speaker's encoder for full quality, only to drop it again.
  */
 const SPEAKER_SWITCH_MS = 1000;
+
+/** A pause longer than this restarts the challenger's count; gaps between words are shorter. */
+const SPEAKER_GAP_MS = 600;
 // How long the copilot takes to slide away. Must match the duration-200 below:
 // the panel unmounts on this timer, and unmounting early cuts the animation.
 const COPILOT_SLIDE_MS = 200;
@@ -4116,7 +4119,7 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
 
     // Who the stage is on, and who has been loudest since when while it is not.
     let shownSpeaker: string | null = null;
-    let challenger: { id: string; since: number } | null = null;
+    let challenger: { id: string; since: number; lastSeen: number } | null = null;
 
     const interval = setInterval(() => {
       if (taps.size === 0) return;
@@ -4146,9 +4149,14 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
           shownSpeaker = loudestId;
           challenger = null;
           setActiveSpeakerId(loudestId);
-        } else if (challenger?.id !== loudestId) {
-          challenger = { id: loudestId, since: now };
-        } else if (now - challenger.since >= SPEAKER_SWITCH_MS) {
+        } else if (challenger?.id !== loudestId || now - challenger.lastSeen > SPEAKER_GAP_MS) {
+          // A new challenger — or the same one after a silence, so one cough
+          // followed ten seconds later by another cannot add up to a second
+          // of talking.
+          challenger = { id: loudestId, since: now, lastSeen: now };
+        } else if (now - challenger.since < SPEAKER_SWITCH_MS) {
+          challenger.lastSeen = now;
+        } else {
           shownSpeaker = loudestId;
           challenger = null;
           setActiveSpeakerId(loudestId);
