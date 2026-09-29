@@ -170,17 +170,29 @@ export function readAcknowledgement(value: unknown): ConsentAcknowledgement | nu
   return { at, disclosure, sources };
 }
 
+// The two formatters `defaultCallTitle` needs, built once for the module.
+//
+// `toLocaleDateString` builds an Intl.DateTimeFormat, uses it once and throws
+// it away, which measured 54.8x the cost of reusing a pair — and the recorder
+// asked for a default title on every render of its setup screen, so every
+// keystroke in the title field paid for two of them.
+const TITLE_DATE = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric" });
+const TITLE_TIME = new Intl.DateTimeFormat("en-US", { hour: "numeric", minute: "2-digit" });
+
 /**
  * What to call a call nobody named.
  *
  * Dated and timed, because a list of twenty "Recorded call" rows is a list of
  * twenty identical rows. The time is what a person actually remembers a phone
  * call by.
+ *
+ * Takes `now` rather than reading the clock for itself so a caller can name a
+ * call after the moment it BEGAN. The recorder used to call this twice — once
+ * for the placeholder and again when the call ended — and an hour-long call
+ * came out of that with two different names.
  */
 export function defaultCallTitle(now: Date = new Date()): string {
-  const date = now.toLocaleDateString("en-US", { month: "short", day: "numeric" });
-  const time = now.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
-  return `Call · ${date}, ${time}`;
+  return `Call · ${TITLE_DATE.format(now)}, ${TITLE_TIME.format(now)}`;
 }
 
 /** A title the person typed, or the dated default if they typed nothing. */

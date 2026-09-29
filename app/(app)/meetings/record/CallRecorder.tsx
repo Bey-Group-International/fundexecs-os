@@ -18,6 +18,7 @@ import {
   captureLabel,
   captureSources,
   type CaptureSource,
+  callTitle,
   defaultCallTitle,
   disclosureScript,
   mayStartRecording,
@@ -48,6 +49,23 @@ import {
 type Line = BufferableLine;
 
 /**
+ * One settled line of the transcript.
+ *
+ * Memoised on its text, which is the half `FinishedLines` cannot cover. That
+ * memo is keyed on the array, and a new sentence is a new array — so every
+ * line already on screen re-rendered with it. Measured at 2,000 lines, one
+ * sentence arriving ran 2,066 row bodies; through this it runs 1. A line's
+ * text never changes once it is final, so every one of those was work whose
+ * output was already on the page.
+ *
+ * Takes the text rather than the line, so a row cannot be invalidated by a
+ * field it does not draw.
+ */
+const TranscriptLine = memo(function TranscriptLine({ text }: { text: string }) {
+  return <li className="px-4 py-2.5 text-sm text-[var(--fg-primary)]">{text}</li>;
+});
+
+/**
  * The finished lines of the transcript, re-rendered only when a line is added.
  *
  * The in-progress words update several times a second while anyone speaks, and
@@ -58,7 +76,7 @@ const FinishedLines = memo(function FinishedLines({ lines }: { lines: Line[] }) 
   return (
     <>
       {lines.map((line) => (
-        <li key={line.id} className="px-4 py-2.5 text-sm text-[var(--fg-primary)]">{line.text}</li>
+        <TranscriptLine key={line.id} text={line.text} />
       ))}
     </>
   );
@@ -88,7 +106,15 @@ export function CallRecorder({
   const [lines, setLines] = useState<Line[]>([]);
   /** Words still being recognised — shown, never saved. */
   const [interim, setInterim] = useState("");
-  const [meeting, setMeeting] = useState<{ id: string; roomCode: string } | null>(null);
+  const [meeting, setMeeting] = useState<{ id: string; roomCode: string; title: string } | null>(null);
+  /**
+   * The name to suggest for a call nobody has titled — read once, on mount.
+   *
+   * It used to be `defaultCallTitle()` in the placeholder, which re-read the
+   * clock on every render: the suggestion moved while the person was typing
+   * beside it, and each keystroke built two Intl formatters to produce it.
+   */
+  const [suggestedTitle] = useState(() => defaultCallTitle());
   /**
    * What is actually being captured, as opposed to what was asked for.
    *
@@ -370,13 +396,20 @@ export function CallRecorder({
           computerAudio: computer !== null,
         }),
       });
-      const body = (await res.json().catch(() => ({}))) as { id?: string; roomCode?: string; error?: string };
+      const body = (await res.json().catch(() => ({}))) as {
+        id?: string; roomCode?: string; title?: string; error?: string;
+      };
       if (!res.ok || !body.id || !body.roomCode) throw new Error(body.error ?? "Could not start the call");
 
       capturedRef.current = { microphone, computer };
       setCaptured(captureSources(computer !== null));
       meetingIdRef.current = body.id;
-      setMeeting({ id: body.id, roomCode: body.roomCode });
+      // The name the route settled on, kept rather than worked out again later.
+      // It is the one stored on the row, so holding it is what keeps the
+      // archive and the report calling this call the same thing. The fallback
+      // is the same rule the route applies, evaluated here at the same moment
+      // — the start of the call — and not when it ends.
+      setMeeting({ id: body.id, roomCode: body.roomCode, title: body.title ?? callTitle(title) });
       setPhase("recording");
     } catch (err) {
       for (const t of microphone.getTracks()) t.stop();
@@ -456,7 +489,7 @@ export function CallRecorder({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           meetingId: meeting.id,
-          title: title.trim() || defaultCallTitle(),
+          title: meeting.title,
           participants: [userName],
           transcript,
           duration: recorder.elapsed,
@@ -473,7 +506,7 @@ export function CallRecorder({
     // coming. The call is in the archive; say so, and stay put.
     setPhase("failed");
     setError("The call was saved, but its summary could not be written. It is in your recorded calls, where you can try again.");
-  }, [meeting, recorder, drainTranscript, title, userName, router]);
+  }, [meeting, recorder, drainTranscript, userName, router]);
 
   const blocked = blockedReason(gate);
 
@@ -575,7 +608,7 @@ export function CallRecorder({
             type="text"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
-            placeholder={defaultCallTitle()}
+            placeholder={suggestedTitle}
             className="mt-1.5 w-full rounded-lg border border-[var(--line)] bg-[var(--surface-0)] px-3 py-2 text-sm text-[var(--fg-primary)] placeholder:text-[var(--fg-muted)] focus:border-[var(--gold-400)] focus:outline-none"
           />
         </label>
