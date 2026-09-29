@@ -113,21 +113,24 @@ async function apiGet<T>(accessToken: string, path: string, params: Record<strin
 }
 
 /**
- * Access tokens minted for a send, reused until shortly before they expire.
+ * Access tokens minted for a calendar write, reused until shortly before they
+ * expire.
  *
  * Keyed by the connection AND its sealed refresh token, so reconnecting
  * (which stores a new refresh token) never reuses a token from the old grant.
  * In-process only: a cold start just mints again.
  */
 const TOKEN_SAFETY_MARGIN_MS = 5 * 60 * 1000;
-const sendTokenCache = new Map<string, { token: string; expiresAt: number }>();
+const writeTokenCache = new Map<string, { token: string; expiresAt: number }>();
 
 /**
  * Mint a short-lived access token for a connection.
  *
- * `reuse` is for sends — invites, report emails, calendar writes — where a
- * burst of them otherwise paid a round trip to Google's token endpoint each.
- * The sync leaves it off: minting fresh is how it notices a revoked grant.
+ * `reuse` is for calendar writes, where a burst of saves otherwise paid a
+ * round trip to Google's token endpoint each. Only for callers that turn a 401
+ * from Google into `invalid_grant` themselves (apiWrite does), so a revoked
+ * grant still reads as "reconnect" while its cached token lingers. The sync and
+ * the mailbox leave it off: minting fresh is how they notice a revoked grant.
  */
 export async function accessTokenFor(
   conn: ConnectionRow,
@@ -135,14 +138,18 @@ export async function accessTokenFor(
 ): Promise<GoogleCallResult<string>> {
   const key = `${conn.id}:${conn.refresh_ciphertext}`;
   if (opts.reuse) {
-    const hit = sendTokenCache.get(key);
+    const hit = writeTokenCache.get(key);
     if (hit && hit.expiresAt > Date.now()) return { ok: true, data: hit.token };
   }
   try {
     const refresh = openRefreshToken(conn);
     const { accessToken, expiresInSec } = await refreshAccessToken(refresh);
     if (opts.reuse) {
-      sendTokenCache.set(key, { token: accessToken, expiresAt: Date.now() + expiresInSec * 1000 - TOKEN_SAFETY_MARGIN_MS });
+      // Expired entries go when a new one arrives, so the map stays the size of
+      // the connections actually writing.
+      const now = Date.now();
+      for (const [k, v] of writeTokenCache) if (v.expiresAt <= now) writeTokenCache.delete(k);
+      writeTokenCache.set(key, { token: accessToken, expiresAt: Date.now() + expiresInSec * 1000 - TOKEN_SAFETY_MARGIN_MS });
     }
     return { ok: true, data: accessToken };
   } catch (err) {
