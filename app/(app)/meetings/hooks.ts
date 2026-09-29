@@ -91,6 +91,9 @@ export interface RecentJoin {
   at: number;
 }
 
+/** The most values Supabase Realtime accepts in an `in` filter. */
+const REALTIME_IN_LIMIT = 100;
+
 /**
  * Live presence + join activity for a set of meetings, sourced from
  * live_meeting_participants (rows with no left_at = currently in the room).
@@ -136,18 +139,37 @@ export function useLivePresence(meetingIds: string[]): {
       setPresence(presenceByMeeting((data ?? []) as ParticipantRow[]));
     }
 
+    // A hidden tab notes that something changed and catches up once when it
+    // is looked at again, instead of re-reading presence for nobody.
+    let staleWhileHidden = false;
+    const isHidden = () => typeof document !== "undefined" && document.visibilityState === "hidden";
+
     function scheduleRefresh() {
+      if (isHidden()) { staleWhileHidden = true; return; }
       if (debounce) clearTimeout(debounce);
       debounce = setTimeout(() => void refresh(), 300);
     }
 
+    function onVisibility() {
+      if (isHidden() || !staleWhileHidden) return;
+      staleWhileHidden = false;
+      void refresh();
+    }
+
     void refresh();
+    document.addEventListener("visibilitychange", onVisibility);
+
+    // Filtered at the server when the list fits Realtime's `in` limit, so this
+    // channel no longer receives — and RLS-checks — every join and leave in the
+    // organisation. The client-side check below stays for the larger case.
+    const ids = key.split(",");
+    const filter = ids.length <= REALTIME_IN_LIMIT ? `meeting_id=in.(${ids.join(",")})` : undefined;
 
     const channel = supabase
       .channel(nextPresenceChannelName())
       .on(
         "postgres_changes",
-        { event: "*", schema: "public", table: "live_meeting_participants" },
+        { event: "*", schema: "public", table: "live_meeting_participants", ...(filter ? { filter } : {}) },
         (payload) => {
           const rec = (payload.new ?? payload.old) as
             | { meeting_id?: string; display_name?: string }
@@ -169,6 +191,7 @@ export function useLivePresence(meetingIds: string[]): {
     return () => {
       cancelled = true;
       if (debounce) clearTimeout(debounce);
+      document.removeEventListener("visibilitychange", onVisibility);
       void supabase.removeChannel(channel);
     };
   }, [key]);
