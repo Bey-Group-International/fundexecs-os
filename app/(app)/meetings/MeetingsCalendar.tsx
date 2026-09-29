@@ -83,6 +83,8 @@ import { useFocusTrap } from "@/hooks/useFocusTrap";
 /** How often the view re-reads the clock. */
 const CLOCK_TICK_MS = 15_000;
 
+const DAY_MS = 24 * 60 * 60 * 1000;
+
 const CAL_SELECT =
   "id, room_code, title, status, host_id, created_at, started_at, ended_at, scheduled_at, duration_minutes, timezone, meeting_type, attendees, preparation_status, followup_status, assigned_copilot_agent, is_draft, locked_at, updated_at, description, location, meeting_url, objective, agenda, preparation_requirements, related_record_type, related_record_id, calendar_visibility, reminder_minutes, priority, tags, external_calendar_provider, external_calendar_sync_enabled, external_calendar_sync_status, guest_quick_access";
 
@@ -321,8 +323,24 @@ export function MeetingsCalendar({
     [meetings, filter, userId, statusOf],
   );
 
-  // Presence only needs the meetings currently rendered. Keep it bounded.
-  const visibleIds = useMemo(() => visible.map((m) => m.id), [visible]);
+  // Presence only for meetings anyone could plausibly be sitting in: already
+  // started, or scheduled from yesterday through tomorrow. The grid holds a
+  // four-month window — up to 500 meetings — and asking after every one of
+  // them sent their ids in a single URL on every month change and every join.
+  // Bounded by the day rather than the minute so the set, and with it the
+  // realtime channel, stays put while the page is open.
+  const visibleIds = useMemo(() => {
+    const from = dayStartMs - DAY_MS;
+    const to = dayStartMs + 2 * DAY_MS;
+    return visible
+      .filter((m) => {
+        if (m.status === "active") return true;
+        if (!m.scheduled_at) return true;
+        const at = new Date(m.scheduled_at).getTime();
+        return at >= from && at < to;
+      })
+      .map((m) => m.id);
+  }, [visible, dayStartMs]);
   const { presence } = useLivePresence(visibleIds);
 
   // ── Navigation ─────────────────────────────────────────────────────────────
