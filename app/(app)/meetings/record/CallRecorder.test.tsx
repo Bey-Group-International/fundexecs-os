@@ -19,6 +19,7 @@ import { render, act, screen } from "@testing-library/react";
 import { fireEvent } from "@testing-library/dom";
 import type { UseRecordingResult } from "@/lib/meetings/use-recording";
 import { FLUSH_INTERVAL_MS } from "@/lib/meetings/transcript-buffer";
+import { defaultCallTitle } from "@/lib/meetings/one-way";
 
 const push = jest.fn();
 jest.mock("next/navigation", () => ({ useRouter: () => ({ push }) }));
@@ -32,9 +33,30 @@ jest.mock("@/lib/meetings/use-recording", () => ({
 
 import { CallRecorder } from "./CallRecorder";
 
-/** The title the route settles on, which is the one stored on the row. */
-const ROUTE_TITLE = "Call · Sep 23, 2:05 PM";
+/**
+ * The title the route settles on, which is the one stored on the row.
+ *
+ * A literal, because the only thing asserted about it is that it survives the
+ * round trip from the route's answer to the report's request untouched. Nothing
+ * here formats it, so no clock or time zone can move it.
+ */
+const ROUTE_TITLE = "Call \u00b7 Sep 23, 2:05 PM";
 const STARTED_AT = "2026-09-23T14:05:30.000Z";
+
+/**
+ * What a title GENERATED at the start of the call reads as.
+ *
+ * Derived rather than written out, because `defaultCallTitle` formats in the
+ * host's own time zone: spelled as a literal this was "2:05 PM" under CI's UTC
+ * and "7:05 AM" for anybody running the suite in California, so two tests
+ * passed in CI and failed on a contributor's machine.
+ *
+ * Not circular. What these tests discriminate is WHICH INSTANT the title is
+ * taken from — the start of the call rather than its end, and the mount rather
+ * than every render — so the formatting is shared with the code under test on
+ * purpose and the instant is the whole assertion.
+ */
+const GENERATED_AT_START = () => defaultCallTitle(new Date(STARTED_AT));
 
 /** Every request the screen made, in order. */
 let calls: Array<{ url: string; body: Record<string, unknown> }>;
@@ -128,6 +150,7 @@ async function startRecording() {
   });
 }
 
+/** Press End and let the recogniser hand over its last words. */
 async function endRecording() {
   await act(async () => {
     fireEvent.click(screen.getByRole("button", { name: /end and summarise/i }));
@@ -188,7 +211,7 @@ describe("one call, one name", () => {
     await endRecording();
 
     const title = calls.find((c) => c.url.endsWith("/report"))!.body.title as string;
-    expect(title).toBe(ROUTE_TITLE);
+    expect(title).toBe(GENERATED_AT_START());
   });
 });
 
@@ -198,14 +221,14 @@ describe("the suggested title", () => {
   it("does not move while the person is typing beside it", () => {
     setup({ routeTitle: ROUTE_TITLE });
     const field = screen.getByRole("textbox");
-    expect(field.getAttribute("placeholder")).toBe(ROUTE_TITLE);
+    expect(field.getAttribute("placeholder")).toBe(GENERATED_AT_START());
 
     // A minute passes — someone reading the consent wording takes longer than
     // that — and something else on the screen changes.
     jest.setSystemTime(new Date("2026-09-23T14:06:10.000Z"));
     fireEvent.click(screen.getByRole("checkbox", { name: /consent/i }));
 
-    expect(field.getAttribute("placeholder")).toBe(ROUTE_TITLE);
+    expect(field.getAttribute("placeholder")).toBe(GENERATED_AT_START());
   });
 });
 
