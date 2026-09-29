@@ -187,52 +187,47 @@ export async function POST(req: Request) {
 
     if (error) throw error;
 
-    // Mark meeting as ended
-    await supabase
-      .from("live_meetings")
-      .update({ status: "ended", ended_at: new Date().toISOString() })
-      .eq("id", body.meetingId);
-
-    await persistInstitutionalMeetingRecord(supabase, {
-      meeting,
-      actorId: user.id,
-      participants: body.participants ?? [],
-      transcript,
-      analysis,
-      // When the meeting happened, not when the report ran. Usually moments
-      // apart; an hour or more apart whenever this is reached by the room's
-      // retry, and a different day whenever a host ends a meeting the next
-      // morning.
-      occurredAt: meeting.started_at ?? meeting.scheduled_at ?? null,
-    });
-
-    // A task for each action item, on the list of whoever the item names.
-    //
-    // Awaited, not fired off. This used to be `void Promise.allSettled(...)` on
-    // the line before the response: on a serverless runtime the invocation can
-    // be frozen the moment the response is sent, so any insert that had not
-    // landed simply never did — silently, because nothing was waiting to hear.
-    // The inserts run in parallel and cost one round trip.
-    let tasks = { created: 0, routed: 0, unrouted: [] as string[], skipped: 0 };
+    // Three writes that need only the report to exist, and not each other: the
+    // meeting closed out, the institutional record, and a task per action
+    // item. They ran one after another — five or six round trips the host sat
+    // through on the "Generating report…" screen after the model had already
+    // answered. Now they overlap and the wait is the slowest of them.
     const actionItems = normalizeNoteList(analysis.action_items);
-    if (actionItems.length > 0 && meeting.organization_id) {
-      // Loaded only when an item actually names somebody — most of the cost of
-      // this route is the model call, and there is no reason to add two table
-      // reads to a report whose items are all unowned.
-      const named = actionItems.some((item) => parseActionItem(item).owner);
-      tasks = await createActionItemTasks(supabase, {
-        orgId: meeting.organization_id,
-        // Stamped on each task, and how a retry after a lost response is
-        // spotted: the same commitment must not reach a colleague twice.
+    const [, , tasks] = await Promise.all([
+      supabase
+        .from("live_meetings")
+        .update({ status: "ended", ended_at: new Date().toISOString() })
+        .eq("id", body.meetingId),
+
+      persistInstitutionalMeetingRecord(supabase, {
+        meeting,
+        actorId: user.id,
+        participants: body.participants ?? [],
+        transcript,
+        analysis,
+        // When the meeting happened, not when the report ran. Usually moments
+        // apart; an hour or more apart whenever this is reached by the room's
+        // retry, and a different day whenever a host ends a meeting the next
+        // morning.
+        occurredAt: meeting.started_at ?? meeting.scheduled_at ?? null,
+      }),
+
+      // A task for each action item, on the list of whoever the item names.
+      //
+      // Awaited, not fired off. This used to be `void Promise.allSettled(...)` on
+      // the line before the response: on a serverless runtime the invocation can
+      // be frozen the moment the response is sent, so any insert that had not
+      // landed simply never did — silently, because nothing was waiting to hear.
+      // The inserts run in parallel and cost one round trip.
+      raiseActionItemTasks(supabase, {
+        meeting,
         meetingId: body.meetingId,
         hostId: user.id,
-        meetingTitle: meeting.title ?? body.title ?? "Untitled",
-        dealId: meeting.deal_id ?? null,
+        title: body.title,
         summary: normalizeNoteText(analysis.summary),
         items: actionItems,
-        directory: named ? await loadOrgDirectory(supabase, meeting.organization_id) : [],
-      });
-    }
+      }),
+    ]);
 
     return NextResponse.json({ reportId: report.id, analysis, tasks });
   } catch (err) {
@@ -242,4 +237,42 @@ export async function POST(req: Request) {
       { status: 500 },
     );
   }
+}
+
+type ReportMeeting = {
+  organization_id: string | null;
+  deal_id: string | null;
+  title: string | null;
+};
+
+async function raiseActionItemTasks(
+  supabase: Awaited<ReturnType<typeof createServerClient>>,
+  input: {
+    meeting: ReportMeeting;
+    meetingId: string;
+    hostId: string;
+    title?: string;
+    summary: string;
+    items: string[];
+  },
+) {
+  const none = { created: 0, routed: 0, unrouted: [] as string[], skipped: 0 };
+  const orgId = input.meeting.organization_id;
+  if (input.items.length === 0 || !orgId) return none;
+  // Loaded only when an item actually names somebody — most of the cost of
+  // this route is the model call, and there is no reason to add two table
+  // reads to a report whose items are all unowned.
+  const named = input.items.some((item) => parseActionItem(item).owner);
+  return createActionItemTasks(supabase, {
+    orgId,
+    // Stamped on each task, and how a retry after a lost response is
+    // spotted: the same commitment must not reach a colleague twice.
+    meetingId: input.meetingId,
+    hostId: input.hostId,
+    meetingTitle: input.meeting.title ?? input.title ?? "Untitled",
+    dealId: input.meeting.deal_id ?? null,
+    summary: input.summary,
+    items: input.items,
+    directory: named ? await loadOrgDirectory(supabase, orgId) : [],
+  });
 }
