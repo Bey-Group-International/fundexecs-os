@@ -114,7 +114,10 @@ async function openWithRetry(constraints: MediaStreamConstraints): Promise<Media
 }
 
 /** Segmented mic meter — the thing that answers "can they actually hear me?". */
-function MicMeter({ level, active, bars = 12 }: { level: number; active: boolean; bars?: number }) {
+/** Bars in the mic meter; the level is only re-rendered when this many change. */
+const MIC_METER_BARS = 12;
+
+function MicMeter({ level, active, bars = MIC_METER_BARS }: { level: number; active: boolean; bars?: number }) {
   const lit = active ? levelBars(level, bars) : 0;
   return (
     <div className="flex items-center gap-[3px]" aria-hidden="true">
@@ -682,12 +685,17 @@ export function MeetingGreenRoom({
     const buffer = new Float32Array(analyser.fftSize);
     let raf = 0;
     let smoothed = 0;
+    let shownBars = -1;
 
     const tick = () => {
       analyser.getFloatTimeDomainData(buffer);
       smoothed = smoothLevel(smoothed, levelFromSamples(buffer));
       micPeakRef.current = Math.max(micPeakRef.current, smoothed);
-      setLevel(smoothed);
+      // Only when a bar lights or goes out. The smoothed level never quite
+      // settles, so setting it raw re-rendered this whole screen on every
+      // display frame — for as long as a guest sat waiting to be let in.
+      const bars = levelBars(smoothed, MIC_METER_BARS);
+      if (bars !== shownBars) { shownBars = bars; setLevel(smoothed); }
       raf = requestAnimationFrame(tick);
     };
     raf = requestAnimationFrame(tick);

@@ -75,7 +75,7 @@ import {
   stopSpan,
   type ElapsedState,
 } from "@/lib/meetings/elapsed";
-import { MeetingClock } from "./MeetingClock";
+import { MeetingClock, RecordingClock } from "./MeetingClock";
 import { useRecording } from "@/lib/meetings/use-recording";
 import { RecordingComposer, type ComposerHandlers, type RoomSnapshot } from "@/lib/meetings/recording-composer";
 import { BackgroundProcessor } from "@/lib/meetings/background-processor";
@@ -885,13 +885,14 @@ function ControlBar({
   onSwitchMic, onSwitchCam, onSwitchSpeaker, onRaiseHand, onReaction, onMuteAll, onToggleLayout, onFlipCamera,
   activeMicId, activeCamId, camStarting,
   leaving, onOpenBackgrounds, backgroundActive, backgroundBtnRef,
-  recordingState, recordingBy, recordingElapsed, onToggleRecording,
+  recordingState, recordingBy, recordingStartedAt, onToggleRecording,
 }: {
   /** Drives the badge every participant sees, and the host's own control. */
   recordingState: RecordingState;
   /** Who is recording. Shown to everyone: "the host knew" is not consent. */
   recordingBy: string;
-  recordingElapsed: number;
+  /** When the running recording started (epoch ms). The button ticks its own clock from it. */
+  recordingStartedAt: number | null;
   onToggleRecording: () => void;
   onOpenBackgrounds: () => void;
   /** An effect is applied, so the control reads as on. */
@@ -1040,7 +1041,7 @@ function ControlBar({
             }`} />
             <span className="hidden sm:inline">
               {recordingState === "recording"
-                ? `Stop · ${formatElapsed(recordingElapsed)}`
+                ? <>Stop · {recordingStartedAt !== null ? <RecordingClock startedAt={recordingStartedAt} /> : formatElapsed(0)}</>
                 : recordingState === "starting" ? "Starting…"
                 : recordingState === "stopping" ? "Saving…"
                 : "Record"}
@@ -4512,6 +4513,8 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     hostName: localName,
     createSource: createRoomSource,
     announce: announceRecording,
+    // The record button keeps its own clock from `startedAt`.
+    tickElapsed: false,
   });
 
   // A late joiner has missed the broadcast that started the recording, and
@@ -6160,7 +6163,7 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
         roomCode={roomCode} bwMode={bwMode} layoutForced={layoutIsForced(layout, sharerId)}
         recordingState={recordingBanner?.state ?? "idle"}
         recordingBy={recordingBanner?.by ?? ""}
-        recordingElapsed={recorder.elapsed}
+        recordingStartedAt={recorder.startedAt}
         onToggleRecording={() => {
           if (recorder.state === "recording") recorder.stop();
           else void recorder.start();

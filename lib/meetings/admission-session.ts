@@ -222,7 +222,18 @@ export function createAdmissionSession(opts: AdmissionSessionOptions): Admission
     return status === "admitted" || status === "denied" || status === "ended";
   }
 
-  async function pollOnce(): Promise<void> {
+  /** The poll in the air, if any. A nudge, a reconnect and the timer can all
+   *  ask at once; they share one request rather than stacking duplicates —
+   *  and, on an "unknown", duplicate knocks. */
+  let polling: Promise<void> | null = null;
+
+  function pollOnce(): Promise<void> {
+    if (polling) return polling;
+    polling = pollOnceNow().finally(() => { polling = null; });
+    return polling;
+  }
+
+  async function pollOnceNow(): Promise<void> {
     if (stopped || settled) return;
     if (!shouldPollNow(typeof document === "undefined" ? undefined : document.visibilityState)) return;
 
