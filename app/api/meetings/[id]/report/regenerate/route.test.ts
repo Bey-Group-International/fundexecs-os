@@ -270,3 +270,23 @@ describe("a regenerated report reaches the people it names", () => {
     expect(writes.updated).toEqual({ followup_status: "not_started" });
   });
 });
+
+describe("after the new report is saved", () => {
+  it("moves the follow-up badge without waiting for the action-item tasks", async () => {
+    wire();
+    let release!: () => void;
+    createActionItemTasks.mockReturnValue(
+      new Promise((r) => { release = () => r({ created: 1, routed: 0, unrouted: [], skipped: 0 }); }),
+    );
+
+    const pending = POST(req(), params);
+    for (let i = 0; i < 20 && !writes.updated; i++) {
+      await new Promise((r) => setTimeout(r, 0));
+    }
+    expect(createActionItemTasks).toHaveBeenCalled();
+    expect(writes.updated).toMatchObject({ followup_status: "draft" });
+
+    release();
+    expect((await pending).status).toBe(200);
+  });
+});
