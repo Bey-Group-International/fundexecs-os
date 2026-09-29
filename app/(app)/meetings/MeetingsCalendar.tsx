@@ -80,6 +80,9 @@ import { PastMeetingsList, type PastMeeting } from "./PastMeetingsList";
 import { useNow, useLivePresence, nextChannelName, type RoomPresence } from "./hooks";
 import { useFocusTrap } from "@/hooks/useFocusTrap";
 
+/** How often the view re-reads the clock. */
+const CLOCK_TICK_MS = 15_000;
+
 const CAL_SELECT =
   "id, room_code, title, status, host_id, created_at, started_at, ended_at, scheduled_at, duration_minutes, timezone, meeting_type, attendees, preparation_status, followup_status, assigned_copilot_agent, is_draft, locked_at, updated_at, description, location, meeting_url, objective, agenda, preparation_requirements, related_record_type, related_record_id, calendar_visibility, reminder_minutes, priority, tags, external_calendar_provider, external_calendar_sync_enabled, external_calendar_sync_status, guest_quick_access";
 
@@ -195,7 +198,11 @@ export function MeetingsCalendar({
   const refreshTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [channelName] = useState(() => nextChannelName("calendar-meetings"));
 
-  const now = useNow(1000);
+  // Every label this clock drives is minute-grained ("in 5 min", "12 min
+  // left", "Starts now"), so a per-second tick re-rendered the whole view for
+  // text that had not changed. Fifteen seconds keeps each flip within a
+  // quarter-minute of true; the hook re-reads the clock on return to the tab.
+  const now = useNow(CLOCK_TICK_MS);
   // Coarsen the clock for the expensive re-derivations below. `now` ticks every
   // second, but the grid filter and the "today" highlight only change at minute /
   // day boundaries — keying their memos off the raw millisecond value re-filtered
