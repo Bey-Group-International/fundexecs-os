@@ -10,7 +10,7 @@
  */
 const from = jest.fn();
 
-import { loadMeetingLog } from "./meeting-log.server";
+import { loadMeetingLog, searchMeetingLog } from "./meeting-log.server";
 
 const MEETING = {
   id: "m1", room_code: "abc-def-gh", title: "LP Update", host_id: "host-1",
@@ -105,5 +105,133 @@ describe("a meeting with no report", () => {
     expect(rows).toHaveLength(1);
     expect(rows[0].report).toBeNull();
     expect(rows[0].isHost).toBe(true);
+  });
+});
+
+/**
+ * Searching the log.
+ *
+ * The capability it did not have. It matched titles, summaries, decisions, action
+ * items and attendee names with String.includes in the browser, so "what did we
+ * agree with Dunbar in March" was answerable only if somebody had written
+ * "Dunbar" in a title. The words were in the transcript, and the transcript was
+ * never read.
+ */
+describe("searchMeetingLog", () => {
+  /** A log row whose interesting words are ONLY in the transcript. */
+  const TRANSCRIPT = [
+    "Ana: The Dunbar valuation came in at forty.",
+    "Priya: Forty is above where we modelled it.",
+  ].join("\n");
+
+  const report = (over: Record<string, unknown> = {}) => [{
+    summary: "A routine update.",
+    key_points: [],
+    action_items: [],
+    analysis: {},
+    has_transcript: true,
+    full_transcript: TRANSCRIPT,
+    created_at: "2026-03-01T11:05:00Z",
+    ...over,
+  }];
+
+  it("finds a meeting by a word said only in the transcript", async () => {
+    // Nothing in the title, summary, decisions, action items or attendees says
+    // "Dunbar". This is the whole point of the change.
+    attended = ["m1"];
+    const db = wire(report());
+
+    const found = await searchMeetingLog(db, "org-1", "host-1", "dunbar");
+
+    expect(found.rows).toHaveLength(1);
+    expect(found.rows[0].hit?.reason).toBe("transcript");
+    expect(found.rows[0].hit?.matches).toBe(1);
+  });
+
+  it("quotes the sentence the hit was in", async () => {
+    // A row that says only "this matched" leaves the reader to open the report to
+    // find out why.
+    attended = ["m1"];
+    const found = await searchMeetingLog(wire(report()), "org-1", "host-1", "modelled");
+    const text = (found.rows[0].hit?.snippet?.parts ?? []).map((part) => part.value).join("");
+    expect(text).toContain("above where we modelled");
+    expect(found.rows[0].hit?.snippet?.speaker).toBe("Priya");
+  });
+
+  it("reads the transcript, which a list read never selects", async () => {
+    attended = ["m1"];
+    await searchMeetingLog(wire(report()), "org-1", "host-1", "dunbar");
+    expect(selectArg).toContain("full_transcript");
+
+    // And the list still does not, because it is up to 120,000 characters a row.
+    await loadMeetingLog(wire(report()), "org-1", "host-1");
+    expect(selectArg).not.toContain("full_transcript");
+  });
+
+  it("still matches on metadata, so the old searches keep working", async () => {
+    attended = ["m1"];
+    const found = await searchMeetingLog(
+      wire(report({ full_transcript: "" })),
+      "org-1",
+      "host-1",
+      "routine",
+    );
+    expect(found.rows).toHaveLength(1);
+    expect(found.rows[0].hit?.reason).toBe("metadata");
+  });
+
+  it("does not search a transcript the caller may not read", async () => {
+    // A non-attendee's report comes back empty under RLS anyway. Searching a
+    // transcript they are not entitled to would turn the search into a way of
+    // reading it — a hit and a snippet are an excerpt.
+    attended = [];
+    const found = await searchMeetingLog(
+      wire(report({ summary: "" })),
+      "org-1",
+      "someone-else",
+      "dunbar",
+    );
+    expect(found.rows).toEqual([]);
+  });
+
+  it("returns nothing for a word nobody said or wrote", async () => {
+    attended = ["m1"];
+    const found = await searchMeetingLog(wire(report()), "org-1", "host-1", "tungsten");
+    expect(found.rows).toEqual([]);
+  });
+
+  it("says how far it looked, so 'nothing' can be told from 'I stopped'", async () => {
+    attended = ["m1"];
+    const found = await searchMeetingLog(wire(report()), "org-1", "host-1", "tungsten");
+    expect(found.scanned).toBe(1);
+    expect(found.bounded).toBe(false);
+  });
+
+  it("admits the bound when the scan filled up", async () => {
+    attended = ["m1"];
+    // A scan of one, filled by one row: the search cannot claim it saw the rest.
+    const found = await searchMeetingLog(wire(report()), "org-1", "host-1", "dunbar", 1);
+    expect(found.bounded).toBe(true);
+  });
+
+  it("keeps drafts out, as the list does", async () => {
+    // A search that surfaced a draft would be the only place they appear.
+    attended = ["m1"];
+    const db = wire(report());
+    MEETING.is_draft = true;
+    try {
+      const found = await searchMeetingLog(db, "org-1", "host-1", "dunbar");
+      expect(found.rows).toEqual([]);
+    } finally {
+      MEETING.is_draft = false;
+    }
+  });
+
+  it("asks about attendance only for the rows it read", async () => {
+    // The batching rule the list already follows: reading every attendance row
+    // the user ever had was silently cut at PostgREST's 1000-row cap.
+    attended = ["m1"];
+    await searchMeetingLog(wire(report()), "org-1", "host-1", "dunbar");
+    expect(attendanceAsked).toEqual([["m1"]]);
   });
 });
