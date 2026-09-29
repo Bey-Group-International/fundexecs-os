@@ -196,22 +196,41 @@ export function MeetingLogs({ meetings: initialMeetings }: { meetings: LoggedMee
     setDetails((prev) => ({ ...prev, [entry.id]: meetingLogDetail(entry) }));
   }, []);
 
+  /**
+   * Whether the result on screen answers the query in the box.
+   *
+   * It stops answering the moment another character is typed, and stays that way
+   * through the debounce AND the request — the two together are about a third of
+   * a second in which the rows below describe an older question.
+   *
+   * The rows are left standing rather than cleared, which is the deliberate half:
+   * falling back to the unfiltered list would flash all two hundred meetings up
+   * between two keystrokes, and the reader would watch their results disappear
+   * and come back on every letter. What must not survive is the CLAIM — see the
+   * count line below, which stops saying how many matched the moment it no longer
+   * knows.
+   */
+  const answered = isSearch && result !== null && result.query === trimmed;
   const shownRows: LogRowData[] = isSearch && result ? result.rows : meetings;
   const groups = useMemo(() => groupLogsByMonth(shownRows), [shownRows]);
 
   const total = meetings.length;
-  const summary =
-    isSearch && result
-      ? searchSummary({
-        query: result.query,
-        hits: result.rows.length,
-        scanned: result.scanned,
-        bounded: result.bounded,
-        // The log's own word. "3 matches … in the most recent 200 sessions" is
-        // a caveat about a page this reader is not on.
-        noun: "meeting",
-      })
-      : `${total} meeting${total === 1 ? "" : "s"}`;
+  const summary = answered
+    ? searchSummary({
+      query: result.query,
+      hits: result.rows.length,
+      scanned: result.scanned,
+      bounded: result.bounded,
+      // The log's own word. "3 matches … in the most recent 200 sessions" is
+      // a caveat about a page this reader is not on.
+      noun: "meeting",
+    })
+    : `${total} meeting${total === 1 ? "" : "s"}`;
+
+  // Covers the debounce as well as the request. `searching` alone starts a
+  // quarter of a second late, and in that gap the line read "3 matches for
+  // “dunbar”" over a box that already said "dunbar x".
+  const searchPending = searching || (isSearch && !answered);
 
   if (total === 0 && !isSearch) {
     return (
@@ -241,7 +260,7 @@ export function MeetingLogs({ meetings: initialMeetings }: { meetings: LoggedMee
           />
         </div>
         <span role="status" aria-live="polite" className="shrink-0 text-xs tabular-nums text-fg-muted">
-          {searching ? "Searching…" : summary}
+          {searchPending ? "Searching…" : summary}
         </span>
       </div>
 
@@ -257,7 +276,10 @@ export function MeetingLogs({ meetings: initialMeetings }: { meetings: LoggedMee
         </p>
       )}
 
-      {shownRows.length === 0 && !searching ? (
+      {/* `searchPending`, not `searching`: a query that found nothing, followed by
+          another keystroke, would otherwise spend the debounce telling the reader
+          that nothing matches a query nobody has answered yet. */}
+      {shownRows.length === 0 && !searchPending ? (
         <div className={`${CARD} border-dashed px-4 py-8 text-center`}>
           <p className="text-sm font-medium text-fg-primary">Nothing matches “{trimmed}”</p>
           <p className="mt-1 text-xs leading-relaxed text-fg-muted">

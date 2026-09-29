@@ -4387,6 +4387,28 @@ Deployed, monitoring               →  live, observability active
              |  add 360.
              |  Confidence: 19 -> 22 visual checks, and the fix is proved by
              |  removing it: three items report 32px on a 16px line at 360.
+             |
+             |  2026-09-29  A review bot found the one thing the tests did not.
+             |  CodeRabbit on #1146: the log's count line was keyed on the last
+             |  ANSWERED query and nothing on the current one, so "1 match for
+             |  “dunbar”" stood over a box that already said "dunbar x" — for the
+             |  debounce plus the request, about a third of a second per keystroke.
+             |  Labelled Minor. It was right, and the fix is one predicate.
+             |  Took half of its suggestion and declined the other half with a
+             |  reason. It proposed falling back to the unfiltered list while the
+             |  next answer is pending, which would flash all two hundred meetings
+             |  up between two keystrokes — the reader watches their results vanish
+             |  and come back on every letter. So the ROWS stay standing and the
+             |  CLAIM goes: stale rows under a "Searching…" label are honest, a
+             |  stale count is not. The same predicate silences "Nothing matches
+             |  “dunbar x”" during a window in which nothing has looked.
+             |  The general shape, and it is the third time: the bug lived in the
+             |  gap between two clocks. `searching` starts when the REQUEST starts;
+             |  the query stops being answered when the KEY is pressed. Everything
+             |  between those two instants was the defect.
+             |  Confidence: Jest 7426 -> 7429 across 525 suites. Proved both ways —
+             |  restoring the old predicate fails 2, taking the literal suggestion
+             |  fails the one that guards against the flash.
 ```
 
 ---

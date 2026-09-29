@@ -294,6 +294,62 @@ describe("searching", () => {
     expect(screen.queryByText("Stale result")).toBeNull();
   });
 
+  it("stops claiming a count the moment the query moves on", async () => {
+    // CodeRabbit found this on the PR, and it is a real one: the count line read
+    // "1 match for “dunbar”" over a box that already said "dunbar x", because the
+    // claim was keyed on the last ANSWERED query and nothing on the current one.
+    // The debounce is a quarter of a second, and the request is on top of that.
+    mockFetch(async () => ({
+      body: { meetings: [{ ...row(), hit: { reason: "metadata", matches: 0, snippet: null } }], scanned: 4, bounded: false },
+    }));
+    render(<MeetingLogs meetings={[row(), row({ id: "m2", title: "Unrelated" })]} />);
+
+    const box = screen.getByRole("searchbox");
+    await userEvent.type(box, "dunbar");
+    expect(await screen.findByText(/1 match for “dunbar”/)).toBeInTheDocument();
+
+    await userEvent.type(box, " x");
+
+    // Before the debounce has even fired, the line must stop asserting a result.
+    expect(screen.getByRole("status")).toHaveTextContent("Searching…");
+    expect(screen.queryByText(/1 match for “dunbar”/)).toBeNull();
+  });
+
+  it("leaves the rows standing while the next answer is on its way", async () => {
+    // The deliberate other half. Falling back to the unfiltered list would flash
+    // all two hundred meetings up between two keystrokes — the reader watches
+    // their results vanish and return on every letter. Stale rows under a
+    // "Searching…" label are the honest version; a stale COUNT is not.
+    mockFetch(async () => ({
+      body: { meetings: [{ ...row(), hit: { reason: "metadata", matches: 0, snippet: null } }], scanned: 4, bounded: false },
+    }));
+    render(<MeetingLogs meetings={[row(), row({ id: "m2", title: "Unrelated" })]} />);
+
+    const box = screen.getByRole("searchbox");
+    await userEvent.type(box, "dunbar");
+    await screen.findByText(/1 match for “dunbar”/);
+
+    await userEvent.type(box, " x");
+
+    expect(screen.getByText("Dunbar Capital — Series B")).toBeInTheDocument();
+    expect(screen.queryByText("Unrelated")).toBeNull();
+  });
+
+  it("does not announce that nothing matched a query it has not answered yet", async () => {
+    // A search that found nothing, then another keystroke: without this the
+    // debounce is spent telling the reader "Nothing matches “dunbar x”" before
+    // anything has looked.
+    mockFetch(async () => ({ body: { meetings: [], scanned: 4, bounded: false } }));
+    render(<MeetingLogs meetings={[row()]} />);
+
+    const box = screen.getByRole("searchbox");
+    await userEvent.type(box, "dunbar");
+    expect(await screen.findByText(/Nothing matches/)).toBeInTheDocument();
+
+    await userEvent.type(box, " x");
+    expect(screen.queryByText(/Nothing matches/)).toBeNull();
+  });
+
   it("does not search on one character, and says why", async () => {
     // A single character matches most transcripts: the same as no filter, and a
     // great deal more reading.
