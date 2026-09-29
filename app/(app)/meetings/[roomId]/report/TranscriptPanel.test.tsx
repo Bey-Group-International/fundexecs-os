@@ -100,6 +100,10 @@ describe("search", () => {
     await openPanel(user);
     await user.type(screen.getByLabelText("Search the transcript"), "valuation");
 
+    const litMarks = () =>
+      [...document.querySelectorAll("mark")].filter((m) =>
+        m.className.includes("bg-[var(--gold-400)]"),
+      );
     const litIndex = () =>
       [...document.querySelectorAll("mark")].findIndex((m) =>
         m.className.includes("bg-[var(--gold-400)]"),
@@ -110,11 +114,20 @@ describe("search", () => {
 
     await user.click(screen.getByRole("button", { name: "Next match" }));
     expect(screen.getByRole("status")).toHaveTextContent("2 of 2");
+    // "It moved" is not enough, and the reason is worth keeping: findIndex
+    // returns -1 when NOTHING is lit, and -1 is not equal to `first` either — so
+    // a row that dropped the highlight altogether would satisfy a bare
+    // `not.toBe(first)`. That is the same hole this test was written to close,
+    // reopened one level down. Both ends are pinned instead: something is lit,
+    // it is not where it was, and it is the only one.
+    expect(litIndex()).toBeGreaterThanOrEqual(0);
     expect(litIndex()).not.toBe(first);
+    expect(litMarks()).toHaveLength(1);
 
     // And back, so this cannot pass on a highlight that only ever moves forward.
     await user.click(screen.getByRole("button", { name: "Previous match" }));
     expect(litIndex()).toBe(first);
+    expect(litMarks()).toHaveLength(1);
   });
 
   it("lights exactly one hit at a time", async () => {
