@@ -132,30 +132,24 @@ export async function PATCH(request: NextRequest, { params }: { params: Params }
       const duration = Math.min(480, Math.max(15, Number.isFinite(rawDuration) ? rawDuration : 60));
       const endIso = new Date(new Date(startIso).getTime() + duration * 60_000).toISOString();
       const windowStart = new Date(new Date(startIso).getTime() - 8 * 3600_000).toISOString();
-      const { data: candidates } = await supabase
-        .from("live_meetings")
-        .select("id, title, scheduled_at, duration_minutes, host_id, attendees")
-        .eq("organization_id", auth.ctx.orgId)
-        .is("deleted_at", null)
-        .eq("is_draft", false)
-        .neq("status", "ended")
-        .gte("scheduled_at", windowStart)
-        .lt("scheduled_at", endIso)
-        .limit(200);
-      const subjectAttendees = nextAttendees ?? (prior.attendees as MeetingAttendeeInput[] | null) ?? [];
-      const conflicts = findConflicts((candidates ?? []) as ConflictCandidate[], startIso, endIso, {
-        excludeId: id,
-        subjectHostId: (prior.host_id as string | null) ?? null,
-        subjectEmails: guestEmails(subjectAttendees),
-      });
       // Whose clock the warning is read in. Resolved here rather than reusing
       // the one computed further down, which is only reached once this check
       // has let the edit through.
       const conflictZone = (cleanString(body.timezone) ?? (prior.timezone as string | null)) || "UTC";
-      // Same escape as a meeting clash for both of the host's own calendars:
-      // time they blocked by hand, and time already taken in a calendar they
-      // only connected.
-      const [blockedBy, busyElsewhere] = await Promise.all([
+      // The meeting clash and both of the host's own calendars — time they
+      // blocked by hand, and time already taken in a calendar they only
+      // connected — asked at once, since none depends on another.
+      const [{ data: candidates }, blockedBy, busyElsewhere] = await Promise.all([
+        supabase
+          .from("live_meetings")
+          .select("id, title, scheduled_at, duration_minutes, host_id, attendees")
+          .eq("organization_id", auth.ctx.orgId)
+          .is("deleted_at", null)
+          .eq("is_draft", false)
+          .neq("status", "ended")
+          .gte("scheduled_at", windowStart)
+          .lt("scheduled_at", endIso)
+          .limit(200),
         loadBlockConflicts(supabase, auth.ctx.userId, startIso, endIso),
         loadExternalConflicts(supabase, {
           userId: auth.ctx.userId,
@@ -164,6 +158,12 @@ export async function PATCH(request: NextRequest, { params }: { params: Params }
           timezone: conflictZone,
         }),
       ]);
+      const subjectAttendees = nextAttendees ?? (prior.attendees as MeetingAttendeeInput[] | null) ?? [];
+      const conflicts = findConflicts((candidates ?? []) as ConflictCandidate[], startIso, endIso, {
+        excludeId: id,
+        subjectHostId: (prior.host_id as string | null) ?? null,
+        subjectEmails: guestEmails(subjectAttendees),
+      });
       if (
         (conflicts.length > 0 || blockedBy.length > 0 || busyElsewhere.length > 0) &&
         body.allowConflict !== true

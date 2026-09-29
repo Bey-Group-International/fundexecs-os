@@ -131,30 +131,33 @@ export async function POST(req: NextRequest) {
       // max-meeting-length window before the end — bound the fetch accordingly
       // (durations are capped at 480 min) instead of scanning all future rows.
       const windowStart = new Date(new Date(scheduledAt).getTime() - 8 * 3600_000).toISOString();
-      const { data: existing } = await supabase
-        .from("live_meetings")
-        .select("id, title, scheduled_at, duration_minutes, host_id, attendees")
-        .eq("organization_id", auth.ctx.orgId)
-        .is("deleted_at", null)
-        .eq("is_draft", false)
-        .neq("status", "ended")
-        .gte("scheduled_at", windowStart)
-        .lt("scheduled_at", endIso)
-        .limit(200);
-      conflicts = findConflicts((existing ?? []) as ConflictCandidate[], scheduledAt, endIso, {
-        excludeId: body.meetingId ?? null,
-        subjectHostId: auth.ctx.userId,
-        subjectEmails: [auth.ctx.email, ...guestEmails(attendees)],
-      });
+      // All three checks at once — they are independent, and asking them one
+      // after another put two extra round trips in front of every save.
+      //
       // Time the host blocked by hand warns like an overlapping meeting does —
       // same "Save anyway" escape, since a block is the host's own note to
       // themselves rather than a commitment to someone else. So does time
       // already taken in a calendar they only connected: the commitment is
       // just as real for being kept somewhere else.
-      const [blockedBy, busyElsewhere] = await Promise.all([
+      const [{ data: existing }, blockedBy, busyElsewhere] = await Promise.all([
+        supabase
+          .from("live_meetings")
+          .select("id, title, scheduled_at, duration_minutes, host_id, attendees")
+          .eq("organization_id", auth.ctx.orgId)
+          .is("deleted_at", null)
+          .eq("is_draft", false)
+          .neq("status", "ended")
+          .gte("scheduled_at", windowStart)
+          .lt("scheduled_at", endIso)
+          .limit(200),
         loadBlockConflicts(supabase, auth.ctx.userId, scheduledAt, endIso),
         loadExternalConflicts(supabase, { userId: auth.ctx.userId, startIso: scheduledAt, endIso, timezone }),
       ]);
+      conflicts = findConflicts((existing ?? []) as ConflictCandidate[], scheduledAt, endIso, {
+        excludeId: body.meetingId ?? null,
+        subjectHostId: auth.ctx.userId,
+        subjectEmails: [auth.ctx.email, ...guestEmails(attendees)],
+      });
       if (
         (conflicts.length > 0 || blockedBy.length > 0 || busyElsewhere.length > 0) &&
         body.allowConflict !== true

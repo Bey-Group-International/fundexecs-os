@@ -21,11 +21,21 @@ const MEETING = {
 
 /** The select string the meetings query was built with. */
 let selectArg = "";
+/** Meetings the caller has an attendance row for, and the id lists asked about. */
+let attended: string[] = [];
+let attendanceAsked: string[][] = [];
 
 function wire(reports: unknown) {
   from.mockImplementation((table: string) => {
     if (table === "live_meeting_participants") {
-      const p: Record<string, unknown> = { select: () => p, eq: async () => ({ data: [] }) };
+      const p: Record<string, unknown> = {
+        select: () => p,
+        eq: () => p,
+        in: async (_col: string, ids: string[]) => {
+          attendanceAsked.push(ids);
+          return { data: attended.filter((id) => ids.includes(id)).map((meeting_id) => ({ meeting_id })) };
+        },
+      };
       return p;
     }
     const b: Record<string, unknown> = {
@@ -45,6 +55,19 @@ function wire(reports: unknown) {
 beforeEach(() => {
   jest.clearAllMocks();
   selectArg = "";
+  attended = [];
+  attendanceAsked = [];
+});
+
+describe("attendance", () => {
+  // It used to read every attendance row the user ever had, which past the
+  // API's 1000-row cap was silently cut, so older meetings read as unattended.
+  it("asks only about the meetings in the log, and marks the ones attended", async () => {
+    attended = ["m1", "elsewhere"];
+    const rows = await loadMeetingLog(wire([REPORT]), "org1", "someone-else");
+    expect(attendanceAsked).toEqual([["m1"]]);
+    expect(rows[0].attended).toBe(true);
+  });
 });
 
 const REPORT = { summary: "s", key_points: [], action_items: [], analysis: {} };

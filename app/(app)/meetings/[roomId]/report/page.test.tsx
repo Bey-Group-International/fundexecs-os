@@ -426,6 +426,36 @@ describe("the viewer, cached but not stale", () => {
     expect(reads.length).toBe(readsAfter);
   });
 
+  it("re-asks whether the NEW account was there, instead of reusing the answer", async () => {
+    /**
+     * The sharper half, and it arrived from another PR rather than this one.
+     *
+     * Attendance is cached as "this meeting was attended" keyed by meeting id,
+     * with no record of BY WHOM. So a stale entry does not merely mis-state who
+     * is reading — it answers the attendance question on behalf of somebody who
+     * was never in the meeting, short-circuiting the query that would have said
+     * no. A non-attendee gets "Generating your report…" forever instead of
+     * being told the report is not theirs, which is the exact defect the
+     * attendance read was added to fix.
+     */
+    db.report = { ...WITH_FOLLOW_UP };
+    db.attended = true;
+    render(<MeetingReportPage />);
+    await settle();
+    expect(screen.getByTestId("follow-up")).toBeInTheDocument();
+
+    // Somebody who was not in this meeting takes over the session.
+    authUser = { id: "never-came" };
+    db.attended = false;
+    await sessionBecomes("never-came");
+
+    // Asked again, and answered honestly.
+    expect(screen.queryByTestId("follow-up")).toBeNull();
+    expect(
+      screen.getByText(/This report is limited to the people who were in the meeting/i),
+    ).toBeInTheDocument();
+  });
+
   it("stops listening when the page goes away", async () => {
     // A listener that outlives its component calls setState on an unmounted
     // one, and does it once per sign-in for the life of the tab.

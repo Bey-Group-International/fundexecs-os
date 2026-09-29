@@ -75,7 +75,7 @@ import {
   stopSpan,
   type ElapsedState,
 } from "@/lib/meetings/elapsed";
-import { MeetingClock } from "./MeetingClock";
+import { MeetingClock, RecordingClock } from "./MeetingClock";
 import { useRecording } from "@/lib/meetings/use-recording";
 import { RecordingComposer, type ComposerHandlers, type RoomSnapshot } from "@/lib/meetings/recording-composer";
 import { BackgroundProcessor } from "@/lib/meetings/background-processor";
@@ -333,6 +333,18 @@ const RECORDING_NOTICE_MS = 8_000;
 // Voice metering: fast enough that a short "yes" leaves samples behind for
 // attribution, slow enough not to compete with rendering for the main thread.
 const VOICE_SAMPLE_MS = 120;
+
+/**
+ * How long someone must be the loudest before the stage moves to them.
+ *
+ * Without it, two people talking over each other flipped the focus several
+ * times a second: each flip re-rendered the room, swapped the big tile's video
+ * and asked the new speaker's encoder for full quality, only to drop it again.
+ */
+const SPEAKER_SWITCH_MS = 1000;
+
+/** A pause longer than this restarts the challenger's count; gaps between words are shorter. */
+const SPEAKER_GAP_MS = 600;
 // How long the copilot takes to slide away. Must match the duration-200 below:
 // the panel unmounts on this timer, and unmounting early cuts the animation.
 const COPILOT_SLIDE_MS = 200;
@@ -879,19 +891,44 @@ export function HostExitControl({
 
 // ─── ControlBar ───────────────────────────────────────────────────────────────
 
-function ControlBar({
+/**
+ * Wrap a set of handlers in functions whose identity never changes and which
+ * always call the handlers from the latest render.
+ *
+ * For props handed to a memoized child: passing the handlers directly would
+ * give it new functions every render and defeat the memo, and freezing the
+ * first render's would act on stale state.
+ */
+function useStableHandlers<T extends Record<string, (...args: any[]) => unknown>>(handlers: T): T {
+  const latest = useRef(handlers);
+  useLayoutEffect(() => { latest.current = handlers; });
+  const [stable] = useState(() => {
+    const out = {} as Record<string, (...args: unknown[]) => unknown>;
+    for (const key of Object.keys(handlers)) {
+      out[key] = (...args: unknown[]) => latest.current[key](...args);
+    }
+    return out as T;
+  });
+  return stable;
+}
+
+/** The bar re-renders only when one of its own props changes. */
+const ControlBar = React.memo(ControlBarImpl);
+
+function ControlBarImpl({
   micOn, camOn, shareOn, shareStarting, copilotOpen, isHost, handRaised, handsUp, handsUpNote, layout, layoutForced, chatUnread, waitingCount, elapsed, roomCode, bwMode,
   onToggleMic, onToggleCam, onToggleScreen, onToggleCopilot, onLeave, onEndForAll,
   onSwitchMic, onSwitchCam, onSwitchSpeaker, onRaiseHand, onReaction, onMuteAll, onToggleLayout, onFlipCamera,
   activeMicId, activeCamId, camStarting,
   leaving, onOpenBackgrounds, backgroundActive, backgroundBtnRef,
-  recordingState, recordingBy, recordingElapsed, onToggleRecording,
+  recordingState, recordingBy, recordingStartedAt, onToggleRecording,
 }: {
   /** Drives the badge every participant sees, and the host's own control. */
   recordingState: RecordingState;
   /** Who is recording. Shown to everyone: "the host knew" is not consent. */
   recordingBy: string;
-  recordingElapsed: number;
+  /** When the running recording started (epoch ms). The button ticks its own clock from it. */
+  recordingStartedAt: number | null;
   onToggleRecording: () => void;
   onOpenBackgrounds: () => void;
   /** An effect is applied, so the control reads as on. */
@@ -1040,7 +1077,7 @@ function ControlBar({
             }`} />
             <span className="hidden sm:inline">
               {recordingState === "recording"
-                ? `Stop · ${formatElapsed(recordingElapsed)}`
+                ? <>Stop · {recordingStartedAt !== null ? <RecordingClock startedAt={recordingStartedAt} /> : formatElapsed(0)}</>
                 : recordingState === "starting" ? "Starting…"
                 : recordingState === "stopping" ? "Saving…"
                 : "Record"}
@@ -1190,6 +1227,9 @@ export function CopilotSidebar({
   // Colour by id, not by position in the list — so a speaker keeps their colour
   // when someone above them leaves, and holds the same one on every screen.
   const colorFor = (speakerId: string) => SPEAKER_COLORS[speakerColorIndex(speakerId, SPEAKER_COLORS.length)];
+  // Regrouped when the messages change, not every time the room re-renders —
+  // which, with someone talking, is several times a second.
+  const chatTurns = useMemo(() => groupChat(chatMessages), [chatMessages]);
 
   const sendChat = () => {
     const text = chatInput.trim();
@@ -1280,7 +1320,7 @@ export function CopilotSidebar({
               // Grouped: three lines in a row is one person talking, and
               // repeating their name above each is how a short exchange
               // becomes a wall.
-              groupChat(chatMessages).map((turn) => (
+              chatTurns.map((turn) => (
                 // `min-w-0` and `break-words` together are what stop a pasted
                 // URL — the most common thing anybody pastes into a meeting
                 // chat — from forcing this column wider than the panel, which
@@ -3883,10 +3923,14 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
    */
   const applySpeakerSink = useCallback(async (deviceId: string) => {
     if (!deviceId) return;
-    type Sinkable = HTMLMediaElement & { setSinkId?: (id: string) => Promise<void> };
+    type Sinkable = HTMLMediaElement & { sinkId?: string; setSinkId?: (id: string) => Promise<void> };
     const elements = document.querySelectorAll<HTMLMediaElement>("video, audio");
     for (const el of Array.from(elements) as Sinkable[]) {
       if (typeof el.setSinkId !== "function") continue;
+      // Already there. This runs on every change to the roster, and re-routing
+      // an element that is already on the right device is an audio-pipeline
+      // rebuild for nothing.
+      if (el.sinkId === deviceId) continue;
       try { await el.setSinkId(deviceId); } catch { /* device gone, or no permission for it */ }
     }
   }, []);
@@ -4073,6 +4117,10 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     const taps = new Map<string, VoiceTap>();
     meterRef.current = { ctx, taps };
 
+    // Who the stage is on, and who has been loudest since when while it is not.
+    let shownSpeaker: string | null = null;
+    let challenger: { id: string; since: number; lastSeen: number } | null = null;
+
     const interval = setInterval(() => {
       if (taps.size === 0) return;
       const now = Date.now();
@@ -4093,7 +4141,27 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
         if (level > loudest) { loudest = level; loudestId = tap.id; }
       }
 
-      if (loudestId && loudest >= SPEAKING_LEVEL) setActiveSpeakerId(loudestId);
+      if (loudestId && loudest >= SPEAKING_LEVEL) {
+        if (loudestId === shownSpeaker) {
+          challenger = null;
+        } else if (shownSpeaker === null || !taps.has(shownSpeaker)) {
+          // Nobody on stage yet, or they have left: no one to hold it for.
+          shownSpeaker = loudestId;
+          challenger = null;
+          setActiveSpeakerId(loudestId);
+        } else if (challenger?.id !== loudestId || now - challenger.lastSeen > SPEAKER_GAP_MS) {
+          // A new challenger — or the same one after a silence, so one cough
+          // followed ten seconds later by another cannot add up to a second
+          // of talking.
+          challenger = { id: loudestId, since: now, lastSeen: now };
+        } else if (now - challenger.since < SPEAKER_SWITCH_MS) {
+          challenger.lastSeen = now;
+        } else {
+          shownSpeaker = loudestId;
+          challenger = null;
+          setActiveSpeakerId(loudestId);
+        }
+      }
 
       setSpeaking((prev) => {
         const next = speakingIds(lastAudibleRef.current, now);
@@ -4512,6 +4580,8 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     hostName: localName,
     createSource: createRoomSource,
     announce: announceRecording,
+    // The record button keeps its own clock from `startedAt`.
+    tickElapsed: false,
   });
 
   // A late joiner has missed the broadcast that started the recording, and
@@ -5887,6 +5957,31 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
   // being in the room was dropped back into the green room instead of the
   // thank-you. An exit outranks whatever screen was showing when it happened.
 
+  // Stable across renders, always calling the latest closures — which is what
+  // lets the memoized ControlBar skip the room's frequent re-renders (someone
+  // starts talking, a chat line lands) without ever acting on stale state.
+  const controlBarHandlers = useStableHandlers({
+    onToggleRecording: () => {
+      if (recorder.state === "recording") recorder.stop();
+      else void recorder.start();
+    },
+    onToggleMic: toggleMic,
+    onToggleCam: toggleCam,
+    onToggleScreen: () => void toggleScreen(),
+    onToggleCopilot: () => (copilotOpen ? collapseCopilot() : expandCopilot()),
+    onLeave: () => void leaveMeeting(),
+    onEndForAll: () => void endForAll(),
+    onOpenBackgrounds: () => setBgPickerOpen((v) => !v),
+    onSwitchMic: switchMic,
+    onSwitchCam: switchCam,
+    onSwitchSpeaker: switchSpeaker,
+    onRaiseHand: toggleRaiseHand,
+    onReaction: sendReaction,
+    onMuteAll: muteAll,
+    onToggleLayout: () => setLayout((v) => v === "grid" ? "speaker" : "grid"),
+    onFlipCamera: () => void flipCamera(),
+  });
+
   if (deniedByHost) {
     return (
       <BodyPortal>
@@ -5954,6 +6049,7 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
   // The others' hands, oldest first — the order a chair would take them in.
   const handsUpPeople = raisedBy(raisedHands, participantList, LOCAL_SPEAKER_ID);
   const handsUpNote = handsUpLabel(handsUpPeople);
+
 
   // Reactions with a name attached, oldest first — the same shape raisedBy
   // gives for hands, and for the same reason: the tile is not a reliable place
@@ -6160,24 +6256,12 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
         roomCode={roomCode} bwMode={bwMode} layoutForced={layoutIsForced(layout, sharerId)}
         recordingState={recordingBanner?.state ?? "idle"}
         recordingBy={recordingBanner?.by ?? ""}
-        recordingElapsed={recorder.elapsed}
-        onToggleRecording={() => {
-          if (recorder.state === "recording") recorder.stop();
-          else void recorder.start();
-        }}
-        onToggleMic={toggleMic} onToggleCam={toggleCam}
-        onToggleScreen={() => void toggleScreen()}
-        onToggleCopilot={() => (copilotOpen ? collapseCopilot() : expandCopilot())}
-        onLeave={() => void leaveMeeting()} onEndForAll={() => void endForAll()}
+        recordingStartedAt={recorder.startedAt}
         leaving={isAwaitingReport(callPhase)}
-        onOpenBackgrounds={() => setBgPickerOpen((v) => !v)}
         backgroundActive={bgEffect.kind !== "none"}
         backgroundBtnRef={bgBtnRef}
-        onSwitchMic={switchMic} onSwitchCam={switchCam} onSwitchSpeaker={switchSpeaker}
         activeMicId={selectedMicId} activeCamId={selectedCamId} camStarting={camStarting}
-        onRaiseHand={toggleRaiseHand} onReaction={sendReaction} onMuteAll={muteAll}
-        onToggleLayout={() => setLayout((v) => v === "grid" ? "speaker" : "grid")}
-        onFlipCamera={() => void flipCamera()}
+        {...controlBarHandlers}
       />
       </div>
 

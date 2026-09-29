@@ -208,6 +208,9 @@ export interface ReadinessProblem {
   message: string;
 }
 
+/** A peak at or under this, once the meter has settled, reads as a dead mic. */
+export const MIC_SILENT_PEAK = 0.01;
+
 /**
  * What is wrong before someone joins.
  *
@@ -244,7 +247,7 @@ export function readinessProblems(state: {
     });
   } else if (state.mics === 0) {
     problems.push({ kind: "no_mic", message: "No microphone found. Others won't hear you." });
-  } else if (state.micEnabled && state.micPeak <= 0.01) {
+  } else if (state.micEnabled && state.micPeak <= MIC_SILENT_PEAK) {
     // Only after the meter has had a chance to see something: a member who is
     // simply not talking yet must not be told their mic is dead.
     problems.push({

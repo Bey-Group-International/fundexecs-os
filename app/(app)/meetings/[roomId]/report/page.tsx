@@ -52,19 +52,6 @@ export default function MeetingReportPage() {
   const { roomId } = useParams<{ roomId: string }>();
   const [data, setData] = useState<Data | undefined>(undefined);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  /**
-   * Who is reading, asked once.
-   *
-   * `supabase.auth.getUser()` is a round trip, and it sat inside the poll — so a
-   * report that took a minute to generate asked the auth server who the viewer
-   * was twelve times, for an answer that only changes when the SESSION does.
-   *
-   * Cached until that happens, not forever: the effect below watches for it and
-   * clears this, because "the reader cannot change while the page is open" is
-   * false across tabs, and this id decides `isHost` — which decides who is
-   * offered the follow-up send.
-   */
-  const viewerRef = useRef<{ id: string } | null | undefined>(undefined);
   // The rows the room wrote while people were speaking. Only these carry a
   // time, which is what lets a line in the transcript drive the recording.
   const [lines, setLines] = useState<CueRow[]>([]);
@@ -113,23 +100,57 @@ export default function MeetingReportPage() {
     );
   }, []);
 
+  /** A poll still waiting on its answer, so a slow network does not stack them. */
+  const inFlightRef = useRef(false);
+  /** The first read for this meeting has landed. */
+  const loadedRef = useRef(false);
+  /**
+   * Who is looking and whether they were there. Neither changes while this page
+   * waits, so they are read once rather than on every poll — the user lookup is
+   * a round trip to the auth server each time.
+   *
+   * "Neither changes" holds for the WAIT, not for the life of the page: another
+   * tab can sign in as somebody else. Cached until the session says otherwise,
+   * then, not forever — the auth listener in the effect below clears both. It
+   * matters because viewerId decides isHost, isHost decides canSend, and
+   * canSend decides who is offered the follow-up send.
+   */
+  const viewerRef = useRef<{ user: { id: string } | null } | null>(null);
+  const attendedRef = useRef<{ meetingId: string } | null>(null);
+
   async function fetchReport() {
+    // Nobody is looking; the next poll after they come back will catch up.
+    // The first read always runs, so a page opened in a background tab still
+    // has something to show.
+    if (loadedRef.current && typeof document !== "undefined" && document.visibilityState === "hidden") return;
+    if (inFlightRef.current) return;
+    inFlightRef.current = true;
+    try {
+      await fetchReportOnce();
+      loadedRef.current = true;
+    } finally {
+      inFlightRef.current = false;
+    }
+  }
+
+  async function fetchReportOnce() {
     const supabase = createClient();
 
     // The viewer on the first pass only; the meeting on every one, because the
     // poll is waiting for its report to appear.
-    const [viewer, { data: meeting }] = await Promise.all([
-      viewerRef.current !== undefined
-        ? Promise.resolve(viewerRef.current)
-        : supabase.auth.getUser().then(({ data }) => data.user ?? null),
+    const [user, { data: meeting }] = await Promise.all([
+      viewerRef.current
+        ? Promise.resolve(viewerRef.current.user)
+        : supabase.auth.getUser().then(({ data: { user } }) => {
+            viewerRef.current = { user };
+            return user;
+          }),
       supabase
         .from("live_meetings")
         .select("id, host_id, title, created_at, started_at, ended_at, scheduled_at, kind, recording_consent")
         .eq("room_code", roomId)
         .maybeSingle(),
     ]);
-    viewerRef.current = viewer;
-    const user = viewer;
 
     if (!meeting) {
       setData(null);
@@ -150,7 +171,9 @@ export default function MeetingReportPage() {
         .order("created_at", { ascending: false })
         .limit(1)
         .maybeSingle(),
-      user
+      attendedRef.current?.meetingId === meeting.id
+        ? Promise.resolve({ data: { meeting_id: meeting.id } })
+        : user
         ? supabase
             .from("live_meeting_participants")
             .select("meeting_id")
@@ -203,6 +226,8 @@ export default function MeetingReportPage() {
         });
     }
 
+    if (attendance) attendedRef.current = { meetingId: meeting.id };
+
     const next: Data = {
       meeting: meeting as Meeting,
       report: (report as Report | null) ?? null,
@@ -235,7 +260,13 @@ export default function MeetingReportPage() {
     // dead on arrival.
     linesFetchedRef.current = false;
     linesFinalRef.current = false;
+    loadedRef.current = false;
+    // A read still out for the previous meeting must not hold up this one's.
+    inFlightRef.current = false;
     // Not the viewer — a soft navigation to another report is the same reader.
+    // Nor attendance, which main keys by meeting id and so is already correct
+    // across that navigation. Both are invalidated by session, not by route:
+    // see the auth listener below.
     waitStartedRef.current = Date.now();
     setWaitedMs(0);
     setLines([]);
@@ -261,9 +292,15 @@ export default function MeetingReportPage() {
       const signedIn = session?.user?.id ?? null;
       // Nothing cached yet: the first read is still in flight and will see the
       // current session by itself. Invalidating here would only race it.
-      if (viewerRef.current === undefined) return;
-      if (signedIn === (viewerRef.current?.id ?? null)) return;
-      viewerRef.current = undefined;
+      if (viewerRef.current === null) return;
+      if (signedIn === (viewerRef.current.user?.id ?? null)) return;
+      viewerRef.current = null;
+      // Attendance goes with it, and this is the sharper half. It is cached as
+      // "this meeting was attended" with no record of BY WHOM, so a stale entry
+      // does not merely mis-state the reader — it answers the attendance
+      // question for somebody who never came, short-circuiting the query that
+      // would have said no.
+      attendedRef.current = null;
       // Re-asked from scratch, polling included: a terminal state was terminal
       // for the PREVIOUS reader, and fetchReport stops the interval again on
       // its own if it still is for this one.
