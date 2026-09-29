@@ -4150,6 +4150,38 @@ Deployed, monitoring               →  live, observability active
              |  anything renders. A report is a DOCUMENT; the meetings page beside
              |  it is a server component. Moving it would beat every render saving
              |  in this entry put together, and it is a different change.
+             |
+             |  MEETINGS XIV (b) — A CACHE IS ONLY HONEST IF SOMETHING
+             |  INVALIDATES IT
+             |  A review bot read the change above and said the cached viewer goes
+             |  stale when another tab switches accounts. Its MECHANISM was wrong:
+             |  it said "later polls reuse the original value", but polling stops
+             |  as soon as the report exists, so in every state that renders the
+             |  follow-up control the OLD code did not re-read the viewer either.
+             |  Its POINT was right anyway, by a narrower path — switch accounts
+             |  during the generating window and the old code caught it on the
+             |  next poll while the cached version does not, and that stale id
+             |  then persists into the rendered report.
+             |  The thing actually wrong was the comment I had written: "an answer
+             |  that cannot change while the page is open". That is false across
+             |  tabs. Given a false claim in a comment and code that relies on it,
+             |  make the code true rather than softening the comment. So
+             |  onAuthStateChange clears the ref and re-asks — comparing the user
+             |  ID, not the event, because that hook also fires on every silent
+             |  token refresh and re-reading on those would put back the exact
+             |  per-poll round trip this change removed.
+             |  Why it is worth the code at all: viewerId decides isHost, isHost
+             |  decides canSend, canSend decides whether the follow-up can be sent
+             |  — so an id outliving its session hands the send to the wrong
+             |  person, or takes it from the right one.
+             |  Confidence: 5 new cases; 3 of them fail against the pre-fix page
+             |  (the two that pass both ways are the guard against reintroducing
+             |  the round trip — that is their job). Jest 7245 → 7250 across 515
+             |  suites, typecheck/eslint/build clean.
+             |  AND: a bot finding whose stated mechanism is wrong can still be a
+             |  real defect. Verify the claim, not the explanation — dismissing it
+             |  because the reasoning does not hold is how the finding underneath
+             |  survives.
 ```
 
 ---

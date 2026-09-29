@@ -34,9 +34,36 @@ const db: {
   attended: boolean;
 } = { meeting: null, report: null, attended: false };
 
+/** Who the auth server says is reading, and how often it was asked. */
+let authUser: { id: string } | null = { id: "host-1" };
+let getUserCalls = 0;
+/** The page's auth listeners, so a test can act like another tab. */
+let authHandlers: Array<(event: string, session: { user: { id: string } } | null) => void> = [];
+let unsubscribes = 0;
+
 jest.mock("@/lib/supabase/client", () => ({
   createClient: () => ({
-    auth: { getUser: async () => ({ data: { user: { id: "host-1" } } }) },
+    auth: {
+      getUser: async () => {
+        getUserCalls += 1;
+        return { data: { user: authUser } };
+      },
+      onAuthStateChange: (
+        handler: (event: string, session: { user: { id: string } } | null) => void,
+      ) => {
+        authHandlers.push(handler);
+        return {
+          data: {
+            subscription: {
+              unsubscribe: () => {
+                unsubscribes += 1;
+                authHandlers = authHandlers.filter((h) => h !== handler);
+              },
+            },
+          },
+        };
+      },
+    },
     from: (table: string) => {
       reads.push(table);
       const chain: Record<string, unknown> = {
@@ -66,7 +93,14 @@ jest.mock("@/lib/supabase/client", () => ({
 jest.mock("./RecordingPanel", () => ({ RecordingPanel: () => <div data-testid="recording-panel" /> }));
 jest.mock("./ChatPanel", () => ({ ChatPanel: () => null }));
 jest.mock("./ExportMenu", () => ({ ExportMenu: () => null }));
-jest.mock("./FollowUpPanel", () => ({ FollowUpPanel: () => null }));
+// Rendered as its one interesting prop: whether this reader is offered the
+// send. That is derived from the cached viewer id, so it is how a test sees
+// whether the cache is still telling the truth.
+jest.mock("./FollowUpPanel", () => ({
+  FollowUpPanel: ({ canSend }: { canSend: boolean }) => (
+    <div data-testid="follow-up" data-can-send={String(canSend)} />
+  ),
+}));
 
 import MeetingReportPage from "./page";
 
@@ -86,6 +120,10 @@ beforeEach(() => {
   jest.useFakeTimers();
   reads = [];
   transcriptRangeCalls = 0;
+  authUser = { id: "host-1" };
+  getUserCalls = 0;
+  authHandlers = [];
+  unsubscribes = 0;
   db.meeting = { ...MEETING };
   db.report = null;
   db.attended = true;
@@ -295,5 +333,109 @@ describe("a recorded call's own facts", () => {
     render(<MeetingReportPage />);
     await settle();
     expect(screen.queryByText(/Consent recorded/i)).toBeNull();
+  });
+});
+
+describe("the viewer, cached but not stale", () => {
+  /**
+   * The viewer is read once rather than on every poll, which is only safe if
+   * something notices when the session changes underneath it.
+   *
+   * It is not a cosmetic cache. `viewerId` decides `isHost`, `isHost` decides
+   * `canSend`, and `canSend` decides whether the follow-up can be sent at all
+   * — so a viewer id that outlives its own session hands the send control to
+   * the wrong person, or takes it from the right one.
+   */
+  const WITH_FOLLOW_UP = {
+    summary: "They agreed to wire on Friday.",
+    key_points: [],
+    action_items: [],
+    analysis: { follow_up_draft: "Thanks all — wiring Friday." },
+    full_transcript: "Ana: Friday.",
+  };
+
+  /** Act like another tab: hand the page's listeners a new session. */
+  async function sessionBecomes(id: string | null) {
+    await act(async () => {
+      for (const handler of [...authHandlers]) {
+        handler(id === null ? "SIGNED_OUT" : "SIGNED_IN", id === null ? null : { user: { id } });
+      }
+    });
+    await settle();
+  }
+
+  it("asks the auth server once, not once per poll", async () => {
+    // The whole point of the cache. Three polls, one question.
+    db.report = null;
+    render(<MeetingReportPage />);
+    await settle();
+    expect(getUserCalls).toBe(1);
+
+    await poll();
+    await poll();
+    await poll();
+    expect(getUserCalls).toBe(1);
+  });
+
+  it("takes the send control away when another tab signs in as someone else", async () => {
+    db.report = { ...WITH_FOLLOW_UP };
+    render(<MeetingReportPage />);
+    await settle();
+    // The host, so the control is offered.
+    expect(screen.getByTestId("follow-up")).toHaveAttribute("data-can-send", "true");
+
+    authUser = { id: "not-the-host" };
+    await sessionBecomes("not-the-host");
+
+    // Polling has already stopped by now — the report exists — so nothing else
+    // would ever re-ask. Without the auth listener this still reads "true",
+    // offering a send to somebody who is not the host.
+    expect(getUserCalls).toBe(2);
+    expect(screen.getByTestId("follow-up")).toHaveAttribute("data-can-send", "false");
+  });
+
+  it("gives it back when the host signs in", async () => {
+    // The direction that loses a real capability rather than granting a false
+    // one: the host sees their own report with the send control missing.
+    db.meeting = { ...MEETING, host_id: "host-2" };
+    authUser = { id: "guest-9" };
+    db.report = { ...WITH_FOLLOW_UP };
+    render(<MeetingReportPage />);
+    await settle();
+    expect(screen.getByTestId("follow-up")).toHaveAttribute("data-can-send", "false");
+
+    authUser = { id: "host-2" };
+    await sessionBecomes("host-2");
+
+    expect(screen.getByTestId("follow-up")).toHaveAttribute("data-can-send", "true");
+  });
+
+  it("ignores a token refresh for the same account", async () => {
+    // onAuthStateChange also fires on every silent refresh. Re-reading on those
+    // would put the per-poll round trip straight back, which is the thing this
+    // cache exists to remove — so the identity is compared, not the event.
+    db.report = { ...WITH_FOLLOW_UP };
+    render(<MeetingReportPage />);
+    await settle();
+    const readsAfter = reads.length;
+
+    await sessionBecomes("host-1");
+    await sessionBecomes("host-1");
+
+    expect(getUserCalls).toBe(1);
+    expect(reads.length).toBe(readsAfter);
+  });
+
+  it("stops listening when the page goes away", async () => {
+    // A listener that outlives its component calls setState on an unmounted
+    // one, and does it once per sign-in for the life of the tab.
+    db.report = { ...WITH_FOLLOW_UP };
+    const view = render(<MeetingReportPage />);
+    await settle();
+    expect(authHandlers.length).toBe(1);
+
+    view.unmount();
+    expect(unsubscribes).toBe(1);
+    expect(authHandlers.length).toBe(0);
   });
 });

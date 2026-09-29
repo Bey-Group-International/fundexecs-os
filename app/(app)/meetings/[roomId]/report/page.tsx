@@ -57,9 +57,12 @@ export default function MeetingReportPage() {
    *
    * `supabase.auth.getUser()` is a round trip, and it sat inside the poll — so a
    * report that took a minute to generate asked the auth server who the viewer
-   * was twelve times, for an answer that cannot change while the page is open.
-   * A sign-out navigates away; it does not turn this reader into a different
-   * one mid-poll.
+   * was twelve times, for an answer that only changes when the SESSION does.
+   *
+   * Cached until that happens, not forever: the effect below watches for it and
+   * clears this, because "the reader cannot change while the page is open" is
+   * false across tabs, and this id decides `isHost` — which decides who is
+   * offered the follow-up send.
    */
   const viewerRef = useRef<{ id: string } | null | undefined>(undefined);
   // The rows the room wrote while people were speaking. Only these carry a
@@ -245,7 +248,33 @@ export default function MeetingReportPage() {
     // Start polling; fetchReport will stop it when status is terminal
     intervalRef.current = setInterval(fetchReport, POLL_INTERVAL);
 
-    return () => stopPolling();
+    // The one thing that can turn this page's reader into a different person:
+    // another tab signing in or out. Reading the viewer once is only safe if
+    // something notices when that answer stops being true — otherwise the id
+    // is cached past its own lifetime, and `isHost` goes on describing whoever
+    // happened to be signed in when the page opened.
+    //
+    // Identity, not tokens. onAuthStateChange also fires on every silent
+    // refresh, and refetching the report on each of those would reintroduce
+    // the per-poll round trip this page just removed.
+    const { data: auth } = createClient().auth.onAuthStateChange((_event, session) => {
+      const signedIn = session?.user?.id ?? null;
+      // Nothing cached yet: the first read is still in flight and will see the
+      // current session by itself. Invalidating here would only race it.
+      if (viewerRef.current === undefined) return;
+      if (signedIn === (viewerRef.current?.id ?? null)) return;
+      viewerRef.current = undefined;
+      // Re-asked from scratch, polling included: a terminal state was terminal
+      // for the PREVIOUS reader, and fetchReport stops the interval again on
+      // its own if it still is for this one.
+      if (intervalRef.current === null) intervalRef.current = setInterval(fetchReport, POLL_INTERVAL);
+      fetchReport();
+    });
+
+    return () => {
+      auth.subscription.unsubscribe();
+      stopPolling();
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [roomId]);
 
