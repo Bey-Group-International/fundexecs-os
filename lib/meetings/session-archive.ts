@@ -204,9 +204,16 @@ export function searchSummary(result: {
   hits: number;
   scanned: number;
   bounded: boolean;
+  /**
+   * What the two halves call their own rows. "session" is the shared word and
+   * nobody's word: the log lists meetings and the archive lists calls, and a
+   * caveat is only believed in the language of the page it is on.
+   */
+  noun?: string;
 }): string {
+  const noun = result.noun ?? "session";
   const q = result.query.trim();
-  if (!q) return result.hits === 1 ? "1 session" : `${result.hits} sessions`;
+  if (!q) return result.hits === 1 ? `1 ${noun}` : `${result.hits} ${noun}s`;
 
   const found =
     result.hits === 0
@@ -217,7 +224,7 @@ export function searchSummary(result: {
 
   if (!result.bounded) return `${found} for “${q}”`;
   // Said even when there ARE hits: the reader may be looking for an older one.
-  return `${found} for “${q}” in the most recent ${result.scanned} sessions`;
+  return `${found} for “${q}” in the most recent ${result.scanned} ${noun}s`;
 }
 
 /**

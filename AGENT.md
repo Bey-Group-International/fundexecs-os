@@ -4295,6 +4295,42 @@ Deployed, monitoring               →  live, observability active
              |  Confidence: Jest 7305 -> 7326 across 519 suites, typecheck/eslint/
              |  build clean. Each fix has a test that fails against the version
              |  before it.
+             |
+             |  2026-09-29  The meeting log searches what was said, and stops
+             |  shipping prose to do it.
+             |  The log and the recorded-call archive were the same table split on
+             |  `kind`, answering the same question in opposite ways: the archive
+             |  read transcripts in Postgres, bounded, and said when the bound bit;
+             |  the log matched titles and summaries with String.includes in the
+             |  browser and could not read a transcript at all. So "what did we
+             |  agree with Dunbar in March" was unanswerable unless somebody had
+             |  written Dunbar in a title.
+             |  One engine now: session-archive.ts holds the rules (metadata match,
+             |  transcript match, the bound and how to admit it) and
+             |  session-archive.server.ts holds the clauses. Visibility travels as
+             |  DATA rather than being inferred from the kind — a call belongs to
+             |  whoever recorded it and a meeting is listed across the org, and
+             |  sharing an engine must not quietly share a permission rule.
+             |  The clause that bites: a regenerated report INSERTS a row, so an
+             |  embed with no order on it returns an arbitrary one. In a list that
+             |  is a stale summary, which somebody notices; in a SEARCH it is a
+             |  stale transcript, which nobody notices — the search reads words
+             |  nobody said any more and misses the ones they did.
+             |  Payload: the page now ships a LINE per meeting (title, date,
+             |  counts) and fetches the prose when a row opens. Modelled on a report
+             |  matching the analysis schema's own description, uncompressed JSON:
+             |  1,118 -> 317 bytes a row, so a 200-meeting page carries 218.4 ->
+             |  61.9 KiB and one open row costs 0.9 KiB. Modelled, not measured:
+             |  real reports vary and the wire is compressed.
+             |  What the tests taught, and it is the third time this week: a race
+             |  test that resolves a stale promise and asserts on the next line
+             |  passes whether or not the stale answer is discarded, because the
+             |  assertion runs before the answer has been processed at all. Both
+             |  race guards here were toothless until the assertions waited. Proved
+             |  by injection afterwards: dropping the search ticket fails one test,
+             |  sharing one detail slot between rows fails two.
+             |  Confidence: Jest 7375 -> 7417 across 524 suites, typecheck and
+             |  eslint clean. Nobody has opened it in a browser.
 ```
 
 ---

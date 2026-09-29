@@ -319,3 +319,38 @@ function transcriptOf(row: unknown): string | null {
     | undefined;
   return typeof report?.full_transcript === "string" ? report.full_transcript : null;
 }
+
+/**
+ * One meeting's row, for the detail an opened log row shows.
+ *
+ * The list ships a line per meeting and fetches the prose when a row is opened
+ * (see LoggedMeeting), so this is that fetch: one row, the same shape the list
+ * is built from, through the same narrowing — which is what keeps "the newest
+ * report" meaning the same thing in the row and in its detail.
+ *
+ * Returns null for a meeting that is not this organisation's, not a meeting, or
+ * deleted. Null rather than a thrown error: to a caller the three are one answer,
+ * which is that there is nothing here to show.
+ */
+export async function loadLogDetail(
+  supabase: SupabaseClient,
+  orgId: string,
+  userId: string,
+  meetingId: string,
+): Promise<MeetingLogRow | null> {
+  const { data } = await narrowArchive(
+    supabase.from("live_meetings").select(LOG_SELECT).eq("id", meetingId),
+    {
+      kind: MEETING_KIND,
+      visibility: { scope: "org", organizationId: orgId },
+      searching: false,
+      page: 1,
+    },
+  );
+
+  const row = (data ?? [])[0];
+  if (!row) return null;
+
+  const attendedIds = await attendanceFor(supabase, userId, [(row as { id: string }).id]);
+  return shapeLogRow(row as Record<string, unknown>, userId, attendedIds);
+}

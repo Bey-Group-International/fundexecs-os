@@ -11,7 +11,13 @@ import { OAuthOutcomeBanner } from "@/components/OAuthOutcomeBanner";
 import { mailboxConfigured } from "@/lib/meetings/mailbox.server";
 import { MailboxWarning } from "./MailboxWarning";
 import { loadMeetingLog } from "@/lib/meetings/meeting-log.server";
-import { toLogEntry, sortLogEntries, type MeetingLogEntry } from "@/lib/meetings/meeting-log";
+import {
+  belongsInLog,
+  loggedMeeting,
+  sortLogEntries,
+  toLogEntry,
+  type LoggedMeeting,
+} from "@/lib/meetings/meeting-log";
 import { isPastMeeting, isUpcomingMeeting, upcomingWindowStart } from "@/lib/meetings/schedule";
 import { attendedButNotHosted } from "@/lib/meetings/attendance";
 import { MEETING_KIND } from "@/lib/meetings/one-way";
@@ -262,18 +268,20 @@ export default async function MeetingsPage(props: {
   const history = calendarRequested ? meetings : [];
   const past = history.filter((m) => isPastMeeting(m, now));
 
-  // Only meetings that have actually happened. A meeting scheduled for next
-  // week has no post-meeting detail to hold, and listing it under "Logs" would
-  // promise a record that does not exist yet.
-  const logs: MeetingLogEntry[] = sortLogEntries(
+  // Only meetings that have actually happened — `belongsInLog`, the same rule the
+  // log's search route applies, so a hit is never the only place a meeting
+  // appears.
+  //
+  // And a LINE per meeting, not an entry: `loggedMeeting` drops the summary, key
+  // points, decisions, action items and attendee names, which the collapsed row
+  // does not draw. They are fetched by the row that opens. Two hundred meetings
+  // of prose used to travel with this page so the browser could filter them;
+  // the filtering is now a query (see /api/meetings/log/search) and the prose
+  // stopped needing to come along.
+  const logs: LoggedMeeting[] = sortLogEntries(
     logRows
-      .filter((row) => isPastMeeting({
-        status: row.meeting.status as "waiting" | "active" | "ended",
-        scheduled_at: row.meeting.scheduled_at,
-        duration_minutes: row.meeting.duration_minutes,
-        is_draft: row.meeting.is_draft,
-      }, now))
-      .map((row) => toLogEntry(row.meeting, row.report, row.attended, row.isHost)),
+      .filter((row) => belongsInLog(row.meeting, now))
+      .map((row) => loggedMeeting(toLogEntry(row.meeting, row.report, row.attended, row.isHost))),
   );
 
   return (

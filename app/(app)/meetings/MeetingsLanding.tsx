@@ -11,7 +11,7 @@ import { SchedulingLinkCard } from "./SchedulingLinkCard";
 import { CALENDAR_VIEW_PARAM, calendarViewUrl, parseCalendarView, type CalendarView } from "./calendar-view";
 import type { PastMeeting } from "./PastMeetingsList";
 import { MeetingLogs } from "./MeetingLogs";
-import type { MeetingLogEntry } from "@/lib/meetings/meeting-log";
+import type { LoggedMeeting } from "@/lib/meetings/meeting-log";
 import type { CalendarMeeting } from "@/lib/meetings/calendar";
 
 /**
@@ -53,7 +53,7 @@ export function MeetingsLanding({
   initialMeetings: CalendarMeeting[];
   initialUpcoming: UpcomingMeeting[];
   initialPast: PastMeeting[];
-  initialLogs: MeetingLogEntry[];
+  initialLogs: LoggedMeeting[];
   userId: string;
   orgId: string;
 }) {
@@ -193,7 +193,7 @@ export function MeetingsLanding({
           <UpcomingMeetingsList initialMeetings={initialUpcoming} />
         </div>
         <div id="panel-logs" role="tabpanel" aria-labelledby="tab-logs" hidden={tab !== "logs"}>
-          <MeetingLogs entries={initialLogs} />
+          <MeetingLogs meetings={initialLogs} />
         </div>
       </div>
 
