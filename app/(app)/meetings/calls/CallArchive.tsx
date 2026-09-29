@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { callWhen, type CallHit } from "@/lib/meetings/call-archive";
 import { searchSummary } from "@/lib/meetings/session-archive";
@@ -83,7 +83,7 @@ export function CallArchive({ initial }: { initial: CallHit[] }) {
    * server says so — a row that vanished on a failed delete would have
    * somebody believing a recording was gone when it was not.
    */
-  async function remove(id: string) {
+  const remove = useCallback(async (id: string) => {
     setConfirming(null);
     setDeleting(id);
     setDeleteError(null);
@@ -101,7 +101,30 @@ export function CallArchive({ initial }: { initial: CallHit[] }) {
     } finally {
       setDeleting(null);
     }
-  }
+    // Stable: every closure here is a setState or the `deleted` ref, none of
+    // which change identity. That is what keeps CallRow's memo real without a
+    // ref-backed wrapper.
+  }, []);
+
+  const confirm = useCallback((id: string) => setConfirming(id), []);
+  const cancelConfirm = useCallback(() => setConfirming(null), []);
+
+  /**
+   * The day the rows' dates are relative to.
+   *
+   * `callWhen` says "Today, 2:15 PM" by comparing against the moment it is
+   * CALLED, so a memoized row that does not re-render keeps whatever it said
+   * when it last did. Left open across midnight, yesterday's last call went on
+   * claiming to be today's — a staleness the memo introduced, because before it
+   * every parent render recomputed every label.
+   *
+   * So the day is passed in rather than read inside. Keyed on `toDateString`,
+   * which is cheap and has no Intl in it, the identity is stable for as long as
+   * the date is: memoized rows ignore a keystroke, and the first render after
+   * midnight re-labels all of them.
+   */
+  const todayKey = new Date().toDateString();
+  const today = useMemo(() => new Date(todayKey), [todayKey]);
 
   const trimmed = query.trim();
   const isSearch = trimmed.length >= MIN_QUERY;
@@ -169,96 +192,140 @@ export function CallArchive({ initial }: { initial: CallHit[] }) {
       ) : (
         <ol className="mt-4 divide-y divide-[var(--line)] rounded-xl border border-[var(--line)] bg-[var(--surface-1)]">
           {calls.map((call) => (
-            <li key={call.id} className="flex items-start hover:bg-[var(--surface-2)]">
-              <Link href={`/meetings/${call.roomCode}/report`} className="block min-w-0 flex-1 px-4 py-3.5">
-                <div className="flex items-baseline justify-between gap-3">
-                  <span className="truncate text-sm font-medium text-[var(--fg-primary)]">{call.title}</span>
-                  <span className="shrink-0 font-mono text-xs tabular-nums text-[var(--fg-muted)]">
-                    {call.durationSeconds === null ? "—" : callClock(call.durationSeconds)}
-                  </span>
-                </div>
-                {/* flex-wrap, found by rendering this at 400px and looking at it:
-                    without it the three items shrank instead of wrapping, and a
-                    phone showed a ragged three-column block — "Sep 7, 2:47 /
-                    PM", "· consent / recorded", "· 14 / mentions". Wrapping
-                    moves a whole item to the next line instead of folding it in
-                    half. */}
-                <div
-                  data-call-meta
-                  className="mt-0.5 flex flex-wrap items-center gap-x-2 text-xs text-[var(--fg-muted)]"
-                >
-                  <span>{callWhen(call.at)}</span>
-                  {call.consented && (
-                    <span title="Consent was acknowledged before this call was recorded.">· consent recorded</span>
-                  )}
-                  {call.matches > 0 && (
-                    <span>· {call.matches} mention{call.matches === 1 ? "" : "s"}</span>
-                  )}
-                </div>
-
-                {call.snippet ? (
-                  <p className="mt-1.5 text-xs text-[var(--fg-secondary)]">
-                    {call.snippet.speaker && (
-                      <span className="font-medium text-[var(--fg-muted)]">{call.snippet.speaker}: </span>
-                    )}
-                    {/* Parts, never markup — these are other people's words. */}
-                    {call.snippet.parts.map((part, i) =>
-                      part.match ? (
-                        <mark key={i} className="rounded bg-gold-400/25 px-0.5 text-[var(--fg-primary)]">
-                          {part.value}
-                        </mark>
-                      ) : (
-                        <span key={i}>{part.value}</span>
-                      ),
-                    )}
-                  </p>
-                ) : call.summary ? (
-                  <p className="mt-1.5 line-clamp-2 text-xs text-[var(--fg-secondary)]">{call.summary}</p>
-                ) : null}
-              </Link>
-
-              {/* Outside the link, so pressing it never opens the report. */}
-              <div className="flex shrink-0 items-center py-3.5 pr-4">
-                {confirming === call.id ? (
-                  <div className="flex items-center gap-2 text-xs">
-                    <span className="text-[var(--fg-muted)]">Delete call and recording?</span>
-                    <button
-                      type="button"
-                      onClick={() => void remove(call.id)}
-                      className="rounded bg-status-danger/15 px-2 py-0.5 font-medium text-[var(--status-danger)] hover:bg-status-danger/25"
-                    >
-                      Yes, delete
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setConfirming(null)}
-                      className="rounded bg-[var(--surface-2)] px-2 py-0.5 font-medium text-[var(--fg-secondary)] hover:bg-[var(--surface-3)]"
-                    >
-                      Cancel
-                    </button>
-                  </div>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={() => setConfirming(call.id)}
-                    disabled={deleting === call.id}
-                    title="Delete permanently"
-                    aria-label={`Delete ${call.title} permanently`}
-                    className="text-[var(--fg-muted)] transition-colors hover:text-[var(--status-danger)] disabled:opacity-40"
-                  >
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
-                      <polyline points="3 6 5 6 21 6" />
-                      <path d="M19 6l-1 14H6L5 6" />
-                      <path d="M10 11v6M14 11v6" />
-                      <path d="M9 6V4h6v2" />
-                    </svg>
-                  </button>
-                )}
-              </div>
-            </li>
+            <CallRow
+              key={call.id}
+              call={call}
+              today={today}
+              confirming={confirming === call.id}
+              deleting={deleting === call.id}
+              onConfirm={confirm}
+              onCancel={cancelConfirm}
+              onDelete={remove}
+            />
           ))}
         </ol>
       )}
     </div>
   );
 }
+
+/**
+ * One recorded call.
+ *
+ * MEMOIZED, and the reason is the search box above it. Every character typed
+ * re-renders this list, and each row derives its date through `callWhen` —
+ * which is two `Intl` formats, not one. Measured over the fifty rows shown at
+ * rest: 50 `toLocaleTimeString` plus 50 `toLocaleDateString` calls per
+ * keystroke, 5.29ms of it, and up to four times that when a search fills the
+ * page. The memo takes the rows that did not change out of the render, and the
+ * cached formatters in `callWhen` make the ones that remain cheap.
+ *
+ * Takes `confirming` and `deleting` as booleans rather than the parent's
+ * selected id, so pressing delete on one row re-renders that row instead of
+ * all of them. The three handlers are stable by construction — see `remove`.
+ *
+ * And it takes the DAY rather than reading the clock, because a memo that skips
+ * a render also skips re-deriving "Today" — see `today` in the parent.
+ */
+const CallRow = memo(function CallRow({
+  call, today, confirming, deleting, onConfirm, onCancel, onDelete,
+}: {
+  call: CallHit;
+  /** The day "Today" is measured against — see the parent. */
+  today: Date;
+  confirming: boolean;
+  deleting: boolean;
+  onConfirm: (id: string) => void;
+  onCancel: () => void;
+  onDelete: (id: string) => void;
+}) {
+  return (
+    <li className="flex items-start hover:bg-[var(--surface-2)]">
+      <Link href={`/meetings/${call.roomCode}/report`} className="block min-w-0 flex-1 px-4 py-3.5">
+        <div className="flex items-baseline justify-between gap-3">
+          <span className="truncate text-sm font-medium text-[var(--fg-primary)]">{call.title}</span>
+          <span className="shrink-0 font-mono text-xs tabular-nums text-[var(--fg-muted)]">
+            {call.durationSeconds === null ? "—" : callClock(call.durationSeconds)}
+          </span>
+        </div>
+        {/* flex-wrap, found by rendering this at 400px and looking at it:
+            without it the three items shrank instead of wrapping, and a
+            phone showed a ragged three-column block — "Sep 7, 2:47 /
+            PM", "· consent / recorded", "· 14 / mentions". Wrapping
+            moves a whole item to the next line instead of folding it in
+            half. */}
+        <div
+          data-call-meta
+          className="mt-0.5 flex flex-wrap items-center gap-x-2 text-xs text-[var(--fg-muted)]"
+        >
+          <span>{callWhen(call.at, today)}</span>
+          {call.consented && (
+            <span title="Consent was acknowledged before this call was recorded.">· consent recorded</span>
+          )}
+          {call.matches > 0 && (
+            <span>· {call.matches} mention{call.matches === 1 ? "" : "s"}</span>
+          )}
+        </div>
+
+        {call.snippet ? (
+          <p className="mt-1.5 text-xs text-[var(--fg-secondary)]">
+            {call.snippet.speaker && (
+              <span className="font-medium text-[var(--fg-muted)]">{call.snippet.speaker}: </span>
+            )}
+            {/* Parts, never markup — these are other people's words. */}
+            {call.snippet.parts.map((part, i) =>
+              part.match ? (
+                <mark key={i} className="rounded bg-gold-400/25 px-0.5 text-[var(--fg-primary)]">
+                  {part.value}
+                </mark>
+              ) : (
+                <span key={i}>{part.value}</span>
+              ),
+            )}
+          </p>
+        ) : call.summary ? (
+          <p className="mt-1.5 line-clamp-2 text-xs text-[var(--fg-secondary)]">{call.summary}</p>
+        ) : null}
+      </Link>
+
+      {/* Outside the link, so pressing it never opens the report. */}
+      <div className="flex shrink-0 items-center py-3.5 pr-4">
+        {confirming ? (
+          <div className="flex items-center gap-2 text-xs">
+            <span className="text-[var(--fg-muted)]">Delete call and recording?</span>
+            <button
+              type="button"
+              onClick={() => void onDelete(call.id)}
+              className="rounded bg-status-danger/15 px-2 py-0.5 font-medium text-[var(--status-danger)] hover:bg-status-danger/25"
+            >
+              Yes, delete
+            </button>
+            <button
+              type="button"
+              onClick={onCancel}
+              className="rounded bg-[var(--surface-2)] px-2 py-0.5 font-medium text-[var(--fg-secondary)] hover:bg-[var(--surface-3)]"
+            >
+              Cancel
+            </button>
+          </div>
+        ) : (
+          <button
+            type="button"
+            onClick={() => onConfirm(call.id)}
+            disabled={deleting}
+            title="Delete permanently"
+            aria-label={`Delete ${call.title} permanently`}
+            className="text-[var(--fg-muted)] transition-colors hover:text-[var(--status-danger)] disabled:opacity-40"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+              <polyline points="3 6 5 6 21 6" />
+              <path d="M19 6l-1 14H6L5 6" />
+              <path d="M10 11v6M14 11v6" />
+              <path d="M9 6V4h6v2" />
+            </svg>
+          </button>
+        )}
+      </div>
+    </li>
+  );
+});

@@ -4568,6 +4568,49 @@ Deployed, monitoring               →  live, observability active
              |  meeting, server-side search). This is the render-time half, which
              |  that change made visible by leaving the page with 200 cheap rows
              |  and a search box that re-renders all of them.
+             |
+             |  2026-09-29  The calls archive had the meeting log's defect, and
+             |  worse: two Intl formats per row, not one.
+             |  Measured before touching it, over the fifty rows the page shows
+             |  at rest: 50 `toLocaleTimeString` + 50 `toLocaleDateString` per
+             |  keystroke, and all 50 rows re-rendering. Now 0, 0 and 0.
+             |  `callWhen` formats a TIME always and a DATE unless the call was
+             |  today, so it is two per row where the log's was one. Benched
+             |  against reused formatters — and the bench asserts both
+             |  implementations return the same string for every fixture, so what
+             |  was timed is not a behaviour change: 5.29ms -> 0.15ms at fifty
+             |  rows, 35x. A search can fill the page to SEARCH_SCAN = 200, where
+             |  the same arithmetic is 21.2ms: past a whole 16.7ms frame to
+             |  redraw dates nobody changed.
+             |  Three formatters, not one, because the options differ — a time, a
+             |  date inside this year, and a date that needs its year spelled out.
+             |  `CallRow` is memoized and takes `confirming`/`deleting` as
+             |  BOOLEANS rather than the parent's selected id, so pressing delete
+             |  on one row re-renders that row instead of all fifty. `remove`
+             |  became a `useCallback` with an honest empty dep list: everything
+             |  it closes over is a setState or a ref, so no ref-backed wrapper
+             |  was needed.
+             |  The two-counter discipline, third time and now routine: row
+             |  RENDERS through `callClock` (pure arithmetic, so caching a
+             |  formatter cannot move it), formatter usage through the `toLocale*`
+             |  calls. Six injections, and the separation holds — memo removed and
+             |  unstable handler fail only the render tests; either formatter
+             |  reverted fails only the caching one; a parent-wide prop on every
+             |  row fails only the per-row delete test; dropping the year
+             |  distinction fails the correctness tests, one of which already
+             |  existed.
+             |  Got the doc-comment insertion right this time by anchoring the
+             |  edit on `callWhen`'s OWN comment opening rather than on its
+             |  `export function` line. That is the fix for the mistake made twice
+             |  in #1154 and #1157: anchoring on the declaration puts the new
+             |  block inside the comment that belongs to it.
+             |  Confidence: Jest 7471 -> 7482 across 528 suites, typecheck and
+             |  eslint clean, the archive's 5 visual checks green.
+             |  Scope: this page's load-time half was done in #1146 — it used to
+             |  re-fetch on mount the same fifty rows the server had just
+             |  rendered. This is the render-time half. Three sibling list pages
+             |  now share the shape: cached formatters in lib, a memoized row, and
+             |  two counters that cannot cover for each other.
 ```
 
 ---

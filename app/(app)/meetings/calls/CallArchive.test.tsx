@@ -12,6 +12,8 @@ import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { CallArchive } from "./CallArchive";
 import type { CallHit } from "@/lib/meetings/call-archive";
+import * as oneWay from "@/lib/meetings/one-way";
+import { fireEvent } from "@testing-library/dom";
 
 function call(over: Partial<CallHit> = {}): CallHit {
   return {
@@ -239,5 +241,127 @@ describe("deleting a call", () => {
 
     expect(await screen.findByRole("alert")).toHaveTextContent("could not be deleted");
     expect(screen.getByText("Dunbar diligence note")).toBeInTheDocument();
+  });
+});
+
+// ── Typing re-rendered every row in the archive ─────────────────────────────
+
+describe("what a keystroke costs", () => {
+  /**
+   * Row renders, counted through `callClock` — which each row calls once.
+   *
+   * Deliberately NOT counted by watching `toLocaleTimeString`. Caching the
+   * formatters in `callWhen` takes those to zero whether or not the rows are
+   * memoized, so a test watching them would pass on either change alone and
+   * guard neither. `callClock` is pure arithmetic: only the memo moves it.
+   */
+  function countRowRenders() {
+    const real = oneWay.callClock;
+    let renders = 0;
+    jest.spyOn(oneWay, "callClock").mockImplementation((s: number) => {
+      renders += 1;
+      return real(s);
+    });
+    return { get value() { return renders; }, reset() { renders = 0; } };
+  }
+
+  const manyCalls = Array.from({ length: 30 }, (_, i) =>
+    call({
+      id: `c${i}`,
+      title: `Call ${i}`,
+      at: new Date(Date.UTC(2025 + (i % 2), i % 12, (i % 27) + 1, 14, 30)).toISOString(),
+    }),
+  );
+
+  afterEach(() => jest.restoreAllMocks());
+
+  // The defect: one character re-rendered every row, each re-deriving a date
+  // that had not changed — two Intl formats apiece.
+  it("does not re-render rows that did not change", async () => {
+    const renders = countRowRenders();
+    const { container } = render(<CallArchive initial={manyCalls} />);
+    expect(renders.value).toBe(manyCalls.length);
+
+    renders.reset();
+    const box = container.querySelector('input[type="search"]')!;
+    // One character: below MIN_QUERY, so no request runs.
+    await act(async () => {
+      fireEvent.change(box, { target: { value: "d" } });
+    });
+    expect(renders.value).toBe(0);
+  });
+
+  // The memo must not cost correctness: asking to delete one call still
+  // re-renders that row, and must not re-render the other twenty-nine.
+  it("re-renders only the row whose delete was pressed", async () => {
+    const user = userEvent.setup();
+    render(<CallArchive initial={manyCalls} />);
+    const renders = countRowRenders();
+    await user.click(screen.getByRole("button", { name: /Delete Call 7 permanently/ }));
+    expect(screen.getByText("Delete call and recording?")).toBeInTheDocument();
+    // Exactly the one row. `< 30` would also have accepted 29, which is
+    // twenty-eight unchanged rows re-rendering — an assertion that passes on
+    // almost the defect it was written for.
+    expect(renders.value).toBe(1);
+  });
+});
+
+// ── The memo kept "Today" on a call from yesterday ──────────────────────────
+
+describe("the day the rows are labelled against", () => {
+  afterEach(() => jest.useRealTimers());
+
+  /**
+   * `callWhen` says "Today" by comparing against the moment it is CALLED, so a
+   * memoized row that does not re-render keeps whatever it last said. Before
+   * the memo every parent render recomputed every label, so this staleness is
+   * one the optimisation introduced — which is why it is tested here rather
+   * than in call-archive.test.ts: the bug is in the caching, not in the rule.
+   */
+  it("re-labels a call once the local day has moved on", async () => {
+    jest.useFakeTimers({ doNotFake: ["nextTick", "setImmediate"] });
+    jest.setSystemTime(new Date("2026-09-29T23:50:00.000Z"));
+
+    const { container } = render(
+      <CallArchive initial={[call({ at: "2026-09-29T23:45:00.000Z" })]} />,
+    );
+    expect(screen.getByText(/^Today, /)).toBeInTheDocument();
+
+    // Past midnight, and a keystroke that is NOT a search (below MIN_QUERY):
+    // before the day was passed in, the memo skipped the row and it went on
+    // calling yesterday's call "Today".
+    jest.setSystemTime(new Date("2026-09-30T00:05:00.000Z"));
+    const box = container.querySelector('input[type="search"]')!;
+    await act(async () => {
+      fireEvent.change(box, { target: { value: "d" } });
+    });
+
+    expect(screen.queryByText(/^Today, /)).not.toBeInTheDocument();
+    expect(screen.getByText(/Sep 29/)).toBeInTheDocument();
+  });
+
+  // And the day must not cost the memo: within one day it is the same value,
+  // so a keystroke still re-renders nothing.
+  it("does not re-render rows for a keystroke inside the same day", async () => {
+    jest.useFakeTimers({ doNotFake: ["nextTick", "setImmediate"] });
+    jest.setSystemTime(new Date("2026-09-29T12:00:00.000Z"));
+
+    const real = oneWay.callClock;
+    let renders = 0;
+    jest.spyOn(oneWay, "callClock").mockImplementation((n: number) => {
+      renders += 1;
+      return real(n);
+    });
+
+    const rows = Array.from({ length: 10 }, (_, i) => call({ id: `c${i}`, title: `Call ${i}` }));
+    const { container } = render(<CallArchive initial={rows} />);
+    renders = 0;
+
+    jest.setSystemTime(new Date("2026-09-29T12:30:00.000Z"));
+    const box = container.querySelector('input[type="search"]')!;
+    await act(async () => {
+      fireEvent.change(box, { target: { value: "d" } });
+    });
+    expect(renders).toBe(0);
   });
 });
