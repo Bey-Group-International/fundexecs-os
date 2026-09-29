@@ -324,3 +324,40 @@ export function chatClock(ts: number, locale?: string): string {
   if (isNaN(at.getTime())) return "";
   return at.toLocaleTimeString(locale, { hour: "numeric", minute: "2-digit" });
 }
+
+/** A stored chat row, as the database holds it. */
+export interface StoredChatRow {
+  id: string;
+  author_id: string | null;
+  author_name: string;
+  body: string;
+  ts: string;
+}
+
+/**
+ * Stored rows read back as messages.
+ *
+ * This lived inside the report's ChatPanel, which read its own rows on mount.
+ * The reading moved to the server; the rule did not, because the rule is the
+ * interesting half:
+ *
+ * A guest has no principal, so their display NAME is the only identity their
+ * row carries — group by `author_id` alone and every guest in the meeting
+ * collapses into one anonymous speaker. Falling back to the name is right for
+ * them and wrong for nobody: two signed-in people who happen to share a display
+ * name still group apart, because they group by id.
+ *
+ * An unparseable timestamp drops the message rather than placing it at the epoch,
+ * where it would sort above everything anybody actually said.
+ */
+export function storedChatMessages(rows: readonly StoredChatRow[]): ChatMessage[] {
+  return rows
+    .map((row) => ({
+      id: row.id,
+      from: row.author_id ?? `guest:${row.author_name}`,
+      displayName: row.author_name,
+      text: row.body,
+      ts: new Date(row.ts).getTime(),
+    }))
+    .filter((msg) => !Number.isNaN(msg.ts));
+}

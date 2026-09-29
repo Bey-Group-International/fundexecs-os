@@ -1,8 +1,8 @@
 "use client";
 
-import { memo, useEffect, useState } from "react";
-import { createClient } from "@/lib/supabase/client";
+import { memo } from "react";
 import { formatSize } from "@/lib/meetings/recording-policy";
+import { playableRecording, type ReportRecording } from "@/lib/meetings/report-page";
 import nextDynamic from "next/dynamic";
 import type { RecordingPlayerHandle } from "./RecordingPlayer";
 
@@ -43,18 +43,6 @@ const RecordingPlayer = nextDynamic(
  * the majority of pages to serve the minority.
  */
 
-interface Recording {
-  id: string;
-  status: "recording" | "complete" | "failed" | "abandoned";
-  duration_seconds: number | null;
-  size_bytes: number;
-  started_by_name: string | null;
-  started_at: string;
-  expires_at: string;
-  deleted_at: string | null;
-  mime_type: string;
-}
-
 function clock(seconds: number | null): string {
   if (!seconds || seconds <= 0) return "";
   const h = Math.floor(seconds / 3600);
@@ -78,58 +66,34 @@ function daysUntil(iso: string): number {
  */
 export const RecordingPanel = memo(function RecordingPanel({
   meetingId,
+  recordings,
   playerRef,
-  onRecordingReady,
   onTime,
 }: {
   meetingId: string;
+  /**
+   * The rows, read on the server.
+   *
+   * This panel used to fetch them on mount and then report the playable one's
+   * start time back UP to the page through a callback, because the transcript
+   * needs that time to place its cues on the recording's clock. So the
+   * timestamps in a transcript could not become clickable until a second browser
+   * round trip had landed, and the page held state whose only purpose was to
+   * carry an answer back from a child. All of it is known before the page
+   * renders now, so the callback and the state are gone.
+   */
+  recordings: readonly ReportRecording[];
   /** Handed to the first playable recording, so the transcript can drive it. */
   playerRef?: React.Ref<RecordingPlayerHandle>;
-  /** When the recording the transcript should follow is known. */
-  /**
-   * The recording the transcript is timed against: when it started, and how
-   * long it ran.
-   *
-   * The duration goes up because the page's header has no other source for it
-   * on a one-way call — nobody joins a room that does not exist, so the
-   * meeting has no started_at to subtract from, and a recorded call showed no
-   * length at all despite the recording knowing it exactly.
-   */
-  onRecordingReady?: (startedAt: string, durationSeconds: number | null) => void;
   /** Where that recording has got to, so the transcript can follow it back. */
   onTime?: (ms: number) => void;
 }) {
-  const [recordings, setRecordings] = useState<Recording[] | null>(null);
+  if (!recordings.length) return null;
 
-  useEffect(() => {
-    let cancelled = false;
-    void (async () => {
-      const supabase = createClient();
-      // RLS decides: only the host and people with an attendance row read these
-      // rows at all, which is the same rule the reports themselves use.
-      const { data } = await supabase
-        .from("live_meeting_recordings")
-        .select("id, status, duration_seconds, size_bytes, started_by_name, started_at, expires_at, deleted_at, mime_type")
-        .eq("meeting_id", meetingId)
-        .order("started_at", { ascending: true });
-      if (cancelled) return;
-      const rows = (data as Recording[] | null) ?? [];
-      setRecordings(rows);
-      // The transcript follows the first recording that can actually be
-      // played. A meeting with two recordings is rare; one whose only
-      // recording was deleted or captured nothing is not.
-      const playable = rows.find((r) => !r.deleted_at && r.status !== "abandoned");
-      if (playable) onRecordingReady?.(playable.started_at, playable.duration_seconds ?? null);
-    })();
-    return () => { cancelled = true; };
-  }, [meetingId, onRecordingReady]);
-
-  if (!recordings?.length) return null;
-
-  // The same row onRecordingReady reports, by the same rule — so the player
-  // that drives the transcript and the start time the transcript is offset
-  // against can never be two different recordings.
-  const playableId = recordings.find((r) => !r.deleted_at && r.status !== "abandoned")?.id;
+  // The same row the page offsets the cues against, by the same rule — so the
+  // player that drives the transcript and the clock it is timed against can
+  // never be two different recordings.
+  const playableId = playableRecording(recordings)?.id;
 
   return (
     <section className="rounded-xl border border-[var(--line)] bg-[var(--surface-1)] p-5">
@@ -171,8 +135,8 @@ export const RecordingPanel = memo(function RecordingPanel({
                 meetingId={meetingId}
                 recordingId={rec.id}
                 ref={rec.id === playableId ? playerRef : undefined}
-                // The first PLAYABLE recording, which is the row
-                // onRecordingReady reports and therefore the clock the
+                // The first PLAYABLE recording, which is the row the page
+                // offsets the cues against and therefore the clock the
                 // transcript is timed against. Keyed on index instead, a
                 // meeting whose first row was abandoned or deleted renders no
                 // player for it at all — so nothing received the ref, the

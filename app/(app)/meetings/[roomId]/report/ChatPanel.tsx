@@ -12,8 +12,7 @@
 // Now the rows survive, so the record can show them — read through the
 // viewer's own client, under the same attendees-only rule the report obeys.
 
-import { memo, useEffect, useMemo, useState } from "react";
-import { createClient } from "@/lib/supabase/client";
+import { memo, useMemo, useState } from "react";
 import { chatClock, groupChat, type ChatMessage } from "@/lib/meetings/chat";
 import { speakerColorIndex } from "@/lib/meetings/speaker-attribution";
 import { speakerInitials } from "@/lib/meetings/transcript-view";
@@ -29,52 +28,22 @@ const SPEAKER_COLORS = [
   "#fdba74",
 ];
 
-/** As many as the panel will read. Chat is short; this is a guard, not a page. */
-const CHAT_LIMIT = 500;
-
 /**
  * Memoised because the report page holds the recording's playhead in its own
  * state, and only the transcript reads it. Without this, every second of
  * playback re-rendered this component for nothing.
  *
- * Its one prop is the meeting id, and it loads the chat once on mount.
+ * It is handed its messages rather than reading them. It used to fetch on mount,
+ * which made the chat a browser round trip that could not even START until the
+ * page's JavaScript had booted and the report had rendered — for content that
+ * was finished before anybody opened the page. The read moved to the server
+ * load; the identity rule that shaped these rows went to storedChatMessages,
+ * where it can be tested without rendering anything.
+ *
+ * Still a client component: the panel collapses, and that is what it is for.
  */
-export const ChatPanel = memo(function ChatPanel({ meetingId }: { meetingId: string }) {
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
+export const ChatPanel = memo(function ChatPanel({ messages }: { messages: readonly ChatMessage[] }) {
   const [open, setOpen] = useState(false);
-
-  useEffect(() => {
-    let cancelled = false;
-    void (async () => {
-      const supabase = createClient();
-      const { data, error } = await supabase
-        .from("live_meeting_chat")
-        .select("id, author_id, author_name, body, ts")
-        .eq("meeting_id", meetingId)
-        .order("ts", { ascending: true })
-        .limit(CHAT_LIMIT);
-
-      if (cancelled || error || !data) return;
-      setMessages(
-        (data as Array<{ id: string; author_id: string | null; author_name: string; body: string; ts: string }>)
-          .map((row) => ({
-            id: row.id,
-            // Guests have no principal, so their name is the only identity the
-            // row carries. Grouping by it is right for them and wrong for
-            // nobody: two signed-in people sharing a display name still group
-            // apart, because they group by id.
-            from: row.author_id ?? `guest:${row.author_name}`,
-            displayName: row.author_name,
-            text: row.body,
-            ts: new Date(row.ts).getTime(),
-          }))
-          .filter((msg) => !isNaN(msg.ts)),
-      );
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [meetingId]);
 
   const turns = useMemo(() => groupChat(messages), [messages]);
   const people = useMemo(
