@@ -12,7 +12,7 @@
  */
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { CopilotSidebar } from "./MeetingRoom";
+import { CopilotSidebar } from "./CallParts";
 import { CHAT_MAX_LENGTH, type ChatMessage } from "@/lib/meetings/chat";
 
 const message = (over: Partial<ChatMessage> = {}): ChatMessage => ({

@@ -14,7 +14,7 @@
  */
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { HostExitControl } from "./MeetingRoom";
+import { HostExitControl } from "./CallParts";
 
 function setup(props: Partial<React.ComponentProps<typeof HostExitControl>> = {}) {
   const onLeave = jest.fn();
