@@ -233,17 +233,25 @@ export async function resolvePublicPage(
   client: SchedulingClient,
   slug: string,
 ): Promise<PageWithEventTypes | null> {
+  // One query, not two. Every public booking-page view and every slot lookup,
+  // booking and reschedule resolves its page through here, and it used to read
+  // the page, wait, and then read its event types — a second round trip in
+  // front of a visitor for rows the page's own foreign key already reaches.
+  // The event types come embedded, in the order `listEventTypes` returns them.
   const { data, error } = await table(client, "scheduling_pages")
-    .select(PAGE_COLUMNS)
+    .select(`${PAGE_COLUMNS}, scheduling_event_types(${EVENT_TYPE_COLUMNS})`)
     .eq("slug", slug.trim().toLowerCase())
     .eq("is_active", true)
+    .order("sort_order", { referencedTable: "scheduling_event_types", ascending: true })
+    .order("created_at", { referencedTable: "scheduling_event_types", ascending: true })
     .maybeSingle();
   if (error) throw new Error(error.message);
-  const page = data as SchedulingPage | null;
-  if (!page) return null;
+  const row = data as (SchedulingPage & { scheduling_event_types?: SchedulingEventType[] | null }) | null;
+  if (!row) return null;
 
-  const eventTypes = (await listEventTypes(client, page.id)).filter((t) => t.is_active);
-  return { page, eventTypes };
+  const { scheduling_event_types: embedded, ...page } = row;
+  const eventTypes = (embedded ?? []).filter((t) => t.is_active);
+  return { page: page as SchedulingPage, eventTypes };
 }
 
 /**

@@ -31,8 +31,20 @@ function makeClient(tables: Record<string, Row[]>) {
 
   const from = (name: string) => {
     let rows = [...(tables[name] ?? [])];
+    let columns = "";
+    // PostgREST resource embedding: `scheduling_pages` selected with
+    // `scheduling_event_types(...)` returns each page with its event types
+    // nested under that key, joined on the foreign key.
+    const embed = (row: Row | undefined): Row | undefined => {
+      if (!row || name !== "scheduling_pages" || !columns.includes("scheduling_event_types(")) return row;
+      const children = (tables.scheduling_event_types ?? []).filter((t) => t.page_id === row.id);
+      return { ...row, scheduling_event_types: children };
+    };
     const builder: Record<string, unknown> = {
-      select: () => builder,
+      select: (cols?: string) => {
+        columns = cols ?? "";
+        return builder;
+      },
       eq: (col: string, val: unknown) => {
         rows = rows.filter((r) => r[col] === val);
         return builder;
@@ -59,8 +71,8 @@ function makeClient(tables: Record<string, Row[]>) {
       },
       update: () => builder,
       delete: () => builder,
-      maybeSingle: async () => ({ data: rows[0] ?? null, error: null }),
-      single: async () => ({ data: rows[0] ?? null, error: null }),
+      maybeSingle: async () => ({ data: embed(rows[0]) ?? null, error: null }),
+      single: async () => ({ data: embed(rows[0]) ?? null, error: null }),
       then: (resolve: (v: unknown) => unknown) => resolve({ data: rows, error: null }),
     };
     return builder;
