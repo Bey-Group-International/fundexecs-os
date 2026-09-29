@@ -42,7 +42,7 @@ jest.mock("@/lib/meetings/hands", () => {
 
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { CopilotSidebar } from "./MeetingRoom";
+import { CopilotSidebar } from "./CallParts";
 import { chatClock, chatParts, type ChatMessage } from "@/lib/meetings/chat";
 import { handsFirst } from "@/lib/meetings/hands";
 

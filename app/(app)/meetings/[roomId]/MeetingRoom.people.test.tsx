@@ -18,7 +18,7 @@ jest.mock("next/navigation", () => ({
 import React from "react";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { CopilotSidebar } from "./MeetingRoom";
+import { CopilotSidebar } from "./CallParts";
 import { subjectFor, type RemovalSubject } from "@/lib/meetings/removal";
 
 const guest = (key: string): RemovalSubject => subjectFor(null, key)!;
