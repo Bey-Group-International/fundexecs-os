@@ -199,11 +199,27 @@ import {
 // The call screen's pieces load as their own chunk, fetched while the member is
 // in the green room (see the preload in MeetingRoom) rather than before the
 // green room can be drawn.
-const loadCallParts = () => import("./CallParts");
-const VideoTile = nextDynamic(() => loadCallParts().then((m) => m.VideoTile));
-const CopilotSidebar = nextDynamic(() => loadCallParts().then((m) => m.CopilotSidebar));
-const ControlBar = nextDynamic(() => loadCallParts().then((m) => m.ControlBar));
-const ReactionTicker = nextDynamic(() => loadCallParts().then((m) => m.ReactionTicker));
+//
+// Held as a module in state rather than through next/dynamic. A lazy component
+// suspends on its first render even when its chunk is already here, and with
+// no boundary of its own that suspended the whole page on every join — the
+// call blanked for a beat — and a failed chunk reached the route's error
+// boundary and took a live call down with it.
+type CallPartsModule = typeof import("./CallParts");
+let callPartsModule: CallPartsModule | null = null;
+let callPartsPromise: Promise<CallPartsModule> | null = null;
+function loadCallParts(): Promise<CallPartsModule> {
+  if (callPartsModule) return Promise.resolve(callPartsModule);
+  if (!callPartsPromise) {
+    callPartsPromise = import("./CallParts")
+      .then((m) => (callPartsModule = m))
+      .catch((err) => { callPartsPromise = null; throw err; });
+  }
+  return callPartsPromise;
+}
+
+/** Attempts at the call-screen chunk before offering a manual retry. */
+const CALL_PARTS_ATTEMPTS = 3;
 
 // Loaded when someone picks a background, not with the room: the picker and
 // the processor behind it are code most calls never run, and the segmenter
@@ -431,7 +447,27 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
   // Start fetching the call screen as soon as the room mounts: the member is
   // about to spend a few seconds in the green room checking their camera, and
   // that is exactly the time it takes to arrive.
-  useEffect(() => { void loadCallParts(); }, []);
+  const [callParts, setCallParts] = useState<CallPartsModule | null>(() => callPartsModule);
+  const [callPartsFailed, setCallPartsFailed] = useState(false);
+  const [callPartsRetry, setCallPartsRetry] = useState(0);
+  useEffect(() => {
+    if (callParts) return;
+    let cancelled = false;
+    let attempt = 0;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const tryLoad = () => {
+      loadCallParts()
+        .then((m) => { if (!cancelled) { setCallParts(m); setCallPartsFailed(false); } })
+        .catch(() => {
+          if (cancelled) return;
+          attempt += 1;
+          if (attempt < CALL_PARTS_ATTEMPTS) timer = setTimeout(tryLoad, 1000 * attempt);
+          else setCallPartsFailed(true);
+        });
+    };
+    tryLoad();
+    return () => { cancelled = true; if (timer) clearTimeout(timer); };
+  }, [callParts, callPartsRetry]);
   const router = useRouter();
   const searchParams = useSearchParams();
   // Memoized so effects that subscribe/query with it can list it as a stable
@@ -2826,7 +2862,8 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
   useEffect(() => {
     if (!ready || !selectedSpeakerId) return;
     void applySpeakerSink(selectedSpeakerId);
-  }, [ready, selectedSpeakerId, peers, applySpeakerSink]);
+    // callParts: the tiles that carry the audio mount when it arrives.
+  }, [ready, selectedSpeakerId, peers, applySpeakerSink, callParts]);
 
   // ── How long the meeting has been live ────────────────────────────────────
 
@@ -4913,6 +4950,33 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
   }
 
   // ── Active meeting ────────────────────────────────────────────────────────
+
+  // The call screen's code, almost always here by now: it was fetched while the
+  // member sat in the green room. If it is not, say so in place — the call
+  // itself is already running underneath and must not be torn down over it.
+  if (!callParts) {
+    return (
+      <BodyPortal>
+        <div className="fixed inset-0 z-50 flex flex-col items-center justify-center gap-3 bg-[var(--surface-0)] text-sm text-[var(--fg-muted)]">
+          {callPartsFailed ? (
+            <>
+              <p>Couldn&apos;t load the call screen. Check your connection.</p>
+              <button
+                type="button"
+                onClick={() => { setCallPartsFailed(false); setCallPartsRetry((n) => n + 1); }}
+                className="rounded-lg border border-[var(--line)] bg-[var(--surface-2)] px-3 py-1.5 text-[var(--fg-primary)]"
+              >
+                Retry
+              </button>
+            </>
+          ) : (
+            <p>Joining…</p>
+          )}
+        </div>
+      </BodyPortal>
+    );
+  }
+  const { VideoTile, CopilotSidebar, ControlBar, ReactionTicker } = callParts;
 
   const allPeers = [...peers.values()] as Peer[];
   const totalCount = 1 + allPeers.length;

@@ -9,7 +9,6 @@ import { createPortal } from "react-dom";
 import type { RemovalSubject } from "@/lib/meetings/removal";
 import { shouldRequestNotificationPermission, type NotificationPermissionLike } from "@/lib/meetings/knock-notice";
 
-// Synthesize a short chime using Web Audio API (no audio files needed)
 /** What the browser currently says about notifications, including "no API". */
 export function notificationPermission(): NotificationPermissionLike {
   if (typeof window === "undefined" || typeof Notification === "undefined") return "unsupported";
@@ -32,6 +31,7 @@ export function requestHostNotifications(isHost: boolean): void {
   try { void Notification.requestPermission(); } catch { /* unsupported */ }
 }
 
+// Synthesize a short chime using Web Audio API (no audio files needed)
 export function playChime(type: "join" | "leave" | "knock") {
   try {
     const ctx = new AudioContext();
