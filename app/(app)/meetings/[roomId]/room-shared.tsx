@@ -178,8 +178,6 @@ export function videoTrackOf(stream: MediaStream | null): MediaStreamTrack | nul
   return stream?.getVideoTracks()[0] ?? null;
 }
 
-
-/** Somebody the host removed, and the name they had when it happened. */
 /**
  * Wrap a set of handlers in functions whose identity never changes and which
  * always call the handlers from the latest render.
@@ -201,4 +199,5 @@ export function useStableHandlers<T extends Record<string, (...args: any[]) => u
   return stable;
 }
 
+/** Somebody the host removed, and the name they had when it happened. */
 export interface RemovedPerson { subject: RemovalSubject; displayName: string }
