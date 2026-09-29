@@ -1,9 +1,33 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { memo, useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { formatSize } from "@/lib/meetings/recording-policy";
-import { RecordingPlayer, type RecordingPlayerHandle } from "./RecordingPlayer";
+import nextDynamic from "next/dynamic";
+import type { RecordingPlayerHandle } from "./RecordingPlayer";
+
+/**
+ * The player, fetched only when there is something to play.
+ *
+ * Most meetings are not recorded — the comment on this panel's call site says so
+ * — and the player is the largest component on the report. It was imported
+ * statically, so every reader of every report downloaded a video player, a
+ * timeline and a seek bar to render nothing.
+ *
+ * `ref` survives the split because React 19 passes refs as ordinary props and
+ * RecordingPlayer takes one. That matters more than the bytes: the ref is what
+ * lets a transcript line seek the recording, and a lazy wrapper that swallowed
+ * it would leave the timestamps clickable and inert.
+ */
+const RecordingPlayer = nextDynamic(
+  () => import("./RecordingPlayer").then((m) => m.RecordingPlayer),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="h-40 animate-pulse rounded-lg border border-[var(--line)] bg-[var(--surface-2)]" />
+    ),
+  },
+);
 
 /**
  * The recording, on the report page.
@@ -45,7 +69,14 @@ function daysUntil(iso: string): number {
   return Math.ceil((Date.parse(iso) - Date.now()) / 86_400_000);
 }
 
-export function RecordingPanel({
+/**
+ * Memoised because the report page holds the recording's playhead in its own
+ * state, and only the transcript reads it. Without this, every second of
+ * playback re-rendered this component for nothing.
+ *
+ * It holds the <video> element. Its props are the meeting id, a ref, and two callbacks the page memoises, so none of them move as the recording plays — which is the whole point: the panel REPORTS the playhead and must not be re-rendered by it.
+ */
+export const RecordingPanel = memo(function RecordingPanel({
   meetingId,
   playerRef,
   onRecordingReady,
@@ -185,4 +216,4 @@ export function RecordingPanel({
       </div>
     </section>
   );
-}
+});

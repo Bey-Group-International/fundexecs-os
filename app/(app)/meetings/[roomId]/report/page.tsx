@@ -104,9 +104,17 @@ export default function MeetingReportPage() {
   const inFlightRef = useRef(false);
   /** The first read for this meeting has landed. */
   const loadedRef = useRef(false);
-  /** Who is looking and whether they were there. Neither changes while this
-   *  page waits, so they are read once rather than on every poll — the user
-   *  lookup is a round trip to the auth server each time. */
+  /**
+   * Who is looking and whether they were there. Neither changes while this page
+   * waits, so they are read once rather than on every poll — the user lookup is
+   * a round trip to the auth server each time.
+   *
+   * "Neither changes" holds for the WAIT, not for the life of the page: another
+   * tab can sign in as somebody else. Cached until the session says otherwise,
+   * then, not forever — the auth listener in the effect below clears both. It
+   * matters because viewerId decides isHost, isHost decides canSend, and
+   * canSend decides who is offered the follow-up send.
+   */
   const viewerRef = useRef<{ user: { id: string } | null } | null>(null);
   const attendedRef = useRef<{ meetingId: string } | null>(null);
 
@@ -128,6 +136,8 @@ export default function MeetingReportPage() {
   async function fetchReportOnce() {
     const supabase = createClient();
 
+    // The viewer on the first pass only; the meeting on every one, because the
+    // poll is waiting for its report to appear.
     const [user, { data: meeting }] = await Promise.all([
       viewerRef.current
         ? Promise.resolve(viewerRef.current.user)
@@ -253,6 +263,10 @@ export default function MeetingReportPage() {
     loadedRef.current = false;
     // A read still out for the previous meeting must not hold up this one's.
     inFlightRef.current = false;
+    // Not the viewer — a soft navigation to another report is the same reader.
+    // Nor attendance, which main keys by meeting id and so is already correct
+    // across that navigation. Both are invalidated by session, not by route:
+    // see the auth listener below.
     waitStartedRef.current = Date.now();
     setWaitedMs(0);
     setLines([]);
@@ -265,7 +279,39 @@ export default function MeetingReportPage() {
     // Start polling; fetchReport will stop it when status is terminal
     intervalRef.current = setInterval(fetchReport, POLL_INTERVAL);
 
-    return () => stopPolling();
+    // The one thing that can turn this page's reader into a different person:
+    // another tab signing in or out. Reading the viewer once is only safe if
+    // something notices when that answer stops being true — otherwise the id
+    // is cached past its own lifetime, and `isHost` goes on describing whoever
+    // happened to be signed in when the page opened.
+    //
+    // Identity, not tokens. onAuthStateChange also fires on every silent
+    // refresh, and refetching the report on each of those would reintroduce
+    // the per-poll round trip this page just removed.
+    const { data: auth } = createClient().auth.onAuthStateChange((_event, session) => {
+      const signedIn = session?.user?.id ?? null;
+      // Nothing cached yet: the first read is still in flight and will see the
+      // current session by itself. Invalidating here would only race it.
+      if (viewerRef.current === null) return;
+      if (signedIn === (viewerRef.current.user?.id ?? null)) return;
+      viewerRef.current = null;
+      // Attendance goes with it, and this is the sharper half. It is cached as
+      // "this meeting was attended" with no record of BY WHOM, so a stale entry
+      // does not merely mis-state the reader — it answers the attendance
+      // question for somebody who never came, short-circuiting the query that
+      // would have said no.
+      attendedRef.current = null;
+      // Re-asked from scratch, polling included: a terminal state was terminal
+      // for the PREVIOUS reader, and fetchReport stops the interval again on
+      // its own if it still is for this one.
+      if (intervalRef.current === null) intervalRef.current = setInterval(fetchReport, POLL_INTERVAL);
+      fetchReport();
+    });
+
+    return () => {
+      auth.subscription.unsubscribe();
+      stopPolling();
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [roomId]);
 

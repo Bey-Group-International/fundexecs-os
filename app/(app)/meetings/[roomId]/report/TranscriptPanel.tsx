@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { memo, useEffect, useMemo, useRef, useState } from "react";
 import {
   parseTranscript,
   speakerInitials,
@@ -43,6 +43,160 @@ const SPEAKER_COLORS = [
   "#fda4af",
   "#fdba74",
 ];
+
+/**
+ * A speaker's colour. Module scope rather than a closure in the component,
+ * because the memoised turn below takes it — and a function recreated on every
+ * render is a prop that changes on every render, which would defeat that memo
+ * silently.
+ */
+function colorFor(speaker: string): string {
+  return SPEAKER_COLORS[speakerColorIndex(speaker, SPEAKER_COLORS.length)];
+}
+
+/**
+ * One turn of the transcript.
+ *
+ * Memoised, and the reason is the playhead. `playing` is a single index, so the
+ * list re-rendered EVERY turn once a second to move one row's background — and a
+ * turn is not a cheap row: a speaker chip, a clock button, and a nested map over
+ * paragraphs and search-match parts. An hour of two people talking is hundreds of
+ * them, rebuilt every second for as long as the recording plays, on the same
+ * thread decoding it.
+ *
+ * Every prop is a primitive, a stable ref, or a value the panel memoises
+ * (`grouped` on the query; `onSeek` by the page). `active` is the only one that
+ * moves as the recording plays, and it moves for exactly two turns: the one being
+ * left and the one being reached. `at` changes when somebody steps through search
+ * hits, which does re-render the list — a keypress, not a clock.
+ *
+ * The per-row match lookup happens INSIDE on purpose: `matchesIn` allocates, so
+ * calling it in the parent and passing the result would hand every row a fresh
+ * array and defeat this entirely.
+ */
+const TranscriptTurn = memo(function TranscriptTurn({
+  turn,
+  index,
+  active,
+  activeRef,
+  markRef,
+  at,
+  grouped,
+  timed,
+  onSeek,
+}: {
+  turn: ReturnType<typeof parseTranscript>[number] | TranscriptCue;
+  index: number;
+  /** This turn is the one being spoken. Moves for two rows per second, not all. */
+  active: boolean;
+  /** Attached only while active, so the follow-the-recording scroll finds it. */
+  activeRef: React.RefObject<HTMLLIElement | null>;
+  markRef: React.RefObject<HTMLElement | null>;
+  at: number;
+  grouped: ReturnType<typeof groupMatches>;
+  timed: boolean;
+  onSeek?: (ms: number) => void;
+}) {
+  return (
+    <li
+      ref={active ? activeRef : undefined}
+      aria-current={active ? "true" : undefined}
+      className={`flex gap-3 px-4 py-3 sm:gap-4 transition-colors ${
+        active ? "bg-gold-400/10" : ""
+      }`}
+    >
+      {/* A fixed left column, so the eye can run down the names
+          rather than hunting for them inside the prose. */}
+      <div className="flex w-24 shrink-0 flex-col items-start gap-1 sm:w-32">
+        {turn.speaker ? (
+          <>
+            <span
+              className="flex h-6 w-6 items-center justify-center rounded-full text-[10px] font-semibold text-[var(--surface-0)]"
+              style={{ background: colorFor(turn.speaker) }}
+            >
+              {speakerInitials(turn.speaker)}
+            </span>
+            {/* The name is searchable too — the filter this
+                replaced matched on it, and "what did Priya say" is
+                half of what anyone asks a transcript. */}
+            <span className="w-full truncate text-xs font-medium text-[var(--fg-secondary)]" title={turn.speaker}>
+              {partsFor(turn.speaker, matchesIn(grouped, index, SPEAKER)).map((part, k) =>
+                part.match ? (
+                  <mark
+                    key={k}
+                    ref={part.index === at ? markRef : undefined}
+                    className={
+                      part.index === at
+                        ? "rounded bg-[var(--gold-400)] px-0.5 text-[var(--surface-0)]"
+                        : "rounded bg-gold-400/25 px-0.5 text-[var(--fg-secondary)]"
+                    }
+                  >
+                    {part.value}
+                  </mark>
+                ) : (
+                  <span key={k}>{part.value}</span>
+                ),
+              )}
+            </span>
+          </>
+        ) : (
+          <span className="text-xs italic text-[var(--fg-muted)]">Unattributed</span>
+        )}
+        {/* Offered only when it would do something: there is a
+            player to drive, and the cues carry a real clock. */}
+        {timed && (
+          <button
+            type="button"
+            onClick={() => onSeek?.((turn as TranscriptCue).atMs)}
+            className="font-mono text-[11px] tabular-nums text-[var(--gold-400)] hover:underline"
+            title="Play the recording from here"
+          >
+            {formatClock((turn as TranscriptCue).atMs)}
+          </button>
+        )}
+        {turn.uncertain && (
+          <span
+            title={
+              turn.overlapped
+                ? "People were speaking over each other, so this attribution is uncertain."
+                : "The room was not confident who said this."
+            }
+            className="rounded px-1 py-0.5 text-[10px] font-medium text-[var(--status-warning)] ring-1 ring-status-warning/30"
+          >
+            {turn.overlapped ? "overlap" : "uncertain"}
+          </span>
+        )}
+      </div>
+
+      <div className="min-w-0 flex-1 space-y-1.5">
+        {turn.paragraphs.map((paragraph, j) => (
+          <p key={j} className="text-sm leading-relaxed text-[var(--fg-primary)]">
+            {/* Painted in place rather than the turn being pulled
+                out of the transcript. Parts, never markup: these
+                are other people's words. */}
+            {partsFor(paragraph, matchesIn(grouped, index, j)).map((part, k) =>
+              part.match ? (
+                <mark
+                  key={k}
+                  ref={part.index === at ? markRef : undefined}
+                  className={
+                    part.index === at
+                      ? "rounded bg-[var(--gold-400)] px-0.5 text-[var(--surface-0)]"
+                      : "rounded bg-gold-400/25 px-0.5 text-[var(--fg-primary)]"
+                  }
+                >
+                  {part.value}
+                </mark>
+              ) : (
+                <span key={k}>{part.value}</span>
+              ),
+            )}
+          </p>
+        ))}
+      </div>
+    </li>
+  );
+});
 
 export function TranscriptPanel({
   transcript,
@@ -118,9 +272,6 @@ export function TranscriptPanel({
     if (!open || !follow || matches.length > 0) return;
     scrollWithin(listRef.current, activeRef.current);
   }, [open, playing, follow, matches.length]);
-
-  const colorFor = (speaker: string) =>
-    SPEAKER_COLORS[speakerColorIndex(speaker, SPEAKER_COLORS.length)];
 
   if (turns.length === 0) return null;
 
@@ -227,104 +378,18 @@ export function TranscriptPanel({
             className="max-h-[32rem] divide-y divide-[var(--line)] overflow-y-auto"
           >
               {turns.map((turn, i) => (
-                <li
+                <TranscriptTurn
                   key={i}
-                  ref={i === playing ? activeRef : undefined}
-                  aria-current={i === playing ? "true" : undefined}
-                  className={`flex gap-3 px-4 py-3 sm:gap-4 transition-colors ${
-                    i === playing ? "bg-gold-400/10" : ""
-                  }`}
-                >
-                  {/* A fixed left column, so the eye can run down the names
-                      rather than hunting for them inside the prose. */}
-                  <div className="flex w-24 shrink-0 flex-col items-start gap-1 sm:w-32">
-                    {turn.speaker ? (
-                      <>
-                        <span
-                          className="flex h-6 w-6 items-center justify-center rounded-full text-[10px] font-semibold text-[var(--surface-0)]"
-                          style={{ background: colorFor(turn.speaker) }}
-                        >
-                          {speakerInitials(turn.speaker)}
-                        </span>
-                        {/* The name is searchable too — the filter this
-                            replaced matched on it, and "what did Priya say" is
-                            half of what anyone asks a transcript. */}
-                        <span className="w-full truncate text-xs font-medium text-[var(--fg-secondary)]" title={turn.speaker}>
-                          {partsFor(turn.speaker, matchesIn(grouped, i, SPEAKER)).map((part, k) =>
-                            part.match ? (
-                              <mark
-                                key={k}
-                                ref={part.index === at ? markRef : undefined}
-                                className={
-                                  part.index === at
-                                    ? "rounded bg-[var(--gold-400)] px-0.5 text-[var(--surface-0)]"
-                                    : "rounded bg-gold-400/25 px-0.5 text-[var(--fg-secondary)]"
-                                }
-                              >
-                                {part.value}
-                              </mark>
-                            ) : (
-                              <span key={k}>{part.value}</span>
-                            ),
-                          )}
-                        </span>
-                      </>
-                    ) : (
-                      <span className="text-xs italic text-[var(--fg-muted)]">Unattributed</span>
-                    )}
-                    {/* Offered only when it would do something: there is a
-                        player to drive, and the cues carry a real clock. */}
-                    {timed && (
-                      <button
-                        type="button"
-                        onClick={() => onSeek?.((turn as TranscriptCue).atMs)}
-                        className="font-mono text-[11px] tabular-nums text-[var(--gold-400)] hover:underline"
-                        title="Play the recording from here"
-                      >
-                        {formatClock((turn as TranscriptCue).atMs)}
-                      </button>
-                    )}
-                    {turn.uncertain && (
-                      <span
-                        title={
-                          turn.overlapped
-                            ? "People were speaking over each other, so this attribution is uncertain."
-                            : "The room was not confident who said this."
-                        }
-                        className="rounded px-1 py-0.5 text-[10px] font-medium text-[var(--status-warning)] ring-1 ring-status-warning/30"
-                      >
-                        {turn.overlapped ? "overlap" : "uncertain"}
-                      </span>
-                    )}
-                  </div>
-
-                  <div className="min-w-0 flex-1 space-y-1.5">
-                    {turn.paragraphs.map((paragraph, j) => (
-                      <p key={j} className="text-sm leading-relaxed text-[var(--fg-primary)]">
-                        {/* Painted in place rather than the turn being pulled
-                            out of the transcript. Parts, never markup: these
-                            are other people's words. */}
-                        {partsFor(paragraph, matchesIn(grouped, i, j)).map((part, k) =>
-                          part.match ? (
-                            <mark
-                              key={k}
-                              ref={part.index === at ? markRef : undefined}
-                              className={
-                                part.index === at
-                                  ? "rounded bg-[var(--gold-400)] px-0.5 text-[var(--surface-0)]"
-                                  : "rounded bg-gold-400/25 px-0.5 text-[var(--fg-primary)]"
-                              }
-                            >
-                              {part.value}
-                            </mark>
-                          ) : (
-                            <span key={k}>{part.value}</span>
-                          ),
-                        )}
-                      </p>
-                    ))}
-                  </div>
-                </li>
+                  turn={turn}
+                  index={i}
+                  active={i === playing}
+                  activeRef={activeRef}
+                  markRef={markRef}
+                  at={at}
+                  grouped={grouped}
+                  timed={timed}
+                  onSeek={onSeek}
+                />
               ))}
           </ol>
 
