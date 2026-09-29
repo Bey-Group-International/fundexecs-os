@@ -178,7 +178,16 @@ export function CallArchive({ initial }: { initial: CallHit[] }) {
                     {call.durationSeconds === null ? "—" : callClock(call.durationSeconds)}
                   </span>
                 </div>
-                <div className="mt-0.5 flex items-center gap-2 text-xs text-[var(--fg-muted)]">
+                {/* flex-wrap, found by rendering this at 400px and looking at it:
+                    without it the three items shrank instead of wrapping, and a
+                    phone showed a ragged three-column block — "Sep 7, 2:47 /
+                    PM", "· consent / recorded", "· 14 / mentions". Wrapping
+                    moves a whole item to the next line instead of folding it in
+                    half. */}
+                <div
+                  data-call-meta
+                  className="mt-0.5 flex flex-wrap items-center gap-x-2 text-xs text-[var(--fg-muted)]"
+                >
                   <span>{callWhen(call.at)}</span>
                   {call.consented && (
                     <span title="Consent was acknowledged before this call was recorded.">· consent recorded</span>

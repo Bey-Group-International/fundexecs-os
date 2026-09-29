@@ -4361,7 +4361,32 @@ Deployed, monitoring               →  live, observability active
              |  they waited; then putting the mount fetch back failed one and
              |  letting the log search an empty box failed two.
              |  Confidence: Jest 7417 -> 7426 across 525 suites, typecheck and
-             |  eslint clean. Still nobody has opened it in a browser.
+             |  eslint clean.
+             |
+             |  2026-09-29  Opened it in a browser. Found something.
+             |  The standing caveat on three PRs this week has been "nobody has
+             |  looked at it". So both changed lists were rendered in headless
+             |  Chromium with the app's real compiled stylesheet, screenshotted at
+             |  400px and 1280px, and looked at.
+             |  The log held up. The recorded-call archive did not: its meta line
+             |  is a flex row with no wrapping, so at phone width the items SHRANK
+             |  instead of moving, and a call read as a ragged three-column block —
+             |  "Sep 7, 2:47 / PM", "· consent / recorded", "· 14 / mentions".
+             |  Nothing in the shared layout checks fires on that. Nothing escapes
+             |  the viewport, nothing overlaps, no two controls read alike. It is
+             |  simply wrong, and only a layout engine can say so.
+             |  Two things learned turning it into a test. getClientRects().length
+             |  does not detect a folded flex item: flex children are blockified
+             |  and a block whose text wraps still reports one rect. Height against
+             |  the element's own line-height does — 32px on a 16px line.
+             |  And the width mattered more than the check: measured on the broken
+             |  version, the items folded at 320, 360 and 375 and fit at 400. The
+             |  shared VIEWPORTS start at 400, which is the WIDE end of a phone, so
+             |  a check written against them would have watched this ship on every
+             |  iPhone SE, every 13 mini and most Android handsets. The new checks
+             |  add 360.
+             |  Confidence: 19 -> 22 visual checks, and the fix is proved by
+             |  removing it: three items report 32px on a 16px line at 360.
 ```
 
 ---
