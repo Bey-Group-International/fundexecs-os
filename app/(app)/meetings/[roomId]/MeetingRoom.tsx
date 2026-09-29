@@ -44,7 +44,6 @@ import {
 } from "@/lib/meetings/chat";
 import { MeetingShareLink } from "@/app/(app)/meetings/MeetingShareLink";
 import { CopilotErrorBoundary } from "./CopilotErrorBoundary";
-import { BackgroundPicker } from "./BackgroundPicker";
 import {
   BACKGROUND_PREF_KEY,
   NO_BACKGROUND,
@@ -78,7 +77,7 @@ import {
 import { MeetingClock, RecordingClock } from "./MeetingClock";
 import { useRecording } from "@/lib/meetings/use-recording";
 import { RecordingComposer, type ComposerHandlers, type RoomSnapshot } from "@/lib/meetings/recording-composer";
-import { BackgroundProcessor } from "@/lib/meetings/background-processor";
+import type { BackgroundProcessor } from "@/lib/meetings/background-processor";
 import { getBackground } from "@/lib/meetings/background-store";
 import {
   canExit,
@@ -196,6 +195,15 @@ import {
   WaitingRoomBar,
   type WaitingPeer,
 } from "./WaitingScreens";
+import nextDynamic from "next/dynamic";
+
+// Loaded when someone picks a background, not with the room: the picker and
+// the processor behind it are code most calls never run, and the segmenter
+// they drive was already fetched on demand.
+const BackgroundPicker = nextDynamic(
+  () => import("./BackgroundPicker").then((m) => m.BackgroundPicker),
+  { ssr: false, loading: () => <p className="px-1 py-2 text-xs text-[var(--fg-muted)]">Loading backgrounds…</p> },
+);
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -4809,6 +4817,7 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
       // reported.
       let processor: BackgroundProcessor | null = null;
       try {
+        const { BackgroundProcessor } = await import("@/lib/meetings/background-processor");
         processor = await BackgroundProcessor.create(raw, {
           onSlowFrames: (consecutive) => {
             if (bgSuspendedRef.current) return;

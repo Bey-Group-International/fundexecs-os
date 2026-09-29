@@ -91,23 +91,26 @@ export async function writeTargetFor(
   client: ServiceClient,
   userId: string,
 ): Promise<{ conn: ConnectionRow; calendarId: string } | null> {
-  const { data: conn } = await client
-    .from("google_calendar_connections")
-    .select("*")
-    .eq("user_id", userId)
-    .maybeSingle();
+  // Both keyed on the member alone, so asked together: this runs on every
+  // meeting save and every calendar-status check.
+  const [{ data: conn }, { data: cal }] = await Promise.all([
+    client
+      .from("google_calendar_connections")
+      .select("*")
+      .eq("user_id", userId)
+      .maybeSingle(),
+    client
+      .from("google_calendars")
+      .select("google_calendar_id, access_role, is_primary")
+      .eq("user_id", userId)
+      // owner and writer are the roles that may create events; reader and
+      // freeBusyReader would 403 on every write.
+      .in("access_role", ["owner", "writer"])
+      .order("is_primary", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+  ]);
   if (!conn) return null;
-
-  const { data: cal } = await client
-    .from("google_calendars")
-    .select("google_calendar_id, access_role, is_primary")
-    .eq("user_id", userId)
-    // owner and writer are the roles that may create events; reader and
-    // freeBusyReader would 403 on every write.
-    .in("access_role", ["owner", "writer"])
-    .order("is_primary", { ascending: false })
-    .limit(1)
-    .maybeSingle();
 
   const calendarId = (cal as { google_calendar_id?: string } | null)?.google_calendar_id;
   if (!calendarId) return null;

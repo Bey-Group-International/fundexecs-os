@@ -29,10 +29,18 @@ import {
   needsSegmentation,
   type BackgroundEffect,
 } from "@/lib/meetings/backgrounds";
-import { BackgroundProcessor } from "@/lib/meetings/background-processor";
+import type { BackgroundProcessor } from "@/lib/meetings/background-processor";
 import { getBackground } from "@/lib/meetings/background-store";
-import { BackgroundPicker } from "./BackgroundPicker";
 import { admissionStatusCopy, canPressJoin, type AdmissionUiState } from "@/lib/meetings/admission-ui";
+import nextDynamic from "next/dynamic";
+
+// Loaded when someone picks a background, not with the room: the picker and
+// the processor behind it are code most calls never run, and the segmenter
+// they drive was already fetched on demand.
+const BackgroundPicker = nextDynamic(
+  () => import("./BackgroundPicker").then((m) => m.BackgroundPicker),
+  { ssr: false, loading: () => <p className="px-1 py-2 text-xs text-[var(--fg-muted)]">Loading backgrounds…</p> },
+);
 
 /** What the member settled on before pressing Join. */
 export interface GreenRoomChoice {
@@ -193,6 +201,8 @@ function BackgroundPreview({
     let cancelled = false;
 
     void (async () => {
+      const { BackgroundProcessor } = await import("@/lib/meetings/background-processor");
+      if (cancelled) return;
       const built = await BackgroundProcessor.create(track, {
         onSlowFrames: () => { /* the call itself decides to give up, not the lobby */ },
         onUnavailable,
