@@ -1,69 +1,61 @@
 /**
- * The report page's states.
+ * The report page's states, now decided on the server.
  *
- * Every decision this page makes now lives in attendance.ts and is tested
- * there. This covers the WIRING, which is where both of the day's defects
- * actually were: the rules were fine and the page asked them the wrong
- * question, then re-read the whole transcript while waiting on the answer.
+ * This file used to mount a client component and let it fetch. The page is a
+ * server component, so each case awaits it and renders what it returned — which
+ * is also the honest shape of the test, because that markup is now what a reader
+ * actually receives.
  *
- * Specifically:
+ * WHAT WAS PORTED AND WHAT WAS NOT, said out loud, because deleting tests is how
+ * a refactor passes without being correct:
  *
- *   A report row with an empty summary is FINISHED. The route writes one when
- *   the model fails and again when a one-way call had nothing to transcribe.
- *   Keyed on the summary, the page called that "generating" — a permanent
- *   spinner, polling every five seconds for the life of the tab, over a
- *   recording and transcript that were fully readable behind it.
+ *   Ported unchanged in substance — every state and every piece of copy: an
+ *   unsummarised row rendering rather than spinning, the two different reasons a
+ *   summary can be missing, a non-attendee being told, a missing meeting, a
+ *   stalled report, the consent block.
  *
- *   And readAllTranscriptRows sat inside the poll body, so a long meeting
- *   re-paged every row it had every five seconds, forever.
+ *   Ported as structure — "stops polling rather than asking forever" and "the
+ *   transcript read is not repeated on every poll". There is no client poll left
+ *   to repeat anything, so the assertion became: a finished report mounts no
+ *   poller at all. Same guarantee, one level up.
+ *
+ *   NOT ported, and gone on purpose — six cases about a cached viewer going
+ *   stale when another tab switched accounts. They tested `viewerRef` and
+ *   `attendedRef`, a client-side cache that existed only because the page asked
+ *   the auth server on every five-second poll. The server reads the session from
+ *   the request's own cookies, so there is no cache to go stale and nothing to
+ *   invalidate. That class of bug is gone by construction rather than by a fix,
+ *   which is the only reason it is acceptable for its tests to go with it.
  */
 
 import React from "react";
-import { act, render, screen, waitFor } from "@testing-library/react";
-
-jest.mock("next/navigation", () => ({ useParams: () => ({ roomId: "abc-def-gh" }) }));
+import { render, screen } from "@testing-library/react";
 
 /** Every table read, so a test can count them and see what was asked for. */
 let reads: string[] = [];
-let transcriptRangeCalls = 0;
 
-/** What the fake database answers with. Mutable, so a poll can see a change. */
+/** What the fake database answers with. */
 const db: {
   meeting: Record<string, unknown> | null;
   report: Record<string, unknown> | null;
   attended: boolean;
-} = { meeting: null, report: null, attended: false };
+  recordings: Array<Record<string, unknown>>;
+  chat: Array<Record<string, unknown>>;
+  transcript: Array<Record<string, unknown>>;
+  viewer: { id: string } | null;
+} = {
+  meeting: null,
+  report: null,
+  attended: true,
+  recordings: [],
+  chat: [],
+  transcript: [],
+  viewer: { id: "host-1" },
+};
 
-/** Who the auth server says is reading, and how often it was asked. */
-let authUser: { id: string } | null = { id: "host-1" };
-let getUserCalls = 0;
-/** The page's auth listeners, so a test can act like another tab. */
-let authHandlers: Array<(event: string, session: { user: { id: string } } | null) => void> = [];
-let unsubscribes = 0;
-
-jest.mock("@/lib/supabase/client", () => ({
-  createClient: () => ({
-    auth: {
-      getUser: async () => {
-        getUserCalls += 1;
-        return { data: { user: authUser } };
-      },
-      onAuthStateChange: (
-        handler: (event: string, session: { user: { id: string } } | null) => void,
-      ) => {
-        authHandlers.push(handler);
-        return {
-          data: {
-            subscription: {
-              unsubscribe: () => {
-                unsubscribes += 1;
-                authHandlers = authHandlers.filter((h) => h !== handler);
-              },
-            },
-          },
-        };
-      },
-    },
+jest.mock("@/lib/supabase/server", () => ({
+  createServerClient: async () => ({
+    auth: { getUser: async () => ({ data: { user: db.viewer } }) },
     from: (table: string) => {
       reads.push(table);
       const chain: Record<string, unknown> = {
@@ -71,38 +63,54 @@ jest.mock("@/lib/supabase/client", () => ({
         eq: () => chain,
         order: () => chain,
         limit: () => chain,
-        range: async () => {
-          transcriptRangeCalls += 1;
-          return { data: [], error: null };
-        },
+        range: async () => ({ data: db.transcript, error: null }),
         maybeSingle: async () => {
-          if (table === "live_meetings") return { data: db.meeting, error: null };
-          if (table === "live_meeting_reports") return { data: db.report, error: null };
+          if (table === "live_meetings") return { data: db.meeting };
+          if (table === "live_meeting_reports") return { data: db.report };
           if (table === "live_meeting_participants") {
-            return { data: db.attended ? { meeting_id: "m1" } : null, error: null };
+            return { data: db.attended ? { meeting_id: "m1" } : null };
           }
-          return { data: null, error: null };
+          return { data: null };
         },
+        // Recordings and chat are awaited as the builder itself.
+        then: (resolve: (v: unknown) => unknown) =>
+          Promise.resolve({
+            data: table === "live_meeting_recordings" ? db.recordings : db.chat,
+          }).then(resolve),
       };
       return chain;
     },
   }),
 }));
 
-// The panels do their own fetching and none of it is what this file is about.
-jest.mock("./RecordingPanel", () => ({ RecordingPanel: () => <div data-testid="recording-panel" /> }));
-jest.mock("./ChatPanel", () => ({ ChatPanel: () => null }));
+// The interactive islands do their own thing and none of it is what this file is
+// about. Each is rendered as a marker so the document can be asserted around it.
+jest.mock("./ReportMedia", () => ({
+  ReportMedia: ({ transcript }: { transcript: string | null }) => (
+    <div data-testid="report-media" data-has-transcript={String(Boolean(transcript))} />
+  ),
+}));
+jest.mock("./ChatPanel", () => ({
+  ChatPanel: ({ messages }: { messages: unknown[] }) => (
+    <div data-testid="chat-panel" data-count={String(messages.length)} />
+  ),
+}));
 jest.mock("./ExportMenu", () => ({ ExportMenu: () => null }));
-// Rendered as its one interesting prop: whether this reader is offered the
-// send. That is derived from the cached viewer id, so it is how a test sees
-// whether the cache is still telling the truth.
 jest.mock("./FollowUpPanel", () => ({
   FollowUpPanel: ({ canSend }: { canSend: boolean }) => (
     <div data-testid="follow-up" data-can-send={String(canSend)} />
   ),
 }));
+// The only remaining client island with a timer. Rendered as a marker so a test
+// can assert whether the page is still waiting on anything.
+jest.mock("./ReportWaiting", () => ({
+  ReportWaiting: ({ stopAfterMs }: { stopAfterMs: number }) => (
+    <div data-testid="waiting" data-stop-after={String(stopAfterMs)} />
+  ),
+}));
 
 import MeetingReportPage from "./page";
+import { REPORT_WAIT_LIMIT_MS } from "@/lib/meetings/attendance";
 
 const MEETING = {
   id: "m1",
@@ -116,76 +124,66 @@ const MEETING = {
   recording_consent: null,
 };
 
+/** Just after the meeting ended, so a missing report is still plausibly coming. */
+const JUST_AFTER = Date.parse("2026-09-23T14:41:00.000Z");
+
+/** Await the server component and render what it returned. */
+async function renderPage() {
+  const ui = await MeetingReportPage({ params: Promise.resolve({ roomId: "abc-def-gh" }) });
+  return render(ui);
+}
+
 beforeEach(() => {
-  jest.useFakeTimers();
+  jest.useFakeTimers().setSystemTime(JUST_AFTER);
   reads = [];
-  transcriptRangeCalls = 0;
-  authUser = { id: "host-1" };
-  getUserCalls = 0;
-  authHandlers = [];
-  unsubscribes = 0;
   db.meeting = { ...MEETING };
   db.report = null;
   db.attended = true;
+  db.recordings = [];
+  db.chat = [];
+  db.transcript = [];
+  db.viewer = { id: "host-1" };
 });
 
 afterEach(() => {
-  jest.runOnlyPendingTimers();
   jest.useRealTimers();
 });
-
-/** Let the page's awaited reads settle without advancing the poll clock. */
-async function settle() {
-  await act(async () => { await Promise.resolve(); await Promise.resolve(); await Promise.resolve(); });
-}
-
-/** Advance past one poll interval. */
-async function poll() {
-  await act(async () => { jest.advanceTimersByTime(5_000); });
-  await settle();
-}
 
 describe("a report that exists without a summary", () => {
   const unsummarised = { summary: "", key_points: [], action_items: [], analysis: {}, full_transcript: "" };
 
   it("is rendered, not hidden behind a spinner", async () => {
     db.report = { ...unsummarised };
-    render(<MeetingReportPage />);
-    await settle();
+    await renderPage();
 
-    // The meeting's own title, which only the rendered report shows.
-    expect(await screen.findByText("Dunbar follow-up")).toBeInTheDocument();
+    expect(screen.getByText("Dunbar follow-up")).toBeInTheDocument();
     expect(screen.getByText(/No summary was written/i)).toBeInTheDocument();
     expect(screen.queryByText(/Generating your report/i)).toBeNull();
   });
 
-  // The recording is the thing worth having when there is no summary, and it
-  // was the thing the spinner covered up.
   it("still shows the recording", async () => {
+    // The thing worth having when there is no summary, and the thing the spinner
+    // used to cover up.
     db.report = { ...unsummarised };
-    render(<MeetingReportPage />);
-    await settle();
-    expect(screen.getByTestId("recording-panel")).toBeInTheDocument();
+    db.recordings = [{ id: "r1", status: "complete", deleted_at: null, started_at: "2026-09-23T14:00:00.000Z" }];
+    await renderPage();
+    expect(screen.getByTestId("report-media")).toBeInTheDocument();
   });
 
-  it("stops polling, rather than asking forever", async () => {
+  it("mounts no poller, rather than asking forever", async () => {
+    // Was "stops polling". There is no client poll left to stop: a finished
+    // report ships as markup with nothing watching it.
     db.report = { ...unsummarised };
-    render(<MeetingReportPage />);
-    await settle();
-
-    const after = reads.length;
-    await poll();
-    await poll();
-    expect(reads.length).toBe(after);
+    await renderPage();
+    expect(screen.queryByTestId("waiting")).toBeNull();
   });
 
-  // A one-way call whose MODEL failed has a real transcript, so the copy must
-  // not claim nothing was transcribed above the words themselves.
   it("blames the analysis, not the microphone, when there are words", async () => {
+    // A one-way call whose MODEL failed has a real transcript, so the copy must
+    // not claim nothing was transcribed above the words themselves.
     db.meeting = { ...MEETING, kind: "one_way" };
     db.report = { ...unsummarised, full_transcript: "Priya: we agreed on Friday." };
-    render(<MeetingReportPage />);
-    await settle();
+    await renderPage();
 
     expect(screen.getByText(/analysis could not be completed/i)).toBeInTheDocument();
     expect(screen.queryByText(/Nothing was transcribed/i)).toBeNull();
@@ -194,30 +192,33 @@ describe("a report that exists without a summary", () => {
   it("says nothing was transcribed only when nothing was", async () => {
     db.meeting = { ...MEETING, kind: "one_way" };
     db.report = { ...unsummarised, full_transcript: "" };
-    render(<MeetingReportPage />);
-    await settle();
+    await renderPage();
     expect(screen.getByText(/Nothing was transcribed/i)).toBeInTheDocument();
   });
 });
 
 describe("a report that has not been written", () => {
-  it("waits, and keeps asking", async () => {
+  it("waits, and leaves something behind to keep asking", async () => {
     db.report = null;
-    render(<MeetingReportPage />);
-    await settle();
+    await renderPage();
 
     expect(screen.getByText(/Generating your report/i)).toBeInTheDocument();
-    const after = reads.length;
-    await poll();
-    expect(reads.length).toBeGreaterThan(after);
+    expect(screen.getByTestId("waiting")).toBeInTheDocument();
   });
 
-  it("renders it once it arrives", async () => {
+  it("gives the poller the time that is LEFT, not a fresh allowance", async () => {
+    // The rule that changed crossing to the server. The meeting ended a minute
+    // ago, so there is a minute less patience — on the client every reload
+    // started the six minutes again, so a long-dead report was always still
+    // "arriving".
     db.report = null;
-    render(<MeetingReportPage />);
-    await settle();
-    expect(screen.getByText(/Generating your report/i)).toBeInTheDocument();
+    await renderPage();
 
+    const left = Number(screen.getByTestId("waiting").getAttribute("data-stop-after"));
+    expect(left).toBe(REPORT_WAIT_LIMIT_MS - 60_000);
+  });
+
+  it("renders the report once it exists", async () => {
     db.report = {
       summary: "They agreed to wire on Friday.",
       key_points: ["Timing"],
@@ -225,84 +226,113 @@ describe("a report that has not been written", () => {
       analysis: {},
       full_transcript: "Ana: Friday.",
     };
-    await poll();
+    await renderPage();
 
-    await waitFor(() => expect(screen.getByText("They agreed to wire on Friday.")).toBeInTheDocument());
+    expect(screen.getByText("They agreed to wire on Friday.")).toBeInTheDocument();
+    expect(screen.queryByTestId("waiting")).toBeNull();
   });
 });
 
-describe("the timed transcript read", () => {
-  // It used to sit in the poll body, so a two-hour meeting re-paged every row
-  // it had every five seconds — and forever, while the summary bug held the
-  // page in "generating".
-  it("is not repeated on every poll", async () => {
-    db.report = null;
-    render(<MeetingReportPage />);
-    await settle();
-    const afterMount = transcriptRangeCalls;
-    expect(afterMount).toBeGreaterThan(0);
+describe("the reads", () => {
+  it("asks for everything once, in one render", async () => {
+    // Was "the timed transcript read is not repeated on every poll". It cannot
+    // be: there is one server pass and nothing on the client re-reads. Asserted
+    // as each table appearing exactly once.
+    db.report = { summary: "Done.", key_points: [], action_items: [], analysis: {}, full_transcript: "x" };
+    await renderPage();
 
-    await poll();
-    await poll();
-    await poll();
-    expect(transcriptRangeCalls).toBe(afterMount);
+    const counts = reads.reduce<Record<string, number>>((acc, t) => {
+      acc[t] = (acc[t] ?? 0) + 1;
+      return acc;
+    }, {});
+    expect(counts).toEqual({
+      live_meetings: 1,
+      live_meeting_reports: 1,
+      live_meeting_participants: 1,
+      live_meeting_recordings: 1,
+      live_meeting_chat: 1,
+      live_meeting_transcripts: 1,
+    });
   });
 
-  // But once is wrong too: people are sent here the instant a meeting ends,
-  // while the last transcript flushes are still in flight, so the read taken on
-  // arrival can be missing the end of the meeting. The second one is taken when
-  // the report appears, which the route writes after the transcript.
-  it("is taken again once the report arrives", async () => {
-    db.report = null;
-    render(<MeetingReportPage />);
-    await settle();
-    const afterMount = transcriptRangeCalls;
+  it("hands the transcript and the chat down as data, not as work to do", async () => {
+    // The two panels that used to fetch on mount, so neither could start until
+    // the page had already rendered.
+    db.report = { summary: "Done.", key_points: [], action_items: [], analysis: {}, full_transcript: "Ana: Friday." };
+    db.chat = [{ id: "c1", author_id: "u1", author_name: "Ana", body: "hi", ts: "2026-09-23T14:05:00.000Z" }];
+    await renderPage();
 
-    db.report = { summary: "Done.", key_points: [], action_items: [], analysis: {}, full_transcript: "x" };
-    await poll();
-
-    expect(transcriptRangeCalls).toBeGreaterThan(afterMount);
+    expect(screen.getByTestId("report-media")).toHaveAttribute("data-has-transcript", "true");
+    expect(screen.getByTestId("chat-panel")).toHaveAttribute("data-count", "1");
   });
 });
 
 describe("who may read it", () => {
   it("says so plainly to someone who was not there", async () => {
+    // The defect this replaced: RLS hides the report from a non-attendee, which
+    // looks exactly like a report still being written.
     db.meeting = { ...MEETING, host_id: "someone-else" };
     db.attended = false;
     db.report = null;
-    render(<MeetingReportPage />);
-    await settle();
+    await renderPage();
 
-    // The defect this replaced: RLS hides the report from a non-attendee,
-    // which looks exactly like a report still being written.
+    expect(screen.getByText(/This report is limited to the people who were in the meeting/i))
+      .toBeInTheDocument();
     expect(screen.queryByText(/Generating your report/i)).toBeNull();
-    const after = reads.length;
-    await poll();
-    expect(reads.length).toBe(after);
+    expect(screen.queryByTestId("waiting")).toBeNull();
   });
 
   it("reports a meeting that is not there", async () => {
     db.meeting = null;
-    render(<MeetingReportPage />);
-    await settle();
+    await renderPage();
     expect(screen.getByText(/Meeting not found/i)).toBeInTheDocument();
+  });
+
+  it("offers the follow-up send to the host", async () => {
+    db.report = {
+      summary: "Done.",
+      key_points: [],
+      action_items: [],
+      analysis: { follow_up_draft: "Thanks all." },
+      full_transcript: "x",
+    };
+    await renderPage();
+    expect(screen.getByTestId("follow-up")).toHaveAttribute("data-can-send", "true");
+  });
+
+  it("withholds it from an attendee who is not the host", async () => {
+    db.meeting = { ...MEETING, host_id: "someone-else" };
+    db.report = {
+      summary: "Done.",
+      key_points: [],
+      action_items: [],
+      analysis: { follow_up_draft: "Thanks all." },
+      full_transcript: "x",
+    };
+    await renderPage();
+    expect(screen.getByTestId("follow-up")).toHaveAttribute("data-can-send", "false");
   });
 });
 
 describe("a report that is never coming", () => {
   it("gives up and explains, rather than spinning for the life of the tab", async () => {
+    // Decided from the MEETING's age now, so this needs no simulated waiting —
+    // and, unlike the client version, it is already decided for the first person
+    // to open the page rather than six minutes after they do.
     db.report = null;
-    render(<MeetingReportPage />);
-    await settle();
-    expect(screen.getByText(/Generating your report/i)).toBeInTheDocument();
-
-    // Past the derived wait limit (360s), one poll at a time.
-    for (let i = 0; i < 75; i++) await poll();
+    jest.setSystemTime(Date.parse("2026-09-23T14:40:00.000Z") + REPORT_WAIT_LIMIT_MS);
+    await renderPage();
 
     expect(screen.getByText(/has no report yet/i)).toBeInTheDocument();
-    const after = reads.length;
-    await poll();
-    expect(reads.length).toBe(after);
+    expect(screen.queryByTestId("waiting")).toBeNull();
+  });
+
+  it("has already given up on a meeting from last week", async () => {
+    // The case the old clock could not represent at all.
+    db.report = null;
+    jest.setSystemTime(Date.parse("2026-09-30T00:00:00.000Z"));
+    await renderPage();
+    expect(screen.getByText(/has no report yet/i)).toBeInTheDocument();
   });
 });
 
@@ -319,8 +349,7 @@ describe("a recorded call's own facts", () => {
       },
     };
     db.report = { summary: "A call.", key_points: [], action_items: [], analysis: {}, full_transcript: "x" };
-    render(<MeetingReportPage />);
-    await settle();
+    await renderPage();
 
     // Stored so somebody can answer "should this have been recorded?" — and
     // until now shown on every page except the one they would ask it on.
@@ -330,142 +359,26 @@ describe("a recorded call's own facts", () => {
 
   it("shows no consent block for an ordinary meeting", async () => {
     db.report = { summary: "A meeting.", key_points: [], action_items: [], analysis: {}, full_transcript: "x" };
-    render(<MeetingReportPage />);
-    await settle();
+    await renderPage();
     expect(screen.queryByText(/Consent recorded/i)).toBeNull();
   });
-});
 
-describe("the viewer, cached but not stale", () => {
-  /**
-   * The viewer is read once rather than on every poll, which is only safe if
-   * something notices when the session changes underneath it.
-   *
-   * It is not a cosmetic cache. `viewerId` decides `isHost`, `isHost` decides
-   * `canSend`, and `canSend` decides whether the follow-up can be sent at all
-   * — so a viewer id that outlives its own session hands the send control to
-   * the wrong person, or takes it from the right one.
-   */
-  const WITH_FOLLOW_UP = {
-    summary: "They agreed to wire on Friday.",
-    key_points: [],
-    action_items: [],
-    analysis: { follow_up_draft: "Thanks all — wiring Friday." },
-    full_transcript: "Ana: Friday.",
-  };
+  it("falls back to the recording's length when the call had no room to join", async () => {
+    // A one-way call has no started_at, so the wall clock is null and the
+    // recording's own duration is the only length the header can show.
+    db.meeting = { ...MEETING, kind: "one_way", started_at: null, ended_at: null };
+    db.report = { summary: "A call.", key_points: [], action_items: [], analysis: {}, full_transcript: "x" };
+    db.recordings = [
+      {
+        id: "r1",
+        status: "complete",
+        deleted_at: null,
+        started_at: "2026-09-23T14:00:00.000Z",
+        duration_seconds: 754,
+      },
+    ];
+    await renderPage();
 
-  /** Act like another tab: hand the page's listeners a new session. */
-  async function sessionBecomes(id: string | null) {
-    await act(async () => {
-      for (const handler of [...authHandlers]) {
-        handler(id === null ? "SIGNED_OUT" : "SIGNED_IN", id === null ? null : { user: { id } });
-      }
-    });
-    await settle();
-  }
-
-  it("asks the auth server once, not once per poll", async () => {
-    // The whole point of the cache. Three polls, one question.
-    db.report = null;
-    render(<MeetingReportPage />);
-    await settle();
-    expect(getUserCalls).toBe(1);
-
-    await poll();
-    await poll();
-    await poll();
-    expect(getUserCalls).toBe(1);
-  });
-
-  it("takes the send control away when another tab signs in as someone else", async () => {
-    db.report = { ...WITH_FOLLOW_UP };
-    render(<MeetingReportPage />);
-    await settle();
-    // The host, so the control is offered.
-    expect(screen.getByTestId("follow-up")).toHaveAttribute("data-can-send", "true");
-
-    authUser = { id: "not-the-host" };
-    await sessionBecomes("not-the-host");
-
-    // Polling has already stopped by now — the report exists — so nothing else
-    // would ever re-ask. Without the auth listener this still reads "true",
-    // offering a send to somebody who is not the host.
-    expect(getUserCalls).toBe(2);
-    expect(screen.getByTestId("follow-up")).toHaveAttribute("data-can-send", "false");
-  });
-
-  it("gives it back when the host signs in", async () => {
-    // The direction that loses a real capability rather than granting a false
-    // one: the host sees their own report with the send control missing.
-    db.meeting = { ...MEETING, host_id: "host-2" };
-    authUser = { id: "guest-9" };
-    db.report = { ...WITH_FOLLOW_UP };
-    render(<MeetingReportPage />);
-    await settle();
-    expect(screen.getByTestId("follow-up")).toHaveAttribute("data-can-send", "false");
-
-    authUser = { id: "host-2" };
-    await sessionBecomes("host-2");
-
-    expect(screen.getByTestId("follow-up")).toHaveAttribute("data-can-send", "true");
-  });
-
-  it("ignores a token refresh for the same account", async () => {
-    // onAuthStateChange also fires on every silent refresh. Re-reading on those
-    // would put the per-poll round trip straight back, which is the thing this
-    // cache exists to remove — so the identity is compared, not the event.
-    db.report = { ...WITH_FOLLOW_UP };
-    render(<MeetingReportPage />);
-    await settle();
-    const readsAfter = reads.length;
-
-    await sessionBecomes("host-1");
-    await sessionBecomes("host-1");
-
-    expect(getUserCalls).toBe(1);
-    expect(reads.length).toBe(readsAfter);
-  });
-
-  it("re-asks whether the NEW account was there, instead of reusing the answer", async () => {
-    /**
-     * The sharper half, and it arrived from another PR rather than this one.
-     *
-     * Attendance is cached as "this meeting was attended" keyed by meeting id,
-     * with no record of BY WHOM. So a stale entry does not merely mis-state who
-     * is reading — it answers the attendance question on behalf of somebody who
-     * was never in the meeting, short-circuiting the query that would have said
-     * no. A non-attendee gets "Generating your report…" forever instead of
-     * being told the report is not theirs, which is the exact defect the
-     * attendance read was added to fix.
-     */
-    db.report = { ...WITH_FOLLOW_UP };
-    db.attended = true;
-    render(<MeetingReportPage />);
-    await settle();
-    expect(screen.getByTestId("follow-up")).toBeInTheDocument();
-
-    // Somebody who was not in this meeting takes over the session.
-    authUser = { id: "never-came" };
-    db.attended = false;
-    await sessionBecomes("never-came");
-
-    // Asked again, and answered honestly.
-    expect(screen.queryByTestId("follow-up")).toBeNull();
-    expect(
-      screen.getByText(/This report is limited to the people who were in the meeting/i),
-    ).toBeInTheDocument();
-  });
-
-  it("stops listening when the page goes away", async () => {
-    // A listener that outlives its component calls setState on an unmounted
-    // one, and does it once per sign-in for the life of the tab.
-    db.report = { ...WITH_FOLLOW_UP };
-    const view = render(<MeetingReportPage />);
-    await settle();
-    expect(authHandlers.length).toBe(1);
-
-    view.unmount();
-    expect(unsubscribes).toBe(1);
-    expect(authHandlers.length).toBe(0);
+    expect(screen.getByText(/12:34/)).toBeInTheDocument();
   });
 });

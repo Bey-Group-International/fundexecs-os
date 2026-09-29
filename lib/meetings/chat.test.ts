@@ -10,6 +10,8 @@ import {
   CHAT_CLOCK_TOLERANCE_MS,
   CHAT_MAX_LENGTH,
   GROUP_WINDOW_MS,
+  storedChatMessages,
+  type StoredChatRow,
   chatClock,
   chatParts,
   groupChat,
@@ -341,5 +343,56 @@ describe("chatClock", () => {
 
   it("says nothing for a time that is not one", () => {
     expect(chatClock(NaN)).toBe("");
+  });
+});
+
+describe("storedChatMessages", () => {
+  const row = (over: Partial<StoredChatRow> = {}): StoredChatRow => ({
+    id: "c1",
+    author_id: "u1",
+    author_name: "Ana",
+    body: "Friday works",
+    ts: "2026-09-23T14:05:00.000Z",
+    ...over,
+  });
+
+  it("reads a signed-in author's row by their id", () => {
+    expect(storedChatMessages([row()])).toEqual([
+      {
+        id: "c1",
+        from: "u1",
+        displayName: "Ana",
+        text: "Friday works",
+        ts: Date.parse("2026-09-23T14:05:00.000Z"),
+      },
+    ]);
+  });
+
+  it("keeps two guests apart by name, since neither has an id", () => {
+    // Grouping on author_id alone collapses every guest in the meeting into one
+    // anonymous speaker.
+    const msgs = storedChatMessages([
+      row({ id: "a", author_id: null, author_name: "Priya" }),
+      row({ id: "b", author_id: null, author_name: "Marcus" }),
+    ]);
+    expect(msgs.map((m) => m.from)).toEqual(["guest:Priya", "guest:Marcus"]);
+  });
+
+  it("keeps two signed-in people with the same display name apart", () => {
+    // The other half of the rule: the name is a FALLBACK, not the key.
+    const msgs = storedChatMessages([
+      row({ id: "a", author_id: "u1", author_name: "Ana" }),
+      row({ id: "b", author_id: "u2", author_name: "Ana" }),
+    ]);
+    expect(msgs.map((m) => m.from)).toEqual(["u1", "u2"]);
+  });
+
+  it("drops a message whose timestamp cannot be read", () => {
+    // Placed at the epoch instead, it would sort above everything anybody said.
+    expect(storedChatMessages([row({ ts: "not a date" })])).toEqual([]);
+  });
+
+  it("is empty for no rows", () => {
+    expect(storedChatMessages([])).toEqual([]);
   });
 });

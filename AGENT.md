@@ -4182,6 +4182,119 @@ Deployed, monitoring               →  live, observability active
              |  real defect. Verify the claim, not the explanation — dismissing it
              |  because the reasoning does not hold is how the finding underneath
              |  survives.
+             |
+             |  MEETINGS XV — THE REPORT IS A DOCUMENT, SO IT IS SERVER-RENDERED
+             |  The entry above ends by naming the largest thing left: the report
+             |  page was entirely client-side, seven browser round trips before
+             |  anything appeared — the viewer, the meeting, the report, the
+             |  attendance row, the timed transcript, the recordings and the chat.
+             |  The last two were fired by panels MOUNTING, so they could not even
+             |  start until the rest had rendered. All of it for content that was
+             |  finished before anybody opened the page.
+             |  Now: one server pass in two waves (report-page.server.ts), because
+             |  the only real dependency is that everything except the viewer needs
+             |  the meeting's id, and the meeting is found by room code. Two waves,
+             |  not seven round trips.
+             |  MEASURED, not asserted: the route's client JS goes 653.6 KiB -> 400.2
+             |  KiB, 253 KiB less, a 39% cut. Taken from the route's own
+             |  client-reference manifest on a build of main and a build of this
+             |  branch, and reproduced. A performance claim nobody measured is a
+             |  performance claim nobody can check.
+             |  Three things stay on the client because each is genuinely
+             |  INTERACTIVE rather than merely dynamic: the export dropdown, the
+             |  editable follow-up, and ReportMedia — the <video> and the
+             |  searchable transcript, one island because a transcript line seeks
+             |  the recording and the playhead moves the highlight back. Plus
+             |  ReportWaiting, which is the only live fact on the page.
+             |  WHAT FELL OUT FOR FREE, and is the nicer half: the stall clock was
+             |  the TAB's. It started at mount, so every reload bought another six
+             |  minutes of "Generating your report...", and a report that failed a
+             |  week ago still promised to arrive. Measured from the meeting's own
+             |  ended_at now, so "not coming" means the same thing on every visit
+             |  and on every device. The waiting island is handed the time that is
+             |  LEFT, not a fresh allowance.
+             |  Also gone: RecordingPanel used to fetch its recordings and then
+             |  report the playable one's start time back UP through a callback,
+             |  because the transcript needs it to place its cues. So timestamps
+             |  were inert until a second round trip landed, and the page held
+             |  state whose only purpose was carrying an answer back from a child.
+             |  The server knows it before the page renders.
+             |  ON DELETING TESTS: six cases went, and it is worth being precise
+             |  about why. They tested viewerRef/attendedRef, a client cache that
+             |  existed ONLY because the page asked the auth server on every poll.
+             |  The server reads the session from the request's cookies, so there
+             |  is no cache to go stale. That class of bug is gone by construction
+             |  rather than by a fix — the only acceptable reason for its tests to
+             |  go with it. Everything else was ported: an async server component
+             |  can be awaited and its returned element rendered, so every state
+             |  and every piece of copy is still asserted, and "stops polling" was
+             |  ported as "mounts no poller at all".
+             |  Confidence: Jest 7250 -> 7305 across 518 suites,
+             |  typecheck/eslint/build clean, and the route builds as a dynamic
+             |  server render.
+             |  NOT DONE: nobody has looked at this page in a browser. The bundle
+             |  number is measured; that it LOOKS right is reasoned from the markup
+             |  being unchanged, which is not the same thing.
+             |
+             |  MEETINGS XV (b) — FOUR FINDINGS, AND TWO COMMENTS THAT LIED
+             |  A review bot read the change above and found four things. All four
+             |  were real. Two of them were cases of an ASSERTION standing in for
+             |  the work:
+             |  ONE. The waiting poll asked the FULL page loader every five seconds
+             |  for three booleans — so every tick re-paged the whole transcript,
+             |  500 chat rows, every recording and the report body, about seventy
+             |  times over a six-minute wait, on a meeting whose transcript is
+             |  longest exactly when the wait is longest. Worse than the client page
+             |  it replaced, which read the transcript twice. And the comment above
+             |  it called it "a cheap request rather than a full re-read of
+             |  everything above". The comment was the only thing making it cheap.
+             |  Now loadReportState: four meeting columns, the report's summary, the
+             |  attendance row. The DECISION stays shared (both end at the same
+             |  reportViewState call) so the poll and the render cannot disagree;
+             |  the READS are what had to differ. Guarded by a negative test — it
+             |  asserts the heavy tables are never touched — because the obvious
+             |  test, "does it return the right state", passes for the expensive
+             |  version too.
+             |  TWO. The concurrency test claimed to assert ORDER and asserted
+             |  membership. A sequential loader pushes the same table names in the
+             |  same order, so it passed for the exact thing it was written to rule
+             |  out. It recorded a `settled` array and never looked at it: the tell.
+             |  Now it asserts how many reads had FINISHED when each one started —
+             |  1,1,1,1,1 concurrent, 1,2,3,4,5 sequential.
+             |  And the bite-check for it nearly lied too. The first injected
+             |  "sequential" loader wrapped the same array literal, which evaluates
+             |  eagerly — so the reads still STARTED together and only the awaiting
+             |  changed. It failed in 2 positions instead of 4, which looked like
+             |  success. A defect has to be injected where the mechanism actually
+             |  is, not where the keyword is.
+             |  THREE. Dates moved to the server, so they formatted in the SERVER's
+             |  zone. A meeting at 20:00 in New York is 00:00 UTC the next day: the
+             |  line under the title showed the wrong weekday. The consent timestamp
+             |  was worse — it exists to answer "recorded with consent, and when",
+             |  and a UTC hour with no label is a quietly wrong answer. Plus a
+             |  hydration mismatch in RecordingPanel, whose toLocaleDateString and
+             |  Date.now() countdown now render once on each side. Fixed with
+             |  LocalTime/ExpiresIn: formatted after mount, first paint explicitly
+             |  labelled UTC, which is the honest fallback rather than a
+             |  local-looking time in the wrong zone.
+             |  THIS IS THE ONE THAT PUNCTURES "the markup is byte-for-byte
+             |  unchanged" — the sentence used to argue the page did not need
+             |  looking at. For dates it was false, and that was the argument for
+             |  not checking.
+             |  FOUR. reportOwedForMs fell back to created_at, which for a meeting
+             |  booked in advance is days before it happens — so a meeting booked
+             |  last week and not yet closed was "probably not coming" the first
+             |  time anybody opened it. Now ended_at, then started_at, then
+             |  scheduled_at, then the row. Took half the suggestion and declined
+             |  the other half with a reason: returning 0 for a meeting with no
+             |  ended_at would make a room nobody closes wait forever, which is the
+             |  permanent spinner the wait limit exists to prevent.
+             |  Bundle after the fixes: 400.2 -> 401.1 KiB, because LocalTime is new
+             |  client code. Still 252.5 KiB under main. Re-measured rather than
+             |  assumed, since the fix added to the thing being counted.
+             |  Confidence: Jest 7305 -> 7326 across 519 suites, typecheck/eslint/
+             |  build clean. Each fix has a test that fails against the version
+             |  before it.
 ```
 
 ---
