@@ -11,7 +11,7 @@
  * bound are in lib/meetings/reactions.test.ts.
  */
 import { render, screen, within } from "@testing-library/react";
-import { ReactionTicker } from "./MeetingRoom";
+import { ReactionTicker } from "./CallParts";
 import { type ActiveReaction } from "@/lib/meetings/reactions";
 
 const entry = (over: Partial<ActiveReaction> = {}): ActiveReaction => ({

@@ -33,7 +33,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import type { Browser } from "playwright-core";
 
 import { VIEWPORTS, chromiumPath, pageHtml } from "@/test-utils/visual";
-import { CopilotSidebar } from "@/app/(app)/meetings/[roomId]/MeetingRoom";
+import { CopilotSidebar } from "@/app/(app)/meetings/[roomId]/CallParts";
 import type { ChatMessage } from "@/lib/meetings/chat";
 
 const exe = chromiumPath();

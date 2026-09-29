@@ -23,7 +23,7 @@
 import { useState } from "react";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { VideoTile, videoTrackOf } from "./MeetingRoom";
+import { VideoTile, videoTrackOf } from "./CallParts";
 
 beforeAll(() => {
   // jsdom has no media pipeline; the component calls play() and catches.
