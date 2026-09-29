@@ -1,4 +1,5 @@
 import {
+  monthDataWindow,
   addDays,
   addMonths,
   dayKey,
@@ -198,5 +199,31 @@ describe("typeMeta", () => {
     expect(typeMeta(null).label).toBe("Other");
     expect(typeMeta("nonexistent").label).toBe("Other");
     expect(typeMeta("board_meeting").label).toBe("Board meeting");
+  });
+});
+
+describe("monthDataWindow", () => {
+  // The calendar's external layers used to reload on every "next day" and
+  // "next week" click, because their window was centred on the day on screen.
+  it("is the same for every day of a month, so navigating inside it loads nothing", () => {
+    const first = monthDataWindow(new Date(2026, 8, 1));
+    for (let d = 1; d <= 30; d++) {
+      expect(monthDataWindow(new Date(2026, 8, d, 15, 30))).toEqual(first);
+    }
+  });
+
+  it("moves when the month does", () => {
+    expect(monthDataWindow(new Date(2026, 9, 1))).not.toEqual(monthDataWindow(new Date(2026, 8, 30)));
+  });
+
+  it("covers the month grid's spill and a week or 21-day agenda from any day in it", () => {
+    const { from, to } = monthDataWindow(new Date(2026, 8, 17));
+    const start = new Date(from).getTime();
+    const end = new Date(to).getTime();
+    // A six-week grid starts at most a week before the 1st and ends 42 days on.
+    expect(start).toBeLessThanOrEqual(new Date(2026, 7, 25).getTime());
+    expect(end).toBeGreaterThanOrEqual(new Date(2026, 9, 13).getTime());
+    // The last day of the month plus a 21-day agenda.
+    expect(end).toBeGreaterThanOrEqual(new Date(2026, 8, 30 + 21).getTime());
   });
 });

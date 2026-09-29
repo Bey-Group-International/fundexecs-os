@@ -22,6 +22,7 @@ import {
 } from "@/lib/meetings/schedule";
 import {
   addDays,
+  monthDataWindow,
   addMonths,
   dayKey,
   emptyFilter,
@@ -225,13 +226,7 @@ export function MeetingsCalendar({
   // follows the day it actually draws from rather than the anchor's month.
   const windowBase = view === "agenda" && anchor < today ? today : anchor;
   const monthStartMs = new Date(windowBase.getFullYear(), windowBase.getMonth(), 1).getTime();
-  const meetingWindow = useMemo(() => {
-    const monthStart = new Date(monthStartMs);
-    return {
-      from: addDays(monthStart, -45).toISOString(),
-      to: addDays(monthStart, 75).toISOString(),
-    };
-  }, [monthStartMs]);
+  const meetingWindow = useMemo(() => monthDataWindow(new Date(monthStartMs)), [monthStartMs]);
   const meetingWindowRef = useRef(meetingWindow);
   meetingWindowRef.current = meetingWindow;
 
@@ -476,13 +471,13 @@ export function MeetingsCalendar({
     }
   }, []);
 
-  // The window the current view covers. Month and week views spill into
-  // neighbouring months, so this widens rather than guessing from `anchor`.
-  const windowRange = useMemo(() => {
-    const from = startOfDay(addDays(anchor, view === "month" ? -45 : -10));
-    const to = startOfDay(addDays(anchor, view === "month" ? 45 : 10));
-    return { from: from.toISOString(), to: to.toISOString() };
-  }, [anchor, view]);
+  // The same month-anchored window the meetings above read, not one centred on
+  // `anchor`. Centred on the anchor, the window moved with every click: each
+  // "next day" in day view and each "next week" in week view re-fetched the
+  // calendar layers for a range it had mostly just read. Anchored to the month
+  // (45 days back, 75 ahead), it covers every view of that month and only moves
+  // when the month does — the same rule the meetings grid already follows.
+  const windowRange = meetingWindow;
 
   const loadCalendars = useCallback(async () => {
     try {
