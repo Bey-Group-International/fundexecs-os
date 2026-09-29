@@ -1,5 +1,7 @@
 import {
+  capRange,
   contentRangeHeader,
+  isOpenEndedRange,
   inPlaybackOrder,
   parseRange,
   rangeLength,
@@ -162,5 +164,24 @@ describe("inPlaybackOrder", () => {
     const chunks = [{ path: "b" }, { path: "a" }];
     inPlaybackOrder(chunks);
     expect(chunks.map((c) => c.path)).toEqual(["b", "a"]);
+  });
+});
+
+describe("capRange", () => {
+  it("trims a long range to the window, keeping its start", () => {
+    expect(capRange({ start: 100, end: 10_000 }, 50)).toEqual({ start: 100, end: 149 });
+  });
+  it("leaves a range already inside the window alone", () => {
+    expect(capRange({ start: 0, end: 9 }, 50)).toEqual({ start: 0, end: 9 });
+  });
+});
+
+describe("isOpenEndedRange", () => {
+  it("is true only for bytes=N-", () => {
+    expect(isOpenEndedRange("bytes=0-")).toBe(true);
+    expect(isOpenEndedRange("bytes=500-")).toBe(true);
+    expect(isOpenEndedRange("bytes=0-99")).toBe(false);
+    expect(isOpenEndedRange("bytes=-500")).toBe(false);
+    expect(isOpenEndedRange(null)).toBe(false);
   });
 });
