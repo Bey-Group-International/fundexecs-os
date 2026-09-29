@@ -1,9 +1,11 @@
 import {
   buildTimeline,
+  evictionFor,
   formatClock,
   partAtTime,
   partsToAppend,
   rangeHeaderFor,
+  KEEP_BEHIND_MS,
   timelineBytes,
   timelineDuration,
   type StoredPart,
@@ -138,5 +140,82 @@ describe("formatClock", () => {
   it("does not print nonsense for nonsense", () => {
     expect(formatClock(-5)).toBe("0:00");
     expect(formatClock(NaN)).toBe("0:00");
+  });
+});
+
+describe("evictionFor", () => {
+  // Ten five-second parts: a fifty-second recording, so the thirty-second
+  // keep-behind window is a real fraction of it rather than the whole thing.
+  const timeline = buildTimeline(
+    Array.from({ length: 10 }, (_, i) => part(i, 1000, i * CHUNK_MS, CHUNK_MS)),
+  );
+  const all = new Set(timeline.map((p) => p.idx));
+
+  it("holds everything until the viewer is past the keep-behind window", () => {
+    expect(evictionFor(timeline, all, 0)).toBeNull();
+    expect(evictionFor(timeline, all, KEEP_BEHIND_MS)).toBeNull();
+    // One part's worth past the window is the first moment anything can go.
+    expect(evictionFor(timeline, all, KEEP_BEHIND_MS + CHUNK_MS)).not.toBeNull();
+  });
+
+  it("removes only whole parts, on a part boundary", () => {
+    // 38s in, keeping 30s: the cutoff is 8s, which falls INSIDE part 1
+    // (5s–10s). Part 1 must survive whole — a removal at 8s would leave the
+    // browser holding a cluster with no beginning.
+    const plan = evictionFor(timeline, all, 38_000);
+    expect(plan).toEqual({ untilMs: CHUNK_MS, dropped: [0] });
+  });
+
+  it("never removes the part the viewer is watching", () => {
+    // Keeping nothing behind: the cutoff IS the playhead, and the part holding
+    // it ends after the playhead, so it is still excluded.
+    const plan = evictionFor(timeline, all, 12_000, 0);
+    expect(plan!.untilMs).toBe(10_000);
+    expect(plan!.dropped).toEqual([0, 1]);
+    expect(plan!.dropped).not.toContain(partAtTime(timeline, 12_000));
+  });
+
+  it("names every part it drops, so the player can forget them", () => {
+    const plan = evictionFor(timeline, all, 45_000, 0);
+    // 45s in, keeping nothing: parts 0–8 end at or before 45s, part 8 holds it.
+    expect(plan!.dropped).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8]);
+    expect(plan!.untilMs).toBe(45_000);
+  });
+
+  it("reports only the parts that were actually resident", () => {
+    // Somebody who seeked straight to the end holds the tail and nothing else.
+    // The removal still spans the front of the recording, but there is nothing
+    // of parts 0–2 to forget.
+    const appended = new Set([6, 7, 8, 9]);
+    const plan = evictionFor(timeline, appended, 45_000, 0);
+    expect(plan!.dropped).toEqual([6, 7, 8]);
+  });
+
+  it("asks for nothing when nothing resident is behind the viewer", () => {
+    // Watching part 7 with only parts 7-9 resident: the front of the recording
+    // is already gone, so a remove would free nothing and must not be queued.
+    expect(evictionFor(timeline, new Set([7, 8, 9]), 38_000)).toBeNull();
+  });
+
+  it("asks for nothing on an empty timeline, an empty buffer, or a broken clock", () => {
+    expect(evictionFor([], all, 45_000)).toBeNull();
+    expect(evictionFor(timeline, new Set(), 45_000)).toBeNull();
+    expect(evictionFor(timeline, all, NaN)).toBeNull();
+    expect(evictionFor(timeline, all, -1)).toBeNull();
+  });
+
+  it("bounds what an hour-long recording keeps resident", () => {
+    // The measured complaint, as a rule rather than a number in a commit
+    // message: watched end to end, the old player held all 720 parts.
+    const hour = buildTimeline(
+      Array.from({ length: 720 }, (_, i) => part(i, 940_000, i * CHUNK_MS, CHUNK_MS)),
+    );
+    const resident = new Set(hour.map((p) => p.idx));
+    for (let ms = 0; ms < 720 * CHUNK_MS; ms += 1000) {
+      const plan = evictionFor(hour, resident, ms);
+      if (plan) for (const idx of plan.dropped) resident.delete(idx);
+    }
+    // Only the keep-behind window and the part being watched survive.
+    expect(resident.size).toBeLessThanOrEqual(KEEP_BEHIND_MS / CHUNK_MS + 1);
   });
 });
