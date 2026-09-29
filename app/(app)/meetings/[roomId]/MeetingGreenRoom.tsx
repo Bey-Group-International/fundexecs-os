@@ -6,6 +6,7 @@ import {
   canJoin as canJoinWith,
   constraintsFor,
   devicesOfKind,
+  MIC_SILENT_PEAK,
   levelBars,
   levelFromSamples,
   pickDevice,
@@ -690,12 +691,16 @@ export function MeetingGreenRoom({
     const tick = () => {
       analyser.getFloatTimeDomainData(buffer);
       smoothed = smoothLevel(smoothed, levelFromSamples(buffer));
+      const wasSilent = micPeakRef.current <= MIC_SILENT_PEAK;
       micPeakRef.current = Math.max(micPeakRef.current, smoothed);
-      // Only when a bar lights or goes out. The smoothed level never quite
-      // settles, so setting it raw re-rendered this whole screen on every
-      // display frame — for as long as a guest sat waiting to be let in.
+      // Only when a bar lights or goes out — or when the mic first proves it
+      // works, which the lowest bar cannot show and the "isn't picking anything
+      // up" warning is waiting on. The smoothed level never quite settles, so
+      // setting it raw re-rendered this whole screen on every display frame,
+      // for as long as a guest sat waiting to be let in.
       const bars = levelBars(smoothed, MIC_METER_BARS);
-      if (bars !== shownBars) { shownBars = bars; setLevel(smoothed); }
+      const heard = wasSilent && micPeakRef.current > MIC_SILENT_PEAK;
+      if (bars !== shownBars || heard) { shownBars = bars; setLevel(smoothed); }
       raf = requestAnimationFrame(tick);
     };
     raf = requestAnimationFrame(tick);

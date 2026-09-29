@@ -51,8 +51,13 @@ import {
 const WASM_PATH = "/mediapipe";
 const MODEL_PATH = "/mediapipe/selfie_segmenter.tflite";
 
-/** How much smaller than the frame the blurred background is painted. */
-const BACKDROP_SCALE = 4;
+/**
+ * How much smaller than the frame the blurred background is painted.
+ *
+ * Half, not less: at a 640px camera the light blur is only 5px, and a smaller
+ * canvas leaves too little blur to hide its own upscaling.
+ */
+const BACKDROP_SCALE = 2;
 
 /** A mask MediaPipe hands back, which must be closed once read. */
 interface CategoryMask { width?: number; height?: number; getAsUint8Array: () => Uint8Array; close: () => void }
@@ -165,7 +170,7 @@ export class BackgroundProcessor {
   /** The mask softened at grid size, so the full-size upscale needs no filter. */
   private readonly feathered: HTMLCanvasElement;
   private readonly featheredCtx: CanvasRenderingContext2D;
-  /** The blurred room, painted at a quarter of the frame and scaled up. A blur
+  /** The blurred room, painted at half the frame's size and scaled up. A blur
    *  throws away exactly the detail the smaller canvas cannot hold. */
   private readonly backdrop: HTMLCanvasElement;
   private readonly backdropCtx: CanvasRenderingContext2D;
@@ -627,7 +632,7 @@ export class BackgroundProcessor {
     if (effect.kind === "blur") {
       // The room itself, out of focus — which is why this is drawn from the
       // camera rather than from a colour. Blurred small and scaled up: the same
-      // radius in frame pixels, on a sixteenth of the pixels.
+      // radius in frame pixels, on a quarter of the pixels.
       const { backdrop, backdropCtx } = this;
       const bw = backdrop.width;
       const bh = backdrop.height;

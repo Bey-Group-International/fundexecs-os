@@ -226,10 +226,22 @@ export function createAdmissionSession(opts: AdmissionSessionOptions): Admission
    *  ask at once; they share one request rather than stacking duplicates —
    *  and, on an "unknown", duplicate knocks. */
   let polling: Promise<void> | null = null;
+  /** Someone asked while a poll was out. That poll may have read the room
+   *  before the admit that prompted the ask, so one more follows it. */
+  let rerun = false;
 
   function pollOnce(): Promise<void> {
-    if (polling) return polling;
-    polling = pollOnceNow().finally(() => { polling = null; });
+    if (polling) { rerun = true; return polling; }
+    polling = (async () => {
+      try {
+        do {
+          rerun = false;
+          await pollOnceNow();
+        } while (rerun && !stopped && !settled);
+      } finally {
+        polling = null;
+      }
+    })();
     return polling;
   }
 
