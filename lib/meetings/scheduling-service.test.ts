@@ -13,7 +13,7 @@ jest.mock("@/lib/calendar/google.server", () => ({
   googleBusyForUser: (...a: unknown[]) => googleBusyForUserMock(...a),
 }));
 
-import { busyIntervals } from "./scheduling-service";
+import { busyIntervals, resolvePublicPage } from "./scheduling-service";
 
 const WINDOW = {
   hostUserId: "host-1",
@@ -133,5 +133,54 @@ describe("busyIntervals", () => {
       { ...WINDOW, excludeBookingId: "b1" },
     );
     expect(busy).toEqual([]);
+  });
+});
+
+describe("resolvePublicPage", () => {
+  // Every public booking-page view and slot lookup goes through here, so the
+  // page and its event types must come back from ONE query, not two.
+  it("reads the page and its event types in a single query", async () => {
+    const calls: { table: string; select?: string; orders: unknown[] }[] = [];
+    const client = {
+      from(table: string) {
+        const call = { table, select: undefined as string | undefined, orders: [] as unknown[] };
+        calls.push(call);
+        const b: Record<string, unknown> = {
+          select: (cols: string) => { call.select = cols; return b; },
+          eq: () => b,
+          order: (col: string, opts: unknown) => { call.orders.push([col, opts]); return b; },
+          maybeSingle: async () => ({
+            data: {
+              id: "p1", slug: "ana", is_active: true,
+              scheduling_event_types: [
+                { id: "e1", slug: "intro", is_active: true },
+                { id: "e2", slug: "old", is_active: false },
+              ],
+            },
+            error: null,
+          }),
+        };
+        return b;
+      },
+    };
+
+    const resolved = await resolvePublicPage(client as never, "Ana");
+
+    expect(calls).toHaveLength(1);
+    expect(calls[0].table).toBe("scheduling_pages");
+    expect(calls[0].select).toContain("scheduling_event_types(");
+    expect(calls[0].orders).toEqual([
+      ["sort_order", { referencedTable: "scheduling_event_types", ascending: true }],
+      ["created_at", { referencedTable: "scheduling_event_types", ascending: true }],
+    ]);
+    // Only active event types, and the page without the embedded array on it.
+    expect(resolved?.eventTypes.map((t) => t.id)).toEqual(["e1"]);
+    expect(resolved?.page).toEqual({ id: "p1", slug: "ana", is_active: true });
+  });
+
+  it("returns null for a handle with no active page", async () => {
+    const b: Record<string, unknown> = {};
+    Object.assign(b, { select: () => b, eq: () => b, order: () => b, maybeSingle: async () => ({ data: null, error: null }) });
+    expect(await resolvePublicPage({ from: () => b } as never, "nobody")).toBeNull();
   });
 });
