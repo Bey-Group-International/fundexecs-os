@@ -4,6 +4,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { cache } from "react";
 import { Logo } from "@/components/Logo";
 import { createServiceClient, hasSupabaseServiceEnv } from "@/lib/supabase/server";
 import { resolvePublicPage } from "@/lib/meetings/scheduling-service";
@@ -11,14 +12,16 @@ import { SITE_NAME } from "@/lib/site";
 
 export const dynamic = "force-dynamic";
 
-async function loadPage(slug: string) {
+// Shared by generateMetadata and the page within one request (React `cache`),
+// so an anonymous visit reads the scheduling page once rather than twice.
+const loadPage = cache(async (slug: string) => {
   if (!hasSupabaseServiceEnv()) return null;
   try {
     return await resolvePublicPage(createServiceClient(), slug);
   } catch {
     return null;
   }
-}
+});
 
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
   const { slug } = await params;

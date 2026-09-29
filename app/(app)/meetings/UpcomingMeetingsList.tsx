@@ -17,6 +17,9 @@ import { MeetingShareLink } from "./MeetingShareLink";
 import { useNow, useLivePresence, nextChannelName } from "./hooks";
 import { fetchUpcoming, forgetUpcoming, recentUpcoming } from "./upcoming-cache";
 
+/** How often the list re-reads the clock. */
+const CLOCK_TICK_MS = 15_000;
+
 /**
  * A placeholder while the scheduling form arrives.
  *
@@ -196,7 +199,11 @@ export function UpcomingMeetingsList({
   // doesn't collide on a shared realtime channel.
   const [channelName] = useState(() => nextChannelName("upcoming-meetings"));
 
-  const now = useNow(1000);
+  // Every label this clock drives is minute-grained ("in 5 min", "12 min
+  // left", "Starts now"), so a per-second tick re-rendered the whole view for
+  // text that had not changed. Fifteen seconds keeps each flip within a
+  // quarter-minute of true; the hook re-reads the clock on return to the tab.
+  const now = useNow(CLOCK_TICK_MS);
   const meetingIds = useMemo(() => meetings.map((m) => m.id), [meetings]);
   const { presence, recentJoins } = useLivePresence(meetingIds);
 

@@ -33,13 +33,12 @@ export function CallArchive({ initial }: { initial: CallHit[] }) {
   // The search that is in flight. A slow request for "val" must not land after
   // a fast one for "valuation" and replace its results with the earlier ones.
   const latest = useRef(0);
-
-  // Whether anything has been searched yet. The list on screen at that point is
-  // the one the server rendered — see the effect below.
-  const searched = useRef(false);
+  /** The query the list on screen answers. Starts as the server's empty one. */
+  const lastRun = useRef("");
 
   const run = useCallback(async (q: string) => {
     const ticket = ++latest.current;
+    lastRun.current = q;
     setLoading(true);
     try {
       const res = await fetch(`/api/meetings/calls?q=${encodeURIComponent(q)}`);
@@ -68,10 +67,10 @@ export function CallArchive({ initial }: { initial: CallHit[] }) {
   useEffect(() => {
     const q = query.trim();
     if (q.length > 0 && q.length < MIN_QUERY) return;
-    // A cleared box after a search DOES need the full list back — it is no longer
-    // the one the server rendered.
-    if (q.length === 0 && !searched.current) return;
-    if (q.length > 0) searched.current = true;
+    // Already showing this. On arrival that is the unfiltered list the server
+    // just rendered — and a cleared box after a search is NOT, so that one still
+    // fetches the full list back.
+    if (q === lastRun.current) return;
     const timer = setTimeout(() => { void run(q); }, 250);
     return () => clearTimeout(timer);
   }, [query, run]);

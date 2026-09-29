@@ -1,6 +1,7 @@
 // One bookable meeting type on a public scheduling link.
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
+import { cache } from "react";
 import { Logo } from "@/components/Logo";
 import { createServiceClient, hasSupabaseServiceEnv } from "@/lib/supabase/server";
 import { resolvePublicPage } from "@/lib/meetings/scheduling-service";
@@ -9,7 +10,9 @@ import { BookingFlow } from "./BookingFlow";
 
 export const dynamic = "force-dynamic";
 
-async function load(slug: string, eventSlug: string) {
+// Shared by generateMetadata and the page within one request (React `cache`),
+// so an anonymous visit reads the scheduling page once rather than twice.
+const load = cache(async (slug: string, eventSlug: string) => {
   if (!hasSupabaseServiceEnv()) return null;
   try {
     const resolved = await resolvePublicPage(createServiceClient(), slug);
@@ -20,7 +23,7 @@ async function load(slug: string, eventSlug: string) {
   } catch {
     return null;
   }
-}
+});
 
 export async function generateMetadata({
   params,
