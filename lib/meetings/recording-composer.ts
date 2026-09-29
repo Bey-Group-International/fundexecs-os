@@ -66,6 +66,8 @@ export interface ComposerHandlers {
 
 const NAME_BAR_HEIGHT = 28;
 const CORNER_RADIUS = 8;
+/** How often the recording re-reads who is in the call. */
+const HOUSEKEEPING_MS = 1000;
 
 /** Colours, matched to the room's own surfaces so the file looks like the product. */
 const BACKDROP = "#0b0d10";
@@ -93,6 +95,8 @@ export class RecordingComposer {
   // off-DOM, muted (the audio is mixed separately, and an unmuted element
   // would play the room back through the speakers) and owned here.
   private readonly surfaces = new Map<MediaStream, HTMLVideoElement>();
+  /** When the roster's audio and decode surfaces were last reconciled. */
+  private lastHousekeepingAt = Number.NEGATIVE_INFINITY;
   private frameTimer: number | null = null;
   private focus: FocusState = NO_FOCUS;
   private chunkIndex = 0;
@@ -264,9 +268,17 @@ export class RecordingComposer {
     const ctx = this.ctx;
     if (!ctx) return;
 
-    this.syncAudioSources();
-
     const now = Date.now();
+    // Who is in the call changes a few times a meeting, not 24 times a second.
+    // Re-reading the roster's audio and decode surfaces once a second costs a
+    // newcomer at most a second of the recording's audio, and spares every
+    // frame a Set, a walk of every stream and a walk of every surface.
+    const housekeeping = now - this.lastHousekeepingAt >= HOUSEKEEPING_MS;
+    if (housekeeping) {
+      this.lastHousekeepingAt = now;
+      this.syncAudioSources();
+    }
+
     this.focus = stepFocus(this.focus, this.room.activity, now);
 
     const stage = composeStage({
@@ -314,6 +326,7 @@ export class RecordingComposer {
     // out of the strip — and a newly created <video> shows black until it has
     // decoded a frame, so the recording would flicker exactly when the
     // conversation moved around.
+    if (!housekeeping) return;
     const live = new Set<MediaStream>();
     for (const p of this.room.participants) {
       const stream = this.room.streamFor(p.id);
