@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireOrgContext } from "@/lib/auth";
-import { createServerClient } from "@/lib/supabase/server";
 import { getEmailConfigStatus, sendEmail } from "@/lib/email";
 import { buildMeetingInviteHtml } from "@/lib/meetings/invite";
 
@@ -29,9 +28,9 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const supabase = await createServerClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  const email = user?.email;
+  // Already resolved by requireOrgContext; asking the auth server again was a
+  // second round trip for the same answer.
+  const email = auth.ctx.email || null;
   if (!email) {
     return NextResponse.json({ error: "No email on your account to send the test to." }, { status: 400 });
   }

@@ -402,6 +402,9 @@ export interface RefreshSummary {
   skipped: number;
 }
 
+/** How many feeds are downloaded at once. */
+const FEED_REFRESH_CONCURRENCY = 4;
+
 /**
  * Refresh feeds whose cache has aged out. Driven by cron, and by an explicit
  * "sync now" from the owner.
@@ -429,16 +432,27 @@ export async function refreshStaleFeeds(
     return summary;
   }
 
+  const due: Array<{ id: string; user_id: string; url: string }> = [];
   for (const row of (data ?? []) as Array<{ id: string; user_id: string; url: string; cached_at: string | null }>) {
-    if (!opts.force && !cacheIsStale(row.cached_at, now)) {
-      summary.skipped++;
-      continue;
+    if (!opts.force && !cacheIsStale(row.cached_at, now)) summary.skipped++;
+    else due.push(row);
+  }
+
+  // A few at a time rather than one after another. Each fetch can wait out a
+  // 10s timeout on a slow third-party host, and in series a member's twenty
+  // feeds could outlast the request that asked for them.
+  for (let i = 0; i < due.length; i += FEED_REFRESH_CONCURRENCY) {
+    const batch = due.slice(i, i + FEED_REFRESH_CONCURRENCY);
+    const outcomes = await Promise.all(batch.map(async (row) => {
+      const result = await fetchFeed(row.url, now);
+      // Counted off what was recorded, not off the fetch: a feed whose events
+      // failed to store has not been refreshed, however well the download went.
+      return recordFeedResult(client, row.id, row.user_id, result, now);
+    }));
+    for (const ok of outcomes) {
+      if (ok) summary.refreshed++;
+      else summary.failed++;
     }
-    const result = await fetchFeed(row.url, now);
-    // Counted off what was recorded, not off the fetch: a feed whose events
-    // failed to store has not been refreshed, however well the download went.
-    if (await recordFeedResult(client, row.id, row.user_id, result, now)) summary.refreshed++;
-    else summary.failed++;
   }
 
   return summary;

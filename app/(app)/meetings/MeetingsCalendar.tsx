@@ -74,11 +74,19 @@ import {
   type DragOrigin,
   type DragPreview,
 } from "@/lib/meetings/calendar-drag";
-import { MeetingEditScreen, type MeetingEditInitial } from "./MeetingEditScreen";
+import nextDynamic from "next/dynamic";
+import type { MeetingEditInitial } from "./MeetingEditScreen";
 import { UpcomingMeetingsList, type UpcomingMeeting } from "./UpcomingMeetingsList";
 import { PastMeetingsList, type PastMeeting } from "./PastMeetingsList";
 import { useNow, useLivePresence, nextChannelName, type RoomPresence } from "./hooks";
 import { useFocusTrap } from "@/hooks/useFocusTrap";
+
+// Loaded when an event is opened for editing, not with the calendar: the
+// calendar is mostly looked at. Shares its chunk with the upcoming list's copy.
+const MeetingEditScreen = nextDynamic(
+  () => import("./MeetingEditScreen").then((m) => m.MeetingEditScreen),
+  { ssr: false },
+);
 
 const CAL_SELECT =
   "id, room_code, title, status, host_id, created_at, started_at, ended_at, scheduled_at, duration_minutes, timezone, meeting_type, attendees, preparation_status, followup_status, assigned_copilot_agent, is_draft, locked_at, updated_at, description, location, meeting_url, objective, agenda, preparation_requirements, related_record_type, related_record_id, calendar_visibility, reminder_minutes, priority, tags, external_calendar_provider, external_calendar_sync_enabled, external_calendar_sync_status, guest_quick_access";

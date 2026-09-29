@@ -85,7 +85,7 @@ async function memberMailbox(
   const conn = data as unknown as ConnectionRow & { granted_scope: string | null };
   if (!grantCanSend(conn.granted_scope)) return { ok: false, problem: "scope_missing" };
 
-  const token = await accessTokenFor(conn);
+  const token = await accessTokenFor(conn, { reuse: true });
   if (!token.ok || !token.data) {
     return { ok: false, problem: problemFromTokenError(token.error) };
   }

@@ -4,7 +4,14 @@ import { useCallback, useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { detectTimezone, formatSlotFull } from "@/lib/meetings/scheduling";
 import type { HostBooking, HostEventType, HostSchedulingPage, SchedulingSnapshot } from "./scheduling-types";
-import { SchedulingSettings } from "./SchedulingSettings";
+import nextDynamic from "next/dynamic";
+
+// Loaded when the settings panel opens, not with the landing page: most visits
+// never open it, and it is the largest thing this card could render.
+const SchedulingSettings = nextDynamic(
+  () => import("./SchedulingSettings").then((m) => m.SchedulingSettings),
+  { ssr: false, loading: () => <p className="text-sm text-[var(--fg-muted)]">Loading settings…</p> },
+);
 
 /**
  * The member's own scheduling link on the Meetings landing. One line at rest:

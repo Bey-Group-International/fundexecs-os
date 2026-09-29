@@ -112,11 +112,38 @@ async function apiGet<T>(accessToken: string, path: string, params: Record<strin
   }
 }
 
-/** Mint a short-lived access token for a connection. */
-export async function accessTokenFor(conn: ConnectionRow): Promise<GoogleCallResult<string>> {
+/**
+ * Access tokens minted for a send, reused until shortly before they expire.
+ *
+ * Keyed by the connection AND its sealed refresh token, so reconnecting
+ * (which stores a new refresh token) never reuses a token from the old grant.
+ * In-process only: a cold start just mints again.
+ */
+const TOKEN_SAFETY_MARGIN_MS = 5 * 60 * 1000;
+const sendTokenCache = new Map<string, { token: string; expiresAt: number }>();
+
+/**
+ * Mint a short-lived access token for a connection.
+ *
+ * `reuse` is for sends — invites, report emails, calendar writes — where a
+ * burst of them otherwise paid a round trip to Google's token endpoint each.
+ * The sync leaves it off: minting fresh is how it notices a revoked grant.
+ */
+export async function accessTokenFor(
+  conn: ConnectionRow,
+  opts: { reuse?: boolean } = {},
+): Promise<GoogleCallResult<string>> {
+  const key = `${conn.id}:${conn.refresh_ciphertext}`;
+  if (opts.reuse) {
+    const hit = sendTokenCache.get(key);
+    if (hit && hit.expiresAt > Date.now()) return { ok: true, data: hit.token };
+  }
   try {
     const refresh = openRefreshToken(conn);
-    const { accessToken } = await refreshAccessToken(refresh);
+    const { accessToken, expiresInSec } = await refreshAccessToken(refresh);
+    if (opts.reuse) {
+      sendTokenCache.set(key, { token: accessToken, expiresAt: Date.now() + expiresInSec * 1000 - TOKEN_SAFETY_MARGIN_MS });
+    }
     return { ok: true, data: accessToken };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);

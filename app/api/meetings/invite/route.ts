@@ -23,20 +23,24 @@ export async function POST(req: NextRequest) {
   // query (RLS + explicit organization_id filter) returns nothing for a room the
   // caller isn't entitled to, which we treat as not-found.
   const supabase = await createServerClient();
-  const { data: meeting } = await supabase
-    .from("live_meetings")
-    .select("id, title")
-    .eq("room_code", body.roomCode)
-    .eq("organization_id", auth.ctx.orgId)
-    .is("deleted_at", null)
-    .maybeSingle();
-  if (!meeting) return NextResponse.json({ error: "Meeting not found" }, { status: 404 });
-
   // Sending IS this route's action, so a missing mailbox is a refusal the
   // member can act on rather than a silent zero. (Routes where email is a side
   // effect of a save use hostCredentials and degrade instead — losing the save
-  // over a mailbox would be the worse trade.)
-  const mailbox = await mailboxFor(supabase, auth.ctx.userId, auth.ctx.orgId);
+  // over a mailbox would be the worse trade.) Looked up alongside the meeting
+  // rather than after it: the two share nothing, and the mailbox is a Google
+  // round trip.
+  const [{ data: meeting }, mailbox] = await Promise.all([
+    supabase
+      .from("live_meetings")
+      .select("id, title")
+      .eq("room_code", body.roomCode)
+      .eq("organization_id", auth.ctx.orgId)
+      .is("deleted_at", null)
+      .maybeSingle(),
+    mailboxFor(supabase, auth.ctx.userId, auth.ctx.orgId),
+  ]);
+  if (!meeting) return NextResponse.json({ error: "Meeting not found" }, { status: 404 });
+
   if (!mailbox.ok) {
     return NextResponse.json(
       { error: mailboxProblemMessage(mailbox.problem), mailbox: mailbox.problem },
