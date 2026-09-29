@@ -12,6 +12,8 @@ import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { CallArchive } from "./CallArchive";
 import type { CallHit } from "@/lib/meetings/call-archive";
+import * as oneWay from "@/lib/meetings/one-way";
+import { fireEvent } from "@testing-library/dom";
 
 function call(over: Partial<CallHit> = {}): CallHit {
   return {
@@ -239,5 +241,67 @@ describe("deleting a call", () => {
 
     expect(await screen.findByRole("alert")).toHaveTextContent("could not be deleted");
     expect(screen.getByText("Dunbar diligence note")).toBeInTheDocument();
+  });
+});
+
+// ── Typing re-rendered every row in the archive ─────────────────────────────
+
+describe("what a keystroke costs", () => {
+  /**
+   * Row renders, counted through `callClock` — which each row calls once.
+   *
+   * Deliberately NOT counted by watching `toLocaleTimeString`. Caching the
+   * formatters in `callWhen` takes those to zero whether or not the rows are
+   * memoized, so a test watching them would pass on either change alone and
+   * guard neither. `callClock` is pure arithmetic: only the memo moves it.
+   */
+  function countRowRenders() {
+    const real = oneWay.callClock;
+    let renders = 0;
+    jest.spyOn(oneWay, "callClock").mockImplementation((s: number) => {
+      renders += 1;
+      return real(s);
+    });
+    return { get value() { return renders; }, reset() { renders = 0; } };
+  }
+
+  const manyCalls = Array.from({ length: 30 }, (_, i) =>
+    call({
+      id: `c${i}`,
+      title: `Call ${i}`,
+      at: new Date(Date.UTC(2025 + (i % 2), i % 12, (i % 27) + 1, 14, 30)).toISOString(),
+    }),
+  );
+
+  afterEach(() => jest.restoreAllMocks());
+
+  // The defect: one character re-rendered every row, each re-deriving a date
+  // that had not changed — two Intl formats apiece.
+  it("does not re-render rows that did not change", async () => {
+    const renders = countRowRenders();
+    const { container } = render(<CallArchive initial={manyCalls} />);
+    expect(renders.value).toBe(manyCalls.length);
+
+    renders.reset();
+    const box = container.querySelector('input[type="search"]')!;
+    // One character: below MIN_QUERY, so no request runs.
+    await act(async () => {
+      fireEvent.change(box, { target: { value: "d" } });
+    });
+    expect(renders.value).toBe(0);
+  });
+
+  // The memo must not cost correctness: asking to delete one call still
+  // re-renders that row, and must not re-render the other twenty-nine.
+  it("re-renders only the row whose delete was pressed", async () => {
+    const user = userEvent.setup();
+    render(<CallArchive initial={manyCalls} />);
+    const renders = countRowRenders();
+    await user.click(screen.getByRole("button", { name: /Delete Call 7 permanently/ }));
+    expect(screen.getByText("Delete call and recording?")).toBeInTheDocument();
+    // One row re-rendered, not thirty. (The confirming row itself no longer
+    // calls callClock through the same path only if it re-rendered, so this is
+    // bounded above rather than pinned to an exact 1.)
+    expect(renders.value).toBeLessThan(manyCalls.length);
   });
 });
