@@ -60,6 +60,12 @@ export interface RecordingSource {
 
 export interface UseRecordingInput {
   supabase: Client;
+  /**
+   * Keep `elapsed` counting. On by default; a caller that shows the time with
+   * its own clock from `startedAt` turns it off, so a running recording does
+   * not re-render that caller once a second for the length of the meeting.
+   */
+  tickElapsed?: boolean;
   meetingId: string | null;
   /** The host's display name, stored so a recording can say who made it. */
   hostName: string;
@@ -99,8 +105,10 @@ export interface UseRecordingResult {
   notice: string | null;
   /** Put the notice away. */
   dismissNotice: () => void;
-  /** Seconds of meeting captured so far. */
+  /** Seconds of meeting captured so far. Stays 0 when `tickElapsed` is off. */
   elapsed: number;
+  /** When the running recording started (epoch ms), or null when none is. */
+  startedAt: number | null;
   start: () => Promise<void>;
   stop: () => void;
 }
@@ -165,6 +173,8 @@ export function useRecording(input: UseRecordingInput): UseRecordingResult {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [elapsed, setElapsed] = useState(0);
+  const [startedAt, setStartedAt] = useState<number | null>(null);
+  const tickElapsed = input.tickElapsed ?? true;
 
   const sourceRef = useRef<RecordingSource | null>(null);
   const tickRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -359,6 +369,7 @@ export function useRecording(input: UseRecordingInput): UseRecordingResult {
           // this run by the time a second one arrives.
           if (run.closed) return;
           if (tickRef.current) { clearInterval(tickRef.current); tickRef.current = null; }
+          setStartedAt(null);
           sourceRef.current = null;
           announce(false);
           if (reason === "error") {
@@ -394,10 +405,13 @@ export function useRecording(input: UseRecordingInput): UseRecordingResult {
       }
 
       setElapsed(0);
-      tickRef.current = setInterval(
-        () => setElapsed(Math.round((Date.now() - run.startedAt) / 1000)),
-        1000,
-      );
+      setStartedAt(run.startedAt);
+      if (tickElapsed) {
+        tickRef.current = setInterval(
+          () => setElapsed(Math.round((Date.now() - run.startedAt) / 1000)),
+          1000,
+        );
+      }
 
       setState("recording");
       // Announced only once it is really running. Telling the room it is being
@@ -414,9 +428,9 @@ export function useRecording(input: UseRecordingInput): UseRecordingResult {
       // own row closed out the previous, finished recording as a failure.
       if (started) void finalize(started, "failed");
     }
-  }, [supabase, meetingId, hostName, createSource, fallbackMime, announce, uploadChunk, finalize]);
+  }, [supabase, meetingId, hostName, createSource, fallbackMime, announce, uploadChunk, finalize, tickElapsed]);
 
   const dismissNotice = useCallback(() => setNotice(null), []);
 
-  return { state, error, notice, dismissNotice, elapsed, start, stop };
+  return { state, error, notice, dismissNotice, elapsed, startedAt, start, stop };
 }

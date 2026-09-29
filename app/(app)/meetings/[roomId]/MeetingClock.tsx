@@ -96,3 +96,36 @@ export function MeetingClock({
     </span>
   );
 }
+
+/**
+ * How long the recording has been running, for the record button.
+ *
+ * A leaf for the same reason as MeetingClock: the count used to live in the
+ * recording hook's state, which re-rendered the whole room once a second for as
+ * long as anything was being recorded. This reads the wall clock against the
+ * start time instead, so it can sleep while the tab is hidden and still be
+ * right the moment it is looked at.
+ */
+export function RecordingClock({ startedAt }: { startedAt: number }) {
+  const read = () => Math.max(0, Math.round((Date.now() - startedAt) / 1000));
+  const [seconds, setSeconds] = useState(read);
+
+  useEffect(() => {
+    const tick = () => setSeconds(Math.max(0, Math.round((Date.now() - startedAt) / 1000)));
+    let id: ReturnType<typeof setInterval> | null = null;
+    const hidden = () => typeof document !== "undefined" && document.visibilityState === "hidden";
+    const start = () => { if (id === null) id = setInterval(tick, 1000); };
+    const stop = () => { if (id !== null) { clearInterval(id); id = null; } };
+    const onVisibility = () => { if (hidden()) stop(); else { tick(); start(); } };
+
+    tick();
+    if (!hidden()) start();
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      stop();
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
+  }, [startedAt]);
+
+  return <>{formatElapsed(seconds)}</>;
+}

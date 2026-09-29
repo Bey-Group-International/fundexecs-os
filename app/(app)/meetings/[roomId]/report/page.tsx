@@ -100,11 +100,41 @@ export default function MeetingReportPage() {
     );
   }, []);
 
+  /** A poll still waiting on its answer, so a slow network does not stack them. */
+  const inFlightRef = useRef(false);
+  /** The first read for this meeting has landed. */
+  const loadedRef = useRef(false);
+  /** Who is looking and whether they were there. Neither changes while this
+   *  page waits, so they are read once rather than on every poll — the user
+   *  lookup is a round trip to the auth server each time. */
+  const viewerRef = useRef<{ user: { id: string } | null } | null>(null);
+  const attendedRef = useRef<{ meetingId: string } | null>(null);
+
   async function fetchReport() {
+    // Nobody is looking; the next poll after they come back will catch up.
+    // The first read always runs, so a page opened in a background tab still
+    // has something to show.
+    if (loadedRef.current && typeof document !== "undefined" && document.visibilityState === "hidden") return;
+    if (inFlightRef.current) return;
+    inFlightRef.current = true;
+    try {
+      await fetchReportOnce();
+      loadedRef.current = true;
+    } finally {
+      inFlightRef.current = false;
+    }
+  }
+
+  async function fetchReportOnce() {
     const supabase = createClient();
 
-    const [{ data: { user } }, { data: meeting }] = await Promise.all([
-      supabase.auth.getUser(),
+    const [user, { data: meeting }] = await Promise.all([
+      viewerRef.current
+        ? Promise.resolve(viewerRef.current.user)
+        : supabase.auth.getUser().then(({ data: { user } }) => {
+            viewerRef.current = { user };
+            return user;
+          }),
       supabase
         .from("live_meetings")
         .select("id, host_id, title, created_at, started_at, ended_at, scheduled_at, kind, recording_consent")
@@ -131,7 +161,9 @@ export default function MeetingReportPage() {
         .order("created_at", { ascending: false })
         .limit(1)
         .maybeSingle(),
-      user
+      attendedRef.current?.meetingId === meeting.id
+        ? Promise.resolve({ data: { meeting_id: meeting.id } })
+        : user
         ? supabase
             .from("live_meeting_participants")
             .select("meeting_id")
@@ -184,6 +216,8 @@ export default function MeetingReportPage() {
         });
     }
 
+    if (attendance) attendedRef.current = { meetingId: meeting.id };
+
     const next: Data = {
       meeting: meeting as Meeting,
       report: (report as Report | null) ?? null,
@@ -216,6 +250,9 @@ export default function MeetingReportPage() {
     // dead on arrival.
     linesFetchedRef.current = false;
     linesFinalRef.current = false;
+    loadedRef.current = false;
+    // A read still out for the previous meeting must not hold up this one's.
+    inFlightRef.current = false;
     waitStartedRef.current = Date.now();
     setWaitedMs(0);
     setLines([]);
