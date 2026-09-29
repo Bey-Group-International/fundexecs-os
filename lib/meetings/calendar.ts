@@ -62,6 +62,24 @@ export function addDays(d: Date, n: number): Date {
   return new Date(d.getFullYear(), d.getMonth(), d.getDate() + n);
 }
 
+/**
+ * The date range the calendar loads for the month containing `base`.
+ *
+ * Anchored to the MONTH, not to the day on screen, so moving between days and
+ * weeks inside a month reads nothing new — only crossing into another month
+ * does. 45 days back and 75 ahead of the 1st covers the month grid's spill into
+ * its neighbours, any week or day inside the month, and a 21-day agenda that
+ * starts late in it. Both the meetings grid and the external calendar layers
+ * read this one window, so they can never disagree about what is loaded.
+ */
+export function monthDataWindow(base: Date): { from: string; to: string } {
+  const monthStart = new Date(base.getFullYear(), base.getMonth(), 1);
+  return {
+    from: addDays(monthStart, -45).toISOString(),
+    to: addDays(monthStart, 75).toISOString(),
+  };
+}
+
 export function addMonths(d: Date, n: number): Date {
   return new Date(d.getFullYear(), d.getMonth() + n, d.getDate());
 }
