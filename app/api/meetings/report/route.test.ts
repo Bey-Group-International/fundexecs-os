@@ -271,3 +271,30 @@ describe("a call with nothing transcribed", () => {
     expect(res.status).toBe(400);
   });
 });
+
+describe("after the report is written", () => {
+  it("raises action-item tasks without waiting for the meeting record", async () => {
+    wire();
+    generateMeetingReport.mockResolvedValue({
+      summary: "They agreed to wire on Friday.",
+      key_points: [],
+      action_items: ["Send the wire instructions"],
+      decisions: [],
+    });
+    createTeamTask.mockResolvedValue({ id: "t1" });
+    // The record never finishes until released, so the task can only have been
+    // created if the two ran side by side rather than one after the other.
+    let release!: () => void;
+    persistInstitutionalMeetingRecord.mockReturnValue(new Promise<void>((r) => { release = r; }));
+
+    const pending = POST(req());
+    for (let i = 0; i < 20 && createTeamTask.mock.calls.length === 0; i++) {
+      await new Promise((r) => setTimeout(r, 0));
+    }
+    expect(createTeamTask).toHaveBeenCalled();
+    expect(writes.meetingUpdate).toMatchObject({ status: "ended" });
+
+    release();
+    expect((await pending).status).toBe(200);
+  });
+});
