@@ -126,8 +126,10 @@ describe("blendCoverageByAgreement", () => {
     const previous = new Uint8ClampedArray([from]);
     const agreement = createMaskAgreement(1);
     const person = new Uint8ClampedArray([from]);
-    // Settled and confidently person first, so the flip that follows is a real
-    // transition with a direction on record rather than a first observation.
+    // Settle at `from` first. Note this leaves NO direction on record: the target
+    // never changes, so every one of these frames is a quiet one. The flip below
+    // is therefore a pixel's first significant change. The case where a direction
+    // IS on record and then goes stale is covered separately, below.
     for (let i = 0; i < 8; i++) blendCoverageByAgreement(previous, person, agreement);
     const background = new Uint8ClampedArray([0]);
     let n = 0;
@@ -182,6 +184,40 @@ describe("blendCoverageByAgreement", () => {
     // Uniform at 0.5 from 255 reaches <8 in 5 frames: 127.5, 63.8, 31.9, 15.9, 8.0.
     expect(framesToHide(255)).toBeLessThanOrEqual(5);
     expect(framesToHide(128)).toBeLessThanOrEqual(4);
+  });
+
+  /**
+   * The same privacy property, but reached the way a real meeting reaches it:
+   * somebody walks in, sits still for a while, then leaves.
+   *
+   * framesToHide above does NOT cover this, and its comment claimed otherwise.
+   * It primes by blending a pixel towards the value it already holds, so every
+   * priming delta is zero, every priming frame is a quiet one, and the direction
+   * never gets on record at all. The flip that follows is therefore a pixel's
+   * FIRST significant change, which is the one case the rule deliberately treats
+   * as movement. The interesting case is the one where a direction IS on record
+   * and then goes stale across a settled stretch.
+   */
+  it("hides a pixel that arrived, settled, and then left", () => {
+    const previous = new Uint8ClampedArray([0]);
+    const agreement = createMaskAgreement(1);
+    const background = new Uint8ClampedArray([0]);
+    const person = new Uint8ClampedArray([255]);
+
+    // An empty chair, which also primes the previous-target record at 0.
+    for (let i = 0; i < 3; i++) blendCoverageByAgreement(previous, background, agreement);
+    // Somebody arrives -- a rising delta, so RISING goes on record -- and then
+    // sits still long enough for the reversal count to unwind to nothing.
+    for (let i = 0; i < 9; i++) blendCoverageByAgreement(previous, person, agreement);
+    expect(previous[0]).toBeGreaterThan(250);
+
+    // They leave. This is one movement, not a contradiction of the arrival.
+    let n = 0;
+    while (previous[0] > 8 && n < 300) {
+      blendCoverageByAgreement(previous, background, agreement);
+      n += 1;
+    }
+    expect(n).toBeLessThanOrEqual(5);
   });
 
   /**

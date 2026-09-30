@@ -223,6 +223,13 @@ export function blendCoverageByAgreement(
       // A quiet frame. The model is no longer arguing with itself, so the pixel
       // returns to full speed rather than serving out a sentence.
       count = 0;
+      // And the direction goes with it. A movement after a settled stretch is a
+      // new movement, not a contradiction of whatever happened before the pause:
+      // keeping RISING on record across an empty chair made a person LEAVING read
+      // as a reversal, which hid the room they exposed a frame slower. Continuous
+      // flicker is unaffected, because there every frame is a significant one and
+      // this branch never runs.
+      sign = SIGN_NONE;
     }
     state[i] = sign | count;
 
