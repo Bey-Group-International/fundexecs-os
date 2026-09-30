@@ -9,6 +9,7 @@ import { StatTile } from "@/components/dashboard/StatTile";
 import { SignupsTable } from "./SignupsTable";
 import { AccessRequestsTable } from "./AccessRequestsTable";
 import { SubscriptionInvoicesTable } from "./SubscriptionInvoicesTable";
+import { LivenessPanel } from "./LivenessPanel";
 
 export const dynamic = "force-dynamic";
 
@@ -74,6 +75,12 @@ export default async function AdminPage() {
 
       {/* Subscription billing — outstanding invoices are money not yet collected,
           and confirming one here is what releases the period's credits. */}
+      {/* Is this deployment actually live? First, because every number below it
+          is meaningless if money cannot move — a Stripe TEST key completes
+          checkout and collects nothing, and nothing else in the app knows the
+          difference. */}
+      <LivenessPanel />
+
       <SubscriptionInvoicesTable open={openInvoices} settled={settledInvoices} />
 
       {/* Traction metrics */}
