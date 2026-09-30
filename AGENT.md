@@ -5191,6 +5191,51 @@ Deployed, monitoring               →  live, observability active
              |  change, so it carries is_system on the event and says so.
              |  Confidence: Jest 7786 across 547 suites, typecheck and eslint
              |  clean.
+             |
+             |  2026-09-30  And then CodeRabbit found that the CRM slice did not
+             |  work at all, and that my test said it did.
+             |  Waited for the review instead of merging on green, because this one
+             |  touched a migration and wrote to people's permanent records. It
+             |  returned two findings, both mine, both real.
+             |  CRITICAL: PostgREST's on_conflict takes a comma-separated list of
+             |  COLUMN NAMES. It cannot carry an expression, and cannot carry the
+             |  WHERE predicate Postgres needs to infer a PARTIAL index. My upsert
+             |  named `(metadata->>'meeting_id')`, so every call would have failed
+             |  with "there is no unique or exclusion constraint matching the ON
+             |  CONFLICT specification" - and because the writer logs and carries
+             |  on by design, it would have failed SILENTLY, forever, with no
+             |  meeting ever reaching a timeline. The feature was dead on arrival.
+             |  Confirmed independently before acting: every other onConflict in
+             |  this repo, all nineteen of them, is a plain column list. Mine was
+             |  the only expression.
+             |  And my test asserted the conflict target EQUALLED the string my own
+             |  migration named. Both were wrong together, so it passed. That is an
+             |  oracle checking code against the assumption the code was written
+             |  from - the exact mistake I named and avoided in the report search
+             |  earlier this same session, then walked into here. The rewritten test
+             |  asserts the property POSTGREST imposes, which is external to both:
+             |  every element of the target matches /^[a-z_][a-z0-9_]*$/, so any
+             |  expression fails whatever the migration says.
+             |  MAJOR: network_contacts.email is stored as given, and there is an
+             |  index on (organization_id, lower(email)) precisely because it holds
+             |  mixed case. I filtered `.in("email", addresses)` with lowercased
+             |  addresses - missing every contact stored capitalised, and missing
+             |  the index. A miss that reads exactly like "not in the CRM".
+             |  Both fixed with real columns rather than cleverness: `meeting_id`
+             |  generated from the metadata (one source of truth) with a PLAIN
+             |  unique index - hand-logged rows have a NULL there and NULLs are
+             |  distinct, so they need no predicate to exempt them - and
+             |  `email_lower` generated from lower(email), indexed, which makes the
+             |  lookup both correct and fast.
+             |  Injected both original bugs back: the expression target fails 1
+             |  test, the raw-email lookup fails 8.
+             |  The lesson is not "run the reviewer". It is that TWELVE injections
+             |  and 7786 tests did not catch a feature that could never write a
+             |  row, because every one of my checks was downstream of the same
+             |  wrong belief about PostgREST. An injection can only disprove what
+             |  its author thought to doubt.
+             |  Confidence: Jest 7787 across 547 suites, typecheck and eslint
+             |  clean.
 ```
 
 ---

@@ -7,7 +7,12 @@
 // can take down the report the host is actually waiting on.
 jest.mock("next/headers", () => ({ cookies: () => ({ getAll: () => [], set: () => undefined }) }));
 
-import { inviteList, recordMeetingOnTimelines, type MeetingForCrm } from "./crm-activity.server";
+import {
+  MEETING_CONFLICT_TARGET,
+  inviteList,
+  recordMeetingOnTimelines,
+  type MeetingForCrm,
+} from "./crm-activity.server";
 
 const MEETING: MeetingForCrm = {
   id: "m1",
@@ -75,7 +80,9 @@ function fakeClient(
   };
 }
 
-const CONTACT_ANA = { id: "contact-ana", email: "ana@acme.com" };
+// `email_lower` is what the lookup selects and filters on, because
+// network_contacts.email holds whatever case it was given.
+const CONTACT_ANA = { id: "contact-ana", email_lower: "ana@acme.com" };
 
 function run(
   rows: Record<string, unknown[]>,
@@ -121,19 +128,41 @@ describe("recordMeetingOnTimelines", () => {
    * The guard the whole feature rests on.
    *
    * The report path runs more than once — the room retries, and
-   * /report/regenerate exists to run the analysis again. The upsert key must be
-   * the one the migration indexes, or a regenerate adds a second copy of one
-   * meeting to somebody's permanent record.
+   * /report/regenerate exists to run the analysis again. Without a usable upsert
+   * key, a regenerate adds a second copy of one meeting to somebody's permanent
+   * record.
+   *
+   * THIS TEST USED TO BE WORTHLESS, and it is worth saying why. It asserted the
+   * conflict target equalled the string this file's own migration named — so when
+   * both were `(metadata->>'meeting_id')`, it passed, while every upsert in
+   * production would have failed with "there is no unique or exclusion
+   * constraint matching the ON CONFLICT specification". An oracle that compares
+   * code against the same assumption the code was written from checks nothing.
+   *
+   * So it now asserts the property PostgREST imposes, which is external to both:
+   * on_conflict carries a comma-separated list of COLUMN NAMES. No parentheses,
+   * no operators, no whitespace. That fails for an expression whatever the
+   * migration says.
    */
-  it("upserts on the key the migration indexes, so a regenerate cannot duplicate", async () => {
+  it("upserts on a conflict target PostgREST can actually carry", async () => {
     const { calls, result } = run({ network_contacts: [CONTACT_ANA], live_meeting_participants: [] });
     await result;
-    const write = calls.find((c) => c.upserted);
-    expect(write?.upserted?.onConflict).toBe(
-      "organization_id,contact_id,(metadata->>'meeting_id')",
-    );
-    // And the meeting id is in the metadata the key reads, or the key matches nothing.
-    expect((write!.upserted!.rows[0].metadata as { meeting_id: string }).meeting_id).toBe("m1");
+    const target = calls.find((c) => c.upserted)!.upserted!.onConflict;
+
+    expect(target).toBe(MEETING_CONFLICT_TARGET);
+    const columns = target.split(",");
+    expect(columns.length).toBeGreaterThan(1);
+    for (const column of columns) {
+      // A plain identifier. An expression — `(metadata->>'x')`, `lower(email)` —
+      // fails here, which is exactly what PostgREST does with it.
+      expect(column).toMatch(/^[a-z_][a-z0-9_]*$/);
+    }
+    // And every column named in the key is one the payload actually sets, or is
+    // generated from something it sets.
+    const row = calls.find((c) => c.upserted)!.upserted!.rows[0];
+    expect(row.organization_id).toBeDefined();
+    expect(row.contact_id).toBeDefined();
+    expect((row.metadata as { meeting_id: string }).meeting_id).toBe("m1");
   });
 
   // A meeting can have two hundred people in it. One query, not two hundred.
@@ -149,8 +178,11 @@ describe("recordMeetingOnTimelines", () => {
     const lookups = calls.filter((c) => c.table === "network_contacts");
     expect(lookups).toHaveLength(1);
     expect(lookups[0].filters).toContainEqual(["organization_id", "org-1"]);
-    const inFilter = lookups[0].filters.find(([col]) => col === "email");
+    const inFilter = lookups[0].filters.find(([col]) => col === "email_lower");
     expect((inFilter?.[1] as string[]).length).toBe(40);
+    // Never the raw column: it holds mixed case, so comparing lowercased
+    // addresses against it silently misses contacts.
+    expect(lookups[0].filters.some(([col]) => col === "email")).toBe(false);
   });
 
   it("does not look up contacts at all when the meeting has no addresses", async () => {
@@ -263,5 +295,27 @@ describe("inviteList", () => {
       { name: null, email: "ana@acme.com" },
       { name: null, email: null },
     ]);
+  });
+});
+
+/**
+ * A contact stored with a capitalised address is still that contact.
+ *
+ * The lookup filters on the generated `email_lower` column, so the case the
+ * address was typed in — by whoever imported the contact, or whoever sent the
+ * invite — cannot decide whether a meeting reaches their record.
+ */
+describe("matching a contact whose address was stored capitalised", () => {
+  it("finds them, because the lookup compares lowercased values on both sides", async () => {
+    const { calls, result } = run(
+      // What the database answers with for `email_lower` is always lowercase; the
+      // point is that the FILTER is on that column rather than on `email`.
+      { network_contacts: [{ id: "contact-ana", email_lower: "ana@acme.com" }], live_meeting_participants: [] },
+      {},
+      { meeting: { ...MEETING, attendees: [{ name: "Ana", email: "Ana@Acme.COM" }] } },
+    );
+    expect(await result).toEqual({ written: 1, failed: false });
+    const lookup = calls.find((c) => c.table === "network_contacts")!;
+    expect(lookup.filters).toContainEqual(["email_lower", ["ana@acme.com"]]);
   });
 });

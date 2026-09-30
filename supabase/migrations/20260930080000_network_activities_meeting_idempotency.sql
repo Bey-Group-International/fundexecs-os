@@ -11,26 +11,56 @@
 -- relationship scoring reads this table, so duplicates do not merely look
 -- untidy, they move numbers people decide on.
 --
--- So: one row per (organisation, contact, meeting) among the machine-written
--- meeting entries, which lets the writer upsert. A regenerate then CORRECTS the
--- entry — the corrected summary reaches the timeline — rather than adding one.
+-- WHY A GENERATED COLUMN RATHER THAN AN EXPRESSION INDEX.
 --
--- Partial, and narrowly so, because it must not constrain anything a person
--- logs by hand. Somebody who genuinely met the same contact twice about the same
--- meeting can still record both: this index only covers rows with is_system,
--- activity_type 'meeting', and a meeting_id in their metadata, which together
--- describe exactly the rows this engine owns.
+-- The obvious shape is a partial unique index on
+-- (organization_id, contact_id, (metadata->>'meeting_id')) WHERE is_system and
+-- activity_type = 'meeting'. It is also unusable from here. The writer reaches
+-- Postgres through PostgREST, whose on_conflict parameter takes a
+-- comma-separated list of COLUMN NAMES: it cannot carry an expression, and it
+-- cannot carry the WHERE predicate that Postgres needs in order to infer a
+-- partial index. Every upsert would have failed with "there is no unique or
+-- exclusion constraint matching the ON CONFLICT specification" — silently, since
+-- the writer logs and carries on, so no meeting would ever have reached a
+-- timeline at all.
 --
--- Rows with no contact_id (an investor-only activity) are outside the index:
--- Postgres does not treat two nulls as equal, so they would never collide
--- anyway, and naming the condition keeps the index small.
+-- So the key is made of real columns. `meeting_id` is generated from the
+-- metadata the writer already sets, which keeps one source of truth, and the
+-- index over it is plain rather than partial.
+--
+-- Hand-logged rows are not constrained, and need no predicate to exempt them:
+-- the activities POST never writes metadata, so their meeting_id is NULL, and
+-- Postgres treats NULLs as distinct in a unique index. Somebody can still log
+-- the same contact by hand as many times as they like.
 
-create unique index if not exists network_activities_system_meeting_uniq
-  on public.network_activities (organization_id, contact_id, (metadata ->> 'meeting_id'))
-  where is_system
-    and activity_type = 'meeting'
-    and contact_id is not null
-    and metadata ? 'meeting_id';
+alter table public.network_activities
+  add column if not exists meeting_id text
+    generated always as (metadata ->> 'meeting_id') stored;
 
-comment on index public.network_activities_system_meeting_uniq is
-  'One machine-written meeting entry per contact per meeting, so a report regenerate corrects the timeline entry instead of duplicating it.';
+comment on column public.network_activities.meeting_id is
+  'The live_meetings id this entry describes, derived from metadata so the upsert has real columns to conflict on. Null for anything logged by hand. Deliberately not a foreign key: the entry is a record of what happened and must outlive the meeting row.';
+
+create unique index if not exists network_activities_meeting_contact_uniq
+  on public.network_activities (organization_id, contact_id, meeting_id);
+
+comment on index public.network_activities_meeting_contact_uniq is
+  'One machine-written meeting entry per contact per meeting, so a report regenerate corrects the timeline entry instead of duplicating it. Rows with no meeting_id (everything logged by hand) are unconstrained, because NULLs are distinct.';
+
+-- And the other half of the same problem: matching a contact by address.
+--
+-- network_contacts.email is stored as it was given — there is an index on
+-- (organization_id, lower(email)) precisely because the column holds mixed case.
+-- A lookup comparing the raw column against a lowercased address therefore
+-- misses any contact whose address was stored capitalised, and misses the index
+-- too. PostgREST cannot filter on lower(email), so the lowercase becomes a
+-- column, and the lookup becomes both correct and indexed.
+
+alter table public.network_contacts
+  add column if not exists email_lower text
+    generated always as (lower(email)) stored;
+
+comment on column public.network_contacts.email_lower is
+  'lower(email), as a column so a case-insensitive lookup can be expressed through PostgREST and use an index. Never written directly.';
+
+create index if not exists network_contacts_email_lower_col_idx
+  on public.network_contacts (organization_id, email_lower);

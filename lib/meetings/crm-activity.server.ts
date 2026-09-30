@@ -52,6 +52,15 @@ type Client = { from: (table: string) => Builder };
  */
 const CONTACT_LOOKUP_LIMIT = 400;
 
+/**
+ * The conflict target, matching network_activities_meeting_contact_uniq.
+ *
+ * Exported so a test can assert the shape PostgREST actually accepts — plain
+ * column names — rather than merely comparing it against whatever this file
+ * happens to say.
+ */
+export const MEETING_CONFLICT_TARGET = "organization_id,contact_id,meeting_id";
+
 export interface MeetingForCrm {
   id: string;
   organizationId: string | null;
@@ -199,19 +208,24 @@ async function contactIndex(
   addresses: string[],
 ): Promise<Map<string, string>> {
   const index = new Map<string, string>();
+  // `email_lower`, not `email`. Addresses are lowercased on the way in, and
+  // network_contacts.email holds whatever case it was given — there is an index
+  // on lower(email) precisely because of that. Comparing against the raw column
+  // would miss every contact stored capitalised, which is a miss that reads
+  // exactly like "they are not in the CRM".
   const { data, error } = await client
     .from("network_contacts")
-    .select("id, email")
+    .select("id, email_lower")
     .eq("organization_id", orgId)
-    .in("email", addresses);
+    .in("email_lower", addresses);
 
   if (error) {
     console.warn("[crm-activity] contact lookup failed", error.message);
     return index;
   }
 
-  for (const row of (data ?? []) as Array<{ id: string; email: string | null }>) {
-    const email = normalizeEmail(row.email);
+  for (const row of (data ?? []) as Array<{ id: string; email_lower: string | null }>) {
+    const email = normalizeEmail(row.email_lower);
     // First writer wins, so two contacts sharing an address resolve stably
     // rather than by row order.
     if (email && !index.has(email)) index.set(email, row.id);
@@ -222,10 +236,18 @@ async function contactIndex(
 /**
  * The rows, upserted on the index that makes this idempotent.
  *
- * `onConflict` names the same three expressions as
- * network_activities_system_meeting_uniq. A regenerate therefore corrects the
- * entry it wrote last time — the better summary reaches the timeline — instead
- * of adding a second copy of one meeting to somebody's record.
+ * Three REAL columns, which is all PostgREST's on_conflict can carry: it takes a
+ * comma-separated list of column names, not expressions, and cannot send the
+ * WHERE predicate a partial index would need to be inferred. An earlier version
+ * of this named `(metadata->>'meeting_id')` and would have failed on every call
+ * with "there is no unique or exclusion constraint matching the ON CONFLICT
+ * specification" — silently, because this function logs and carries on, so no
+ * meeting would ever have reached a timeline. `meeting_id` is a generated column
+ * over that same metadata, so there is still one source of truth.
+ *
+ * A regenerate therefore corrects the entry it wrote last time — the better
+ * summary reaches the timeline — instead of adding a second copy of one meeting
+ * to somebody's record.
  */
 async function writeRows(
   client: Client,
@@ -248,7 +270,7 @@ async function writeRows(
 
   const { error } = await client
     .from("network_activities")
-    .upsert(payload, { onConflict: "organization_id,contact_id,(metadata->>'meeting_id')" });
+    .upsert(payload, { onConflict: MEETING_CONFLICT_TARGET });
 
   if (error) {
     console.error("[crm-activity] timeline write failed", error.message);
