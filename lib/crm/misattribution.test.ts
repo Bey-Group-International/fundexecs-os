@@ -140,6 +140,59 @@ describe("the authorization the definer function does itself", () => {
     expect(sql).toMatch(/public\.network_contact_visible\(row_contact\)/);
   });
 
+  /**
+   * A caller outside the organisation learns nothing about whether the entry
+   * exists.
+   *
+   * CodeRabbit's finding, and it was a real inconsistency rather than a style
+   * point. The first version combined membership and the admin right into one
+   * guard raising 42501, so a non-member got 403 for an activity that exists and
+   * 404 for one that does not — an existence oracle across tenants. Ids are
+   * uuids, so nobody enumerates them; that bounds the harm, it does not make the
+   * distinction acceptable. The visibility check three statements down already
+   * answered "not found" for a contact the caller cannot see, so the migration
+   * was inconsistent with itself.
+   *
+   * Asserted structurally, in bounded windows, and NOT against the surrounding
+   * prose — the same file has already had three tests pass by matching a comment
+   * about the code. The comments in that block deliberately avoid the identifiers
+   * these regexes match, which is the only reason matching them proves anything.
+   */
+  it("answers a non-member exactly as it answers a missing id", () => {
+    const sql = migrationSql();
+    // The guard and its errcode within one bounded window, so a P0002 raised
+    // elsewhere in the function cannot satisfy this.
+    expect(sql).toMatch(
+      /if\s+caller is null[\s\S]{0,400}?current_principal_org_ids\(\)[\s\S]{0,200}?errcode\s*=\s*'P0002'/i,
+    );
+
+    // Null-safe by construction. `row_org not in (select ...)` over a set holding
+    // a null evaluates to null, the guard does not fire, and the non-member is
+    // admitted by the one statement meant to stop them. The two forms read alike,
+    // so the working one is pinned rather than trusted.
+    expect(sql).toMatch(
+      /not exists \(\s*select 1 from public\.current_principal_org_ids\(\) as org where org = row_org\s*\)/i,
+    );
+
+    // And membership is checked BEFORE the right. With the order reversed a
+    // non-member fails the admin check first and is told 42501, which is the leak
+    // restored under a different shape.
+    const membershipAt = sql.indexOf("current_principal_org_ids()");
+    const adminAt = sql.indexOf("not public.is_org_admin(row_org)");
+    expect(membershipAt).toBeGreaterThan(-1);
+    expect(adminAt).toBeGreaterThan(membershipAt);
+  });
+
+  // A member who is not an admin is told plainly. They can already read the
+  // organisation's entries, so naming the missing right discloses nothing — and
+  // collapsing this into "not found" too would make a routine permission problem
+  // undiagnosable.
+  it("still names the missing right for a member who is not an admin", () => {
+    expect(migrationSql()).toMatch(
+      /if\s+not\s+public\.is_org_admin\(row_org\)\s+then[\s\S]{0,200}?errcode\s*=\s*'42501'/i,
+    );
+  });
+
   it("refuses a hand-written entry", () => {
     // Those have an owner and ordinary edit rights; routing them through an
     // admin-only definer function would be a different power.

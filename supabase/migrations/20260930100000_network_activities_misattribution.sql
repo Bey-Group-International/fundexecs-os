@@ -115,14 +115,41 @@ begin
     raise exception 'Activity not found' using errcode = 'P0002';
   end if;
 
-  -- DEFINER has bypassed RLS. Membership, then the admin right, then the same
-  -- visibility helper the policies use -- so this cannot reach a private contact
-  -- the caller could not otherwise see.
-  if caller is null or not public.is_org_admin(row_org) then
+  -- DEFINER has bypassed RLS, so every check the policies would have made is
+  -- made here. Three of them, in this order, and the order is the point.
+  --
+  -- MEMBERSHIP FIRST, answering exactly as it does for an id that is not there.
+  -- Combined with the right check below -- which is how this was first written --
+  -- somebody outside the organisation got one answer for a row that exists and a
+  -- different one for a row that does not, which tells them which ids are real in
+  -- an organisation they cannot see. Ids are uuids so nobody enumerates them, but
+  -- a cross-tenant existence oracle is not something to leave in place on that
+  -- basis. The check two statements down already had this discipline for a
+  -- contact the caller cannot see; membership did not, and the comment that used
+  -- to sit here described the design it failed to implement.
+  --
+  -- Written as `not exists` over the helper rather than `row_org not in (...)`
+  -- deliberately: NOT IN against a set containing a null yields null, the guard
+  -- would not fire, and a non-member would be let through by the one statement
+  -- meant to stop them.
+  if caller is null
+     or not exists (
+       select 1 from public.current_principal_org_ids() as org where org = row_org
+     )
+  then
+    raise exception 'Activity not found' using errcode = 'P0002';
+  end if;
+
+  -- THE RIGHT SECOND, and this one is named honestly. A member can already read
+  -- the organisation's entries, so telling them they lack the right discloses
+  -- nothing they could not see for themselves.
+  if not public.is_org_admin(row_org) then
     raise exception 'Only an organization admin can correct an automatic entry'
       using errcode = '42501';
   end if;
 
+  -- VISIBILITY THIRD, through the same helper the SELECT policy uses, so an
+  -- admin cannot reach a private contact they could not otherwise see.
   if row_contact is not null and not public.network_contact_visible(row_contact) then
     raise exception 'Activity not found' using errcode = 'P0002';
   end if;
