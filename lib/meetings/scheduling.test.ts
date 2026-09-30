@@ -14,6 +14,9 @@ import {
   parseAvailability,
   suggestSlug,
   validateBookingRequest,
+  BOOKING_EMAIL_MAX,
+  BOOKING_NAME_MAX,
+  BOOKING_NOTES_MAX,
   weekdayOfDate,
   buildBookingManageUrl,
   buildBookingPageUrl,
@@ -354,6 +357,19 @@ describe("validateBookingRequest", () => {
     expect(errors.name).toBeTruthy();
     expect(errors.email).toBeTruthy();
     expect(errors.slot).toBeTruthy();
+  });
+
+  it("caps every free-text field, so one public request can't store megabytes", () => {
+    const ok = { name: "Ada", email: "ada@x.com", startIso: "2026-03-02T09:00:00Z" };
+    expect(validateBookingRequest({ ...ok, name: "A".repeat(BOOKING_NAME_MAX) })).toEqual({});
+    expect(validateBookingRequest({ ...ok, name: "A".repeat(BOOKING_NAME_MAX + 1) }).name).toBeTruthy();
+    expect(
+      validateBookingRequest({ ...ok, email: `${"a".repeat(BOOKING_EMAIL_MAX)}@x.com` }).email,
+    ).toBeTruthy();
+    expect(validateBookingRequest({ ...ok, notes: "n".repeat(BOOKING_NOTES_MAX) })).toEqual({});
+    expect(validateBookingRequest({ ...ok, notes: "n".repeat(BOOKING_NOTES_MAX + 1) }).notes).toBeTruthy();
+    // Notes may be absent entirely.
+    expect(validateBookingRequest({ ...ok, notes: null })).toEqual({});
   });
 
   it("rejects a name carrying a header break", () => {

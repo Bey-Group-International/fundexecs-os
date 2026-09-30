@@ -7,7 +7,7 @@ import { createServiceClient, hasSupabaseServiceEnv } from "@/lib/supabase/serve
 import { checkRateLimit, clientIp, rateLimitResponse } from "@/lib/rate-limit";
 import { SITE_URL } from "@/lib/site";
 import { buildMeetingInviteUrl } from "@/lib/meetings/service";
-import { buildBookingManageUrl, validateBookingRequest } from "@/lib/meetings/scheduling";
+import { buildBookingManageUrl, isValidTimezone, validateBookingRequest } from "@/lib/meetings/scheduling";
 import {
   SlotUnavailableError,
   createBooking,
@@ -55,6 +55,7 @@ export async function POST(
     const fieldErrors = validateBookingRequest({
       name: body.name,
       email: body.email,
+      notes: body.notes,
       startIso: body.startIso,
     });
     if (Object.keys(fieldErrors).length > 0) {
@@ -75,7 +76,9 @@ export async function POST(
       inviteeName: body.name!.trim(),
       inviteeEmail: body.email!.trim(),
       inviteeNotes: body.notes ?? null,
-      inviteeTimezone: body.timezone ?? null,
+      // Anything but a real zone falls back to the host's, rather than being
+      // stored and read back into every later email about this booking.
+      inviteeTimezone: isValidTimezone(body.timezone) ? body.timezone : null,
     });
 
     const host = await hostContactFor(service, resolved.page);

@@ -396,8 +396,20 @@ export function formatSlotFull(iso: string, timezone: string): string {
 export interface BookingValidation {
   name?: string;
   email?: string;
+  notes?: string;
   slot?: string;
 }
+
+/**
+ * Ceilings on what the public booking form accepts. The form is open to anyone,
+ * and every one of these fields is copied into the meeting title or
+ * description, both confirmation emails and the calendar invite — without a cap
+ * a single rate-limited request could store and send megabytes. 254 is the
+ * longest address SMTP allows.
+ */
+export const BOOKING_NAME_MAX = 200;
+export const BOOKING_EMAIL_MAX = 254;
+export const BOOKING_NOTES_MAX = 2000;
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -412,19 +424,25 @@ const CONTROL_CHARS = /[\u0000-\u001F\u007F-\u009F]/;
 export function validateBookingRequest(input: {
   name?: string | null;
   email?: string | null;
+  notes?: string | null;
   startIso?: string | null;
 }): BookingValidation {
   const errors: BookingValidation = {};
   const name = input.name ?? "";
   if (!name.trim()) errors.name = "Your name is required.";
   else if (CONTROL_CHARS.test(name)) errors.name = "Your name can't contain line breaks.";
+  else if (name.trim().length > BOOKING_NAME_MAX) errors.name = `Keep your name under ${BOOKING_NAME_MAX} characters.`;
 
   const email = input.email?.trim() ?? "";
   if (!email) errors.email = "Your email is required.";
   // EMAIL_RE rejects whitespace but not the other control characters, and a
   // valid address contains none of them.
-  else if (!EMAIL_RE.test(email) || CONTROL_CHARS.test(email)) {
+  else if (email.length > BOOKING_EMAIL_MAX || !EMAIL_RE.test(email) || CONTROL_CHARS.test(email)) {
     errors.email = "Enter a valid email address.";
+  }
+
+  if ((input.notes?.trim().length ?? 0) > BOOKING_NOTES_MAX) {
+    errors.notes = `Keep this under ${BOOKING_NOTES_MAX} characters.`;
   }
 
   if (!input.startIso || isNaN(new Date(input.startIso).getTime())) errors.slot = "Pick a time.";

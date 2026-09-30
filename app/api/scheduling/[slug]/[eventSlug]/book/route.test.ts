@@ -298,6 +298,33 @@ describe("POST /api/scheduling/[slug]/[eventSlug]/book", () => {
     }));
   });
 
+  it("files an unrecognised timezone under the host's instead of storing it", async () => {
+    const { client, writes } = makeClient(tables());
+    serviceClient.mockReturnValue(client);
+
+    const res = await POST(
+      request({ startIso: nextSlotIso(), name: "Grace Hopper", email: "grace@x.com", timezone: "Not/AZone" }),
+      { params },
+    );
+
+    expect(res.status).toBe(200);
+    expect(writes.scheduling_bookings[0].invitee_timezone).not.toBe("Not/AZone");
+  });
+
+  it("refuses oversized notes before touching the database", async () => {
+    const { client, writes } = makeClient(tables());
+    serviceClient.mockReturnValue(client);
+
+    const res = await POST(
+      request({ startIso: nextSlotIso(), name: "Grace Hopper", email: "grace@x.com", notes: "x".repeat(5000) }),
+      { params },
+    );
+
+    expect(res.status).toBe(422);
+    expect((await res.json()).fieldErrors.notes).toBeTruthy();
+    expect(writes.scheduling_bookings).toBeUndefined();
+  });
+
   it("holds an approval-gated slot as pending and creates no room", async () => {
     const { client, writes } = makeClient(
       tables({ scheduling_event_types: [eventType({ requires_approval: true })] }),
