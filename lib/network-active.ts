@@ -710,6 +710,9 @@ export async function loadNetworkActivity(
           "id, contact_id, investor_id, activity_type, subject, body, occurred_at, is_system, network_contacts(full_name)",
         )
         .eq("organization_id", orgId)
+        // An entry established as being about the wrong person should not
+        // resurface in the feed either.
+        .is("misattributed_at", null)
         .order("occurred_at", { ascending: false })
         .limit(20),
     ),

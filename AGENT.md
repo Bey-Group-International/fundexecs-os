@@ -5331,6 +5331,64 @@ Deployed, monitoring               →  live, observability active
              |  introduced here, but it is now reaching the CRM.
              |  Confidence: Jest 7842 across 551 suites, typecheck and eslint
              |  clean.
+             |
+             |  2026-09-30  A way to take a machine-written entry off the wrong
+             |  person's record. CodeRabbit's second hardening point on #1195, and
+             |  the better one: it is useful even when nothing is forged, because a
+             |  summary can simply be about the wrong person.
+             |  The reason there was no way: network_activities_update restricts a
+             |  member to their OWN, non-system entries, and that restriction is
+             |  what makes the timeline evidence rather than opinion. Correct in
+             |  itself, and its consequence was that a machine-written entry on the
+             |  wrong record was PERMANENT for everyone who could see it.
+             |  MARK, do not edit and do not delete. Editing the body would destroy
+             |  what is_system is for. And DELETING WOULD BE SILENTLY UNDONE - the
+             |  inbox writer re-matches on the address every time the thread gets a
+             |  reply, so a deleted row returns on the next message, unmarked.
+             |  Keeping the row WITH its contact_id is what makes the correction
+             |  durable: the next reply conflicts with the marked row and updates
+             |  its content, and the mark survives because PostgREST's ON CONFLICT
+             |  DO UPDATE sets only the columns in the payload, and neither writer
+             |  mentions it. That is now the most important test in the set.
+             |  Recency too, or it is half a fix. network_contact_touch_activity is
+             |  an AFTER INSERT trigger that pushes network_contacts
+             |  .last_activity_at forward, indexed and feeding relationship
+             |  scoring - so hiding the entry while leaving the contact looking that
+             |  recently active corrects nothing a person reads. The function
+             |  recomputes it from the entries that remain, and leaves it alone when
+             |  none do, because it was backfilled for contacts that never had an
+             |  activity and clearing it would destroy rather than correct.
+             |  Authorization is deliberately NOT ordinary edit rights. A system
+             |  entry belongs to no member - actor_id is whoever happened to end the
+             |  meeting, or null for an ingest - so "your own entries" has no
+             |  meaning. Org admin, through a SECURITY DEFINER function following
+             |  merge_network_contacts: over PostgREST the update would match zero
+             |  rows, report no error, and the route would say it worked.
+             |  Did not copy the merge route's `as any` on the client, which is how
+             |  it reaches an unregistered RPC. Registered the function in
+             |  database.types.ts instead, which then made a cast in my own route
+             |  unnecessary - removed rather than kept.
+             |  12 injections, 11 caught, AND THE MISS IS THE INTERESTING ONE.
+             |  Dropping `security definer` from the function broke nothing, because
+             |  my test asserted /security definer/i against the whole migration and
+             |  the migration's OWN COMMENT explains why it is SECURITY DEFINER. The
+             |  oracle matched prose, not the clause. Third time this session that a
+             |  test passed by agreeing with something other than the code under it.
+             |  Rewritten to match the clause structurally, between `language
+             |  plpgsql` and the body; injection 6 then failed as it should.
+             |  WHAT IS NOT BUILT: restoring a mistaken correction. The function
+             |  takes flag=false and the route exposes it, but a marked entry is
+             |  hidden from every reader, so there is no way to FIND one in the UI
+             |  to restore. Irreversibility-in-the-UI is the same shape as the
+             |  problem this slice fixes, and it is deferred rather than
+             |  half-built - it wants the timeline to show corrected entries to
+             |  admins, which is its own piece.
+             |  Also left: the dashboard's org-wide activities_week count still
+             |  counts corrected rows. It is not a record about a person, and
+             |  re-creating that rollup function to filter one number was not worth
+             |  the noise. Said rather than skipped.
+             |  Confidence: Jest 7851 across 552 suites, typecheck and eslint
+             |  clean.
 ```
 
 ---
