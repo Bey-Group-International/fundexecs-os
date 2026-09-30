@@ -560,6 +560,39 @@ describe("what a keystroke costs", () => {
     expect(renders.value).toBe(0);
   });
 
+  /**
+   * The companion to the one above, and the one that was missing.
+   *
+   * "still re-renders the row that was opened" uses a log of ONE row — and with
+   * one row, "every row re-rendered" and "only the opened row re-rendered" are
+   * the same observation. It therefore passed identically whether or not the
+   * memo held on the open path. It did not hold: `toggle` listed `openId` and
+   * `details` among its dependencies, so it was a new function every time either
+   * moved, and it is handed to every row. Opening one row re-rendered all of
+   * them, and the detail landing a moment later re-rendered all of them again.
+   * Measured at 200 meetings: 95ms to open a row, against 15ms once `toggle`
+   * stopped changing.
+   *
+   * Thirty rows here, because the number is the whole point: the two cases have
+   * to come out as different numbers or the test is agreeing with either.
+   */
+  it("re-renders the opened row and leaves the rest of the log alone", async () => {
+    mockFetch(async () => ({ body: { detail: DETAIL } }));
+    const user = userEvent.setup();
+    render(<MeetingLogs meetings={manyRows} />);
+
+    const renders = countRowRenders();
+    // `m1`, because the detail is filed under the id it names and this is the
+    // row that owns it.
+    await user.click(screen.getByRole("button", { name: /Meeting 1\b/ }));
+    expect(await screen.findByText(DETAIL.summary)).toBeInTheDocument();
+
+    // The opened row renders a few times over: opening it, then the detail
+    // arriving. Every other row renders zero. The bound is far below the row
+    // count on purpose — with the dependency array back, this is ~60.
+    expect(renders.value).toBeLessThanOrEqual(6);
+  });
+
   // The memo must not cost correctness: opening a row still re-renders THAT row.
   it("still re-renders the row that was opened", async () => {
     mockFetch(async () => ({ body: { detail: DETAIL } }));
