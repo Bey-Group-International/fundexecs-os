@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { createPortal } from "react-dom";
-import { detectTimezone, formatSlotFull } from "@/lib/meetings/scheduling";
+import { BOOKING_REASON_MAX, detectTimezone, formatSlotFull } from "@/lib/meetings/scheduling";
 import type { HostBooking, HostEventType, HostSchedulingPage, SchedulingSnapshot } from "./scheduling-types";
 import nextDynamic from "next/dynamic";
 
@@ -35,6 +35,14 @@ export function SchedulingLinkCard() {
   const [busyId, setBusyId] = useState<string | null>(null);
   /** Which booking list, if any, is expanded under the link row. */
   const [openList, setOpenList] = useState<"pending" | "confirmed" | null>(null);
+  /**
+   * The decline or cancel waiting on a second click. Both email the invitee
+   * and cannot be undone, so neither happens on the first click, and the
+   * second is where the host can say why.
+   */
+  const [confirming, setConfirming] = useState<{ id: string; action: "decline" | "cancel" } | null>(null);
+  const [reason, setReason] = useState("");
+  const [showAllConfirmed, setShowAllConfirmed] = useState(false);
   const [viewerTimezone, setViewerTimezone] = useState("UTC");
 
   useEffect(() => {
@@ -95,10 +103,12 @@ export function SchedulingLinkCard() {
       const res = await fetch(`/api/meetings/scheduling/bookings/${booking.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action }),
+        body: JSON.stringify(action === "approve" ? { action } : { action, reason: reason.trim() || undefined }),
       });
       const data = (await res.json()) as { error?: string };
       if (!res.ok) throw new Error(data.error ?? "That didn't work.");
+      setConfirming(null);
+      setReason("");
       await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : "That didn't work.");
@@ -222,28 +232,41 @@ export function SchedulingLinkCard() {
                   <span className="text-xs text-fg-muted">
                     {formatSlotFull(booking.startsAt, viewerTimezone)}
                   </span>
+                  <GuestLine guests={booking.inviteeGuests} />
                   {booking.inviteeNotes ? (
                     <span className="mt-1 text-xs text-fg-secondary">&ldquo;{booking.inviteeNotes}&rdquo;</span>
                   ) : null}
                 </div>
-                <div className="flex gap-2">
-                  <button
-                    type="button"
-                    disabled={busyId === booking.id}
-                    onClick={() => void decide(booking, "approve")}
-                    className="fx-btn rounded-lg bg-gold-400 px-3 py-1.5 text-xs font-semibold text-white hover:bg-gold-500"
-                  >
-                    Approve
-                  </button>
-                  <button
-                    type="button"
-                    disabled={busyId === booking.id}
-                    onClick={() => void decide(booking, "decline")}
-                    className="fx-btn rounded-lg border border-line bg-surface-1 px-3 py-1.5 text-xs font-medium text-fg-secondary hover:border-status-danger/40 hover:text-[var(--status-danger)]"
-                  >
-                    Decline
-                  </button>
-                </div>
+                {confirming?.id === booking.id ? (
+                  <ConfirmRow
+                    label={`Decline ${booking.inviteeName}'s request?`}
+                    confirmLabel="Decline request"
+                    reason={reason}
+                    onReason={setReason}
+                    busy={busyId === booking.id}
+                    onConfirm={() => void decide(booking, "decline")}
+                    onBack={() => { setConfirming(null); setReason(""); }}
+                  />
+                ) : (
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      disabled={busyId === booking.id}
+                      onClick={() => void decide(booking, "approve")}
+                      className="fx-btn rounded-lg bg-gold-400 px-3 py-1.5 text-xs font-semibold text-white hover:bg-gold-500"
+                    >
+                      Approve
+                    </button>
+                    <button
+                      type="button"
+                      disabled={busyId === booking.id}
+                      onClick={() => { setConfirming({ id: booking.id, action: "decline" }); setReason(""); }}
+                      className="fx-btn rounded-lg border border-line bg-surface-1 px-3 py-1.5 text-xs font-medium text-fg-secondary hover:border-status-danger/40 hover:text-[var(--status-danger)]"
+                    >
+                      Decline
+                    </button>
+                  </div>
+                )}
               </li>
             ))}
           </ul>
@@ -251,7 +274,7 @@ export function SchedulingLinkCard() {
 
         {openList === "confirmed" ? (
           <ul className="mt-2 flex flex-col gap-2">
-            {confirmed.slice(0, 5).map((booking) => (
+            {(showAllConfirmed ? confirmed : confirmed.slice(0, 5)).map((booking) => (
               <li
                 key={booking.id}
                 className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-line bg-surface-0 px-3 py-2.5"
@@ -263,17 +286,41 @@ export function SchedulingLinkCard() {
                   <span className="text-xs text-fg-muted">
                     {formatSlotFull(booking.startsAt, viewerTimezone)}
                   </span>
+                  <GuestLine guests={booking.inviteeGuests} />
                 </div>
-                <button
-                  type="button"
-                  disabled={busyId === booking.id}
-                  onClick={() => void decide(booking, "cancel")}
-                  className="rounded-lg border border-line px-3 py-1.5 text-xs font-medium text-fg-muted transition-colors hover:text-[var(--status-danger)] disabled:opacity-50"
-                >
-                  Cancel
-                </button>
+                {confirming?.id === booking.id ? (
+                  <ConfirmRow
+                    label={`Cancel the meeting with ${booking.inviteeName}?`}
+                    confirmLabel="Cancel meeting"
+                    reason={reason}
+                    onReason={setReason}
+                    busy={busyId === booking.id}
+                    onConfirm={() => void decide(booking, "cancel")}
+                    onBack={() => { setConfirming(null); setReason(""); }}
+                  />
+                ) : (
+                  <button
+                    type="button"
+                    disabled={busyId === booking.id}
+                    onClick={() => { setConfirming({ id: booking.id, action: "cancel" }); setReason(""); }}
+                    className="rounded-lg border border-line px-3 py-1.5 text-xs font-medium text-fg-muted transition-colors hover:text-[var(--status-danger)] disabled:opacity-50"
+                  >
+                    Cancel
+                  </button>
+                )}
               </li>
             ))}
+            {confirmed.length > 5 ? (
+              <li>
+                <button
+                  type="button"
+                  onClick={() => setShowAllConfirmed((v) => !v)}
+                  className="fx-focus rounded text-xs text-fg-muted underline-offset-2 hover:text-fg-primary hover:underline"
+                >
+                  {showAllConfirmed ? "Show fewer" : `Show all ${confirmed.length}`}
+                </button>
+              </li>
+            ) : null}
           </ul>
         ) : null}
       </section>
@@ -321,3 +368,68 @@ function LinkIcon() {
   );
 }
 
+
+/** Who else the invitee is bringing, when anyone. */
+function GuestLine({ guests }: { guests?: string[] }) {
+  if (!guests || guests.length === 0) return null;
+  return (
+    <span className="mt-0.5 truncate text-xs text-fg-muted" title={guests.join(", ")}>
+      + {guests.length === 1 ? guests[0] : `${guests.length} guests: ${guests.join(", ")}`}
+    </span>
+  );
+}
+
+/**
+ * The second click on a decline or cancel. Says who hears about it, and takes
+ * an optional reason that goes into their email.
+ */
+function ConfirmRow({
+  label,
+  confirmLabel,
+  reason,
+  onReason,
+  busy,
+  onConfirm,
+  onBack,
+}: {
+  label: string;
+  confirmLabel: string;
+  reason: string;
+  onReason: (v: string) => void;
+  busy: boolean;
+  onConfirm: () => void;
+  onBack: () => void;
+}) {
+  return (
+    <div className="flex w-full flex-col gap-2 sm:w-auto sm:min-w-[18rem]">
+      <span className="text-xs text-fg-secondary">{label} They&apos;ll be emailed.</span>
+      <input
+        type="text"
+        value={reason}
+        onChange={(e) => onReason(e.target.value)}
+        maxLength={BOOKING_REASON_MAX}
+        placeholder="Reason (optional, included in the email)"
+        aria-label="Reason"
+        className="w-full rounded-lg border border-line bg-surface-0 px-2.5 py-1.5 text-xs text-fg-primary focus:outline-none focus:ring-2 focus:ring-[var(--gold-400)]"
+      />
+      <div className="flex gap-2">
+        <button
+          type="button"
+          disabled={busy}
+          onClick={onConfirm}
+          className="fx-btn rounded-lg border border-status-danger/40 bg-status-danger/10 px-3 py-1.5 text-xs font-semibold text-[var(--status-danger)] disabled:opacity-50"
+        >
+          {busy ? "Working…" : confirmLabel}
+        </button>
+        <button
+          type="button"
+          disabled={busy}
+          onClick={onBack}
+          className="rounded-lg border border-line px-3 py-1.5 text-xs font-medium text-fg-muted hover:text-fg-primary"
+        >
+          Keep it
+        </button>
+      </div>
+    </div>
+  );
+}
