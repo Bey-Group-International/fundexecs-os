@@ -16,6 +16,7 @@ jest.mock("@/lib/calendar/google.server", () => ({
 import {
   busyIntervals,
   createMeetingForBooking,
+  openSlots,
   rescheduleBooking,
   resolvePublicPage,
   SlotUnavailableError,
@@ -140,6 +141,41 @@ describe("busyIntervals", () => {
       { ...WINDOW, excludeBookingId: "b1" },
     );
     expect(busy).toEqual([]);
+  });
+});
+
+describe("openSlots daily booking limit", () => {
+  const page = {
+    id: "page-1",
+    user_id: "host-1",
+    timezone: "UTC",
+    availability: [
+      { day: 3, start: "09:00", end: "11:00" },
+      { day: 4, start: "09:00", end: "11:00" },
+    ],
+    buffer_minutes: 0,
+    min_notice_minutes: 0,
+    booking_window_days: 30,
+    max_bookings_per_day: 1,
+  };
+  const eventType = { duration_minutes: 30, slot_interval_minutes: 30 };
+  const client = () =>
+    fakeClient({
+      scheduling_bookings: [
+        { id: "b1", starts_at: "2026-09-02T15:00:00.000Z", ends_at: "2026-09-02T15:30:00.000Z" },
+      ],
+    }) as never;
+  const opts = { now: new Date("2026-09-01T00:00:00Z"), fromDate: "2026-09-02", toDate: "2026-09-03" };
+
+  it("closes a day that already holds the host's limit", async () => {
+    const { slots } = await openSlots(client(), page as never, eventType as never, opts);
+    expect(slots.some((s) => s.start.startsWith("2026-09-02"))).toBe(false);
+    expect(slots.filter((s) => s.start.startsWith("2026-09-03"))).toHaveLength(4);
+  });
+
+  it("does not count the booking being rescheduled against its own day", async () => {
+    const { slots } = await openSlots(client(), page as never, eventType as never, { ...opts, excludeBookingId: "b1" });
+    expect(slots.filter((s) => s.start.startsWith("2026-09-02"))).toHaveLength(4);
   });
 });
 
