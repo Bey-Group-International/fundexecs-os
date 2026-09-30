@@ -297,3 +297,26 @@ describe("a reminder's save-to-calendar link", () => {
     expect(hostile).not.toContain("Save to calendar");
   });
 });
+
+describe("buildReminderEmail manage link", () => {
+  const base = {
+    title: "Intro call",
+    hostName: "Rae",
+    whenLabel: "Tue, Sep 1, 3:00 PM EDT",
+    timeUntil: "in about 3 hours",
+  };
+
+  it("offers the way to reschedule when there is one", () => {
+    const { html } = buildReminderEmail({ ...base, manageUrl: "https://fundexecs.com/booking/tok" });
+    expect(html).toContain('href="https://fundexecs.com/booking/tok"');
+    expect(html).toMatch(/Reschedule or cancel/);
+  });
+
+  it("leaves it out otherwise, and refuses anything that is not a web link", () => {
+    expect(buildReminderEmail(base).html).not.toMatch(/Reschedule or cancel/);
+    expect(buildReminderEmail({ ...base, manageUrl: "javascript:alert(1)" }).html).not.toContain("javascript:");
+    expect(buildReminderEmail({ ...base, manageUrl: 'https://x.test/" onmouseover="x' }).html).not.toContain(
+      '" onmouseover',
+    );
+  });
+});

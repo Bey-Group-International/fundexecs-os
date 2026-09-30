@@ -15,7 +15,7 @@ import { sendEmail } from "@/lib/email";
 import { SITE_URL } from "@/lib/site";
 import { buildMeetingInviteUrl } from "@/lib/meetings/service";
 import { buildMeetingCalendarUrl } from "@/lib/meetings/scheduled-invite";
-import { formatSlotFull } from "@/lib/meetings/scheduling";
+import { buildBookingManageUrl, formatSlotFull } from "@/lib/meetings/scheduling";
 import { hostCredentials } from "@/lib/meetings/mailbox.server";
 import {
   buildReminderEmail,
@@ -177,33 +177,86 @@ async function release(supabase: ServiceClient, id: string, claimedAt: string): 
   }
 }
 
+/** The booking behind a meeting, when it came in through a scheduling link. */
+interface BookedBy {
+  email: string;
+  timezone: string | null;
+  manageUrl: string;
+}
+
+/**
+ * Who booked this meeting through a scheduling link, if anyone did.
+ *
+ * Only a confirmed booking counts: a cancelled one has no manage link worth
+ * sending. Never throws; without it the reminder still goes out, just without
+ * the invitee's own time zone and way to reschedule.
+ */
+async function bookedBy(supabase: ServiceClient, meetingId: string): Promise<BookedBy | null> {
+  try {
+    const { data, error } = await (supabase as unknown as { from: (t: string) => any })
+      .from("scheduling_bookings")
+      .select("invitee_email, invitee_timezone, manage_token")
+      .eq("meeting_id", meetingId)
+      .eq("status", "confirmed")
+      .limit(1);
+    if (error) throw new Error(error.message);
+    const row = (data ?? [])[0] as
+      | { invitee_email: string | null; invitee_timezone: string | null; manage_token: string | null }
+      | undefined;
+    if (!row?.invitee_email || !row.manage_token) return null;
+    return {
+      email: row.invitee_email.trim().toLowerCase(),
+      timezone: row.invitee_timezone,
+      manageUrl: buildBookingManageUrl(SITE_URL, row.manage_token),
+    };
+  } catch (err) {
+    console.error("[meetings/reminder-sweep] could not look up booking", meetingId, err);
+    return null;
+  }
+}
+
 /** Email one meeting's reminder. Returns how many recipients were reached. */
 async function remind(supabase: ServiceClient, meeting: SweepableMeeting, now: Date): Promise<number> {
   const recipients = reminderRecipients(meeting.attendees);
   if (recipients.length === 0) return 0;
 
   const orgId = meeting.organization_id ?? undefined;
-  const credentials = await hostCredentials(supabase, meeting.host_id, orgId);
+  const [credentials, booking] = await Promise.all([
+    hostCredentials(supabase, meeting.host_id, orgId),
+    bookedBy(supabase, meeting.id),
+  ]);
   const joinUrl = meeting.room_code
     ? buildMeetingInviteUrl(SITE_URL, meeting.room_code)
     : meeting.meeting_url ?? null;
 
-  const { subject, html } = buildReminderEmail({
-    title: meeting.title ?? "your meeting",
-    // The sweep has no acting user — nobody pressed anything. The meeting is
-    // the sender, and saying so is better than naming a host who is asleep.
-    hostName: "FundExecs OS",
-    whenLabel: formatSlotFull(meeting.scheduled_at!, meeting.timezone || "UTC"),
-    timeUntil: describeTimeUntil(meeting.scheduled_at!, now),
-    joinUrl,
-    calendarUrl: meeting.room_code ? buildMeetingCalendarUrl(SITE_URL, meeting.room_code) : null,
-  });
+  const email = (forInvitee: boolean) =>
+    buildReminderEmail({
+      title: meeting.title ?? "your meeting",
+      // The sweep has no acting user — nobody pressed anything. The meeting is
+      // the sender, and saying so is better than naming a host who is asleep.
+      hostName: "FundExecs OS",
+      // The person who booked chose a time in their own zone and told us which
+      // one; everyone else gets the meeting's.
+      whenLabel: formatSlotFull(
+        meeting.scheduled_at!,
+        (forInvitee && booking?.timezone) || meeting.timezone || "UTC",
+      ),
+      timeUntil: describeTimeUntil(meeting.scheduled_at!, now),
+      joinUrl,
+      calendarUrl: meeting.room_code ? buildMeetingCalendarUrl(SITE_URL, meeting.room_code) : null,
+      // Their manage link, to them alone: guests on the same booking must not
+      // be able to cancel it.
+      manageUrl: forInvitee ? booking?.manageUrl : null,
+    });
+  const shared = email(false);
+  const personal = booking ? email(true) : shared;
 
   const results = await Promise.allSettled(
-    recipients.map((r) =>
+    recipients.map((r) => {
+      const { subject, html } = booking && r.email === booking.email ? personal : shared;
       // Allowed to fall back: this is the reminder nobody else will send.
-      sendEmail({ orgId, credentials, to: r, subject, htmlBody: html, allowFallback: true }),
-    ),
+      return sendEmail({ orgId, credentials, to: r, subject, htmlBody: html, allowFallback: true });
+    }),
   );
 
   return results.filter((r) => r.status === "fulfilled" && (r.value as { ok: boolean }).ok).length;

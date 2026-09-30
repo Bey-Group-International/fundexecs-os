@@ -97,9 +97,23 @@ describe("isReminderDue", () => {
  * A client whose read returns `rows` on the first page and whose claim update
  * returns `claim`. Later pages come back empty, which ends the paging loop.
  */
-function client(rows: SweepableMeeting[], claim: unknown[] = [{ id: "m1" }]) {
+function client(
+  rows: SweepableMeeting[],
+  claim: unknown[] = [{ id: "m1" }],
+  bookings: unknown[] = [],
+) {
   const update = jest.fn();
   const ranges: Array<[number, number]> = [];
+  const bookingFilters: Array<[string, unknown]> = [];
+  // scheduling_bookings: .select().eq(meeting_id).eq(status).limit(1)
+  const bookingQuery: Record<string, unknown> = {
+    select: () => bookingQuery,
+    eq: (column: string, value: unknown) => {
+      bookingFilters.push([column, value]);
+      return bookingQuery;
+    },
+    limit: async () => ({ data: bookings, error: null }),
+  };
   const b: Record<string, unknown> = {
     select: () => b,
     eq: () => b,
@@ -125,7 +139,12 @@ function client(rows: SweepableMeeting[], claim: unknown[] = [{ id: "m1" }]) {
       };
     },
   };
-  return { supabase: { from: () => b } as never, update, ranges };
+  return {
+    supabase: { from: (table: string) => (table === "scheduling_bookings" ? bookingQuery : b) } as never,
+    update,
+    ranges,
+    bookingFilters,
+  };
 }
 
 describe("runMeetingReminders", () => {
@@ -272,5 +291,63 @@ describe("runMeetingReminders", () => {
     const stats = await runMeetingReminders(supabase, { now: NOW });
     expect(stats.due).toBe(0);
     expect(sendEmailMock).not.toHaveBeenCalled();
+  });
+});
+
+describe("runMeetingReminders for a meeting booked through a scheduling link", () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    sendEmailMock.mockResolvedValue({ ok: true, channel: "gmail", detail: "sent" });
+    hostCredentialsMock.mockResolvedValue({ gmailAccessToken: "tok" });
+  });
+
+  const booked = meeting({
+    timezone: "America/Chicago",
+    attendees: [
+      { name: "Ada", email: "Ada@LP.test" },
+      { name: "Ben", email: "ben@lp.test" },
+    ],
+  });
+  const booking = { invitee_email: "ada@lp.test", invitee_timezone: "Asia/Singapore", manage_token: "tok123" };
+
+  function sentTo(email: string) {
+    const call = sendEmailMock.mock.calls.find(([a]) => (a as { to: { email: string } }).to.email === email);
+    return (call?.[0] ?? {}) as { htmlBody: string };
+  }
+
+  it("gives the person who booked their own time and a way to reschedule", async () => {
+    const { supabase, bookingFilters } = client([booked], [{ id: "m1" }], [booking]);
+    await runMeetingReminders(supabase, { now: NOW });
+
+    const invitee = sentTo("ada@lp.test").htmlBody;
+    expect(invitee).toContain("/booking/tok123");
+    expect(invitee).toMatch(/Reschedule or cancel/);
+    // 09:30 UTC is 5:30 PM in Singapore.
+    expect(invitee).toContain("5:30");
+    expect(bookingFilters).toEqual([
+      ["meeting_id", "m1"],
+      ["status", "confirmed"],
+    ]);
+  });
+
+  it("never hands a guest the invitee's manage link", async () => {
+    const { supabase } = client([booked], [{ id: "m1" }], [booking]);
+    await runMeetingReminders(supabase, { now: NOW });
+
+    const guest = sentTo("ben@lp.test").htmlBody;
+    expect(guest).not.toContain("tok123");
+    expect(guest).not.toMatch(/Reschedule or cancel/);
+    // The meeting's own zone: 09:30 UTC is 4:30 AM in Chicago.
+    expect(guest).toContain("4:30");
+  });
+
+  it("sends the usual reminder when the meeting was not booked", async () => {
+    const { supabase } = client([booked]);
+    const stats = await runMeetingReminders(supabase, { now: NOW });
+
+    expect(stats.sent).toBe(2);
+    for (const [args] of sendEmailMock.mock.calls) {
+      expect((args as { htmlBody: string }).htmlBody).not.toMatch(/Reschedule or cancel/);
+    }
   });
 });
