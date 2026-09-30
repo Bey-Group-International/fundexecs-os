@@ -97,7 +97,7 @@ function captureFetch() {
 }
 
 function view(timeline: TimelineEntry[], canCorrect: boolean) {
-  render(
+  return render(
     <ContactRecordView
       initial={{ contact: CONTACT, timeline, tasks: [], possibleDuplicates: [] }}
       owners={[]}
@@ -237,5 +237,94 @@ describe("after a correction", () => {
     await userEvent.click(screen.getByRole("button", { name: /take it off this record/i }));
 
     await waitFor(() => expect(refresh).toHaveBeenCalled());
+  });
+});
+
+/**
+ * What the refresh has to actually DO.
+ *
+ * The test above asserts router.refresh() is called. That is a claim about my
+ * assumption — that a server re-render reaches the screen — not about what a
+ * reader ends up looking at. It does not: useState reads `initial` once, on
+ * mount, so fresh props were being dropped and the correction changed nothing
+ * visible. CodeRabbit caught it. These two rerender with new server data and
+ * assert the rendered result, which is the property that matters.
+ */
+describe("when the server re-reads the record", () => {
+  it("the timeline shows what the server now returns", () => {
+    const { rerender } = view([entry({ id: "act-1", subject: "Dunbar follow-up" })], true);
+    expect(screen.getByText("Dunbar follow-up")).toBeInTheDocument();
+
+    // What router.refresh() produces: the same component, new props, because
+    // the entry was corrected and the server no longer returns it.
+    rerender(
+      <ContactRecordView
+        initial={{
+          contact: CONTACT,
+          timeline: [entry({ id: "act-2", subject: "Pacing call" })],
+          tasks: [],
+          possibleDuplicates: [],
+        }}
+        owners={[]}
+        currentUserId="principal-1"
+        canDelete
+        canCorrect
+      />,
+    );
+
+    expect(screen.queryByText("Dunbar follow-up")).toBeNull();
+    expect(screen.getByText("Pacing call")).toBeInTheDocument();
+  });
+
+  // The other half of the correction, and the reason it refreshes rather than
+  // patching one row: the RPC moves the contact's last_activity_at too.
+  it("the header shows the recency the server recomputed", () => {
+    const { rerender } = view([entry()], true);
+
+    rerender(
+      <ContactRecordView
+        initial={{
+          contact: { ...CONTACT, lastActivityAt: "2026-06-01T00:00:00.000Z" },
+          timeline: [entry()],
+          tasks: [],
+          possibleDuplicates: [],
+        }}
+        owners={[]}
+        currentUserId="principal-1"
+        canDelete
+        canCorrect
+      />,
+    );
+
+    expect(screen.getByText(/Jun/)).toBeInTheDocument();
+  });
+});
+
+/**
+ * A failed correction keeps the prompt and the reason.
+ *
+ * correctEntry reports failure rather than throwing, so the form could close on
+ * a rejected request — showing an error while discarding what the person had
+ * just typed, and looking like it had worked.
+ */
+describe("when the correction fails", () => {
+  it("leaves the prompt open with the reason still in it", async () => {
+    (global as unknown as { fetch: unknown }).fetch = jest.fn(async () => ({
+      ok: false,
+      json: async () => ({ error: "Only an organization admin can correct an automatic entry" }),
+    })) as unknown;
+
+    view([entry({ id: "act-42" })], true);
+    await userEvent.click(screen.getByRole("button", { name: /wrong person/i }));
+
+    const field = screen.getByLabelText(/why is this the wrong person/i);
+    await userEvent.type(field, "Not her meeting");
+    await userEvent.click(screen.getByRole("button", { name: /take it off this record/i }));
+
+    await waitFor(() =>
+      expect(screen.getByText(/Only an organization admin/)).toBeInTheDocument(),
+    );
+    // Still open, still holding what they wrote.
+    expect(screen.getByLabelText(/why is this the wrong person/i)).toHaveValue("Not her meeting");
   });
 });

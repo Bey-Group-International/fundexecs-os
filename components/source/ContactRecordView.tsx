@@ -10,7 +10,7 @@
 // Every control writes through an API route that also records the change on the
 // timeline and in the audit log, so nothing here changes quietly.
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { CONTACT_STAGES, STAGE_LABEL, type ContactStage } from "@/lib/network-stages";
@@ -100,6 +100,28 @@ export function ContactRecordView({ initial, owners, currentUserId, canCorrect }
   const router = useRouter();
 
   /**
+   * Take the server's word when it re-reads the record.
+   *
+   * useState only reads its argument on mount, so new `initial` props are
+   * ignored afterwards. That was harmless while every mutation here patched
+   * local state — the component was the only writer, and it was self-consistent.
+   * The correction broke that: it deliberately does NOT patch, because the RPC
+   * also recomputes the contact's last_activity_at, and calls router.refresh()
+   * so the server recomputes the whole record. Without this the refresh changed
+   * nothing a person could see — the corrected entry stayed on the timeline and
+   * the header kept the recency the database had just moved. CodeRabbit caught
+   * it; my own test had asserted only that refresh was CALLED, which is a claim
+   * about my assumption rather than about what a reader ends up looking at.
+   */
+  useEffect(() => {
+    setContact(initial.contact);
+  }, [initial.contact]);
+
+  useEffect(() => {
+    setTimeline(initial.timeline);
+  }, [initial.timeline]);
+
+  /**
    * Mark an automatic entry as being about the wrong person, or put it back.
    *
    * Refreshes the server component rather than patching the row in state. The
@@ -109,7 +131,7 @@ export function ContactRecordView({ initial, owners, currentUserId, canCorrect }
    * the same half-a-fix the function exists to avoid.
    */
   const correctEntry = useCallback(
-    async (entryId: string, misattributed: boolean, reason: string | null) => {
+    async (entryId: string, misattributed: boolean, reason: string | null): Promise<boolean> => {
       try {
         const res = await fetch(`/api/network/activities/${entryId}/correction`, {
           method: "POST",
@@ -129,11 +151,17 @@ export function ContactRecordView({ initial, owners, currentUserId, canCorrect }
             : "Entry restored to the record.",
         });
         router.refresh();
+        return true;
       } catch (err) {
         setMessage({
           tone: "error",
           text: err instanceof Error ? err.message : "Couldn't update that entry.",
         });
+        // Reported rather than thrown, so the caller can keep the prompt open
+        // with what the person typed still in it. Swallowing the failure AND
+        // closing the form made a failed correction look like a finished one and
+        // threw away the reason they had just written.
+        return false;
       }
     },
     [router],
@@ -522,7 +550,7 @@ function Timeline({
 }: {
   entries: TimelineEntry[];
   canCorrect: boolean;
-  onCorrect: (entryId: string, misattributed: boolean, reason: string | null) => Promise<void>;
+  onCorrect: (entryId: string, misattributed: boolean, reason: string | null) => Promise<boolean>;
 }) {
   const [showCorrected, setShowCorrected] = useState(false);
 
@@ -679,7 +707,7 @@ function CorrectionControl({
   onCorrect,
 }: {
   entry: TimelineEntry;
-  onCorrect: (entryId: string, misattributed: boolean, reason: string | null) => Promise<void>;
+  onCorrect: (entryId: string, misattributed: boolean, reason: string | null) => Promise<boolean>;
 }) {
   const [asking, setAsking] = useState(false);
   const [reason, setReason] = useState("");
@@ -688,9 +716,12 @@ function CorrectionControl({
   async function run(misattributed: boolean, why: string | null) {
     setBusy(true);
     try {
-      await onCorrect(entry.id, misattributed, why);
-      setAsking(false);
-      setReason("");
+      // Only on success. A failed request leaves the prompt open with the
+      // reason intact, so the person can retry rather than retype.
+      if (await onCorrect(entry.id, misattributed, why)) {
+        setAsking(false);
+        setReason("");
+      }
     } finally {
       setBusy(false);
     }
