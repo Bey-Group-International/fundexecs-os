@@ -29,18 +29,30 @@ jest.mock("next/navigation", () => ({
   useSearchParams: () => new URLSearchParams(),
   usePathname: () => "/meetings",
 }));
+/**
+ * The rows the overlay's own read will find.
+ *
+ * It refetches `live_meetings` on mount and replaces `initialMeetings` with the
+ * answer — the same "the list replaces the snapshot moments later" shape the
+ * landing page documents. A stub that resolves empty therefore WIPES the
+ * fixture, which is what made an earlier attempt at these tests see an empty
+ * grid and wrongly look like the chips were gated on calendar layers. They are
+ * not: `visibleEvents`/`layerIndex` only filter connected-calendar events. So
+ * the fixture is supplied through the read the product actually makes.
+ */
+let dbRows: unknown[] = [];
+
 jest.mock("@/lib/supabase/client", () => {
-  // A query builder that answers every chain with itself and resolves empty, so
-  // the lists mounted beside the grid can run their reads without a database.
-  const table = () => {
+  const table = (name: string) => {
     const q: Record<string, unknown> = {};
     const chain = () => q;
     for (const k of ["select", "eq", "neq", "in", "is", "gte", "lte", "lt", "gt",
                      "order", "limit", "not", "or", "filter", "range", "contains"]) {
       q[k] = chain;
     }
+    const answer = () => ({ data: name === "live_meetings" ? dbRows : [], error: null });
     q.single = async () => ({ data: null, error: null });
-    q.then = (res: (v: { data: never[]; error: null }) => unknown) => res({ data: [], error: null });
+    q.then = (res: (v: unknown) => unknown) => res(answer());
     return q;
   };
   return {
@@ -59,6 +71,7 @@ jest.mock("@/lib/supabase/client", () => {
     }),
   };
 });
+
 jest.mock("./hooks", () => {
   const real = jest.requireActual("./hooks");
   return { ...real, useLivePresence: () => ({ presence: {}, recentJoins: [] }) };
@@ -100,6 +113,7 @@ function meeting(over: Partial<CalendarMeeting> & { id: string; scheduled_at: st
 }
 
 async function show(meetings: CalendarMeeting[]) {
+  dbRows = meetings;
   const out = render(
     <MeetingsCalendar
       initialMeetings={meetings}
@@ -122,14 +136,6 @@ beforeEach(() => {
 });
 afterEach(() => { jest.useRealTimers(); });
 
-// NOT covered here, and deliberately not faked: whether a given meeting draws
-// as a chip in its own cell. The chips go through `visibleEvents`/`layerIndex`,
-// which gate on the calendar layers this overlay fetches, and a stub that
-// returns no layers draws no chips. Reverse-engineering that plumbing to make an
-// assertion go green would produce a fixture that lies about what the product
-// does, which is worse than an honest gap. What is covered is the grid itself —
-// its shape, its headers, and its invariance across a clock tick, which is the
-// property the memoised cell depends on.
 describe("the month grid", () => {
   it("draws the seven weekday headers", async () => {
     await show([]);
@@ -145,6 +151,45 @@ describe("the month grid", () => {
     const cells = container.querySelectorAll("[data-day]");
     if (cells.length > 0) expect(cells.length).toBe(42);
     else expect(screen.getAllByText("1").length).toBeGreaterThan(0);
+  });
+
+  it("shows a meeting on its own day", async () => {
+    await show([
+      meeting({ id: "a", title: "Dunbar committee", scheduled_at: new Date(2026, 8, 16, 14, 0).toISOString() }),
+    ]);
+    expect(screen.getAllByText(/Dunbar committee/).length).toBeGreaterThan(0);
+  });
+
+  // The count in each cell's accessible label is the load-bearing part: a screen
+  // reader hears what a day holds even when the chips are summarised away, and
+  // it is the one assertion that cannot be satisfied by a chip drawn on the
+  // wrong day.
+  it("counts the day's items on the day that owns them", async () => {
+    await show([
+      meeting({ id: "a", title: "First thing", scheduled_at: new Date(2026, 8, 10, 14, 0).toISOString() }),
+      meeting({ id: "b", title: "Second thing", scheduled_at: new Date(2026, 8, 22, 14, 0).toISOString() }),
+    ]);
+    const withOne = screen.getAllByRole("button", { name: /1 item$/ });
+    expect(withOne.length).toBe(2);
+    expect(screen.getAllByRole("button", { name: /nothing scheduled$/ }).length).toBe(40);
+  });
+
+  it("keeps two meetings on different days apart", async () => {
+    await show([
+      meeting({ id: "a", title: "First thing", scheduled_at: new Date(2026, 8, 10, 14, 0).toISOString() }),
+      meeting({ id: "b", title: "Second thing", scheduled_at: new Date(2026, 8, 22, 14, 0).toISOString() }),
+    ]);
+    expect(screen.getAllByText(/First thing/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Second thing/).length).toBeGreaterThan(0);
+  });
+
+  // Two on one day is the case the three-chip budget has to survive.
+  it("puts two meetings on the same day in the same cell", async () => {
+    await show([
+      meeting({ id: "a", title: "Morning standup", scheduled_at: new Date(2026, 8, 16, 9, 0).toISOString() }),
+      meeting({ id: "b", title: "Afternoon review", scheduled_at: new Date(2026, 8, 16, 15, 0).toISOString() }),
+    ]);
+    expect(screen.getAllByRole("button", { name: /2 items$/ }).length).toBe(1);
   });
 
   it("draws an empty month without falling over", async () => {
