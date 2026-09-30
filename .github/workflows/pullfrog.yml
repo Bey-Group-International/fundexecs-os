@@ -30,7 +30,15 @@ jobs:
           # anything anyway (zizmor: artipacked).
           persist-credentials: false
       - name: Run agent
-        uses: pullfrog/pullfrog@v0
+        # Pinned to a commit SHA, like the repo's other third-party actions
+        # (supabase/setup-cli, anthropics/claude-code-action). `v0` is a MUTABLE
+        # major tag that pullfrog re-points on every release, so taking it by
+        # name means running whatever they published most recently.
+        # 0d318be = tag v0 as of 2026-09-30. Bump the SHA to move.
+        #
+        # This pins the action SHIM only: it npx-installs `pullfrog@^0.1.86` at
+        # runtime, so the agent itself still floats.
+        uses: pullfrog/pullfrog@0d318bef8c7cf7ae3f193ef32b2bc74e1d94b4d1 # v0
         with:
           prompt: ${{ inputs.prompt }}
         env:

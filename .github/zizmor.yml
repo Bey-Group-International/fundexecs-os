@@ -1,0 +1,37 @@
+# zizmor configuration. See .github/workflows/workflow-security.yml for how it runs.
+#
+# Two rules are configured. Both encode decisions this repository has already
+# made and documented elsewhere, rather than silencing findings to get green.
+
+rules:
+  # zizmor's default policy is `"*": hash-pin` — every action, first-party or
+  # not, must be pinned to a full SHA. That is stricter than this repository's
+  # own convention, which db-migrate.yml and office-hourly.yml already state in
+  # comments: pin NON-IMMUTABLE THIRD-PARTY actions to a SHA, and take GitHub's
+  # own actions at a major tag so they keep receiving patches.
+  #
+  # So the policy below is the repo's rule written down where a tool can read
+  # it. It is not a blanket exemption: a new third-party action added at a tag
+  # fails the audit, which is the case that actually matters for supply chain.
+  unpinned-uses:
+    config:
+      policies:
+        # GitHub's own actions, at a major tag. Immutable-ish, and freezing them
+        # means missing their security patches.
+        actions/*: ref-pin
+        # Everything else: a full SHA, no exceptions.
+        "*": hash-pin
+
+  artipacked:
+    ignore:
+      # office-hourly.yml keeps `persist-credentials` ON deliberately, and it is
+      # the only workflow here that does. It is `contents: write` and its agent
+      # step pushes a branch and opens a PR with exactly those credentials, so
+      # setting them false breaks the push rather than hardening it. The reason
+      # is written at the checkout step itself; this entry stops the audit
+      # re-reporting a decision that was made on purpose.
+      #
+      # Deliberately the whole file rather than a line number: there is one
+      # checkout here, and a line-pinned ignore silently stops matching the
+      # moment anything above it moves.
+      - office-hourly.yml
