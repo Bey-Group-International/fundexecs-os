@@ -17,6 +17,8 @@ import {
   BOOKING_EMAIL_MAX,
   BOOKING_NAME_MAX,
   BOOKING_NOTES_MAX,
+  BOOKING_REASON_MAX,
+  normalizeBookingReason,
   weekdayOfDate,
   buildBookingManageUrl,
   buildBookingPageUrl,
@@ -302,6 +304,22 @@ describe("generateSlots daily booking limit", () => {
     const input = { ...base, maxBookingsPerDay: 1, bookingStarts: ["2026-03-02T15:00:00Z"] };
     expect(isSlotAvailable("2026-03-02T09:00:00.000Z", input)).toBe(false);
     expect(isSlotAvailable("2026-03-03T09:00:00.000Z", input)).toBe(true);
+  });
+});
+
+describe("normalizeBookingReason", () => {
+  it("keeps text, trimmed", () => {
+    expect(normalizeBookingReason("  running late  ")).toBe("running late");
+  });
+
+  it("is null for blanks and anything that is not text", () => {
+    for (const raw of ["", "   ", null, undefined, 42, { text: "x" }, ["x"], true]) {
+      expect(normalizeBookingReason(raw)).toBeNull();
+    }
+  });
+
+  it("caps a long reason", () => {
+    expect(normalizeBookingReason("x".repeat(BOOKING_REASON_MAX + 500))).toHaveLength(BOOKING_REASON_MAX);
   });
 });
 

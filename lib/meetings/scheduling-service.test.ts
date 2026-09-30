@@ -17,6 +17,8 @@ import {
   busyIntervals,
   createMeetingForBooking,
   openSlots,
+  cancelBooking,
+  declineBooking,
   rescheduleBooking,
   resolvePublicPage,
   SlotUnavailableError,
@@ -228,37 +230,37 @@ describe("resolvePublicPage", () => {
   });
 });
 
-describe("rescheduleBooking", () => {
-  /**
-   * Records every write and answers each table's writes from a queue, so a test
-   * can make the booking row reject a move the way the overlap constraint does.
-   */
-  function recordingClient(results: Record<string, Array<{ data: unknown; error: unknown }>>) {
-    const writes: Array<{ table: string; patch: Record<string, unknown> }> = [];
-    return {
-      writes,
-      from(table: string) {
-        const b: Record<string, unknown> = new Proxy(
-          {
-            update(patch: Record<string, unknown>) {
-              writes.push({ table, patch });
-              return b;
-            },
-            then: (res: (v: unknown) => unknown, rej: (e: unknown) => unknown) =>
-              Promise.resolve(results[table]?.shift() ?? { data: null, error: null }).then(res, rej),
+/**
+ * Records every write and answers each table's writes from a queue, so a test
+ * can make the booking row reject a move the way the overlap constraint does.
+ */
+function recordingClient(results: Record<string, Array<{ data: unknown; error: unknown }>>) {
+  const writes: Array<{ table: string; patch: Record<string, unknown> }> = [];
+  return {
+    writes,
+    from(table: string) {
+      const b: Record<string, unknown> = new Proxy(
+        {
+          update(patch: Record<string, unknown>) {
+            writes.push({ table, patch });
+            return b;
           },
-          {
-            get(target: Record<string, unknown>, prop: string) {
-              if (prop in target) return target[prop];
-              return () => b;
-            },
+          then: (res: (v: unknown) => unknown, rej: (e: unknown) => unknown) =>
+            Promise.resolve(results[table]?.shift() ?? { data: null, error: null }).then(res, rej),
+        },
+        {
+          get(target: Record<string, unknown>, prop: string) {
+            if (prop in target) return target[prop];
+            return () => b;
           },
-        ) as Record<string, unknown>;
-        return b;
-      },
-    };
-  }
+        },
+      ) as Record<string, unknown>;
+      return b;
+    },
+  };
+}
 
+describe("rescheduleBooking", () => {
   const ctx = {
     booking: {
       id: "bk-1",
@@ -328,6 +330,38 @@ describe("rescheduleBooking", () => {
     await rescheduleBooking(client as never, ctx, "2026-10-06T16:00:00.000Z", { enforceAvailability: false });
 
     expect(client.writes[1]).toMatchObject({ table: "live_meetings", patch: { last_reminder_sent_at: null } });
+  });
+});
+
+describe("booking reasons", () => {
+  const live = {
+    booking: { id: "bk-2", meeting_id: "mtg-2", status: "confirmed" },
+    page: { id: "page-1" },
+    eventType: { id: "et-1" },
+    roomCode: null,
+  } as unknown as BookingContext;
+
+  // The invitee's reason arrives in an anonymous JSON body. A number there used
+  // to throw on `.trim()` after the room was deleted, stranding the booking.
+  it("cancels cleanly whatever the reason's type", async () => {
+    const client = recordingClient({ scheduling_bookings: [{ data: { ...live.booking, status: "cancelled" }, error: null }] });
+    const next = await cancelBooking(client as never, live, "invitee", 42);
+    expect(next.booking.status).toBe("cancelled");
+    expect(client.writes.map((w) => w.table)).toEqual(["live_meetings", "scheduling_bookings"]);
+    expect(client.writes[1].patch).toMatchObject({ status: "cancelled", cancellation_reason: null });
+  });
+
+  it("stores a reason trimmed and capped", async () => {
+    const client = recordingClient({ scheduling_bookings: [{ data: live.booking, error: null }] });
+    await cancelBooking(client as never, live, "host", `  ${"r".repeat(5000)}  `);
+    expect((client.writes[1].patch.cancellation_reason as string).length).toBe(1000);
+  });
+
+  it("declines with a non-string reason without throwing", async () => {
+    const pending = { ...live, booking: { ...live.booking, status: "pending" } } as unknown as BookingContext;
+    const client = recordingClient({ scheduling_bookings: [{ data: pending.booking, error: null }] });
+    await declineBooking(client as never, pending, { text: "no" });
+    expect(client.writes[0].patch).toMatchObject({ status: "declined", cancellation_reason: null });
   });
 });
 

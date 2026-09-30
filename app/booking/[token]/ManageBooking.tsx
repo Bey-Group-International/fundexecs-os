@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { SlotPicker } from "@/components/scheduling/SlotPicker";
 import { TimezoneSelect } from "@/components/scheduling/TimezoneSelect";
-import { detectTimezone, formatSlotFull, type SlotWindow } from "@/lib/meetings/scheduling";
+import { BOOKING_REASON_MAX, detectTimezone, formatSlotFull, type SlotWindow } from "@/lib/meetings/scheduling";
 
 interface BookingView {
   booking: {
@@ -209,6 +209,7 @@ export function ManageBooking({ token }: { token: string }) {
               <textarea
                 value={reason}
                 onChange={(e) => setReason(e.target.value)}
+                maxLength={BOOKING_REASON_MAX}
                 rows={2}
                 className="w-full resize-y rounded-lg border border-[var(--line)] bg-[var(--surface-0)] px-3 py-2.5 text-sm text-[var(--fg-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--gold-400)]"
               />
