@@ -583,6 +583,23 @@ describe("buildIcs", () => {
     expect(buildIcs([], base)).toContain("X-WR-CALNAME:Nia — FundExecs");
   });
 
+  it("marks a held-but-unagreed event tentative", () => {
+    const ics = buildIcs(
+      [
+        {
+          uid: "req@fundexecs",
+          startIso: "2026-09-02T14:00:00.000Z",
+          endIso: "2026-09-02T15:00:00.000Z",
+          summary: "Requested: Intro",
+          tentative: true,
+        },
+      ],
+      base,
+    );
+    expect(ics).toContain("STATUS:TENTATIVE");
+    expect(ics).not.toContain("STATUS:CONFIRMED");
+  });
+
   it("marks a cancelled event so subscribers remove it", () => {
     const ics = buildIcs(
       [

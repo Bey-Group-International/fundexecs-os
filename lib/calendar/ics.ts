@@ -668,6 +668,11 @@ export interface IcsFeedEvent {
   url?: string | null;
   /** Cancelled events stay in the feed so subscribers remove them. */
   cancelled?: boolean;
+  /**
+   * Held but not yet agreed, such as a booking request waiting on the host.
+   * Subscribers show it as tentative; it still blocks the time.
+   */
+  tentative?: boolean;
   /** Bumped when an event changes, so clients accept the update. */
   sequence?: number;
 }
@@ -715,7 +720,7 @@ export function buildIcs(events: IcsFeedEvent[], opts: BuildIcsOptions): string 
     if (ev.description) lines.push(`DESCRIPTION:${escapeText(ev.description)}`);
     if (ev.location) lines.push(`LOCATION:${escapeText(ev.location)}`);
     if (ev.url) lines.push(`URL:${ev.url}`);
-    lines.push(`STATUS:${ev.cancelled ? "CANCELLED" : "CONFIRMED"}`);
+    lines.push(`STATUS:${ev.cancelled ? "CANCELLED" : ev.tentative ? "TENTATIVE" : "CONFIRMED"}`);
     lines.push(`SEQUENCE:${ev.sequence ?? 0}`);
     lines.push("END:VEVENT");
   }
