@@ -240,9 +240,16 @@ export function connectionHealth(conn: {
   lastError: string | null;
   consecutiveFailures: number;
 }): ConnectionHealth {
-  // Checked first: an `invalid_client` is this app's OAuth credentials being
+  // Checked first: an `invalid_client` / `deleted_client` is this app's OAuth credentials being
   // rejected, which fails every connection at once and which reconnecting
   // cannot fix — so it must not fall through to "reconnect".
+  if (conn.lastError && /deleted_client/i.test(conn.lastError)) {
+    return {
+      state: "failing",
+      message:
+        "This app's Google OAuth client was deleted. An admin can restore it in Google Cloud Console (Credentials → deleted credentials, within 30 days).",
+    };
+  }
   if (conn.lastError && /invalid_client/i.test(conn.lastError)) {
     return {
       state: "failing",
@@ -329,7 +336,7 @@ export function retryDelayMs(consecutiveFailures: number): number {
 /**
  * The longest a connection waits when Google rejected this app's OAuth client.
  * The day-long backoff exists for a revoked grant, which only its member can
- * fix; an `invalid_client` is fixed once, by an admin, for every connection —
+ * fix; an `invalid_client` or `deleted_client` is fixed once, by an admin, for every connection —
  * and after that fix a day-long wait would leave every calendar dark for no
  * reason. Hourly matches the sweep.
  */
@@ -338,7 +345,7 @@ const CLIENT_REJECTED_MAX_DELAY_MS = 60 * 60_000;
 /** When a connection that has just failed may next be tried. */
 export function nextAttemptAt(consecutiveFailures: number, now: Date = new Date(), error?: string | null): Date {
   let delay = retryDelayMs(consecutiveFailures);
-  if (error && /invalid_client/i.test(error)) delay = Math.min(delay, CLIENT_REJECTED_MAX_DELAY_MS);
+  if (error && /invalid_client|deleted_client/i.test(error)) delay = Math.min(delay, CLIENT_REJECTED_MAX_DELAY_MS);
   return new Date(now.getTime() + delay);
 }
 

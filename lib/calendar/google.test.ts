@@ -180,6 +180,17 @@ describe("connectionHealth", () => {
     expect(h.state).toBe("reauth_required");
   });
 
+  it("says the OAuth client was deleted, and how to get it back", () => {
+    const h = connectionHealth({
+      lastSyncAt: null,
+      lastError: "google token refresh failed: 401 deleted_client",
+      consecutiveFailures: 3,
+    });
+    expect(h.state).toBe("failing");
+    expect(h.message).toMatch(/deleted/i);
+    expect(h.message).toMatch(/restore/i);
+  });
+
   it("points at the app's Google credentials, not the member, when the client is rejected", () => {
     // Reconnecting can't fix a rejected OAuth client — every connection fails
     // at once — so the member shouldn't be sent to do it.
@@ -273,6 +284,8 @@ describe("nextAttemptAt for a rejected OAuth client", () => {
     expect(nextAttemptAt(1, now, "google token refresh failed: 401 invalid_client").getTime() - now.getTime()).toBe(
       retryDelayMs(1),
     );
+    // A deleted client is the same kind of failure — fixed once, for everyone.
+    expect(nextAttemptAt(9, now, "google token refresh failed: 401 deleted_client").getTime() - now.getTime()).toBe(hour);
     // A revoked grant still backs off to a day: only the member can fix it.
     expect(nextAttemptAt(9, now, "google token refresh failed: 400 invalid_grant").getTime() - now.getTime()).toBe(
       24 * hour,
