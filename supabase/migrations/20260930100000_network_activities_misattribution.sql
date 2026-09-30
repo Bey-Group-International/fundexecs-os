@@ -113,6 +113,13 @@ begin
   -- Left alone when none remain: last_activity_at was backfilled from
   -- strength_updated_at/updated_at/created_at for contacts that never had an
   -- activity, and clearing it would destroy that rather than correct anything.
+  -- Both statements are scoped to the organisation the admin check was made
+  -- against, belt and braces. A row whose contact_id points outside its own org
+  -- should not exist -- both writers resolve the contact by organization_id, and
+  -- the insert policy requires network_contact_visible -- but they hold
+  -- service-role clients that bypass RLS, and this function bypasses it too, so
+  -- one malformed row would otherwise let a correction reach another org's
+  -- contact. Cheaper to state than to rely on.
   if row_contact is not null then
     update public.network_contacts c
        set last_activity_at = sub.newest,
@@ -121,9 +128,11 @@ begin
         select max(a.occurred_at) as newest
           from public.network_activities a
          where a.contact_id = row_contact
+           and a.organization_id = row_org
            and a.misattributed_at is null
       ) sub
      where c.id = row_contact
+       and c.organization_id = row_org
        and sub.newest is not null
        and (c.last_activity_at is null or c.last_activity_at <> sub.newest);
   end if;

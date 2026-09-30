@@ -152,6 +152,22 @@ describe("the authorization the definer function does itself", () => {
     expect(sql).toMatch(/grant execute on function public\.flag_network_activity_misattributed[^;]*to authenticated/i);
   });
 
+  /**
+   * The recency recompute cannot reach another organisation's contact.
+   *
+   * Indirectly true already — the visibility check above would have raised on a
+   * contact the caller cannot see — but this function bypasses RLS and both
+   * writers hold service-role clients, so one malformed row is all it would take.
+   * Asserted on the statements themselves rather than left to the inference.
+   */
+  it("scopes the recency recompute to the organisation it checked", () => {
+    const sql = migrationSql();
+    // The contact being updated, and the activities the new value is computed
+    // from, both constrained to the org the admin right was checked against.
+    expect(sql).toMatch(/c\.organization_id = row_org/);
+    expect(sql).toMatch(/a\.organization_id = row_org/);
+  });
+
   // Hiding the entry without this leaves the contact looking as recently active
   // as the wrong entry made them, which is the half of the harm a label cannot
   // reach.
