@@ -8,6 +8,8 @@ it("tells an admin guests cannot connect and names the settings to set", async (
   render(<CallRelayWarning reason="unconfigured" />);
   expect(await screen.findByText(/some guests can.t connect to calls/i)).toBeInTheDocument();
   expect(screen.getByText(/no call relay/i)).toBeInTheDocument();
+  expect(screen.getByText("CLOUDFLARE_TURN_KEY_ID")).toBeInTheDocument();
+  expect(screen.getByText("CLOUDFLARE_TURN_API_TOKEN")).toBeInTheDocument();
   expect(screen.getByText("TURN_URLS")).toBeInTheDocument();
   expect(screen.getByText("TURN_SECRET")).toBeInTheDocument();
 });

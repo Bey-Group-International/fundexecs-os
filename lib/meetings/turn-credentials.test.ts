@@ -11,6 +11,7 @@ import {
   normalizeTtlSeconds,
   parseTurnUrls,
   turnFailureLog,
+  parseCloudflareIceServers,
 } from "./turn-credentials";
 
 describe("cleanCredential", () => {
@@ -242,5 +243,31 @@ describe("turnFailureLog", () => {
     const log = turnFailureLog("misconfigured", "TURN_URLS contains no turn: or turns: entry");
     expect(log).toMatch(/no turn: or turns: entry/);
     expect(log).toMatch(/static-auth-secret/);
+  });
+});
+
+describe("parseCloudflareIceServers", () => {
+  it("reads the older single-object answer too", () => {
+    expect(
+      parseCloudflareIceServers({
+        iceServers: { urls: ["turn:turn.cloudflare.com:3478?transport=udp"], username: "u", credential: "c" },
+      }),
+    ).toEqual([{ urls: ["turn:turn.cloudflare.com:3478?transport=udp"], username: "u", credential: "c" }]);
+  });
+
+  it("drops port 53, which browsers refuse to use", () => {
+    const servers = parseCloudflareIceServers({
+      iceServers: [
+        { urls: ["turn:turn.cloudflare.com:53?transport=udp", "turns:turn.cloudflare.com:443?transport=tcp"], username: "u", credential: "c" },
+      ],
+    });
+    expect(servers[0].urls).toEqual(["turns:turn.cloudflare.com:443?transport=tcp"]);
+  });
+
+  it("is empty when no relay survives, or the relay has no credentials", () => {
+    expect(parseCloudflareIceServers({ iceServers: [{ urls: ["stun:stun.cloudflare.com:3478"] }] })).toEqual([]);
+    expect(parseCloudflareIceServers({ iceServers: [{ urls: ["turn:turn.cloudflare.com:3478"] }] })).toEqual([]);
+    expect(parseCloudflareIceServers(null)).toEqual([]);
+    expect(parseCloudflareIceServers({ error: "nope" })).toEqual([]);
   });
 });

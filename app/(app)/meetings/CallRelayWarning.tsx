@@ -54,12 +54,16 @@ export function CallRelayWarning({ reason }: { reason: "unconfigured" | "misconf
         </p>
         <p className="mt-0.5 text-[13px] leading-snug text-fg-secondary">
           {reason === "misconfigured"
-            ? "The call relay is only half set up: TURN_URLS needs a turn: or turns: address and TURN_SECRET must be set."
-            : "No call relay (TURN server) is set up."}{" "}
-          People on mobile data, corporate networks or strict home routers join but can&apos;t be seen or heard. Set{" "}
+            ? "The call relay is only half set up: both values of a pair below must be set."
+            : "No call relay is set up."}{" "}
+          People on mobile data, corporate networks or strict home routers join but can&apos;t be seen or heard. The
+          simplest fix is Cloudflare&apos;s hosted relay: set{" "}
+          <code className="rounded bg-surface-2 px-1">CLOUDFLARE_TURN_KEY_ID</code> and{" "}
+          <code className="rounded bg-surface-2 px-1">CLOUDFLARE_TURN_API_TOKEN</code> in the deployment&apos;s
+          environment. Running your own relay instead uses{" "}
           <code className="rounded bg-surface-2 px-1">TURN_URLS</code> and{" "}
-          <code className="rounded bg-surface-2 px-1">TURN_SECRET</code> in the deployment&apos;s environment — the
-          steps are in <code className="rounded bg-surface-2 px-1">docs/infra/turn-server.md</code>.
+          <code className="rounded bg-surface-2 px-1">TURN_SECRET</code>. Steps for both are in{" "}
+          <code className="rounded bg-surface-2 px-1">docs/infra/turn-server.md</code>.
         </p>
       </div>
 
