@@ -458,6 +458,12 @@ export interface FulfillResult {
   kind?: string;
   error?: string;
   alreadyFulfilled?: boolean;
+  /**
+   * Another caller holds the claim and has not finished yet. `ok` is false so
+   * the webhook keeps retrying, but the PAYMENT succeeded and fulfillment is
+   * underway — the buyer's redirect must not be told their purchase failed.
+   */
+  inProgress?: boolean;
   /** Invoice public token, so the return route can redirect back to /pay/<token>. */
   token?: string;
 }
@@ -529,17 +535,23 @@ export async function fulfillCheckout(
     // Someone else holds it. Whether they FINISHED decides what we say, because
     // "already fulfilled" and "in flight" need opposite handling: the first is
     // success, the second must keep retrying.
-    const { data: current } = await service
-      .from("stripe_checkouts")
-      .select("status")
-      .eq("session_id", sessionId)
-      .maybeSingle();
-    if (current && current.status !== "fulfilled") {
-      return { ok: false, kind, error: "Fulfillment is already in progress for this checkout." };
+    //
+    // Holding the claim is not evidence of having finished, so completion is
+    // recorded separately and that marker is what gets read here. Asking
+    // stripe_checkouts instead would answer for plan/pack/gift and silently
+    // answer "done" for every invoice, which has no row to ask.
+    const done = await fulfillmentCompleted(service, sessionId);
+    if (done !== true) {
+      // Unfinished, or unreadable. Both must keep retrying: saying "already
+      // fulfilled" here is what loses a purchase, because it also stops the
+      // webhook redelivering.
+      return {
+        ok: false,
+        inProgress: true,
+        kind,
+        error: "Fulfillment is already in progress for this checkout.",
+      };
     }
-    // No row means an invoice checkout, which never gets one (the kind CHECK
-    // allows only plan/pack/gift). Those settle idempotently, so the holder
-    // finishing is enough.
     return { ok: true, kind, alreadyFulfilled: true, token: meta.token };
   }
 
@@ -647,9 +659,14 @@ export async function fulfillCheckout(
     throw err;
   }
 
-  // Only now is the checkout really fulfilled, so only now does the row say so.
-  // Best-effort, like the row's creation: the claim is what prevents a second
-  // grant, and this is the audit trail plus the fast path above.
+  // Record completion BEFORE the audit row, and separately from the claim. This
+  // marker is the one durable answer to "did fulfillment actually finish?", and
+  // it exists for every kind — including invoice checkouts, which cannot have a
+  // stripe_checkouts row at all.
+  await markFulfillmentComplete(service, sessionId);
+
+  // The audit row's own status, for the fast path and for anyone reading the
+  // table. Best-effort, like the row's creation.
   await service
     .from("stripe_checkouts")
     .update({ status: "fulfilled", fulfilled_at: new Date().toISOString() })
@@ -714,4 +731,44 @@ async function releaseFulfillment(service: CheckoutService, sessionId: string): 
     console.error("[stripe] releaseFulfillment threw:", err);
     return false;
   }
+}
+
+/** Record that this session's fulfillment ran to completion. */
+async function markFulfillmentComplete(
+  service: CheckoutService,
+  sessionId: string,
+): Promise<void> {
+  const { error } = await service
+    .from("processed_stripe_events")
+    .upsert({ id: `fulfilled:${sessionId}`, type: "checkout.fulfilled" }, {
+      onConflict: "id",
+      ignoreDuplicates: true,
+    });
+  if (error) {
+    // The grant already happened, so this cannot fail the call — but a missing
+    // marker makes a concurrent caller retry a fulfillment that is actually
+    // done, so it is worth saying out loud.
+    console.error("[stripe] markFulfillmentComplete failed:", error.message);
+  }
+}
+
+/**
+ * Did fulfillment for this session finish? `true` only on positive evidence:
+ * a read error answers `false`, because treating "we could not tell" as "yes"
+ * is what drops a purchase.
+ */
+async function fulfillmentCompleted(
+  service: CheckoutService,
+  sessionId: string,
+): Promise<boolean> {
+  const { data, error } = await service
+    .from("processed_stripe_events")
+    .select("id")
+    .eq("id", `fulfilled:${sessionId}`)
+    .maybeSingle();
+  if (error) {
+    console.error("[stripe] fulfillmentCompleted read failed:", error.message);
+    return false;
+  }
+  return data != null;
 }

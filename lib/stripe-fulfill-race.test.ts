@@ -23,6 +23,7 @@ const grants: string[] = [];
 // first caller gets a row back.
 const claims = new Set<string>();
 let claimFails = false;
+let completionReadFails = false;
 
 // The checkout audit row. Absent for invoice kinds, which the `kind` CHECK
 // (plan|pack|gift) cannot store at all.
@@ -31,13 +32,26 @@ let checkoutRow: { status: string } | null = null;
 function table(name: string) {
   if (name === "processed_stripe_events") {
     return {
-      upsert: (row: { id: string }) => ({
-        select: async () => {
+      upsert: (row: { id: string }) => {
+        const apply = () => {
           if (claimFails) return { data: null, error: { message: "db down" } };
           if (claims.has(row.id)) return { data: [], error: null };
           claims.add(row.id);
           return { data: [{ id: row.id }], error: null };
-        },
+        };
+        // Awaited directly (completion marker) or via .select() (the claim).
+        return {
+          select: async () => apply(),
+          then: (resolve: (v: unknown) => void) => resolve(apply()),
+        };
+      },
+      select: () => ({
+        eq: (_c: string, id: string) => ({
+          maybeSingle: async () => {
+            if (completionReadFails) return { data: null, error: { message: "db down" } };
+            return { data: claims.has(id) ? { id } : null, error: null };
+          },
+        }),
       }),
       delete: () => ({
         eq: async (_c: string, id: string) => {
@@ -97,6 +111,7 @@ beforeEach(() => {
   grants.length = 0;
   claims.clear();
   claimFails = false;
+  completionReadFails = false;
   checkoutRow = { status: "pending" };
   process.env.STRIPE_SECRET_KEY = "sk_live_test_fixture";
 });
@@ -110,10 +125,12 @@ it("grants once when the webhook and the return redirect arrive together", async
   expect(grants).toHaveLength(1);
   // The winner succeeds; the loser must not surface an error to a buyer whose
   // payment genuinely went through, nor claim to have granted anything.
-  const winner = [a, b].find((r) => !r.alreadyFulfilled);
-  const loser = [a, b].find((r) => r.alreadyFulfilled);
+  const winner = [a, b].find((r) => r.ok);
+  const loser = [a, b].find((r) => !r.ok);
   expect(winner?.ok).toBe(true);
-  expect(loser?.ok).toBe(true);
+  // The loser lost the race, not the payment: it reports retryable-but-underway
+  // so the webhook redelivers, while the buyer's redirect still reads success.
+  expect(loser?.inProgress).toBe(true);
   expect(checkoutRow?.status).toBe("fulfilled");
 });
 
@@ -146,7 +163,7 @@ it("keeps retrying while another caller is mid-fulfillment", async () => {
 
 it("reports already-fulfilled once the holder has finished", async () => {
   claims.add("fulfill:cs_live_race");
-  checkoutRow = { status: "fulfilled" };
+  claims.add("fulfilled:cs_live_race"); // the completion marker is the evidence
   const res = await fulfillCheckout("cs_live_race");
 
   expect(res.ok).toBe(true);
@@ -154,11 +171,32 @@ it("reports already-fulfilled once the holder has finished", async () => {
   expect(grants).toHaveLength(0);
 });
 
-it("does not strand an invoice checkout, which never has an audit row", async () => {
+it("keeps retrying an unfinished invoice checkout, which never has an audit row", async () => {
+  // The claim is held and nothing has completed. Answering from the audit row
+  // would say "done" here, because an invoice kind cannot have one — which is
+  // exactly how a paid invoice would be left unsettled in silence.
   claims.add("fulfill:cs_live_race");
-  checkoutRow = null; // the kind CHECK cannot store invoice kinds
+  checkoutRow = null;
   const res = await fulfillCheckout("cs_live_race");
 
-  expect(res.ok).toBe(true);
-  expect(res.alreadyFulfilled).toBe(true);
+  expect(res.ok).toBe(false);
+  expect(res.alreadyFulfilled).toBeUndefined();
+});
+
+it("does not call an unreadable completion state success", async () => {
+  claims.add("fulfill:cs_live_race");
+  claims.add("fulfilled:cs_live_race");
+  completionReadFails = true;
+  const res = await fulfillCheckout("cs_live_race");
+
+  // "We could not tell" must never read as "yes": that stops the webhook
+  // redelivering and the purchase is lost.
+  expect(res.ok).toBe(false);
+  expect(res.alreadyFulfilled).toBeUndefined();
+});
+
+it("records completion so a later caller can see it finished", async () => {
+  await fulfillCheckout("cs_live_race");
+  expect(grants).toHaveLength(1);
+  expect(claims.has("fulfilled:cs_live_race")).toBe(true);
 });
