@@ -109,8 +109,15 @@ jobs:
 
       - name: Hourly office enhancement
         # Pinned to a commit SHA (CodeQL: pin non-immutable third-party actions).
-        # be7b93b = tag v1 (v1.0.183). Bump the SHA to move to a newer release.
-        uses: anthropics/claude-code-action@be7b93b1907a4abad570368f3c74b6fe3807510b # v1
+        # Bump the SHA, and the version comment with it, to move to a newer release.
+        #
+        # The trailing comment names v1.0.183 and not v1 on purpose. zizmor's
+        # online pass resolves it and complains when it does not point at the
+        # pinned SHA, and `v1` is a rolling major tag: it moved twice in the
+        # half hour this was being checked. v1.0.183 is immutable and is this
+        # commit -- as `refs/tags/v1.0.183^{}`, the commit the annotated tag
+        # dereferences to, which is not the same SHA as the tag object itself.
+        uses: anthropics/claude-code-action@be7b93b1907a4abad570368f3c74b6fe3807510b # v1.0.183
         env:
           GH_TOKEN: ${{ github.token }}
         with:
