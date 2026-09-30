@@ -54,14 +54,20 @@ jobs:
     timeout-minutes: 45
     steps:
       - name: Checkout
-        # persist-credentials stays ON here, and only here. Every other
-        # workflow in this repo sets it false (zizmor: artipacked), but this
-        # job is `contents: write` and the agent step below pushes a branch
-        # and opens a PR using the credentials checkout leaves behind.
-        # Turning them off here breaks the push rather than hardening it.
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          # This job is `contents: write` and `npm ci` runs below it, with
+          # lifecycle scripts enabled and install-script packages in the
+          # lockfile (esbuild, unrs-resolver among others). Persisting the token
+          # here would leave a WRITE-scoped credential in .git/config while that
+          # untrusted code executes, which is the whole of zizmor's artipacked
+          # threat model and the worst instance of it in this repo.
+          #
+          # The agent below still has to push, so the credential is installed
+          # again further down -- after installation, and only for the step that
+          # legitimately needs it.
+          persist-credentials: false
 
       - name: Set up Node
         uses: actions/setup-node@v4
@@ -76,6 +82,23 @@ jobs:
         run: |
           git config user.name "Claude"
           git config user.email "noreply@anthropic.com"
+
+      # Deliberately AFTER `npm ci`. Checkout no longer leaves the token in
+      # .git/config, so no dependency lifecycle script can read it; the agent's
+      # own `git push` still needs it, and by this point the only thing left to
+      # run is the agent.
+      #
+      # Written from an env var rather than interpolated into the command, so
+      # the token stays a masked value rather than becoming part of a command
+      # line. claude-code-action also receives it as `github_token`, but which
+      # of the two its internal `git push` uses is not something this file
+      # should have to assume -- this makes the push work either way.
+      - name: Give the agent a credential to push with
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git remote set-url origin \
+            "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
 
       - name: Hourly office enhancement
         # Pinned to a commit SHA (CodeQL: pin non-immutable third-party actions).
