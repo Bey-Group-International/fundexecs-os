@@ -134,6 +134,31 @@ describe("deriveMeetingStatus", () => {
     // …but an open follow-up on a passed-end meeting still needs follow-up.
     expect(deriveMeetingStatus({ ...base, status: "waiting", followup_status: "draft" }, later)).toBe("Follow-Up Needed");
   });
+
+  it("calls a passed in-app meeting whose room was never opened Missed, not Completed", () => {
+    const later = new Date("2026-07-10T12:00:00.000Z").getTime();
+    const neverOpened = { ...base, status: "waiting", started_at: null, meeting_url: null };
+    expect(deriveMeetingStatus(neverOpened, later)).toBe("Missed");
+    expect(deriveMeetingStatus({ ...neverOpened, meeting_url: "" }, later)).toBe("Missed");
+    // Still upcoming: not missed yet.
+    expect(deriveMeetingStatus({ ...neverOpened, preparation_status: "ready" }, now)).toBe("Ready");
+    // An open follow-up still outranks it.
+    expect(deriveMeetingStatus({ ...neverOpened, followup_status: "draft" }, later)).toBe("Follow-Up Needed");
+  });
+
+  it("does not call a meeting Missed when it may have happened somewhere this app can't see", () => {
+    const later = new Date("2026-07-10T12:00:00.000Z").getTime();
+    // Held on Zoom / Meet: the room here was never meant to open.
+    expect(
+      deriveMeetingStatus({ ...base, status: "waiting", started_at: null, meeting_url: "https://zoom.us/j/1" }, later),
+    ).toBe("Completed");
+    // The room did open.
+    expect(
+      deriveMeetingStatus({ ...base, status: "waiting", started_at: "2026-07-10T10:01:00.000Z", meeting_url: null }, later),
+    ).toBe("Completed");
+    // A caller that didn't load started_at can't tell, so it keeps the old reading.
+    expect(deriveMeetingStatus({ ...base, status: "waiting" }, later)).toBe("Completed");
+  });
 });
 
 describe("isPastMeeting", () => {

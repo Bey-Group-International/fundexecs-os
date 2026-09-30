@@ -61,6 +61,7 @@ export type MeetingDisplayStatus =
   | "Updated"
   | "Live"
   | "Completed"
+  | "Missed"
   | "Follow-Up Needed";
 
 export const REQUIRED_FIELDS = [
@@ -216,6 +217,10 @@ export interface ScheduledMeetingShape {
   locked_at?: string | null;
   updated_at?: string | null;
   created_at?: string | null;
+  /** When the room first opened. Only an explicit null means "never" — see Missed. */
+  started_at?: string | null;
+  /** An external join link (Zoom, Meet…): the meeting may happen away from the room. */
+  meeting_url?: string | null;
 }
 
 /**
@@ -224,6 +229,7 @@ export interface ScheduledMeetingShape {
  *  active room               -> Live
  *  ended room, follow-up open -> Follow-Up Needed
  *  ended room                 -> Completed
+ *  passed, room never opened  -> Missed (in-app meetings only)
  *  edited after save          -> Updated
  *  prep still needed          -> Prep Needed
  *  prep ready                 -> Ready
@@ -246,9 +252,16 @@ export function deriveMeetingStatus(
   if (meeting.scheduled_at) {
     const end = new Date(meeting.scheduled_at).getTime() + (meeting.duration_minutes ?? 60) * 60_000;
     if (end < now) {
-      return meeting.followup_status && meeting.followup_status !== "not_started" && meeting.followup_status !== "done"
-        ? "Follow-Up Needed"
-        : "Completed";
+      if (meeting.followup_status && meeting.followup_status !== "not_started" && meeting.followup_status !== "done") {
+        return "Follow-Up Needed";
+      }
+      // Its time is over and its room never opened. Unless it was meant to
+      // happen elsewhere (an external link), it didn't happen — calling it
+      // Completed told the host a meeting took place that nobody attended.
+      // `started_at === undefined` is a caller that didn't load the column, so
+      // it can't tell and keeps the old reading.
+      if (meeting.started_at === null && !meeting.meeting_url) return "Missed";
+      return "Completed";
     }
   }
 
