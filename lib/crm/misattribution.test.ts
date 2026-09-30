@@ -153,6 +153,26 @@ describe("the authorization the definer function does itself", () => {
   });
 
   /**
+   * The reference stays NOT VALID.
+   *
+   * Declared inline it validates immediately, scanning network_activities and
+   * locking it and principals against writes — an outage on the CRM's busiest
+   * table. NOT VALID skips only the check of existing rows, all of which are NULL
+   * because the column is created in the same migration, so nothing is lost.
+   * Guarded because "tidying" it back to an inline reference looks harmless.
+   */
+  it("adds the principal reference without validating the whole table", () => {
+    const sql = migrationSql();
+    expect(sql).toMatch(
+      /add constraint network_activities_misattributed_by_fkey[\s\S]*?not valid/i,
+    );
+    // Not declared inline on the column, which is what would validate at once.
+    expect(sql).not.toMatch(/misattributed_by uuid references/i);
+    // Still enforced for the case that matters: a principal being removed.
+    expect(sql).toMatch(/on delete set null/i);
+  });
+
+  /**
    * The recency recompute cannot reach another organisation's contact.
    *
    * Indirectly true already — the visibility check above would have raised on a

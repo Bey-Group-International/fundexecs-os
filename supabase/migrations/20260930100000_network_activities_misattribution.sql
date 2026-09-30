@@ -28,15 +28,52 @@
 
 alter table public.network_activities
   add column if not exists misattributed_at timestamptz,
-  add column if not exists misattributed_by uuid references public.principals (id) on delete set null,
+  add column if not exists misattributed_by uuid,
   add column if not exists misattribution_reason text;
 
 comment on column public.network_activities.misattributed_at is
   'Set when someone with authority established this machine-written entry is about the wrong contact. The row is kept as evidence and hidden from the timeline; the writers'' upsert does not clear it, so a later message updates a row that stays hidden.';
 
+-- The reference is added separately and NOT VALID on purpose.
+--
+-- Declared inline it would be validated immediately, which scans
+-- network_activities and takes a SHARE ROW EXCLUSIVE lock on it AND on
+-- principals, blocking writes to both for the duration. This table is the CRM's
+-- timeline and is written by the meeting and inbox paths, so that is a real
+-- outage on a busy org.
+--
+-- NOT VALID skips only the check of EXISTING rows. The constraint is otherwise
+-- live: new and updated rows are checked, and ON DELETE SET NULL still fires
+-- when a principal is removed. And every existing row is NULL, because the
+-- column was created in the statement above — so a later
+--   alter table public.network_activities
+--     validate constraint network_activities_misattributed_by_fkey;
+-- is guaranteed to succeed and can be run whenever convenient. It is not needed
+-- for the constraint to do its job.
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint where conname = 'network_activities_misattributed_by_fkey'
+  ) then
+    alter table public.network_activities
+      add constraint network_activities_misattributed_by_fkey
+      foreign key (misattributed_by) references public.principals (id)
+      on delete set null
+      not valid;
+  end if;
+end $$;
+
 -- The timeline reads a contact's entries newest-first and now has to skip the
 -- marked ones, so the partial index carries the predicate rather than making
 -- every read filter a column it cannot use an index for.
+--
+-- DEPLOYMENT NOTE. This index is built non-concurrently, which blocks writes to
+-- network_activities while it builds (reads continue). CREATE INDEX CONCURRENTLY
+-- is not available here: it cannot run inside a transaction block, and every
+-- migration in this repo runs in one — no migration uses it. So check the row
+-- count and apply this in a low-traffic window, as with the generated columns in
+-- 20260930083000 and 20260930090000. The three are cheaper applied together than
+-- spread out.
 create index if not exists network_activities_contact_visible_idx
   on public.network_activities (organization_id, contact_id, occurred_at desc)
   where misattributed_at is null;
