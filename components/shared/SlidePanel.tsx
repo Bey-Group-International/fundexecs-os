@@ -80,7 +80,7 @@ export function SlidePanel({
         </header>
 
         {/* Scrollable body */}
-        <div className="flex-1 overflow-y-auto px-5 py-4">{children}</div>
+        <div className="flex-1 overflow-y-auto overscroll-contain px-5 py-4">{children}</div>
 
         {/* Optional footer */}
         {footer ? (

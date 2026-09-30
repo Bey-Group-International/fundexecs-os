@@ -227,6 +227,16 @@ export default function Copilot({
   const [, startTransition] = useTransition();
   const refreshTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const bottomRef = useRef<HTMLDivElement | null>(null);
+  // The transcript's own scroll container (full-page mode only; the embedded
+  // composer has none and lives in the page's scroll).
+  const transcriptRef = useRef<HTMLDivElement | null>(null);
+  // Whether the reader is parked at (or near) the bottom of the transcript.
+  // Updated from scroll events, so a reply that grows by a big chunk at once
+  // still reads as "was following" rather than "scrolled away".
+  const followingRef = useRef(true);
+  // Set when the operator sends a turn; the next transcript update brings the
+  // newest turn into view even if they had scrolled up to reread.
+  const userSentRef = useRef(false);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const toolbarRef = useRef<HTMLDivElement | null>(null);
@@ -354,11 +364,28 @@ export default function Copilot({
   }, [paletteOpen, openMenu, streamingChat]);
 
   // Keep the newest turn in view as the conversation grows — chat behavior.
-  // Skip when there's nothing to follow (empty composer): otherwise the
-  // embedded workspace composer would scroll the page to the bottom on mount.
+  // Skip when there's nothing to follow (empty composer). This runs on every
+  // streamed chunk, so it must never move the page: `scrollIntoView` scrolls
+  // every scrollable ancestor (including the window), and a smooth one per
+  // token dragged the whole page along and fought the reader's own scrolling.
+  //  - Full-page mode: pin only the transcript's own scroller, instantly, and
+  //    only while the reader is following along (or has just sent a turn).
+  //  - Embedded composer (workspace page): it has no scroller of its own, so
+  //    leave the page alone while a reply streams; only a turn the operator
+  //    just sent is brought into view, once.
   useEffect(() => {
+    const sent = userSentRef.current;
+    userSentRef.current = false;
     if (bundles.length === 0 && chatTurns.length === 0 && !planning) return;
-    bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+    const el = transcriptRef.current;
+    if (el) {
+      if (sent || followingRef.current) el.scrollTop = el.scrollHeight;
+      return;
+    }
+    if (sent) {
+      const reduce = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+      bottomRef.current?.scrollIntoView({ behavior: reduce ? "auto" : "smooth", block: "nearest" });
+    }
   }, [bundles.length, planning, chatTurns]);
 
   useEffect(() => {
@@ -404,6 +431,7 @@ export default function Copilot({
   // directives for execution, so those always run as tasks.
   async function dispatchPrompt(body: string) {
     if (!body || busy) return;
+    userSentRef.current = true;
     // An explicit desk delegation means the operator wants work done, not a
     // chat answer — so it always takes the agentic (gated) task path.
     if (!delegate && mode === "accept-edits" && classifyIntent(body) === "chat") {
@@ -513,6 +541,7 @@ export default function Copilot({
   async function planWithEarn() {
     const directive = prompt.trim();
     if (!directive || busy) return;
+    userSentRef.current = true;
     setBusy(true);
     setOpenMenu(null);
     setPrompt("");
@@ -1357,7 +1386,18 @@ export default function Copilot({
             aria-label="Conversation"
             className={`relative flex flex-col ${embedded ? "" : "min-h-0 flex-1"}`}
           >
-          <div className={`px-3 py-5 sm:px-6 ${embedded ? "" : "flex-1 overflow-y-auto"}`}>
+          <div
+            ref={embedded ? undefined : transcriptRef}
+            onScroll={
+              embedded
+                ? undefined
+                : (e) => {
+                    const t = e.currentTarget;
+                    followingRef.current = t.scrollHeight - t.scrollTop - t.clientHeight < 80;
+                  }
+            }
+            className={`px-3 py-5 sm:px-6 ${embedded ? "" : "flex-1 overflow-y-auto overscroll-contain"}`}
+          >
             <div className="mx-auto flex w-full max-w-3xl flex-col gap-5">
               {empty ? (
                 <div className="flex min-h-[360px] flex-col items-center justify-center px-4 py-14 text-center">

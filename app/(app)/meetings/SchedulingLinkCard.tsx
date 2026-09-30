@@ -340,7 +340,7 @@ export function SchedulingLinkCard() {
                   Close
                 </button>
               </header>
-              <div className="flex-1 overflow-y-auto px-4 py-6 sm:px-6">
+              <div className="flex-1 overflow-y-auto overscroll-contain px-4 py-6 sm:px-6">
                 <div className="mx-auto w-full max-w-2xl">
                   <SchedulingSettings
                     page={snapshot.page}

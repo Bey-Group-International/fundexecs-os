@@ -347,8 +347,9 @@ export function ProfileForm({
       </form>
 
       {/* Live preview ------------------------------------------------------- */}
+      {/* Pinned below the sticky app top bar (--app-header-h). */}
       {showPreview && (
-        <aside className="w-full shrink-0 lg:sticky lg:top-5 lg:w-72">
+        <aside className="w-full shrink-0 lg:sticky lg:top-[calc(var(--app-header-h)+1.25rem)] lg:w-72">
           <div className="rounded-2xl border border-line bg-surface-1 p-5">
             <div className="flex items-center gap-3">
               {form.logo_url.trim() ? (

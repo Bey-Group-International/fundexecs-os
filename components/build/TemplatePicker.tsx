@@ -37,7 +37,7 @@ export function TemplatePicker({
         {/* Body */}
         <div className="flex min-h-0 flex-1 overflow-hidden">
           {/* Template list */}
-          <div className="flex w-64 shrink-0 flex-col gap-1 overflow-y-auto border-r border-line p-3">
+          <div className="flex w-64 shrink-0 flex-col gap-1 overflow-y-auto overscroll-contain border-r border-line p-3">
             {sectionTemplates.length > 0 && (
               <>
                 <p className="mb-1 px-1 font-mono text-[11px] uppercase tracking-wider text-gold-300">
@@ -85,7 +85,7 @@ export function TemplatePicker({
           </div>
 
           {/* Preview */}
-          <div className="min-h-0 flex-1 overflow-y-auto p-4">
+          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-4">
             {preview ? (
               <>
                 <p className="mb-2 font-mono text-[11px] uppercase tracking-wider text-gold-300">Preview</p>

@@ -641,7 +641,7 @@ export function MeetingEditScreen({
         </div>
 
         {/* Body */}
-        <div className="flex-1 overflow-y-auto px-4 py-4 sm:px-6">
+        <div className="flex-1 overflow-y-auto overscroll-contain px-4 py-4 sm:px-6">
           {/* Borderless title — the GCal "Add title" input. */}
           <div className="pl-0 sm:pl-11">
             <input

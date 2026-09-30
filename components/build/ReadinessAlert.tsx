@@ -75,7 +75,7 @@ export function ReadinessAlert({ children }: { children: ReactNode }) {
     <div
       role="complementary"
       aria-label="Investor readiness"
-      className="fixed bottom-4 right-4 z-40 w-[min(92vw,380px)] max-h-[calc(100vh-2rem)] overflow-y-auto"
+      className="fixed bottom-4 right-4 z-40 w-[min(92vw,380px)] max-h-[calc(100dvh-2rem)] overflow-y-auto overscroll-contain"
     >
       <div className="relative">
         <button

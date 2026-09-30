@@ -250,7 +250,7 @@ export function MeetingsLanding({
                   </button>
                 </div>
               </header>
-              <div className="flex-1 overflow-y-auto px-4 py-5 sm:px-6">
+              <div className="flex-1 overflow-y-auto overscroll-contain px-4 py-5 sm:px-6">
                 {/* The whole width: the calendar is what this screen is for. */}
                 <div className={pane === "calendar" ? "w-full" : "hidden"}>
                   <MeetingsCalendar

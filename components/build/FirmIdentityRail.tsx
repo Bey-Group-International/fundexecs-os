@@ -354,7 +354,9 @@ export function FirmIdentityRail({
   const byKey = new Map(progress.sections.map((s) => [s.key, s]));
 
   return (
-    <aside className="lg:sticky lg:top-6 lg:self-start">
+    // Pinned below the sticky app top bar (--app-header-h), which the window
+    // scrolls under.
+    <aside className="lg:sticky lg:top-[calc(var(--app-header-h)+1.5rem)] lg:self-start">
       <div className="rounded-2xl border border-line bg-surface-1 p-5">
         {/* Completion ring */}
         <div className="flex items-center gap-4">

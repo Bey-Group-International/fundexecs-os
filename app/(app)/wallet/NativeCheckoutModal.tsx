@@ -49,7 +49,7 @@ export function NativeCheckoutModal({
     <div
       ref={dialogRef}
       tabIndex={-1}
-      className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-900/40 p-4 backdrop-blur-sm focus:outline-none sm:items-center"
+      className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto overscroll-contain bg-slate-900/40 p-4 backdrop-blur-sm focus:outline-none sm:items-center"
       role="dialog"
       aria-modal="true"
       onMouseDown={(e) => {

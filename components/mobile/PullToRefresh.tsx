@@ -8,10 +8,11 @@ const THRESHOLD = 72; // px pull needed to trigger a refresh
 const MAX = 110; // px cap on the visible pull
 const RESIST = 0.5; // rubber-band resistance
 
-// Native pull-to-refresh for the mobile app screens. Attaches to the nearest
-// scroll ancestor (the app's `<main>`, which is `overflow-y-auto`). Only engages
-// when that container is scrolled to the very top and the user drags DOWN, so it
-// never fights normal scrolling; a downward pull past the threshold calls
+// Native pull-to-refresh for the mobile app screens. The app shell scrolls the
+// document (window), not an inner container, so the gesture is bound to this
+// screen's content and gated on the page scroll position. Only engages when the
+// page is scrolled to the very top and the user drags DOWN, so it never fights
+// normal scrolling; a downward pull past the threshold calls
 // router.refresh() to re-run the server component's queries. Touch-only and
 // mobile-only — desktop/web never mount it.
 export function PullToRefresh({ children }: { children: React.ReactNode }) {
@@ -35,20 +36,11 @@ export function PullToRefresh({ children }: { children: React.ReactNode }) {
     const wrap = wrapRef.current;
     if (!wrap) return;
 
-    // Find the scroll container (the app <main>); fall back to the wrapper.
-    let scroller: HTMLElement = wrap;
-    let el: HTMLElement | null = wrap.parentElement;
-    while (el) {
-      const oy = getComputedStyle(el).overflowY;
-      if (oy === "auto" || oy === "scroll") {
-        scroller = el;
-        break;
-      }
-      el = el.parentElement;
-    }
+    // The document is the scroller; read its offset fresh on every touch.
+    const scrollTop = () => document.scrollingElement?.scrollTop ?? window.scrollY;
 
     const onStart = (e: TouchEvent) => {
-      if (refreshingRef.current || scroller.scrollTop > 0) return;
+      if (refreshingRef.current || scrollTop() > 0) return;
       startY.current = e.touches[0].clientY;
       active.current = true;
       armed.current = false;
@@ -57,13 +49,13 @@ export function PullToRefresh({ children }: { children: React.ReactNode }) {
     const onMove = (e: TouchEvent) => {
       if (!active.current || refreshingRef.current) return;
       const dy = e.touches[0].clientY - startY.current;
-      if (dy <= 0 || scroller.scrollTop > 0) {
+      if (dy <= 0 || scrollTop() > 0) {
         active.current = false;
         setDragging(false);
         setPull(0);
         return;
       }
-      // We own this gesture now — stop the container from rubber-banding.
+      // We own this gesture now — stop the page from rubber-banding.
       e.preventDefault();
       setDragging(true);
       const dist = Math.min(MAX, dy * RESIST);
@@ -96,15 +88,15 @@ export function PullToRefresh({ children }: { children: React.ReactNode }) {
       }
     };
 
-    scroller.addEventListener("touchstart", onStart, { passive: true });
-    scroller.addEventListener("touchmove", onMove, { passive: false });
-    scroller.addEventListener("touchend", onEnd, { passive: true });
-    scroller.addEventListener("touchcancel", onEnd, { passive: true });
+    wrap.addEventListener("touchstart", onStart, { passive: true });
+    wrap.addEventListener("touchmove", onMove, { passive: false });
+    wrap.addEventListener("touchend", onEnd, { passive: true });
+    wrap.addEventListener("touchcancel", onEnd, { passive: true });
     return () => {
-      scroller.removeEventListener("touchstart", onStart);
-      scroller.removeEventListener("touchmove", onMove);
-      scroller.removeEventListener("touchend", onEnd);
-      scroller.removeEventListener("touchcancel", onEnd);
+      wrap.removeEventListener("touchstart", onStart);
+      wrap.removeEventListener("touchmove", onMove);
+      wrap.removeEventListener("touchend", onEnd);
+      wrap.removeEventListener("touchcancel", onEnd);
     };
   }, [router]);
 
@@ -134,7 +126,10 @@ export function PullToRefresh({ children }: { children: React.ReactNode }) {
       <div
         ref={wrapRef}
         style={{
-          transform: `translateY(${pull}px)`,
+          // No transform at rest: even `translateY(0)` would make this wrapper
+          // the containing block for any `position: fixed` sheet/toast inside
+          // the screen, pinning it to the content instead of the viewport.
+          transform: pull ? `translateY(${pull}px)` : undefined,
           transition: dragging ? "none" : "transform 0.28s cubic-bezier(0.22,1,0.36,1)",
         }}
       >

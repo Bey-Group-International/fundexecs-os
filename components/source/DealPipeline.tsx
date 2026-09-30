@@ -308,7 +308,7 @@ function DealSlideOver({
         </div>
 
         {/* Scrollable body */}
-        <div className="flex-1 overflow-y-auto px-5 py-4 space-y-5">
+        <div className="flex-1 overflow-y-auto overscroll-contain px-5 py-4 space-y-5">
           {/* Stage */}
           <div>
             <p className="mb-1.5 font-mono text-[11px] uppercase tracking-widest text-fg-muted">Stage</p>
