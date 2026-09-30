@@ -36,6 +36,20 @@ create unique index if not exists credit_ledger_reference_key
   on public.credit_ledger (reference)
   where reference is not null;
 
+-- Drop the six-argument version FIRST, in this same transaction.
+--
+-- CREATE OR REPLACE cannot change a function's arity: it would add a SECOND
+-- overload beside the old one, and a six-argument call — which is what every
+-- currently deployed caller sends — then matches both. Postgres refuses with
+-- "function grant_org_credits(...) is not unique", so every grant in the app
+-- (free tier, referrals, coupons, purchases, spend) starts failing the moment
+-- this is applied. Verified by doing exactly that on a scratch database.
+--
+-- With only the seven-argument version present, p_reference's default means a
+-- six-argument call still resolves to it, so deployed code keeps working until
+-- the new code ships.
+drop function if exists public.grant_org_credits(uuid, integer, text, uuid, integer, text);
+
 create or replace function public.grant_org_credits(
   p_org uuid,
   p_delta integer,
