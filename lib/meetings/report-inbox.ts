@@ -85,6 +85,17 @@ export interface ReportInboxHistory {
    * reliable way to make nobody read any of them.
    */
   untouched: MeetingRecipient[];
+  /**
+   * True when the read this was built from hit its ceiling, so `untouched` is not
+   * trustworthy and has been emptied.
+   *
+   * The threads come back under ONE limit shared across every attendee, so a
+   * single long-standing counterparty can fill it and push another attendee's
+   * threads out of the result — and that attendee then looks like somebody the
+   * inbox has never seen. "No inbox history for Ana" is the most actionable line
+   * on this panel, which is exactly why it must never be a guess.
+   */
+  capped: boolean;
 }
 
 /**
@@ -181,7 +192,10 @@ export function attendeeInboxHistory(input: {
     });
   }
 
-  return { attendees, untouched };
+  // Not capped as far as this rule knows: it is handed a list of threads and
+  // cannot tell whether the read that produced it was cut short. The loader owns
+  // that fact and overrides it.
+  return { attendees, untouched, capped: false };
 }
 
 /**

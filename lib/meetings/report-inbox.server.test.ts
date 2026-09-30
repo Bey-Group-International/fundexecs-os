@@ -133,7 +133,7 @@ describe("what it asks the database for", () => {
       invited: [{ name: "Ana", email: "ana@acme.com" }],
     });
     expect(calls).toEqual([]);
-    expect(history).toEqual({ attendees: [], untouched: [] });
+    expect(history).toEqual({ attendees: [], untouched: [], capped: false });
   });
 
   it("reads nothing when no attendee has a usable address", async () => {
@@ -144,7 +144,7 @@ describe("what it asks the database for", () => {
       invited: [{ name: "Guest", email: "not-an-address" }],
     });
     expect(calls.some((c) => c.table === "inbox_threads")).toBe(false);
-    expect(history).toEqual({ attendees: [], untouched: [] });
+    expect(history).toEqual({ attendees: [], untouched: [], capped: false });
   });
 });
 
@@ -188,7 +188,7 @@ describe("when the read goes wrong", () => {
         organizationId: "org-1",
         invited: [{ name: "Ana", email: "ana@acme.com" }],
       }),
-    ).resolves.toEqual({ attendees: [], untouched: [] });
+    ).resolves.toEqual({ attendees: [], untouched: [], capped: false });
   });
 
   it("returns an empty history rather than throwing", async () => {
@@ -199,7 +199,7 @@ describe("when the read goes wrong", () => {
         organizationId: "org-1",
         invited: [{ name: "Ana", email: "ana@acme.com" }],
       }),
-    ).resolves.toEqual({ attendees: [], untouched: [] });
+    ).resolves.toEqual({ attendees: [], untouched: [], capped: false });
   });
 
   // Past the ceiling every per-attendee total is an undercount, and a count that
@@ -216,5 +216,53 @@ describe("when the read goes wrong", () => {
       "[report-inbox] thread read hit the ceiling",
       expect.objectContaining({ limit: THREAD_READ_LIMIT }),
     );
+  });
+
+  /**
+   * And withholds the one claim it can no longer stand behind.
+   *
+   * The ceiling is shared across every attendee, so one counterparty with a long
+   * history fills it and pushes another attendee's threads out of the result. That
+   * attendee then reaches `untouched` and the page states, as a fact, that the
+   * organisation has never written to somebody it may email weekly. Logging it and
+   * rendering the list anyway — which an earlier version did, under a comment
+   * saying a quietly wrong count is worse than a missing one — was not the fix.
+   */
+  it("withholds the untouched list rather than guessing at absence", async () => {
+    const rows = Array.from({ length: THREAD_READ_LIMIT }, (_, i) => ({
+      ...THREAD,
+      id: `t${i}`,
+      counterparty_email: "ana@acme.com",
+    }));
+    const { api } = client({ rows });
+    const history = await loadAttendeeInboxHistory(api, {
+      meetingId: "m1",
+      organizationId: "org-1",
+      invited: [
+        { name: "Ana", email: "ana@acme.com" },
+        // Pushed out of the result by Ana's volume, NOT a person with no history.
+        { name: "Ben Okoro", email: "ben@acme.com" },
+      ],
+    });
+
+    expect(history.capped).toBe(true);
+    expect(history.untouched).toEqual([]);
+    // What it still knows is kept: Ana's threads are real and were read.
+    expect(history.attendees.map((a) => a.email)).toEqual(["ana@acme.com"]);
+  });
+
+  // Below the ceiling the list is trustworthy and is reported.
+  it("reports the untouched list when the read was not cut short", async () => {
+    const { api } = client({ rows: [THREAD] });
+    const history = await loadAttendeeInboxHistory(api, {
+      meetingId: "m1",
+      organizationId: "org-1",
+      invited: [
+        { name: "Ana", email: "ana@acme.com" },
+        { name: "Ben Okoro", email: "ben@acme.com" },
+      ],
+    });
+    expect(history.capped).toBe(false);
+    expect(history.untouched.map((p) => p.email)).toEqual(["ben@acme.com"]);
   });
 });

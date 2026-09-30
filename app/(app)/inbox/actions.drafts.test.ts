@@ -62,14 +62,23 @@ const THREAD = {
   meeting_at: null,
 };
 
-function wire() {
+/** Task-row updates, so a failure path can be seen to leave no dangling task. */
+let taskUpdates: Array<Record<string, unknown>> = [];
+
+function wire(opts: { approvalFails?: boolean } = {}) {
   from.mockImplementation((table: string) => {
     const b: Record<string, unknown> = {
       select: () => b,
       eq: () => Object.assign(Promise.resolve({ error: null }), b),
-      update: () => b,
+      update: (row: Record<string, unknown>) => {
+        if (table === "tasks") taskUpdates.push(row);
+        return b;
+      },
       insert: () => b,
-      single: async () => ({ data: { id: `${table}-row` }, error: null }),
+      single: async () =>
+        table === "approvals" && opts.approvalFails
+          ? { data: null, error: { message: "approvals insert denied" } }
+          : { data: { id: `${table}-row` }, error: null },
       maybeSingle: async () => ({ data: table === "inbox_threads" ? THREAD : null, error: null }),
     };
     // `insert` on task_events / inbox_messages is awaited as the builder.
@@ -87,6 +96,7 @@ function form(body: string) {
 
 beforeEach(() => {
   jest.clearAllMocks();
+  taskUpdates = [];
   wire();
   requireOrgContext.mockResolvedValue({ ok: true, ctx: { userId: "p1", orgId: "org-1", email: "host@fund.test" } });
   gateDecision.mockReturnValue({ tier: 1, requiresApproval: false });
@@ -152,6 +162,34 @@ describe("when it does not", () => {
       expect(clearThreadDraft).not.toHaveBeenCalled();
     },
   );
+
+  /**
+   * The approval IS the release mechanism for a gated reply. Without a row the task
+   * holds the composed text and nothing can ever clear it — so deleting the draft
+   * on that path leaves the operator told "sent to your approvals", with no
+   * approval and no draft to retry from.
+   *
+   * The task insert above it was already checked; this one was not, and the draft
+   * deletion is what turned a recoverable state into a lossy one.
+   */
+  it("keeps the draft when the approval could not be created", async () => {
+    gateDecision.mockReturnValue({ tier: 2, requiresApproval: true });
+    wire({ approvalFails: true });
+    const res = await replyToThread(form("Hi Ana,"));
+
+    expect(res.ok).toBe(false);
+    expect(res.error).toMatch(/approvals insert denied/);
+    expect(clearThreadDraft).not.toHaveBeenCalled();
+  });
+
+  // And leaves no task stuck at awaiting_approval, which is a queue entry no
+  // approver can act on and no sweep clears.
+  it("marks the orphaned task failed rather than leaving it awaiting approval", async () => {
+    gateDecision.mockReturnValue({ tier: 2, requiresApproval: true });
+    wire({ approvalFails: true });
+    await replyToThread(form("Hi Ana,"));
+    expect(taskUpdates).toEqual([expect.objectContaining({ status: "failed" })]);
+  });
 
   it("does nothing at all for a caller with no organisation", async () => {
     requireOrgContext.mockResolvedValue({ ok: false, error: "Not authorized." });

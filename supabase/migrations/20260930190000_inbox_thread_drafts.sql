@@ -27,11 +27,17 @@
 -- consult. A `discarded_at` here would also force the uniqueness above into a
 -- partial index, which PostgREST cannot express as an upsert target.
 
+-- The composite reference below needs a unique key to point at. `id` is already
+-- the primary key of inbox_threads, so this adds no constraint the table did not
+-- already have -- it only makes (id, organization_id) nameable as a foreign-key
+-- target.
+create unique index if not exists inbox_threads_id_org_uniq
+  on public.inbox_threads (id, organization_id);
+
 create table if not exists public.inbox_thread_drafts (
   -- The thread this is a draft on, and the key. Cascades: a deleted thread has
   -- no draft.
-  thread_id         uuid primary key
-                      references public.inbox_threads (id) on delete cascade,
+  thread_id         uuid primary key,
   organization_id   uuid not null
                       references public.organizations (id) on delete cascade,
   body              text not null,
@@ -44,7 +50,29 @@ create table if not exists public.inbox_thread_drafts (
   source_meeting_id uuid references public.live_meetings (id) on delete set null,
   created_by        uuid references public.principals (id) on delete set null,
   created_at        timestamptz not null default now(),
-  updated_at        timestamptz not null default now()
+  updated_at        timestamptz not null default now(),
+
+  -- The draft's organisation must be the THREAD's organisation, enforced by the
+  -- database rather than asserted in a comment.
+  --
+  -- An earlier version of this table referenced inbox_threads (id) alone and said
+  -- in prose that "a thread belongs to exactly one organisation, so thread_id
+  -- alone is the key". That invariant was never enforced, and because thread_id is
+  -- the PRIMARY KEY the uniqueness it creates is GLOBAL across organisations. So a
+  -- writer in organisation A who knew a thread UUID from organisation B could
+  -- insert {thread_id: B's thread, organization_id: A}: RLS checked only that they
+  -- may write for A, the row landed, and it then occupied B's one draft slot for
+  -- that thread -- invisible to B under their own select policy, so impossible for
+  -- them to clear. A cross-tenant row and a denial of service on somebody else's
+  -- thread, from one missing clause. CWE-639.
+  --
+  -- A composite foreign key makes it unrepresentable rather than merely forbidden,
+  -- which is the same reasoning that put the drafts in a table with no send path
+  -- instead of behind a confirmation dialog.
+  constraint inbox_thread_drafts_thread_org_fk
+    foreign key (thread_id, organization_id)
+    references public.inbox_threads (id, organization_id)
+    on delete cascade
 );
 
 comment on table public.inbox_thread_drafts is
@@ -75,4 +103,17 @@ create policy inbox_thread_drafts_select on public.inbox_thread_drafts
 drop policy if exists inbox_thread_drafts_write on public.inbox_thread_drafts;
 create policy inbox_thread_drafts_write on public.inbox_thread_drafts
   for all using (public.is_org_writer(organization_id))
-  with check (public.is_org_writer(organization_id));
+  -- The thread clause is redundant against the composite foreign key above and
+  -- kept deliberately: it refuses the write at the policy layer, where the caller
+  -- gets a permission error naming the organisation rather than a constraint
+  -- violation naming an index. Defence in depth costs one EXISTS on a write path
+  -- that runs a handful of times per meeting.
+  with check (
+    public.is_org_writer(organization_id)
+    and exists (
+      select 1
+      from public.inbox_threads t
+      where t.id = thread_id
+        and t.organization_id = inbox_thread_drafts.organization_id
+    )
+  );

@@ -223,6 +223,18 @@ describe("the attendees the inbox has never seen", () => {
   });
 });
 
+describe("whether the read was cut short", () => {
+  /**
+   * The pure rule cannot know: it is handed a list of threads, not the query that
+   * produced it. Reporting `capped: true` from here would be a guess, and the
+   * loader is the only place that can tell.
+   */
+  it("is never claimed by the rule itself", () => {
+    const history = attendeeInboxHistory({ recipients: [ANA], threads: [thread()] });
+    expect(history.capped).toBe(false);
+  });
+});
+
 describe("the addresses the query asks for", () => {
   /**
    * These are handed straight to `.in("counterparty_email_lower", …)`. If this

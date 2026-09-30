@@ -53,7 +53,9 @@ export async function AttendeeHistoryPanel({
 
   // Nothing to say: no attendee has a thread and none is missing one either,
   // which is every one-way recording and every meeting the reader held alone.
-  if (history.attendees.length === 0 && history.untouched.length === 0) return null;
+  if (history.attendees.length === 0 && history.untouched.length === 0 && !history.capped) {
+    return null;
+  }
 
   return (
     <section className="rounded-xl border border-[var(--line)] bg-[var(--surface-1)] p-4 flex flex-col gap-3">
@@ -83,6 +85,20 @@ export async function AttendeeHistoryPanel({
           <span className="text-[var(--fg-secondary)]">
             {history.untouched.map((person) => person.name).join(", ")}
           </span>
+          .
+        </p>
+      )}
+
+      {/* Said instead of the line above, never alongside it. The read was cut
+          short, so "nobody else has been written to" would be a guess presented as
+          a fact — and it is the one line on this panel somebody would act on. */}
+      {history.capped && (
+        <p className="text-xs text-[var(--fg-muted)] border-t border-[var(--line)] pt-3">
+          This meeting has more correspondence than fits here, so the attendees with
+          no history are not listed.{" "}
+          <Link href="/inbox" className="text-[var(--gold-400)] hover:underline">
+            Check the inbox
+          </Link>
           .
         </p>
       )}

@@ -44,7 +44,7 @@ type SupabaseClient = Awaited<ReturnType<typeof createServerClient>>;
 export const THREAD_READ_LIMIT = 200;
 
 /** Empty, and the shape a caller can render without checking anything. */
-const NOTHING: ReportInboxHistory = { attendees: [], untouched: [] };
+const NOTHING: ReportInboxHistory = { attendees: [], untouched: [], capped: false };
 
 /**
  * What the inbox holds on the people who were in this meeting.
@@ -100,17 +100,27 @@ export async function loadAttendeeInboxHistory(
     }
 
     const threads = (data ?? []) as unknown as InboxThreadRow[];
+    const history = attendeeInboxHistory({ recipients: audience.recipients, threads });
+
+    // The ceiling is shared across every attendee, so one counterparty with a long
+    // history can fill it and push another attendee's threads out of the result —
+    // leaving somebody the organisation talks to every week looking like somebody
+    // it has never written to.
+    //
+    // An earlier version logged this and rendered the list anyway, under a comment
+    // saying a quietly wrong count is worse than a missing one. The log was not the
+    // fix; this is. Per-attendee totals are undercounts past the ceiling too, but an
+    // undercount shows its own bound ("3 more in the inbox") whereas "no inbox
+    // history" is a confident claim about absence, so only the latter is withheld.
     if (threads.length >= THREAD_READ_LIMIT) {
-      // Said rather than swallowed. Past the ceiling the panel's per-attendee
-      // totals are undercounts, and a count that is quietly wrong on a page
-      // people read as a record is worse than a count that is missing.
       console.warn("[report-inbox] thread read hit the ceiling", {
         meetingId: logId(input.meetingId),
         limit: THREAD_READ_LIMIT,
       });
+      return { ...history, untouched: [], capped: true };
     }
 
-    return attendeeInboxHistory({ recipients: audience.recipients, threads });
+    return history;
   } catch (err) {
     console.warn("[report-inbox] history load threw", err);
     return NOTHING;

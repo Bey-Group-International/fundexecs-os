@@ -149,7 +149,7 @@ async function performThreadAction(
   // Gated (Tier 2/3): nothing goes out now. Open an approval and stop — the
   // approval-decision path dispatches with the same context once cleared.
   if (decision.requiresApproval) {
-    const { data: approval } = await supabase
+    const { data: approval, error: approvalError } = await supabase
       .from("approvals")
       .insert({
         organization_id: orgId,
@@ -160,13 +160,35 @@ async function performThreadAction(
       .select("id")
       .single();
 
+    // The approval IS the release mechanism, so a failure here is not cosmetic:
+    // without a row, the task holds the composed reply and nothing can ever clear
+    // it. The task insert above was already checked; this one was not, and the
+    // draft deletion added below turned a recoverable state into a lossy one —
+    // the operator would be told "sent to your approvals", find no approval, and
+    // no longer have the draft to try again from.
+    if (approvalError || !approval) {
+      // Marked failed rather than left at awaiting_approval, which is a queue
+      // entry no approver can act on and no sweep clears.
+      await supabase
+        .from("tasks")
+        .update({ status: "failed", result: { error: "approval not created" } as unknown as Json })
+        .eq("organization_id", orgId)
+        .eq("id", task.id);
+      return {
+        ok: false,
+        gated: true,
+        tier: decision.tier,
+        error: approvalError?.message ?? "Could not open an approval for this reply.",
+      };
+    }
+
     await supabase.from("task_events").insert({
       organization_id: orgId,
       task_id: task.id,
       event_type: "approval.requested",
       agent,
       hub: "source",
-      payload: { approval_id: approval?.id, gate_tier: decision.tier, summary: title } as Json,
+      payload: { approval_id: approval.id, gate_tier: decision.tier, summary: title } as Json,
     });
 
     // The composed text is now on the task, waiting for an approver. A draft of it
