@@ -1445,6 +1445,27 @@ export type InboxMessage = {
   created_at: string;
 };
 
+// Unsent reply text held against an inbox thread (migration 20260930190000).
+// Written by the meeting report's follow-up and sent only by a person through the
+// inbox composer — and therefore through the gate layer. Nothing on this table has
+// a send path, which is the reason it is a table rather than a confirm dialog on a
+// direct send: a dialog can be auto-confirmed, a row with no send path cannot.
+//
+// One row per thread, and thread_id IS the primary key: two drafts on one thread
+// is a question the composer cannot answer.
+export type InboxThreadDraft = {
+  thread_id: string;
+  organization_id: string;
+  body: string;
+  /** Currently only 'meeting_follow_up'; CHECK-constrained in the migration. */
+  source: string;
+  /** The meeting whose report wrote it; null once that meeting is deleted. */
+  source_meeting_id: string | null;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
 // Ownership & Buyer Intelligence (migration 0056). The M&A side of the market on
 // top of the sourcing catalog (0042) + deals: who-bought-whom history and the
 // likely-buyer / add-on lists ranked by lib/ownership-intel.ts. Both org-scoped.
@@ -3085,6 +3106,7 @@ export type Database = {
       equity_holdings: TableShape<EquityHolding>;
       inbox_threads: TableShape<InboxThread>;
       inbox_messages: TableShape<InboxMessage>;
+      inbox_thread_drafts: TableShape<InboxThreadDraft>;
       referral_codes: TableShape<ReferralCode>;
       referrals: TableShape<Referral>;
       credit_ledger: TableShape<CreditLedgerEntry>;
