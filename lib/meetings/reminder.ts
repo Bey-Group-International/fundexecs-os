@@ -200,6 +200,12 @@ export interface ReminderEmailInput {
   joinUrl?: string | null;
   /** A one-tap "Save to calendar" .ics, for a recipient who never saved it. */
   calendarUrl?: string | null;
+  /**
+   * Where the person who booked can move or cancel this meeting. Only ever
+   * set on the copy addressed to them: it is their manage link, and anyone
+   * holding it can cancel the booking.
+   */
+  manageUrl?: string | null;
   note?: string | null;
 }
 
@@ -222,6 +228,9 @@ export function buildReminderEmail(input: ReminderEmailInput): { subject: string
   // of it. Same two hazards as the join link, handled the same way.
   const calendar =
     input.calendarUrl && /^https?:\/\//i.test(input.calendarUrl) ? escapeHtml(input.calendarUrl) : null;
+  // The reminder is when a clash gets noticed, so the way out belongs in it.
+  const manage =
+    input.manageUrl && /^https?:\/\//i.test(input.manageUrl) ? escapeHtml(input.manageUrl) : null;
 
   return {
     subject: `Reminder: ${title} — ${input.timeUntil}`,
@@ -247,6 +256,11 @@ export function buildReminderEmail(input: ReminderEmailInput): { subject: string
   ${
     calendar
       ? `<p style="margin:16px 0 0"><a href="${calendar}" style="color:#b8a36a;font-size:13px;text-decoration:none">Save to calendar</a></p>`
+      : ""
+  }
+  ${
+    manage
+      ? `<p style="color:#6b7280;font-size:13px;margin:16px 0 0">Can't make it? <a href="${manage}" style="color:#b8a36a;text-decoration:none">Reschedule or cancel</a></p>`
       : ""
   }
 </body>
