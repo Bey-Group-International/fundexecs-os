@@ -8,6 +8,7 @@ import { getSessionContext, type SessionContext } from "@/lib/auth";
 import { getWallet } from "@/lib/wallet";
 import { createServerClient, type createServiceClient } from "@/lib/supabase/server";
 import { isPlatformAdmin } from "@/lib/platform-admin";
+import { planPurchasable } from "@/lib/live-readiness";
 import {
   evaluateFeatureAccess,
   featureLockedMessage,
@@ -20,10 +21,20 @@ export async function featureAccessFor(ctx: SessionContext): Promise<FeatureAcce
   const admin = isPlatformAdmin(ctx);
   // An admin never needs the wallet or org read.
   if (admin || !ctx.orgId) {
-    return evaluateFeatureAccess({ isPlatformAdmin: admin, plan: null, orgCreatedAt: null });
+    return evaluateFeatureAccess({
+      isPlatformAdmin: admin,
+      plan: null,
+      orgCreatedAt: null,
+      planPurchasable: planPurchasable(process.env),
+    });
   }
   const [wallet, orgCreatedAt] = await Promise.all([getWallet(ctx.orgId), orgCreatedAtFor(ctx.orgId)]);
-  return evaluateFeatureAccess({ isPlatformAdmin: false, plan: wallet?.plan ?? null, orgCreatedAt });
+  return evaluateFeatureAccess({
+    isPlatformAdmin: false,
+    plan: wallet?.plan ?? null,
+    orgCreatedAt,
+    planPurchasable: planPurchasable(process.env),
+  });
 }
 
 async function orgCreatedAtFor(orgId: string): Promise<string | null> {
@@ -58,7 +69,12 @@ export async function featureAccessForOrg(
     if (error) throw new Error(`feature access: owner lookup failed: ${error.message}`);
     const user = data?.user;
     if (user && isPlatformAdmin({ email: user.email, emailConfirmed: Boolean(user.email_confirmed_at) })) {
-      return evaluateFeatureAccess({ isPlatformAdmin: true, plan: null, orgCreatedAt: null });
+      return evaluateFeatureAccess({
+        isPlatformAdmin: true,
+        plan: null,
+        orgCreatedAt: null,
+        planPurchasable: planPurchasable(process.env),
+      });
     }
   }
   const [walletRes, orgRes] = await Promise.all([
@@ -71,13 +87,18 @@ export async function featureAccessForOrg(
     isPlatformAdmin: false,
     plan: (walletRes.data as { plan?: string | null } | null)?.plan ?? null,
     orgCreatedAt: (orgRes.data as { created_at?: string | null } | null)?.created_at ?? null,
+    planPurchasable: planPurchasable(process.env),
   });
 }
 
 /** The current session's feature access; locked when there is no session. */
 export async function currentFeatureAccess(): Promise<FeatureAccess> {
   const ctx = await getSessionContext();
-  if (!ctx) return { unlocked: false, viaAdmin: false, grandfathered: false, plan: null };
+  // Signed out is locked regardless of billing: the unsellable escape hatch
+  // exists so MEMBERS are not stranded, never to admit an anonymous caller.
+  if (!ctx) {
+    return { unlocked: false, viaAdmin: false, grandfathered: false, unsellable: false, plan: null };
+  }
   return featureAccessFor(ctx);
 }
 

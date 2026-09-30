@@ -71,6 +71,30 @@ function present(env: EnvView, name: string): boolean {
 }
 
 /**
+ * Whether an operator could actually BUY a plan right now.
+ *
+ * "Purchasable" means a rail that moves real money: a LIVE Stripe key, or
+ * remittance details so an invoice has somewhere to be paid to. A test key does
+ * not count — checkout completes and nothing is collected, so a plan obtained
+ * that way is free, and a gate that demands one is theatre.
+ *
+ * The plan gate (lib/feature-access) asks this so it never demands a plan that
+ * cannot be bought. That is a deliberate fail-OPEN, and the reasoning is worth
+ * keeping: locking members out of five surfaces with no way to pay is a hard
+ * outage with no remedy available to them, while opening those surfaces cannot
+ * cost revenue that by definition cannot be collected. The readiness panel
+ * reports the same condition, so the state is loud rather than silent.
+ */
+export function planPurchasable(env: EnvView): boolean {
+  if (stripeKeyMode(env.STRIPE_SECRET_KEY) === "live") return true;
+  return (
+    present(env, "FUNDEXECS_REMITTANCE_BANK_NAME") &&
+    present(env, "FUNDEXECS_REMITTANCE_ACCOUNT_NAME") &&
+    present(env, "FUNDEXECS_REMITTANCE_ACCOUNT_NUMBER")
+  );
+}
+
+/**
  * Whether money can actually be collected, and by what.
  *
  * This is the finding that matters most and the one nothing reported: a
@@ -138,6 +162,19 @@ export function inspectCollection(env: EnvView): Finding[] {
         : "Remittance details are unset, so the bank-transfer option never appears.",
       action:
         "Set FUNDEXECS_REMITTANCE_BANK_NAME, _ACCOUNT_NAME and _ACCOUNT_NUMBER together — all three or none.",
+    });
+  }
+
+  // The plan gate opens itself when no plan can be bought (lib/feature-access).
+  // That is the right call for members and the wrong state to leave running, so
+  // it is reported rather than left to be noticed.
+  if (!planPurchasable(env)) {
+    findings.push({
+      subject: "Paid feature gate",
+      severity: "critical",
+      detail:
+        "No plan can be bought, so Run, Execute, Marketplace, Office and Automations are OPEN to every org — the gate refuses to demand a plan nobody can buy.",
+      action: "Configure a live card rail or remittance details; the gate closes on its own once one works.",
     });
   }
 

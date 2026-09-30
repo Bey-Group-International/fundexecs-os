@@ -33,6 +33,12 @@ export interface FeatureAccessInput {
   plan: string | null | undefined;
   /** organizations.created_at — orgs predating the paywall are exempt. */
   orgCreatedAt: string | null | undefined;
+  /**
+   * Whether a plan can actually be bought right now (lib/live-readiness
+   * planPurchasable). Demanding a plan that cannot be purchased locks members
+   * out of five surfaces with no way to pay, so the gate opens instead.
+   */
+  planPurchasable: boolean;
 }
 
 export interface FeatureAccess {
@@ -42,6 +48,12 @@ export interface FeatureAccess {
   viaAdmin: boolean;
   /** Unlocked only because the org predates the paywall. */
   grandfathered: boolean;
+  /**
+   * Unlocked only because no plan can currently be bought. Distinct from
+   * grandfathered: this is a deployment fault, not an entitlement, and it goes
+   * away the moment a live rail is configured.
+   */
+  unsellable: boolean;
   plan: PlanKey | null;
 }
 
@@ -65,10 +77,25 @@ export function predatesPaywall(orgCreatedAt: string | null | undefined): boolea
 /** Resolve whether the gated features are usable. */
 export function evaluateFeatureAccess(input: FeatureAccessInput): FeatureAccess {
   const plan = paidPlan(input.plan);
-  if (input.isPlatformAdmin) return { unlocked: true, viaAdmin: true, grandfathered: false, plan };
-  if (plan) return { unlocked: true, viaAdmin: false, grandfathered: false, plan };
+  if (input.isPlatformAdmin) {
+    return { unlocked: true, viaAdmin: true, grandfathered: false, unsellable: false, plan };
+  }
+  if (plan) {
+    return { unlocked: true, viaAdmin: false, grandfathered: false, unsellable: false, plan };
+  }
   const grandfathered = predatesPaywall(input.orgCreatedAt);
-  return { unlocked: grandfathered, viaAdmin: false, grandfathered, plan };
+  if (grandfathered) {
+    return { unlocked: true, viaAdmin: false, grandfathered: true, unsellable: false, plan };
+  }
+  // Nothing entitles this org, so the gate would close. Before it does, ask
+  // whether the way out actually exists: a paid plan is the only remedy the
+  // lock offers, and if none can be bought the lock has no remedy at all.
+  //
+  // Grandfathering is checked first and reported separately on purpose. It is a
+  // promise kept to orgs that predate the paywall; this is a deployment fault,
+  // and conflating them would hide a broken rail behind a legitimate exemption.
+  const unsellable = !input.planPurchasable;
+  return { unlocked: unsellable, viaAdmin: false, grandfathered: false, unsellable, plan };
 }
 
 /** Whether a hub key is one of the gated hubs. */
