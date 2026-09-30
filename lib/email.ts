@@ -23,12 +23,20 @@
 // reconnecting Google could not rescue it, since the callback writes only the
 // refresh token and never clears the stale paste.
 //
+// A backup provider (Resend) covers the messages whose loss hurts most —
+// booking confirmations and meeting reminders — when Gmail cannot send them:
+// no mailbox connected, or Gmail refusing (as when the app's Google OAuth
+// client itself is revoked or deleted, which silences every org at once). It
+// is opt-in twice over: a caller passes `allowFallback`, and the deployment
+// sets RESEND_API_KEY and EMAIL_FALLBACK_FROM (a sender on a domain verified
+// with Resend). Unset, nothing changes and every message stays Gmail-only.
+//
 // With none of those, sending degrades to "in-app": the result reports
 // `channel: "in-app"` and `ok: false`, and callers carry on. That is
 // deliberate — an org that has not connected a mailbox yet must still be able
 // to save a meeting, cancel a booking, or issue an invoice. Nothing in this
 // module throws.
-import { encodeHeaderValue, formatMailbox, sanitizeMimeParam } from "@/lib/email-headers";
+import { encodeHeaderValue, formatMailbox, sanitizeHeaderValue, sanitizeMimeParam } from "@/lib/email-headers";
 import { getGoogleAccessToken, googleOAuthConfigured } from "@/lib/google-oauth";
 import { getOrgSecretBounded } from "@/lib/org-secrets";
 
@@ -72,11 +80,18 @@ export interface SendEmailArgs {
   fromEmail?: string;
   /** Pre-resolved credentials — wins over `orgId` lookup and the env. */
   credentials?: SendEmailCredentials;
+  /**
+   * Let the deployment's backup provider send this when Gmail cannot. For the
+   * messages whose loss strands someone — a booking confirmation, a meeting
+   * reminder. Has no effect unless RESEND_API_KEY and EMAIL_FALLBACK_FROM are
+   * set.
+   */
+  allowFallback?: boolean;
 }
 
 export interface SendEmailResult {
   ok: boolean;
-  channel: "gmail" | "in-app";
+  channel: "gmail" | "fallback" | "in-app";
   detail: string;
 }
 
@@ -317,6 +332,21 @@ export async function getEmailConfigStatus(orgId?: string): Promise<EmailConfigS
  * caller's own work still stands.
  */
 export async function sendEmail(args: SendEmailArgs): Promise<SendEmailResult> {
+  const primary = await sendViaMailbox(args);
+  if (primary.ok || !args.allowFallback) return primary;
+
+  const backup = fallbackConfig();
+  if (!backup) return primary;
+
+  const result = await sendViaFallback(args, backup);
+  if (result.ok) return result;
+  console.warn("[email] backup send failed:", result.detail);
+  // Both paths failed; say so about both, so a caller logging `detail` sees
+  // the whole story rather than just the last attempt.
+  return { ...primary, detail: `${primary.detail}; backup: ${result.detail}` };
+}
+
+async function sendViaMailbox(args: SendEmailArgs): Promise<SendEmailResult> {
   const token = await resolveGmailToken(args);
   if (!token) {
     return { ok: false, channel: "in-app", detail: "no mailbox connected" };
@@ -330,6 +360,62 @@ export async function sendEmail(args: SendEmailArgs): Promise<SendEmailResult> {
     const detail = err instanceof Error ? err.message : "gmail request failed";
     console.warn("[email] Gmail send threw:", detail);
     return { ok: false, channel: "gmail", detail };
+  }
+}
+
+/** The backup provider's settings, or null when this deployment has none. */
+function fallbackConfig(): { apiKey: string; from: string } | null {
+  const apiKey = process.env.RESEND_API_KEY?.trim();
+  const from = process.env.EMAIL_FALLBACK_FROM?.trim();
+  return apiKey && from ? { apiKey, from } : null;
+}
+
+const FALLBACK_TIMEOUT_MS = 10_000;
+
+/**
+ * Send through Resend. The From is the deployment's own verified sender — the
+ * org's mailbox is exactly what could not be used — and a reply goes to the
+ * org's configured sender when there is one.
+ */
+async function sendViaFallback(
+  args: SendEmailArgs,
+  config: { apiKey: string; from: string },
+): Promise<SendEmailResult> {
+  try {
+    const replyTo = args.fromEmail ?? args.credentials?.fromEmail ?? null;
+    const invite = args.calendarInvite;
+    const res = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${config.apiKey}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        from: config.from,
+        // The same header-safe rendering the Gmail path uses: the name can
+        // come from a stranger on a public booking page.
+        to: [formatMailbox(args.to.name, args.to.email)],
+        subject: sanitizeHeaderValue(args.subject),
+        html: args.htmlBody,
+        ...(replyTo ? { reply_to: replyTo } : {}),
+        ...(invite
+          ? {
+              attachments: [
+                {
+                  filename: sanitizeMimeParam(invite.filename ?? "invite.ics"),
+                  content: Buffer.from(invite.content, "utf8").toString("base64"),
+                  content_type: `text/calendar; charset=utf-8; method=${methodOf(invite.content) ?? invite.method}`,
+                },
+              ],
+            }
+          : {}),
+      }),
+      signal: AbortSignal.timeout(FALLBACK_TIMEOUT_MS),
+    });
+    if (!res.ok) {
+      const text = await res.text().catch(() => res.statusText);
+      return { ok: false, channel: "fallback", detail: text };
+    }
+    return { ok: true, channel: "fallback", detail: "sent" };
+  } catch (err) {
+    return { ok: false, channel: "fallback", detail: err instanceof Error ? err.message : "backup request failed" };
   }
 }
 

@@ -161,6 +161,14 @@ describe("runMeetingReminders", () => {
     });
   });
 
+  it("lets the backup provider carry a reminder the host's mailbox can't", async () => {
+    // A reminder nobody receives is a meeting nobody shows up to; this is one
+    // of the sends allowed to fall back when Gmail can't.
+    const { supabase } = client([meeting()]);
+    await runMeetingReminders(supabase, { now: NOW });
+    expect((sendEmailMock.mock.calls[0][0] as { allowFallback?: boolean }).allowFallback).toBe(true);
+  });
+
   it("stamps the meeting before sending, so a crash cannot mail twice", async () => {
     const { supabase, update } = client([meeting()]);
     await runMeetingReminders(supabase, { now: NOW });
