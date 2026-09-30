@@ -5236,6 +5236,101 @@ Deployed, monitoring               →  live, observability active
              |  its author thought to doubt.
              |  Confidence: Jest 7787 across 547 suites, typecheck and eslint
              |  clean.
+             |
+             |  2026-09-30  And the other half: an inbox conversation now writes
+             |  itself onto the CRM record of the person on the other end of it.
+             |  ONE ROW PER THREAD, not per message. A conversation of forty
+             |  replies is one relationship, and a row per message would bury every
+             |  hand-logged note under a wall of email. So the entry is upserted on
+             |  the thread and kept CURRENT: subject, newest summary, instant of the
+             |  latest message.
+             |  Which makes the same key the meetings writer needed - real columns,
+             |  because PostgREST's on_conflict carries column names and nothing
+             |  else - and `thread_id` generated from the metadata the writer
+             |  already sets. Hand-logged rows have NULL there and NULLs are
+             |  distinct, so nothing a person types is constrained by it.
+             |  Two write points, deliberately. The ingest writes the entry as the
+             |  thread lands, carrying only the raw preview, because the
+             |  intelligence pass has not run yet. refreshThreadSummary then writes
+             |  it AGAIN with the model's summary, and the upsert makes that a
+             |  CORRECTION to the same entry rather than a second copy of the
+             |  conversation. A record should read "Ana asked for the updated pacing
+             |  model", not "Hi - could you send over".
+             |  Extracted contact-match.ts on the way: the matching rule was in
+             |  lib/meetings, and "lib/meetings owns the rule lib/inbox depends on"
+             |  is the wrong shape. The rule belongs to the CRM; both are consumers.
+             |  Exact addresses only, again, held there by the same near-miss list.
+             |  The ingest path never fails on this. A thread that cannot reach the
+             |  CRM must still reach the inbox - a webhook that reports failure is a
+             |  provider retry and then a message the operator never sees. Asserted
+             |  from the ingest's own side, with a CRM write that fails: the ledger
+             |  still says the thread landed.
+             |  ONE TEST WORTH NAMING. activity_type has a CHECK constraint, so
+             |  every channel must map to something the column accepts. The pure
+             |  test asserts against a copy of that list; the server test reads the
+             |  list OUT OF THE MIGRATION and checks what the writer actually puts
+             |  in the payload. That is what caught the injection where an unknown
+             |  channel falls through to its own name - the kind of value a new
+             |  provider added in six months would produce.
+             |  15 injections, 15 caught, no misses this time. Worth being precise
+             |  about why: the ones that matter (the expression conflict target, the
+             |  raw-email lookup) were caught because they had already SHIPPED
+             |  BROKEN on the meetings side earlier today, and the tests here were
+             |  written from that. An injection pass measures the author's
+             |  imagination, and mine had just been corrected by a reviewer.
+             |  WHAT THESE TESTS CANNOT DO: the index and generated-column tests
+             |  read SQL text out of supabase/migrations. They prove the migration
+             |  says the right thing. They cannot prove it was APPLIED, and they
+             |  cannot prove Postgres accepts the generated expression. Only a run
+             |  against a real database does that.
+             |  Confidence: Jest 7835 across 549 suites, typecheck and eslint
+             |  clean.
+             |
+             |  2026-09-30  CodeRabbit passed the inbox slice with zero actionable
+             |  comments and MINIMAL merge risk, and then its security section
+             |  raised the thing that was actually wrong with it.
+             |  `counterparty_email` comes from the message's From header. The Svix
+             |  signature proves RESEND sent the delivery; it proves nothing about
+             |  who the message says it is from, and the payload slice this app
+             |  reads carries no SPF/DKIM/DMARC result. So a forged
+             |  `From: ana@acme.com` that happens to match a contact exactly lands
+             |  as a row on Ana's permanent record - and the timeline badged every
+             |  is_system row "Automatic", which a reader takes to mean the app
+             |  observed it.
+             |  That badge conflated two different claims. WHO WROTE THE ROW (the
+             |  engine, not a person) and WHETHER THE APP HAD GROUNDS TO BELIEVE THE
+             |  PERSON IT NAMED WAS INVOLVED. For a meeting the second is true: the
+             |  host built the invite list, the room watched people join. For
+             |  inbound mail it is not.
+             |  I did not fix sender authentication. That needs a provider contract
+             |  - which auth results Resend exposes, what the other channels mean -
+             |  and guessing at it would be worse than not having it. What IS
+             |  fixable from here is the overclaim: identity-assurance.ts, one
+             |  marker on the provenance, and a second badge that says "Sender
+             |  unverified" beside "Automatic". The record now says what it knows.
+             |  The test worth naming asserts across the TWO WRITERS rather than
+             |  against the marker string: every row threadActivity returns reads as
+             |  asserted, and no row meetingActivities returns does. A marker only
+             |  works if producer and consumer agree, and comparing each of them to
+             |  a literal I typed in the test would prove neither.
+             |  5 injections, 5 caught, including the two that matter most: a reader
+             |  that calls everything asserted (marks observed meetings unverified)
+             |  and a UI that marks every automatic row (same effect from the other
+             |  end). Both would train a reader to ignore the words on the rows
+             |  where they are true, which is worse than silence.
+             |  A cast hid a real type error on the way - `as ContactRecord` over a
+             |  fixture with stage: "active", which is not a stage. Second time
+             |  today a cast covered drift the type would have caught. Removed the
+             |  cast rather than widening it.
+             |  WHAT THIS DOES NOT DO: a forged sender can still write that row. It
+             |  can still land on a private contact - matching has no visibility
+             |  predicate. And because the activity is keyed on the thread, a forged
+             |  message that hits the same threadKey (same From, same subject)
+             |  updates the genuine conversation's entry rather than adding one.
+             |  That last one is inherited from the inbox's own threading, not
+             |  introduced here, but it is now reaching the CRM.
+             |  Confidence: Jest 7842 across 551 suites, typecheck and eslint
+             |  clean.
 ```
 
 ---
