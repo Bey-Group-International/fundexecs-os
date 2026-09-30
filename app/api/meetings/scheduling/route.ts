@@ -8,6 +8,7 @@ import {
   buildBookingPageUrl,
   isReservedSlug,
   isValidTime,
+  MAX_BOOKINGS_PER_DAY,
   mergeAvailability,
   normalizeSlug,
   parseAvailability,
@@ -36,6 +37,8 @@ interface PatchBody {
   bufferMinutes?: number;
   minNoticeMinutes?: number;
   bookingWindowDays?: number;
+  /** Null or 0 lifts the limit. */
+  maxBookingsPerDay?: number | null;
   isActive?: boolean;
 }
 
@@ -114,6 +117,11 @@ export async function PATCH(req: NextRequest) {
     if (body.bufferMinutes !== undefined) update.buffer_minutes = clamp(body.bufferMinutes, 0, 120);
     if (body.minNoticeMinutes !== undefined) update.min_notice_minutes = clamp(body.minNoticeMinutes, 0, 20160);
     if (body.bookingWindowDays !== undefined) update.booking_window_days = clamp(body.bookingWindowDays, 1, 365);
+    if (body.maxBookingsPerDay !== undefined) {
+      const max = Number(body.maxBookingsPerDay);
+      update.max_bookings_per_day =
+        body.maxBookingsPerDay === null || !Number.isFinite(max) || max < 1 ? null : clamp(max, 1, MAX_BOOKINGS_PER_DAY);
+    }
     if (body.isActive !== undefined) update.is_active = body.isActive === true;
 
     if (body.availability !== undefined) {

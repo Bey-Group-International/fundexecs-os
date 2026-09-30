@@ -260,6 +260,9 @@ export interface SlotWindow {
   end: string;
 }
 
+/** Highest daily booking limit a host can set; the column's check matches. */
+export const MAX_BOOKINGS_PER_DAY = 50;
+
 export interface GenerateSlotsInput {
   /** Host's IANA timezone — the zone the availability rules are written in. */
   timezone: string;
@@ -273,6 +276,13 @@ export interface GenerateSlotsInput {
   minNoticeMinutes: number;
   /** Everything the host is already committed to, as ISO intervals. */
   busy: BusyInterval[];
+  /**
+   * Most bookings the host takes on one host-local day; null or absent for no
+   * limit. A day that has reached it offers nothing more.
+   */
+  maxBookingsPerDay?: number | null;
+  /** Start instants of the host's live bookings, counted against that limit. */
+  bookingStarts?: string[];
   /** First and last calendar date (host-local) to consider, inclusive. */
   fromDate: string;
   toDate: string;
@@ -299,6 +309,18 @@ export function generateSlots(input: GenerateSlotsInput): SlotWindow[] {
     .filter((b) => Number.isFinite(b.start) && Number.isFinite(b.end) && b.end > b.start)
     .sort((a, b) => a.start - b.start);
 
+  // Live bookings per host-local date, only when a daily limit is in force.
+  const limit = input.maxBookingsPerDay && input.maxBookingsPerDay > 0 ? Math.trunc(input.maxBookingsPerDay) : null;
+  const bookedPerDay = new Map<string, number>();
+  if (limit !== null) {
+    for (const iso of input.bookingStarts ?? []) {
+      const at = new Date(iso);
+      if (isNaN(at.getTime())) continue;
+      const day = dateInTimezone(at, input.timezone);
+      bookedPerDay.set(day, (bookedPerDay.get(day) ?? 0) + 1);
+    }
+  }
+
   const byDay = new Map<number, SchedulingAvailabilityRule[]>();
   for (const rule of input.availability) {
     byDay.set(rule.day, [...(byDay.get(rule.day) ?? []), rule]);
@@ -310,6 +332,7 @@ export function generateSlots(input: GenerateSlotsInput): SlotWindow[] {
   for (const date of datesBetween(input.fromDate, input.toDate)) {
     const rules = byDay.get(weekdayOfDate(date));
     if (!rules) continue;
+    if (limit !== null && (bookedPerDay.get(date) ?? 0) >= limit) continue;
 
     for (const rule of rules) {
       const windowStart = minutesOfDay(rule.start);
@@ -472,6 +495,23 @@ export interface BookingValidation {
 export const BOOKING_NAME_MAX = 200;
 export const BOOKING_EMAIL_MAX = 254;
 export const BOOKING_NOTES_MAX = 2000;
+/** Longest cancellation or decline reason kept and emailed. */
+export const BOOKING_REASON_MAX = 1000;
+
+/**
+ * A cancellation or decline reason as it is stored and emailed: text only,
+ * trimmed, capped, and null when there is nothing to say.
+ *
+ * The invitee's side comes from an anonymous request body, so it can be
+ * anything JSON can carry. A number there used to throw on `.trim()` halfway
+ * through a cancel, after the meeting room was already deleted, leaving a
+ * booking still "confirmed" with no room behind it.
+ */
+export function normalizeBookingReason(raw: unknown): string | null {
+  if (typeof raw !== "string") return null;
+  const text = raw.trim().slice(0, BOOKING_REASON_MAX).trim();
+  return text || null;
+}
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 

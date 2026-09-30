@@ -13,6 +13,8 @@ export interface HostSchedulingPage {
   bufferMinutes: number;
   minNoticeMinutes: number;
   bookingWindowDays: number;
+  /** Most bookings taken per day; null for no limit. */
+  maxBookingsPerDay: number | null;
   isActive: boolean;
 }
 

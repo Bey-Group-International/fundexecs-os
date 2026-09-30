@@ -17,6 +17,8 @@ import {
   BOOKING_EMAIL_MAX,
   BOOKING_NAME_MAX,
   BOOKING_NOTES_MAX,
+  BOOKING_REASON_MAX,
+  normalizeBookingReason,
   weekdayOfDate,
   buildBookingManageUrl,
   buildBookingPageUrl,
@@ -251,6 +253,73 @@ describe("generateSlots", () => {
     const starts = slots.map((s) => s.start);
     expect([...starts].sort()).toEqual(starts);
     expect(slots).toHaveLength(48);
+  });
+});
+
+describe("generateSlots daily booking limit", () => {
+  it("stops offering a day once it holds the limit", () => {
+    const slots = generateSlots({
+      ...base,
+      maxBookingsPerDay: 2,
+      bookingStarts: ["2026-03-02T09:00:00Z", "2026-03-02T14:00:00Z"],
+      fromDate: MONDAY,
+      toDate: "2026-03-03",
+    });
+    expect(slots.some((s) => s.start.startsWith("2026-03-02"))).toBe(false);
+    expect(slots.filter((s) => s.start.startsWith("2026-03-03"))).toHaveLength(16);
+  });
+
+  it("keeps offering a day still under the limit", () => {
+    const slots = generateSlots({
+      ...base,
+      maxBookingsPerDay: 2,
+      bookingStarts: ["2026-03-02T09:00:00Z"],
+      fromDate: MONDAY,
+      toDate: MONDAY,
+    });
+    expect(slots).toHaveLength(16);
+  });
+
+  it("counts bookings by the host's local date, not UTC's", () => {
+    // 23:30Z on the 1st is already Monday the 2nd in Tokyo.
+    const slots = generateSlots({
+      ...base,
+      timezone: "Asia/Tokyo",
+      maxBookingsPerDay: 1,
+      bookingStarts: ["2026-03-01T23:30:00Z"],
+      fromDate: MONDAY,
+      toDate: MONDAY,
+    });
+    expect(slots).toHaveLength(0);
+  });
+
+  it("ignores the limit when it is unset or not positive", () => {
+    const bookingStarts = ["2026-03-02T09:00:00Z"];
+    for (const maxBookingsPerDay of [null, undefined, 0]) {
+      expect(generateSlots({ ...base, maxBookingsPerDay, bookingStarts, fromDate: MONDAY, toDate: MONDAY })).toHaveLength(16);
+    }
+  });
+
+  it("is enforced by isSlotAvailable too", () => {
+    const input = { ...base, maxBookingsPerDay: 1, bookingStarts: ["2026-03-02T15:00:00Z"] };
+    expect(isSlotAvailable("2026-03-02T09:00:00.000Z", input)).toBe(false);
+    expect(isSlotAvailable("2026-03-03T09:00:00.000Z", input)).toBe(true);
+  });
+});
+
+describe("normalizeBookingReason", () => {
+  it("keeps text, trimmed", () => {
+    expect(normalizeBookingReason("  running late  ")).toBe("running late");
+  });
+
+  it("is null for blanks and anything that is not text", () => {
+    for (const raw of ["", "   ", null, undefined, 42, { text: "x" }, ["x"], true]) {
+      expect(normalizeBookingReason(raw)).toBeNull();
+    }
+  });
+
+  it("caps a long reason", () => {
+    expect(normalizeBookingReason("x".repeat(BOOKING_REASON_MAX + 500))).toHaveLength(BOOKING_REASON_MAX);
   });
 });
 

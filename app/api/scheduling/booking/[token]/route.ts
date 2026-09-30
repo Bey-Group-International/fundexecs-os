@@ -8,7 +8,7 @@ import { hostCredentials } from "@/lib/meetings/mailbox.server";
 import { checkRateLimit, clientIp, rateLimitResponse } from "@/lib/rate-limit";
 import { SITE_URL } from "@/lib/site";
 import { buildMeetingInviteUrl } from "@/lib/meetings/service";
-import { buildBookingManageUrl } from "@/lib/meetings/scheduling";
+import { buildBookingManageUrl, normalizeBookingReason } from "@/lib/meetings/scheduling";
 import { loadManageView } from "@/lib/meetings/booking-manage.server";
 import {
   SlotUnavailableError,
@@ -66,7 +66,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tok
     const body = (await req.json().catch(() => ({}))) as {
       action?: "cancel" | "reschedule";
       startIso?: string;
-      reason?: string;
+      reason?: unknown;
     };
     if (body.action !== "cancel" && body.action !== "reschedule") {
       return NextResponse.json({ error: "Unknown action." }, { status: 400 });
@@ -85,10 +85,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tok
     }
 
     const host = await hostContactFor(service, ctx.page);
+    const reason = normalizeBookingReason(body.reason);
     let next = ctx;
 
     if (body.action === "cancel") {
-      next = await cancelBooking(service, ctx, "invitee", body.reason);
+      next = await cancelBooking(service, ctx, "invitee", reason);
     } else {
       if (!body.startIso) return NextResponse.json({ error: "Pick a new time." }, { status: 422 });
       next = await rescheduleBooking(service, ctx, body.startIso);
@@ -115,7 +116,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tok
       joinUrl: next.roomCode ? buildMeetingInviteUrl(SITE_URL, next.roomCode) : null,
       manageUrl: buildBookingManageUrl(SITE_URL, next.booking.manage_token),
       manageToken: next.booking.manage_token,
-      reason: body.reason ?? null,
+      reason,
       bookingId: next.booking.id,
       bookingCreatedAt: next.booking.created_at,
       bookingUpdatedAt: next.booking.updated_at,
