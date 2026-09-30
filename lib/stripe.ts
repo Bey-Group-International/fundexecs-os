@@ -545,6 +545,15 @@ export async function fulfillCheckout(
       // Unfinished, or unreadable. Both must keep retrying: saying "already
       // fulfilled" here is what loses a purchase, because it also stops the
       // webhook redelivering.
+      //
+      // A claim this old belongs to a caller that died mid-fulfillment: nothing
+      // releases it, so without this every later retry refuses forever and the
+      // purchase waits on a human. Releasing it is only safe because the grant
+      // itself is now keyed on the session (see the migration) — a retry that
+      // re-runs a grant which already landed is a no-op, not a second grant.
+      // The retry, not this call, does the work; Stripe's redelivery provides
+      // it, so no sweep is needed.
+      await releaseStaleClaim(service, sessionId);
       return {
         ok: false,
         inProgress: true,
@@ -599,7 +608,12 @@ export async function fulfillCheckout(
   } else if (kind === "pack") {
     const pack = CREDIT_PACKS.find((p) => p.key === meta.pack_key);
     if (pack) {
-      await addPack(service, orgId, pack.key, { note: `${pack.credits} credit pack — Stripe` });
+      // Keyed on the session so a replayed fulfillment cannot grant twice.
+      // This is what makes releasing a stale claim below safe.
+      await addPack(service, orgId, pack.key, {
+        note: `${pack.credits} credit pack — Stripe`,
+        reference: `checkout:${sessionId}`,
+      });
     }
   } else if (kind === "gift") {
     // The gift only exists once paid: create it now so it's redeemable.
@@ -752,6 +766,52 @@ async function releaseFulfillment(service: CheckoutService, sessionId: string): 
     console.error("[stripe] releaseFulfillment threw:", err);
     return false;
   }
+}
+
+/**
+ * How long a claim may be held before a caller is assumed to have died.
+ *
+ * Generous on purpose: fulfillment does several round trips (Stripe, the grant,
+ * the audit row), and releasing a claim that is merely slow costs a duplicate
+ * attempt rather than a duplicate grant — but it still costs a retry, so there
+ * is no reason to be tight about it.
+ */
+const CLAIM_STALE_AFTER_MS = 5 * 60_000;
+
+/**
+ * Release a claim whose holder never finished, so the next retry can fulfill.
+ *
+ * Deliberately conditional on age AND on the completion marker still being
+ * absent, and it re-reads rather than trusting the caller: between the caller's
+ * check and this write the holder may have finished, and releasing then would
+ * let a retry re-enter fulfillment. That is survivable now — the grant is keyed
+ * on the session — but a needless second pass over Stripe and the invoice
+ * tables is worth avoiding.
+ */
+async function releaseStaleClaim(service: CheckoutService, sessionId: string): Promise<void> {
+  const { data, error } = await service
+    .from("processed_stripe_events")
+    .select("id, created_at")
+    .eq("id", `fulfill:${sessionId}`)
+    .maybeSingle();
+  if (error || !data) return;
+
+  const heldFor = Date.now() - new Date(data.created_at as string).getTime();
+  if (!Number.isFinite(heldFor) || heldFor < CLAIM_STALE_AFTER_MS) return;
+
+  if (await fulfillmentCompleted(service, sessionId)) return;
+
+  const { error: delErr } = await service
+    .from("processed_stripe_events")
+    .delete()
+    .eq("id", `fulfill:${sessionId}`);
+  if (delErr) {
+    console.error("[stripe] releaseStaleClaim failed:", delErr.message);
+    return;
+  }
+  console.warn(
+    `[stripe] released a stale fulfillment claim for ${logSafe(sessionId)} after ${Math.round(heldFor / 1000)}s; the next retry will fulfill it`,
+  );
 }
 
 /** Record that this session's fulfillment ran to completion. */

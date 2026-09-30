@@ -24,12 +24,13 @@ export async function addPack(
   service: ServiceClient,
   orgId: string,
   packKey: string,
-  opts: { note?: string } = {},
+  opts: { note?: string; reference?: string | null } = {},
 ): Promise<void> {
   const pack = CREDIT_PACKS.find((p) => p.key === packKey);
   if (!pack) return;
   await grantCredits(service, orgId, pack.credits, "pack_purchase", {
     note: opts.note ?? `${pack.credits} credit pack`,
+    reference: opts.reference ?? null,
   });
 }
 
