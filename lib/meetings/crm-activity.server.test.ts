@@ -7,6 +7,9 @@
 // can take down the report the host is actually waiting on.
 jest.mock("next/headers", () => ({ cookies: () => ({ getAll: () => [], set: () => undefined }) }));
 
+import { readdirSync, readFileSync } from "fs";
+import { join } from "path";
+
 import {
   MEETING_CONFLICT_TARGET,
   inviteList,
@@ -317,5 +320,59 @@ describe("matching a contact whose address was stored capitalised", () => {
     expect(await result).toEqual({ written: 1, failed: false });
     const lookup = calls.find((c) => c.table === "network_contacts")!;
     expect(lookup.filters).toContainEqual(["email_lower", ["ana@acme.com"]]);
+  });
+});
+
+/**
+ * The half of the idempotency guarantee the conflict target cannot prove.
+ *
+ * The test above establishes that the target is a shape PostgREST will carry —
+ * plain column names — which is what the first version of this got wrong. It
+ * cannot establish that a unique index over those columns EXISTS, and without
+ * one Postgres rejects the upsert exactly as it did before, for a different
+ * reason. CodeRabbit named that gap when it confirmed the fix; this is it closed.
+ *
+ * Read out of the migration directory rather than asserted against a constant,
+ * so deleting or narrowing the index fails here.
+ */
+describe("the index the conflict target relies on", () => {
+  const migrations = join(__dirname, "..", "..", "supabase", "migrations");
+
+  /** Every migration's SQL, newest last, as one string. */
+  function allSql(): string {
+    return readdirSync(migrations)
+      .filter((f) => f.endsWith(".sql"))
+      .sort()
+      .map((f) => readFileSync(join(migrations, f), "utf8"))
+      .join("\n");
+  }
+
+  it("is created over exactly the columns the upsert conflicts on", () => {
+    const sql = allSql();
+    const columns = MEETING_CONFLICT_TARGET.split(",");
+
+    // A unique index on network_activities covering those columns, in order.
+    const pattern = new RegExp(
+      String.raw`create\s+unique\s+index[^;]*?on\s+public\.network_activities\s*\(\s*` +
+        columns.map((c) => `${c}\\s*`).join(String.raw`,\s*`) +
+        String.raw`\)`,
+      "is",
+    );
+    expect(sql).toMatch(pattern);
+  });
+
+  // The columns have to be real, or generated from something real. `meeting_id`
+  // is generated from the metadata the writer sets; if that generation goes, the
+  // key silently becomes NULL for every row and the upsert stops de-duplicating.
+  it("has a meeting_id column generated from the metadata the writer sets", () => {
+    const sql = allSql();
+    expect(sql).toMatch(/add column if not exists meeting_id text\s+generated always as \(metadata ->> 'meeting_id'\) stored/i);
+  });
+
+  // And the lookup's column, for the same reason: a filter on a column that is
+  // not maintained returns nothing, which reads as "no contacts matched".
+  it("has an email_lower column generated from the address", () => {
+    const sql = allSql();
+    expect(sql).toMatch(/add column if not exists email_lower text\s+generated always as \(lower\(email\)\) stored/i);
   });
 });
