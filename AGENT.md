@@ -4784,6 +4784,71 @@ Deployed, monitoring               →  live, observability active
              |  a naive coarsening moves when "Starts now" appears. Left alone.
              |  Chunking the grid measured WORSE on the landing page (13.60 vs
              |  8.11ms, 31 slice() calls a render) and was not retried here.
+             |
+             |  2026-09-30  The meeting room's live half can be tested after all,
+             |  and measuring it says the render path is already in good shape.
+             |  Four MeetingRoom test files say some version of "reaching the live
+             |  call means a camera, an ICE negotiation and a Realtime channel, and
+             |  a test that mocked all of that would be testing its own mocks", and
+             |  render CallParts directly instead. The first half is true; the
+             |  conclusion did not follow. Everything the room reaches for on the
+             |  way in is a browser API, and about eighty lines of stubs -
+             |  getUserMedia, a peer connection, MediaStream, an AudioContext, the
+             |  Realtime channel - opens the door. What a stub cannot fake is which
+             |  state the room derives from a signal and which component it hands
+             |  the answer to: the fake supplies the input and the real code does
+             |  all the deciding. So the objection rules out asserting that
+             |  negotiation works, and rules in asserting the wiring - which is
+             |  where this file's shipped bugs have always been.
+             |  MeetingRoom.live.test.tsx is that: 8 tests over the tile grid, the
+             |  mic announcement, the speaker attribution, the sidebar's list and
+             |  the clock. All five injections fail the test that names them -
+             |  ringing every tile instead of the speaker's fails 1, ignoring a mic
+             |  announcement 1, dropping an arriving peer 4, freezing the clock 1.
+             |  What the measurement found, all of it through that harness with a
+             |  Profiler. A conversation re-runs the room's 4,858-line body about
+             |  three times a second (31 times per ten seconds, as `speaking` turns
+             |  over), at 2.3ms a run with eight people and 3.8ms with twenty-six.
+             |  Ten seconds of SILENCE re-runs it ONCE - which is #70's clock fix
+             |  verified rather than assumed: the other ten commits in that window
+             |  are MeetingClock's own leaf at 0.2ms each.
+             |  #71's tile memo is load-bearing and now has a number: removing it
+             |  takes a conversation from 1.97ms to 2.58ms a commit at eight people
+             |  and from 2.76ms to 4.06ms at twenty-six, a 24-32% saving.
+             |  And the fixture lied first, the same way the landing page's did.
+             |  One shared loudness dial for every analyser made every tile's
+             |  `speaking` flip on the same tick, so no memo ever got to bail out,
+             |  and measured through it the tile memo looked useless - very
+             |  slightly WORSE than none. A fixture in which nobody takes turns
+             |  cannot see the cost of everyone re-rendering at once. Giving each
+             |  analyser its own level, one speaker at a time, is what turned 12
+             |  commits per ten seconds into 38 and the memo from noise into a
+             |  third of the render. Second time in three passes that an
+             |  unrealistic fixture inverted a conclusion.
+             |  Also corrected a measurement of my own: a Profiler wrapping the
+             |  room counts commits anywhere in its subtree, so the clock's leaf
+             |  read looked like a room render until the body was counted directly.
+             |  What is NOT worth doing, measured rather than assumed. The room's
+             |  five unmemoised per-render derivations - activeReactions, raisedBy,
+             |  handsUpLabel and two lookups - cost 7.4 MICROseconds together at
+             |  twenty-six people, 0.27% of a 2.76ms render, even though each
+             |  rebuilds an N-entry Map to answer "nobody is reacting". Memoising
+             |  them would be padding. VoiceActivityLog already bounds itself with
+             |  batched pruning. allPeers, participantList, livePeers, sharerId and
+             |  recordingRoom are already memoised for identity; ControlBar is
+             |  memoised with stabilised handlers; the sidebar's rows are memoised.
+             |  The one real waste left, and it is not fixable with a memo: the
+             |  sidebar takes `speaking` whole, re-renders its 290-line body three
+             |  times a second, and on the default CHAT tab renders nothing that
+             |  reads it - the People list that does is behind `tab === "people"`.
+             |  A memo cannot help because `speaking` genuinely changes; the fix is
+             |  to stop it being room state at all, the way #70 moved the clock to
+             |  a ref a leaf reads. Left for a decision, with the numbers, rather
+             |  than started: it is the app's most critical component and the win
+             |  is around 1% of the main thread in jsdom, which has no layout and
+             |  so measures a floor rather than a ceiling.
+             |  Confidence: Jest 7619 across 538 suites, typecheck and eslint
+             |  clean.
 ```
 
 ---
