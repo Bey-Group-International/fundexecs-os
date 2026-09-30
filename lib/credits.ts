@@ -2,6 +2,7 @@
 // through spend_org_credits so wallet balance and the append-only credit_ledger
 // stay in lockstep under concurrent workflow execution.
 import { createServiceClient, createServerClient } from "@/lib/supabase/server";
+import { currentUserIsPlatformAdmin } from "@/lib/platform-admin";
 import type { LedgerReason } from "@/lib/referrals";
 import type { CreditLedgerEntry } from "@/lib/supabase/database.types";
 
@@ -79,6 +80,9 @@ export async function spendCredits(
   if (process.env.CREDITS_SPEND_ENABLED !== "true") {
     return { ok: true };
   }
+  // Platform admins have unrestricted access: their work never draws down (or is
+  // walled by) the org's credits. Background runs have no session and still pay.
+  if (await currentUserIsPlatformAdmin()) return { ok: true };
   const service = createServiceClient();
   const { data, error } = await service.rpc("spend_org_credits", {
     p_org: orgId,

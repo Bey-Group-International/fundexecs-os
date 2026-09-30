@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getSessionContext } from "@/lib/auth";
 import { createServerClient } from "@/lib/supabase/server";
 import { saveAutomationCanvas } from "@/lib/automation-canvas";
+import { requireFeatureAccess } from "@/lib/feature-access.server";
 import type { CanvasLayout } from "@/lib/automation-canvas";
 
 export const runtime = "nodejs";
@@ -16,6 +17,8 @@ export async function POST(req: Request, props: { params: Promise<{ id: string }
   if (!ctx?.orgId) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
+  const gate = await requireFeatureAccess("automations");
+  if (!gate.ok) return NextResponse.json({ error: gate.error }, { status: gate.status });
 
   const supabase = await createServerClient();
   const { data: automation } = await supabase

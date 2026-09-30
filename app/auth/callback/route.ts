@@ -78,7 +78,11 @@ async function enforceAccessOrSignOut(
   } = await supabase.auth.getUser();
   if (!user) return null;
 
-  const blocked = await enforceAccessGate({ userId: user.id, email: user.email });
+  const blocked = await enforceAccessGate({
+    userId: user.id,
+    email: user.email,
+    emailConfirmed: Boolean(user.email_confirmed_at),
+  });
   if (!blocked) return null;
 
   await supabase.auth.signOut();

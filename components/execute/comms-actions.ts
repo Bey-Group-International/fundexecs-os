@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createServerClient } from "@/lib/supabase/server";
 import { getSessionContext } from "@/lib/auth";
+import { requireFeatureAccess } from "@/lib/feature-access.server";
 
 // Execute › Shareholder Comms server actions. The shareholder_comms table isn't
 // in the generated types yet (migration 20260707140000), so writes use an
@@ -19,6 +20,8 @@ const TYPES = new Set([
 ]);
 
 export async function addShareholderComm(formData: FormData): Promise<void> {
+  const gate = await requireFeatureAccess("execute");
+  if (!gate.ok) return;
   const ctx = await getSessionContext();
   if (!ctx?.orgId) return;
   const title = String(formData.get("title") ?? "").trim();
@@ -37,6 +40,8 @@ export async function addShareholderComm(formData: FormData): Promise<void> {
 }
 
 export async function markCommSent(formData: FormData): Promise<void> {
+  const gate = await requireFeatureAccess("execute");
+  if (!gate.ok) return;
   const ctx = await getSessionContext();
   if (!ctx?.orgId) return;
   const id = String(formData.get("id") ?? "");

@@ -62,6 +62,7 @@ describe("getSessionContext", () => {
     await expect(getSessionContext()).resolves.toEqual({
       userId: "u1",
       email: "u1@example.com",
+      emailConfirmed: false,
       orgId: "org1",
       role: "owner",
     });

@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { createServerClient } from "@/lib/supabase/server";
 import { getSessionContext } from "@/lib/auth";
 import { clampUnit } from "@/lib/run-strategy";
+import { requireFeatureAccess } from "@/lib/feature-access.server";
 
 /**
  * Set (or adjust) a deal's thesis fit from the Strategy module. The control
@@ -13,6 +14,8 @@ import { clampUnit } from "@/lib/run-strategy";
  * allocation / prioritization views reflect the change immediately.
  */
 export async function setThesisFit(formData: FormData): Promise<void> {
+  const gate = await requireFeatureAccess("run");
+  if (!gate.ok) return;
   const ctx = await getSessionContext();
   if (!ctx?.orgId) return;
 

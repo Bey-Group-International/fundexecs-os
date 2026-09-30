@@ -4,6 +4,11 @@
 // UnderwritingCalculator.tsx) use the shared ActionForm wrapper to surface a
 // failure inline instead of silently doing nothing.
 
+const requireFeatureAccess = jest.fn();
+jest.mock("@/lib/feature-access.server", () => ({
+  requireFeatureAccess: (...a: unknown[]) => requireFeatureAccess(...a),
+}));
+
 jest.mock("next/cache", () => ({ revalidatePath: jest.fn() }));
 
 const getSessionContext = jest.fn();
@@ -47,6 +52,7 @@ function makeFromStub(opts: { caseRow?: unknown; updateError?: { message: string
 
 beforeEach(() => {
   jest.clearAllMocks();
+  requireFeatureAccess.mockResolvedValue({ ok: true });
   getSessionContext.mockResolvedValue({ orgId: "org-1", userId: "user-1" });
   recordConvictionSnapshot.mockResolvedValue(undefined);
   from.mockImplementation(makeFromStub());
@@ -126,5 +132,14 @@ describe("saveUnderwritingInputs", () => {
   it("returns ok on success", async () => {
     const result = await saveUnderwritingInputs(formData({ id: "uw-1", equity: "1000000", holdYears: "5", exitMultiple: "3" }));
     expect(result).toEqual({ ok: true });
+  });
+});
+
+describe("saveUnderwritingInputs — plan gate", () => {
+  it("refuses with the lock message before touching the database when the org has no paid plan", async () => {
+    requireFeatureAccess.mockResolvedValue({ ok: false, status: 402, error: "locked" });
+    await expect(saveUnderwritingInputs(new FormData())).resolves.toEqual({ ok: false, error: "locked" });
+    expect(requireFeatureAccess).toHaveBeenCalledWith("run");
+    expect(from).not.toHaveBeenCalled();
   });
 });

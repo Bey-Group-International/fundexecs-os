@@ -9,6 +9,8 @@ import type { MemberRole } from "@/lib/supabase/database.types";
 export interface SessionContext {
   userId: string;
   email: string;
+  /** Supabase has confirmed the user owns `email` (email_confirmed_at is set). */
+  emailConfirmed: boolean;
   orgId: string | null;
   role: MemberRole | null;
 }
@@ -44,6 +46,7 @@ export const getSessionContext = perRequest(async (): Promise<SessionContext | n
     return {
       userId: user.id,
       email: user.email ?? "",
+      emailConfirmed: Boolean(user.email_confirmed_at),
       orgId: membership?.organization_id ?? null,
       role: (membership?.role as MemberRole) ?? null,
     };

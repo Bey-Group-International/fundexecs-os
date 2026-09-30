@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { getSessionContext } from "@/lib/auth";
-import { isPlatformAdminEmail } from "@/lib/platform-admin";
+import { isPlatformAdmin as isPlatformAdminUser } from "@/lib/platform-admin";
 import { countPendingAccessRequests } from "@/lib/admin/access-requests";
 import { signOut } from "@/app/login/actions";
 import { HUB_BY_KEY } from "@/lib/hubs";
@@ -51,7 +51,7 @@ export default async function AppLayout({
   // Computed before the batch so the pending-request count is only queried for
   // the handful of people who can act on it — it's a cross-org service-role
   // read, and no ordinary member should trigger it.
-  const isPlatformAdmin = isPlatformAdminEmail(ctx.email);
+  const isPlatformAdmin = isPlatformAdminUser(ctx);
   const pendingAccessRequests = isPlatformAdmin
     ? await countPendingAccessRequests()
     : 0;
