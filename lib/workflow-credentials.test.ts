@@ -31,13 +31,20 @@ import { load } from "js-yaml";
 const WORKFLOW_DIR = join(process.cwd(), ".github", "workflows");
 
 /**
- * Workflows that must KEEP their credentials, each because it pushes with them.
+ * Workflows that must KEEP their credentials because they push with them.
  *
- * This is not a way to silence the rule: the test below independently checks
- * that anything named here actually declares `contents: write`, so an entry
- * added to a read-only workflow fails rather than excusing it.
+ * EMPTY, and that is the point. office-hourly.yml was the one entry here: it is
+ * `contents: write` and its agent pushes. It now installs a push credential in
+ * its own step AFTER `npm ci` instead, so checkout persists nothing and there is
+ * no exception left anywhere in the repository.
+ *
+ * Kept as a mechanism rather than deleted, because the next workflow that needs
+ * to push should land here deliberately. It is not a way to silence the rule:
+ * the test below independently checks that anything named here actually
+ * declares `contents: write`, so an entry added to a read-only workflow fails
+ * rather than excusing it.
  */
-const PUSHES_WITH_CHECKOUT_CREDENTIALS = new Set(["office-hourly.yml"]);
+const PUSHES_WITH_CHECKOUT_CREDENTIALS = new Set<string>();
 
 interface Step {
   uses?: string;
@@ -107,6 +114,14 @@ describe("workflow checkout credentials", () => {
       expect(steps.length).toBeGreaterThan(0);
     });
 
+    // There is deliberately NO assertion here that the job avoids
+    // `contents: write`. An earlier draft had one, on the theory that write
+    // access implied needing the persisted credential — which is exactly the
+    // assumption office-hourly.yml disproved: it is `contents: write`, sets
+    // persist-credentials false, and installs a push credential in its own step
+    // after `npm ci`. Write access and a persisted checkout token are separate
+    // questions, and only the second one is this file's business.
+
     // `toBe(false)` and not `toBeFalsy()`, on purpose. A null `with` gives
     // undefined here, which is falsy but is precisely the evasion described at
     // the top of this file.
@@ -116,12 +131,5 @@ describe("workflow checkout credentials", () => {
         expect(step.with?.["persist-credentials"]).toBe(false);
       },
     );
-
-    // A read-only workflow that starts pushing needs the credentials back, and
-    // should be added to the set above deliberately rather than by quietly
-    // dropping the line.
-    it.each(steps.map(({ job }) => job))("job %s does not claim write access", (job) => {
-      expect(writesContents(wf, job)).toBe(false);
-    });
   });
 });

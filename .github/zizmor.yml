@@ -1,7 +1,15 @@
 # zizmor configuration. See .github/workflows/workflow-security.yml for how it runs.
 #
-# Two rules are configured. Both encode decisions this repository has already
-# made and documented elsewhere, rather than silencing findings to get green.
+# ONE rule is configured, and it encodes a decision this repository had already
+# made and documented in comments, rather than silencing findings to get green.
+#
+# There is deliberately no `artipacked` ignore. An earlier draft had one, for
+# office-hourly.yml, the single workflow that kept its checkout credentials
+# because its agent pushes. Review pointed out that `npm ci` runs between that
+# checkout and the agent, so a write-scoped token sat in .git/config while
+# lifecycle scripts executed -- the strongest instance of the finding in the
+# repo, not an acceptable exception. It now installs a push credential in its
+# own step afterwards, so nothing here needs excusing.
 
 rules:
   # zizmor's default policy is `"*": hash-pin` — every action, first-party or
@@ -21,17 +29,3 @@ rules:
         actions/*: ref-pin
         # Everything else: a full SHA, no exceptions.
         "*": hash-pin
-
-  artipacked:
-    ignore:
-      # office-hourly.yml keeps `persist-credentials` ON deliberately, and it is
-      # the only workflow here that does. It is `contents: write` and its agent
-      # step pushes a branch and opens a PR with exactly those credentials, so
-      # setting them false breaks the push rather than hardening it. The reason
-      # is written at the checkout step itself; this entry stops the audit
-      # re-reporting a decision that was made on purpose.
-      #
-      # Deliberately the whole file rather than a line number: there is one
-      # checkout here, and a line-pinned ignore silently stops matching the
-      # moment anything above it moves.
-      - office-hourly.yml
