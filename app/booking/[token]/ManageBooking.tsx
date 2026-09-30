@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { SlotPicker } from "@/components/scheduling/SlotPicker";
 import { TimezoneSelect } from "@/components/scheduling/TimezoneSelect";
+import { useRefreshWhenStale } from "@/components/scheduling/useRefreshWhenStale";
 import { BOOKING_REASON_MAX, detectTimezone, formatSlotFull } from "@/lib/meetings/scheduling";
 import type { ManageBookingView } from "@/lib/meetings/booking-manage";
 
@@ -59,22 +60,37 @@ export function ManageBooking({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
-      const res = await fetch(`/api/scheduling/booking/${token}`, { cache: "no-store" });
-      if (res.status === 404) {
-        setNotFound(true);
-        return;
+  const markFreshRef = useRef<() => void>(() => {});
+
+  /**
+   * `quiet` is the background refresh when the invitee comes back to the tab:
+   * no full-page spinner over what they were reading, and a failed refresh
+   * keeps the booking on screen instead of swapping it for an error.
+   */
+  const load = useCallback(
+    async ({ quiet = false }: { quiet?: boolean } = {}) => {
+      if (!quiet) setLoading(true);
+      try {
+        const res = await fetch(`/api/scheduling/booking/${token}`, { cache: "no-store" });
+        if (res.status === 404) {
+          if (!quiet) setNotFound(true);
+          return;
+        }
+        if (!res.ok) throw new Error("Could not load this booking.");
+        setView((await res.json()) as ManageBookingView);
+        markFreshRef.current();
+      } catch (err) {
+        if (!quiet) setError(err instanceof Error ? err.message : "Could not load this booking.");
+      } finally {
+        if (!quiet) setLoading(false);
       }
-      if (!res.ok) throw new Error("Could not load this booking.");
-      setView((await res.json()) as ManageBookingView);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not load this booking.");
-    } finally {
-      setLoading(false);
-    }
-  }, [token]);
+    },
+    [token],
+  );
+
+  // Picks up both a slot list gone stale and a status the host changed (a
+  // request confirmed or declined) while the page sat open.
+  markFreshRef.current = useRefreshWhenStale(() => void load({ quiet: true }), { enabled: !busy });
 
   // The first load is skipped when the server sent the booking with the page —
   // including when it sent a definite "no such booking". Later loads (after a
@@ -104,6 +120,19 @@ export function ManageBooking({
     zoneResolved.current = true;
     setTimezone(detectTimezone() || view.booking.inviteeTimezone);
   }, [view]);
+
+  // A new time they had picked was taken while the page sat open.
+  useEffect(() => {
+    if (selected && view && !view.slots.some((s) => s.start === selected)) {
+      setSelected(null);
+      setError("The time you picked is no longer available. Please choose another.");
+    }
+  }, [view, selected]);
+
+  const selectSlot = useCallback((start: string) => {
+    setSelected(start);
+    setError(null);
+  }, []);
 
   // The server's instant for the first render, the real one from then on.
   const [now, setNow] = useState(() => (serverNowIso ? new Date(serverNowIso).getTime() : Date.now()));
@@ -221,7 +250,7 @@ export function ManageBooking({
               slots={view.slots}
               timezone={timezone}
               selected={selected}
-              onSelect={setSelected}
+              onSelect={selectSlot}
               emptyMessage={`${page.displayName} has no other open times right now.`}
             />
             <div className="flex gap-3">

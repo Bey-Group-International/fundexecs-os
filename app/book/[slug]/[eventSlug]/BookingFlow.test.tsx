@@ -142,3 +142,51 @@ describe("what typing costs", () => {
     expect(built).toBe(0);
   });
 });
+
+describe("coming back to a stale tab", () => {
+  const LATER = { start: "2026-10-05T15:00:00.000Z", end: "2026-10-05T15:30:00.000Z" };
+  let now = 1_000_000;
+  beforeEach(() => {
+    now = 1_000_000;
+    jest.spyOn(Date, "now").mockImplementation(() => now);
+  });
+  afterEach(() => jest.restoreAllMocks());
+
+  function returnToTab() {
+    act(() => {
+      document.dispatchEvent(new Event("visibilitychange"));
+    });
+  }
+
+  it("quietly reloads the open times", async () => {
+    fetchMock.mockResolvedValue({ ok: true, json: async () => ({ slots: [SLOT, LATER] }) });
+    render(<BookingFlow slug="ana" hostName="Ana" eventType={EVENT} initialSlots={[SLOT]} />);
+    now += 6 * 60_000;
+    returnToTab();
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith("/api/scheduling/ana/intro/slots", { cache: "no-store" }));
+    await waitFor(() => expect(screen.getAllByRole("button", { name: /\d{1,2}:\d{2}/ })).toHaveLength(2));
+    // Quiet: the grid never gave way to a spinner.
+    expect(screen.queryByText(/finding open times/i)).toBeNull();
+  });
+
+  it("drops a picked time that has gone, and says so", async () => {
+    fetchMock.mockResolvedValue({ ok: true, json: async () => ({ slots: [LATER] }) });
+    render(<BookingFlow slug="ana" hostName="Ana" eventType={EVENT} initialSlots={[SLOT]} />);
+    fireEvent.click(await screen.findByRole("button", { name: /\d{1,2}:\d{2}/ }));
+    expect(screen.getByLabelText(/your name/i)).toBeInTheDocument();
+
+    now += 6 * 60_000;
+    returnToTab();
+
+    expect(await screen.findByText(/no longer available/i)).toBeInTheDocument();
+    expect(screen.queryByLabelText(/your name/i)).toBeNull();
+  });
+
+  it("does not reload a page that was just loaded", async () => {
+    render(<BookingFlow slug="ana" hostName="Ana" eventType={EVENT} initialSlots={[SLOT]} />);
+    now += 60_000;
+    returnToTab();
+    await new Promise((r) => setTimeout(r, 0));
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+});

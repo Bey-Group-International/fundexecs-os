@@ -235,3 +235,39 @@ describe("moving the meeting", () => {
     expect(screen.getByRole("button", { name: /confirm new time/i })).toBeTruthy();
   });
 });
+
+describe("coming back to a stale tab", () => {
+  let now = 1_000_000;
+  beforeEach(() => {
+    now = 1_000_000;
+    jest.spyOn(Date, "now").mockImplementation(() => now);
+  });
+  afterEach(() => jest.restoreAllMocks());
+
+  it("picks up a decision the host made while the page sat open, without a spinner", async () => {
+    fetchMock.mockResolvedValue({ ok: true, status: 200, json: async () => view({ status: "confirmed" }) });
+    render(<ManageBooking token="tok" initialView={view({ status: "pending" })} />);
+    expect(screen.getByText("Waiting on the host")).toBeTruthy();
+
+    now += 6 * 60_000;
+    act(() => {
+      document.dispatchEvent(new Event("visibilitychange"));
+    });
+
+    expect(await screen.findByText("Confirmed")).toBeTruthy();
+    expect(screen.queryByText(/loading your booking/i)).toBeNull();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps the booking on screen when the refresh fails", async () => {
+    fetchMock.mockRejectedValue(new TypeError("offline"));
+    render(<ManageBooking token="tok" initialView={view()} />);
+    now += 6 * 60_000;
+    act(() => {
+      document.dispatchEvent(new Event("visibilitychange"));
+    });
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    expect(screen.getByText("Ada Lovelace")).toBeTruthy();
+    expect(screen.queryByText(/could not load/i)).toBeNull();
+  });
+});
