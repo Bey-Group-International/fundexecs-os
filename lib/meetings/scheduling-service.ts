@@ -829,18 +829,34 @@ export async function rescheduleBooking(
   const duration = opts.durationMinutes ?? ctx.eventType.duration_minutes;
   const endIso = new Date(start.getTime() + duration * 60_000).toISOString();
 
-  if (ctx.booking.meeting_id) {
-    const { error } = await table(client, "live_meetings")
-      .update({ scheduled_at: start.toISOString(), updated_at: new Date().toISOString() } as never)
-      .eq("id", ctx.booking.meeting_id);
-    if (error) throw new Error(error.message);
-  }
-
+  // The booking row moves FIRST: it carries the overlap constraint, so it is
+  // what decides whether this move happens at all. Moving the room first left
+  // it at the new time whenever the constraint then said no — the host's
+  // calendar showing a meeting the booking, and every email, said was elsewhere.
   const updated = await updateBookingRow(client, ctx.booking.id, {
     starts_at: start.toISOString(),
     ends_at: endIso,
     rescheduled_at: new Date().toISOString(),
   });
+
+  if (ctx.booking.meeting_id) {
+    const { error } = await table(client, "live_meetings")
+      .update({ scheduled_at: start.toISOString(), updated_at: new Date().toISOString() } as never)
+      .eq("id", ctx.booking.meeting_id);
+    if (error) {
+      // The room couldn't follow; put the booking back where the room still is.
+      await table(client, "scheduling_bookings")
+        .update({
+          starts_at: ctx.booking.starts_at,
+          ends_at: ctx.booking.ends_at,
+          rescheduled_at: ctx.booking.rescheduled_at,
+          updated_at: new Date().toISOString(),
+        } as never)
+        .eq("id", ctx.booking.id);
+      throw new Error(error.message);
+    }
+  }
+
   return { ...ctx, booking: updated };
 }
 
