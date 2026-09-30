@@ -105,7 +105,7 @@ export async function GET(req: NextRequest) {
 
   // The room code reaches the TURN server's own log, so an operator can see
   // which meeting a relayed session belongs to. It authorizes nothing.
-  const turn = turnServers(req.nextUrl.searchParams.get("roomCode")?.trim() || undefined);
+  const turn = await turnServers(req.nextUrl.searchParams.get("roomCode")?.trim() || undefined);
   if (turn.relay) {
     return NextResponse.json({ iceServers: turn.iceServers, relay: true }, { headers: PRIVATE });
   }
