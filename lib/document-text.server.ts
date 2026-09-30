@@ -101,7 +101,11 @@ export async function extractAndStoreDocumentText(input: {
         result = await extractFromBytes(input.storageKey, new Uint8Array(await data.arrayBuffer()));
       }
     } catch (err) {
-      console.warn("document text extraction failed", input.documentId, err);
+      // Both values can carry caller-supplied text; strip line breaks so a
+      // crafted id or error message cannot forge extra log lines.
+      const safeId = String(input.documentId).replace(/[\r\n]/g, "").slice(0, 64);
+      const safeErr = (err instanceof Error ? err.message : String(err)).replace(/[\r\n]/g, " ").slice(0, 200);
+      console.warn("document text extraction failed", safeId, safeErr);
       result = { status: "failed", text: "", preview: null };
     }
   }
