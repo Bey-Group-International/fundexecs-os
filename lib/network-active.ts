@@ -115,6 +115,7 @@ interface LoggedActivityRow {
   subject: string | null;
   body: string | null;
   occurred_at: string;
+  is_system: boolean | null;
   network_contacts: { full_name: string | null } | { full_name: string | null }[] | null;
 }
 
@@ -164,6 +165,13 @@ export interface NetworkActivityEvent {
   detail: string | null;
   /** The person/firm the event concerns, when identifiable. */
   actor: string | null;
+  /**
+   * True when the app recorded this itself rather than a person logging it.
+   *
+   * Only CRM activity rows carry it today, and only some of those. Absent means
+   * "not applicable", not "logged by hand".
+   */
+  automatic?: boolean;
   temperature: Temperature | null;
   /** Optional 0–100 intensity (signal strength) for accenting. */
   strength: number | null;
@@ -690,12 +698,16 @@ export async function loadNetworkActivity(
         .order("created_at", { ascending: false })
         .limit(8),
     ),
-    // The CRM timeline: notes, calls, and meetings people logged by hand.
+    // The CRM timeline. It used to be only what people logged by hand; a
+    // finished meeting now writes itself against whoever was in it, so entries
+    // here are a mix and `is_system` is what tells them apart. Read, and carried
+    // on the event, because a record of what the app observed and a record of
+    // what somebody claims happened are not the same claim.
     tryQuery<LoggedActivityRow>(() =>
       client
         .from("network_activities")
         .select(
-          "id, contact_id, investor_id, activity_type, subject, body, occurred_at, network_contacts(full_name)",
+          "id, contact_id, investor_id, activity_type, subject, body, occurred_at, is_system, network_contacts(full_name)",
         )
         .eq("organization_id", orgId)
         .order("occurred_at", { ascending: false })
@@ -865,6 +877,7 @@ export async function loadNetworkActivity(
       title: l.subject?.trim() || `${LOGGED_VERB[l.activity_type] ?? "Activity"}${who ? ` · ${who}` : ""}`,
       detail: l.body ? truncate(l.body, 160) : who,
       actor: who,
+      automatic: l.is_system === true,
       temperature: null,
       strength: null,
       amount: null,

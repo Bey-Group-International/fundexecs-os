@@ -11,6 +11,10 @@ import { EMPTY_REPORT, clampTranscript, generateMeetingReport } from "@/lib/meet
 import { mergeTranscripts, restoreTranscript, type StoredLine } from "@/lib/meetings/transcript-restore";
 import { readAllTranscriptRows } from "@/lib/meetings/transcript-read";
 import { ONE_WAY_KIND } from "@/lib/meetings/one-way";
+import {
+  recordMeetingOnTimelines,
+  type MeetingForCrm,
+} from "@/lib/meetings/crm-activity.server";
 
 export const runtime = "nodejs";
 
@@ -42,6 +46,7 @@ async function endWithoutAnalysis(
   supabase: ReportSupabase,
   meetingId: string,
   transcript: string,
+  crm?: { meeting: MeetingForCrm; actorId: string | null },
 ): Promise<void> {
   await supabase.from("live_meeting_reports").insert({
     meeting_id: meetingId,
@@ -51,10 +56,26 @@ async function endWithoutAnalysis(
     full_transcript: transcript,
     analysis: { ...EMPTY_REPORT } as import("@/lib/supabase/database.types").Json,
   });
+  const endedAt = new Date().toISOString();
   await supabase
     .from("live_meetings")
-    .update({ status: "ended", ended_at: new Date().toISOString() })
+    .update({ status: "ended", ended_at: endedAt })
     .eq("id", meetingId);
+
+  // The CRM record of a meeting that happened, even though nothing was
+  // summarised. Omitting it would make the contact's timeline quietly
+  // incomplete, and an incomplete timeline is what makes relationship scoring
+  // wrong. The entry carries no report and is REPLACED, not duplicated, if a
+  // regenerate later produces one — both write on the same key.
+  if (crm) {
+    await recordMeetingOnTimelines(supabase as never, {
+      meeting: crm.meeting,
+      actorId: crm.actorId,
+      endedAt,
+      durationMinutes: null,
+      report: null,
+    });
+  }
 }
 
 export async function POST(req: Request) {
@@ -79,13 +100,32 @@ export async function POST(req: Request) {
     // Verify caller is the meeting host
     const { data: meeting } = await supabase
       .from("live_meetings")
-      .select("id, host_id, organization_id, deal_id, title, started_at, scheduled_at, kind")
+      // room_code and attendees are for the CRM timeline entry (the report link
+      // and the invite list); they cost nothing on a select that already runs.
+      .select("id, host_id, organization_id, deal_id, title, started_at, scheduled_at, kind, room_code, attendees")
       .eq("id", body.meetingId)
       .single();
 
     if (!meeting || meeting.host_id !== user.id) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
+
+    // Everything the CRM write needs about this meeting, gathered once because
+    // three paths below reach it: the success path, and the two that close a
+    // meeting without an analysis.
+    const crm = {
+      actorId: user.id,
+      meeting: {
+        id: body.meetingId,
+        organizationId: (meeting as { organization_id?: string | null }).organization_id ?? null,
+        roomCode: (meeting as { room_code?: string | null }).room_code ?? null,
+        title: body.title ?? meeting.title ?? null,
+        startedAt: meeting.started_at ?? null,
+        scheduledAt: meeting.scheduled_at ?? null,
+        attendees: (meeting as { attendees?: unknown }).attendees ?? null,
+        hostEmail: user.email ?? null,
+      } satisfies MeetingForCrm,
+    };
 
     if (!body.transcript?.trim()) {
       // A ONE-WAY CALL with nothing transcribed is a real and ordinary outcome:
@@ -99,7 +139,7 @@ export async function POST(req: Request) {
       // is a meeting that did not happen or a bug, and either way writing an
       // empty report over it would bury the evidence.
       if ((meeting as { kind?: string | null }).kind === ONE_WAY_KIND) {
-        await endWithoutAnalysis(supabase, body.meetingId, "");
+        await endWithoutAnalysis(supabase, body.meetingId, "", crm);
         return NextResponse.json({ ok: true, summarised: false });
       }
       return NextResponse.json({ error: "meetingId and transcript required" }, { status: 400 });
@@ -167,7 +207,7 @@ export async function POST(req: Request) {
       });
     } catch (err) {
       console.error("[/api/meetings/report] analysis failed", err);
-      await endWithoutAnalysis(supabase, body.meetingId, transcript);
+      await endWithoutAnalysis(supabase, body.meetingId, transcript, crm);
       throw err;
     }
 
@@ -193,10 +233,11 @@ export async function POST(req: Request) {
     // through on the "Generating report…" screen after the model had already
     // answered. Now they overlap and the wait is the slowest of them.
     const actionItems = normalizeNoteList(analysis.action_items);
+    const endedAt = new Date().toISOString();
     const [, , tasks] = await Promise.all([
       supabase
         .from("live_meetings")
-        .update({ status: "ended", ended_at: new Date().toISOString() })
+        .update({ status: "ended", ended_at: endedAt })
         .eq("id", body.meetingId),
 
       persistInstitutionalMeetingRecord(supabase, {
@@ -227,6 +268,23 @@ export async function POST(req: Request) {
         summary: normalizeNoteText(analysis.summary),
         items: actionItems,
       }),
+
+      // The meeting on the CRM record of everyone in it who is a contact.
+      //
+      // A fourth sibling rather than a fifth round trip: it needs only the
+      // report's content, which is in hand, and none of the other three. It
+      // never throws — a timeline entry that cannot be written must not cost the
+      // host the report they are waiting on — so its result is not read here.
+      recordMeetingOnTimelines(supabase as never, {
+        meeting: crm.meeting,
+        actorId: crm.actorId,
+        endedAt,
+        durationMinutes: durationMinutes(body.duration ?? null),
+        report: {
+          summary: normalizeNoteText(analysis.summary),
+          decisions: normalizeNoteList(analysis.decisions),
+        },
+      }),
     ]);
 
     return NextResponse.json({ reportId: report.id, analysis, tasks });
@@ -237,6 +295,12 @@ export async function POST(req: Request) {
       { status: 500 },
     );
   }
+}
+
+/** The posted duration is seconds; the timeline entry records whole minutes. */
+function durationMinutes(seconds: number | null): number | null {
+  if (seconds === null || !Number.isFinite(seconds) || seconds <= 0) return null;
+  return Math.max(1, Math.round(seconds / 60));
 }
 
 type ReportMeeting = {

@@ -14,6 +14,7 @@ import { useCallback, useMemo, useState } from "react";
 import Link from "next/link";
 import { CONTACT_STAGES, STAGE_LABEL, type ContactStage } from "@/lib/network-stages";
 import { LOGGABLE_TYPES } from "@/lib/network-contact";
+import { reportUrlFromMetadata } from "@/lib/meetings/crm-activity";
 import type {
   ContactRecordView as RecordView,
   ContactRecord,
@@ -496,10 +497,29 @@ function Timeline({ entries }: { entries: TimelineEntry[] }) {
               </span>
               <span className="text-[11px] text-fg-muted/70">{formatDateTime(e.occurredAt)}</span>
               {e.actorName && <span className="text-[11px] text-fg-muted/70">· {e.actorName}</span>}
+              {/*
+                Said, not just shaded. A system entry already had a muted dot
+                rather than a gold one, which tells a reader nothing on its own —
+                and the difference between what this app observed and what a
+                person claims happened is the whole reason is_system exists.
+              */}
+              {e.isSystem && (
+                <span className="rounded border border-line px-1 font-mono text-[10px] uppercase tracking-wider text-fg-muted/70">
+                  Automatic
+                </span>
+              )}
             </div>
             {e.subject && <p className="mt-0.5 text-sm text-fg-primary">{e.subject}</p>}
             {e.body && (
               <p className="mt-0.5 whitespace-pre-wrap text-xs leading-relaxed text-fg-secondary">{e.body}</p>
+            )}
+            {reportUrlFromMetadata(e.metadata) && (
+              <a
+                href={reportUrlFromMetadata(e.metadata) as string}
+                className="mt-1 inline-block text-[11px] text-gold-400 hover:underline"
+              >
+                Open the full report →
+              </a>
             )}
           </div>
         </li>
