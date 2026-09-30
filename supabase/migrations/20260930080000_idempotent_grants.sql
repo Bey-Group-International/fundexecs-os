@@ -1,4 +1,4 @@
--- 20260930070000_idempotent_grants.sql
+-- 20260930080000_idempotent_grants.sql
 -- Make a credit grant idempotent, so replaying a fulfillment cannot grant twice.
 --
 -- Checkout fulfillment has two callers (the return redirect and the Stripe
