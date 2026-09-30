@@ -16,8 +16,11 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { AGENTS } from "@/lib/agents";
 import {
+  calendarWhenLabel,
   deriveMeetingStatus,
   meetingTimeState,
+  monthLabel,
+  weekdayLabel,
   type MeetingDisplayStatus,
 } from "@/lib/meetings/schedule";
 import {
@@ -1822,7 +1825,7 @@ function TimeGridView({ days, meetings, blocks, externalEvents, layersById, now,
           return (
             <div key={dayKey(d)} className="flex-1 border-l border-[var(--line)] px-2 py-2 text-center">
               <div className="text-[11px] font-medium uppercase tracking-wider text-[var(--fg-muted)]">
-                {d.toLocaleDateString("en-US", { weekday: "short" })}
+                {weekdayLabel(d)}
               </div>
               <div className={`mx-auto mt-0.5 inline-flex h-7 w-7 items-center justify-center rounded-full text-sm ${isToday ? "bg-[var(--gold-400)] font-semibold text-white" : "text-[var(--fg-primary)]"}`}>
                 {d.getDate()}
@@ -2063,11 +2066,11 @@ function AgendaView({ anchor, meetings, now, today, presence, statusOf, onSelect
       {withEvents.map(({ d, evs }) => (
         <div key={dayKey(d)} className="flex gap-4 px-2 py-3">
           <div className="w-16 shrink-0 text-center">
-            <div className="text-[11px] font-medium uppercase tracking-wider text-[var(--fg-muted)]">{d.toLocaleDateString("en-US", { weekday: "short" })}</div>
+            <div className="text-[11px] font-medium uppercase tracking-wider text-[var(--fg-muted)]">{weekdayLabel(d)}</div>
             <div className={`mx-auto mt-0.5 inline-flex h-8 w-8 items-center justify-center rounded-full text-base font-semibold ${isSameDay(d, today) ? "bg-[var(--gold-400)] text-white" : "text-[var(--fg-primary)]"}`}>
               {d.getDate()}
             </div>
-            <div className="text-[11px] text-[var(--fg-muted)]">{d.toLocaleDateString("en-US", { month: "short" })}</div>
+            <div className="text-[11px] text-[var(--fg-muted)]">{monthLabel(d)}</div>
           </div>
           <div className="flex min-w-0 flex-1 flex-col gap-1.5">
             {evs.map((m) => {
@@ -2253,7 +2256,7 @@ function MeetingDetailHeading({
       </div>
       <h3 className="mt-2 text-base font-semibold text-[var(--fg-primary)]">{meeting.title}</h3>
       <p className="mt-0.5 text-xs text-[var(--fg-muted)]">
-        {meeting.scheduled_at ? new Date(meeting.scheduled_at).toLocaleString("en-US", { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }) : "Time TBD"}
+        {calendarWhenLabel(meeting.scheduled_at) ?? "Time TBD"}
         {meeting.duration_minutes ? ` · ${meeting.duration_minutes} min` : ""}
         {ts && ts.phase !== "ended" ? ` · ${ts.phase === "in_progress" ? "In progress" : ts.label}` : ""}
       </p>
