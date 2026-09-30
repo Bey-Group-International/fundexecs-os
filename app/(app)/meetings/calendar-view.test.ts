@@ -1,4 +1,4 @@
-import { calendarViewUrl, parseCalendarView } from "./calendar-view";
+import { calendarViewUrl, nextSchedulableStart, parseCalendarView } from "./calendar-view";
 
 describe("parseCalendarView", () => {
   it("accepts the two real panes", () => {
@@ -41,5 +41,17 @@ describe("calendarViewUrl", () => {
     expect(calendarViewUrl("/meetings", new URLSearchParams("tab=upcoming"), "calendar")).toBe(
       "/meetings?tab=upcoming&view=calendar",
     );
+  });
+});
+
+describe("nextSchedulableStart", () => {
+  const at = (h: number, m: number, sec = 0) => new Date(2026, 8, 16, h, m, sec);
+  const hm = (d: Date) => `${d.getHours()}:${String(d.getMinutes()).padStart(2, "0")}`;
+
+  it("lands on the next :00 or :30 at least half an hour away", () => {
+    expect(hm(nextSchedulableStart(at(9, 0)))).toBe("9:30");
+    expect(hm(nextSchedulableStart(at(9, 7)))).toBe("10:00");
+    expect(hm(nextSchedulableStart(at(9, 31, 20)))).toBe("10:30");
+    expect(hm(nextSchedulableStart(at(23, 45)))).toBe("0:30");
   });
 });

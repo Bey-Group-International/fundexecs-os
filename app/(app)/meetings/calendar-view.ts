@@ -41,3 +41,20 @@ export function calendarViewUrl(
   const query = next.toString();
   return query ? `${pathname}?${query}` : pathname;
 }
+
+/**
+ * Where a meeting booked from "Schedule for later" starts unless somebody
+ * changes it: the next :00 or :30 that is at least half an hour away. "An hour
+ * from now" to the minute gave 2:37 PM, a time nobody books.
+ */
+export function nextSchedulableStart(now: Date): Date {
+  const earliest = new Date(now.getTime() + 30 * 60_000);
+  earliest.setSeconds(0, 0);
+  const minutes = earliest.getMinutes();
+  if (minutes === 0 || minutes === 30) return earliest;
+  earliest.setMinutes(minutes < 30 ? 30 : 60);
+  return earliest;
+}
+
+/** Remembered per browser: whether the calendar's side panel is showing. */
+export const CALENDAR_RAIL_KEY = "fx.meetings.calendar.rail";

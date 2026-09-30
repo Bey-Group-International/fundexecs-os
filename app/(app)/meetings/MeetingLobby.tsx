@@ -45,7 +45,18 @@ const MeetingEditScreen = nextDynamic(
  * stays (it's the right phrasing when you're already there to create something),
  * but the button is the door people find.
  */
-export function MeetingLobby({ onOpenCalendar }: { onOpenCalendar?: () => void } = {}) {
+export function MeetingLobby({
+  onOpenCalendar,
+  onScheduleLater,
+}: {
+  onOpenCalendar?: () => void;
+  /**
+   * "Schedule for later": the calendar with the scheduler already open on top
+   * of it. Picking that item means somebody is here to book a meeting, and
+   * landing them on a bare calendar made them find "new meeting" a second time.
+   */
+  onScheduleLater?: () => void;
+} = {}) {
   const router = useRouter();
   const [joinCode, setJoinCode] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -102,6 +113,13 @@ export function MeetingLobby({ onOpenCalendar }: { onOpenCalendar?: () => void }
     else setScheduleOpen(true);
   }
 
+  function scheduleLater() {
+    setMenuOpen(false);
+    // Without a calendar behind the lobby, the scheduler opens on its own.
+    if (onScheduleLater) onScheduleLater();
+    else setScheduleOpen(true);
+  }
+
   function handleJoin(e: React.FormEvent) {
     e.preventDefault();
     const code = joinCode.trim().toLowerCase().replace(/\s/g, "");
@@ -147,8 +165,8 @@ export function MeetingLobby({ onOpenCalendar }: { onOpenCalendar?: () => void }
                   <MenuItem
                     icon={<CalendarIcon />}
                     title="Schedule for later"
-                    subtitle="Open the calendar to pick a time"
-                    onClick={openCalendar}
+                    subtitle="Pick a time, with your calendar behind it"
+                    onClick={scheduleLater}
                   />
                   <div className="h-px bg-line" />
                   {/* No room, no second participant: a call somebody is taking

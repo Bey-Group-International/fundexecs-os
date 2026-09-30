@@ -125,7 +125,10 @@ function meeting(over: Partial<CalendarMeeting> & { id: string; scheduled_at: st
   } as CalendarMeeting;
 }
 
-async function show(meetings: CalendarMeeting[]) {
+async function show(
+  meetings: CalendarMeeting[],
+  extra: { openScheduler?: boolean; onSchedulerOpened?: () => void } = {},
+) {
   dbRows = meetings;
   const out = render(
     <MeetingsCalendar
@@ -134,6 +137,7 @@ async function show(meetings: CalendarMeeting[]) {
       initialPast={[] as PastMeeting[]}
       userId="u1"
       orgId="o1"
+      {...extra}
     />,
   );
   await act(async () => { await Promise.resolve(); await Promise.resolve(); });
@@ -236,5 +240,42 @@ describe("the clock", () => {
       });
     }
     expect(cells()).toBe(before);
+  });
+});
+
+describe("opening from Schedule for later", () => {
+  it("puts the scheduler on top of the calendar straight away, at the next half hour", async () => {
+    const opened = jest.fn();
+    await show([], { openScheduler: true, onSchedulerOpened: opened });
+    const dialog = screen.getByRole("dialog", { name: "Schedule a meeting" });
+    expect(dialog).toBeInTheDocument();
+    // 9:00 now: half an hour out is 9:30.
+    expect(dialog.querySelector('input[type="time"]')).toHaveValue("09:30");
+    expect(opened).toHaveBeenCalledTimes(1);
+  });
+
+  it("opens just the calendar otherwise", async () => {
+    await show([]);
+    expect(screen.queryByRole("dialog", { name: "Schedule a meeting" })).toBeNull();
+  });
+});
+
+describe("the side panel", () => {
+  beforeEach(() => window.localStorage.clear());
+
+  it("is folded away so the grid gets the whole screen, and comes back on request", async () => {
+    await show([]);
+    const toggle = screen.getByRole("button", { name: "Calendars & lists" });
+    expect(document.querySelector("aside")).toHaveAttribute("hidden");
+
+    fireEvent.click(toggle);
+    expect(document.querySelector("aside")).not.toHaveAttribute("hidden");
+    expect(screen.getByRole("button", { name: "Hide side panel" })).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("remembers that it was left open", async () => {
+    window.localStorage.setItem("fx.meetings.calendar.rail", "open");
+    await show([]);
+    expect(document.querySelector("aside")).not.toHaveAttribute("hidden");
   });
 });
