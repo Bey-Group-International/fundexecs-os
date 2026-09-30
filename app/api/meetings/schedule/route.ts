@@ -13,7 +13,7 @@ import { planCalendarSync } from "@/lib/meetings/calendar-sync";
 import { canWriteCalendar } from "@/lib/calendar/google-write.server";
 import { loadBlockConflicts } from "@/lib/meetings/blocks.server";
 import { loadExternalConflicts } from "@/lib/meetings/conflicts.server";
-import { conflictMessage } from "@/lib/meetings/schedule";
+import { BUSY_ELSEWHERE_MESSAGE, conflictGate, conflictMessage } from "@/lib/meetings/schedule";
 import { SITE_URL } from "@/lib/site";
 import {
   validateMeetingDraft,
@@ -158,13 +158,20 @@ export async function POST(req: NextRequest) {
         subjectHostId: auth.ctx.userId,
         subjectEmails: [auth.ctx.email, ...guestEmails(attendees)],
       });
-      if (
-        (conflicts.length > 0 || blockedBy.length > 0 || busyElsewhere.length > 0) &&
-        body.allowConflict !== true
-      ) {
+      // Time taken in a connected calendar cannot be saved over, "Save anyway"
+      // or not; the rest of the clash can.
+      const gate = conflictGate(
+        { meetings: conflicts.length, blocks: blockedBy.length, external: busyElsewhere.length },
+        body.allowConflict === true,
+      );
+      if (gate !== "ok") {
         return NextResponse.json(
           {
-            error: conflictMessage(conflicts.length, blockedBy.length, busyElsewhere.length),
+            error:
+              gate === "blocked"
+                ? BUSY_ELSEWHERE_MESSAGE
+                : conflictMessage(conflicts.length, blockedBy.length, busyElsewhere.length),
+            overridable: gate === "overridable",
             conflicts,
             blockedBy,
             busyElsewhere,

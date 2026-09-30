@@ -279,3 +279,80 @@ describe("the side panel", () => {
     expect(document.querySelector("aside")).not.toHaveAttribute("hidden");
   });
 });
+
+describe("time a connected calendar has taken", () => {
+  const LAYER = {
+    id: "g1",
+    source: "google",
+    name: "Work",
+    color: "#4285f4",
+    isVisible: true,
+    blocksAvailability: true,
+    isPrimary: true,
+    canWrite: true,
+    health: { state: "ok", message: null },
+  };
+  // Wednesday 16 September, 10:00–11:00 local.
+  const BUSY = {
+    id: "e1",
+    calendarId: "g1",
+    title: "Client call",
+    location: null,
+    link: null,
+    startsAt: new Date(2026, 8, 16, 10, 0).toISOString(),
+    endsAt: new Date(2026, 8, 16, 11, 0).toISOString(),
+    isAllDay: false,
+    isBusy: true,
+  };
+  const FREE = { ...BUSY, id: "e2", title: "Birthday reminder", isBusy: false,
+    startsAt: new Date(2026, 8, 16, 14, 0).toISOString(), endsAt: new Date(2026, 8, 16, 15, 0).toISOString() };
+
+  async function weekWith(events: unknown[], layer: Record<string, unknown> = LAYER) {
+    global.fetch = (async (url: string) => ({
+      ok: true,
+      status: 200,
+      json: async () =>
+        String(url).startsWith("/api/meetings/calendars")
+          ? { layers: [layer], events }
+          : { blocks: [], calendars: [], events: [] },
+    })) as unknown as typeof fetch;
+    await show([]);
+    fireEvent.click(screen.getByRole("button", { name: "Week" }));
+    await act(async () => { await Promise.resolve(); });
+  }
+
+  it("is drawn as blocked and cannot be clicked to start a meeting", async () => {
+    await weekWith([BUSY, FREE]);
+    const blocked = document.querySelectorAll('[data-busy="true"]');
+    expect(blocked).toHaveLength(1);
+    expect(blocked[0]).toHaveAttribute("aria-disabled", "true");
+    expect(blocked[0].getAttribute("title")).toContain("Client call");
+
+    fireEvent.click(blocked[0]);
+    expect(screen.queryByRole("menu")).toBeNull();
+  });
+
+  it("stops a click on the column from landing in it", async () => {
+    await weekWith([BUSY]);
+    const column = document.querySelector('[data-busy="true"]')!.parentElement!;
+    // 10:30, inside the busy hour.
+    fireEvent.click(column, { clientY: 10.5 * 46 });
+    expect(screen.queryByRole("menu")).toBeNull();
+
+    // 8:00 is free.
+    fireEvent.click(column, { clientY: 8 * 46 });
+    expect(screen.getByRole("menu")).toBeInTheDocument();
+  });
+
+  it("stays blocked when that calendar is hidden, without naming the event", async () => {
+    await weekWith([BUSY], { ...LAYER, isVisible: false });
+    const blocked = document.querySelector('[data-busy="true"]');
+    expect(blocked).not.toBeNull();
+    expect(blocked!.textContent).toBe("Busy");
+  });
+
+  it("leaves a calendar that does not count as busy alone", async () => {
+    await weekWith([BUSY], { ...LAYER, blocksAvailability: false });
+    expect(document.querySelector('[data-busy="true"]')).toBeNull();
+  });
+});
