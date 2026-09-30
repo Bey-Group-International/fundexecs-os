@@ -1,4 +1,4 @@
-import { externalEventsToBusy, clipToWindow } from "@/lib/calendar/busy";
+import { externalEventsToBusy, clipToWindow, ownInviteRef } from "@/lib/calendar/busy";
 
 describe("externalEventsToBusy", () => {
   it("keeps ordinary timed events", () => {
@@ -110,5 +110,18 @@ describe("clipToWindow", () => {
   it("passes everything through when the window makes no sense", () => {
     const all = [{ start: "2026-09-10T09:00:00.000Z", end: "2026-09-10T10:00:00.000Z" }];
     expect(clipToWindow(all, "nonsense", to)).toEqual(all);
+  });
+});
+
+describe("ownInviteRef", () => {
+  const ID = "11111111-1111-4111-8111-111111111111";
+  it("reads the meeting or booking an app-written UID names", () => {
+    expect(ownInviteRef(`meeting-${ID}@fundexecs.com`)).toEqual({ kind: "meeting", id: ID });
+    expect(ownInviteRef(`booking-${ID.toUpperCase()}@localhost:3000`)).toEqual({ kind: "booking", id: ID });
+  });
+  it("is null for anything else", () => {
+    expect(ownInviteRef("abc123@google.com")).toBeNull();
+    expect(ownInviteRef("meeting-not-a-uuid@fundexecs.com")).toBeNull();
+    expect(ownInviteRef(null)).toBeNull();
   });
 });

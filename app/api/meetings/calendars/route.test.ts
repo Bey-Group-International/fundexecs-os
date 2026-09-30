@@ -76,6 +76,8 @@ function client(opts: {
   googleEvents?: { data?: unknown[] | null; error?: unknown };
   feedEvents?: { data?: unknown[] | null; error?: unknown };
   calls?: string[];
+  /** Meetings the member hosts, for recognising copies of their own invites. */
+  hosted?: string[];
 } = {}) {
   return (table: string) => {
     opts.calls?.push(table);
@@ -83,6 +85,7 @@ function client(opts: {
     const layerRows = () => {
       if (table === "google_calendars") return { data: opts.calendars ?? [], error: null };
       if (table === "calendar_feeds") return { data: opts.feeds ?? [], error: null };
+      if (table === "live_meetings") return { data: (opts.hosted ?? []).map((id) => ({ id })), error: null };
       return { data: [], error: null };
     };
     const eventRows = () =>
@@ -215,6 +218,21 @@ describe("GET /api/meetings/calendars", () => {
         isBusy: true,
       },
     ]);
+  });
+
+  it("does not draw a copy of the member's own meeting invite over the meeting", async () => {
+    const MINE = "11111111-1111-4111-8111-111111111111";
+    from.mockImplementation(
+      client({
+        calendars: [GOOGLE_CAL],
+        hosted: [MINE],
+        googleEvents: {
+          data: [GOOGLE_EVENT, { ...GOOGLE_EVENT, id: "ge-2", summary: "Copy", ical_uid: `meeting-${MINE}@fundexecs.com` }],
+        },
+      }),
+    );
+    const json = await (await GET(req())).json();
+    expect(json.events.map((e: { id: string }) => e.id)).toEqual(["ge-1"]);
   });
 
   it("says when Google was last read", async () => {

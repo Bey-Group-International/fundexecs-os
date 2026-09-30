@@ -23,7 +23,7 @@ import {
   normalizeEvent,
   syncWindow,
 } from "@/lib/calendar/google";
-import { clipToWindow, externalEventsToBusy, type StoredExternalEvent } from "@/lib/calendar/busy";
+import { clipToWindow, externalEventsToBusy, ownInviteRef, type StoredExternalEvent } from "@/lib/calendar/busy";
 import { mergeIntervals, type BusyInterval } from "@/lib/calendar/feeds";
 
 type Client = SupabaseClient<Database>;
@@ -605,6 +605,60 @@ export async function recordConnectionResult(
 const BUSY_EVENT_CAP = 2000;
 
 /**
+ * Of these synced events, the ones that are only a copy of an invite this
+ * member sent for their own meeting or booking.
+ *
+ * The app already counts its meetings and bookings as the host's time. The
+ * copy their calendar kept of the emailed invite is the same commitment a
+ * second time, so counted as busy it blocked the meeting's own slot: moving or
+ * lengthening a meeting ran into itself and was refused.
+ *
+ * Only the member's OWN meetings and bookings qualify. An invite from another
+ * FundExecs host carries the same shape of UID and is a real commitment for
+ * someone who is only a guest on it, so it stays. A lookup that fails drops
+ * nothing: a shadow left in is a warning too many, a real event taken out is a
+ * double booking.
+ */
+export async function ownInviteEchoes(
+  client: Client,
+  userId: string,
+  rows: Array<{ ical_uid?: string | null }>,
+): Promise<Set<string>> {
+  const meetings = new Set<string>();
+  const bookings = new Set<string>();
+  for (const row of rows) {
+    const ref = ownInviteRef(row.ical_uid);
+    if (ref?.kind === "meeting") meetings.add(ref.id);
+    else if (ref?.kind === "booking") bookings.add(ref.id);
+  }
+  const echoes = new Set<string>();
+  if (meetings.size === 0 && bookings.size === 0) return echoes;
+
+  try {
+    const db = client as unknown as { from: (t: string) => any };
+    const [hosted, booked] = await Promise.all([
+      meetings.size
+        ? db.from("live_meetings").select("id").in("id", [...meetings]).eq("host_id", userId)
+        : Promise.resolve({ data: [] }),
+      bookings.size
+        ? db.from("scheduling_bookings").select("id").in("id", [...bookings]).eq("host_user_id", userId)
+        : Promise.resolve({ data: [] }),
+    ]);
+    const mine = new Set<string>([
+      ...((hosted.data ?? []) as Array<{ id: string }>).map((r) => `meeting:${String(r.id).toLowerCase()}`),
+      ...((booked.data ?? []) as Array<{ id: string }>).map((r) => `booking:${String(r.id).toLowerCase()}`),
+    ]);
+    for (const row of rows) {
+      const ref = ownInviteRef(row.ical_uid);
+      if (ref && mine.has(`${ref.kind}:${ref.id}`) && row.ical_uid) echoes.add(row.ical_uid);
+    }
+  } catch (err) {
+    console.error("[google-calendar] could not check for invite echoes", err);
+  }
+  return echoes;
+}
+
+/**
  * Busy intervals from connected Google calendars, for availability.
  *
  * Reads cache only, exactly as the ICS path does: a booking-page visitor asking
@@ -625,7 +679,7 @@ export async function googleBusyForUser(
   try {
     const { data, error } = await client
       .from("external_events")
-      .select("starts_at, ends_at, is_all_day, transparency, status, google_calendars!inner(blocks_availability)")
+      .select("starts_at, ends_at, is_all_day, transparency, status, ical_uid, google_calendars!inner(blocks_availability)")
       .eq("user_id", userId)
       // A calendar the member switched out of availability still draws on their
       // grid; it just stops holding their time.
@@ -639,10 +693,13 @@ export async function googleBusyForUser(
       .limit(BUSY_EVENT_CAP);
     if (error) throw new Error(error.message);
 
-    const rows = (data ?? []) as StoredExternalEvent[];
+    const fetched = (data ?? []) as Array<StoredExternalEvent & { ical_uid?: string | null }>;
+    // A copy of the member's own invite is the meeting itself, already counted.
+    const echoes = await ownInviteEchoes(client, userId, fetched);
+    const rows = echoes.size ? fetched.filter((r) => !r.ical_uid || !echoes.has(r.ical_uid)) : fetched;
     // Truncation here quietly stops blocking real commitments, so it is loud
     // rather than invisible.
-    if (rows.length >= BUSY_EVENT_CAP) {
+    if (fetched.length >= BUSY_EVENT_CAP) {
       console.warn(
         `[google-calendar] busy lookup hit the ${BUSY_EVENT_CAP}-event cap for user ${userId}; ` +
           "some commitments may not be blocking slots.",
