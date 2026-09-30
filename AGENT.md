@@ -5072,6 +5072,64 @@ Deployed, monitoring               →  live, observability active
              |  Confidence: Jest 7685 across 540 suites, typecheck and eslint
              |  clean. Eight injections, each breaking exactly what it should and
              |  nothing it should not.
+             |
+             |  2026-09-30  The manage-booking page showed a stranger nothing at
+             |  all until a round trip it did not need to make.
+             |  Measured the render path FIRST, and it was already fine - typing a
+             |  cancellation reason costs 1.1ms and builds zero formatters, which
+             |  is #1187's shared SlotPicker/TimezoneSelect work paying off on a
+             |  page I had not touched. There was no render work to do here and I
+             |  did not invent any.
+             |  The cost was the SHAPE of first paint: commit one was a 0.3ms
+             |  spinner, commit two was 39-45ms and arrived only after
+             |  /api/scheduling/booking/[token] answered. Instrumented that GET
+             |  with a 25ms-per-read stub: SEVEN reads at a SERIAL DEPTH OF FOUR -
+             |  booking, then (page, event type), then the room code, then
+             |  (meetings, bookings, blocks) - about 100ms, plus 7-9ms generating
+             |  slots. All of it after the HTML had been delivered and hydrated,
+             |  on the one page a stranger reaches from the one email they have.
+             |  The page holds the token. The server could always have made that
+             |  request. So page.tsx is a server component now: it reads the view
+             |  and hands it over, and the route keeps serving the same thing
+             |  through the SAME function - the browser still needs it after a
+             |  cancel or reschedule, and as the fallback when the server read
+             |  fails. One loader, so the two cannot disagree about the shape.
+             |  After: ZERO fetches on mount, and the booking is in the FIRST
+             |  commit. Honesty about my own harness: the "before" fetch was a
+             |  jsdom mock that resolved instantly, so the wall-clock numbers
+             |  understate this - the round trip IS the win, and it was measured
+             |  separately rather than inferred.
+             |  Three states, not two, because they are three different sentences:
+             |  a view means paint it, `null` means this token names no booking so
+             |  say the link is dead, `undefined` means the server could not look
+             |  so fetch as before. Collapsing the last two would tell somebody
+             |  holding a perfectly good link that it is invalid because a
+             |  deployment is missing its keys.
+             |  Two bugs found on the way, one pre-existing and one I would have
+             |  introduced. Pre-existing: the zone was re-resolved on every load,
+             |  so cancelling threw away the zone the invitee had picked from the
+             |  dropdown; it resolves once now, on the first view to arrive.
+             |  Introduced-and-caught: `isPast` read Date.now() in the render body,
+             |  which is fine for a client-only page and a hydration mismatch the
+             |  moment the server renders it - a meeting ending between the two
+             |  renders would change which controls exist. The server's instant is
+             |  passed in and used for that first render; the real clock takes over
+             |  on mount.
+             |  EIGHT injections, and the eighth is the point. Reverting page.tsx
+             |  to `<ManageBooking token={token} />` - undoing the entire change -
+             |  passed everything, because a server component has no component
+             |  test. So I wrote page.test.tsx, following report/page.test.tsx:
+             |  await the page, render what it returned, assert which of the three
+             |  answers it handed over. That injection now fails 3 tests.
+             |  This is the first change in this pass with NOTHING unguarded. The
+             |  other four each had a claim resting only on the PR's numbers. The
+             |  difference is not that I tried harder: it is that "the server did
+             |  the read" leaves a trace a test can see - a fetch that did not
+             |  happen - where "a component skipped a render" does not.
+             |  The page had no tests at all before this. It has 17 now, plus 5 on
+             |  the shared loader.
+             |  Confidence: Jest 7725 across 545 suites, typecheck and eslint
+             |  clean.
 ```
 
 ---
