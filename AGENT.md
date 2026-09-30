@@ -4976,6 +4976,47 @@ Deployed, monitoring               →  live, observability active
              |  search box is its own kind of laggy.
              |  Confidence: Jest 7656 across 539 suites, typecheck and eslint
              |  clean.
+             |
+             |  2026-09-30  The log's row memo held for typing and was defeated
+             |  for opening, and the test that should have caught it had one row.
+             |  #105 memoised LogRow so a keystroke stops re-rendering 200 rows,
+             |  and it works: measured at 200 meetings, a keystroke is 8.5ms and
+             |  the rows hold still. #104's cached formatter is real too, with a
+             |  counting test that fails if it is reverted.
+             |  But `toggle` listed `openId` and `details` among its dependencies,
+             |  so it was a NEW FUNCTION whenever either moved - and it is handed
+             |  to every row. Opening one row re-rendered all 200, and the detail
+             |  arriving a moment later re-rendered all 200 again. 95ms to open a
+             |  row against 8.5ms for a keystroke: the same page doing eleven times
+             |  the work for a smaller change.
+             |  Fixed by reading both through refs, the pattern MeetingRoom already
+             |  uses everywhere. Opening a row: 95ms -> 15.5ms at 200 meetings,
+             |  25ms -> 13ms at 50. The shape is the tell, as usual: before, the
+             |  cost climbed steeply with row count (25 -> 95 from fifty rows to
+             |  two hundred); after, it barely moves (13 -> 15.5), because it is
+             |  the two rows that changed plus the parent's own body.
+             |  The test story is the interesting half. A render counter already
+             |  existed - `countRowRenders`, spying on logDateLabel, one call per
+             |  row render - and the typing path was genuinely guarded at ZERO
+             |  re-renders. The open path had "still re-renders the row that was
+             |  opened", which used a log of ONE ROW. With one row, "every row
+             |  re-rendered" and "only the opened row re-rendered" are the same
+             |  observation, so it passed identically with the bug present.
+             |  Not an unguardable property, then, and not a missing counter: a
+             |  fixture too small to tell the two cases apart. Thirty rows makes
+             |  them different numbers, and the new test reports 60 when the
+             |  dependency array goes back - 30 rows times the 2 commits.
+             |  Three injections, each failing the test that names it: the shipped
+             |  dependency array fails 1 (at 60 against a bound of 6), `openId`
+             |  alone fails 1, and letting the refs go stale fails 1 - and that
+             |  last is caught by the PRE-EXISTING "does not fetch the same detail
+             |  twice when a row is reopened", which is the right place for it.
+             |  The failure mode this fix introduces was already covered.
+             |  Not touched: the 175-200ms mount of two hundred rows. That is one
+             |  render of a bounded list on page load, not a frequent path, and
+             |  virtualising it is a different change with a different risk.
+             |  Confidence: Jest 7659 across 539 suites, typecheck and eslint
+             |  clean.
 ```
 
 ---
