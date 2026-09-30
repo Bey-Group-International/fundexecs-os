@@ -8,7 +8,7 @@
 //
 // Everything here is pure so the decision is testable and identical wherever it
 // is asked; the org's actual state is resolved in lib/paywall.server.
-import { PLANS, PLAN_BY_KEY, type PlanKey } from "@/lib/billing";
+import { CREDIT_PACKS, PLANS, PLAN_BY_KEY, type PlanKey } from "@/lib/billing";
 
 /**
  * Organizations created before this instant never hit the wall.
@@ -67,6 +67,30 @@ export interface PaywallState {
    * exposure stops being capped.
    */
   canUnlockOnCommitment: boolean;
+  /**
+   * A one-off credit pack ("burst credits") big enough to clear the shortfall.
+   *
+   * Offered whenever the wall is up, including to an org refused a plan on
+   * credit. A pack is PAID UP FRONT — it extends no credit at all — so the
+   * reasoning that caps plan commitments does not apply to it. That is what
+   * turns the old dead end ("add credits or settle your invoice", with no way to
+   * do either here) into something the operator can act on without leaving.
+   */
+  recommendedPack: string | null;
+}
+
+/**
+ * The smallest pack that actually clears the shortfall.
+ *
+ * Smallest-that-clears, not cheapest: a pack too small leaves the operator
+ * exactly where they started, having paid. When even the largest cannot cover
+ * it, the largest is still the best offer — one purchase gets them closest, and
+ * the alternative is offering nothing.
+ */
+export function packForShortfall(shortfall: number): string | null {
+  if (shortfall <= 0) return null;
+  const bySize = [...CREDIT_PACKS].sort((a, b) => a.credits - b.credits);
+  return (bySize.find((p) => p.credits >= shortfall) ?? bySize[bySize.length - 1])?.key ?? null;
 }
 
 /**
@@ -108,6 +132,7 @@ export function evaluatePaywall(input: PaywallInput): PaywallState {
       grandfathered,
       recommendedPlan: null,
       canUnlockOnCommitment,
+      recommendedPack: null,
     };
   }
 
@@ -120,6 +145,7 @@ export function evaluatePaywall(input: PaywallInput): PaywallState {
     grandfathered,
     recommendedPlan: recommendedPlanFor(shortfall, input.recentSpend ?? 0),
     canUnlockOnCommitment,
+    recommendedPack: packForShortfall(shortfall),
   };
 }
 
@@ -136,6 +162,12 @@ export function paywallMessage(state: PaywallState): string {
   if (state.canUnlockOnCommitment) {
     return `${head} Start ${plan.name} to continue right now — we'll invoice you, and your credits are available immediately.`;
   }
+  // No plan on credit, but a pack is paid up front and so always available. The
+  // previous wording named two remedies and offered neither here, which made the
+  // wall a dead end for exactly the orgs already paying us.
+  if (state.recommendedPack) {
+    return `${head} Add credits now to keep going, or settle your outstanding invoice.`;
+  }
   return `${head} Add credits or settle your outstanding invoice to continue.`;
 }
 
@@ -146,6 +178,8 @@ export interface PaywallPayload {
   required: number;
   recommendedPlan: PlanKey | null;
   canUnlockOnCommitment: boolean;
+  /** A paid-up-front top-up that clears the shortfall, when one fits. */
+  recommendedPack: string | null;
   message: string;
 }
 
@@ -157,6 +191,7 @@ export function paywallPayload(state: PaywallState): PaywallPayload | null {
     required: state.required,
     recommendedPlan: state.recommendedPlan,
     canUnlockOnCommitment: state.canUnlockOnCommitment,
+    recommendedPack: state.recommendedPack,
     message: paywallMessage(state),
   };
 }
