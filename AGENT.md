@@ -5017,6 +5017,61 @@ Deployed, monitoring               →  live, observability active
              |  virtualising it is a different change with a different risk.
              |  Confidence: Jest 7659 across 539 suites, typecheck and eslint
              |  clean.
+             |
+             |  2026-09-30  The public booking page built 833 date formatters to
+             |  paint itself and 60 more for every character an invitee typed.
+             |  Measured first, on a 336-slot window (21 days, 16 times a day,
+             |  which is a 30-minute meeting over a normal working fortnight):
+             |  mount 108ms over two commits, picking a time 10-37ms, and each
+             |  keystroke in the name field 15-22ms. Instrumenting the
+             |  Intl.DateTimeFormat constructor said why: 833 constructions to
+             |  mount, 60 per keystroke. The 60 is exactly the page - 42 for the
+             |  day rail (two formatters per day, built inline in SlotPicker's
+             |  render body), 16 for the times in the open day, one for the day
+             |  heading, one for the chosen slot's stamp.
+             |  Two independent causes. Every function in lib/meetings/scheduling.ts
+             |  constructed its formatter per call, and `dateInTimezone` is called
+             |  once per slot by `groupSlotsByDate` - so grouping a fortnight built
+             |  336 of them, twice, because the page renders at UTC for hydration
+             |  and regroups once `detectTimezone` answers. And SlotPicker was not
+             |  memoised while the form's state lives in the page above it, so
+             |  typing a name re-rendered the whole grid to paint a character into
+             |  an input beneath it.
+             |  Fixed both. Six named shapes cached per zone, the idiom
+             |  lib/meetings/schedule.ts already used for its offset formatters;
+             |  the rail's two inline formatters moved into the module as
+             |  formatSlotWeekday and formatSlotDayMonth (which also gave them the
+             |  fallback they never had - an unknown zone used to throw mid-render);
+             |  and memo on SlotPicker and on TimezoneSelect, whose option list is
+             |  the runtime's whole IANA table, 418 elements rebuilt per keystroke.
+             |  After: mount 55ms, picking a time 5-7ms, a keystroke 0.9-1.1ms and
+             |  ZERO formatters. Twelve characters went from 233-345ms to 16-20ms.
+             |  A failure cannot be cached - the constructor throws before the map
+             |  is written - so a browser sending a junk zone still falls back and
+             |  cannot grow the map. Tested, not just reasoned.
+             |  What is guarded: the formatter count, which is the cost that was
+             |  actually paid. One formatter for 336 slots, zero once a zone is
+             |  warm, zero across twelve keystrokes end-to-end on the real page,
+             |  and an oracle built in the test that checks the cached answers
+             |  against a formatter it constructs itself.
+             |  What is NOT, said plainly because both were injected and neither
+             |  broke a thing: un-memoising SlotPicker passes all 7685 tests, and
+             |  so does putting the quadratic bucket copy back into
+             |  groupSlotsByDate. A component that skips a render writes nothing to
+             |  the DOM, and an allocation count is not observable from outside.
+             |  The render numbers are in the PR with a Profiler; the memo is
+             |  defended by nothing but the comment explaining why its props are
+             |  stable.
+             |  Third call site, found by grep not by luck: SchedulingSettings
+             |  passed TimezoneSelect an inline arrow, which would have defeated
+             |  the new memo on the one screen where a host types into three text
+             |  fields. patchDraft is a useCallback now. That is the same
+             |  memo-defeated-by-one-prop shape as the calendar's presence object
+             |  and the log's dependency array - a third instance, in a component
+             |  shared by three screens.
+             |  Confidence: Jest 7685 across 540 suites, typecheck and eslint
+             |  clean. Eight injections, each breaking exactly what it should and
+             |  nothing it should not.
 ```
 
 ---

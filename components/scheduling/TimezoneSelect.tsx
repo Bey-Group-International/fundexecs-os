@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { memo, useMemo } from "react";
 
 // A short, dependency-free fallback for runtimes without
 // Intl.supportedValuesOf. Covers the zones a private-markets audience actually
@@ -27,7 +27,16 @@ const FALLBACK_ZONES = [
   "Australia/Sydney",
 ];
 
-export function TimezoneSelect({
+/**
+ * A zone picker whose option list is the runtime's whole IANA table — over four
+ * hundred of them on Node 20 and every current browser.
+ *
+ * Memoised because that list is rebuilt into four hundred React elements on
+ * every render, and the three screens using it keep their other form state in
+ * the same component: without this, each character typed into a name, a slug or
+ * a headline reconciled the entire table.
+ */
+export const TimezoneSelect = memo(function TimezoneSelect({
   value,
   onChange,
   label = "Timezone",
@@ -69,7 +78,7 @@ export function TimezoneSelect({
       </select>
     </label>
   );
-}
+});
 
 function GlobeIcon() {
   return (
