@@ -203,6 +203,22 @@ export async function exchangeCodeForTokens(
   };
 }
 
+/**
+ * Google's OAuth error code from a failed token response — `invalid_grant`
+ * (the member revoked access: reconnect), `invalid_client` (this app's
+ * credentials were rejected: an admin must fix them). Only the code, never
+ * `error_description`: that is free text, and "Unauthorized" in it would read
+ * as a revoked grant downstream.
+ */
+async function oauthErrorCode(res: Response): Promise<string | null> {
+  try {
+    const body = JSON.parse(await res.text()) as { error?: unknown };
+    return typeof body.error === "string" && /^[a-z_]{1,64}$/.test(body.error) ? body.error : null;
+  } catch {
+    return null;
+  }
+}
+
 export async function refreshAccessToken(
   refreshToken: string,
 ): Promise<{ accessToken: string; expiresInSec: number }> {
@@ -217,7 +233,12 @@ export async function refreshAccessToken(
     }),
     signal: AbortSignal.timeout(TOKEN_FETCH_TIMEOUT_MS),
   });
-  if (!res.ok) throw new Error(`google token refresh failed: ${res.status}`);
+  if (!res.ok) {
+    // Keep Google's code: it is the only thing that tells "reconnect" apart
+    // from "the app's credentials are wrong", and callers match on it.
+    const code = await oauthErrorCode(res);
+    throw new Error(`google token refresh failed: ${res.status}${code ? ` ${code}` : ""}`);
+  }
   const body = (await res.json()) as { access_token?: string; expires_in?: number };
   if (!body.access_token) throw new Error("google token refresh returned no access token");
   return { accessToken: body.access_token, expiresInSec: body.expires_in ?? 3600 };

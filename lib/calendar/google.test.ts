@@ -171,6 +171,27 @@ describe("connectionHealth", () => {
     expect(connectionHealth({ lastSyncAt: null, lastError: null, consecutiveFailures: 0 }).state).toBe("never_synced");
   });
 
+  it("asks the member to reconnect when Google revoked the grant", () => {
+    const h = connectionHealth({
+      lastSyncAt: null,
+      lastError: "google token refresh failed: 400 invalid_grant",
+      consecutiveFailures: 1,
+    });
+    expect(h.state).toBe("reauth_required");
+  });
+
+  it("points at the app's Google credentials, not the member, when the client is rejected", () => {
+    // Reconnecting can't fix a rejected OAuth client — every connection fails
+    // at once — so the member shouldn't be sent to do it.
+    const h = connectionHealth({
+      lastSyncAt: null,
+      lastError: "google token refresh failed: 401 invalid_client",
+      consecutiveFailures: 1,
+    });
+    expect(h.state).toBe("failing");
+    expect(h.message).toMatch(/admin/i);
+  });
+
   it("flags a connection that has not synced in six hours", () => {
     const h = connectionHealth({
       lastSyncAt: new Date(Date.now() - 7 * 3_600_000).toISOString(),

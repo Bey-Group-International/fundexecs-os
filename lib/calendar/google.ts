@@ -240,6 +240,15 @@ export function connectionHealth(conn: {
   lastError: string | null;
   consecutiveFailures: number;
 }): ConnectionHealth {
+  // Checked first: an `invalid_client` is this app's OAuth credentials being
+  // rejected, which fails every connection at once and which reconnecting
+  // cannot fix — so it must not fall through to "reconnect".
+  if (conn.lastError && /invalid_client/i.test(conn.lastError)) {
+    return {
+      state: "failing",
+      message: "Google rejected this app's sign-in credentials. An admin needs to check the Google OAuth client settings.",
+    };
+  }
   if (conn.lastError && /invalid_grant|unauthorized|revoked/i.test(conn.lastError)) {
     return {
       state: "reauth_required",
