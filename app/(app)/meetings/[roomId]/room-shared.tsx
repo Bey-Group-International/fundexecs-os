@@ -290,20 +290,30 @@ export const SpeakingProvider = SpeakingContext.Provider;
 /**
  * Whether one person is talking, live, without re-rendering anything above.
  *
- * `fallback` is what the answer is when there is no provider — which is how
- * every component here stays renderable on its own with a plain boolean, as
- * CallParts.sidebar.test.tsx and MeetingRoom.tile.test.tsx both do. Those tests
- * pass a value and get a value; the room provides a store and the same
- * components subscribe. One interface, so neither path is a special case.
+ * `fallback` answers in two cases: when there is no provider, and when `id` is
+ * empty. The first is how every component here stays renderable on its own with
+ * a plain boolean, as CallParts.sidebar.test.tsx and MeetingRoom.tile.test.tsx
+ * both do. The second is the one this shipped without, and CodeRabbit caught it
+ * on #1176: an empty id used to ask the store about a participant who cannot
+ * exist, which answers `false` forever, so a caller who gave a boolean and no id
+ * got silence instead of their own value. Nothing was visibly broken — every
+ * call site in the room passes a real id — but the contract VideoTile documents
+ * was not the one this kept.
+ *
+ * So: no store, or nobody named, means the caller's own answer stands.
  */
 export function useSpeaking(id: string, fallback: boolean): boolean {
   const source = useContext(SpeakingContext);
 
+  const watching = source !== null && id !== "";
   const subscribe = useCallback(
-    (onChange: () => void) => (source ? source.subscribe(id, onChange) : () => {}),
-    [source, id],
+    (onChange: () => void) => (watching && source ? source.subscribe(id, onChange) : () => {}),
+    [watching, source, id],
   );
-  const read = useCallback(() => (source ? source.get(id) : fallback), [source, id, fallback]);
+  const read = useCallback(
+    () => (watching && source ? source.get(id) : fallback),
+    [watching, source, id, fallback],
+  );
 
   return useSyncExternalStore(subscribe, read, read);
 }
