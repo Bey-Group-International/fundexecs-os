@@ -1,11 +1,27 @@
 # TURN relay for live meetings
 
-FundExecs runs its own TURN server. There is no TURN vendor, no account, and no
-per-gigabyte bill — the application mints credentials itself from a secret it
-shares with the relay.
+Calls need a TURN relay for guests on restrictive networks. FundExecs can use
+Cloudflare's hosted relay, or a TURN server of its own. With its own server
+there is no vendor, no account, and no per-gigabyte bill: the application mints
+credentials itself from a secret it shares with the relay.
 
-This document is the whole set-up: why the relay exists, how to stand one up,
-and how to prove it is working.
+This document covers why the relay exists, both ways to set it up, and how to
+prove it is working.
+
+## Two ways to run the relay
+
+- **Cloudflare's hosted TURN**: no server to run. Create a TURN key in the
+  Cloudflare dashboard under *Realtime → TURN Server*, then set
+  `CLOUDFLARE_TURN_KEY_ID` and `CLOUDFLARE_TURN_API_TOKEN` in the deployment's
+  environment and redeploy. The app asks Cloudflare for short-lived
+  credentials when someone joins a call and caches them for an hour.
+  Cloudflare's free allowance covers a great deal of meeting traffic; check
+  their current pricing for beyond it.
+- **Your own coturn server**: the rest of this document. Set `TURN_URLS` and
+  `TURN_SECRET`. When both pairs are set, your own server is used.
+
+Either way, the meetings page stops showing owners and admins the "Some guests
+can't connect to calls" warning once a relay is configured.
 
 ## Why a relay is not optional
 

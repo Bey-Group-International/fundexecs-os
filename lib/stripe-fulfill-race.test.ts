@@ -21,11 +21,16 @@ const grants: string[] = [];
 // Claims live in processed_stripe_events (a bare text primary key). The one
 // property that matters: a second insert of the same id conflicts, so only the
 // first caller gets a row back.
-const claims = new Set<string>();
+const claims = new Map<string, string>(); // id -> created_at ISO
 let claimFails = false;
 let completionReadFails = false;
 let releaseFails = false;
 let grantThrows = false;
+const grantRefs: (string | null)[] = [];
+// Simulates the holder finishing mid-recovery: the completion marker is absent
+// on the first read and present on the next.
+let completesDuringRecovery = false;
+let completionReads = 0;
 
 // The checkout audit row. Absent for invoice kinds, which the `kind` CHECK
 // (plan|pack|gift) cannot store at all.
@@ -38,7 +43,7 @@ function table(name: string) {
         const apply = () => {
           if (claimFails) return { data: null, error: { message: "db down" } };
           if (claims.has(row.id)) return { data: [], error: null };
-          claims.add(row.id);
+          claims.set(row.id, new Date().toISOString());
           return { data: [{ id: row.id }], error: null };
         };
         // Awaited directly (completion marker) or via .select() (the claim).
@@ -47,10 +52,21 @@ function table(name: string) {
           then: (resolve: (v: unknown) => void) => resolve(apply()),
         };
       },
-      select: () => ({
+      select: (cols?: string) => ({
         eq: (_c: string, id: string) => ({
           maybeSingle: async () => {
+            // The staleness read asks for created_at; the completion read does not.
+            if (cols?.includes("created_at")) {
+              const at = claims.get(id);
+              return { data: at ? { id, created_at: at } : null, error: null };
+            }
             if (completionReadFails) return { data: null, error: { message: "db down" } };
+            if (completesDuringRecovery && id.startsWith("fulfilled:")) {
+              completionReads += 1;
+              // Absent to the caller's own check, present by the time the
+              // release re-reads it — the window the re-read exists to cover.
+              return { data: completionReads > 1 ? { id } : null, error: null };
+            }
             return { data: claims.has(id) ? { id } : null, error: null };
           },
         }),
@@ -102,9 +118,10 @@ jest.mock("stripe", () =>
 );
 
 jest.mock("@/lib/purchase", () => ({
-  addPack: jest.fn(async () => {
+  addPack: jest.fn(async (_s: unknown, _o: string, _k: string, opts?: { reference?: string | null }) => {
     if (grantThrows) throw new Error("grant blew up");
     grants.push("pack_500");
+    grantRefs.push(opts?.reference ?? null);
     return { ok: true };
   }),
 }));
@@ -113,11 +130,14 @@ import { fulfillCheckout } from "./stripe";
 
 beforeEach(() => {
   grants.length = 0;
+  grantRefs.length = 0;
   claims.clear();
   claimFails = false;
   completionReadFails = false;
   releaseFails = false;
   grantThrows = false;
+  completesDuringRecovery = false;
+  completionReads = 0;
   checkoutRow = { status: "pending" };
   process.env.STRIPE_SECRET_KEY = "sk_live_test_fixture";
 });
@@ -159,7 +179,7 @@ it("reports failure, not success, when the claim cannot be taken", async () => {
 
 it("keeps retrying while another caller is mid-fulfillment", async () => {
   // Claim held, but the checkout is still pending: the holder has not finished.
-  claims.add("fulfill:cs_live_race");
+  claims.set("fulfill:cs_live_race", new Date().toISOString());
   const res = await fulfillCheckout("cs_live_race");
 
   expect(res.ok).toBe(false);
@@ -168,8 +188,8 @@ it("keeps retrying while another caller is mid-fulfillment", async () => {
 });
 
 it("reports already-fulfilled once the holder has finished", async () => {
-  claims.add("fulfill:cs_live_race");
-  claims.add("fulfilled:cs_live_race"); // the completion marker is the evidence
+  claims.set("fulfill:cs_live_race", new Date().toISOString());
+  claims.set("fulfilled:cs_live_race", new Date().toISOString()); // the completion marker is the evidence
   const res = await fulfillCheckout("cs_live_race");
 
   expect(res.ok).toBe(true);
@@ -181,7 +201,7 @@ it("keeps retrying an unfinished invoice checkout, which never has an audit row"
   // The claim is held and nothing has completed. Answering from the audit row
   // would say "done" here, because an invoice kind cannot have one — which is
   // exactly how a paid invoice would be left unsettled in silence.
-  claims.add("fulfill:cs_live_race");
+  claims.set("fulfill:cs_live_race", new Date().toISOString());
   checkoutRow = null;
   const res = await fulfillCheckout("cs_live_race");
 
@@ -190,8 +210,8 @@ it("keeps retrying an unfinished invoice checkout, which never has an audit row"
 });
 
 it("does not call an unreadable completion state success", async () => {
-  claims.add("fulfill:cs_live_race");
-  claims.add("fulfilled:cs_live_race");
+  claims.set("fulfill:cs_live_race", new Date().toISOString());
+  claims.set("fulfilled:cs_live_race", new Date().toISOString());
   completionReadFails = true;
   const res = await fulfillCheckout("cs_live_race");
 
@@ -232,4 +252,51 @@ it("strips control characters out of a session id before logging it", async () =
   // And the mangled remains stay inside the one line the repair message owns.
   expect(repairLog.split("\n")).toHaveLength(1);
   spy.mockRestore();
+});
+
+it("keys the grant on the session, so a replay cannot grant twice", async () => {
+  // The database enforces this (unique `reference`), but the key has to reach
+  // it. Without the reference the migration's guard is dead weight.
+  await fulfillCheckout("cs_live_race");
+  expect(grantRefs).toEqual(["checkout:cs_live_race"]);
+});
+
+it("releases a claim whose holder died, so a retry can fulfill", async () => {
+  // Held long ago, never completed: the holder is gone and nothing else will
+  // ever release it. Before this, every retry refused forever.
+  claims.set("fulfill:cs_live_race", new Date(Date.now() - 10 * 60_000).toISOString());
+  const res = await fulfillCheckout("cs_live_race");
+
+  expect(res.ok).toBe(false); // this call defers; the retry does the work
+  expect(claims.has("fulfill:cs_live_race")).toBe(false);
+});
+
+it("does not release a claim that is merely slow", async () => {
+  claims.set("fulfill:cs_live_race", new Date().toISOString());
+  await fulfillCheckout("cs_live_race");
+  expect(claims.has("fulfill:cs_live_race")).toBe(true);
+});
+
+it("does not release an old claim whose holder actually finished", async () => {
+  // Age alone must not decide it: this one completed, and releasing it would
+  // let a retry re-enter fulfillment for a purchase already delivered.
+  claims.set("fulfill:cs_live_race", new Date(Date.now() - 10 * 60_000).toISOString());
+  claims.set("fulfilled:cs_live_race", new Date().toISOString());
+  const res = await fulfillCheckout("cs_live_race");
+
+  expect(res.alreadyFulfilled).toBe(true);
+  expect(claims.has("fulfill:cs_live_race")).toBe(true);
+});
+
+it("does not release a claim whose holder finishes mid-recovery", async () => {
+  // The holder was still working when this caller decided the claim was stale,
+  // and finished before the release ran. Deleting the claim then would let a
+  // retry re-enter fulfillment for a purchase already delivered — survivable
+  // now that grants are keyed, but a pointless second pass over Stripe.
+  claims.set("fulfill:cs_live_race", new Date(Date.now() - 10 * 60_000).toISOString());
+  completesDuringRecovery = true;
+
+  await fulfillCheckout("cs_live_race");
+
+  expect(claims.has("fulfill:cs_live_race")).toBe(true);
 });

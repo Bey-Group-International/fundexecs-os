@@ -254,8 +254,48 @@ export function turnFailureLog(reason: TurnUnavailableReason, detail?: string): 
   const consequence =
     "Meetings will run on STUN only, so guests behind symmetric NAT, a corporate firewall or mobile CGNAT will fail to connect.";
   if (reason === "unconfigured") {
-    return `[turn] No TURN relay configured: set TURN_URLS and TURN_SECRET to your own TURN server. ${consequence}`;
+    return `[turn] No TURN relay configured: set CLOUDFLARE_TURN_KEY_ID and CLOUDFLARE_TURN_API_TOKEN for Cloudflare's hosted relay, or TURN_URLS and TURN_SECRET for your own TURN server. ${consequence}`;
   }
   return `[turn] TURN is configured but unusable${detail ? ` (${detail})` : ""}.`
     + ` TURN_URLS must list at least one turn: or turns: URL and TURN_SECRET must match the TURN server's static-auth-secret. ${consequence}`;
+}
+
+/**
+ * The ICE servers out of a Cloudflare TURN credentials response.
+ *
+ * `generate-ice-servers` answers `{ iceServers: [...] }`; the older `generate`
+ * endpoint answered `{ iceServers: {...} }` with a single entry. Both are read,
+ * so an account on either behaves the same.
+ *
+ * Port 53 URLs are dropped. Cloudflare lists them for networks that allow
+ * nothing but DNS, and browsers refuse to connect to port 53 at all — Chrome
+ * and Firefox both block it — so offering them only buys a timeout per entry
+ * before ICE moves on.
+ *
+ * An answer with no turn:/turns: URL left is no relay, and returns [] so the
+ * caller reports it as a failure rather than handing out STUN it thinks is a
+ * relay.
+ */
+export function parseCloudflareIceServers(json: unknown): RTCIceServer[] {
+  const raw = (json as { iceServers?: unknown } | null)?.iceServers;
+  const entries = Array.isArray(raw) ? raw : raw && typeof raw === "object" ? [raw] : [];
+
+  const servers: RTCIceServer[] = [];
+  for (const entry of entries as Array<{ urls?: unknown; username?: unknown; credential?: unknown }>) {
+    const list = Array.isArray(entry?.urls) ? entry.urls : typeof entry?.urls === "string" ? [entry.urls] : [];
+    const urls = list.filter(
+      (u): u is string => typeof u === "string" && /^(stuns?|turns?):/i.test(u) && !/:53(\?|$)/.test(u),
+    );
+    if (urls.length === 0) continue;
+
+    const isRelay = urls.some((u) => /^turns?:/i.test(u));
+    if (isRelay) {
+      if (typeof entry.username !== "string" || typeof entry.credential !== "string") continue;
+      servers.push({ urls, username: entry.username, credential: entry.credential });
+    } else {
+      servers.push({ urls });
+    }
+  }
+
+  return servers.some((s) => (s.urls as string[]).some((u) => /^turns?:/i.test(u))) ? servers : [];
 }
