@@ -307,6 +307,137 @@ describe("parseIcs", () => {
     expect(out.map((e) => e.startIso)).toEqual(["2026-09-01T09:00:00.000Z", "2026-09-03T09:00:00.000Z"]);
   });
 
+  // RFC 5545 expands a series in DTSTART's own zone: a 9:00 New York meeting
+  // stays at 9:00 New York time after the clocks change, which is a different
+  // UTC hour. US DST ends 2026-11-01.
+  describe("across a DST change", () => {
+    const FALL = { windowStart: new Date("2026-10-20T00:00:00Z"), windowEnd: new Date("2026-11-20T00:00:00Z") };
+
+    it("keeps a TZID weekly series at the same local hour", () => {
+      const out = parseIcs(
+        cal(
+          vevent(
+            "UID:weekly@test",
+            "DTSTART;TZID=America/New_York:20261022T090000",
+            "DTEND;TZID=America/New_York:20261022T093000",
+            "RRULE:FREQ=WEEKLY;COUNT=3",
+          ),
+        ),
+        FALL,
+      );
+      expect(out.map((e) => e.startIso)).toEqual([
+        "2026-10-22T13:00:00.000Z", // EDT
+        "2026-10-29T13:00:00.000Z", // EDT
+        "2026-11-05T14:00:00.000Z", // EST — still 9:00 local
+      ]);
+      expect(out[2].endIso).toBe("2026-11-05T14:30:00.000Z");
+    });
+
+    it("keeps BYDAY and DAILY series at the same local hour too", () => {
+      const byDay = parseIcs(
+        cal(
+          vevent(
+            "UID:byday@test",
+            "DTSTART;TZID=America/New_York:20261030T090000",
+            "DTEND;TZID=America/New_York:20261030T091500",
+            "RRULE:FREQ=WEEKLY;BYDAY=MO,FR;COUNT=3",
+          ),
+        ),
+        FALL,
+      );
+      expect(byDay.map((e) => e.startIso)).toEqual([
+        "2026-10-30T13:00:00.000Z",
+        "2026-11-02T14:00:00.000Z",
+        "2026-11-06T14:00:00.000Z",
+      ]);
+
+      const daily = parseIcs(
+        cal(
+          vevent(
+            "UID:daily@test",
+            "DTSTART;TZID=America/New_York:20261031T090000",
+            "DTEND;TZID=America/New_York:20261031T091500",
+            "RRULE:FREQ=DAILY;COUNT=2",
+          ),
+        ),
+        FALL,
+      );
+      expect(daily.map((e) => e.startIso)).toEqual(["2026-10-31T13:00:00.000Z", "2026-11-01T14:00:00.000Z"]);
+    });
+
+    it("honours an EXDATE that falls after the change", () => {
+      const out = parseIcs(
+        cal(
+          vevent(
+            "UID:ex@test",
+            "DTSTART;TZID=America/New_York:20261022T090000",
+            "DTEND;TZID=America/New_York:20261022T093000",
+            "RRULE:FREQ=WEEKLY;COUNT=3",
+            "EXDATE;TZID=America/New_York:20261105T090000",
+          ),
+        ),
+        FALL,
+      );
+      expect(out.map((e) => e.startIso)).toEqual(["2026-10-22T13:00:00.000Z", "2026-10-29T13:00:00.000Z"]);
+    });
+
+    it("honours an UNTIL that lands exactly on a post-change occurrence", () => {
+      const out = parseIcs(
+        cal(
+          vevent(
+            "UID:until@test",
+            "DTSTART;TZID=America/New_York:20261022T090000",
+            "DTEND;TZID=America/New_York:20261022T093000",
+            "RRULE:FREQ=WEEKLY;UNTIL=20261105T140000Z",
+          ),
+        ),
+        FALL,
+      );
+      expect(out.map((e) => e.startIso)).toEqual([
+        "2026-10-22T13:00:00.000Z",
+        "2026-10-29T13:00:00.000Z",
+        "2026-11-05T14:00:00.000Z",
+      ]);
+    });
+
+    it("follows the clocks forward as well as back", () => {
+      // Sydney moves to AEDT (UTC+11) on 2026-10-04.
+      const out = parseIcs(
+        cal(
+          vevent(
+            "UID:syd@test",
+            "DTSTART;TZID=Australia/Sydney:20260930T090000",
+            "DTEND;TZID=Australia/Sydney:20260930T093000",
+            "RRULE:FREQ=WEEKLY;COUNT=2",
+          ),
+        ),
+        { windowStart: new Date("2026-09-25T00:00:00Z"), windowEnd: new Date("2026-10-20T00:00:00Z") },
+      );
+      expect(out.map((e) => e.startIso)).toEqual(["2026-09-29T23:00:00.000Z", "2026-10-06T22:00:00.000Z"]);
+    });
+
+    it("leaves UTC and unknown-zone series on UTC arithmetic", () => {
+      const utc = parseIcs(
+        cal(vevent("UID:u@test", "DTSTART:20261029T130000Z", "DTEND:20261029T133000Z", "RRULE:FREQ=WEEKLY;COUNT=2")),
+        FALL,
+      );
+      expect(utc.map((e) => e.startIso)).toEqual(["2026-10-29T13:00:00.000Z", "2026-11-05T13:00:00.000Z"]);
+
+      const unknown = parseIcs(
+        cal(
+          vevent(
+            "UID:x@test",
+            "DTSTART;TZID=Not/AZone:20261029T130000",
+            "DTEND;TZID=Not/AZone:20261029T133000",
+            "RRULE:FREQ=WEEKLY;COUNT=2",
+          ),
+        ),
+        FALL,
+      );
+      expect(unknown.map((e) => e.startIso)).toEqual(["2026-10-29T13:00:00.000Z", "2026-11-05T13:00:00.000Z"]);
+    });
+  });
+
   it("skips a RECURRENCE-ID override rather than double-counting the slot", () => {
     const out = parseIcs(
       cal(
