@@ -2567,6 +2567,8 @@ export type SchedulingPage = {
   buffer_minutes: number;
   min_notice_minutes: number;
   booking_window_days: number;
+  /** Most bookings accepted per host-local day; null for no limit. */
+  max_bookings_per_day?: number | null;
   is_active: boolean;
   created_at: string;
   updated_at: string;

@@ -19,6 +19,8 @@ const NOTICE_CHOICES = [
 
 const BUFFER_CHOICES = [0, 5, 10, 15, 30];
 const WINDOW_CHOICES = [7, 14, 30, 60, 90];
+// 0 stands for "no limit" in the select; it is sent as null.
+const DAILY_LIMIT_CHOICES = [0, 1, 2, 3, 4, 5, 6, 8, 10];
 
 /**
  * Availability + meeting types for the host's scheduling link. Every change is
@@ -81,6 +83,7 @@ export function SchedulingSettings({
           bufferMinutes: draft.bufferMinutes,
           minNoticeMinutes: draft.minNoticeMinutes,
           bookingWindowDays: draft.bookingWindowDays,
+          maxBookingsPerDay: draft.maxBookingsPerDay,
           isActive: draft.isActive,
         }),
       });
@@ -184,7 +187,7 @@ export function SchedulingSettings({
       <section className="flex flex-col gap-4">
         <SectionHeading title="Booking rules" hint="Guardrails applied to every meeting type." />
 
-        <div className="grid gap-4 sm:grid-cols-3">
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <Select
             label="Buffer between meetings"
             value={draft.bufferMinutes}
@@ -202,6 +205,15 @@ export function SchedulingSettings({
             value={draft.bookingWindowDays}
             onChange={(v) => patchDraft({ bookingWindowDays: v })}
             options={WINDOW_CHOICES.map((d) => ({ label: `${d} days out`, value: d }))}
+          />
+          <Select
+            label="Daily limit"
+            value={draft.maxBookingsPerDay ?? 0}
+            onChange={(v) => patchDraft({ maxBookingsPerDay: v > 0 ? v : null })}
+            options={DAILY_LIMIT_CHOICES.map((n) => ({
+              label: n === 0 ? "No limit" : `${n} booking${n === 1 ? "" : "s"} a day`,
+              value: n,
+            }))}
           />
         </div>
       </section>
