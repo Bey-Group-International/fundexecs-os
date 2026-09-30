@@ -579,7 +579,7 @@ export async function recordConnectionResult(
       }
     : {
         last_error: error ?? "Unknown error",
-        next_attempt_at: nextAttemptAt((failures ?? 0) + 1, now).toISOString(),
+        next_attempt_at: nextAttemptAt((failures ?? 0) + 1, now, error).toISOString(),
         updated_at: stamp,
       };
 

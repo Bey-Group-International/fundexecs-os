@@ -262,6 +262,24 @@ describe("describeGoogleError", () => {
 // queue forever — retried hourly at full cost, and holding a slot a healthy
 // connection then never reached. These are the rules that stop that.
 
+describe("nextAttemptAt for a rejected OAuth client", () => {
+  it("keeps retrying hourly, so fixing the app's credentials heals every connection within the hour", () => {
+    // An invalid_client is fixed out of band, for everyone at once. Backing off
+    // to a day would leave every connection dark for up to a day after the fix.
+    const now = new Date("2026-09-30T05:00:00Z");
+    const hour = 60 * 60_000;
+    expect(nextAttemptAt(9, now, "google token refresh failed: 401 invalid_client").getTime() - now.getTime()).toBe(hour);
+    // Early retries stay as quick as before.
+    expect(nextAttemptAt(1, now, "google token refresh failed: 401 invalid_client").getTime() - now.getTime()).toBe(
+      retryDelayMs(1),
+    );
+    // A revoked grant still backs off to a day: only the member can fix it.
+    expect(nextAttemptAt(9, now, "google token refresh failed: 400 invalid_grant").getTime() - now.getTime()).toBe(
+      24 * hour,
+    );
+  });
+});
+
 describe("retryDelayMs", () => {
   it("does not delay a connection that has not failed", () => {
     expect(retryDelayMs(0)).toBe(0);

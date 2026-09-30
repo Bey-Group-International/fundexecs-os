@@ -326,9 +326,20 @@ export function retryDelayMs(consecutiveFailures: number): number {
   return RETRY_STEPS_MS[i];
 }
 
+/**
+ * The longest a connection waits when Google rejected this app's OAuth client.
+ * The day-long backoff exists for a revoked grant, which only its member can
+ * fix; an `invalid_client` is fixed once, by an admin, for every connection —
+ * and after that fix a day-long wait would leave every calendar dark for no
+ * reason. Hourly matches the sweep.
+ */
+const CLIENT_REJECTED_MAX_DELAY_MS = 60 * 60_000;
+
 /** When a connection that has just failed may next be tried. */
-export function nextAttemptAt(consecutiveFailures: number, now: Date = new Date()): Date {
-  return new Date(now.getTime() + retryDelayMs(consecutiveFailures));
+export function nextAttemptAt(consecutiveFailures: number, now: Date = new Date(), error?: string | null): Date {
+  let delay = retryDelayMs(consecutiveFailures);
+  if (error && /invalid_client/i.test(error)) delay = Math.min(delay, CLIENT_REJECTED_MAX_DELAY_MS);
+  return new Date(now.getTime() + delay);
 }
 
 /**
