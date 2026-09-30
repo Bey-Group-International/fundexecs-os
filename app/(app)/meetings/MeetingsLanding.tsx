@@ -117,6 +117,16 @@ export function MeetingsLanding({
     [setView],
   );
 
+  // Set by "Schedule for later" and handed to the calendar, which opens the
+  // scheduler once it has mounted and then clears it, so a later plain
+  // "Calendar" click opens just the calendar.
+  const [schedulerRequested, setSchedulerRequested] = useState(false);
+  const scheduleLater = useCallback(() => {
+    setSchedulerRequested(true);
+    openCalendar("calendar");
+  }, [openCalendar]);
+  const schedulerOpened = useCallback(() => setSchedulerRequested(false), []);
+
   const closeCalendar = useCallback(() => {
     if (pushedRef.current) window.history.back();
     else setView(null, "replace");
@@ -171,7 +181,7 @@ export function MeetingsLanding({
         </p>
       </header>
 
-      <MeetingLobby onOpenCalendar={() => openCalendar("calendar")} />
+      <MeetingLobby onOpenCalendar={() => openCalendar("calendar")} onScheduleLater={scheduleLater} />
       {/* Booking link sits between "start a meeting" and "meetings you have":
           it's how meetings arrive when someone else picks the time. Collapsed to
           a single row — it no longer competes with the meetings themselves. */}
@@ -241,13 +251,16 @@ export function MeetingsLanding({
                 </div>
               </header>
               <div className="flex-1 overflow-y-auto px-4 py-5 sm:px-6">
-                <div className={pane === "calendar" ? "mx-auto w-full max-w-7xl" : "hidden"}>
+                {/* The whole width: the calendar is what this screen is for. */}
+                <div className={pane === "calendar" ? "w-full" : "hidden"}>
                   <MeetingsCalendar
                     initialMeetings={initialMeetings}
                     initialUpcoming={initialUpcoming}
                     initialPast={initialPast}
                     userId={userId}
                     orgId={orgId}
+                    openScheduler={schedulerRequested}
+                    onSchedulerOpened={schedulerOpened}
                   />
                 </div>
                 {settingsSeen ? (

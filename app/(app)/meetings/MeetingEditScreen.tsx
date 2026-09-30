@@ -547,9 +547,14 @@ export function MeetingEditScreen({
     <div
       ref={overlayRef}
       onClick={handleOverlayClick}
-      className="fixed inset-0 z-50 flex items-stretch justify-center bg-slate-900/40 backdrop-blur-sm sm:items-start sm:p-6"
+      className="fixed inset-0 z-50 flex items-stretch justify-center bg-slate-900/40 backdrop-blur-sm sm:items-center sm:p-6"
     >
-      <div className="flex h-full w-full max-w-3xl flex-col overflow-hidden bg-[var(--surface-1)] shadow-2xl sm:h-auto sm:max-h-[92vh] sm:rounded-2xl sm:border sm:border-[var(--line)]">
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label={mode === "create" ? "Schedule a meeting" : "Edit meeting"}
+        className="flex h-full w-full max-w-3xl flex-col overflow-hidden bg-[var(--surface-1)] shadow-2xl sm:h-auto sm:max-h-[92vh] sm:rounded-2xl sm:border sm:border-[var(--line)]"
+      >
         {/* Header — GCal keeps only Close (left) and a prominent Save (right). */}
         <div className="flex items-center justify-between gap-3 border-b border-[var(--line)] px-4 py-3">
           <button

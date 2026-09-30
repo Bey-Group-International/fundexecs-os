@@ -2,6 +2,7 @@
 
 import { Fragment, memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import CalendarLayers from "./CalendarLayers";
+import { CALENDAR_RAIL_KEY, nextSchedulableStart } from "./calendar-view";
 import {
   type CalendarLayer,
   type ExternalEvent,
@@ -162,12 +163,18 @@ export function MeetingsCalendar({
   initialPast,
   userId,
   orgId,
+  openScheduler = false,
+  onSchedulerOpened,
 }: {
   initialMeetings: CalendarMeeting[];
   initialUpcoming: UpcomingMeeting[];
   initialPast: PastMeeting[];
   userId: string;
   orgId: string;
+  /** Open the scheduler on top of the calendar ("Schedule for later"). */
+  openScheduler?: boolean;
+  /** Called once it has, so the request is not replayed on the next visit. */
+  onSchedulerOpened?: () => void;
 }) {
   const router = useRouter();
   const [meetings, setMeetings] = useState<CalendarMeeting[]>(initialMeetings);
@@ -396,6 +403,36 @@ export function MeetingsCalendar({
     setScheduleOpen(true);
   }
 
+  // "Schedule for later" arrives here wanting the scheduler, not a calendar to
+  // find the button on.
+  useEffect(() => {
+    if (!openScheduler) return;
+    openScheduleAt(nextSchedulableStart(new Date()).toISOString());
+    onSchedulerOpened?.();
+  }, [openScheduler, onSchedulerOpened]);
+
+  // The side panel (mini month, calendars, upcoming, past) is folded away by
+  // default so the grid gets the whole screen; the choice is remembered.
+  const [railOpen, setRailOpen] = useState(false);
+  useEffect(() => {
+    try {
+      if (window.localStorage.getItem(CALENDAR_RAIL_KEY) === "open") setRailOpen(true);
+    } catch {
+      // Storage blocked: the panel simply starts folded.
+    }
+  }, []);
+  const toggleRail = useCallback(() => {
+    setRailOpen((open) => {
+      const next = !open;
+      try {
+        window.localStorage.setItem(CALENDAR_RAIL_KEY, next ? "open" : "closed");
+      } catch {
+        // Not remembered, still toggled.
+      }
+      return next;
+    });
+  }, []);
+
   async function createBlock(title: string, startsAt: string, endsAt: string) {
     setBlockError(null);
     const res = await fetch("/api/meetings/blocks", {
@@ -616,6 +653,8 @@ export function MeetingsCalendar({
         filterOpen={filterOpen}
         setFilterOpen={setFilterOpen}
         onShortcuts={() => setShortcutsOpen(true)}
+        railOpen={railOpen}
+        onToggleRail={toggleRail}
       />
 
       {moveError ? (
@@ -634,7 +673,7 @@ export function MeetingsCalendar({
         </div>
       ) : null}
 
-      <div className="grid gap-6 pb-6 lg:grid-cols-[minmax(0,1fr)_340px]">
+      <div className={`grid gap-6 pb-6 ${railOpen ? "lg:grid-cols-[minmax(0,1fr)_340px]" : ""}`}>
         {/* Calendar surface */}
         <div className="min-w-0 rounded-2xl border border-[var(--line)] bg-[var(--surface-1)] p-2 sm:p-3">
           {view === "month" ? (
@@ -662,7 +701,7 @@ export function MeetingsCalendar({
         </div>
 
         {/* Side rail */}
-        <aside className="flex flex-col gap-6">
+        <aside hidden={!railOpen} className="flex flex-col gap-6">
           <MiniMonth anchor={anchor} onPick={(d) => { setAnchor(startOfDay(d)); }} today={today} meetings={meetings} orgId={orgId} loaded={meetingWindow} />
           <CalendarLayers
             layers={layers}
@@ -982,6 +1021,8 @@ function Toolbar({
   filterOpen,
   setFilterOpen,
   onShortcuts,
+  railOpen,
+  onToggleRail,
 }: {
   title: string;
   view: CalendarView;
@@ -994,6 +1035,8 @@ function Toolbar({
   filterOpen: boolean;
   setFilterOpen: (v: boolean) => void;
   onShortcuts: () => void;
+  railOpen: boolean;
+  onToggleRail: () => void;
 }) {
   const filterRef = useRef<HTMLDivElement>(null);
   const activeFilters = filterCountActive(filter);
@@ -1065,6 +1108,20 @@ function Toolbar({
             </button>
             {filterOpen ? <FilterMenu filter={filter} onFilter={onFilter} /> : null}
           </div>
+
+          {/* Mini month, connected calendars, upcoming and past. */}
+          <button
+            type="button"
+            onClick={onToggleRail}
+            aria-pressed={railOpen}
+            className={`flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium ${
+              railOpen
+                ? "border-gold-400/50 bg-gold-400/10 text-[var(--gold-400)]"
+                : "border-[var(--line)] text-[var(--fg-secondary)] hover:text-[var(--fg-primary)]"
+            }`}
+          >
+            {railOpen ? "Hide side panel" : "Calendars & lists"}
+          </button>
         </div>
       </div>
     </div>
@@ -1199,7 +1256,7 @@ const MonthDayCell = memo(function MonthDayCell({
       aria-expanded={isOpen}
       aria-label={`${spokenLabel} — ${count === 0 ? "nothing scheduled" : `${count} item${count === 1 ? "" : "s"}`}`}
       onClick={() => onOpenDay(day)}
-      className={`flex min-h-[104px] flex-col gap-1 border-b border-r border-[var(--line)] p-1.5 text-left transition-colors hover:bg-[var(--surface-0)] ${
+      className={`flex min-h-[104px] flex-col gap-1 lg:min-h-[132px] border-b border-r border-[var(--line)] p-1.5 text-left transition-colors hover:bg-[var(--surface-0)] ${
         inMonth ? "" : "bg-surface-0/40"
       } ${isOpen ? "bg-[var(--surface-0)] ring-1 ring-inset ring-[var(--gold-400)]" : ""}`}
     >
