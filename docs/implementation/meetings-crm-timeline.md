@@ -11,18 +11,18 @@ writes itself onto the timeline of the contacts who were in it.
 
 This is not a new CRM. Almost all of it is built:
 
-| piece | where | state |
-|---|---|---|
-| Contacts, stages, owners, scoring | `network_contacts`, `lib/network-*.ts` | works |
-| A per-contact timeline | `network_activities`, `app/api/network/contacts/[id]/activities` | works |
-| `meeting` as a first-class activity type | migration `20260919140000_network_workspace.sql` | exists |
-| `is_system` flag for engine-written entries | same | exists, **unused by meetings** |
-| `metadata` jsonb, documented for "message id, duration" | same | exists, **unused by meetings** |
+|                           piece                            |                                            where                                            |                      state                      |
+|------------------------------------------------------------|---------------------------------------------------------------------------------------------|-------------------------------------------------|
+| Contacts, stages, owners, scoring                          | `network_contacts`, `lib/network-*.ts`                                                      | works                                           |
+| A per-contact timeline                                     | `network_activities`, `app/api/network/contacts/[id]/activities`                            | works                                           |
+| `meeting` as a first-class activity type                   | migration `20260919140000_network_workspace.sql`                                            | exists                                          |
+| `is_system` flag for engine-written entries                | same                                                                                        | exists, **unused by meetings**                  |
+| `metadata` jsonb, documented for "message id, duration"    | same                                                                                        | exists, **unused by meetings**                  |
 | `live_meetings.related_contact_id` (+ company, fund, deal) | selected in every meetings query, typed everywhere, writable via `PATCH /api/meetings/[id]` | **nothing in the UI sets it; nothing reads it** |
-| Who was actually in a meeting | `live_meeting_participants` | works |
-| Who was invited | `live_meetings.attendees` — `{name, email?, type?}[]` | works |
-| Pure rules for resolving both into addresses | `lib/meetings/recipients.ts` | works, reusable here |
-| Meetings → contact timeline | — | **does not exist** |
+| Who was actually in a meeting                              | `live_meeting_participants`                                                                 | works                                           |
+| Who was invited                                            | `live_meetings.attendees` — `{name, email?, type?}[]`                                       | works                                           |
+| Pure rules for resolving both into addresses               | `lib/meetings/recipients.ts`                                                                | works, reusable here                            |
+| Meetings → contact timeline                                | —                                                                                           | **does not exist**                              |
 
 So today the app hosts the meeting, records who attended, transcribes it,
 generates a report and emails the follow-up — and the contact's record shows
@@ -185,3 +185,4 @@ addresses are the ones they take meetings from is not something CI can know.
    out?
 3. **`direction` for a booking-link meeting** — I have it as `inbound`. Say if
    your convention differs.
+
