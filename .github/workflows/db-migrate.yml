@@ -52,6 +52,11 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          # Keep this job's token out of .git/config. checkout persists it there
+          # by default, where every later step can read it (zizmor: artipacked).
+          # Nothing here pushes, so it is dead weight with a blast radius.
+          persist-credentials: false
 
       # Pinned, not `latest`, and the reason is the token rather than taste.
       #

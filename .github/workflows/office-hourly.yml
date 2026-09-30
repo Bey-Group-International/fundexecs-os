@@ -54,6 +54,11 @@ jobs:
     timeout-minutes: 45
     steps:
       - name: Checkout
+        # persist-credentials stays ON here, and only here. Every other
+        # workflow in this repo sets it false (zizmor: artipacked), but this
+        # job is `contents: write` and the agent step below pushes a branch
+        # and opens a PR using the credentials checkout leaves behind.
+        # Turning them off here breaks the push rather than hardening it.
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
