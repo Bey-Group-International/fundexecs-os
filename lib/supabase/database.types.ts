@@ -3401,6 +3401,28 @@ export type Database = {
         };
         Returns: number;
       };
+      // Mark a machine-written CRM entry as being about the wrong contact —
+      // hiding it from the timeline while keeping the row as evidence — and
+      // recompute that contact's last_activity_at from what remains
+      // (migration 20260930100000). SECURITY DEFINER: network_activities_update
+      // forbids a member from touching an is_system row, so the function
+      // re-checks membership, the org-admin right and contact visibility itself.
+      // Org admin only; raises 42501 otherwise, P0002 when the entry is absent
+      // or invisible, and 22023 for a hand-written entry.
+      flag_network_activity_misattributed: {
+        Args: {
+          activity_id: string;
+          reason?: string | null;
+          flag?: boolean;
+        };
+        Returns: {
+          activity_id: string;
+          misattributed: boolean;
+          contact_id: string | null;
+          /** The activity's own org — what the admin right was checked against. */
+          organization_id: string;
+        };
+      };
     };
     Enums: {
       hub: Hub;

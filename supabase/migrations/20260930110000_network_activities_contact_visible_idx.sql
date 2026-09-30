@@ -1,0 +1,42 @@
+-- The index the corrected-entry filter reads through.
+--
+-- The timeline reads a contact's entries newest-first and now has to skip the
+-- ones marked misattributed (20260930100000), so the predicate belongs in the
+-- index rather than making every read filter a column it cannot use one for.
+--
+-- IN ITS OWN MIGRATION on purpose. 20260930100000 adds a foreign key, which
+-- takes SHARE ROW EXCLUSIVE on network_activities and on principals; NOT VALID
+-- avoids the row scan but not those locks, and Postgres holds them until the
+-- transaction ends. Building this index in that same transaction would keep both
+-- tables locked against writes for the build's duration too. Split, the
+-- constraint's locks release when its migration commits and this one blocks only
+-- network_activities.
+--
+-- DEPLOYMENT NOTE, and read the second paragraph before trusting the first.
+--
+-- This build blocks writes to network_activities while it runs (reads continue).
+-- CREATE INDEX CONCURRENTLY is not available: it cannot run inside a transaction
+-- block, every migration in this repo runs in one, and no migration here uses it.
+--
+-- "Pick a low-traffic window" is NOT advice to a human operator, because nobody
+-- applies this by hand. .github/workflows/db-migrate.yml runs `supabase db push`
+-- against PRODUCTION on every push to main that touches supabase/migrations/**.
+-- So THE MERGE IS THE WINDOW: whoever merges the pull request chooses when this
+-- lock is taken, and there is no later gate. The same is true of the generated
+-- columns in 20260930083000 and 20260930090000, which rewrite this table, and
+-- which were merged before anyone noticed that is how they ship.
+--
+-- Except it did not happen, and that is the more important half. Checked
+-- against production rather than assumed: 20260930083000 and 20260930090000 are
+-- NOT in supabase_migrations.schema_migrations, and network_activities has
+-- neither meeting_id nor thread_id. DB Migrate ran on both merges and FAILED at
+-- `supabase link` with {"message":"Unauthorized"} -- an expired
+-- SUPABASE_ACCESS_TOKEN, the failure its own header says once went unnoticed for
+-- a month. A red DB Migrate run does not block a merge, so the merges looked
+-- green. Whoever merges this should confirm DB Migrate went green afterwards,
+-- because "the merge is the window" describes the design and not, right now,
+-- what happens.
+
+create index if not exists network_activities_contact_visible_idx
+  on public.network_activities (organization_id, contact_id, occurred_at desc)
+  where misattributed_at is null;

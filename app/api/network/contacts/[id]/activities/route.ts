@@ -39,6 +39,9 @@ export async function GET(req: NextRequest, { params }: Ctx) {
       .select("id, activity_type, direction, subject, body, occurred_at, actor_id, is_system, metadata")
       .eq("organization_id", auth.ctx.orgId)
       .eq("contact_id", id)
+      // Corrected entries are hidden, not deleted. Same reason as the server
+      // load in lib/network-contact.ts.
+      .is("misattributed_at", null)
       .order("occurred_at", { ascending: false })
       .limit(limit),
   ]);

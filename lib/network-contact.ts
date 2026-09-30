@@ -250,6 +250,11 @@ export async function loadContactRecord(
       .select("id, activity_type, direction, subject, body, occurred_at, actor_id, is_system, metadata")
       .eq("organization_id", orgId)
       .eq("contact_id", contactId)
+      // Entries established as being about the wrong person are kept as
+      // evidence and hidden here. The row stays so a later message updates it
+      // instead of arriving unmarked as a new one — see
+      // 20260930100000_network_activities_misattribution.sql.
+      .is("misattributed_at", null)
       .order("occurred_at", { ascending: false })
       .limit(timelineLimit),
     client

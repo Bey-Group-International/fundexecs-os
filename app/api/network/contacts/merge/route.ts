@@ -17,6 +17,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { requireOrgContext } from "@/lib/auth";
+import { statusForPgCode } from "@/lib/pg-error-status";
 import { createServerClient } from "@/lib/supabase/server";
 import { checkRateLimit, rateLimitHeaders } from "@/lib/rate-limit";
 import { planMerge, type MergeableContact } from "@/lib/network-merge";
@@ -34,19 +35,6 @@ const SELECT = `
 `;
 
 /** Postgres error codes the merge function raises, mapped to HTTP. */
-function statusForPgCode(code: unknown): number {
-  switch (code) {
-    case "P0002": // no_data_found — missing, or invisible to this caller
-      return 404;
-    case "42501": // insufficient_privilege
-      return 403;
-    case "22023": // invalid_parameter_value — merging a record into itself
-      return 400;
-    default:
-      return 500;
-  }
-}
-
 export async function POST(req: NextRequest) {
   const auth = await requireOrgContext();
   if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: auth.status });
