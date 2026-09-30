@@ -8,6 +8,7 @@ import { cache } from "react";
 import { Logo } from "@/components/Logo";
 import { createServiceClient, hasSupabaseServiceEnv } from "@/lib/supabase/server";
 import { resolvePublicPage } from "@/lib/meetings/scheduling-service";
+import { bookingPrefillQuery, parseBookingPrefill } from "@/lib/meetings/scheduling";
 import { SITE_NAME } from "@/lib/site";
 
 export const dynamic = "force-dynamic";
@@ -33,8 +34,16 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
   };
 }
 
-export default async function BookingPage({ params }: { params: Promise<{ slug: string }> }) {
+export default async function BookingPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ slug: string }>;
+  searchParams?: Promise<Record<string, string | string[] | undefined>>;
+}) {
   const { slug } = await params;
+  // A link that knows who is booking passes that on to whichever meeting they pick.
+  const prefillQuery = bookingPrefillQuery(parseBookingPrefill(await searchParams));
   const resolved = await loadPage(slug);
   if (!resolved) notFound();
 
@@ -65,7 +74,7 @@ export default async function BookingPage({ params }: { params: Promise<{ slug: 
             {eventTypes.map((type) => (
               <li key={type.id}>
                 <Link
-                  href={`/book/${page.slug}/${type.slug}`}
+                  href={`/book/${page.slug}/${type.slug}${prefillQuery}`}
                   className="flex items-center justify-between gap-4 rounded-xl border border-[var(--line)] bg-[var(--surface-1)] px-4 py-4 transition-colors hover:border-[var(--gold-400)]/40 hover:bg-[var(--surface-2)]"
                 >
                   <span className="flex flex-col gap-1">

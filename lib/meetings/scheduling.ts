@@ -589,10 +589,55 @@ export function validateBookingRequest(input: {
   return errors;
 }
 
-/** Public URL of a booking page, or of one event type on it. */
-export function buildBookingPageUrl(origin: string, slug: string, eventSlug?: string): string {
+/** Who is booking, when a link already knows: a name and email to start the form with. */
+export interface BookingPrefill {
+  name?: string;
+  email?: string;
+}
+
+function firstParam(value: unknown): string {
+  const one = Array.isArray(value) ? value[0] : value;
+  return typeof one === "string" ? one : "";
+}
+
+/**
+ * The `?name=&email=` a booking link can carry, as safe starting values for the
+ * form: trimmed, capped, and dropped when they could never be submitted.
+ *
+ * This only fills in fields the visitor can see and change before booking; the
+ * server validates the submission as it always did. It is what lets a declined
+ * invitee pick another time without typing themselves in again, and lets a
+ * host send a link that already knows who it is for.
+ */
+export function parseBookingPrefill(params: Record<string, unknown> | null | undefined): BookingPrefill {
+  const prefill: BookingPrefill = {};
+  const name = firstParam(params?.name).trim();
+  if (name && name.length <= BOOKING_NAME_MAX && !CONTROL_CHARS.test(name)) prefill.name = name;
+  const email = firstParam(params?.email).trim();
+  if (email && email.length <= BOOKING_EMAIL_MAX && EMAIL_RE.test(email) && !CONTROL_CHARS.test(email)) {
+    prefill.email = email;
+  }
+  return prefill;
+}
+
+/** The query string that carries a prefill, "" when there is nothing to carry. */
+export function bookingPrefillQuery(prefill: BookingPrefill | null | undefined): string {
+  const params = new URLSearchParams();
+  if (prefill?.name) params.set("name", prefill.name);
+  if (prefill?.email) params.set("email", prefill.email);
+  const query = params.toString();
+  return query ? `?${query}` : "";
+}
+
+/** Public URL of a booking page, or of one event type on it, optionally knowing who is booking. */
+export function buildBookingPageUrl(
+  origin: string,
+  slug: string,
+  eventSlug?: string,
+  prefill?: BookingPrefill | null,
+): string {
   const base = `${origin.replace(/\/$/, "")}/book/${slug}`;
-  return eventSlug ? `${base}/${eventSlug}` : base;
+  return `${eventSlug ? `${base}/${eventSlug}` : base}${bookingPrefillQuery(prefill)}`;
 }
 
 /** The invitee's cancel/reschedule link for a booking. */

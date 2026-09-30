@@ -558,7 +558,10 @@ export async function DELETE(request: NextRequest, { params }: { params: Params 
         durationMinutes: cancelled.eventType.duration_minutes,
         // The booking is gone, so the invitee gets the booking page back rather
         // than a manage link for something that no longer exists.
-        manageUrl: buildBookingPageUrl(SITE_URL, cancelled.page.slug),
+        manageUrl: buildBookingPageUrl(SITE_URL, cancelled.page.slug, undefined, {
+          name: cancelled.booking.invitee_name,
+          email: cancelled.booking.invitee_email,
+        }),
         reason,
         bookingId: cancelled.booking.id,
         bookingCreatedAt: cancelled.booking.created_at,

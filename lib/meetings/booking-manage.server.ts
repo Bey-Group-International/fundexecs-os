@@ -61,7 +61,11 @@ export async function loadManageView(
     eventType: publicEventType,
     hostTimezone: ctx.page.timezone,
     joinUrl: ctx.roomCode ? buildMeetingInviteUrl(SITE_URL, ctx.roomCode) : null,
-    bookingPageUrl: buildBookingPageUrl(SITE_URL, ctx.page.slug),
+    // Only the manage-token holder sees this, and it is their own name and email.
+    bookingPageUrl: buildBookingPageUrl(SITE_URL, ctx.page.slug, undefined, {
+      name: ctx.booking.invitee_name,
+      email: ctx.booking.invitee_email,
+    }),
     slots,
   };
 }

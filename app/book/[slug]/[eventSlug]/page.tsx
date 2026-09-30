@@ -5,7 +5,7 @@ import { cache } from "react";
 import { Logo } from "@/components/Logo";
 import { createServiceClient, hasSupabaseServiceEnv } from "@/lib/supabase/server";
 import { openSlots, resolvePublicPage } from "@/lib/meetings/scheduling-service";
-import type { SlotWindow } from "@/lib/meetings/scheduling";
+import { parseBookingPrefill, type SlotWindow } from "@/lib/meetings/scheduling";
 import { SITE_NAME } from "@/lib/site";
 import { BookingFlow } from "./BookingFlow";
 
@@ -42,10 +42,13 @@ export async function generateMetadata({
 
 export default async function EventTypeBookingPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ slug: string; eventSlug: string }>;
+  searchParams?: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const { slug, eventSlug } = await params;
+  const prefill = parseBookingPrefill(await searchParams);
   const found = await load(slug, eventSlug);
   if (!found) notFound();
 
@@ -93,6 +96,7 @@ export default async function EventTypeBookingPage({
             requiresApproval: eventType.requires_approval,
           }}
           initialSlots={initialSlots}
+          prefill={prefill}
         />
       </div>
     </div>
