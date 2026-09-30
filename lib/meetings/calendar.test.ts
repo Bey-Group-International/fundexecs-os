@@ -71,6 +71,17 @@ describe("date primitives", () => {
     expect(dayKey(addMonths(new Date(2026, 0, 15), 1))).toBe("2026-02-15");
   });
 
+  it("addMonths lands in the target month even from the 29th–31st", () => {
+    // The calendar anchors on today, so "next month" on Oct 31 must show
+    // November — not roll through Nov 31 to December 1.
+    expect(dayKey(addMonths(new Date(2026, 9, 31), 1))).toBe("2026-11-30");
+    expect(dayKey(addMonths(new Date(2026, 0, 31), 1))).toBe("2026-02-28");
+    expect(dayKey(addMonths(new Date(2028, 0, 31), 1))).toBe("2028-02-29");
+    expect(dayKey(addMonths(new Date(2026, 2, 31), -1))).toBe("2026-02-28");
+    expect(dayKey(addMonths(new Date(2026, 11, 31), 2))).toBe("2027-02-28");
+    expect(dayKey(addMonths(new Date(2026, 4, 31), -12))).toBe("2025-05-31");
+  });
+
   it("isSameDay / isSameMonth", () => {
     expect(isSameDay(new Date(2026, 5, 10, 9), new Date(2026, 5, 10, 23))).toBe(true);
     expect(isSameDay(new Date(2026, 5, 10), new Date(2026, 5, 11))).toBe(false);

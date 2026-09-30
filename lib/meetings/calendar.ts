@@ -80,8 +80,14 @@ export function monthDataWindow(base: Date): { from: string; to: string } {
   };
 }
 
+/**
+ * The same day `n` months on, clamped to the target month's last day. Without
+ * the clamp Oct 31 + 1 is "Nov 31", which Date rolls into December 1 — and the
+ * calendar, anchored on today, would skip November on the 31st.
+ */
 export function addMonths(d: Date, n: number): Date {
-  return new Date(d.getFullYear(), d.getMonth() + n, d.getDate());
+  const lastDay = new Date(d.getFullYear(), d.getMonth() + n + 1, 0).getDate();
+  return new Date(d.getFullYear(), d.getMonth() + n, Math.min(d.getDate(), lastDay));
 }
 
 export function isSameDay(a: Date, b: Date): boolean {
