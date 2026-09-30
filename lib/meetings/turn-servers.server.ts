@@ -76,3 +76,20 @@ export function turnServers(label?: string): TurnLookup {
 
   return { relay: true, iceServers: buildIceServers(urls, credential) };
 }
+
+/**
+ * Whether this deployment can relay calls, without minting a credential or
+ * logging.
+ *
+ * For surfaces that only need to KNOW — the meetings page warning an admin
+ * that guests on restrictive networks will fail to connect. `turnServers`
+ * logs an error each time it finds no relay, which is right on the join path
+ * and would be noise on every page view.
+ */
+export function relayStatus(): { configured: true } | { configured: false; reason: TurnUnavailableReason } {
+  const urls = parseTurnUrls(process.env.TURN_URLS);
+  const secret = cleanCredential(process.env.TURN_SECRET);
+  if (urls.length === 0 && !secret) return { configured: false, reason: "unconfigured" };
+  if (!secret || !hasRelayUrl(urls)) return { configured: false, reason: "misconfigured" };
+  return { configured: true };
+}
