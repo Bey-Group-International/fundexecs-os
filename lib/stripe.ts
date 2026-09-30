@@ -458,6 +458,12 @@ export interface FulfillResult {
   kind?: string;
   error?: string;
   alreadyFulfilled?: boolean;
+  /**
+   * Another caller holds the claim and has not finished yet. `ok` is false so
+   * the webhook keeps retrying, but the PAYMENT succeeded and fulfillment is
+   * underway — the buyer's redirect must not be told their purchase failed.
+   */
+  inProgress?: boolean;
   /** Invoice public token, so the return route can redirect back to /pay/<token>. */
   token?: string;
 }
@@ -486,6 +492,10 @@ export async function fulfillCheckout(
     const token = (row.metadata as { token?: string } | null)?.token;
     return { ok: true, kind: row.kind, alreadyFulfilled: true, token };
   }
+  // NB: that read is a fast path, NOT the guard. Two callers racing both see
+  // "pending" here. The guard is claimFulfillment() below, after payment is
+  // confirmed. It is accurate as a fast path because "fulfilled" is only
+  // written once the grant has actually succeeded.
 
   const session = await getStripe().checkout.sessions.retrieve(sessionId);
   const paid = session.payment_status === "paid" || session.status === "complete";
@@ -504,6 +514,48 @@ export async function fulfillCheckout(
   }
   const createdBy = meta.created_by || null;
 
+  // Claim the session before granting anything.
+  //
+  // Fulfillment has TWO callers — the return redirect and the Stripe webhook —
+  // and they arrive together, not in sequence: the first real purchase on this
+  // deployment was fulfilled by both within 7ms and granted its credit pack
+  // twice. The old guard read `status` and then acted on it, so both callers
+  // read "pending", both granted, and the loser's write of "fulfilled" landed
+  // last. The claim below is atomic, so exactly one caller proceeds.
+  //
+  // Placed AFTER the paid check so an unpaid session is never claimed, and
+  // released if granting throws, so a retry can re-run.
+  const claim = await claimFulfillment(service, sessionId);
+  if (claim === "error") {
+    // Never report a claim we could not take as success: that would drop the
+    // grant AND tell the webhook to stop retrying.
+    return { ok: false, kind, error: "Could not claim this checkout for fulfillment." };
+  }
+  if (claim === "taken") {
+    // Someone else holds it. Whether they FINISHED decides what we say, because
+    // "already fulfilled" and "in flight" need opposite handling: the first is
+    // success, the second must keep retrying.
+    //
+    // Holding the claim is not evidence of having finished, so completion is
+    // recorded separately and that marker is what gets read here. Asking
+    // stripe_checkouts instead would answer for plan/pack/gift and silently
+    // answer "done" for every invoice, which has no row to ask.
+    const done = await fulfillmentCompleted(service, sessionId);
+    if (done !== true) {
+      // Unfinished, or unreadable. Both must keep retrying: saying "already
+      // fulfilled" here is what loses a purchase, because it also stops the
+      // webhook redelivering.
+      return {
+        ok: false,
+        inProgress: true,
+        kind,
+        error: "Fulfillment is already in progress for this checkout.",
+      };
+    }
+    return { ok: true, kind, alreadyFulfilled: true, token: meta.token };
+  }
+
+  try {
   if (kind === "plan") {
     const planKey = meta.plan_key as PlanKey;
     const plan = PLAN_BY_KEY[planKey];
@@ -594,10 +646,150 @@ export async function fulfillCheckout(
     }
   }
 
+  } catch (err) {
+    // The claim is only as good as the work it guards: leaving it in place
+    // after a failure would make every retry a no-op and lose a paid-for grant
+    // silently. Release it so the webhook's redelivery (or a page reload) can
+    // fulfill properly.
+    if (!(await releaseFulfillment(service, sessionId))) {
+      console.error(
+        `[stripe] checkout ${logSafe(sessionId)} was claimed, did not fulfill, and the claim could not be released — needs manual repair`,
+      );
+    }
+    throw err;
+  }
+
+  // Record completion BEFORE the audit row, and separately from the claim. This
+  // marker is the one durable answer to "did fulfillment actually finish?", and
+  // it exists for every kind — including invoice checkouts, which cannot have a
+  // stripe_checkouts row at all.
+  await markFulfillmentComplete(service, sessionId);
+
+  // The audit row's own status, for the fast path and for anyone reading the
+  // table. Best-effort, like the row's creation.
   await service
     .from("stripe_checkouts")
     .update({ status: "fulfilled", fulfilled_at: new Date().toISOString() })
     .eq("session_id", sessionId);
 
   return { ok: true, kind, token: meta.token };
+}
+
+type CheckoutService = ReturnType<typeof createServiceClient>;
+
+type ClaimResult = "won" | "taken" | "error";
+
+/**
+ * Make an untrusted identifier safe to put in a log line.
+ *
+ * The session id arrives from `?session_id=` on the return route, so it is
+ * whatever the browser sent. Interpolated raw it is a log-forging vector: a
+ * newline in the value writes what looks like a second, fabricated log entry.
+ * Stripe ids are `cs_…` with alphanumerics and underscores, so anything else is
+ * dropped and the result is capped.
+ */
+function logSafe(value: string): string {
+  // The CR/LF strip is the barrier that matters and is written separately on
+  // purpose: an allowlist replace removes newlines too, but static analysis
+  // does not model it as a log-injection barrier, so CodeQL kept flagging this
+  // line. Explicit first, allowlist second for everything else an id should not
+  // carry, then a length cap.
+  return value
+    .replace(/[\r\n]/g, "")
+    .replace(/[^A-Za-z0-9_-]/g, "")
+    .slice(0, 80);
+}
+
+/**
+ * Take exclusive ownership of fulfilling this checkout session.
+ *
+ * The claim lives in `processed_stripe_events`, not in `stripe_checkouts`, and
+ * that choice is load-bearing. `stripe_checkouts` cannot hold it: its audit row
+ * is written best-effort by createCheckout, so it may be absent, and it CANNOT
+ * exist for invoice checkouts at all — the `kind` CHECK allows only
+ * plan/pack/gift, while fulfillment also handles `invoice` and
+ * `subscription_invoice`. A claim that depends on that row would simply fail
+ * for every invoice payment. `processed_stripe_events` is a bare text primary
+ * key with no constraints, and an insert that conflicts on it is exactly the
+ * atomic test-and-set this needs.
+ *
+ * Returns three states, and the distinction matters: reporting a storage
+ * failure as "someone else has it" would skip the grant AND tell the webhook to
+ * acknowledge, so a paid checkout would be silently dropped.
+ */
+async function claimFulfillment(service: CheckoutService, sessionId: string): Promise<ClaimResult> {
+  const { data, error } = await service
+    .from("processed_stripe_events")
+    .upsert({ id: `fulfill:${sessionId}`, type: "checkout.fulfill" }, {
+      onConflict: "id",
+      ignoreDuplicates: true,
+    })
+    .select("id");
+  if (error) {
+    console.error("[stripe] claimFulfillment failed:", error.message);
+    return "error";
+  }
+  return (data?.length ?? 0) > 0 ? "won" : "taken";
+}
+
+/**
+ * Hand the claim back so a redelivery can fulfill. Reports whether it worked,
+ * because a claim that cannot be released leaves the checkout unfulfillable and
+ * the caller needs to say so rather than swallow it.
+ */
+async function releaseFulfillment(service: CheckoutService, sessionId: string): Promise<boolean> {
+  try {
+    const { error } = await service
+      .from("processed_stripe_events")
+      .delete()
+      .eq("id", `fulfill:${sessionId}`);
+    if (error) {
+      console.error("[stripe] releaseFulfillment failed:", error.message);
+      return false;
+    }
+    return true;
+  } catch (err) {
+    console.error("[stripe] releaseFulfillment threw:", err);
+    return false;
+  }
+}
+
+/** Record that this session's fulfillment ran to completion. */
+async function markFulfillmentComplete(
+  service: CheckoutService,
+  sessionId: string,
+): Promise<void> {
+  const { error } = await service
+    .from("processed_stripe_events")
+    .upsert({ id: `fulfilled:${sessionId}`, type: "checkout.fulfilled" }, {
+      onConflict: "id",
+      ignoreDuplicates: true,
+    });
+  if (error) {
+    // The grant already happened, so this cannot fail the call — but a missing
+    // marker makes a concurrent caller retry a fulfillment that is actually
+    // done, so it is worth saying out loud.
+    console.error("[stripe] markFulfillmentComplete failed:", error.message);
+  }
+}
+
+/**
+ * Did fulfillment for this session finish? `true` only on positive evidence:
+ * a read error answers `false`, because treating "we could not tell" as "yes"
+ * is what drops a purchase.
+ */
+async function fulfillmentCompleted(
+  service: CheckoutService,
+  sessionId: string,
+): Promise<boolean> {
+  const { data, error } = await service
+    .from("processed_stripe_events")
+    .select("id")
+    .eq("id", `fulfilled:${sessionId}`)
+    .maybeSingle();
+  if (error) {
+    console.error("[stripe] fulfillmentCompleted read failed:", error.message);
+    return false;
+  }
+  return data != null;
 }

@@ -24,7 +24,11 @@ export async function GET(req: NextRequest) {
       return NextResponse.redirect(new URL(`/pay/${res.token}?checkout=${status}`, origin));
     }
     const dest = res.kind === "gift" ? "/gift" : "/wallet";
-    const status = res.ok ? "success" : "error";
+    // `inProgress` means the webhook is fulfilling this same session right now.
+    // The payment went through and the credits are landing, so telling the
+    // buyer their checkout failed would be both wrong and alarming; only the
+    // webhook needs the retryable falsehood of `ok: false`.
+    const status = res.ok || res.inProgress ? "success" : "error";
     return NextResponse.redirect(new URL(`${dest}?checkout=${status}`, origin));
   } catch {
     return NextResponse.redirect(new URL("/wallet?checkout=error", origin));

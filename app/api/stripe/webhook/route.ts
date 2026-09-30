@@ -55,7 +55,15 @@ export async function POST(req: NextRequest) {
   try {
     if (event.type === "checkout.session.completed") {
       const session = event.data.object as Stripe.Checkout.Session;
-      await fulfillCheckout(session.id);
+      // Throw rather than acknowledge a fulfillment that did not happen. A 2xx
+      // here tells Stripe to stop redelivering, so swallowing the result would
+      // turn a transient failure into a paid checkout that never grants
+      // anything. The catch below releases the event claim, so the redelivery
+      // re-processes rather than being skipped as a duplicate.
+      const result = await fulfillCheckout(session.id);
+      if (!result.ok) {
+        throw new Error(result.error ?? "Checkout fulfillment failed");
+      }
     }
 
     // LEGACY subscriptions only: grant the plan's allotment on each Stripe-driven
