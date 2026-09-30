@@ -14,7 +14,8 @@
 //   ✓ VEVENT with DTSTART/DTEND, or DTSTART + DURATION
 //   ✓ UTC (Z), floating, and TZID datetimes for IANA zone names
 //   ✓ All-day events (VALUE=DATE), treated as busy for the whole local day
-//   ✓ RRULE FREQ=DAILY|WEEKLY|MONTHLY|YEARLY with INTERVAL, COUNT, UNTIL, BYDAY
+//   ✓ RRULE FREQ=DAILY|WEEKLY|MONTHLY|YEARLY with INTERVAL, COUNT, UNTIL, BYDAY,
+//     expanded in DTSTART's zone so a series keeps its local hour across DST
 //   ✓ EXDATE, and RECURRENCE-ID overrides skipped rather than double-counted
 //   ✓ STATUS:CANCELLED and TRANSP:TRANSPARENT excluded from busy time
 //   ✓ Line unfolding, parameter parsing, and value unescaping
@@ -328,9 +329,49 @@ export function expandRecurrence(
   rule: RRule,
   windowStart: Date,
   windowEnd: Date,
-  opts: { maxOccurrences?: number } = {},
+  opts: { maxOccurrences?: number; timeZone?: string } = {},
 ): Date[] {
   const max = opts.maxOccurrences ?? 1000;
+  const tz = opts.timeZone && zoneOffsetMs(start, opts.timeZone) !== null ? opts.timeZone : null;
+  if (!tz) return expandInUtc(start, rule, windowStart, windowEnd, max);
+
+  // RFC 5545 repeats a series in DTSTART's own zone: a weekly 09:00 New York
+  // meeting is at 09:00 New York time after the clocks change, which is a
+  // different UTC hour. Stepping fixed 24h blocks in UTC moved every
+  // occurrence after a DST change by an hour — the host's real meeting read as
+  // free, a phantom hour beside it read as busy, and an EXDATE (resolved in
+  // local time) no longer matched the occurrence it cancels.
+  //
+  // So run the same expansion on wall-clock time — the local time written as
+  // if it were UTC, where day and month arithmetic is exact — and map each
+  // occurrence back to its real instant. The wall window is a day wider on
+  // each side so no offset can push a real occurrence out of it; the true
+  // window is applied after mapping back.
+  const toWall = (d: Date) => new Date(d.getTime() + (zoneOffsetMs(d, tz) ?? 0));
+  const toInstant = (w: Date) =>
+    zonedWallTimeToUtc(
+      {
+        year: w.getUTCFullYear(),
+        month: w.getUTCMonth() + 1,
+        day: w.getUTCDate(),
+        hour: w.getUTCHours(),
+        minute: w.getUTCMinutes(),
+        second: w.getUTCSeconds(),
+      },
+      tz,
+    ) ?? w;
+
+  const wall = expandInUtc(
+    toWall(start),
+    { ...rule, until: rule.until ? toWall(rule.until) : null },
+    new Date(toWall(windowStart).getTime() - 86_400_000),
+    new Date(toWall(windowEnd).getTime() + 86_400_000),
+    max,
+  );
+  return wall.map(toInstant).filter((d) => d >= windowStart && d <= windowEnd);
+}
+
+function expandInUtc(start: Date, rule: RRule, windowStart: Date, windowEnd: Date, max: number): Date[] {
   const out: Date[] = [];
   const hardEnd = rule.until && rule.until < windowEnd ? rule.until : windowEnd;
 
@@ -544,7 +585,11 @@ export function parseIcs(text: string, opts: ParseIcsOptions): IcsEvent[] {
       }
 
       const starts = rule
-        ? expandRecurrence(start.date, rule, opts.windowStart, opts.windowEnd)
+        ? expandRecurrence(start.date, rule, opts.windowStart, opts.windowEnd, {
+            // Only a zoned date-time recurs in local time; UTC, floating and
+            // all-day series have no zone to follow.
+            timeZone: start.dateOnly ? undefined : dtStart.params.TZID,
+          })
         : [start.date];
 
       for (const s of starts) {
