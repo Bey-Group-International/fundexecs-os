@@ -68,6 +68,23 @@ export function ThreadConversation({
   // the server round trip would leave "Nothing has been sent" under a message that
   // just went.
   const [draftNote, setDraftNote] = useState<string | null>(card.draft?.origin ?? null);
+  /**
+   * The revision of the draft that seeded the text CURRENTLY in the composer.
+   *
+   * Tracked in state beside the text rather than read off `card.draft` at send
+   * time, and the distinction is the whole point. `replyText` is seeded on mount;
+   * the panel stays mounted while its card is collapsed and the card is keyed by
+   * thread id, so a router.refresh() or an InboxLive update can replace
+   * `card.draft` with a NEWER draft while the composer still holds the older text.
+   * Reading the revision off the prop then pairs the new revision with the old
+   * text, and the server deletes a draft nobody has seen — the exact lost update
+   * the revision guard exists to prevent, through a different door.
+   *
+   * Cleared whenever something REPLACES the text, because the revision identifies
+   * the text being sent and not the newest draft on the thread. Editing the seeded
+   * draft keeps it: that is still the operator sending that draft.
+   */
+  const [seedRevision, setSeedRevision] = useState<string | null>(card.draft?.revision ?? null);
   const [sending, startSendTransition] = useTransition();
   const [drafting, startDraftTransition] = useTransition();
   // AI-personalized reply openers, fetched once when the thread is opened. Null
@@ -108,6 +125,8 @@ export function ThreadConversation({
       const r = await draftThreadReply(card.id);
       if (r.ok && r.draft) {
         setReplyText(r.draft);
+        // Earn's text is not the report's draft, so it no longer stands for it.
+        setSeedRevision(null);
       } else {
         onResult({ ok: false, error: r.error ?? "Couldn't draft a reply. Try again." }, "reply");
       }
@@ -126,11 +145,12 @@ export function ThreadConversation({
       // Without it the server deletes nothing, which is the safe direction: a
       // draft left behind is visible and discardable, a newer one deleted by an
       // older send is gone.
-      if (card.draft) f.set("draft_revision", card.draft.revision);
+      if (seedRevision) f.set("draft_revision", seedRevision);
       const r = await replyToThread(f);
       onResult(r, "reply");
       if (r.ok) {
         setReplyText("");
+        setSeedRevision(null);
         // The reply has gone (or been queued for approval), so the draft of it is
         // no longer a draft. `replyToThread` deletes the row; this is the same
         // fact in the open panel, which would otherwise keep saying an unsent
@@ -140,10 +160,10 @@ export function ThreadConversation({
         router.refresh();
       }
     });
-    // `card.draft` is in here on purpose rather than silenced: if a refresh replaces
-    // the card with a newer draft while this panel is open, the next send must carry
-    // THAT revision. A stale closure would send the old one and clear nothing.
-  }, [replyText, card.id, card.draft, loadMessages, router, onResult]);
+    // `seedRevision`, NOT `card.draft`. An earlier version depended on the prop with
+    // a comment claiming the next send must carry the newest revision; that had the
+    // invariant backwards and reintroduced the lost update it was meant to stop.
+  }, [replyText, card.id, seedRevision, loadMessages, router, onResult]);
 
   const chips = aiReplies ?? card.quickReplies;
   const showChips = chips.length > 0 && !replyText.trim();
@@ -201,7 +221,12 @@ export function ThreadConversation({
                 <button
                   key={qr}
                   type="button"
-                  onClick={() => setReplyText(qr)}
+                  onClick={() => {
+                    setReplyText(qr);
+                    // A chip REPLACES the composer, so the seeded draft is no longer
+                    // what is about to be sent and must not be cleared by it.
+                    setSeedRevision(null);
+                  }}
                   className="rounded-full border border-line bg-surface-1 px-2.5 py-1 text-xs text-fg-secondary transition hover:-translate-y-px hover:border-gold-500 hover:text-fg-primary"
                 >
                   {qr}

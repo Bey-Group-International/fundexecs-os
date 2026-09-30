@@ -49,7 +49,14 @@ function card(over: Partial<ThreadConversationCard> = {}): ThreadConversationCar
 }
 
 function panel(over: Partial<ThreadConversationCard> = {}) {
-  return render(<ThreadConversation card={card(over)} onResult={jest.fn()} />);
+  const onResult = jest.fn();
+  const view = render(<ThreadConversation card={card(over)} onResult={onResult} />);
+  return {
+    ...view,
+    /** Re-render with new props, as a router.refresh() or InboxLive update would. */
+    withCard: (next: Partial<ThreadConversationCard>) =>
+      view.rerender(<ThreadConversation card={card(next)} onResult={onResult} />),
+  };
 }
 
 beforeEach(() => {
@@ -167,5 +174,91 @@ describe("a thread with no draft", () => {
     expect(
       await screen.findByRole("button", { name: /following up shortly/i }),
     ).toBeInTheDocument();
+  });
+});
+
+/**
+ * Which draft revision a send actually claims.
+ *
+ * The revision identifies THE TEXT BEING SENT, not the newest draft on the thread.
+ * These are separate facts, and an earlier version conflated them: it read the
+ * revision off `card.draft` at send time, so a refresh that replaced the prop with
+ * a newer draft paired the NEW revision with the OLD composer text — and the server
+ * then deleted a draft nobody had seen. The lost update the revision guard exists to
+ * prevent, reintroduced by the guard's own client half.
+ *
+ * `replyText` is seeded on mount, the panel stays mounted while its card is
+ * collapsed, and the card is keyed by thread id — so that prop change is ordinary,
+ * not exotic.
+ */
+describe("the revision follows the text, not the thread", () => {
+  const NEWER = "2026-09-30T18:00:00.000Z";
+
+  it("sends the revision it was seeded with, even after a newer draft arrives", async () => {
+    const view = panel({ draft: { body: DRAFT_BODY, origin: "x", revision: REVISION } });
+    expect(await screen.findByRole("textbox")).toHaveValue(DRAFT_BODY);
+
+    // A refresh lands a newer draft while the composer still holds the old text.
+    view.withCard({ draft: { body: "Rewritten by a later meeting.", origin: "x", revision: NEWER } });
+    expect(screen.getByRole("textbox")).toHaveValue(DRAFT_BODY);
+
+    await userEvent.click(screen.getByRole("button", { name: /send reply/i }));
+    await waitFor(() => expect(replyToThread).toHaveBeenCalledTimes(1));
+    const form = replyToThread.mock.calls[0][0] as FormData;
+    expect(form.get("body")).toBe(DRAFT_BODY);
+    // The OLD revision: it is the one this text came from. Sending NEWER here would
+    // delete the newer draft, which is the bug.
+    expect(form.get("draft_revision")).toBe(REVISION);
+  });
+
+  /**
+   * A chip replaces the composer wholesale, so the seeded draft is no longer what is
+   * about to be sent and must not be cleared by it.
+   *
+   * Reached by clearing the composer first, because the chips are deliberately hidden
+   * while it holds text — asserted above. That is the only route to a chip on a thread
+   * that had a draft, and it is a real one: an operator who does not want the drafted
+   * follow-up clears it and taps an opener instead.
+   */
+  it("claims no revision once a quick-reply chip replaces the text", async () => {
+    panel({ draft: { body: DRAFT_BODY, origin: "x", revision: REVISION } });
+    await userEvent.clear(await screen.findByRole("textbox"));
+    await userEvent.click(
+      await screen.findByRole("button", { name: /following up shortly/i }),
+    );
+    await userEvent.click(screen.getByRole("button", { name: /send reply/i }));
+
+    await waitFor(() => expect(replyToThread).toHaveBeenCalledTimes(1));
+    const form = replyToThread.mock.calls[0][0] as FormData;
+    expect(form.get("draft_revision")).toBeNull();
+  });
+
+  // Same reasoning for Earn's draft: different text, so it does not stand for the
+  // report's draft.
+  it("claims no revision once Earn replaces the text", async () => {
+    draftThreadReply.mockResolvedValue({ ok: true, draft: "Earn wrote this." });
+    panel({ draft: { body: DRAFT_BODY, origin: "x", revision: REVISION } });
+
+    await userEvent.click(await screen.findByRole("button", { name: /draft with earn/i }));
+    await waitFor(() => expect(screen.getByRole("textbox")).toHaveValue("Earn wrote this."));
+    await userEvent.click(screen.getByRole("button", { name: /send reply/i }));
+
+    await waitFor(() => expect(replyToThread).toHaveBeenCalledTimes(1));
+    const form = replyToThread.mock.calls[0][0] as FormData;
+    expect(form.get("draft_revision")).toBeNull();
+  });
+
+  // Editing the seeded draft KEEPS the revision: that is still the operator sending
+  // that draft, so clearing it on send is correct.
+  it("keeps the revision when the operator edits the seeded draft", async () => {
+    panel({ draft: { body: DRAFT_BODY, origin: "x", revision: REVISION } });
+    const field = await screen.findByRole("textbox");
+    await userEvent.type(field, " One more line.");
+    await userEvent.click(screen.getByRole("button", { name: /send reply/i }));
+
+    await waitFor(() => expect(replyToThread).toHaveBeenCalledTimes(1));
+    const form = replyToThread.mock.calls[0][0] as FormData;
+    expect(form.get("draft_revision")).toBe(REVISION);
+    expect(String(form.get("body"))).toContain("One more line.");
   });
 });
