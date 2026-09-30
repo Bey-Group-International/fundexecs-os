@@ -21,6 +21,7 @@ import type {
   SchedulingPage,
 } from "@/lib/supabase/database.types";
 import { generateRoomCode } from "@/lib/meetings/service";
+import { DEFAULT_REMINDER_MINUTES } from "@/lib/meetings/reminder";
 import { blocksToBusyIntervals } from "@/lib/meetings/blocks";
 import { externalBusyForUser } from "@/lib/calendar/feeds.server";
 import { googleBusyForUser } from "@/lib/calendar/google.server";
@@ -560,6 +561,10 @@ export async function createMeetingForBooking(
       followup_status: "not_started",
       is_draft: false,
       locked_at: new Date().toISOString(),
+      // The same default a meeting scheduled in the app gets. Left null, the
+      // reminder sweep skipped every booked meeting: the one kind of meeting
+      // most likely to have an outside guest was the one never reminded.
+      reminder_minutes: DEFAULT_REMINDER_MINUTES,
     } as never)
     .select("id, room_code")
     .single();
@@ -841,7 +846,13 @@ export async function rescheduleBooking(
 
   if (ctx.booking.meeting_id) {
     const { error } = await table(client, "live_meetings")
-      .update({ scheduled_at: start.toISOString(), updated_at: new Date().toISOString() } as never)
+      .update({
+        scheduled_at: start.toISOString(),
+        // A reminder sent for the old time says nothing about the new one —
+        // the same re-arm updateMeeting does when a start moves.
+        last_reminder_sent_at: null,
+        updated_at: new Date().toISOString(),
+      } as never)
       .eq("id", ctx.booking.meeting_id);
     if (error) {
       // The room couldn't follow; put the booking back where the room still is.

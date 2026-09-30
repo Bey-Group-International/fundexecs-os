@@ -19,6 +19,12 @@ import { escapeHtml } from "@/lib/email";
  * These land in other people's inboxes, several of them external. A host who
  * clicks twice means "did that work?", not "send it again".
  */
+/**
+ * The reminder a meeting gets when nobody chose one: the schedule screen's
+ * default, and what a meeting booked through a scheduling link starts with.
+ */
+export const DEFAULT_REMINDER_MINUTES = 15;
+
 export const REMINDER_COOLDOWN_MS = 10 * 60_000;
 
 /** Past this point a reminder is a curiosity rather than a prompt. */
