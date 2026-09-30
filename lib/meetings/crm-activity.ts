@@ -17,8 +17,12 @@
 //
 // Pure: no database, no clock, no network.
 
-/** A contact matched only by an address equal to one the CRM holds. */
-export type EmailIndex = ReadonlyMap<string, string>;
+// The matching rule lives in lib/crm now: the inbox needs the same one, and it
+// belongs to the CRM rather than to meetings. Re-exported so every existing
+// caller and test keeps working against one implementation.
+export { normalizeEmail, type EmailIndex } from "@/lib/crm/contact-match";
+import { boundedBody, normalizeEmail } from "@/lib/crm/contact-match";
+import type { EmailIndex } from "@/lib/crm/contact-match";
 
 export interface CrmMeetingInput {
   meeting: {
@@ -93,29 +97,6 @@ export const CRM_BODY_MAX = 2000;
 /** Said when a meeting closed without an analysis, so the gap is explicit. */
 export const NO_REPORT_BODY = "No summary was generated for this meeting.";
 
-/**
- * An address, or "" when it is not one.
- *
- * Deliberately strict, and deliberately not clever. Matching is exact: the only
- * link drawn is between an address and a contact holding the same address, with
- * case and surrounding space ignored because those are not differences. No
- * domain guessing and no name similarity — an unmatched participant stays
- * unlinked and can be attached by hand, which is recoverable, where a wrong link
- * is silently wrong forever.
- */
-export function normalizeEmail(value: unknown): string {
-  if (typeof value !== "string") return "";
-  const trimmed = value.trim().toLowerCase();
-  if (!trimmed || /\s/.test(trimmed)) return "";
-  const at = trimmed.indexOf("@");
-  // Exactly one @, with something either side of it.
-  if (at <= 0 || at !== trimmed.lastIndexOf("@") || at === trimmed.length - 1) return "";
-  // A domain has to have a dot in it, and cannot end on one.
-  const domain = trimmed.slice(at + 1);
-  if (!domain.includes(".") || domain.startsWith(".") || domain.endsWith(".")) return "";
-  return trimmed;
-}
-
 /** The body of the entry: what was said, and what was agreed. */
 export function meetingBody(report: CrmMeetingInput["report"]): string {
   if (!report) return NO_REPORT_BODY;
@@ -131,9 +112,7 @@ export function meetingBody(report: CrmMeetingInput["report"]): string {
   // A report row exists but the model wrote nothing usable into it.
   if (parts.length === 0) return NO_REPORT_BODY;
 
-  const body = parts.join("\n\n");
-  if (body.length <= CRM_BODY_MAX) return body;
-  return `${body.slice(0, CRM_BODY_MAX).trimEnd()}…`;
+  return boundedBody(parts.join("\n\n"), CRM_BODY_MAX);
 }
 
 /** Where the whole report lives, for the caller that wants the rest. */

@@ -8,6 +8,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database, Json } from "@/lib/supabase/database.types";
 import { computePriority } from "@/lib/inbox/intelligence";
+import { recordThreadOnTimeline } from "@/lib/inbox/crm-activity.server";
 import type { InboundEvent } from "./types";
 
 const UNIQUE_VIOLATION = "23505";
@@ -128,7 +129,33 @@ export async function ingestInboundEvent(
     });
     if (message.error) throw new Error(message.error.message);
 
-    // 4. Finalize the ledger row with where the event landed.
+    // 4. The conversation on the CRM record of whoever is on the other end.
+    //
+    // On every ingest, not only on the first: the row is meant to stay current,
+    // so the newest summary and the latest message time reach the record rather
+    // than the state the conversation was in when it started. Upserted on the
+    // thread, so a fortieth reply updates one entry instead of adding a fortieth.
+    //
+    // Never throws and its result is not read. This is a webhook path — a thread
+    // that cannot reach the CRM must still reach the inbox, or the provider
+    // retries the delivery and the operator loses the message.
+    await recordThreadOnTimeline(supabase as never, {
+      orgId,
+      actorId: null,
+      now: occurredAt,
+      thread: {
+        id: threadId,
+        channel: seed.channel,
+        subject: seed.subject,
+        counterpartyEmail: seed.counterpartyEmail,
+        // Written by the intelligence pass later, so absent on a first ingest.
+        aiSummary: null,
+        preview,
+        lastMessageAt: occurredAt,
+      },
+    });
+
+    // 5. Finalize the ledger row with where the event landed.
     await finalize({
       ok: true,
       detail: created ? "created thread" : "appended to thread",

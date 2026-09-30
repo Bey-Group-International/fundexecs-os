@@ -12,6 +12,7 @@ import {
   type ThreadDigestInput,
   type ThreadSummary,
 } from "@/lib/inbox/intelligence";
+import { recordThreadOnTimeline } from "@/lib/inbox/crm-activity.server";
 
 export interface ThreadContext {
   kind: "deal" | "investor";
@@ -206,7 +207,8 @@ export async function refreshThreadSummary(
     const { data: t, error } = await supabase
       .from("inbox_threads")
       .select(
-        "subject, category, counterparty_name, counterparty_email, deal_id, investor_id, unread, last_message_at",
+        // `channel` is read for the CRM entry below, not for the summary itself.
+        "subject, channel, category, counterparty_name, counterparty_email, deal_id, investor_id, unread, last_message_at",
       )
       .eq("organization_id", orgId)
       .eq("id", threadId)
@@ -252,6 +254,26 @@ export async function refreshThreadSummary(
       .update({ ai_summary: summary, intent, priority })
       .eq("organization_id", orgId)
       .eq("id", threadId);
+
+    // Put the summary on the counterparty's CRM record, replacing the raw preview
+    // the ingest wrote there a moment ago. Same upsert key, so this corrects that
+    // one entry rather than adding a second copy of the conversation — which is
+    // the whole reason the key exists. A contact's record should read "Ana asked
+    // for the updated pacing model", not "Hi — could you send over".
+    await recordThreadOnTimeline(supabase as never, {
+      orgId,
+      actorId: null,
+      now: new Date().toISOString(),
+      thread: {
+        id: threadId,
+        channel: t.channel,
+        subject: t.subject,
+        counterpartyEmail: t.counterparty_email,
+        aiSummary: summary,
+        preview: null,
+        lastMessageAt: t.last_message_at,
+      },
+    });
   } catch {
     // Best-effort: a summary refresh must never surface as an ingest failure.
   }

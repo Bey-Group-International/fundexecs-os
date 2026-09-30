@@ -5236,6 +5236,55 @@ Deployed, monitoring               →  live, observability active
              |  its author thought to doubt.
              |  Confidence: Jest 7787 across 547 suites, typecheck and eslint
              |  clean.
+             |
+             |  2026-09-30  And the other half: an inbox conversation now writes
+             |  itself onto the CRM record of the person on the other end of it.
+             |  ONE ROW PER THREAD, not per message. A conversation of forty
+             |  replies is one relationship, and a row per message would bury every
+             |  hand-logged note under a wall of email. So the entry is upserted on
+             |  the thread and kept CURRENT: subject, newest summary, instant of the
+             |  latest message.
+             |  Which makes the same key the meetings writer needed - real columns,
+             |  because PostgREST's on_conflict carries column names and nothing
+             |  else - and `thread_id` generated from the metadata the writer
+             |  already sets. Hand-logged rows have NULL there and NULLs are
+             |  distinct, so nothing a person types is constrained by it.
+             |  Two write points, deliberately. The ingest writes the entry as the
+             |  thread lands, carrying only the raw preview, because the
+             |  intelligence pass has not run yet. refreshThreadSummary then writes
+             |  it AGAIN with the model's summary, and the upsert makes that a
+             |  CORRECTION to the same entry rather than a second copy of the
+             |  conversation. A record should read "Ana asked for the updated pacing
+             |  model", not "Hi - could you send over".
+             |  Extracted contact-match.ts on the way: the matching rule was in
+             |  lib/meetings, and "lib/meetings owns the rule lib/inbox depends on"
+             |  is the wrong shape. The rule belongs to the CRM; both are consumers.
+             |  Exact addresses only, again, held there by the same near-miss list.
+             |  The ingest path never fails on this. A thread that cannot reach the
+             |  CRM must still reach the inbox - a webhook that reports failure is a
+             |  provider retry and then a message the operator never sees. Asserted
+             |  from the ingest's own side, with a CRM write that fails: the ledger
+             |  still says the thread landed.
+             |  ONE TEST WORTH NAMING. activity_type has a CHECK constraint, so
+             |  every channel must map to something the column accepts. The pure
+             |  test asserts against a copy of that list; the server test reads the
+             |  list OUT OF THE MIGRATION and checks what the writer actually puts
+             |  in the payload. That is what caught the injection where an unknown
+             |  channel falls through to its own name - the kind of value a new
+             |  provider added in six months would produce.
+             |  15 injections, 15 caught, no misses this time. Worth being precise
+             |  about why: the ones that matter (the expression conflict target, the
+             |  raw-email lookup) were caught because they had already SHIPPED
+             |  BROKEN on the meetings side earlier today, and the tests here were
+             |  written from that. An injection pass measures the author's
+             |  imagination, and mine had just been corrected by a reviewer.
+             |  WHAT THESE TESTS CANNOT DO: the index and generated-column tests
+             |  read SQL text out of supabase/migrations. They prove the migration
+             |  says the right thing. They cannot prove it was APPLIED, and they
+             |  cannot prove Postgres accepts the generated expression. Only a run
+             |  against a real database does that.
+             |  Confidence: Jest 7835 across 549 suites, typecheck and eslint
+             |  clean.
 ```
 
 ---

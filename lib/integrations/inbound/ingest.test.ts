@@ -12,14 +12,19 @@ import type { InboundEvent } from "./types";
 interface Recorded {
   inserts: { table: string; row: Record<string, unknown> }[];
   updates: { table: string; patch: Record<string, unknown>; id: unknown }[];
+  upserts: { table: string; rows: Record<string, unknown>[]; onConflict: string }[];
 }
 
 function makeSupabase(opts: {
   existingThreadId?: string | null;
   claimConflict?: boolean;
   failMessageInsert?: boolean;
+  /** A contact in the CRM holding the counterparty's address, if there is one. */
+  crmContactId?: string;
+  /** Make the CRM write blow up, to prove the ingest does not go with it. */
+  failCrmWrite?: boolean;
 } = {}): { supabase: SupabaseClient<Database>; recorded: Recorded } {
-  const recorded: Recorded = { inserts: [], updates: [] };
+  const recorded: Recorded = { inserts: [], updates: [], upserts: [] };
 
   const from = (table: string) => ({
     insert(row: Record<string, unknown>) {
@@ -52,12 +57,23 @@ function makeSupabase(opts: {
       };
     },
     select() {
-      const maybeSingle = async () => ({
-        data: opts.existingThreadId ? { id: opts.existingThreadId } : null,
-        error: null,
-      });
-      const chain = { eq: () => chain, maybeSingle };
+      const maybeSingle = async () => {
+        // The CRM step looks up whether the counterparty is a contact; the thread
+        // lookup asks whether this conversation already exists. Different tables,
+        // different answers.
+        if (table === "network_contacts") {
+          return { data: opts.crmContactId ? { id: opts.crmContactId } : null, error: null };
+        }
+        return { data: opts.existingThreadId ? { id: opts.existingThreadId } : null, error: null };
+      };
+      const chain: Record<string, unknown> = { eq: () => chain, limit: () => chain, maybeSingle };
       return chain;
+    },
+    upsert(rows: Record<string, unknown>[], options: { onConflict: string }) {
+      recorded.upserts.push({ table, rows, onConflict: options.onConflict });
+      return Promise.resolve(
+        opts.failCrmWrite ? { error: { message: "timeline write failed" } } : { error: null },
+      );
     },
   });
 
@@ -168,5 +184,51 @@ describe("ingestInboundEvent", () => {
 
     const finalized = recorded.updates.find((u) => u.table === "ingest_log")!;
     expect(finalized.patch).toMatchObject({ ok: false, detail: "message insert failed" });
+  });
+  /**
+   * The CRM half of an ingest, from the ingest's side.
+   *
+   * crm-activity.server.test.ts covers the writer. What only this test can show
+   * is that the ingest hands it the thread it just wrote — the id, the channel and
+   * the address it resolved — rather than something stale or something else.
+   */
+  it("puts the conversation on the CRM record of a counterparty it knows", async () => {
+    const { supabase, recorded } = makeSupabase({ crmContactId: "contact-dana" });
+    const result = await ingestInboundEvent(supabase, "org-1", "calendly", BOOKING_EVENT);
+    expect(result).toEqual({ ok: true, duplicate: false, threadId: "thr-new", created: true });
+
+    const timeline = recorded.upserts.find((u) => u.table === "network_activities")!;
+    expect(timeline.rows).toHaveLength(1);
+    const row = timeline.rows[0];
+    expect(row.organization_id).toBe("org-1");
+    expect(row.contact_id).toBe("contact-dana");
+    expect(row.is_system).toBe(true);
+    // The thread this ingest wrote, so a reply updates that entry instead of
+    // adding another copy of the conversation.
+    expect((row.metadata as { thread_id: string }).thread_id).toBe("thr-new");
+    expect(row.occurred_at).toBe(BOOKING_EVENT.message.occurredAt);
+  });
+
+  it("writes no timeline entry for a counterparty the CRM does not hold", async () => {
+    const { supabase, recorded } = makeSupabase();
+    await ingestInboundEvent(supabase, "org-1", "calendly", BOOKING_EVENT);
+    expect(recorded.upserts).toHaveLength(0);
+  });
+
+  /**
+   * The property that matters more than the feature.
+   *
+   * This is a webhook path: an ingest that reports failure is a delivery the
+   * provider retries and, once it gives up, a message the operator never sees. A
+   * CRM timeline entry is not worth that, so a CRM failure must leave the ingest
+   * succeeding and the ledger row saying the thread landed.
+   */
+  it("still acknowledges the delivery when the CRM write fails", async () => {
+    const { supabase, recorded } = makeSupabase({ crmContactId: "contact-dana", failCrmWrite: true });
+    const result = await ingestInboundEvent(supabase, "org-1", "calendly", BOOKING_EVENT);
+    expect(result).toEqual({ ok: true, duplicate: false, threadId: "thr-new", created: true });
+
+    const finalized = recorded.updates.find((u) => u.table === "ingest_log")!;
+    expect(finalized.patch).toMatchObject({ ok: true, thread_id: "thr-new" });
   });
 });
