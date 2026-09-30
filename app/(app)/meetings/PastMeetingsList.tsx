@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
-import { isPastMeeting } from "@/lib/meetings/schedule";
+import { isPastMeeting, pastMeetingDate, pastMeetingTime } from "@/lib/meetings/schedule";
 import { attendedButNotHosted } from "@/lib/meetings/attendance";
 import { MEETING_KIND } from "@/lib/meetings/one-way";
 import { nextChannelName } from "./hooks";
@@ -30,18 +30,6 @@ interface Props {
   userId: string;
   /** Rail variant: drop the centered max-width wrapper and tighten spacing. */
   compact?: boolean;
-}
-
-function formatDate(iso: string) {
-  return new Date(iso).toLocaleDateString("en-US", {
-    month: "short", day: "numeric", year: "numeric",
-  });
-}
-
-function formatTime(iso: string) {
-  return new Date(iso).toLocaleTimeString("en-US", {
-    hour: "numeric", minute: "2-digit",
-  });
 }
 
 function getDuration(started_at: string | null, ended_at: string | null) {
@@ -299,7 +287,7 @@ export function PastMeetingsList({ initialMeetings, userId, compact = false }: P
                       {m.title}
                     </span>
                     <span className="text-xs text-[var(--fg-muted)]">
-                      {formatDate(m.created_at)}
+                      {pastMeetingDate(m.created_at)}
                       {duration ? ` · ${duration}` : ""}
                     </span>
                   </button>
@@ -406,8 +394,8 @@ export function PastMeetingsList({ initialMeetings, userId, compact = false }: P
                         </span>
                         <span className="text-xs text-[var(--fg-secondary)]">
                           {m.started_at
-                            ? `${formatDate(m.started_at)} at ${formatTime(m.started_at)}`
-                            : `Created ${formatTime(m.created_at)}`}
+                            ? `${pastMeetingDate(m.started_at)} at ${pastMeetingTime(m.started_at)}`
+                            : `Created ${pastMeetingTime(m.created_at)}`}
                         </span>
                       </div>
                     </div>
