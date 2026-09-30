@@ -3,13 +3,35 @@
 import Link from "next/link";
 import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { PLANS, PLAN_BY_KEY, formatCredits, formatUsd, type PlanInterval, type PlanKey } from "@/lib/billing";
+import dynamic from "next/dynamic";
+import {
+  CREDIT_PACKS,
+  PLANS,
+  PLAN_BY_KEY,
+  formatCredits,
+  formatUsd,
+  type PlanInterval,
+  type PlanKey,
+  type PurchaseSummary,
+} from "@/lib/billing";
 import type { PaywallPayload } from "@/lib/paywall";
 import {
   commitToPlanAction,
   settlementOptionsAction,
 } from "@/app/(app)/wallet/paywall-actions";
 import type { PayableRoute, RouteFacts } from "@/lib/native-payments";
+import { purchasePackAction } from "@/app/(app)/wallet/actions";
+
+// Checkout only ever mounts after a click, so it stays out of the bundle for
+// every route that renders this wall and is never paid at.
+const StripeCheckoutModal = dynamic(
+  () => import("@/components/StripeCheckoutModal").then((m) => m.StripeCheckoutModal),
+  { ssr: false },
+);
+const NativeCheckoutModal = dynamic(
+  () => import("@/app/(app)/wallet/NativeCheckoutModal").then((m) => m.NativeCheckoutModal),
+  { ssr: false },
+);
 
 /**
  * The credit wall, rendered where the action was blocked.
@@ -46,6 +68,28 @@ export function PaywallDialog({
   // start a plan, we just decide the rail ourselves.
   const [routes, setRoutes] = useState<RouteFacts[]>([]);
   const [route, setRoute] = useState<PayableRoute | null>(null);
+  // Burst credits: a paid-up-front top-up. Unlike committing to a plan this
+  // extends no credit, so it is offered even to an org refused a period on
+  // credit — which is the case the wall used to dead-end.
+  const [packSecret, setPackSecret] = useState<string | null>(null);
+  const [packNative, setPackNative] = useState<PurchaseSummary | null>(null);
+  const pack = paywall.recommendedPack
+    ? (CREDIT_PACKS.find((p) => p.key === paywall.recommendedPack) ?? null)
+    : null;
+
+  function buyPack() {
+    if (!pack) return;
+    setError(null);
+    const fd = new FormData();
+    fd.set("pack_key", pack.key);
+    startTransition(async () => {
+      const res = await purchasePackAction(fd);
+      if (res?.clientSecret) setPackSecret(res.clientSecret);
+      else if (res?.checkoutUrl) window.location.href = res.checkoutUrl;
+      else if (res?.native) setPackNative(res.native);
+      else setError(res?.error ?? "Could not start checkout.");
+    });
+  }
 
   useEffect(() => {
     let alive = true;
@@ -87,6 +131,22 @@ export function PaywallDialog({
         setError(res?.error ?? "Could not start your plan.");
       }
     });
+  }
+
+  // Checkout REPLACES the wall rather than stacking on it: both are z-50, and
+  // two overlapping modals asking for money is worse than one at a time. The
+  // wall is still behind it conceptually — closing checkout returns here.
+  if (packSecret) {
+    return (
+      <StripeCheckoutModal
+        clientSecret={packSecret}
+        publishableKey=""
+        onClose={() => setPackSecret(null)}
+      />
+    );
+  }
+  if (packNative) {
+    return <NativeCheckoutModal summary={packNative} onClose={() => setPackNative(null)} />;
   }
 
   return (
@@ -285,16 +345,62 @@ export function PaywallDialog({
                     Not now
                   </button>
                 </div>
+                {/* Not everyone blocked once wants a subscription. A one-off
+                    top-up is the smaller commitment, and hiding it here would
+                    push people into a plan to get past a single action. */}
+                {pack ? (
+                  <button
+                    type="button"
+                    disabled={pending}
+                    onClick={buyPack}
+                    aria-busy={pending}
+                    className="mt-3 text-xs text-fg-muted underline transition hover:text-fg-secondary disabled:opacity-60"
+                  >
+                    Just need credits? Add {formatCredits(pack.credits)} for{" "}
+                    {formatUsd(pack.price)} instead
+                  </button>
+                ) : null}
               </>
             ) : (
               // No credit extended: an existing plan-holder topping up, or an
-              // account with an unpaid period behind it.
+              // account with an unpaid period behind it. Burst credits are paid
+              // up front, so they are the one thing both of those can still do
+              // — and doing it here is the difference between clearing the wall
+              // and being sent to a page to work out what to click.
               <>
                 <p className="mt-2 text-sm text-fg-secondary">{paywall.message}</p>
-                <div className="mt-5 flex items-center gap-3">
+                {pack ? (
+                  <div className="mt-4 rounded-xl border border-neural-400/40 bg-neural-400/[0.06] p-4">
+                    <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-neural-300">
+                      Burst credits
+                    </p>
+                    <p className="mt-1 font-display text-lg font-semibold text-fg-primary">
+                      {formatCredits(pack.credits)} for {formatUsd(pack.price)}
+                    </p>
+                    <p className="mt-0.5 text-xs text-fg-muted">
+                      Enough to cover this and keep going. Paid now — nothing is invoiced.
+                    </p>
+                  </div>
+                ) : null}
+                <div className="mt-5 flex flex-wrap items-center gap-3">
+                  {pack ? (
+                    <button
+                      type="button"
+                      disabled={pending}
+                      onClick={buyPack}
+                      aria-busy={pending}
+                      className="rounded-lg bg-neural-400 px-4 py-2 text-sm font-medium text-white transition hover:bg-neural-300 disabled:opacity-60"
+                    >
+                      {pending ? "Starting…" : `Add ${formatCredits(pack.credits)} credits`}
+                    </button>
+                  ) : null}
                   <a
                     href="/wallet"
-                    className="rounded-lg bg-neural-400 px-4 py-2 text-sm font-medium text-white transition hover:bg-neural-300"
+                    className={
+                      pack
+                        ? "text-sm text-neural-300 underline transition hover:text-neural-200"
+                        : "rounded-lg bg-neural-400 px-4 py-2 text-sm font-medium text-white transition hover:bg-neural-300"
+                    }
                   >
                     Open Wallet
                   </a>

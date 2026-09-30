@@ -14,6 +14,9 @@ import {
   meetingTimeState,
   pastMeetingDate,
   pastMeetingTime,
+  weekdayLabel,
+  monthLabel,
+  calendarWhenLabel,
 } from "./schedule";
 import { PRESENCE_STALE_MS } from "./attendance";
 
@@ -555,5 +558,71 @@ describe("dates on the past-meetings list", () => {
       expect(pastMeetingDate(bad)).toBeNull();
       expect(pastMeetingTime(bad)).toBeNull();
     }
+  });
+});
+
+// The calendar overlay draws its weekday header seven times per grid and its
+// date-and-time line once per meeting, and a fifteen-second clock re-renders the
+// whole grid — so every one of these ran four times a minute for as long as the
+// overlay was open. Benched: weekday 0.0584ms vs 0.0008ms reused (75x), the
+// date-and-time line 0.0632ms vs 0.0022ms (29x).
+describe("the calendar overlay's labels", () => {
+  // Through the per-call API, not the constructor: V8's toLocale* does not go
+  // through the JS-visible Intl.DateTimeFormat, so a constructor spy reads zero
+  // either way and would pass on the unfixed code.
+  it("builds no formatter per header or per meeting", () => {
+    const d = jest.spyOn(Date.prototype, "toLocaleDateString");
+    const s = jest.spyOn(Date.prototype, "toLocaleString");
+    try {
+      // A month grid's worth: 42 cells, 7 headers, 30 meetings, four times over.
+      for (let pass = 0; pass < 4; pass++) {
+        for (let i = 0; i < 7; i++) {
+          weekdayLabel(new Date(Date.UTC(2026, 8, 1 + i)));
+          monthLabel(new Date(Date.UTC(2026, 8, 1 + i)));
+        }
+        for (let i = 0; i < 30; i++) {
+          calendarWhenLabel(new Date(Date.UTC(2026, 8, 1 + (i % 28), 14, 5)).toISOString());
+        }
+      }
+      expect(d).not.toHaveBeenCalled();
+      expect(s).not.toHaveBeenCalled();
+    } finally {
+      d.mockRestore();
+      s.mockRestore();
+    }
+  });
+
+  // The other half: a reused formatter is only a safe swap if it still says the
+  // same thing. "Mon" against "Monday" across seven column headers is exactly
+  // the kind of change that does not announce itself in a diff.
+  it("says exactly what the one-shot formatters said", () => {
+    for (const iso of [
+      "2026-09-23T14:05:00.000Z",
+      "2026-01-01T00:00:00.000Z",
+      "2026-12-31T23:59:00.000Z",
+      "2025-07-04T12:00:00.000Z",
+    ]) {
+      const when = new Date(iso);
+      expect(weekdayLabel(when)).toBe(when.toLocaleDateString("en-US", { weekday: "short" }));
+      expect(monthLabel(when)).toBe(when.toLocaleDateString("en-US", { month: "short" }));
+      expect(calendarWhenLabel(iso)).toBe(
+        when.toLocaleString("en-US", {
+          weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit",
+        }),
+      );
+    }
+  });
+
+  // Both reasons the overlay draws "Time TBD" — an unscheduled meeting and an
+  // unreadable timestamp — have to come back as null, not as "Invalid Date".
+  it("returns null for a meeting with no readable time", () => {
+    for (const bad of [null, undefined, "", "   ", "not a date", "2026-13-45T99:99:99Z"]) {
+      expect(calendarWhenLabel(bad)).toBeNull();
+    }
+  });
+
+  it("covers a whole week of weekdays without repeating itself", () => {
+    const week = Array.from({ length: 7 }, (_, i) => weekdayLabel(new Date(Date.UTC(2026, 8, 28 + i))));
+    expect(new Set(week).size).toBe(7);
   });
 });

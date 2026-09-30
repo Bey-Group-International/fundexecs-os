@@ -4713,6 +4713,77 @@ Deployed, monitoring               →  live, observability active
              |  stopped 200 meetings of prose travelling with it. This is the
              |  render-time half, and the fifth page in the pass to get a cached
              |  formatter in lib plus a memoised row.
+             |
+             |  #1169 - Calendar overlay: the clock stops rebuilding 42 cells.
+             |  Same shape as the two pages before it, one page deeper, and the
+             |  measurement was wrong twice before it was right.
+             |  Three formatters first: the month grid called `toLocale*` for a
+             |  weekday, a month and a date-and-time on every render. 75x for
+             |  the weekday label, 29x for the calendar date-and-time - each
+             |  call built an Intl.DateTimeFormat for one string and threw it
+             |  away. Now `weekdayLabel`/`monthLabel`/`calendarWhenLabel` in
+             |  schedule.ts, beside the rules the landing page already uses.
+             |  Then the grid itself. Over ten minutes of the fifteen-second
+             |  clock, NOT ONE of the 40 ticks changed a single cell's label or
+             |  text - and all 40 rebuilt all 42 cells. Nothing a cell draws
+             |  comes from that clock: `today` is coarsened to the day and the
+             |  buckets key on the data.
+             |  Fixed in three parts. `weeks` memoised on the anchor, because
+             |  `monthMatrix` minted 42 fresh Dates a render and no memo below
+             |  could see through 42 new identities. A `buckets` map worked out
+             |  once per data change: `eventsForDay` and the external lookups
+             |  already cache by list identity but `blocksForDay` does not, and
+             |  rescanning every block for each of 42 cells cost 0.61ms a render
+             |  at thirty meetings and five blocks, 1.85ms at eighty and twenty,
+             |  of which blocksForDay alone is 0.36ms. And the cell lifted out to
+             |  a module-scope memo taking the answers rather than the questions.
+             |  Result, Profiler actualDuration on the grid alone: 10.2ms a tick
+             |  -> 4.3ms at thirty meetings, 18.4ms -> 6.9ms at eighty.
+             |  Two wrong measurements on the way, both worth keeping.
+             |  First, the Profiler wrapped the WHOLE overlay - sidebar, rails,
+             |  both lists - and the grid is a small part of it, so the before
+             |  and after differed by less than the run-to-run noise (290-474ms
+             |  either way) and in two of six runs the refactor looked SLOWER.
+             |  Instrumenting the grid alone is what made the signal visible.
+             |  Second, and worse: the test stub for `useLivePresence` returned a
+             |  fresh `{ presence: {} }` per call. The cell takes `presence`
+             |  whole and deliberately - a room that just filled should redraw -
+             |  so that one object invalidated all 42 cells on every tick, and
+             |  the measured saving came out at 11% instead of 58%. A stub may be
+             |  simpler than the thing it stands in for; it must not be less
+             |  stable, or every number taken through it is wrong. The real hook
+             |  holds it in useState, and that is now a test in hooks.test.tsx
+             |  that fails when presence is rebuilt per call - the one part of
+             |  this render-count story CI can hold, so it is held rather than
+             |  left to a comment.
+             |  Corrected in this pass: the first version of the overlay's test
+             |  header claimed "30 of 40 ticks changed nothing", a figure carried
+             |  over rather than measured here. Measured, it is 0 of 40 - a
+             |  stronger claim, and the reason to measure rather than reuse.
+             |  Gave the overlay its first tests - 2,400 lines, none - run
+             |  against the PRE-refactor component first: all 8 green there too,
+             |  which is what says the extraction changed no behaviour. The
+             |  earlier attempt at them saw an empty grid and I wrongly told the
+             |  user the chips were gated on calendar layers. They are not:
+             |  `visibleEvents`/`layerIndex` only filter connected-calendar
+             |  events. The overlay refetches `live_meetings` on mount and
+             |  replaces `initialMeetings`, so a stub resolving empty WIPED the
+             |  fixture. Verified at lib level before touching the component.
+             |  And the honest gap, fourth time: removing the memo leaves all 8
+             |  green, as does un-memoising `weeks` or the buckets. A memoised
+             |  cell with unchanged props writes nothing to the DOM either way.
+             |  Verified by injection, disclosed in the test header, measured
+             |  with a Profiler. What the tests DO hold is the other half: that
+             |  ten minutes of ticks redraw an identical grid, so the render the
+             |  cells now skip was one that changed nothing.
+             |  Confidence: Jest 7590 across 537 suites, typecheck and eslint
+             |  clean.
+             |  Not done, deliberately: `minutesToStart` is never read anywhere
+             |  in the overlay, so the clock could in principle be coarsened
+             |  further - but `phase` and `label` flip on minute boundaries, and
+             |  a naive coarsening moves when "Starts now" appears. Left alone.
+             |  Chunking the grid measured WORSE on the landing page (13.60 vs
+             |  8.11ms, 31 slice() calls a render) and was not retried here.
 ```
 
 ---
