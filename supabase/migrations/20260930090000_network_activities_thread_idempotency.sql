@@ -16,6 +16,14 @@
 --
 -- Hand-logged rows have a NULL thread_id and NULLs are distinct in a unique
 -- index, so nothing a person types is constrained by this.
+--
+-- DEPLOYMENT NOTE. Adding a STORED generated column rewrites the table and holds
+-- an ACCESS EXCLUSIVE lock for the duration; the index build then blocks writes
+-- while it runs. CREATE INDEX CONCURRENTLY is not an escape, because migrations
+-- run inside a transaction. So check network_activities' row count and apply this
+-- in a low-traffic window if it is large. The same caveat applies to
+-- 20260930083000, which added meeting_id to this table; the two are independent
+-- rewrites of the same table and are cheaper applied back to back than apart.
 
 alter table public.network_activities
   add column if not exists thread_id text
