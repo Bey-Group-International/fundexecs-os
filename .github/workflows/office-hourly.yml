@@ -88,11 +88,18 @@ jobs:
       # own `git push` still needs it, and by this point the only thing left to
       # run is the agent.
       #
-      # Written from an env var rather than interpolated into the command, so
-      # the token stays a masked value rather than becoming part of a command
-      # line. claude-code-action also receives it as `github_token`, but which
-      # of the two its internal `git push` uses is not something this file
-      # should have to assume -- this makes the push work either way.
+      # Be precise about what this does and does not buy, because an earlier
+      # version of this comment overclaimed it. The token still lands in
+      # .git/config, and `${GH_TOKEN}` still expands into this process's
+      # arguments; neither is avoidable if git is to authenticate with it, and
+      # reading it from the environment does not change either. What it buys is
+      # narrower and real: the credential is ABSENT while `npm ci` runs, which
+      # is the only step here that executes third-party code. It protects
+      # nothing from the agent step itself, which is handed the token anyway.
+      #
+      # claude-code-action also receives it as `github_token`, but which of the
+      # two its internal `git push` uses is not something this file should have
+      # to assume -- this makes the push work either way.
       - name: Give the agent a credential to push with
         env:
           GH_TOKEN: ${{ github.token }}
