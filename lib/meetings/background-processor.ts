@@ -28,7 +28,7 @@
 import {
   FRAME_BUDGET_MS,
   NO_BACKGROUND,
-  blendCoverage,
+  blendCoverageByCertainty,
   blurRadiusPx,
   dilateCoverage,
   maskDilatePx,
@@ -557,7 +557,7 @@ export class BackgroundProcessor {
       // fade in over the opening frames.
       this.maskHistory = new Uint8ClampedArray(target);
     } else {
-      blendCoverage(this.maskHistory, target);
+      blendCoverageByCertainty(this.maskHistory, target);
     }
 
     if (!this.maskImage || this.maskImage.width !== grid.width || this.maskImage.height !== grid.height) {

@@ -59,6 +59,81 @@ export function blurRadiusPx(strength: BlurStrength, frameWidth: number): number
  */
 export const MASK_SMOOTHING = 0.5;
 
+/**
+ * How much of each new mask to believe where the model is UNDECIDED.
+ *
+ * Measured, because the constant-alpha blend above turned out to be spending its
+ * whole budget in the wrong place. Peak-to-peak coverage swing for a pixel
+ * oscillating frame to frame, settled, at MASK_SMOOTHING = 0.5:
+ *
+ *   chair edge   (0.05<->0.25 confidence)   raw 196/255 -> 65/255
+ *   hair wisp    (0.10<->0.30)              raw 196/255 -> 66/255
+ *   headwear     (0.20<->0.34)              raw  98/255 -> 32/255
+ *   confident body / background             raw   0     ->  0
+ *
+ * The confident rows are the finding. They are zero before smoothing, so
+ * smoothing them achieves nothing — yet they got the same responsive alpha as
+ * everything else, while the pixels that actually strobe kept a quarter of their
+ * swing. A chair's edge flipping 65/255 every other frame is the strobe you see.
+ *
+ * So alpha follows how settled a pixel already is, not a constant. A square wave
+ * of amplitude A blended at alpha a settles to A*a/(2-a); at 0.5 that is the
+ * 65/255 measured above, and holding the residue under about 10/255 — below
+ * where an eye picks it out of a moving image — needs a <= 0.097.
+ *
+ * The cost of the slower lane is memory: ~1/a frames to settle, so about 0.4s at
+ * 24fps. That is paid ONLY by pixels the model cannot decide, which are by
+ * definition the thin boundary band; the confident interior still moves at
+ * MASK_SMOOTHING, so turning your head does not drag a ghost.
+ */
+export const MASK_SMOOTHING_UNCERTAIN = 0.1;
+
+/**
+ * The blend rate for one pixel, from how settled it already is.
+ *
+ * Driven by the RUNNING history rather than the incoming frame, and that choice
+ * is load-bearing. The incoming value is the thing oscillating: a pixel flipping
+ * between 2 and 196 looks highly confident on the frame it reads 2, so keying off
+ * the target would hand the strobe a fast lane on every other frame and change
+ * nothing. The history is the settled state, and a pixel settled mid-band is
+ * exactly the pixel the model cannot decide about.
+ */
+export function blendAlphaForCoverage(
+  settled: number,
+  confident: number = MASK_SMOOTHING,
+  uncertain: number = MASK_SMOOTHING_UNCERTAIN,
+): number {
+  const mid = 127.5;
+  const certainty = Math.min(1, Math.abs(settled - mid) / mid);
+  return uncertain + (confident - uncertain) * certainty;
+}
+
+/**
+ * Blend a new coverage map into the running one, in place, at a rate that
+ * depends on how decided each pixel already is.
+ *
+ * Same contract as blendCoverage — writes into `previous`, returns it, allocates
+ * nothing — and used in its place by the processor. blendCoverage is kept as the
+ * uniform-rate primitive it always was rather than changed underneath its
+ * callers and its tests.
+ */
+export function blendCoverageByCertainty(
+  previous: Uint8ClampedArray,
+  target: Uint8ClampedArray,
+  confident: number = MASK_SMOOTHING,
+  uncertain: number = MASK_SMOOTHING_UNCERTAIN,
+): Uint8ClampedArray {
+  const hi = Math.max(0, Math.min(1, confident));
+  const lo = Math.max(0, Math.min(1, uncertain));
+  const n = Math.min(previous.length, target.length);
+  for (let i = 0; i < n; i++) {
+    const p = previous[i];
+    const a = blendAlphaForCoverage(p, hi, lo);
+    previous[i] = p + (target[i] - p) * a;
+  }
+  return previous;
+}
+
 /** Feather radius as a fraction of frame width. */
 const FEATHER_FRACTION = 0.004;
 
