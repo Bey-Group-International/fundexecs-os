@@ -41,21 +41,22 @@ function bookings(client: Client) {
  * Send the confirmation for a booking made through a public link, and mark it
  * for a retry if the invitee's copy didn't go out.
  */
-export async function sendBookingConfirmation(
+/**
+ * The email context for a booking made through a public link.
+ *
+ * The invitee is anonymous, so there is no acting user to send as. The person
+ * this is from is the host whose link was booked, so it goes out from their
+ * mailbox; without one it falls back to the org's, because a booking email the
+ * invitee never receives is worse than one from a shared address.
+ */
+export async function bookingEmailContext(
   client: Client,
   ctx: BookingContext,
-  opts: { inviteeOnly?: boolean } = {},
-): Promise<{ sent: number; inviteeSent: boolean }> {
+  extra: Partial<BookingEmailContext> = {},
+): Promise<BookingEmailContext> {
   const { booking, page, eventType, roomCode } = ctx;
   const host = await hostContactFor(client, page);
-
-  const kind = booking.status === "pending" ? "requested" : "confirmed";
-  const context: BookingEmailContext = {
-    // The invitee is anonymous, so there is no acting user to send as. The
-    // person this is from is the host whose link was booked, so it goes out
-    // from their mailbox; without one it falls back to the org's, because a
-    // booking confirmation the invitee never receives is worse than one from
-    // a shared address.
+  return {
     credentials: await hostCredentials(client, page.user_id, page.organization_id ?? undefined),
     orgId: page.organization_id ?? undefined,
     eventTitle: eventType.title,
@@ -78,7 +79,22 @@ export async function sendBookingConfirmation(
     bookingUpdatedAt: booking.updated_at,
     bookingSequence: booking.calendar_sequence,
     siteUrl: SITE_URL,
+    ...extra,
   };
+}
+
+/**
+ * Send the confirmation for a booking made through a public link, and mark it
+ * for a retry if the invitee's copy didn't go out.
+ */
+export async function sendBookingConfirmation(
+  client: Client,
+  ctx: BookingContext,
+  opts: { inviteeOnly?: boolean } = {},
+): Promise<{ sent: number; inviteeSent: boolean }> {
+  const { booking } = ctx;
+  const kind = booking.status === "pending" ? "requested" : "confirmed";
+  const context = await bookingEmailContext(client, ctx);
   const result = opts.inviteeOnly
     ? await sendBookingEmails(kind, context, { inviteeOnly: true })
     : await sendBookingEmails(kind, context);

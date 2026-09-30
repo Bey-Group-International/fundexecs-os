@@ -15,6 +15,7 @@ import {
   runBookingConfirmationRetries,
   type ConfirmationRetryStats,
 } from "@/lib/meetings/booking-confirmation.server";
+import { runBookingRequestExpiry, type RequestExpiryStats } from "@/lib/meetings/booking-expiry.server";
 import { runRecordingSweep, type RecordingSweepStats } from "@/lib/meetings/recording-sweep.server";
 import { runEventIdRepair } from "@/lib/calendar/event-id-repair.server";
 import { NO_REPAIRS, summarize, worthReporting, type RepairStats } from "@/lib/calendar/event-id-repair";
@@ -307,6 +308,15 @@ export async function GET(request: Request) {
     console.error("booking_confirmation_retries failed", e);
   }
 
+  // Booking requests the host never answered, closed once their time has come
+  // so the invitee hears back instead of waiting on a meeting that is over.
+  let bookingRequestsExpired: RequestExpiryStats = { expired: 0, notified: 0, failed: 0 };
+  try {
+    bookingRequestsExpired = await runBookingRequestExpiry(supabase, { now });
+  } catch (e) {
+    console.error("booking_request_expiry failed", e);
+  }
+
   // Meeting recordings: retention, closing out recordings nobody stopped, and
   // the ones whose meeting was deleted out from under them.
   //
@@ -426,5 +436,5 @@ export async function GET(request: Request) {
     // best-effort: never let health tracking break the cron response
   }
 
-  return NextResponse.json({ swept: due.length, results, radar, escalated, webhooks, proactive, reminders, bookingConfirmations, calendarRepair, subscriptions, settledInvoices, nativeCollections, networkAutomations });
+  return NextResponse.json({ swept: due.length, results, radar, escalated, webhooks, proactive, reminders, bookingConfirmations, bookingRequestsExpired, calendarRepair, subscriptions, settledInvoices, nativeCollections, networkAutomations });
 }
