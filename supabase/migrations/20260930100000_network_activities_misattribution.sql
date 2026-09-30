@@ -36,16 +36,21 @@ comment on column public.network_activities.misattributed_at is
 
 -- The reference is added separately and NOT VALID on purpose.
 --
--- Declared inline it would be validated immediately, which scans
--- network_activities and takes a SHARE ROW EXCLUSIVE lock on it AND on
--- principals, blocking writes to both for the duration. This table is the CRM's
--- timeline and is written by the meeting and inbox paths, so that is a real
--- outage on a busy org.
+-- Declared inline it would be validated immediately, which SCANS
+-- network_activities. This table is the CRM's timeline, written by the meeting
+-- and inbox paths, so on a busy org that scan is a real outage.
 --
--- NOT VALID skips only the check of EXISTING rows. The constraint is otherwise
--- live: new and updated rows are checked, and ON DELETE SET NULL still fires
--- when a principal is removed. And every existing row is NULL, because the
--- column was created in the statement above — so a later
+-- Be precise about what NOT VALID buys, because it is easy to overstate: it
+-- skips the check of EXISTING rows, and nothing else. Adding the constraint
+-- still takes SHARE ROW EXCLUSIVE on network_activities AND on principals, and
+-- Postgres holds those locks until the transaction ends. So this avoids the
+-- scan, not the locks -- which is why the index that used to sit below is now in
+-- its own migration, rather than extending those locks for the length of a
+-- build.
+--
+-- The constraint is otherwise fully live: new and updated rows are checked, and
+-- ON DELETE SET NULL still fires when a principal is removed. And every existing
+-- row is NULL, because the column was created in the statement above — so a later
 --   alter table public.network_activities
 --     validate constraint network_activities_misattributed_by_fkey;
 -- is guaranteed to succeed and can be run whenever convenient. It is not needed
@@ -63,20 +68,14 @@ begin
   end if;
 end $$;
 
--- The timeline reads a contact's entries newest-first and now has to skip the
--- marked ones, so the partial index carries the predicate rather than making
--- every read filter a column it cannot use an index for.
---
--- DEPLOYMENT NOTE. This index is built non-concurrently, which blocks writes to
--- network_activities while it builds (reads continue). CREATE INDEX CONCURRENTLY
--- is not available here: it cannot run inside a transaction block, and every
--- migration in this repo runs in one — no migration uses it. So check the row
--- count and apply this in a low-traffic window, as with the generated columns in
--- 20260930083000 and 20260930090000. The three are cheaper applied together than
--- spread out.
-create index if not exists network_activities_contact_visible_idx
-  on public.network_activities (organization_id, contact_id, occurred_at desc)
-  where misattributed_at is null;
+-- The partial index the timeline read needs is in its own migration,
+-- 20260930110000_network_activities_contact_visible_idx.sql, and deliberately
+-- not here. Adding the constraint above takes SHARE ROW EXCLUSIVE on
+-- network_activities and principals, and Postgres holds those until the
+-- transaction ends -- so building an index in the same transaction keeps both
+-- tables locked against writes for the length of the build as well. Separate
+-- files are separate transactions, so the constraint's locks release first.
+
 
 /**
  * Mark (or unmark) a machine-written entry as being about the wrong contact.
