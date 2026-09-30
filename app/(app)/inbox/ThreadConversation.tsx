@@ -33,7 +33,7 @@ export interface ThreadConversationCard {
   connected: boolean;
   quickReplies: string[];
   /** An unsent draft waiting on this thread — a meeting report's follow-up. */
-  draft: { body: string; origin: string } | null;
+  draft: { body: string; origin: string; revision: string } | null;
 }
 
 /**
@@ -122,6 +122,11 @@ export function ThreadConversation({
       const f = new FormData();
       f.set("thread_id", card.id);
       f.set("body", body);
+      // Which draft this composer opened on, so the send clears that one or none.
+      // Without it the server deletes nothing, which is the safe direction: a
+      // draft left behind is visible and discardable, a newer one deleted by an
+      // older send is gone.
+      if (card.draft) f.set("draft_revision", card.draft.revision);
       const r = await replyToThread(f);
       onResult(r, "reply");
       if (r.ok) {
@@ -135,7 +140,10 @@ export function ThreadConversation({
         router.refresh();
       }
     });
-  }, [replyText, card.id, loadMessages, router, onResult]);
+    // `card.draft` is in here on purpose rather than silenced: if a refresh replaces
+    // the card with a newer draft while this panel is open, the next send must carry
+    // THAT revision. A stale closure would send the old one and clear nothing.
+  }, [replyText, card.id, card.draft, loadMessages, router, onResult]);
 
   const chips = aiReplies ?? card.quickReplies;
   const showChips = chips.length > 0 && !replyText.trim();

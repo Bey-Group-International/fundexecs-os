@@ -78,7 +78,13 @@ type BackingArtifact = { verification_status: string; grounding_score: number };
 async function performThreadAction(
   threadId: string,
   action: ActionKind,
-  opts: { sharePreface?: string; backingArtifact?: BackingArtifact; replyBody?: string } = {},
+  opts: {
+    sharePreface?: string;
+    backingArtifact?: BackingArtifact;
+    replyBody?: string;
+    /** The draft's `updated_at` as the composer was seeded with it, if it was. */
+    draftRevision?: string;
+  } = {},
 ): Promise<ThreadActionResult> {
   const auth = await requireOrgContext();
   if (!auth.ok) return { ok: false, error: "Not authorized." };
@@ -194,7 +200,9 @@ async function performThreadAction(
     // The composed text is now on the task, waiting for an approver. A draft of it
     // left on the thread would be the same words in two places, and the composer
     // would keep offering to send them again — a second approval for one reply.
-    if (shouldClearDraft(action, opts.replyBody)) await clearThreadDraft(supabase, threadId);
+    if (shouldClearDraft(action, opts.replyBody, opts.draftRevision)) {
+      await clearThreadDraft(supabase, threadId, opts.draftRevision);
+    }
 
     revalidatePath("/inbox");
     revalidatePath("/dashboard");
@@ -299,8 +307,8 @@ async function performThreadAction(
   // Only on a dispatch that actually got somewhere. A draft removed after a failed
   // send would leave the operator with nothing to retry from once they reloaded —
   // and unlike the gated branch above, nothing else is holding the text for them.
-  if (result.ok && shouldClearDraft(action, opts.replyBody)) {
-    await clearThreadDraft(supabase, threadId);
+  if (result.ok && shouldClearDraft(action, opts.replyBody, opts.draftRevision)) {
+    await clearThreadDraft(supabase, threadId, opts.draftRevision);
   }
 
   revalidatePath("/inbox");
@@ -469,7 +477,10 @@ export async function replyToThread(formData: FormData): Promise<ThreadActionRes
   const body = String(formData.get("body") ?? "").trim();
   if (!threadId) return { ok: false, error: "Missing thread." };
   if (!body) return { ok: false, error: "Write a reply first." };
-  return performThreadAction(threadId, "send_reply", { replyBody: body });
+  // Present only when the composer was seeded from a draft. It identifies WHICH
+  // draft, so sending cannot delete one saved after this composer opened.
+  const draftRevision = String(formData.get("draft_revision") ?? "") || undefined;
+  return performThreadAction(threadId, "send_reply", { replyBody: body, draftRevision });
 }
 
 /**

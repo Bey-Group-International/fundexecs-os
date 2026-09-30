@@ -171,7 +171,11 @@ export default async function InboxPage(
       // The follow-up a meeting report drafted onto this thread, if any. The
       // origin line is resolved here for the same reason every other display
       // field is: so the client board never imports the module that computes it.
-      draft: draft ? { body: draft.body, origin: draftOrigin(draft) } : null,
+      // The revision travels with the text so a send can only clear the draft it was
+      // actually composed from — a thread's draft is replaced, not appended to.
+      draft: draft
+        ? { body: draft.body, origin: draftOrigin(draft), revision: draft.updatedAt }
+        : null,
     };
   });
 

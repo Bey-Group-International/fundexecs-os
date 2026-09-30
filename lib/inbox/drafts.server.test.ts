@@ -8,6 +8,8 @@
 import { DRAFT_LIMIT } from "./drafts";
 import { clearThreadDraft, readThreadDrafts } from "./drafts.server";
 
+const REVISION = "2026-09-30T12:00:00.000Z";
+
 const ROW = {
   thread_id: "t1",
   body: "Hi Ana,",
@@ -50,9 +52,11 @@ function client(
           rec.deleted = true;
           return chain;
         },
+        // Both a builder and a promise: the delete chains two eq() calls (thread
+        // and revision) and awaits the last one.
         eq: (col: string, val: unknown) => {
           rec.eq.push([col, val]);
-          return Promise.resolve(answer);
+          return Object.assign(Promise.resolve(answer), chain);
         },
       };
       return chain;
@@ -103,12 +107,32 @@ describe("reading them", () => {
 });
 
 describe("clearing one", () => {
-  it("deletes the row for that thread", async () => {
+  /**
+   * Conditioned on the revision, which makes this a compare-and-set rather than a
+   * blind delete. A thread's draft is REPLACED — thread_id is the primary key — so
+   * deleting by thread alone let an operator who opened on draft v1 destroy a v2
+   * the report wrote afterwards, without anyone ever seeing it.
+   */
+  it("deletes only the revision the reply was composed from", async () => {
     const { api, calls } = client();
-    expect(await clearThreadDraft(api, "t1")).toBe(true);
+    expect(await clearThreadDraft(api, "t1", REVISION)).toBe(true);
     expect(calls[0].table).toBe("inbox_thread_drafts");
     expect(calls[0].deleted).toBe(true);
-    expect(calls[0].eq).toEqual([["thread_id", "t1"]]);
+    expect(calls[0].eq).toEqual([
+      ["thread_id", "t1"],
+      ["updated_at", REVISION],
+    ]);
+  });
+
+  /**
+   * No revision, no delete — and that is the safe direction, not a gap. A draft
+   * left behind is visible in the composer and discardable by hand; a newer draft
+   * deleted by an older send is gone with nothing to recover it from.
+   */
+  it.each([undefined, null, ""])("deletes nothing when the revision is %p", async (rev) => {
+    const { api, calls } = client();
+    expect(await clearThreadDraft(api, "t1", rev)).toBe(false);
+    expect(calls).toEqual([]);
   });
 
   /**
@@ -118,11 +142,11 @@ describe("clearing one", () => {
    */
   it("reports a failure without throwing", async () => {
     const { api } = client({ error: "denied" });
-    expect(await clearThreadDraft(api, "t1")).toBe(false);
+    expect(await clearThreadDraft(api, "t1", REVISION)).toBe(false);
   });
 
   it("does not throw when the client itself does", async () => {
     const { api } = client({ throws: true });
-    await expect(clearThreadDraft(api, "t1")).resolves.toBe(false);
+    await expect(clearThreadDraft(api, "t1", REVISION)).resolves.toBe(false);
   });
 });

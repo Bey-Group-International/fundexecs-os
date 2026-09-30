@@ -131,14 +131,23 @@ describe("the ceiling", () => {
  * sent.
  */
 describe("whether an action clears the draft", () => {
-  it("does, for an inline reply that carries text", () => {
-    expect(shouldClearDraft("send_reply", "Hi Ana,")).toBe(true);
+  it("does, for an inline reply that carries text and names its revision", () => {
+    expect(shouldClearDraft("send_reply", "Hi Ana,", "2026-09-30T12:00:00.000Z")).toBe(true);
+  });
+
+  /**
+   * And not without the revision. A thread's draft is REPLACED, so a reply that
+   * cannot say which revision it was composed from must not delete whatever is
+   * there now — it may be a newer draft nobody has seen.
+   */
+  it.each([undefined, null, ""])("does not, when the revision is %p", (rev) => {
+    expect(shouldClearDraft("send_reply", "Hi Ana,", rev)).toBe(false);
   });
 
   it.each(["propose_meeting", "confirm_booking", "create_video_meeting", "share_materials"])(
     "does not, for %s on the same thread",
     (action) => {
-      expect(shouldClearDraft(action, "Hi Ana,")).toBe(false);
+      expect(shouldClearDraft(action, "Hi Ana,", "2026-09-30T12:00:00.000Z")).toBe(false);
     },
   );
 
@@ -146,6 +155,6 @@ describe("whether an action clears the draft", () => {
   // dispatcher writes its own. Clearing on that would delete a draft the operator
   // had not looked at.
   it.each([undefined, null, "", "   "])("does not, when the body is %p", (body) => {
-    expect(shouldClearDraft("send_reply", body)).toBe(false);
+    expect(shouldClearDraft("send_reply", body, "2026-09-30T12:00:00.000Z")).toBe(false);
   });
 });

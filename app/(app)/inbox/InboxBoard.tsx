@@ -88,7 +88,7 @@ export interface InboxCardData {
    * follow-up, and sendable only from the composer below. Null for almost every
    * thread.
    */
-  draft: { body: string; origin: string } | null;
+  draft: { body: string; origin: string; revision: string } | null;
 }
 
 // How many thread cards mount before the operator asks for more.

@@ -92,6 +92,13 @@ export function draftOrigin(draft: ThreadDraft): string {
  * and must not quietly discard a follow-up nobody has sent yet — a suggested
  * action fired from the card would otherwise delete the draft sitting under it.
  */
-export function shouldClearDraft(action: string, replyBody: string | undefined | null): boolean {
-  return action === "send_reply" && Boolean(replyBody && replyBody.trim());
+export function shouldClearDraft(
+  action: string,
+  replyBody: string | undefined | null,
+  revision?: string | null,
+): boolean {
+  if (action !== "send_reply" || !replyBody || !replyBody.trim()) return false;
+  // A reply that cannot say which draft revision it was composed from does not get
+  // to delete whatever is there now: it may be a newer one nobody has seen.
+  return Boolean(revision);
 }

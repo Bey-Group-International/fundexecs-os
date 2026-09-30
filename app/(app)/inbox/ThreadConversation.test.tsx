@@ -32,6 +32,8 @@ jest.mock("./actions", () => ({
 import { ThreadConversation, type ThreadConversationCard } from "./ThreadConversation";
 
 const DRAFT_BODY = "Hi Ana,\n\nThanks for the time today.\n\n— Host";
+/** The draft revision the composer opened on — its `updated_at`. */
+const REVISION = "2026-09-30T12:00:00.000Z";
 
 function card(over: Partial<ThreadConversationCard> = {}): ThreadConversationCard {
   return {
@@ -59,12 +61,12 @@ beforeEach(() => {
 
 describe("a thread with a draft waiting", () => {
   it("opens with the draft already in the composer", async () => {
-    panel({ draft: { body: DRAFT_BODY, origin: "Drafted from a meeting report. Nothing has been sent." } });
+    panel({ draft: { body: DRAFT_BODY, origin: "Drafted from a meeting report. Nothing has been sent.", revision: REVISION } });
     expect(await screen.findByRole("textbox")).toHaveValue(DRAFT_BODY);
   });
 
   it("says where it came from, and that it has not gone anywhere", () => {
-    panel({ draft: { body: DRAFT_BODY, origin: "Drafted from a meeting report. Nothing has been sent." } });
+    panel({ draft: { body: DRAFT_BODY, origin: "Drafted from a meeting report. Nothing has been sent.", revision: REVISION } });
     expect(screen.getByText(/Drafted from a meeting report/)).toBeInTheDocument();
     expect(screen.getByText(/Nothing has been sent/)).toBeInTheDocument();
   });
@@ -75,7 +77,7 @@ describe("a thread with a draft waiting", () => {
    * precisely so that keystroke belongs to a person.
    */
   it("sends nothing by opening", async () => {
-    panel({ draft: { body: DRAFT_BODY, origin: "Nothing has been sent." } });
+    panel({ draft: { body: DRAFT_BODY, origin: "Nothing has been sent.", revision: REVISION } });
     await waitFor(() => expect(getThreadMessages).toHaveBeenCalled());
     expect(replyToThread).not.toHaveBeenCalled();
   });
@@ -83,12 +85,12 @@ describe("a thread with a draft waiting", () => {
   // The chips replace whatever is in the composer, so offering them over a draft
   // would put a one-tap "Thanks — following up shortly." on top of the follow-up.
   it("does not offer the one-tap openers over it", () => {
-    panel({ draft: { body: DRAFT_BODY, origin: "x" } });
+    panel({ draft: { body: DRAFT_BODY, origin: "x", revision: REVISION } });
     expect(screen.queryByRole("button", { name: /following up shortly/i })).toBeNull();
   });
 
   it("sends exactly what is in the composer when the operator presses send", async () => {
-    panel({ draft: { body: DRAFT_BODY, origin: "x" } });
+    panel({ draft: { body: DRAFT_BODY, origin: "x", revision: REVISION } });
     await userEvent.click(await screen.findByRole("button", { name: /send reply/i }));
 
     await waitFor(() => expect(replyToThread).toHaveBeenCalledTimes(1));
@@ -98,12 +100,29 @@ describe("a thread with a draft waiting", () => {
   });
 
   /**
+   * And says WHICH draft it was composed from.
+   *
+   * Without this the server deletes by thread alone, so sending a draft the report
+   * has since replaced destroys the replacement — a draft nobody ever saw. Dropping
+   * this one `f.set` passed every other test in this file, which is the third time
+   * in this area that a rule was covered and the line feeding it was not.
+   */
+  it("tells the server which draft revision it opened on", async () => {
+    panel({ draft: { body: DRAFT_BODY, origin: "x", revision: REVISION } });
+    await userEvent.click(await screen.findByRole("button", { name: /send reply/i }));
+
+    await waitFor(() => expect(replyToThread).toHaveBeenCalledTimes(1));
+    const form = replyToThread.mock.calls[0][0] as FormData;
+    expect(form.get("draft_revision")).toBe(REVISION);
+  });
+
+  /**
    * The row is deleted server-side by replyToThread. This is the same fact in the
    * panel that is still open — without it the operator watches "nothing has been
    * sent" sit under a reply that has just gone.
    */
   it("stops saying a draft is waiting once the reply goes", async () => {
-    panel({ draft: { body: DRAFT_BODY, origin: "Drafted from a meeting report. Nothing has been sent." } });
+    panel({ draft: { body: DRAFT_BODY, origin: "Drafted from a meeting report. Nothing has been sent.", revision: REVISION } });
     await userEvent.click(await screen.findByRole("button", { name: /send reply/i }));
 
     await waitFor(() => expect(screen.queryByText(/Nothing has been sent/)).toBeNull());
@@ -114,7 +133,7 @@ describe("a thread with a draft waiting", () => {
   // left and the draft is still genuinely unsent.
   it("keeps the draft and the note when the send fails", async () => {
     replyToThread.mockResolvedValue({ ok: false, error: "The mailbox is not connected." });
-    panel({ draft: { body: DRAFT_BODY, origin: "Drafted from a meeting report. Nothing has been sent." } });
+    panel({ draft: { body: DRAFT_BODY, origin: "Drafted from a meeting report. Nothing has been sent.", revision: REVISION } });
     await userEvent.click(await screen.findByRole("button", { name: /send reply/i }));
 
     await waitFor(() => expect(replyToThread).toHaveBeenCalled());
@@ -128,6 +147,19 @@ describe("a thread with no draft", () => {
     panel();
     expect(await screen.findByRole("textbox")).toHaveValue("");
     expect(screen.queryByText(/Nothing has been sent/)).toBeNull();
+  });
+
+  // Nothing to identify, so nothing is sent — and the server then clears nothing,
+  // which is the safe direction.
+  it("sends no revision when there is no draft", async () => {
+    panel();
+    const field = await screen.findByRole("textbox");
+    await userEvent.type(field, "Typed from scratch.");
+    await userEvent.click(screen.getByRole("button", { name: /send reply/i }));
+
+    await waitFor(() => expect(replyToThread).toHaveBeenCalledTimes(1));
+    const form = replyToThread.mock.calls[0][0] as FormData;
+    expect(form.get("draft_revision")).toBeNull();
   });
 
   it("still offers the one-tap openers", async () => {

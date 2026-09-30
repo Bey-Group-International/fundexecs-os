@@ -87,10 +87,13 @@ function wire(opts: { approvalFails?: boolean } = {}) {
   });
 }
 
-function form(body: string) {
+const REVISION = "2026-09-30T12:00:00.000Z";
+
+function form(body: string, revision: string | null = REVISION) {
   const f = new FormData();
   f.set("thread_id", "t1");
   f.set("body", body);
+  if (revision !== null) f.set("draft_revision", revision);
   return f;
 }
 
@@ -112,7 +115,7 @@ describe("when the reply goes out", () => {
   it("clears the thread's draft", async () => {
     const res = await replyToThread(form("Hi Ana,"));
     expect(res.ok).toBe(true);
-    expect(clearThreadDraft).toHaveBeenCalledWith(expect.anything(), "t1");
+    expect(clearThreadDraft).toHaveBeenCalledWith(expect.anything(), "t1", REVISION);
   });
 
   /**
@@ -124,7 +127,7 @@ describe("when the reply goes out", () => {
     gateDecision.mockReturnValue({ tier: 2, requiresApproval: true });
     const res = await replyToThread(form("Hi Ana,"));
     expect(res.gated).toBe(true);
-    expect(clearThreadDraft).toHaveBeenCalledWith(expect.anything(), "t1");
+    expect(clearThreadDraft).toHaveBeenCalledWith(expect.anything(), "t1", REVISION);
   });
 });
 
@@ -134,6 +137,18 @@ describe("when it does not", () => {
    * is no task carrying it — so deleting the draft would leave the operator with
    * nothing to retry from after a reload.
    */
+  /**
+   * The seam for the lost-update fix: the revision has to survive FormData, the
+   * action signature and the gate branch to reach the delete. Nothing else in this
+   * file would notice it being dropped — the draft would still be cleared, just
+   * unconditionally, which is the bug.
+   */
+  it("keeps the draft when the reply cannot say which revision it came from", async () => {
+    const res = await replyToThread(form("Hi Ana,", null));
+    expect(res.ok).toBe(true);
+    expect(clearThreadDraft).not.toHaveBeenCalled();
+  });
+
   it("keeps the draft when the dispatch fails", async () => {
     dispatchAction.mockResolvedValue({ ok: false, channel: "gmail", live: false, detail: "No mailbox.", error: "No mailbox." });
     const res = await replyToThread(form("Hi Ana,"));

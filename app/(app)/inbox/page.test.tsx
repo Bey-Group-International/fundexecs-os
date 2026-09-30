@@ -140,6 +140,9 @@ describe("the draft on its way to the card", () => {
     // Resolved on the server so the client board never imports the module that
     // computes it — and the sentence the composer must show.
     expect(card.origin).toMatch(/Nothing has been sent/);
+    // The revision travels with the text, so a send can only clear the draft it was
+    // composed from rather than whatever is on the thread by then.
+    expect(card.revision).toBe(DRAFT.updatedAt);
   });
 
   it("is null for a thread with nothing waiting", async () => {
