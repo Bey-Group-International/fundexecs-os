@@ -4661,6 +4661,58 @@ Deployed, monitoring               →  live, observability active
              |  test-utils/visual.ts - jsdom reports every rect as zero, so it
              |  cannot see layout cost at all, which is exactly why that harness
              |  exists.
+             |
+             |  #1165 - Meetings landing: the clock stops re-drawing the list.
+             |  Two fixes, and the first measurement of each was the misleading
+             |  one - twice in one pass.
+             |  PastMeetingsList formatted a date AND a time per row with
+             |  `toLocale*`, each constructing an Intl.DateTimeFormat for one
+             |  value and discarding it. 0.4967ms the pair against 0.0037ms
+             |  reused - 134x, the largest ratio this pass - so fifty finished
+             |  meetings spent 24.83ms of a render building formatters and
+             |  0.19ms using them. Now `pastMeetingDate`/`pastMeetingTime` in
+             |  schedule.ts, beside the offset-formatter cache that exists for
+             |  the same reason. Pure so the YEAR is testable: this list reaches
+             |  back indefinitely and "Sep 23" across two years names two days,
+             |  which is the one way it differs from the upcoming list.
+             |  UpcomingMeetingsList had no memo at all and `useNow` re-renders
+             |  it every fifteen seconds to keep countdowns right. Measured over
+             |  ten minutes of ticks against the REAL meetingTimeState and
+             |  deriveMeetingStatus: 93% of those row re-renders changed nothing
+             |  on screen - "in 22 days" either side of a tick.
+             |  The trap: benched with a one-line <li> row the saving was 2.16ms
+             |  -> 0.24ms per tick, and I nearly wrote it off as not worth
+             |  refactoring an untested 900-line component for. The real row is
+             |  ~30 JSX tags. Re-benched at realistic weight: 13.97ms -> 0.52ms
+             |  at twenty meetings, 64.58ms -> 2.83ms at sixty. 64ms every
+             |  fifteen seconds is a stutter somebody can see. The toy fixture
+             |  did not just understate it, it inverted the decision.
+             |  What made the fix small: only ONE row is ever open, so the
+             |  expanded panel costs one render rather than N. Extracting just
+             |  the COLLAPSED row - eight primitives and a stable toggle - takes
+             |  nearly all the per-tick cost for a fraction of the risk of
+             |  moving 190 lines that close over nine handlers. Derivation stays
+             |  in the parent, where it is cheap arithmetic over the new clock.
+             |  Gave the file its first tests - 900 lines, none, including a
+             |  delete confirmation that emails guests. They are characterisation
+             |  tests and were run against the PRE-refactor component first: all
+             |  12 green there too, which is what says the extraction changed no
+             |  behaviour rather than me asserting it.
+             |  And the honest gap, third time now: removing the memo leaves all
+             |  12 green, as does making the toggle unstable. A memoised row with
+             |  unchanged props writes nothing to the DOM either way, so no
+             |  assertion available from outside the module can see it. Verified
+             |  by injection, stated in the test header, measured with a Profiler
+             |  instead. The counter that DOES bite is the formatter one in lib:
+             |  one failure on the pre-fix code, nothing else.
+             |  Confidence: Jest 7518 across 531 suites, typecheck and eslint
+             |  clean.
+             |  Scope: this page's load-time half was already done - #65 split
+             |  the scheduling form out of the bundle, #66 stopped the clock in a
+             |  hidden tab, #63 fixed the window that hid instant meetings, #96
+             |  stopped 200 meetings of prose travelling with it. This is the
+             |  render-time half, and the fifth page in the pass to get a cached
+             |  formatter in lib plus a memoised row.
 ```
 
 ---
