@@ -4,7 +4,14 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { SlotPicker } from "@/components/scheduling/SlotPicker";
 import { TimezoneSelect } from "@/components/scheduling/TimezoneSelect";
-import { detectTimezone, formatSlotFull, type SlotWindow } from "@/lib/meetings/scheduling";
+import {
+  BOOKING_EMAIL_MAX,
+  BOOKING_NAME_MAX,
+  BOOKING_NOTES_MAX,
+  detectTimezone,
+  formatSlotFull,
+  type SlotWindow,
+} from "@/lib/meetings/scheduling";
 
 interface PublicEventType {
   id: string;
@@ -193,6 +200,7 @@ export function BookingFlow({
               value={name}
               onChange={(e) => setName(e.target.value)}
               autoComplete="name"
+              maxLength={BOOKING_NAME_MAX}
               required
               className="w-full rounded-lg border border-[var(--line)] bg-[var(--surface-0)] px-3 py-2.5 text-sm text-[var(--fg-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--gold-400)]"
             />
@@ -204,15 +212,17 @@ export function BookingFlow({
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               autoComplete="email"
+              maxLength={BOOKING_EMAIL_MAX}
               required
               className="w-full rounded-lg border border-[var(--line)] bg-[var(--surface-0)] px-3 py-2.5 text-sm text-[var(--fg-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--gold-400)]"
             />
           </Field>
 
-          <Field label="What would you like to cover? (optional)">
+          <Field label="What would you like to cover? (optional)" error={fieldErrors.notes}>
             <textarea
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
+              maxLength={BOOKING_NOTES_MAX}
               rows={3}
               className="w-full resize-y rounded-lg border border-[var(--line)] bg-[var(--surface-0)] px-3 py-2.5 text-sm text-[var(--fg-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--gold-400)]"
             />
