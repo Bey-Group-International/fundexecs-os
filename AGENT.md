@@ -5285,6 +5285,52 @@ Deployed, monitoring               →  live, observability active
              |  against a real database does that.
              |  Confidence: Jest 7835 across 549 suites, typecheck and eslint
              |  clean.
+             |
+             |  2026-09-30  CodeRabbit passed the inbox slice with zero actionable
+             |  comments and MINIMAL merge risk, and then its security section
+             |  raised the thing that was actually wrong with it.
+             |  `counterparty_email` comes from the message's From header. The Svix
+             |  signature proves RESEND sent the delivery; it proves nothing about
+             |  who the message says it is from, and the payload slice this app
+             |  reads carries no SPF/DKIM/DMARC result. So a forged
+             |  `From: ana@acme.com` that happens to match a contact exactly lands
+             |  as a row on Ana's permanent record - and the timeline badged every
+             |  is_system row "Automatic", which a reader takes to mean the app
+             |  observed it.
+             |  That badge conflated two different claims. WHO WROTE THE ROW (the
+             |  engine, not a person) and WHETHER THE APP HAD GROUNDS TO BELIEVE THE
+             |  PERSON IT NAMED WAS INVOLVED. For a meeting the second is true: the
+             |  host built the invite list, the room watched people join. For
+             |  inbound mail it is not.
+             |  I did not fix sender authentication. That needs a provider contract
+             |  - which auth results Resend exposes, what the other channels mean -
+             |  and guessing at it would be worse than not having it. What IS
+             |  fixable from here is the overclaim: identity-assurance.ts, one
+             |  marker on the provenance, and a second badge that says "Sender
+             |  unverified" beside "Automatic". The record now says what it knows.
+             |  The test worth naming asserts across the TWO WRITERS rather than
+             |  against the marker string: every row threadActivity returns reads as
+             |  asserted, and no row meetingActivities returns does. A marker only
+             |  works if producer and consumer agree, and comparing each of them to
+             |  a literal I typed in the test would prove neither.
+             |  5 injections, 5 caught, including the two that matter most: a reader
+             |  that calls everything asserted (marks observed meetings unverified)
+             |  and a UI that marks every automatic row (same effect from the other
+             |  end). Both would train a reader to ignore the words on the rows
+             |  where they are true, which is worse than silence.
+             |  A cast hid a real type error on the way - `as ContactRecord` over a
+             |  fixture with stage: "active", which is not a stage. Second time
+             |  today a cast covered drift the type would have caught. Removed the
+             |  cast rather than widening it.
+             |  WHAT THIS DOES NOT DO: a forged sender can still write that row. It
+             |  can still land on a private contact - matching has no visibility
+             |  predicate. And because the activity is keyed on the thread, a forged
+             |  message that hits the same threadKey (same From, same subject)
+             |  updates the genuine conversation's entry rather than adding one.
+             |  That last one is inherited from the inbox's own threading, not
+             |  introduced here, but it is now reaching the CRM.
+             |  Confidence: Jest 7842 across 551 suites, typecheck and eslint
+             |  clean.
 ```
 
 ---

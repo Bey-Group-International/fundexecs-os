@@ -16,6 +16,7 @@
 // Pure: no database, no clock, no network.
 
 import { boundedBody, contactForEmail, type EmailIndex } from "@/lib/crm/contact-match";
+import { IDENTITY_ASSERTED } from "@/lib/crm/identity-assurance";
 
 /** The inbox channels a thread can arrive on. */
 export type InboxChannelKey =
@@ -84,6 +85,16 @@ export interface InboxCrmActivity {
     thread_id: string;
     channel: string;
     source: "inbox_thread";
+    /**
+     * The link to this contact rests on an address the sender supplied.
+     *
+     * Every inbox channel asserts rather than proves: an email's From header is
+     * written by whoever sent it, and a booking form's address is typed by
+     * whoever filled it in. The webhook signature authenticates the PROVIDER,
+     * not the identity the message claims. Marked on the row so the record can
+     * say what it actually knows — see lib/crm/identity-assurance.ts.
+     */
+    identity: typeof IDENTITY_ASSERTED;
   };
 }
 
@@ -129,6 +140,7 @@ export function threadActivity(input: InboxCrmInput): InboxCrmActivity | null {
       thread_id: thread.id,
       channel: thread.channel,
       source: "inbox_thread",
+      identity: IDENTITY_ASSERTED,
     },
   };
 }

@@ -15,6 +15,7 @@ import Link from "next/link";
 import { CONTACT_STAGES, STAGE_LABEL, type ContactStage } from "@/lib/network-stages";
 import { LOGGABLE_TYPES } from "@/lib/network-contact";
 import { reportUrlFromMetadata } from "@/lib/meetings/crm-activity";
+import { identityIsAsserted } from "@/lib/crm/identity-assurance";
 import type {
   ContactRecordView as RecordView,
   ContactRecord,
@@ -504,8 +505,27 @@ function Timeline({ entries }: { entries: TimelineEntry[] }) {
                 person claims happened is the whole reason is_system exists.
               */}
               {e.isSystem && (
-                <span className="rounded border border-line px-1 font-mono text-[10px] uppercase tracking-wider text-fg-muted/70">
+                <span
+                  className="rounded border border-line px-1 font-mono text-[10px] uppercase tracking-wider text-fg-muted/70"
+                  title="Recorded by the app, not logged by a person."
+                >
                   Automatic
+                </span>
+              )}
+              {/*
+                "Automatic" says the app wrote the row. It does not say the app
+                had grounds to believe this is the right person, and for an
+                inbound conversation it does not: the address comes from the
+                message's own From header, which the sender wrote. Saying so is
+                the honest part; see lib/crm/identity-assurance.ts for why it
+                cannot be more than said.
+              */}
+              {identityIsAsserted(e.metadata) && (
+                <span
+                  className="rounded border border-line px-1 font-mono text-[10px] uppercase tracking-wider text-fg-muted/70"
+                  title="Matched on an address the sender supplied. The delivery is verified; the sender's identity is not."
+                >
+                  Sender unverified
                 </span>
               )}
             </div>
