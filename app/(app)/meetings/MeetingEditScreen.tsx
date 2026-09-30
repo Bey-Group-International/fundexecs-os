@@ -275,6 +275,40 @@ export function MeetingEditScreen({
 
   const activeDuration = durationMinutesFromTimes(startTime, endTime);
 
+  // Checked as the time is picked, not only on Schedule: time a connected
+  // calendar has taken cannot be saved over, so saying so after the button
+  // is pressed is saying it late. The server holds the same line either way.
+  useEffect(() => {
+    if (savedResult) return;
+    const minutes = durationMinutesFromTimes(startTime, endTime);
+    let startIso: string;
+    try {
+      startIso = localToIso(date, startTime, timezone);
+    } catch {
+      return;
+    }
+    const startMs = new Date(startIso).getTime();
+    if (!date || minutes <= 0 || !Number.isFinite(startMs)) return;
+    const endIso = new Date(startMs + minutes * 60_000).toISOString();
+    const controller = new AbortController();
+    const timer = setTimeout(() => {
+      const query = new URLSearchParams({ start: startIso, end: endIso, tz: timezone });
+      fetch(`/api/meetings/busy?${query}`, { signal: controller.signal, cache: "no-store" })
+        .then((res) => (res.ok ? res.json() : null))
+        .then((json: { busy?: Array<{ start: string; end: string }> } | null) => {
+          if (json && Array.isArray(json.busy)) setBusyElsewhere(json.busy);
+        })
+        // A failed check leaves the save to decide; it enforces the same rule.
+        .catch(() => {});
+    }, 300);
+    return () => {
+      clearTimeout(timer);
+      controller.abort();
+    };
+  }, [date, startTime, endTime, timezone, savedResult]);
+
+  const busyOnCalendar = busyElsewhere.length > 0;
+
   function chooseDuration(minutes: number) {
     setCustomEnd(false);
     setEndTime(addMinutesToTime(startTime, minutes));
@@ -345,7 +379,8 @@ export function MeetingEditScreen({
     // clear them — is how a warning stops being read.
     setConflicts([]);
     setBlockedBy([]);
-    setBusyElsewhere([]);
+    // Not busyElsewhere: that describes the time on screen now, kept current
+    // by the live check, and saving does not change it.
     const errors = validateMeetingDraft({ title, meetingType, date, startTime, endTime, timezone });
     if (!draft && Object.keys(errors).length > 0) {
       setFieldErrors(errors);
@@ -592,7 +627,10 @@ export function MeetingEditScreen({
                 <button
                   type="button"
                   onClick={() => void submit(false)}
-                  disabled={busy !== null}
+                  // Not over time a connected calendar has taken; a draft can
+                  // still be kept while another time is found.
+                  disabled={busy !== null || busyOnCalendar}
+                  title={busyOnCalendar ? "That time is busy on your connected calendar" : undefined}
                   className="rounded-full bg-[var(--gold-400)] px-6 py-2 text-sm font-semibold text-white hover:bg-[var(--gold-500)] disabled:opacity-50"
                 >
                   {busy === "save" ? "Saving…" : mode === "edit" ? "Save" : "Schedule"}
@@ -869,7 +907,11 @@ export function MeetingEditScreen({
           {conflicts.length > 0 || blockedBy.length > 0 || busyElsewhere.length > 0 ? (
             <div className="mt-4 rounded-lg border border-[var(--status-warning,#f59e0b)]/40 bg-[var(--status-warning,#f59e0b)]/10 px-3 py-3 sm:ml-11">
               <p className="text-xs font-medium text-[var(--fg-primary)]">
-                {conflicts.length > 0 || busyElsewhere.length > 0 ? "Scheduling conflict" : "Inside blocked time"}
+                {busyOnCalendar
+                  ? "Busy on your connected calendar — pick another time"
+                  : conflicts.length > 0
+                    ? "Scheduling conflict"
+                    : "Inside blocked time"}
               </p>
               <ul className="mt-1 list-disc pl-4 text-xs text-[var(--fg-muted)]">
                 {conflicts.map((c) => (
@@ -888,10 +930,13 @@ export function MeetingEditScreen({
                   </li>
                 ))}
               </ul>
-              <label className="mt-2 flex items-center gap-2 text-xs text-[var(--fg-secondary)]">
-                <input type="checkbox" checked={allowConflict} onChange={(e) => setAllowConflict(e.target.checked)} />
-                Save anyway
-              </label>
+              {/* Only a clash that may be overridden offers to be. */}
+              {busyOnCalendar ? null : (
+                <label className="mt-2 flex items-center gap-2 text-xs text-[var(--fg-secondary)]">
+                  <input type="checkbox" checked={allowConflict} onChange={(e) => setAllowConflict(e.target.checked)} />
+                  Save anyway
+                </label>
+              )}
             </div>
           ) : null}
 

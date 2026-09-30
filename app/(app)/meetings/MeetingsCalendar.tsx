@@ -11,6 +11,9 @@ import {
   eventSpansForDay,
   layerIndex,
   visibleEvents,
+  busyEvents as busyExternalEvents,
+  busyMinutesForDay,
+  overlapsBusy,
 } from "@/lib/calendar/layers";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -553,6 +556,10 @@ export function MeetingsCalendar({
   // in its own calendar's colour.
   const shownExternal = useMemo(() => visibleEvents(externalEvents, layers), [externalEvents, layers]);
   const layersById = useMemo(() => layerIndex(layers), [layers]);
+  // Time a connected calendar has taken. Drawn as blocked and not bookable
+  // from the grid, whether or not that calendar is showing: hiding a calendar
+  // hides its events, not the fact that the time is gone.
+  const busyExternal = useMemo(() => busyExternalEvents(externalEvents, layers), [externalEvents, layers]);
 
   const toggleLayer = useCallback(
     async (layer: CalendarLayer, isVisible: boolean) => {
@@ -631,6 +638,7 @@ export function MeetingsCalendar({
     onSelectBlock: (b: CalendarBlock) => clearBlock(b.id),
     onSelectSlot: (iso: string, x: number, y: number) => setSlotMenu({ iso, x, y }),
     externalEvents: shownExternal,
+    busyEvents: busyExternal,
     layersById,
     onExpandDay: (d: Date) => {
       setAnchor(startOfDay(d));
@@ -1195,6 +1203,8 @@ interface SharedViewProps {
   onSelectBlock: (b: CalendarBlock) => void;
   onSelectSlot: (iso: string, x: number, y: number) => void;
   externalEvents: ExternalEvent[];
+  /** Events whose time is taken: busy, on a calendar that counts as busy. */
+  busyEvents: ExternalEvent[];
   layersById: Map<string, CalendarLayer>;
   onExpandDay: (d: Date) => void;
   /** Commit a drag. Absent in views that cannot express one (month, agenda). */
@@ -1830,7 +1840,8 @@ function MonthChip({ m, live, onClick }: { m: CalendarMeeting; live: boolean; on
 }
 
 // ── Week / Day time grid ────────────────────────────────────────────────────
-function TimeGridView({ days, meetings, blocks, externalEvents, layersById, now, today, presence, statusOf, onSelectEvent, onSelectBlock, onSelectSlot, onMoveMeeting }: SharedViewProps & { days: Date[] }) {
+function TimeGridView({ days, meetings, blocks, externalEvents, busyEvents, layersById, now, today, presence, statusOf, onSelectEvent, onSelectBlock, onSelectSlot, onMoveMeeting }: SharedViewProps & { days: Date[] }) {
+  const busyIds = useMemo(() => new Set(busyEvents.map((e) => e.id)), [busyEvents]);
   const scrollRef = useRef<HTMLDivElement>(null);
   const columnsRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -2008,6 +2019,8 @@ function TimeGridView({ days, meetings, blocks, externalEvents, layersById, now,
               : null;
           const rendered = visitor ? [...evs, visitor] : evs;
           const dayBlocks = blocksForDay(blocks, d);
+          const busySpans = busyMinutesForDay(busyEvents, d);
+          const allDayBusy = allDayEventsForDay(busyEvents, d);
           const isToday = isSameDay(d, today);
           return (
             <div
@@ -2020,6 +2033,8 @@ function TimeGridView({ days, meetings, blocks, externalEvents, layersById, now,
                 const y = e.clientY - rect.top;
                 let minutes = Math.round((y / HOUR_PX) * 60 / 30) * 30;
                 minutes = Math.max(0, Math.min(23 * 60 + 30, minutes));
+                // Rounding can land a click just beside a busy block inside it.
+                if (overlapsBusy(busySpans, minutes, minutes + 30)) return;
                 onSelectSlot(
                   localIso(d.getFullYear(), d.getMonth(), d.getDate(), Math.floor(minutes / 60), minutes % 60),
                   e.clientX,
@@ -2037,6 +2052,8 @@ function TimeGridView({ days, meetings, blocks, externalEvents, layersById, now,
                   subject of one — and they are read-only, so nothing here is
                   clickable in a way that implies otherwise. */}
               {eventSpansForDay(externalEvents, d).map(({ event, startMinute, endMinute }) => {
+                // Busy time is drawn as blocked, below.
+                if (busyIds.has(event.id)) return null;
                 const layer = layersById.get(event.calendarId);
                 const color = layer ? colorForLayer(layer) : "var(--fg-muted)";
                 return (
@@ -2057,6 +2074,42 @@ function TimeGridView({ days, meetings, blocks, externalEvents, layersById, now,
                   </div>
                 );
               })}
+
+              {/* Time a connected calendar has taken: blocked, and not a place
+                  to start a meeting. The click stops here rather than falling
+                  through to the column, which would offer "New meeting". */}
+              {allDayBusy.length > 0 ? (
+                <div
+                  aria-disabled="true"
+                  onClick={(e) => e.stopPropagation()}
+                  className="absolute inset-0 cursor-not-allowed"
+                  style={BUSY_STYLE}
+                  title={`Busy all day — ${allDayBusy.map((ev) => busyLabel(ev, layersById)).join(", ")}`}
+                >
+                  <span className="block truncate px-1.5 py-0.5 text-[11px] font-medium text-[var(--fg-muted)]">
+                    Busy all day
+                  </span>
+                </div>
+              ) : null}
+              {eventSpansForDay(busyEvents, d).map(({ event, startMinute, endMinute }) => (
+                <div
+                  key={`busy-${event.id}`}
+                  aria-disabled="true"
+                  data-busy="true"
+                  onClick={(e) => e.stopPropagation()}
+                  className="absolute left-0 right-0 cursor-not-allowed overflow-hidden border-y border-dashed border-[var(--line)] px-1.5 py-0.5"
+                  style={{
+                    ...BUSY_STYLE,
+                    top: (startMinute / 60) * HOUR_PX,
+                    height: Math.max(((endMinute - startMinute) / 60) * HOUR_PX, 16),
+                  }}
+                  title={`Busy — ${busyLabel(event, layersById)}`}
+                >
+                  <span className="truncate text-[11px] font-medium text-[var(--fg-muted)]">
+                    {busyLabel(event, layersById)}
+                  </span>
+                </div>
+              ))}
 
               {/* Blocked time sits under the events: a meeting deliberately
                   scheduled over a block must still be readable. */}
@@ -2549,4 +2602,21 @@ function FilterIcon() {
 }
 function CloseIcon() {
   return (<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>);
+}
+
+/** The hatched look shared with time blocked by hand. */
+const BUSY_STYLE: React.CSSProperties = {
+  backgroundColor: "color-mix(in srgb, var(--fg-muted) 14%, transparent)",
+  backgroundImage:
+    "repeating-linear-gradient(45deg, transparent, transparent 5px, color-mix(in srgb, var(--fg-muted) 12%, transparent) 5px, color-mix(in srgb, var(--fg-muted) 12%, transparent) 10px)",
+};
+
+/**
+ * What a busy block says. A calendar the member is showing names the event;
+ * a hidden one says only "Busy", since hiding it was a choice not to see it.
+ */
+function busyLabel(event: ExternalEvent, layersById: Map<string, CalendarLayer>): string {
+  const layer = layersById.get(event.calendarId);
+  if (!layer?.isVisible) return "Busy";
+  return `${event.title || "Busy"} — ${layer.name}`;
 }

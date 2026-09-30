@@ -193,3 +193,36 @@ function computeAllDay(events: ExternalEvent[], dayStart: number): ExternalEvent
     return Number.isFinite(start) && Number.isFinite(end) && end > dayStart && start < dayEnd;
   });
 }
+
+/**
+ * Whether an external event takes its time off the table.
+ *
+ * The same rule the server's availability check applies: the event is marked
+ * busy (not "free", as birthdays and reminders are), and its calendar counts
+ * toward availability. A subscribed feed counts only while it is shown; a
+ * Google calendar counts whenever the member left "Counts as busy" on.
+ */
+export function blocksTime(event: ExternalEvent, layer: CalendarLayer | undefined): boolean {
+  if (!event.isBusy || !layer?.blocksAvailability) return false;
+  return layer.source === "google" || layer.isVisible;
+}
+
+/** Of every synced event, the ones that make their time unavailable. */
+export function busyEvents(events: ExternalEvent[], layers: CalendarLayer[]): ExternalEvent[] {
+  const byId = layerIndex(layers);
+  return events.filter((e) => blocksTime(e, byId.get(e.calendarId)));
+}
+
+/**
+ * The minutes of one day that busy events take, as [start, end) pairs. An
+ * all-day busy event (out of office, say) takes the whole day.
+ */
+export function busyMinutesForDay(busy: ExternalEvent[], day: Date): Array<[number, number]> {
+  if (allDayEventsForDay(busy, day).length > 0) return [[0, DAY_MINUTES]];
+  return eventSpansForDay(busy, day).map((s) => [s.startMinute, s.endMinute]);
+}
+
+/** Whether [start, end) minutes touch any busy span. */
+export function overlapsBusy(spans: Array<[number, number]>, start: number, end: number): boolean {
+  return spans.some(([s, e]) => start < e && end > s);
+}

@@ -14,6 +14,11 @@ const cancelBookingMock = jest.fn();
 // the mock has to hand back something that actually is one.
 class SlotUnavailable extends Error {}
 
+const loadExternalConflictsMock = jest.fn(async () => [] as Array<{ start: string; end: string }>);
+jest.mock("@/lib/meetings/conflicts.server", () => ({
+  loadExternalConflicts: (...args: unknown[]) => loadExternalConflictsMock(...(args as [])),
+}));
+
 jest.mock("@/lib/auth", () => ({
   requireOrgContext: () => authMock(),
 }));
@@ -210,6 +215,19 @@ describe("/api/meetings/[id]", () => {
 
     expect(res.status).toBe(200);
     expect(updateMeetingMock).toHaveBeenCalled();
+  });
+
+  it("will not move a meeting onto time a connected calendar has taken, even when asked to", async () => {
+    loadExternalConflictsMock.mockResolvedValueOnce([
+      { start: "2026-07-10T10:15:00.000Z", end: "2026-07-10T10:45:00.000Z" },
+    ]);
+    from.mockReturnValue(makeBuilder({ maybeSingle: { data: PRIOR_ROW }, limit: { data: [] } }));
+
+    const res = await PATCH(req({ scheduledAt: "2026-07-10T10:15:00.000Z", durationMinutes: 30, allowConflict: true }), params);
+
+    expect(res.status).toBe(409);
+    expect(await res.json()).toMatchObject({ overridable: false });
+    expect(updateMeetingMock).not.toHaveBeenCalled();
   });
 
   it("does not flag a reschedule that overlaps an unrelated meeting", async () => {

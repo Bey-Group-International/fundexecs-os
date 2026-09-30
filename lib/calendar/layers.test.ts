@@ -1,4 +1,8 @@
 import {
+  blocksTime,
+  busyEvents,
+  busyMinutesForDay,
+  overlapsBusy,
   LAYER_PALETTE,
   type CalendarLayer,
   type ExternalEvent,
@@ -209,5 +213,70 @@ describe("allDayEventsForDay", () => {
 
   it("leaves timed events to the rail", () => {
     expect(allDayEventsForDay([event({ isAllDay: false })], day)).toEqual([]);
+  });
+});
+
+describe("what blocks time", () => {
+  const google = (over: Partial<CalendarLayer> = {}): CalendarLayer => ({
+    id: "g1",
+    source: "google",
+    name: "Work",
+    color: null,
+    isVisible: true,
+    blocksAvailability: true,
+    isPrimary: true,
+    canWrite: true,
+    health: { state: "ok", message: null },
+    ...over,
+  });
+  const feed = (over: Partial<CalendarLayer> = {}): CalendarLayer => google({ id: "f1", source: "ics", ...over });
+  const ev = (over: Partial<ExternalEvent> = {}): ExternalEvent => ({
+    id: "e1",
+    calendarId: "g1",
+    title: "Client call",
+    location: null,
+    link: null,
+    startsAt: new Date(2026, 8, 16, 10, 0).toISOString(),
+    endsAt: new Date(2026, 8, 16, 11, 0).toISOString(),
+    isAllDay: false,
+    isBusy: true,
+    ...over,
+  });
+
+  it("is a busy event on a calendar that counts as busy", () => {
+    expect(blocksTime(ev(), google())).toBe(true);
+    expect(blocksTime(ev({ isBusy: false }), google())).toBe(false);
+    expect(blocksTime(ev(), google({ blocksAvailability: false }))).toBe(false);
+    expect(blocksTime(ev(), undefined)).toBe(false);
+  });
+
+  it("counts a hidden Google calendar, but a subscribed feed only while shown", () => {
+    expect(blocksTime(ev(), google({ isVisible: false }))).toBe(true);
+    expect(blocksTime(ev({ calendarId: "f1" }), feed({ isVisible: false }))).toBe(false);
+    expect(blocksTime(ev({ calendarId: "f1" }), feed())).toBe(true);
+  });
+
+  it("picks the busy events out of everything synced", () => {
+    const events = [ev(), ev({ id: "e2", isBusy: false }), ev({ id: "e3", calendarId: "nope" })];
+    expect(busyEvents(events, [google()]).map((e) => e.id)).toEqual(["e1"]);
+  });
+
+  it("gives the busy minutes of a day, all of it for an all-day busy event", () => {
+    const day = new Date(2026, 8, 16);
+    expect(busyMinutesForDay([ev()], day)).toEqual([[600, 660]]);
+    const allDay = ev({
+      isAllDay: true,
+      startsAt: new Date(2026, 8, 16).toISOString(),
+      endsAt: new Date(2026, 8, 17).toISOString(),
+    });
+    expect(busyMinutesForDay([allDay], day)).toEqual([[0, 1440]]);
+    expect(busyMinutesForDay([ev()], new Date(2026, 8, 17))).toEqual([]);
+  });
+
+  it("knows when a slot touches busy time", () => {
+    const spans: Array<[number, number]> = [[600, 660]];
+    expect(overlapsBusy(spans, 570, 600)).toBe(false);
+    expect(overlapsBusy(spans, 630, 660)).toBe(true);
+    expect(overlapsBusy(spans, 660, 690)).toBe(false);
   });
 });

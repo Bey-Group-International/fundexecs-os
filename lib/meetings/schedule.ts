@@ -593,6 +593,26 @@ export function nextExternalSyncStatus(opts: {
  * already on the calendar they live in — so the message names each one that
  * applies rather than picking a winner and hiding the rest.
  */
+/**
+ * What a save that clashes may do.
+ *
+ * Time taken in a connected calendar is a hard stop: the member asked for it
+ * to be blocked, and "Save anyway" is not offered. Another meeting here, or
+ * time they blocked by hand, still warns and can be overridden.
+ */
+export function conflictGate(
+  counts: { meetings: number; blocks: number; external: number },
+  allowConflict: boolean,
+): "ok" | "overridable" | "blocked" {
+  if (counts.external > 0) return "blocked";
+  if ((counts.meetings > 0 || counts.blocks > 0) && !allowConflict) return "overridable";
+  return "ok";
+}
+
+/** Said when a save lands on time a connected calendar has taken. */
+export const BUSY_ELSEWHERE_MESSAGE =
+  "That time is busy on your connected calendar. Pick another time.";
+
 export function conflictMessage(meetingCount: number, blockCount: number, externalCount = 0): string {
   const clashes: string[] = [];
   if (meetingCount > 0) clashes.push("another meeting");

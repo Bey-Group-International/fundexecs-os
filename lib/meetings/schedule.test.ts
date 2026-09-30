@@ -1,4 +1,5 @@
 import {
+  conflictGate,
   validateMeetingDraft,
   isValidDraft,
   durationMinutesFromTimes,
@@ -624,5 +625,19 @@ describe("the calendar overlay's labels", () => {
   it("covers a whole week of weekdays without repeating itself", () => {
     const week = Array.from({ length: 7 }, (_, i) => weekdayLabel(new Date(Date.UTC(2026, 8, 28 + i))));
     expect(new Set(week).size).toBe(7);
+  });
+});
+
+describe("conflictGate", () => {
+  it("never lets a save land on a connected calendar's busy time", () => {
+    expect(conflictGate({ meetings: 0, blocks: 0, external: 1 }, false)).toBe("blocked");
+    expect(conflictGate({ meetings: 0, blocks: 0, external: 1 }, true)).toBe("blocked");
+  });
+
+  it("warns about other clashes, and lets Save anyway through", () => {
+    expect(conflictGate({ meetings: 1, blocks: 0, external: 0 }, false)).toBe("overridable");
+    expect(conflictGate({ meetings: 0, blocks: 1, external: 0 }, false)).toBe("overridable");
+    expect(conflictGate({ meetings: 1, blocks: 1, external: 0 }, true)).toBe("ok");
+    expect(conflictGate({ meetings: 0, blocks: 0, external: 0 }, false)).toBe("ok");
   });
 });

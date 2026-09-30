@@ -6,6 +6,7 @@ const loadBlockConflictsMock = jest.fn();
 const mailboxForMock = jest.fn();
 const canWriteCalendarMock = jest.fn();
 const syncMeetingExternalMock = jest.fn();
+const loadExternalConflictsMock = jest.fn();
 
 jest.mock("@/lib/auth", () => ({
   requireOrgContext: () => authMock(),
@@ -36,6 +37,10 @@ jest.mock("@/lib/meetings/invite", () => ({
 
 jest.mock("@/lib/meetings/blocks.server", () => ({
   loadBlockConflicts: (...args: unknown[]) => loadBlockConflictsMock(...args),
+}));
+
+jest.mock("@/lib/meetings/conflicts.server", () => ({
+  loadExternalConflicts: (...args: unknown[]) => loadExternalConflictsMock(...args),
 }));
 
 jest.mock("@/lib/meetings/mailbox.server", () => ({
@@ -97,6 +102,7 @@ beforeEach(() => {
   });
   from.mockImplementation(withTeam([]));
   loadBlockConflictsMock.mockResolvedValue([]);
+  loadExternalConflictsMock.mockResolvedValue([]);
   mailboxForMock.mockResolvedValue({ ok: true, token: "tok", email: "host@fund.test", source: "member" });
   sendMeetingInvitesMock.mockResolvedValue({ sent: 0, total: 0, attempted: 0, failed: [], reasons: [] });
   // No calendar unless a test says otherwise.
@@ -339,5 +345,46 @@ describe("reporting what the invite send achieved", () => {
     const json = (await res.json()) as { attempted?: number; inviteReasons?: string[] };
     expect(json.attempted).toBeGreaterThan(0);
     expect(json.inviteReasons).toEqual(["network down"]);
+  });
+});
+
+describe("POST /api/meetings/schedule over a connected calendar's busy time", () => {
+  const BUSY = [{ start: "2026-09-10T14:00:00.000Z", end: "2026-09-10T14:30:00.000Z" }];
+
+  it("refuses the save, and does not offer Save anyway", async () => {
+    loadExternalConflictsMock.mockResolvedValue(BUSY);
+    const res = await POST(req(VALID));
+
+    expect(res.status).toBe(409);
+    const body = await res.json();
+    expect(body).toMatchObject({ overridable: false, busyElsewhere: BUSY });
+    expect(body.error).toMatch(/busy on your connected calendar/i);
+    expect(saveScheduledMeetingMock).not.toHaveBeenCalled();
+  });
+
+  it("refuses it even when asked to save anyway", async () => {
+    loadExternalConflictsMock.mockResolvedValue(BUSY);
+    const res = await POST(req({ ...VALID, allowConflict: true }));
+    expect(res.status).toBe(409);
+    expect(saveScheduledMeetingMock).not.toHaveBeenCalled();
+  });
+
+  it("still lets time blocked by hand be saved over when asked", async () => {
+    loadBlockConflictsMock.mockResolvedValue([
+      { id: "b1", title: "Focus", startsAt: "2026-09-10T14:00:00.000Z", endsAt: "2026-09-10T15:00:00.000Z" },
+    ]);
+    const warned = await POST(req(VALID));
+    expect(warned.status).toBe(409);
+    expect(await warned.json()).toMatchObject({ overridable: true });
+
+    const saved = await POST(req({ ...VALID, allowConflict: true }));
+    expect(saved.status).toBe(200);
+  });
+
+  it("lets a draft be kept whatever the calendar says", async () => {
+    loadExternalConflictsMock.mockResolvedValue(BUSY);
+    const res = await POST(req({ ...VALID, draft: true }));
+    expect(res.status).toBe(200);
+    expect(loadExternalConflictsMock).not.toHaveBeenCalled();
   });
 });
