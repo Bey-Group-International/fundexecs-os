@@ -208,6 +208,46 @@ function timezoneOffsetMs(instant: Date, timezone: string): number {
   }
 }
 
+/**
+ * The wall-clock date ("YYYY-MM-DD") and time ("HH:MM") an instant shows in a
+ * zone: the inverse of localToIso, for putting an instant back into the
+ * scheduler's date and time fields.
+ */
+export function zonedDateTime(instant: Date, timezone: string): { date: string; time: string } {
+  const shifted = new Date(instant.getTime() + timezoneOffsetMs(instant, timezone));
+  const iso = shifted.toISOString();
+  return { date: iso.slice(0, 10), time: iso.slice(11, 16) };
+}
+
+/**
+ * The first start, on a step boundary, from which a meeting of this length
+ * clears every busy interval, or null if none does before `untilMs`.
+ *
+ * Starts from `fromMs` itself when that is free. Otherwise it jumps to the end
+ * of whatever it hit, rounded up to the step, so a run of back-to-back events
+ * is crossed in a few hops rather than a walk of every half hour.
+ */
+export function nextFreeStart(
+  busy: Array<{ start: string; end: string }>,
+  fromMs: number,
+  durationMs: number,
+  untilMs: number,
+  stepMs = 30 * 60_000,
+): number | null {
+  const spans = busy
+    .map((b) => [new Date(b.start).getTime(), new Date(b.end).getTime()] as const)
+    .filter(([s, e]) => Number.isFinite(s) && Number.isFinite(e) && e > s);
+  let candidate = fromMs;
+  for (let hops = 0; hops < 500 && candidate + durationMs <= untilMs; hops += 1) {
+    const end = candidate + durationMs;
+    const hit = spans.filter(([s, e]) => candidate < e && end > s);
+    if (hit.length === 0) return candidate;
+    const clearAt = Math.max(...hit.map(([, e]) => e));
+    candidate = Math.ceil(clearAt / stepMs) * stepMs;
+  }
+  return null;
+}
+
 export interface ScheduledMeetingShape {
   status?: string | null; // room lifecycle: waiting | active | ended
   scheduled_at?: string | null;

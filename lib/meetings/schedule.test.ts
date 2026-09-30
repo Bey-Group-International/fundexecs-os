@@ -1,4 +1,6 @@
 import {
+  nextFreeStart,
+  zonedDateTime,
   conflictGate,
   validateMeetingDraft,
   isValidDraft,
@@ -639,5 +641,36 @@ describe("conflictGate", () => {
     expect(conflictGate({ meetings: 0, blocks: 1, external: 0 }, false)).toBe("overridable");
     expect(conflictGate({ meetings: 1, blocks: 1, external: 0 }, true)).toBe("ok");
     expect(conflictGate({ meetings: 0, blocks: 0, external: 0 }, false)).toBe("ok");
+  });
+});
+
+describe("nextFreeStart", () => {
+  const T = (h: number, m = 0) => Date.UTC(2026, 9, 5, h, m);
+  const span = (a: number, b: number) => ({ start: new Date(a).toISOString(), end: new Date(b).toISOString() });
+  const HOUR = 3600_000;
+
+  it("is the start itself when that is free", () => {
+    expect(nextFreeStart([span(T(12), T(13))], T(10), HOUR, T(22))).toBe(T(10));
+  });
+
+  it("jumps past what it hits, to the next half hour", () => {
+    expect(nextFreeStart([span(T(10), T(11, 15))], T(10), HOUR, T(22))).toBe(T(11, 30));
+  });
+
+  it("crosses back-to-back events, and skips a gap too short for the meeting", () => {
+    const busy = [span(T(10), T(11)), span(T(11), T(12)), span(T(12, 30), T(13))];
+    expect(nextFreeStart(busy, T(10), HOUR, T(22))).toBe(T(13));
+  });
+
+  it("gives up at the horizon", () => {
+    expect(nextFreeStart([span(T(10), T(22))], T(10), HOUR, T(22))).toBeNull();
+  });
+});
+
+describe("zonedDateTime", () => {
+  it("is the inverse of localToIso", () => {
+    const iso = localToIso("2026-10-05", "11:30", "America/Chicago");
+    expect(zonedDateTime(new Date(iso), "America/Chicago")).toEqual({ date: "2026-10-05", time: "11:30" });
+    expect(zonedDateTime(new Date("2026-10-05T23:30:00Z"), "Asia/Tokyo")).toEqual({ date: "2026-10-06", time: "08:30" });
   });
 });

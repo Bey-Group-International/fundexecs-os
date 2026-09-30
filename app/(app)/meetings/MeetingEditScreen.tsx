@@ -15,8 +15,13 @@ import {
   validateMeetingDraft,
   durationMinutesFromTimes,
   localToIso,
+  nextFreeStart,
+  zonedDateTime,
   type FieldErrors,
 } from "@/lib/meetings/schedule";
+
+/** How far past the picked start to look for the next free time. */
+const SUGGESTION_HORIZON_MS = 12 * 3600_000;
 
 export interface MeetingEditInitial {
   meetingId?: string;
@@ -267,6 +272,9 @@ export function MeetingEditScreen({
   // feed). Spans only — the host knows what is in their own calendar, and the
   // summary of a private event has no business travelling here to say "busy".
   const [busyElsewhere, setBusyElsewhere] = useState<Array<{ start: string; end: string }>>([]);
+  // When a connected calendar has taken the picked time: the next start it
+  // leaves free for a meeting this long, to offer as a one-tap fix.
+  const [nextFree, setNextFree] = useState<number | null>(null);
   const [allowConflict, setAllowConflict] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -289,14 +297,28 @@ export function MeetingEditScreen({
     }
     const startMs = new Date(startIso).getTime();
     if (!date || minutes <= 0 || !Number.isFinite(startMs)) return;
-    const endIso = new Date(startMs + minutes * 60_000).toISOString();
+    const endMs = startMs + minutes * 60_000;
+    // Half a day past the start, so the same answer also says when the
+    // calendar next clears if this time is taken.
+    const horizonMs = startMs + SUGGESTION_HORIZON_MS;
     const controller = new AbortController();
     const timer = setTimeout(() => {
-      const query = new URLSearchParams({ start: startIso, end: endIso, tz: timezone });
+      const query = new URLSearchParams({
+        start: startIso,
+        end: new Date(horizonMs).toISOString(),
+        tz: timezone,
+      });
       fetch(`/api/meetings/busy?${query}`, { signal: controller.signal, cache: "no-store" })
         .then((res) => (res.ok ? res.json() : null))
         .then((json: { busy?: Array<{ start: string; end: string }> } | null) => {
-          if (json && Array.isArray(json.busy)) setBusyElsewhere(json.busy);
+          if (!json || !Array.isArray(json.busy)) return;
+          const clash = json.busy.filter(
+            (b) => new Date(b.start).getTime() < endMs && new Date(b.end).getTime() > startMs,
+          );
+          setBusyElsewhere(clash);
+          setNextFree(
+            clash.length > 0 ? nextFreeStart(json.busy, startMs, endMs - startMs, horizonMs) : null,
+          );
         })
         // A failed check leaves the save to decide; it enforces the same rule.
         .catch(() => {});
@@ -306,6 +328,17 @@ export function MeetingEditScreen({
       controller.abort();
     };
   }, [date, startTime, endTime, timezone, savedResult]);
+
+  // Move the meeting to the suggested start, keeping its length.
+  function applyNextFree() {
+    if (nextFree === null) return;
+    const minutes = durationMinutesFromTimes(startTime, endTime);
+    const parts = zonedDateTime(new Date(nextFree), timezone);
+    setDate(parts.date);
+    setStartTime(parts.time);
+    setEndTime(addMinutesToTime(parts.time, minutes));
+    setNextFree(null);
+  }
 
   const busyOnCalendar = busyElsewhere.length > 0;
 
@@ -930,6 +963,15 @@ export function MeetingEditScreen({
                   </li>
                 ))}
               </ul>
+              {busyOnCalendar && nextFree !== null ? (
+                <button
+                  type="button"
+                  onClick={applyNextFree}
+                  className="mt-2 rounded-full border border-gold-400/50 bg-gold-400/10 px-3 py-1 text-xs font-medium text-[var(--gold-300)] hover:bg-gold-400/20"
+                >
+                  Use next free time: {formatSuggestion(nextFree, timezone)}
+                </button>
+              ) : null}
               {/* Only a clash that may be overridden offers to be. */}
               {busyOnCalendar ? null : (
                 <label className="mt-2 flex items-center gap-2 text-xs text-[var(--fg-secondary)]">
@@ -1241,4 +1283,20 @@ function SelectField({
       {error ? <span className="text-[11px] text-[var(--status-danger)]">{error}</span> : null}
     </label>
   );
+}
+
+/** "Mon, Oct 5, 11:00 AM" in the scheduler's zone. */
+function formatSuggestion(ms: number, timezone: string): string {
+  try {
+    return new Intl.DateTimeFormat("en-US", {
+      weekday: "short",
+      month: "short",
+      day: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+      timeZone: timezone,
+    }).format(new Date(ms));
+  } catch {
+    return new Date(ms).toLocaleString();
+  }
 }
