@@ -4,6 +4,7 @@ import {
   isGrandfathered,
   paywallMessage,
   paywallPayload,
+  packForShortfall,
   recommendedPlanFor,
   type PaywallInput,
 } from "@/lib/paywall";
@@ -176,5 +177,73 @@ describe("settlement choice", () => {
     // Chose bank debit, then unlinked the account. Holding the choice would
     // mean the invoice never collects at all.
     expect(chosenRoute(cap({ hasCard: true }), "ach_debit")).toBe("card");
+  });
+});
+
+// Burst credits at the wall.
+//
+// The wall used to dead-end for exactly the orgs already paying: a plan-holder
+// who ran dry, or one with an unpaid period, got "add credits or settle your
+// outstanding invoice" and no way to do either without leaving. A pack is paid
+// UP FRONT, so it extends no credit and the reasoning that caps plan
+// commitments does not apply to it.
+describe("burst credits", () => {
+  it("picks the smallest pack that actually clears the shortfall", () => {
+    // 500-credit pack exists, so a small gap takes it.
+    expect(packForShortfall(400)).toBe("pack_500");
+    // 501 does not fit in 500, so it must step up rather than leave them short.
+    expect(packForShortfall(501)).toBe("pack_3000");
+    expect(packForShortfall(3_000)).toBe("pack_3000");
+  });
+
+  it("offers the largest pack when nothing covers the gap", () => {
+    // Better than offering nothing: one purchase gets them closest.
+    expect(packForShortfall(99_999)).toBe("pack_12000");
+  });
+
+  it("offers no pack when nothing is owed", () => {
+    expect(packForShortfall(0)).toBeNull();
+    expect(packForShortfall(-5)).toBeNull();
+  });
+
+  it("is offered to an org refused a plan on credit", () => {
+    // The case that used to dead-end. hasPlan means no commitment is available.
+    const state = evaluatePaywall(
+      input({ balance: 1, required: 3, orgCreatedAt: AFTER, hasPlan: true }),
+    );
+    expect(state.walled).toBe(true);
+    expect(state.canUnlockOnCommitment).toBe(false);
+    expect(state.recommendedPack).toBe("pack_500");
+  });
+
+  it("is offered even to an org with an unpaid period behind it", () => {
+    // Paid up front, so nothing is being extended to someone who did not pay.
+    const state = evaluatePaywall(
+      input({ balance: 0, required: 5, orgCreatedAt: AFTER, hasUnpaidHistory: true }),
+    );
+    expect(state.canUnlockOnCommitment).toBe(false);
+    expect(state.recommendedPack).toBe("pack_500");
+  });
+
+  it("stops naming a remedy the wall cannot offer", () => {
+    const state = evaluatePaywall(
+      input({ balance: 1, required: 3, orgCreatedAt: AFTER, hasPlan: true }),
+    );
+    // Previously: "Add credits or settle your outstanding invoice to continue."
+    // Now it says credits can be added here, because they can.
+    expect(paywallMessage(state)).toContain("Add credits now");
+  });
+
+  it("offers none when the org is not walled at all", () => {
+    const state = evaluatePaywall(input({ balance: 100, required: 3, orgCreatedAt: AFTER }));
+    expect(state.walled).toBe(false);
+    expect(state.recommendedPack).toBeNull();
+  });
+
+  it("carries the pack on the wire so the dialog can render it", () => {
+    const payload = paywallPayload(
+      evaluatePaywall(input({ balance: 1, required: 3, orgCreatedAt: AFTER, hasPlan: true })),
+    );
+    expect(payload?.recommendedPack).toBe("pack_500");
   });
 });

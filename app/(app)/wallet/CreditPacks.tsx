@@ -74,16 +74,19 @@ export function CreditPacks({
           const busy = pending && pendingKey === pack.key;
           const isRecommended = recommendedKey === pack.key;
           return (
+            // Laid out like a plan card (PlanSelector): the buy action is a
+            // full-width primary button, not a price chip tucked to one side.
+            // A pack cost the same money as a plan and read as a label.
             <div
               key={pack.key}
               data-active={isRecommended ? "true" : undefined}
-              className={`fx-neural-card group flex items-center justify-between gap-3 p-4 ${
+              className={`fx-neural-card group flex flex-col p-4 ${
                 isRecommended
                   ? "border-neural-400/60 shadow-[0_18px_60px_-34px_rgb(var(--fx-accent-rgb)/0.378)]"
                   : ""
               }`}
             >
-              <div className="relative z-10">
+              <div className="relative z-10 flex-1">
                 <p className="font-display text-lg font-semibold text-fg-primary">
                   {formatCredits(pack.credits)}
                 </p>
@@ -103,9 +106,10 @@ export function CreditPacks({
                 disabled={busy}
                 onClick={() => buy(pack.key)}
                 aria-busy={busy}
-                className="relative z-10 overflow-hidden rounded-lg border border-neural-400/25 px-3 py-1.5 text-sm text-fg-secondary transition hover:border-neural-400/50 hover:bg-neural-400/10 hover:text-fg-primary disabled:opacity-60"
+                aria-label={`Add ${formatCredits(pack.credits)} burst credits for ${formatUsd(pack.price)}`}
+                className="relative z-10 mt-4 overflow-hidden rounded-lg bg-neural-400 px-4 py-2 text-sm font-medium text-white shadow-[0_0_22px_rgb(var(--fx-accent-rgb)/0.118)] transition hover:bg-neural-300 disabled:opacity-60"
               >
-                {busy ? "Adding…" : formatUsd(pack.price)}
+                {busy ? "Adding…" : `Add for ${formatUsd(pack.price)}`}
                 {busy ? <span className="fx-data-stream" aria-hidden /> : null}
               </button>
             </div>
