@@ -249,8 +249,8 @@ export function DataRoomViewer({
       setSelected(key);
       setSidebarOpen(false);
       // A new section starts at its top, not wherever the last one was scrolled.
-      mainRef.current?.scrollTo({ top: 0 });
-      if (!preview) window.scrollTo({ top: 0 });
+      if (mainRef.current) mainRef.current.scrollTop = 0;
+      if (!preview && document.scrollingElement) document.scrollingElement.scrollTop = 0;
     },
     [effectiveSelected, fireDwell, preview],
   );

@@ -130,8 +130,13 @@ export function RoomWorkspace({
   return (
     <div className="grid gap-6 lg:grid-cols-[15rem_minmax(0,1fr)]">
       {/* ---------------------------------------------------------------- Rail */}
-      <aside className="lg:sticky lg:top-6 lg:self-start">
-        <div className="rounded-2xl border border-line bg-surface-1" style={{ boxShadow: "0 2px 12px rgba(0,0,0,0.15)" }}>
+      <aside className="lg:sticky lg:top-[calc(var(--app-header-h)+1.5rem)] lg:self-start">
+        {/* Capped to the viewport so the rail's footer stays reachable while
+            pinned; the index scrolls inside it instead. */}
+        <div
+          className="rounded-2xl border border-line bg-surface-1 lg:flex lg:max-h-[calc(100dvh-var(--app-header-h)-3rem)] lg:flex-col"
+          style={{ boxShadow: "0 2px 12px rgba(0,0,0,0.15)" }}
+        >
           {/* Coverage */}
           <div className="flex items-center gap-3 border-b border-line px-4 py-4">
             <CoverageArc percent={coverage.weightedPercent} />
@@ -176,7 +181,7 @@ export function RoomWorkspace({
           </div>
 
           {/* Index */}
-          <nav className="flex max-h-[24rem] flex-col gap-0.5 overflow-y-auto p-2">
+          <nav className="flex max-h-[24rem] min-h-0 flex-col gap-0.5 overflow-y-auto overscroll-contain p-2 lg:max-h-none lg:flex-1">
             <button
               type="button"
               onClick={() => {
@@ -316,7 +321,7 @@ export function RoomWorkspace({
               links are inert here, and nothing you do in this pane is recorded as viewer activity.
             </p>
           </div>
-          <div className="h-[42rem] overflow-hidden rounded-2xl border border-line" style={{ boxShadow: "0 2px 12px rgba(0,0,0,0.15)" }}>
+          <div className="h-[min(42rem,calc(100dvh-var(--app-header-h)-8rem))] min-h-[24rem] overflow-hidden rounded-2xl border border-line" style={{ boxShadow: "0 2px 12px rgba(0,0,0,0.15)" }}>
             {preview}
           </div>
         </div>

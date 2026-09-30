@@ -113,7 +113,7 @@ describe("checkUploadCandidate", () => {
   it("rejects a file over the bucket ceiling and says both numbers", () => {
     const result = checkUploadCandidate({ name: "huge.pdf", size: MAX_UPLOAD_BYTES + 1 });
     expect(result.ok).toBe(false);
-    if (!result.ok) expect(result.reason).toContain("100 MB");
+    if (!result.ok) expect(result.reason).toContain("500 MB");
   });
 
   it("accepts a file exactly at the ceiling", () => {
@@ -152,7 +152,7 @@ describe("formatBytes", () => {
     expect(formatBytes(512)).toBe("512 B");
     expect(formatBytes(2048)).toBe("2 KB");
     expect(formatBytes(1024 * 1024 * 1.5)).toBe("1.5 MB");
-    expect(formatBytes(MAX_UPLOAD_BYTES)).toBe("100 MB");
+    expect(formatBytes(MAX_UPLOAD_BYTES)).toBe("500 MB");
   });
 
   it("renders an unknown size as a dash rather than 0", () => {

@@ -121,11 +121,11 @@ export function LibraryWorkspace({
   return (
     <div className="grid gap-6 lg:grid-cols-[15rem_minmax(0,1fr)]">
       {/* ---------------------------------------------------------------- Rail */}
-      <aside className="lg:sticky lg:top-6 lg:self-start">
+      <aside className="lg:sticky lg:top-[calc(var(--app-header-h)+1.5rem)] lg:self-start">
         {/* Capped to the viewport so the rail's footer is always reachable
             while it is pinned; the section list scrolls inside it instead. */}
         <div
-          className="rounded-2xl border border-line bg-surface-1 lg:flex lg:max-h-[calc(100dvh-6rem)] lg:flex-col"
+          className="rounded-2xl border border-line bg-surface-1 lg:flex lg:max-h-[calc(100dvh-var(--app-header-h)-3rem)] lg:flex-col"
           style={{ boxShadow: "0 2px 12px rgba(0,0,0,0.15)" }}
         >
           <div className="border-b border-line px-4 py-4">
