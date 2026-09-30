@@ -4611,6 +4611,56 @@ Deployed, monitoring               →  live, observability active
              |  rendered. This is the render-time half. Three sibling list pages
              |  now share the shape: cached formatters in lib, a memoized row, and
              |  two counters that cannot cover for each other.
+             |
+             |  #1164 - Recorder page: one call, one name.
+             |  Went looking for render cost and found a correctness defect
+             |  instead. The recorder asked `defaultCallTitle()` twice: once for
+             |  the placeholder and again, from the clock, when the call ended.
+             |  But `/api/meetings/one-way` already resolves the title at START,
+             |  stores it on the row and RETURNS it - and this screen threw that
+             |  away. So an untitled hour-long call sat in the archive under the
+             |  minute it began and in the report under the minute it finished:
+             |  one call, two names. The route's title is now kept on `meeting`
+             |  and used for the report, with the same rule as the fallback,
+             |  evaluated at the start rather than the end.
+             |  The suggested title is read ONCE, on mount, into `useState`. It
+             |  used to be `defaultCallTitle()` in the placeholder, recomputed
+             |  every render - so the suggestion moved while the person typed
+             |  beside it, and each keystroke built two Intl formatters. Those
+             |  are module-scope now: 0.124ms -> 0.0023ms per title, 54.8x,
+             |  which the API route gets as well.
+             |  Measure first, and this time measuring said DON'T. The interim
+             |  words cost 0.07ms of React and 0.7ms of layout at 2,000 lines,
+             |  and an elapsed tick runs zero row bodies in 0.021ms - #1152's
+             |  memo already covers both. I nearly "fixed" `tickElapsed` on the
+             |  strength of the hook's own doc comment; the profiler said there
+             |  was nothing there. What WAS left: one settled sentence arriving
+             |  re-ran 2,066 row bodies at 2,000 lines, because `FinishedLines`
+             |  is memoized on the ARRAY and a new sentence is a new array. A
+             |  memoized `TranscriptLine` taking the text takes that to 1.
+             |  Chunking the list into sealed 64-row blocks measured WORSE (13.6
+             |  vs 8.1ms) - 31 `slice()` calls per render cost more than the
+             |  renders they saved - which is the second time this pass that the
+             |  obvious structural fix was the wrong one.
+             |  Two counters again, and the honest part: the transcript one has
+             |  no CI guard. A keyed row with unchanged props writes nothing to
+             |  the DOM either way, so every assertion available from outside the
+             |  module passes on the unfixed code - verified by injection, not
+             |  assumed. The test file says so in its header and the render count
+             |  lives in the PR, measured with a Profiler. The counters that DO
+             |  bite: the `toLocale*` call count in lib (1 failure when the
+             |  formatters are reverted) and the two clock tests (2 failures when
+             |  the title is recomputed at End, 1 when the placeholder is).
+             |  Gave CallRecorder its first tests - 680 lines and none, like
+             |  RecordingPlayer before #1154 - with a drivable fake
+             |  SpeechRecognition, since jsdom has none and without one the
+             |  screen takes its "cannot transcribe" path and shows no
+             |  transcript at all.
+             |  Confidence: Jest 7500 across 529 suites, typecheck and eslint
+             |  clean. The reflow measurement needed real Chromium via
+             |  test-utils/visual.ts - jsdom reports every rect as zero, so it
+             |  cannot see layout cost at all, which is exactly why that harness
+             |  exists.
 ```
 
 ---

@@ -147,6 +147,57 @@ describe("titles", () => {
     expect(callTitle("   ", now)).toBe(defaultCallTitle(now));
     expect(callTitle(null, now)).toBe(defaultCallTitle(now));
   });
+
+  // The recorder asks for a default title on every render of its setup screen,
+  // so this runs once per keystroke in the title field — and the route runs it
+  // once per call created. `toLocaleDateString` builds an Intl.DateTimeFormat,
+  // formats one date with it and throws it away, which benched at 54.8x a
+  // reused pair.
+  //
+  // Counted through the per-call API rather than through the constructor:
+  // `toLocaleDateString` does not go through the JS-visible
+  // `Intl.DateTimeFormat`, so a spy on the constructor reads zero either way
+  // and would pass on the unfixed code.
+  it("does not build a formatter per title", () => {
+    const date = jest.spyOn(Date.prototype, "toLocaleDateString");
+    const time = jest.spyOn(Date.prototype, "toLocaleTimeString");
+    try {
+      for (let i = 0; i < 200; i++) defaultCallTitle(new Date(Date.UTC(2026, 8, 23, 14, i % 60)));
+      expect(date).not.toHaveBeenCalled();
+      expect(time).not.toHaveBeenCalled();
+    } finally {
+      date.mockRestore();
+      time.mockRestore();
+    }
+  });
+
+  // The other half of caching a formatter: that it still says the same thing.
+  // A reused Intl.DateTimeFormat is only a safe swap if its output matches the
+  // per-call one it replaced, for every field, and "Sep 23" vs "September 23"
+  // in twenty archive rows is the kind of change nobody notices in a diff.
+  it("says exactly what the one-shot formatters said", () => {
+    for (const iso of [
+      "2026-09-23T14:05:00.000Z",
+      "2026-01-01T00:00:00.000Z",
+      "2026-12-31T23:59:00.000Z",
+      "2026-07-04T12:00:00.000Z",
+    ]) {
+      const when = new Date(iso);
+      const date = when.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+      const time = when.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+      expect(defaultCallTitle(when)).toBe(`Call · ${date}, ${time}`);
+    }
+  });
+
+  // The recorder names a call after the moment it BEGAN, and passes that
+  // moment in. An hour-long call must not come out named after the minute it
+  // finished.
+  it("names the call after the moment it is handed, not the clock", () => {
+    const began = new Date("2026-09-23T14:05:00.000Z");
+    const ended = new Date("2026-09-23T15:12:00.000Z");
+    expect(defaultCallTitle(began)).not.toBe(defaultCallTitle(ended));
+    expect(callTitle(null, began)).toBe(defaultCallTitle(began));
+  });
 });
 
 describe("isOneWay", () => {
