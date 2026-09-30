@@ -487,8 +487,9 @@ export async function fulfillCheckout(
     return { ok: true, kind: row.kind, alreadyFulfilled: true, token };
   }
   // NB: that read is a fast path, NOT the guard. Two callers racing both see
-  // "pending" here. The guard is claimCheckout() below, after payment is
-  // confirmed.
+  // "pending" here. The guard is claimFulfillment() below, after payment is
+  // confirmed. It is accurate as a fast path because "fulfilled" is only
+  // written once the grant has actually succeeded.
 
   const session = await getStripe().checkout.sessions.retrieve(sessionId);
   const paid = session.payment_status === "paid" || session.status === "complete";
@@ -514,12 +515,31 @@ export async function fulfillCheckout(
   // deployment was fulfilled by both within 7ms and granted its credit pack
   // twice. The old guard read `status` and then acted on it, so both callers
   // read "pending", both granted, and the loser's write of "fulfilled" landed
-  // last. Claiming is a single conditional UPDATE, so exactly one caller can
-  // move the row out of "pending" and only that one proceeds.
+  // last. The claim below is atomic, so exactly one caller proceeds.
   //
-  // Placed AFTER the paid check so an unpaid session is never marked fulfilled,
-  // and released below if granting throws, so a retry can re-run.
-  if (!(await claimCheckout(service, sessionId))) {
+  // Placed AFTER the paid check so an unpaid session is never claimed, and
+  // released if granting throws, so a retry can re-run.
+  const claim = await claimFulfillment(service, sessionId);
+  if (claim === "error") {
+    // Never report a claim we could not take as success: that would drop the
+    // grant AND tell the webhook to stop retrying.
+    return { ok: false, kind, error: "Could not claim this checkout for fulfillment." };
+  }
+  if (claim === "taken") {
+    // Someone else holds it. Whether they FINISHED decides what we say, because
+    // "already fulfilled" and "in flight" need opposite handling: the first is
+    // success, the second must keep retrying.
+    const { data: current } = await service
+      .from("stripe_checkouts")
+      .select("status")
+      .eq("session_id", sessionId)
+      .maybeSingle();
+    if (current && current.status !== "fulfilled") {
+      return { ok: false, kind, error: "Fulfillment is already in progress for this checkout." };
+    }
+    // No row means an invoice checkout, which never gets one (the kind CHECK
+    // allows only plan/pack/gift). Those settle idempotently, so the holder
+    // finishing is enough.
     return { ok: true, kind, alreadyFulfilled: true, token: meta.token };
   }
 
@@ -619,77 +639,79 @@ export async function fulfillCheckout(
     // after a failure would make every retry a no-op and lose a paid-for grant
     // silently. Release it so the webhook's redelivery (or a page reload) can
     // fulfill properly.
-    await releaseCheckout(service, sessionId);
+    if (!(await releaseFulfillment(service, sessionId))) {
+      console.error(
+        `[stripe] checkout ${sessionId} was claimed, did not fulfill, and the claim could not be released — needs manual repair`,
+      );
+    }
     throw err;
   }
+
+  // Only now is the checkout really fulfilled, so only now does the row say so.
+  // Best-effort, like the row's creation: the claim is what prevents a second
+  // grant, and this is the audit trail plus the fast path above.
+  await service
+    .from("stripe_checkouts")
+    .update({ status: "fulfilled", fulfilled_at: new Date().toISOString() })
+    .eq("session_id", sessionId);
 
   return { ok: true, kind, token: meta.token };
 }
 
 type CheckoutService = ReturnType<typeof createServiceClient>;
 
+type ClaimResult = "won" | "taken" | "error";
+
 /**
- * Compare-and-set the checkout out of "pending". Returns true for the one
- * caller that won, false for every other.
+ * Take exclusive ownership of fulfilling this checkout session.
  *
- * The row is written by createCheckout on a best-effort basis, so it may not
- * exist at all — hence the upsert rather than a plain update. `session_id`
- * carries a unique index (stripe_checkouts_session_id_key), which is what makes
- * the insert side of this atomic: the loser hits the constraint instead of
- * writing a second row.
+ * The claim lives in `processed_stripe_events`, not in `stripe_checkouts`, and
+ * that choice is load-bearing. `stripe_checkouts` cannot hold it: its audit row
+ * is written best-effort by createCheckout, so it may be absent, and it CANNOT
+ * exist for invoice checkouts at all — the `kind` CHECK allows only
+ * plan/pack/gift, while fulfillment also handles `invoice` and
+ * `subscription_invoice`. A claim that depends on that row would simply fail
+ * for every invoice payment. `processed_stripe_events` is a bare text primary
+ * key with no constraints, and an insert that conflicts on it is exactly the
+ * atomic test-and-set this needs.
  *
- * Fails CLOSED (returns false) on a database error. A transient DB fault then
- * costs a redelivery rather than a duplicate grant, which is the right way
- * round for something that hands out paid value — and unlike a dropped Stripe
- * event, both of our callers retry.
+ * Returns three states, and the distinction matters: reporting a storage
+ * failure as "someone else has it" would skip the grant AND tell the webhook to
+ * acknowledge, so a paid checkout would be silently dropped.
  */
-async function claimCheckout(service: CheckoutService, sessionId: string): Promise<boolean> {
+async function claimFulfillment(service: CheckoutService, sessionId: string): Promise<ClaimResult> {
   const { data, error } = await service
-    .from("stripe_checkouts")
-    .update({ status: "fulfilled", fulfilled_at: new Date().toISOString() })
-    .eq("session_id", sessionId)
-    .neq("status", "fulfilled")
-    .select("session_id");
+    .from("processed_stripe_events")
+    .upsert({ id: `fulfill:${sessionId}`, type: "checkout.fulfill" }, {
+      onConflict: "id",
+      ignoreDuplicates: true,
+    })
+    .select("id");
   if (error) {
-    console.error("[stripe] claimCheckout failed:", error.message);
-    return false;
+    console.error("[stripe] claimFulfillment failed:", error.message);
+    return "error";
   }
-  if ((data?.length ?? 0) > 0) return true;
-
-  // No row moved: either another caller already claimed it, or createCheckout's
-  // audit insert never landed. Distinguish the two — only the missing-row case
-  // is ours to fulfill.
-  const { data: existing } = await service
-    .from("stripe_checkouts")
-    .select("session_id")
-    .eq("session_id", sessionId)
-    .maybeSingle();
-  if (existing) return false; // someone else holds the claim
-
-  const { error: insertErr } = await service.from("stripe_checkouts").insert({
-    session_id: sessionId,
-    status: "fulfilled",
-    fulfilled_at: new Date().toISOString(),
-  });
-  // A unique-violation here means a concurrent caller inserted first — they own
-  // the claim, so we stand down.
-  if (insertErr) {
-    if (insertErr.code !== "23505") {
-      console.error("[stripe] claimCheckout insert failed:", insertErr.message);
-    }
-    return false;
-  }
-  return true;
+  return (data?.length ?? 0) > 0 ? "won" : "taken";
 }
 
-/** Hand the claim back so a redelivery can fulfill. */
-async function releaseCheckout(service: CheckoutService, sessionId: string): Promise<void> {
+/**
+ * Hand the claim back so a redelivery can fulfill. Reports whether it worked,
+ * because a claim that cannot be released leaves the checkout unfulfillable and
+ * the caller needs to say so rather than swallow it.
+ */
+async function releaseFulfillment(service: CheckoutService, sessionId: string): Promise<boolean> {
   try {
-    await service
-      .from("stripe_checkouts")
-      .update({ status: "pending", fulfilled_at: null })
-      .eq("session_id", sessionId);
+    const { error } = await service
+      .from("processed_stripe_events")
+      .delete()
+      .eq("id", `fulfill:${sessionId}`);
+    if (error) {
+      console.error("[stripe] releaseFulfillment failed:", error.message);
+      return false;
+    }
+    return true;
   } catch (err) {
-    console.error("[stripe] releaseCheckout failed:", err);
+    console.error("[stripe] releaseFulfillment threw:", err);
+    return false;
   }
 }

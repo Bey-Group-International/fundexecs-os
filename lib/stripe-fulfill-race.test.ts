@@ -1,81 +1,71 @@
 /**
- * Fulfillment must grant exactly once, even when both paths arrive together.
+ * Fulfillment must grant exactly once, and must never report success without
+ * granting.
  *
- * This is a regression test for a bug that reached production and gave real
- * credits away. Fulfillment has two callers — the browser's return redirect
+ * Regression test for a bug that reached production and gave real credits away.
+ * Fulfillment has two callers — the browser's return redirect
  * (/api/stripe/return) and the Stripe webhook — and adding the webhook made
  * them concurrent for the first time. The very first live purchase was
  * fulfilled by both within 7ms and granted its 500-credit pack twice, because
  * the guard read `status` and then acted on it: both callers read "pending".
  *
- * The fix is a compare-and-set claim, so the test drives the thing that
- * actually broke — two overlapping calls against one store — rather than two
- * sequential ones, which passed even with the bug.
+ * The concurrency case drives two OVERLAPPING calls against one store, because
+ * two sequential ones passed even with the bug. The remaining cases cover the
+ * other half of the contract: a claim that could not be taken must not be
+ * reported as "already fulfilled", or the grant is dropped and the webhook is
+ * told to stop retrying.
  */
 
 const grants: string[] = [];
 
-// A minimal stand-in for the checkout table that honours the ONE property the
-// claim depends on: an UPDATE filtered on `status <> 'fulfilled'` matches a row
-// for the first caller and nothing for the second.
-const store = new Map<string, { status: string; kind: string }>();
+// Claims live in processed_stripe_events (a bare text primary key). The one
+// property that matters: a second insert of the same id conflicts, so only the
+// first caller gets a row back.
+const claims = new Set<string>();
+let claimFails = false;
+
+// The checkout audit row. Absent for invoice kinds, which the `kind` CHECK
+// (plan|pack|gift) cannot store at all.
+let checkoutRow: { status: string } | null = null;
 
 function table(name: string) {
-  if (name !== "stripe_checkouts") {
-    // Every other table used during a pack grant: accept and record writes.
+  if (name === "processed_stripe_events") {
     return {
-      select: () => ({ eq: () => ({ maybeSingle: async () => ({ data: null }) }) }),
-      insert: async () => ({ error: null }),
-      update: () => ({ eq: async () => ({ error: null }) }),
-      upsert: async () => ({ data: [], error: null }),
+      upsert: (row: { id: string }) => ({
+        select: async () => {
+          if (claimFails) return { data: null, error: { message: "db down" } };
+          if (claims.has(row.id)) return { data: [], error: null };
+          claims.add(row.id);
+          return { data: [{ id: row.id }], error: null };
+        },
+      }),
+      delete: () => ({
+        eq: async (_c: string, id: string) => {
+          claims.delete(id);
+          return { error: null };
+        },
+      }),
     };
   }
-  let pendingUpdate: Record<string, unknown> | null = null;
-  let sessionFilter = "";
-  let requirePending = false;
-  const api = {
-    select: (_cols?: string) => ({
-      eq: (_c: string, v: string) => {
-        sessionFilter = v;
-        return {
-          maybeSingle: async () => ({ data: store.get(sessionFilter) ?? null }),
-        };
-      },
-    }),
-    update: (patch: Record<string, unknown>) => {
-      pendingUpdate = patch;
-      return {
-        eq: (_c: string, v: string) => {
-          sessionFilter = v;
-          const chain = {
-            neq: (_col: string, _val: string) => {
-              requirePending = true;
-              return chain;
-            },
-            select: async (_c?: string) => {
-              const row = store.get(sessionFilter);
-              if (!row) return { data: [], error: null };
-              if (requirePending && row.status === "fulfilled") {
-                return { data: [], error: null };
-              }
-              // Atomic in the real DB; here the whole callback is synchronous
-              // between awaits, which is the same guarantee.
-              store.set(sessionFilter, { ...row, ...(pendingUpdate as object) } as never);
-              return { data: [{ session_id: sessionFilter }], error: null };
-            },
-            then: undefined as never,
-          };
-          return chain;
+  if (name === "stripe_checkouts") {
+    return {
+      select: () => ({
+        eq: () => ({ maybeSingle: async () => ({ data: checkoutRow }) }),
+      }),
+      update: (patch: { status?: string }) => ({
+        eq: async () => {
+          if (checkoutRow && patch.status) checkoutRow.status = patch.status;
+          return { error: null };
         },
-      };
-    },
-    insert: async (rowData: { session_id: string }) => {
-      if (store.has(rowData.session_id)) return { error: { code: "23505", message: "dup" } };
-      store.set(rowData.session_id, { status: "fulfilled", kind: "pack" });
-      return { error: null };
-    },
+      }),
+    };
+  }
+  return {
+    select: () => ({ eq: () => ({ maybeSingle: async () => ({ data: null }) }) }),
+    insert: async () => ({ error: null }),
+    update: () => ({ eq: async () => ({ error: null }) }),
+    upsert: async () => ({ data: [], error: null }),
   };
-  return api;
 }
 
 jest.mock("@/lib/supabase/server", () => ({
@@ -91,9 +81,7 @@ const retrieve = jest.fn(async () => ({
   payment_intent: "pi_1",
 }));
 jest.mock("stripe", () =>
-  jest.fn().mockImplementation(() => ({
-    checkout: { sessions: { retrieve } },
-  })),
+  jest.fn().mockImplementation(() => ({ checkout: { sessions: { retrieve } } })),
 );
 
 jest.mock("@/lib/purchase", () => ({
@@ -107,8 +95,9 @@ import { fulfillCheckout } from "./stripe";
 
 beforeEach(() => {
   grants.length = 0;
-  store.clear();
-  store.set("cs_live_race", { status: "pending", kind: "pack" });
+  claims.clear();
+  claimFails = false;
+  checkoutRow = { status: "pending" };
   process.env.STRIPE_SECRET_KEY = "sk_live_test_fixture";
 });
 
@@ -119,16 +108,57 @@ it("grants once when the webhook and the return redirect arrive together", async
   ]);
 
   expect(grants).toHaveLength(1);
-  // Both callers still report success — the loser must not surface an error to
-  // a buyer whose payment genuinely went through.
-  expect(a.ok).toBe(true);
-  expect(b.ok).toBe(true);
-  expect([a.alreadyFulfilled, b.alreadyFulfilled].filter(Boolean)).toHaveLength(1);
-  expect(store.get("cs_live_race")?.status).toBe("fulfilled");
+  // The winner succeeds; the loser must not surface an error to a buyer whose
+  // payment genuinely went through, nor claim to have granted anything.
+  const winner = [a, b].find((r) => !r.alreadyFulfilled);
+  const loser = [a, b].find((r) => r.alreadyFulfilled);
+  expect(winner?.ok).toBe(true);
+  expect(loser?.ok).toBe(true);
+  expect(checkoutRow?.status).toBe("fulfilled");
 });
 
-it("still grants once when the same session is fulfilled twice in sequence", async () => {
+it("grants once when the same session is fulfilled twice in sequence", async () => {
   await fulfillCheckout("cs_live_race");
   await fulfillCheckout("cs_live_race");
   expect(grants).toHaveLength(1);
+});
+
+it("reports failure, not success, when the claim cannot be taken", async () => {
+  claimFails = true;
+  const res = await fulfillCheckout("cs_live_race");
+
+  // The dangerous outcome is ok:true — it drops the grant and tells the webhook
+  // to stop redelivering, so the buyer pays and receives nothing.
+  expect(res.ok).toBe(false);
+  expect(res.alreadyFulfilled).toBeUndefined();
+  expect(grants).toHaveLength(0);
+});
+
+it("keeps retrying while another caller is mid-fulfillment", async () => {
+  // Claim held, but the checkout is still pending: the holder has not finished.
+  claims.add("fulfill:cs_live_race");
+  const res = await fulfillCheckout("cs_live_race");
+
+  expect(res.ok).toBe(false);
+  expect(res.alreadyFulfilled).toBeUndefined();
+  expect(grants).toHaveLength(0);
+});
+
+it("reports already-fulfilled once the holder has finished", async () => {
+  claims.add("fulfill:cs_live_race");
+  checkoutRow = { status: "fulfilled" };
+  const res = await fulfillCheckout("cs_live_race");
+
+  expect(res.ok).toBe(true);
+  expect(res.alreadyFulfilled).toBe(true);
+  expect(grants).toHaveLength(0);
+});
+
+it("does not strand an invoice checkout, which never has an audit row", async () => {
+  claims.add("fulfill:cs_live_race");
+  checkoutRow = null; // the kind CHECK cannot store invoice kinds
+  const res = await fulfillCheckout("cs_live_race");
+
+  expect(res.ok).toBe(true);
+  expect(res.alreadyFulfilled).toBe(true);
 });
