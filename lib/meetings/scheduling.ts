@@ -495,6 +495,23 @@ export interface BookingValidation {
 export const BOOKING_NAME_MAX = 200;
 export const BOOKING_EMAIL_MAX = 254;
 export const BOOKING_NOTES_MAX = 2000;
+/** Longest cancellation or decline reason kept and emailed. */
+export const BOOKING_REASON_MAX = 1000;
+
+/**
+ * A cancellation or decline reason as it is stored and emailed: text only,
+ * trimmed, capped, and null when there is nothing to say.
+ *
+ * The invitee's side comes from an anonymous request body, so it can be
+ * anything JSON can carry. A number there used to throw on `.trim()` halfway
+ * through a cancel, after the meeting room was already deleted, leaving a
+ * booking still "confirmed" with no room behind it.
+ */
+export function normalizeBookingReason(raw: unknown): string | null {
+  if (typeof raw !== "string") return null;
+  const text = raw.trim().slice(0, BOOKING_REASON_MAX).trim();
+  return text || null;
+}
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 

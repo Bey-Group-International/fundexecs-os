@@ -38,6 +38,7 @@ import {
   isReservedSlug,
   isSlotAvailable,
   isValidTimezone,
+  normalizeBookingReason,
   normalizeSlug,
   parseAvailability,
   suggestSlug,
@@ -785,12 +786,12 @@ export async function approveBooking(client: SchedulingClient, ctx: BookingConte
 export async function declineBooking(
   client: SchedulingClient,
   ctx: BookingContext,
-  reason?: string | null,
+  reason?: unknown,
 ): Promise<BookingContext> {
   if (ctx.booking.status !== "pending") throw new Error("Only a pending request can be declined.");
   const updated = await updateBookingRow(client, ctx.booking.id, {
     status: "declined",
-    cancellation_reason: reason?.trim() || null,
+    cancellation_reason: normalizeBookingReason(reason),
     decided_at: new Date().toISOString(),
   });
   return { ...ctx, booking: updated };
@@ -801,7 +802,7 @@ export async function cancelBooking(
   client: SchedulingClient,
   ctx: BookingContext,
   by: "host" | "invitee",
-  reason?: string | null,
+  reason?: unknown,
 ): Promise<BookingContext> {
   if (ctx.booking.status === "cancelled" || ctx.booking.status === "declined") return ctx;
 
@@ -816,7 +817,7 @@ export async function cancelBooking(
   const updated = await updateBookingRow(client, ctx.booking.id, {
     status: "cancelled",
     cancelled_by: by,
-    cancellation_reason: reason?.trim() || null,
+    cancellation_reason: normalizeBookingReason(reason),
     decided_at: new Date().toISOString(),
   });
   return { ...ctx, booking: updated };
