@@ -221,7 +221,7 @@ export type BookingEmailKind =
 export async function sendBookingEmails(
   kind: BookingEmailKind,
   ctx: BookingEmailContext,
-): Promise<{ sent: number }> {
+): Promise<{ sent: number; inviteeSent: boolean }> {
   // "Save to calendar", offered on exactly the transitions that put an entry in
   // somebody's calendar in the first place — the ones inviteMethodFor sends a
   // REQUEST for. A pending request is a hold the host may still decline, and a
@@ -500,5 +500,11 @@ export async function sendBookingEmails(
   const results = await Promise.allSettled(
     messages.map((m) => send(m.to, m.subject, m.html, ctx.orgId, invite, ctx.credentials)),
   );
-  return { sent: results.filter((r) => r.status === "fulfilled" && r.value).length };
+  const delivered = (i: number) => results[i].status === "fulfilled" && (results[i] as PromiseFulfilledResult<boolean>).value;
+  return {
+    sent: results.filter((_, i) => delivered(i)).length,
+    // Reported apart from the total: the booking page promises the invitee an
+    // email only when theirs went out, and the host's copy says nothing of it.
+    inviteeSent: messages.some((m, i) => m.to === inviteeTo && delivered(i)),
+  };
 }

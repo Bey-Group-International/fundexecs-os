@@ -7,7 +7,12 @@ import { createServiceClient, hasSupabaseServiceEnv } from "@/lib/supabase/serve
 import { checkRateLimit, clientIp, rateLimitResponse } from "@/lib/rate-limit";
 import { SITE_URL } from "@/lib/site";
 import { buildMeetingInviteUrl } from "@/lib/meetings/service";
-import { buildBookingManageUrl, isValidTimezone, validateBookingRequest } from "@/lib/meetings/scheduling";
+import {
+  buildBookingCalendarUrl,
+  buildBookingManageUrl,
+  isValidTimezone,
+  validateBookingRequest,
+} from "@/lib/meetings/scheduling";
 import {
   SlotUnavailableError,
   createBooking,
@@ -85,7 +90,7 @@ export async function POST(
     const joinUrl = roomCode ? buildMeetingInviteUrl(SITE_URL, roomCode) : null;
     const manageUrl = buildBookingManageUrl(SITE_URL, booking.manage_token);
 
-    await sendBookingEmails(booking.status === "pending" ? "requested" : "confirmed", {
+    const mail = await sendBookingEmails(booking.status === "pending" ? "requested" : "confirmed", {
       // The invitee is anonymous, so there is no acting user to send as. The
       // person this is from is the host whose link was booked, so it goes out
       // from their mailbox; without one it falls back to the org's, because a
@@ -121,6 +126,13 @@ export async function POST(
       joinUrl,
       manageUrl,
       manageToken: booking.manage_token,
+      // Whether the invitee's confirmation actually went out. When it didn't —
+      // no host mailbox, or the mail provider down — this page is the only
+      // record they get, so it must not say otherwise.
+      emailed: mail.inviteeSent,
+      // A calendar file that doesn't depend on email arriving. Confirmed only:
+      // a pending request is a hold the host may still decline.
+      calendarUrl: booking.status === "confirmed" ? buildBookingCalendarUrl(SITE_URL, booking.manage_token) : null,
     });
   } catch (err) {
     if (err instanceof SlotUnavailableError) {

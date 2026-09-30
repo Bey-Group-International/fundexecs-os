@@ -27,6 +27,8 @@ interface BookedState {
   startIso: string;
   joinUrl: string | null;
   manageUrl: string;
+  calendarUrl: string | null;
+  emailed: boolean;
 }
 
 /**
@@ -113,6 +115,8 @@ export function BookingFlow({
         status?: "pending" | "confirmed";
         joinUrl?: string | null;
         manageUrl?: string;
+        calendarUrl?: string | null;
+        emailed?: boolean;
       };
       if (!res.ok) {
         setFieldErrors(data.fieldErrors ?? {});
@@ -129,6 +133,9 @@ export function BookingFlow({
         startIso: selected,
         joinUrl: data.joinUrl ?? null,
         manageUrl: data.manageUrl ?? "",
+        calendarUrl: data.calendarUrl ?? null,
+        // An older server that doesn't report this did send the email.
+        emailed: data.emailed ?? true,
       });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not book this time.");
@@ -147,8 +154,12 @@ export function BookingFlow({
         <p className="text-sm text-[var(--fg-primary)]">{formatSlotFull(booked.startIso, timezone)}</p>
         <p className="text-sm text-[var(--fg-muted)]">
           {booked.status === "pending"
-            ? `${hostName} will confirm or decline this time. We've emailed you the details, and you'll hear either way.`
-            : `We've emailed you the details and a link to join. ${hostName} has it on their calendar.`}
+            ? booked.emailed
+              ? `${hostName} will confirm or decline this time. We've emailed you the details, and you'll hear either way.`
+              : `${hostName} will confirm or decline this time. We couldn't email you a copy, so keep the link below to check on it.`
+            : booked.emailed
+              ? `We've emailed you the details and a link to join. ${hostName} has it on their calendar.`
+              : `${hostName} has it on their calendar. We couldn't email you a confirmation, so add it to your calendar and keep the links below.`}
         </p>
         <div className="flex flex-wrap gap-3">
           {booked.joinUrl ? (
@@ -157,6 +168,14 @@ export function BookingFlow({
               className="rounded-lg bg-[var(--gold-400)] px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-[var(--gold-500)]"
             >
               Join link
+            </a>
+          ) : null}
+          {booked.calendarUrl ? (
+            <a
+              href={booked.calendarUrl}
+              className="rounded-lg border border-[var(--line)] px-4 py-2 text-sm font-medium text-[var(--fg-secondary)] transition-colors hover:text-[var(--fg-primary)]"
+            >
+              Add to calendar
             </a>
           ) : null}
           {booked.manageUrl ? (

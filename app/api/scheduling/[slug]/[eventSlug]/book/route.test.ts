@@ -5,7 +5,7 @@
 
 const hasServiceEnv = jest.fn(() => true);
 const serviceClient = jest.fn();
-const sendBookingEmails = jest.fn(async () => ({ sent: 2 }));
+const sendBookingEmails = jest.fn(async () => ({ sent: 2, inviteeSent: true }));
 
 jest.mock("@/lib/supabase/server", () => ({
   hasSupabaseServiceEnv: () => hasServiceEnv(),
@@ -291,6 +291,10 @@ describe("POST /api/scheduling/[slug]/[eventSlug]/book", () => {
     expect(booking.invitee_email).toBe("grace@x.com"); // normalized
     expect(booking.invitee_timezone).toBe("Asia/Tokyo");
     expect(String(booking.manage_token)).toHaveLength(32);
+    // The page's own record of the booking: whether the invitee's email went
+    // out, and a calendar file that doesn't depend on it.
+    expect(body.emailed).toBe(true);
+    expect(body.calendarUrl).toContain(`/booking/${booking.manage_token}/calendar.ics`);
 
     expect(sendBookingEmails).toHaveBeenCalledWith("confirmed", expect.objectContaining({
       hostEmail: "ada@fund.test",

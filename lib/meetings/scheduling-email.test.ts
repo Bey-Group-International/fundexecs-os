@@ -153,6 +153,23 @@ describe("sendBookingEmails — the invitation", () => {
     sendEmailMock.mockResolvedValue({ ok: false, channel: "in-app", detail: "no mailbox" });
     const result = await sendBookingEmails("confirmed", ctx());
     expect(result.sent).toBe(0);
+    expect(result.inviteeSent).toBe(false);
+  });
+
+  it("says whether the invitee's own copy went out, apart from the host's", async () => {
+    // The booking page tells the invitee "we've emailed you" only if this is
+    // true — the host's copy arriving says nothing about theirs.
+    sendEmailMock.mockImplementation(async (args: { to: { email: string } }) =>
+      args.to.email === "ada@example.com"
+        ? { ok: false, channel: "gmail", detail: "401" }
+        : { ok: true, channel: "gmail", detail: "sent" },
+    );
+    const result = await sendBookingEmails("confirmed", ctx());
+    expect(result.sent).toBe(1);
+    expect(result.inviteeSent).toBe(false);
+
+    sendEmailMock.mockResolvedValue({ ok: true, channel: "gmail", detail: "sent" });
+    expect((await sendBookingEmails("confirmed", ctx())).inviteeSent).toBe(true);
   });
 });
 
