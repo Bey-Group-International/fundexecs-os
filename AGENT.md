@@ -5017,6 +5017,119 @@ Deployed, monitoring               →  live, observability active
              |  virtualising it is a different change with a different risk.
              |  Confidence: Jest 7659 across 539 suites, typecheck and eslint
              |  clean.
+             |
+             |  2026-09-30  The public booking page built 833 date formatters to
+             |  paint itself and 60 more for every character an invitee typed.
+             |  Measured first, on a 336-slot window (21 days, 16 times a day,
+             |  which is a 30-minute meeting over a normal working fortnight):
+             |  mount 108ms over two commits, picking a time 10-37ms, and each
+             |  keystroke in the name field 15-22ms. Instrumenting the
+             |  Intl.DateTimeFormat constructor said why: 833 constructions to
+             |  mount, 60 per keystroke. The 60 is exactly the page - 42 for the
+             |  day rail (two formatters per day, built inline in SlotPicker's
+             |  render body), 16 for the times in the open day, one for the day
+             |  heading, one for the chosen slot's stamp.
+             |  Two independent causes. Every function in lib/meetings/scheduling.ts
+             |  constructed its formatter per call, and `dateInTimezone` is called
+             |  once per slot by `groupSlotsByDate` - so grouping a fortnight built
+             |  336 of them, twice, because the page renders at UTC for hydration
+             |  and regroups once `detectTimezone` answers. And SlotPicker was not
+             |  memoised while the form's state lives in the page above it, so
+             |  typing a name re-rendered the whole grid to paint a character into
+             |  an input beneath it.
+             |  Fixed both. Six named shapes cached per zone, the idiom
+             |  lib/meetings/schedule.ts already used for its offset formatters;
+             |  the rail's two inline formatters moved into the module as
+             |  formatSlotWeekday and formatSlotDayMonth (which also gave them the
+             |  fallback they never had - an unknown zone used to throw mid-render);
+             |  and memo on SlotPicker and on TimezoneSelect, whose option list is
+             |  the runtime's whole IANA table, 418 elements rebuilt per keystroke.
+             |  After: mount 55ms, picking a time 5-7ms, a keystroke 0.9-1.1ms and
+             |  ZERO formatters. Twelve characters went from 233-345ms to 16-20ms.
+             |  A failure cannot be cached - the constructor throws before the map
+             |  is written - so a browser sending a junk zone still falls back and
+             |  cannot grow the map. Tested, not just reasoned.
+             |  What is guarded: the formatter count, which is the cost that was
+             |  actually paid. One formatter for 336 slots, zero once a zone is
+             |  warm, zero across twelve keystrokes end-to-end on the real page,
+             |  and an oracle built in the test that checks the cached answers
+             |  against a formatter it constructs itself.
+             |  What is NOT, said plainly because both were injected and neither
+             |  broke a thing: un-memoising SlotPicker passes all 7685 tests, and
+             |  so does putting the quadratic bucket copy back into
+             |  groupSlotsByDate. A component that skips a render writes nothing to
+             |  the DOM, and an allocation count is not observable from outside.
+             |  The render numbers are in the PR with a Profiler; the memo is
+             |  defended by nothing but the comment explaining why its props are
+             |  stable.
+             |  Third call site, found by grep not by luck: SchedulingSettings
+             |  passed TimezoneSelect an inline arrow, which would have defeated
+             |  the new memo on the one screen where a host types into three text
+             |  fields. patchDraft is a useCallback now. That is the same
+             |  memo-defeated-by-one-prop shape as the calendar's presence object
+             |  and the log's dependency array - a third instance, in a component
+             |  shared by three screens.
+             |  Confidence: Jest 7685 across 540 suites, typecheck and eslint
+             |  clean. Eight injections, each breaking exactly what it should and
+             |  nothing it should not.
+             |
+             |  2026-09-30  The manage-booking page showed a stranger nothing at
+             |  all until a round trip it did not need to make.
+             |  Measured the render path FIRST, and it was already fine - typing a
+             |  cancellation reason costs 1.1ms and builds zero formatters, which
+             |  is #1187's shared SlotPicker/TimezoneSelect work paying off on a
+             |  page I had not touched. There was no render work to do here and I
+             |  did not invent any.
+             |  The cost was the SHAPE of first paint: commit one was a 0.3ms
+             |  spinner, commit two was 39-45ms and arrived only after
+             |  /api/scheduling/booking/[token] answered. Instrumented that GET
+             |  with a 25ms-per-read stub: SEVEN reads at a SERIAL DEPTH OF FOUR -
+             |  booking, then (page, event type), then the room code, then
+             |  (meetings, bookings, blocks) - about 100ms, plus 7-9ms generating
+             |  slots. All of it after the HTML had been delivered and hydrated,
+             |  on the one page a stranger reaches from the one email they have.
+             |  The page holds the token. The server could always have made that
+             |  request. So page.tsx is a server component now: it reads the view
+             |  and hands it over, and the route keeps serving the same thing
+             |  through the SAME function - the browser still needs it after a
+             |  cancel or reschedule, and as the fallback when the server read
+             |  fails. One loader, so the two cannot disagree about the shape.
+             |  After: ZERO fetches on mount, and the booking is in the FIRST
+             |  commit. Honesty about my own harness: the "before" fetch was a
+             |  jsdom mock that resolved instantly, so the wall-clock numbers
+             |  understate this - the round trip IS the win, and it was measured
+             |  separately rather than inferred.
+             |  Three states, not two, because they are three different sentences:
+             |  a view means paint it, `null` means this token names no booking so
+             |  say the link is dead, `undefined` means the server could not look
+             |  so fetch as before. Collapsing the last two would tell somebody
+             |  holding a perfectly good link that it is invalid because a
+             |  deployment is missing its keys.
+             |  Two bugs found on the way, one pre-existing and one I would have
+             |  introduced. Pre-existing: the zone was re-resolved on every load,
+             |  so cancelling threw away the zone the invitee had picked from the
+             |  dropdown; it resolves once now, on the first view to arrive.
+             |  Introduced-and-caught: `isPast` read Date.now() in the render body,
+             |  which is fine for a client-only page and a hydration mismatch the
+             |  moment the server renders it - a meeting ending between the two
+             |  renders would change which controls exist. The server's instant is
+             |  passed in and used for that first render; the real clock takes over
+             |  on mount.
+             |  EIGHT injections, and the eighth is the point. Reverting page.tsx
+             |  to `<ManageBooking token={token} />` - undoing the entire change -
+             |  passed everything, because a server component has no component
+             |  test. So I wrote page.test.tsx, following report/page.test.tsx:
+             |  await the page, render what it returned, assert which of the three
+             |  answers it handed over. That injection now fails 3 tests.
+             |  This is the first change in this pass with NOTHING unguarded. The
+             |  other four each had a claim resting only on the PR's numbers. The
+             |  difference is not that I tried harder: it is that "the server did
+             |  the read" leaves a trace a test can see - a fetch that did not
+             |  happen - where "a component skipped a render" does not.
+             |  The page had no tests at all before this. It has 17 now, plus 5 on
+             |  the shared loader.
+             |  Confidence: Jest 7725 across 545 suites, typecheck and eslint
+             |  clean.
 ```
 
 ---

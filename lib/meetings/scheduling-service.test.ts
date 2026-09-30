@@ -16,6 +16,9 @@ jest.mock("@/lib/calendar/google.server", () => ({
 import {
   busyIntervals,
   createMeetingForBooking,
+  openSlots,
+  cancelBooking,
+  declineBooking,
   rescheduleBooking,
   resolvePublicPage,
   SlotUnavailableError,
@@ -143,6 +146,41 @@ describe("busyIntervals", () => {
   });
 });
 
+describe("openSlots daily booking limit", () => {
+  const page = {
+    id: "page-1",
+    user_id: "host-1",
+    timezone: "UTC",
+    availability: [
+      { day: 3, start: "09:00", end: "11:00" },
+      { day: 4, start: "09:00", end: "11:00" },
+    ],
+    buffer_minutes: 0,
+    min_notice_minutes: 0,
+    booking_window_days: 30,
+    max_bookings_per_day: 1,
+  };
+  const eventType = { duration_minutes: 30, slot_interval_minutes: 30 };
+  const client = () =>
+    fakeClient({
+      scheduling_bookings: [
+        { id: "b1", starts_at: "2026-09-02T15:00:00.000Z", ends_at: "2026-09-02T15:30:00.000Z" },
+      ],
+    }) as never;
+  const opts = { now: new Date("2026-09-01T00:00:00Z"), fromDate: "2026-09-02", toDate: "2026-09-03" };
+
+  it("closes a day that already holds the host's limit", async () => {
+    const { slots } = await openSlots(client(), page as never, eventType as never, opts);
+    expect(slots.some((s) => s.start.startsWith("2026-09-02"))).toBe(false);
+    expect(slots.filter((s) => s.start.startsWith("2026-09-03"))).toHaveLength(4);
+  });
+
+  it("does not count the booking being rescheduled against its own day", async () => {
+    const { slots } = await openSlots(client(), page as never, eventType as never, { ...opts, excludeBookingId: "b1" });
+    expect(slots.filter((s) => s.start.startsWith("2026-09-02"))).toHaveLength(4);
+  });
+});
+
 describe("resolvePublicPage", () => {
   // Every public booking-page view and slot lookup goes through here, so the
   // page and its event types must come back from ONE query, not two.
@@ -192,37 +230,37 @@ describe("resolvePublicPage", () => {
   });
 });
 
-describe("rescheduleBooking", () => {
-  /**
-   * Records every write and answers each table's writes from a queue, so a test
-   * can make the booking row reject a move the way the overlap constraint does.
-   */
-  function recordingClient(results: Record<string, Array<{ data: unknown; error: unknown }>>) {
-    const writes: Array<{ table: string; patch: Record<string, unknown> }> = [];
-    return {
-      writes,
-      from(table: string) {
-        const b: Record<string, unknown> = new Proxy(
-          {
-            update(patch: Record<string, unknown>) {
-              writes.push({ table, patch });
-              return b;
-            },
-            then: (res: (v: unknown) => unknown, rej: (e: unknown) => unknown) =>
-              Promise.resolve(results[table]?.shift() ?? { data: null, error: null }).then(res, rej),
+/**
+ * Records every write and answers each table's writes from a queue, so a test
+ * can make the booking row reject a move the way the overlap constraint does.
+ */
+function recordingClient(results: Record<string, Array<{ data: unknown; error: unknown }>>) {
+  const writes: Array<{ table: string; patch: Record<string, unknown> }> = [];
+  return {
+    writes,
+    from(table: string) {
+      const b: Record<string, unknown> = new Proxy(
+        {
+          update(patch: Record<string, unknown>) {
+            writes.push({ table, patch });
+            return b;
           },
-          {
-            get(target: Record<string, unknown>, prop: string) {
-              if (prop in target) return target[prop];
-              return () => b;
-            },
+          then: (res: (v: unknown) => unknown, rej: (e: unknown) => unknown) =>
+            Promise.resolve(results[table]?.shift() ?? { data: null, error: null }).then(res, rej),
+        },
+        {
+          get(target: Record<string, unknown>, prop: string) {
+            if (prop in target) return target[prop];
+            return () => b;
           },
-        ) as Record<string, unknown>;
-        return b;
-      },
-    };
-  }
+        },
+      ) as Record<string, unknown>;
+      return b;
+    },
+  };
+}
 
+describe("rescheduleBooking", () => {
   const ctx = {
     booking: {
       id: "bk-1",
@@ -292,6 +330,38 @@ describe("rescheduleBooking", () => {
     await rescheduleBooking(client as never, ctx, "2026-10-06T16:00:00.000Z", { enforceAvailability: false });
 
     expect(client.writes[1]).toMatchObject({ table: "live_meetings", patch: { last_reminder_sent_at: null } });
+  });
+});
+
+describe("booking reasons", () => {
+  const live = {
+    booking: { id: "bk-2", meeting_id: "mtg-2", status: "confirmed" },
+    page: { id: "page-1" },
+    eventType: { id: "et-1" },
+    roomCode: null,
+  } as unknown as BookingContext;
+
+  // The invitee's reason arrives in an anonymous JSON body. A number there used
+  // to throw on `.trim()` after the room was deleted, stranding the booking.
+  it("cancels cleanly whatever the reason's type", async () => {
+    const client = recordingClient({ scheduling_bookings: [{ data: { ...live.booking, status: "cancelled" }, error: null }] });
+    const next = await cancelBooking(client as never, live, "invitee", 42);
+    expect(next.booking.status).toBe("cancelled");
+    expect(client.writes.map((w) => w.table)).toEqual(["live_meetings", "scheduling_bookings"]);
+    expect(client.writes[1].patch).toMatchObject({ status: "cancelled", cancellation_reason: null });
+  });
+
+  it("stores a reason trimmed and capped", async () => {
+    const client = recordingClient({ scheduling_bookings: [{ data: live.booking, error: null }] });
+    await cancelBooking(client as never, live, "host", `  ${"r".repeat(5000)}  `);
+    expect((client.writes[1].patch.cancellation_reason as string).length).toBe(1000);
+  });
+
+  it("declines with a non-string reason without throwing", async () => {
+    const pending = { ...live, booking: { ...live.booking, status: "pending" } } as unknown as BookingContext;
+    const client = recordingClient({ scheduling_bookings: [{ data: pending.booking, error: null }] });
+    await declineBooking(client as never, pending, { text: "no" });
+    expect(client.writes[0].patch).toMatchObject({ status: "declined", cancellation_reason: null });
   });
 });
 

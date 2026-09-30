@@ -4,8 +4,11 @@
  * The page now sends the open times with the HTML, so the picker must paint
  * from them without a spinner and without asking /slots for what it already
  * has — and must still fetch when the server could not supply them.
+ *
+ * It also holds the one exact guard on the page's cost: typing in the form must
+ * not rebuild the date formatters behind the grid above it. See the bottom.
  */
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { BookingFlow } from "./BookingFlow";
 
 const EVENT = {
@@ -73,5 +76,69 @@ describe("after booking", () => {
   it("says it emailed you when it did", async () => {
     await book({ status: "confirmed", joinUrl: null, manageUrl: "https://app.test/b/tok", calendarUrl: null, emailed: true });
     expect(screen.getByText(/we've emailed you/i)).toBeTruthy();
+  });
+});
+
+/**
+ * What typing costs.
+ *
+ * The form fields live in this component, so every character re-rendered the
+ * picker sitting above them — a fortnight of days in the rail and every open
+ * time in the day on screen. Each of those labels built its own
+ * Intl.DateTimeFormat, so one keystroke constructed sixty formatters, measured
+ * at 15–22ms apiece on a 336-slot window; a twelve-character name cost about a
+ * third of a second of nothing but formatter construction.
+ *
+ * Two changes fixed it: the formatters are cached per zone in
+ * lib/meetings/scheduling.ts, and the picker is memoised so it is not re-rendered
+ * at all. The memo cannot be asserted from here — a component that skips a
+ * render writes nothing to the DOM either way, and the render counts are in the
+ * pull request with a Profiler. The formatter count can be, exactly, and it is
+ * the cost that was actually being paid.
+ */
+describe("what typing costs", () => {
+  function manySlots(days: number, perDay: number) {
+    const out: Array<{ start: string; end: string }> = [];
+    const base = Date.UTC(2026, 9, 5, 13, 0);
+    for (let d = 0; d < days; d++) {
+      for (let i = 0; i < perDay; i++) {
+        const start = base + d * 86_400_000 + i * 30 * 60_000;
+        out.push({ start: new Date(start).toISOString(), end: new Date(start + 1_800_000).toISOString() });
+      }
+    }
+    return out;
+  }
+
+  it("does not rebuild a single date formatter while somebody types their name", async () => {
+    const slots = manySlots(21, 16);
+    render(<BookingFlow slug="ana" hostName="Ana" eventType={EVENT} initialSlots={slots} />);
+
+    // Pick a time so the name field exists. Everything up to here may build
+    // formatters; the page has painted and this is where an invitee starts typing.
+    fireEvent.click(screen.getAllByRole("button", { name: /^\d{1,2}:\d{2}\s?(AM|PM)$/ })[0]);
+    const name = screen.getByLabelText(/your name/i) as HTMLInputElement;
+
+    const Real = Intl.DateTimeFormat;
+    let built = 0;
+    const Counting = function (...args: unknown[]) {
+      built++;
+      return new (Real as unknown as new (...a: unknown[]) => Intl.DateTimeFormat)(...args);
+    } as unknown as typeof Intl.DateTimeFormat;
+    Counting.supportedLocalesOf = Real.supportedLocalesOf;
+    Intl.DateTimeFormat = Counting;
+    try {
+      for (const ch of "Ada Lovelace") {
+        await act(async () => {
+          fireEvent.change(name, { target: { value: name.value + ch } });
+        });
+      }
+    } finally {
+      Intl.DateTimeFormat = Real;
+    }
+
+    expect(name.value).toBe("Ada Lovelace");
+    // Sixty per keystroke before: forty-two for the day rail, sixteen for the
+    // times, one for the day heading, one for the chosen slot's stamp.
+    expect(built).toBe(0);
   });
 });

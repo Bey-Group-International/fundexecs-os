@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import {
   DAY_LABELS,
   DAY_LABELS_SHORT,
@@ -19,6 +19,8 @@ const NOTICE_CHOICES = [
 
 const BUFFER_CHOICES = [0, 5, 10, 15, 30];
 const WINDOW_CHOICES = [7, 14, 30, 60, 90];
+// 0 stands for "no limit" in the select; it is sent as null.
+const DAILY_LIMIT_CHOICES = [0, 1, 2, 3, 4, 5, 6, 8, 10];
 
 /**
  * Availability + meeting types for the host's scheduling link. Every change is
@@ -41,10 +43,15 @@ export function SchedulingSettings({
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
 
-  function patchDraft(patch: Partial<HostSchedulingPage>) {
+  const patchDraft = useCallback((patch: Partial<HostSchedulingPage>) => {
     setDraft((d) => ({ ...d, ...patch }));
     setSaved(false);
-  }
+  }, []);
+
+  // A stable handler, because TimezoneSelect is memoised and renders the
+  // runtime's whole zone table: an arrow built here per render would hand it a
+  // new prop on every keystroke in the fields above and undo that.
+  const setTimezone = useCallback((timezone: string) => patchDraft({ timezone }), [patchDraft]);
 
   function ruleFor(day: number): SchedulingAvailabilityRule | null {
     return draft.availability.find((r) => r.day === day) ?? null;
@@ -81,6 +88,7 @@ export function SchedulingSettings({
           bufferMinutes: draft.bufferMinutes,
           minNoticeMinutes: draft.minNoticeMinutes,
           bookingWindowDays: draft.bookingWindowDays,
+          maxBookingsPerDay: draft.maxBookingsPerDay,
           isActive: draft.isActive,
         }),
       });
@@ -149,7 +157,7 @@ export function SchedulingSettings({
       <section className="flex flex-col gap-4">
         <SectionHeading title="Weekly hours" hint="When you're bookable, in your own timezone." />
 
-        <TimezoneSelect value={draft.timezone} onChange={(tz) => patchDraft({ timezone: tz })} id="host-timezone" />
+        <TimezoneSelect value={draft.timezone} onChange={setTimezone} id="host-timezone" />
 
         <div className="flex flex-col gap-2">
           {DAY_LABELS.map((label, day) => {
@@ -184,7 +192,7 @@ export function SchedulingSettings({
       <section className="flex flex-col gap-4">
         <SectionHeading title="Booking rules" hint="Guardrails applied to every meeting type." />
 
-        <div className="grid gap-4 sm:grid-cols-3">
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <Select
             label="Buffer between meetings"
             value={draft.bufferMinutes}
@@ -202,6 +210,15 @@ export function SchedulingSettings({
             value={draft.bookingWindowDays}
             onChange={(v) => patchDraft({ bookingWindowDays: v })}
             options={WINDOW_CHOICES.map((d) => ({ label: `${d} days out`, value: d }))}
+          />
+          <Select
+            label="Daily limit"
+            value={draft.maxBookingsPerDay ?? 0}
+            onChange={(v) => patchDraft({ maxBookingsPerDay: v > 0 ? v : null })}
+            options={DAILY_LIMIT_CHOICES.map((n) => ({
+              label: n === 0 ? "No limit" : `${n} booking${n === 1 ? "" : "s"} a day`,
+              value: n,
+            }))}
           />
         </div>
       </section>

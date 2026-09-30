@@ -38,6 +38,7 @@ import {
   isReservedSlug,
   isSlotAvailable,
   isValidTimezone,
+  normalizeBookingReason,
   normalizeSlug,
   parseAvailability,
   suggestSlug,
@@ -48,7 +49,7 @@ export type SchedulingClient =
   | ReturnType<typeof createServiceClient>;
 
 const PAGE_COLUMNS =
-  "id, user_id, organization_id, slug, display_name, headline, bio, timezone, availability, buffer_minutes, min_notice_minutes, booking_window_days, is_active, created_at, updated_at";
+  "id, user_id, organization_id, slug, display_name, headline, bio, timezone, availability, buffer_minutes, min_notice_minutes, booking_window_days, max_bookings_per_day, is_active, created_at, updated_at";
 const EVENT_TYPE_COLUMNS =
   "id, page_id, user_id, organization_id, slug, title, description, duration_minutes, slot_interval_minutes, meeting_type, requires_approval, is_active, sort_order, created_at, updated_at";
 const BOOKING_COLUMNS =
@@ -263,6 +264,17 @@ export async function resolvePublicPage(
  */
 export async function busyIntervals(
   client: SchedulingClient,
+  opts: Parameters<typeof hostCommitments>[1],
+): Promise<BusyInterval[]> {
+  return (await hostCommitments(client, opts)).busy;
+}
+
+/**
+ * The host's busy intervals, plus the start of each live booking they hold —
+ * what a daily booking limit counts.
+ */
+async function hostCommitments(
+  client: SchedulingClient,
   opts: {
     hostUserId: string;
     fromIso: string;
@@ -275,7 +287,7 @@ export async function busyIntervals(
      */
     timezone: string;
   },
-): Promise<BusyInterval[]> {
+): Promise<{ busy: BusyInterval[]; bookingStarts: string[] }> {
   // Anything that *overlaps* the window can start before it. Meetings are capped
   // at MAX_MEETING_MINUTES, so looking back that far is sufficient and keeps the
   // scan bounded instead of reading the host's whole history.
@@ -359,6 +371,7 @@ export async function busyIntervals(
   }
 
   const out: BusyInterval[] = [];
+  const bookingStarts: string[] = [];
 
   for (const row of (meetings.data ?? []) as Array<{ scheduled_at: string | null; duration_minutes: number | null }>) {
     if (!row.scheduled_at) continue;
@@ -374,6 +387,7 @@ export async function busyIntervals(
     // When rescheduling, the booking's own slot must not block its new time.
     if (opts.excludeBookingId && row.id === opts.excludeBookingId) continue;
     out.push({ start: row.starts_at, end: row.ends_at });
+    bookingStarts.push(row.starts_at);
   }
 
   out.push(
@@ -385,7 +399,7 @@ export async function busyIntervals(
   const [feedBusy, googleBusy] = await externalBusy;
   out.push(...feedBusy, ...googleBusy);
 
-  return out;
+  return { busy: out, bookingStarts };
 }
 
 export interface OpenSlotsResult {
@@ -423,7 +437,7 @@ export async function openSlots(
   // can sit up to a zone offset (±14h) either side of the same dates read as
   // UTC. Widening the busy lookup by two days each way keeps a meeting near the
   // range edge blocking its slots for hosts well east or west of UTC.
-  const busy = await busyIntervals(client, {
+  const { busy, bookingStarts } = await hostCommitments(client, {
     hostUserId: page.user_id,
     fromIso: new Date(new Date(`${fromDate}T00:00:00.000Z`).getTime() - 48 * 3600_000).toISOString(),
     toIso: new Date(new Date(`${toDate}T00:00:00.000Z`).getTime() + 48 * 3600_000).toISOString(),
@@ -439,6 +453,8 @@ export async function openSlots(
     bufferMinutes: page.buffer_minutes,
     minNoticeMinutes: page.min_notice_minutes,
     busy,
+    maxBookingsPerDay: page.max_bookings_per_day,
+    bookingStarts,
     fromDate,
     toDate,
     now,
@@ -475,10 +491,13 @@ async function assertSlotOpen(
     throw new SlotUnavailableError("That time is beyond how far ahead this link accepts bookings.");
   }
 
-  const busy = await busyIntervals(client, {
+  // Two days either side, not one: the daily booking limit counts every
+  // booking on the host-local day this start falls on, and that day (25 hours
+  // across a DST change) can begin or end more than 24 hours away from it.
+  const { busy, bookingStarts } = await hostCommitments(client, {
     hostUserId: page.user_id,
-    fromIso: new Date(start.getTime() - 24 * 3600_000).toISOString(),
-    toIso: new Date(start.getTime() + 24 * 3600_000).toISOString(),
+    fromIso: new Date(start.getTime() - 48 * 3600_000).toISOString(),
+    toIso: new Date(start.getTime() + 48 * 3600_000).toISOString(),
     excludeBookingId: opts.excludeBookingId,
     timezone: page.timezone,
   });
@@ -491,6 +510,8 @@ async function assertSlotOpen(
     bufferMinutes: page.buffer_minutes,
     minNoticeMinutes: page.min_notice_minutes,
     busy,
+    maxBookingsPerDay: page.max_bookings_per_day,
+    bookingStarts,
     now,
   });
   if (!open) throw new SlotUnavailableError("That time is no longer available. Please pick another.");
@@ -765,12 +786,12 @@ export async function approveBooking(client: SchedulingClient, ctx: BookingConte
 export async function declineBooking(
   client: SchedulingClient,
   ctx: BookingContext,
-  reason?: string | null,
+  reason?: unknown,
 ): Promise<BookingContext> {
   if (ctx.booking.status !== "pending") throw new Error("Only a pending request can be declined.");
   const updated = await updateBookingRow(client, ctx.booking.id, {
     status: "declined",
-    cancellation_reason: reason?.trim() || null,
+    cancellation_reason: normalizeBookingReason(reason),
     decided_at: new Date().toISOString(),
   });
   return { ...ctx, booking: updated };
@@ -781,7 +802,7 @@ export async function cancelBooking(
   client: SchedulingClient,
   ctx: BookingContext,
   by: "host" | "invitee",
-  reason?: string | null,
+  reason?: unknown,
 ): Promise<BookingContext> {
   if (ctx.booking.status === "cancelled" || ctx.booking.status === "declined") return ctx;
 
@@ -796,7 +817,7 @@ export async function cancelBooking(
   const updated = await updateBookingRow(client, ctx.booking.id, {
     status: "cancelled",
     cancelled_by: by,
-    cancellation_reason: reason?.trim() || null,
+    cancellation_reason: normalizeBookingReason(reason),
     decided_at: new Date().toISOString(),
   });
   return { ...ctx, booking: updated };
@@ -965,6 +986,7 @@ export function serializeHostPage(page: SchedulingPage) {
     bufferMinutes: page.buffer_minutes,
     minNoticeMinutes: page.min_notice_minutes,
     bookingWindowDays: page.booking_window_days,
+    maxBookingsPerDay: page.max_bookings_per_day ?? null,
     isActive: page.is_active,
   };
 }

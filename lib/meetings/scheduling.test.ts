@@ -17,9 +17,16 @@ import {
   BOOKING_EMAIL_MAX,
   BOOKING_NAME_MAX,
   BOOKING_NOTES_MAX,
+  BOOKING_REASON_MAX,
+  normalizeBookingReason,
   weekdayOfDate,
   buildBookingManageUrl,
   buildBookingPageUrl,
+  formatSlotDate,
+  formatSlotDayMonth,
+  formatSlotFull,
+  formatSlotTime,
+  formatSlotWeekday,
 } from "./scheduling";
 
 // 2026-03-02 is a Monday. All fixtures anchor here so weekday math is explicit.
@@ -249,6 +256,73 @@ describe("generateSlots", () => {
   });
 });
 
+describe("generateSlots daily booking limit", () => {
+  it("stops offering a day once it holds the limit", () => {
+    const slots = generateSlots({
+      ...base,
+      maxBookingsPerDay: 2,
+      bookingStarts: ["2026-03-02T09:00:00Z", "2026-03-02T14:00:00Z"],
+      fromDate: MONDAY,
+      toDate: "2026-03-03",
+    });
+    expect(slots.some((s) => s.start.startsWith("2026-03-02"))).toBe(false);
+    expect(slots.filter((s) => s.start.startsWith("2026-03-03"))).toHaveLength(16);
+  });
+
+  it("keeps offering a day still under the limit", () => {
+    const slots = generateSlots({
+      ...base,
+      maxBookingsPerDay: 2,
+      bookingStarts: ["2026-03-02T09:00:00Z"],
+      fromDate: MONDAY,
+      toDate: MONDAY,
+    });
+    expect(slots).toHaveLength(16);
+  });
+
+  it("counts bookings by the host's local date, not UTC's", () => {
+    // 23:30Z on the 1st is already Monday the 2nd in Tokyo.
+    const slots = generateSlots({
+      ...base,
+      timezone: "Asia/Tokyo",
+      maxBookingsPerDay: 1,
+      bookingStarts: ["2026-03-01T23:30:00Z"],
+      fromDate: MONDAY,
+      toDate: MONDAY,
+    });
+    expect(slots).toHaveLength(0);
+  });
+
+  it("ignores the limit when it is unset or not positive", () => {
+    const bookingStarts = ["2026-03-02T09:00:00Z"];
+    for (const maxBookingsPerDay of [null, undefined, 0]) {
+      expect(generateSlots({ ...base, maxBookingsPerDay, bookingStarts, fromDate: MONDAY, toDate: MONDAY })).toHaveLength(16);
+    }
+  });
+
+  it("is enforced by isSlotAvailable too", () => {
+    const input = { ...base, maxBookingsPerDay: 1, bookingStarts: ["2026-03-02T15:00:00Z"] };
+    expect(isSlotAvailable("2026-03-02T09:00:00.000Z", input)).toBe(false);
+    expect(isSlotAvailable("2026-03-03T09:00:00.000Z", input)).toBe(true);
+  });
+});
+
+describe("normalizeBookingReason", () => {
+  it("keeps text, trimmed", () => {
+    expect(normalizeBookingReason("  running late  ")).toBe("running late");
+  });
+
+  it("is null for blanks and anything that is not text", () => {
+    for (const raw of ["", "   ", null, undefined, 42, { text: "x" }, ["x"], true]) {
+      expect(normalizeBookingReason(raw)).toBeNull();
+    }
+  });
+
+  it("caps a long reason", () => {
+    expect(normalizeBookingReason("x".repeat(BOOKING_REASON_MAX + 500))).toHaveLength(BOOKING_REASON_MAX);
+  });
+});
+
 describe("isSlotAvailable", () => {
   const input = { ...base };
 
@@ -334,6 +408,20 @@ describe("bookingWindowRange", () => {
 });
 
 describe("groupSlotsByDate", () => {
+  // The bucket used to be rebuilt for every slot appended to it, which is
+  // quadratic in the size of the biggest day — and the biggest day is the whole
+  // list when a host opens one long window. The rewrite pushes instead. Only the
+  // result is assertable here; the complexity is in the pull request.
+  it("keeps every slot, in order, when they all land on the same day", () => {
+    const slots = Array.from({ length: 200 }, (_, i) => {
+      const start = Date.UTC(2026, 2, 2, 0, 0) + i * 5 * 60_000;
+      return { start: new Date(start).toISOString(), end: new Date(start + 300_000).toISOString() };
+    });
+    const grouped = groupSlotsByDate(slots, "UTC");
+    expect(grouped).toHaveLength(1);
+    expect(grouped[0].slots).toEqual(slots);
+  });
+
   it("buckets slots by the viewer's local date", () => {
     const slots = [
       { start: "2026-03-02T22:00:00.000Z", end: "2026-03-02T22:30:00.000Z" },
@@ -421,5 +509,157 @@ describe("public URLs", () => {
       "https://fundexecs.com/book/ada/intro-15",
     );
     expect(buildBookingManageUrl("https://fundexecs.com/", "tok")).toBe("https://fundexecs.com/booking/tok");
+  });
+});
+
+/**
+ * The formatters, which are the part of "stop the booking page rebuilding Intl
+ * on every keystroke" that a test can hold exactly.
+ *
+ * The saving is a render cost, and the memo on the picker that stops the grid
+ * re-rendering while somebody types their name writes nothing to the DOM either
+ * way — that number lives in the pull request with a Profiler. But the thing the
+ * saving rests on is not a render count: it is that formatting a thousand slots
+ * constructs one formatter, not a thousand. Counting constructions is exact.
+ *
+ * Each test picks a zone the rest of this file never touches, because the cache
+ * is module-level and a warm zone would make the first count zero.
+ */
+describe("formatter reuse", () => {
+  function counting<T>(work: () => T): { result: T; built: number } {
+    const Real = Intl.DateTimeFormat;
+    let built = 0;
+    const Counting = function (...args: unknown[]) {
+      built++;
+      return new (Real as unknown as new (...a: unknown[]) => Intl.DateTimeFormat)(...args);
+    } as unknown as typeof Intl.DateTimeFormat;
+    Counting.supportedLocalesOf = Real.supportedLocalesOf;
+    Intl.DateTimeFormat = Counting;
+    try {
+      return { result: work(), built };
+    } finally {
+      Intl.DateTimeFormat = Real;
+    }
+  }
+
+  function slotsOver(days: number, perDay: number, zoneOffsetHour = 13) {
+    const out: Array<{ start: string; end: string }> = [];
+    const base = Date.UTC(2026, 9, 5, zoneOffsetHour, 0);
+    for (let d = 0; d < days; d++) {
+      for (let i = 0; i < perDay; i++) {
+        const start = base + d * 86_400_000 + i * 30 * 60_000;
+        out.push({ start: new Date(start).toISOString(), end: new Date(start + 1_800_000).toISOString() });
+      }
+    }
+    return out;
+  }
+
+  // The whole point. Grouping a three-week window used to build a formatter per
+  // slot: 336 of them to paint the picker once.
+  it("builds one formatter for a whole window of slots, not one per slot", () => {
+    const slots = slotsOver(21, 16);
+    expect(slots).toHaveLength(336);
+
+    const { result, built } = counting(() => groupSlotsByDate(slots, "America/Argentina/Ushuaia"));
+    expect(result.length).toBeGreaterThan(1);
+    expect(built).toBe(1);
+  });
+
+  it("builds nothing at all once a zone has been seen", () => {
+    const slots = slotsOver(10, 12);
+    const zone = "Pacific/Chatham";
+    groupSlotsByDate(slots, zone);
+    formatSlotTime(slots[0].start, zone);
+    formatSlotDate(slots[0].start, zone);
+    formatSlotFull(slots[0].start, zone);
+    formatSlotWeekday(slots[0].start, zone);
+    formatSlotDayMonth(slots[0].start, zone);
+
+    const { built } = counting(() => {
+      groupSlotsByDate(slots, zone);
+      for (const slot of slots) {
+        formatSlotTime(slot.start, zone);
+        formatSlotWeekday(slot.start, zone);
+        formatSlotDayMonth(slot.start, zone);
+      }
+      formatSlotDate(slots[0].start, zone);
+      formatSlotFull(slots[0].start, zone);
+    });
+    expect(built).toBe(0);
+  });
+
+  /**
+   * An oracle that shares none of the module's machinery: the formatter is built
+   * here, in the test, and the cached answers are compared against it. A cache
+   * that returned a stale or wrong-zone formatter would pass a count assertion
+   * and fail this one.
+   */
+  it("answers exactly as a formatter built from scratch does", () => {
+    const zone = "Asia/Kathmandu";
+    const instants = [
+      "2026-01-01T00:00:00.000Z",
+      "2026-03-29T01:30:00.000Z", // European DST boundary
+      "2026-07-04T18:45:00.000Z",
+      "2026-11-01T05:59:00.000Z", // US DST boundary
+      "2026-12-31T23:59:00.000Z",
+    ];
+    for (const iso of instants) {
+      const at = new Date(iso);
+      expect(dateInTimezone(at, zone)).toBe(
+        new Intl.DateTimeFormat("en-CA", {
+          timeZone: zone,
+          year: "numeric",
+          month: "2-digit",
+          day: "2-digit",
+        }).format(at),
+      );
+      expect(formatSlotTime(iso, zone)).toBe(
+        new Intl.DateTimeFormat("en-US", { timeZone: zone, hour: "numeric", minute: "2-digit" }).format(at),
+      );
+      expect(formatSlotWeekday(iso, zone)).toBe(
+        new Intl.DateTimeFormat("en-US", { timeZone: zone, weekday: "short" }).format(at),
+      );
+      expect(formatSlotDayMonth(iso, zone)).toBe(
+        new Intl.DateTimeFormat("en-US", { timeZone: zone, day: "numeric", month: "short" }).format(at),
+      );
+    }
+  });
+
+  // A cache keyed on the shape alone would pass every count assertion above and
+  // show an invitee in Singapore a London host's times.
+  it("keeps the zones apart", () => {
+    const iso = "2026-10-05T22:30:00.000Z";
+    expect(formatSlotTime(iso, "Europe/London")).toBe("11:30 PM");
+    expect(formatSlotTime(iso, "Asia/Singapore")).toBe("6:30 AM");
+    // And back again: the second zone must not have displaced the first.
+    expect(formatSlotTime(iso, "Europe/London")).toBe("11:30 PM");
+    expect(dateInTimezone(new Date(iso), "Europe/London")).toBe("2026-10-05");
+    expect(dateInTimezone(new Date(iso), "Asia/Singapore")).toBe("2026-10-06");
+  });
+
+  /**
+   * A zone this runtime does not know throws in the constructor, so nothing is
+   * cached for it and every caller keeps its own plain-ISO fallback. Two things
+   * follow, and the second is why the map cannot be grown by a browser sending
+   * junk: the fallback answer is returned every time, and a real zone asked
+   * immediately afterwards is unaffected.
+   */
+  it("falls back for a zone it does not know, without disturbing a real one", () => {
+    const iso = "2026-10-05T22:30:00.000Z";
+    for (let i = 0; i < 5; i++) {
+      expect(dateInTimezone(new Date(iso), "Mars/Olympus_Mons")).toBe("2026-10-05");
+      expect(formatSlotTime(iso, "Not/AZone")).toBe("22:30");
+    }
+    expect(formatSlotTime(iso, "Asia/Singapore")).toBe("6:30 AM");
+  });
+
+  // The picker's day rail built these two inline, in the render body, once per
+  // day shown. They moved into the module so they are cached with the rest — and
+  // so an unknown zone falls back instead of throwing mid-render.
+  it("labels a day the way the rail used to", () => {
+    const iso = "2026-10-05T14:00:00.000Z"; // a Monday
+    expect(formatSlotWeekday(iso, "UTC")).toBe("Mon");
+    expect(formatSlotDayMonth(iso, "UTC")).toBe("Oct 5");
+    expect(formatSlotWeekday(iso, "Mars/Olympus_Mons")).toBe("Mon");
   });
 });

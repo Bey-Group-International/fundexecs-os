@@ -1,14 +1,29 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { formatSlotDate, formatSlotTime, groupSlotsByDate, type SlotWindow } from "@/lib/meetings/scheduling";
+import { memo, useEffect, useMemo, useState } from "react";
+import {
+  formatSlotDate,
+  formatSlotDayMonth,
+  formatSlotTime,
+  formatSlotWeekday,
+  groupSlotsByDate,
+  type SlotWindow,
+} from "@/lib/meetings/scheduling";
 
 /**
  * Day rail + times for a public booking page. Slots arrive as absolute
  * instants and are grouped into days in the *viewer's* timezone, so an invitee
  * in Singapore sees a London host's afternoon on the right calendar day.
+ *
+ * Memoised because it sits directly above the form the invitee types their
+ * name and email into, and that form's state lives in the page component. Every
+ * keystroke re-rendered the whole grid — a fortnight of days and every time in
+ * the open one — to paint characters in an input beneath it. None of the props
+ * here change while somebody types: `slots`, `timezone` and `selected` are the
+ * page's state, `onSelect` is a setState, and `emptyMessage` is a fresh string
+ * each render but an equal one, which is all a shallow compare asks.
  */
-export function SlotPicker({
+export const SlotPicker = memo(function SlotPicker({
   slots,
   timezone,
   selected,
@@ -74,13 +89,9 @@ export function SlotPicker({
               }`}
             >
               <span className="text-[11px] uppercase tracking-wide text-[var(--fg-muted)]">
-                {new Intl.DateTimeFormat("en-US", { timeZone: timezone, weekday: "short" }).format(new Date(sample))}
+                {formatSlotWeekday(sample, timezone)}
               </span>
-              <span className="text-sm font-medium">
-                {new Intl.DateTimeFormat("en-US", { timeZone: timezone, day: "numeric", month: "short" }).format(
-                  new Date(sample),
-                )}
-              </span>
+              <span className="text-sm font-medium">{formatSlotDayMonth(sample, timezone)}</span>
               <span className="text-[11px] text-[var(--fg-muted)]">{day.slots.length} open</span>
             </button>
           );
@@ -114,4 +125,4 @@ export function SlotPicker({
       ) : null}
     </div>
   );
-}
+});
