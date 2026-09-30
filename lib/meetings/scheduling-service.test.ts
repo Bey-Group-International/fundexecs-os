@@ -13,7 +13,13 @@ jest.mock("@/lib/calendar/google.server", () => ({
   googleBusyForUser: (...a: unknown[]) => googleBusyForUserMock(...a),
 }));
 
-import { busyIntervals, rescheduleBooking, resolvePublicPage, SlotUnavailableError } from "./scheduling-service";
+import {
+  busyIntervals,
+  createMeetingForBooking,
+  rescheduleBooking,
+  resolvePublicPage,
+  SlotUnavailableError,
+} from "./scheduling-service";
 import type { BookingContext } from "./scheduling-service";
 
 const WINDOW = {
@@ -275,5 +281,39 @@ describe("rescheduleBooking", () => {
     expect(next.booking.starts_at).toBe("2026-10-05T16:00:00.000Z");
     expect(client.writes.map((w) => w.table)).toEqual(["scheduling_bookings", "live_meetings"]);
     expect(client.writes[1].patch).toMatchObject({ scheduled_at: "2026-10-05T16:00:00.000Z" });
+  });
+
+  it("re-arms the reminder when the room moves", async () => {
+    // A reminder already sent for the old time says nothing about the new one;
+    // left stamped, the sweep would never remind anyone of the new time.
+    const moved = { ...ctx.booking, starts_at: "2026-10-06T16:00:00.000Z", ends_at: "2026-10-06T16:30:00.000Z" };
+    const client = recordingClient({ scheduling_bookings: [{ data: moved, error: null }] });
+
+    await rescheduleBooking(client as never, ctx, "2026-10-06T16:00:00.000Z", { enforceAvailability: false });
+
+    expect(client.writes[1]).toMatchObject({ table: "live_meetings", patch: { last_reminder_sent_at: null } });
+  });
+});
+
+describe("createMeetingForBooking", () => {
+  it("gives a booked meeting the same default reminder as one scheduled in the app", async () => {
+    let inserted: Record<string, unknown> | null = null;
+    const b: Record<string, unknown> = {
+      insert(row: Record<string, unknown>) {
+        inserted = row;
+        return b;
+      },
+      select: () => b,
+      single: () => Promise.resolve({ data: { id: "mtg-1", room_code: "abc-defg-hij" }, error: null }),
+    };
+    const client = { from: () => b };
+
+    await createMeetingForBooking(client as never, {
+      page: { user_id: "host-1", organization_id: "org-1", timezone: "UTC" } as never,
+      eventType: { title: "Intro", duration_minutes: 30, meeting_type: "external" } as never,
+      booking: { invitee_name: "Pat", invitee_email: "pat@example.com", invitee_notes: null, starts_at: "2026-10-05T14:00:00.000Z" },
+    });
+
+    expect(inserted).toMatchObject({ reminder_minutes: 15 });
   });
 });
