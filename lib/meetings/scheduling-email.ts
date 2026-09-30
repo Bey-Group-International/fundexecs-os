@@ -135,7 +135,10 @@ async function send(
   credentials?: SendEmailCredentials,
 ): Promise<boolean> {
   try {
-    const result = await sendEmail({ orgId, to, subject, htmlBody, calendarInvite, credentials });
+    // A booking email that doesn't arrive strands a stranger with no record of
+    // their meeting, so it may go through the deployment's backup provider
+    // when the host's mailbox can't send it.
+    const result = await sendEmail({ orgId, to, subject, htmlBody, calendarInvite, credentials, allowFallback: true });
     return result.ok;
   } catch (err) {
     console.error("[scheduling-email] send failed", err);

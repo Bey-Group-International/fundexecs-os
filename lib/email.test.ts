@@ -24,6 +24,8 @@ beforeEach(() => {
   process.env = { ...ORIGINAL_ENV };
   delete process.env.GMAIL_ACCESS_TOKEN;
   delete process.env.FUNDEXECS_FROM_EMAIL;
+  delete process.env.RESEND_API_KEY;
+  delete process.env.EMAIL_FALLBACK_FROM;
   global.fetch = fetchMock as unknown as typeof fetch;
   fetchMock.mockResolvedValue({ ok: true, json: async () => ({}) });
   getOrgSecretMock.mockResolvedValue(null);
@@ -110,6 +112,106 @@ describe("sendEmail credential resolution", () => {
     expect(fetchMock.mock.calls[0][0]).toBe(
       "https://gmail.googleapis.com/gmail/v1/users/me/messages/send",
     );
+  });
+});
+
+describe("sendEmail backup provider", () => {
+  const RESEND = "https://api.resend.com/emails";
+  const INVITE = {
+    content: "BEGIN:VCALENDAR\r\nMETHOD:REQUEST\r\nEND:VCALENDAR",
+    method: "REQUEST" as const,
+    filename: "meeting.ics",
+  };
+
+  function configure() {
+    process.env.RESEND_API_KEY = "re_test";
+    process.env.EMAIL_FALLBACK_FROM = "FundExecs <notifications@fundexecs.test>";
+  }
+
+  /** The JSON body of the call to the backup provider. */
+  function resendBody(): Record<string, unknown> {
+    const call = fetchMock.mock.calls.find(([url]) => url === RESEND);
+    return JSON.parse(call![1].body);
+  }
+
+  it("sends through the backup when Gmail rejects the message and the caller allows it", async () => {
+    configure();
+    getGoogleAccessTokenMock.mockResolvedValue("tok");
+    fetchMock.mockImplementation(async (url: string) =>
+      url === RESEND
+        ? { ok: true, json: async () => ({ id: "em_1" }), text: async () => "" }
+        : { ok: false, statusText: "Unauthorized", text: async () => "401 Invalid Credentials" },
+    );
+
+    const result = await sendEmail({ ...ARGS, orgId: "org1", allowFallback: true, calendarInvite: INVITE });
+
+    expect(result).toMatchObject({ ok: true, channel: "fallback" });
+    const body = resendBody();
+    expect(body.from).toBe("FundExecs <notifications@fundexecs.test>");
+    expect(body.to).toEqual(["LP <lp@acme.test>"]);
+    expect(body.subject).toBe("Q2 update");
+    expect(body.html).toBe("<p>hi</p>");
+    // The invite still travels, so the recipient can still add it to a calendar.
+    const [att] = body.attachments as Array<{ filename: string; content: string; content_type: string }>;
+    expect(att.filename).toBe("meeting.ics");
+    expect(Buffer.from(att.content, "base64").toString()).toContain("METHOD:REQUEST");
+    expect(att.content_type).toContain("text/calendar");
+    expect((fetchMock.mock.calls.find(([u]) => u === RESEND)![1].headers as Record<string, string>).Authorization).toBe(
+      "Bearer re_test",
+    );
+  });
+
+  it("also covers an org with no mailbox connected", async () => {
+    configure();
+    const result = await sendEmail({ ...ARGS, orgId: "org1", allowFallback: true });
+    expect(result).toMatchObject({ ok: true, channel: "fallback" });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock.mock.calls[0][0]).toBe(RESEND);
+  });
+
+  it("stays Gmail-only for callers that don't opt in", async () => {
+    configure();
+    const result = await sendEmail({ ...ARGS, orgId: "org1" });
+    expect(result.channel).toBe("in-app");
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("does nothing until the deployment configures it", async () => {
+    const result = await sendEmail({ ...ARGS, orgId: "org1", allowFallback: true });
+    expect(result.channel).toBe("in-app");
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("never touches the backup when Gmail delivers", async () => {
+    configure();
+    getGoogleAccessTokenMock.mockResolvedValue("tok");
+    const result = await sendEmail({ ...ARGS, orgId: "org1", allowFallback: true });
+    expect(result.channel).toBe("gmail");
+    expect(fetchMock.mock.calls.some(([u]) => u === RESEND)).toBe(false);
+  });
+
+  it("reports both failures, without throwing, when the backup fails too", async () => {
+    configure();
+    const warn = jest.spyOn(console, "warn").mockImplementation(() => {});
+    fetchMock.mockResolvedValue({ ok: false, status: 500, statusText: "err", text: async () => "provider down" });
+    const result = await sendEmail({ ...ARGS, orgId: "org1", allowFallback: true });
+    expect(result.ok).toBe(false);
+    expect(result.detail).toMatch(/no mailbox connected/);
+    expect(result.detail).toMatch(/provider down/);
+    warn.mockRestore();
+  });
+
+  it("keeps a line break in the name or subject out of the headers", async () => {
+    configure();
+    await sendEmail({
+      ...ARGS,
+      to: { name: "Bob\r\nBcc: x@evil.test", email: "bob@acme.test" },
+      subject: "Hi\r\nBcc: x@evil.test",
+      allowFallback: true,
+    });
+    const body = resendBody();
+    expect(String(body.subject)).not.toMatch(/[\r\n]/);
+    expect(String((body.to as string[])[0])).not.toMatch(/[\r\n]/);
   });
 });
 

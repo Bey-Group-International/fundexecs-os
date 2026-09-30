@@ -201,7 +201,8 @@ async function remind(supabase: ServiceClient, meeting: SweepableMeeting, now: D
 
   const results = await Promise.allSettled(
     recipients.map((r) =>
-      sendEmail({ orgId, credentials, to: r, subject, htmlBody: html }),
+      // Allowed to fall back: this is the reminder nobody else will send.
+      sendEmail({ orgId, credentials, to: r, subject, htmlBody: html, allowFallback: true }),
     ),
   );
 

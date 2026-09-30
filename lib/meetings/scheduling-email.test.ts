@@ -149,6 +149,14 @@ describe("sendBookingEmails — the invitation", () => {
     expect(invites()).toHaveLength(0);
   });
 
+  it("lets the backup provider carry a booking email the mailbox can't", async () => {
+    await sendBookingEmails("confirmed", ctx());
+    expect(sendEmailMock).toHaveBeenCalled();
+    for (const [args] of sendEmailMock.mock.calls) {
+      expect((args as { allowFallback?: boolean }).allowFallback).toBe(true);
+    }
+  });
+
   it("reports how many messages actually went out", async () => {
     sendEmailMock.mockResolvedValue({ ok: false, channel: "in-app", detail: "no mailbox" });
     const result = await sendBookingEmails("confirmed", ctx());
