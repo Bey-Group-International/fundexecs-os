@@ -569,95 +569,128 @@ export async function fulfillCheckout(
     const planKey = meta.plan_key as PlanKey;
     const plan = PLAN_BY_KEY[planKey];
     const interval: PlanInterval = meta.interval === "annual" ? "annual" : "monthly";
-    if (plan) {
-      const stripeCustomerId =
-        typeof session.customer === "string"
-          ? session.customer
-          : (session.customer as { id?: string } | null)?.id ?? null;
-      // The card the operator just used, saved via setup_future_usage. Without
-      // it the subscription starts but can never renew, so pull it off the
-      // PaymentIntent while we have the session in hand.
-      const paymentMethodId = await paymentMethodFromSession(session);
-
-      // Hand the period to the native engine: it owns the schedule from here.
-      // `alreadyPaid` because checkout just collected this period — charging
-      // the rail again would bill twice.
-      const result = await startSubscription({
-        orgId,
-        planKey,
-        interval,
-        createdBy,
-        processor: "stripe",
-        processorCustomerId: stripeCustomerId,
-        paymentMethodId,
-        reference: session.payment_intent
-          ? typeof session.payment_intent === "string"
-            ? session.payment_intent
-            : session.payment_intent.id
-          : session.id,
-        alreadyPaid: true,
-        note: `${plan.name} plan (${interval}) — Stripe`,
-      });
-      if (!result.ok) {
-        console.error("[stripe] subscription start after checkout failed:", result.error);
-      }
-      // Persist the instrument even when the subscription already existed (a
-      // re-subscribe, or a card update), so renewals use the newest card.
-      await savePaymentMethod(service, orgId, paymentMethodId, stripeCustomerId);
+    if (!plan) {
+      // The key was written when the checkout was created and is read back when
+      // it is paid — for an annual plan, possibly much later. A plan renamed or
+      // retired in between used to make this branch a no-op on a paid checkout.
+      fulfillmentIncomplete(sessionId, `unknown plan key ${meta.plan_key ?? ""}`);
     }
+    const stripeCustomerId =
+      typeof session.customer === "string"
+        ? session.customer
+        : (session.customer as { id?: string } | null)?.id ?? null;
+    // The card the operator just used, saved via setup_future_usage. Without
+    // it the subscription starts but can never renew, so pull it off the
+    // PaymentIntent while we have the session in hand.
+    const paymentMethodId = await paymentMethodFromSession(session);
+
+    // Hand the period to the native engine: it owns the schedule from here.
+    // `alreadyPaid` because checkout just collected this period — charging
+    // the rail again would bill twice.
+    const result = await startSubscription({
+      orgId,
+      planKey,
+      interval,
+      createdBy,
+      processor: "stripe",
+      processorCustomerId: stripeCustomerId,
+      paymentMethodId,
+      reference: session.payment_intent
+        ? typeof session.payment_intent === "string"
+          ? session.payment_intent
+          : session.payment_intent.id
+        : session.id,
+      alreadyPaid: true,
+      note: `${plan.name} plan (${interval}) — Stripe`,
+    });
+    if (!result.ok) {
+      // Logging this and carrying on recorded the checkout as fulfilled and
+      // returned 200, so Stripe stopped redelivering: a paid plan with no
+      // plan, no credits and no invoice, and no retry that could ever fix it.
+      fulfillmentIncomplete(sessionId, `subscription start failed: ${result.error ?? "unknown error"}`);
+    }
+    // Persist the instrument even when the subscription already existed (a
+    // re-subscribe, or a card update), so renewals use the newest card.
+    await savePaymentMethod(service, orgId, paymentMethodId, stripeCustomerId);
   } else if (kind === "pack") {
     const pack = CREDIT_PACKS.find((p) => p.key === meta.pack_key);
-    if (pack) {
-      // Keyed on the session so a replayed fulfillment cannot grant twice.
-      // This is what makes releasing a stale claim below safe.
-      await addPack(service, orgId, pack.key, {
-        note: `${pack.credits} credit pack — Stripe`,
-        reference: `checkout:${sessionId}`,
-      });
+    if (!pack) {
+      fulfillmentIncomplete(sessionId, `unknown pack key ${meta.pack_key ?? ""}`);
     }
+    // Keyed on the session so a replayed fulfillment cannot grant twice.
+    // This is what makes releasing a stale claim below safe.
+    await addPack(service, orgId, pack.key, {
+      note: `${pack.credits} credit pack — Stripe`,
+      reference: `checkout:${sessionId}`,
+    });
   } else if (kind === "gift") {
     // The gift only exists once paid: create it now so it's redeemable.
-    await purchaseGift({
+    const gift = await purchaseGift({
       senderOrgId: orgId,
       createdBy,
       recipientEmail: meta.recipient_email ?? "",
       packKey: meta.pack_key ?? "",
       message: meta.message,
     });
+    // purchaseGift validates the email and the pack and reports refusal in its
+    // result rather than throwing. Discarding it meant a gift that was never
+    // created still counted as a fulfilled purchase.
+    if (!gift.ok) {
+      fulfillmentIncomplete(sessionId, `gift purchase failed: ${gift.error ?? "unknown error"}`);
+    }
   } else if (kind === "subscription_invoice") {
     // Settle the subscription bill this checkout paid, then hand over what it
     // bought. Both steps are idempotent, so a webhook arriving after the return
     // redirect (or vice versa) does nothing the first one didn't already do.
     const invoiceId = meta.subscription_invoice_id;
-    if (invoiceId) {
-      const paymentIntent =
-        typeof session.payment_intent === "string"
-          ? session.payment_intent
-          : (session.payment_intent as { id?: string } | null)?.id ?? null;
-      await markInvoiceSettled(
-        invoiceId,
-        { via: "card", reference: paymentIntent, note: "Paid by card" },
-        service,
-      );
-      await savePaymentMethod(
-        service,
-        orgId,
-        await paymentMethodFromSession(session),
-        typeof session.customer === "string"
-          ? session.customer
-          : (session.customer as { id?: string } | null)?.id ?? null,
-      );
-      await applySettledInvoices(service);
+    if (!invoiceId) {
+      fulfillmentIncomplete(sessionId, "checkout metadata carries no subscription_invoice_id");
     }
+    const paymentIntent =
+      typeof session.payment_intent === "string"
+        ? session.payment_intent
+        : (session.payment_intent as { id?: string } | null)?.id ?? null;
+    const settled = await markInvoiceSettled(
+      invoiceId,
+      { via: "card", reference: paymentIntent, note: "Paid by card" },
+      service,
+    );
+    // markInvoiceSettled reports refusal in its result. Ignoring it left the
+    // bill unsettled on a checkout recorded as fulfilled.
+    if (!settled.ok) {
+      fulfillmentIncomplete(sessionId, `invoice settle failed: ${settled.error ?? "unknown error"}`);
+    }
+    await savePaymentMethod(
+      service,
+      orgId,
+      await paymentMethodFromSession(session),
+      typeof session.customer === "string"
+        ? session.customer
+        : (session.customer as { id?: string } | null)?.id ?? null,
+    );
+    await applySettledInvoices(service);
   } else if (kind === "invoice") {
     // Flip the merchant's invoice to paid (idempotent) and record the linkage.
-    if (meta.invoice_id) {
-      const paymentIntent =
-        typeof session.payment_intent === "string"
-          ? session.payment_intent
-          : (session.payment_intent as { id?: string } | null)?.id ?? null;
-      await markInvoicePaid(meta.invoice_id, { sessionId: session.id, paymentIntent });
+    if (!meta.invoice_id) {
+      fulfillmentIncomplete(sessionId, "checkout metadata carries no invoice_id");
     }
+    const paymentIntent =
+      typeof session.payment_intent === "string"
+        ? session.payment_intent
+        : (session.payment_intent as { id?: string } | null)?.id ?? null;
+    const paidResult = await markInvoicePaid(meta.invoice_id, {
+      sessionId: session.id,
+      paymentIntent,
+    });
+    if (!paidResult.ok) {
+      fulfillmentIncomplete(sessionId, `invoice update failed: ${paidResult.error ?? "unknown error"}`);
+    }
+  } else {
+    // `kind` is read from checkout metadata, so it is whatever was written when
+    // the session was created. An unrecognised value matched no branch above and
+    // fell through to "fulfilled", which is the same silent loss as the rest of
+    // this list — a paid checkout that delivered nothing.
+    fulfillmentIncomplete(sessionId, `unrecognised checkout kind ${kind}`);
   }
 
   } catch (err) {
@@ -692,6 +725,34 @@ export async function fulfillCheckout(
 type CheckoutService = ReturnType<typeof createServiceClient>;
 
 type ClaimResult = "won" | "taken" | "error";
+
+/**
+ * Abort a fulfillment that did not deliver what was paid for.
+ *
+ * Every branch that calls this runs only after Stripe confirmed payment. Simply
+ * returning, or logging an error and carrying on, lets execution reach
+ * markFulfillmentComplete — which records the checkout as fulfilled and makes
+ * the webhook answer 200, so Stripe stops redelivering. The purchase is then
+ * permanently "done" with the money kept, nothing handed over, and no retry
+ * that could ever repair it. That is precisely the loss the claim exists to
+ * prevent, and every silent `if (x) { … }` with no else walked into it.
+ *
+ * Throwing instead unwinds into the catch below, which releases the claim so
+ * Stripe's redelivery re-runs fulfillment. Retrying is safe because a grant is
+ * keyed on the session, so one that already landed replays as a no-op rather
+ * than granting a second time.
+ *
+ * When the cause is permanent — a plan key that no longer exists — retries are
+ * exhausted and the checkout is left unfulfilled and unclaimed. That is the
+ * correct end state: a paying customer holding nothing is a repair someone has
+ * to make, not a detail to swallow.
+ */
+function fulfillmentIncomplete(sessionId: string, detail: string): never {
+  // `detail` can carry a database message, so strip the line breaks that would
+  // let it forge a second log entry, and cap it.
+  const safeDetail = detail.replace(/[\r\n]/g, " ").slice(0, 200);
+  throw new Error(`checkout ${logSafe(sessionId)} was paid but not fulfilled: ${safeDetail}`);
+}
 
 /**
  * Make an untrusted identifier safe to put in a log line.
