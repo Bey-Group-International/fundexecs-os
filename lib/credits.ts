@@ -14,6 +14,13 @@ export interface GrantOpts {
   /** Downline depth for referral overrides. */
   level?: number | null;
   note?: string | null;
+  /**
+   * Idempotency key for whatever caused this grant (e.g. `checkout:<session>`).
+   * When set, replaying the same grant is a no-op rather than a second one —
+   * the uniqueness is enforced inside grant_org_credits' own transaction, which
+   * is the only place it can be enforced safely.
+   */
+  reference?: string | null;
 }
 
 // Credit (amount > 0) or debit (amount < 0) an org's wallet AND append a ledger
@@ -36,6 +43,7 @@ export async function grantCredits(
     p_source_org: opts.sourceOrgId ?? null,
     p_level: opts.level ?? null,
     p_note: opts.note ?? null,
+    p_reference: opts.reference ?? null,
   });
   if (error) throw new Error(error.message);
   return data ?? 0;
