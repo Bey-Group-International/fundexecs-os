@@ -24,6 +24,8 @@ const grants: string[] = [];
 const claims = new Set<string>();
 let claimFails = false;
 let completionReadFails = false;
+let releaseFails = false;
+let grantThrows = false;
 
 // The checkout audit row. Absent for invoice kinds, which the `kind` CHECK
 // (plan|pack|gift) cannot store at all.
@@ -55,6 +57,7 @@ function table(name: string) {
       }),
       delete: () => ({
         eq: async (_c: string, id: string) => {
+          if (releaseFails) return { error: { message: "db down" } };
           claims.delete(id);
           return { error: null };
         },
@@ -100,6 +103,7 @@ jest.mock("stripe", () =>
 
 jest.mock("@/lib/purchase", () => ({
   addPack: jest.fn(async () => {
+    if (grantThrows) throw new Error("grant blew up");
     grants.push("pack_500");
     return { ok: true };
   }),
@@ -112,6 +116,8 @@ beforeEach(() => {
   claims.clear();
   claimFails = false;
   completionReadFails = false;
+  releaseFails = false;
+  grantThrows = false;
   checkoutRow = { status: "pending" };
   process.env.STRIPE_SECRET_KEY = "sk_live_test_fixture";
 });
@@ -199,4 +205,25 @@ it("records completion so a later caller can see it finished", async () => {
   await fulfillCheckout("cs_live_race");
   expect(grants).toHaveLength(1);
   expect(claims.has("fulfilled:cs_live_race")).toBe(true);
+});
+
+it("strips control characters out of a session id before logging it", async () => {
+  // The session id comes from ?session_id= on the return route, so a newline in
+  // it would forge a second log line. CodeQL flagged exactly this.
+  //
+  // Reaching that log needs the repair path: win the claim, fail the grant, then
+  // fail the release. Anything less never names the session and the test would
+  // pass without the fix.
+  const spy = jest.spyOn(console, "error").mockImplementation(() => {});
+  const nasty = "cs_live_x\n[stripe] FAKE ENTRY payment approved";
+  grantThrows = true;
+  releaseFails = true;
+
+  await expect(fulfillCheckout(nasty)).rejects.toThrow("grant blew up");
+
+  const repairLog = spy.mock.calls.flat().join(" ");
+  expect(repairLog).toContain("needs manual repair"); // the path really ran
+  expect(repairLog).not.toContain("\n");
+  expect(repairLog).not.toContain("FAKE ENTRY");
+  spy.mockRestore();
 });

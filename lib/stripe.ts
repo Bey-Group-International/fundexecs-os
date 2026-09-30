@@ -653,7 +653,7 @@ export async function fulfillCheckout(
     // fulfill properly.
     if (!(await releaseFulfillment(service, sessionId))) {
       console.error(
-        `[stripe] checkout ${sessionId} was claimed, did not fulfill, and the claim could not be released — needs manual repair`,
+        `[stripe] checkout ${logSafe(sessionId)} was claimed, did not fulfill, and the claim could not be released — needs manual repair`,
       );
     }
     throw err;
@@ -678,6 +678,19 @@ export async function fulfillCheckout(
 type CheckoutService = ReturnType<typeof createServiceClient>;
 
 type ClaimResult = "won" | "taken" | "error";
+
+/**
+ * Make an untrusted identifier safe to put in a log line.
+ *
+ * The session id arrives from `?session_id=` on the return route, so it is
+ * whatever the browser sent. Interpolated raw it is a log-forging vector: a
+ * newline in the value writes what looks like a second, fabricated log entry.
+ * Stripe ids are `cs_…` with alphanumerics and underscores, so anything else is
+ * dropped and the result is capped.
+ */
+function logSafe(value: string): string {
+  return value.replace(/[^A-Za-z0-9_-]/g, "").slice(0, 80);
+}
 
 /**
  * Take exclusive ownership of fulfilling this checkout session.
