@@ -100,6 +100,7 @@ const STATUS_ORDER: MeetingDisplayStatus[] = [
   "Updated",
   "Live",
   "Completed",
+  "Missed",
   "Follow-Up Needed",
 ];
 

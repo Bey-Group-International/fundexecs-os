@@ -50,7 +50,7 @@ export function chip(tone: Tone): string {
 }
 
 /**
- * Seven statuses, four tones. Colour carries the *class* of thing — this needs
+ * Eight statuses, six tones. Colour carries the *class* of thing — this needs
  * you, this is fine, this is running — and the label carries the specific. Prep
  * Needed and Follow-Up Needed share a tone because they are the same fact at
  * two ends of a meeting: it is waiting on you.
@@ -62,6 +62,7 @@ export const STATUS_TONE: Record<MeetingDisplayStatus, Tone> = {
   Updated: "info",
   Live: "success",
   Completed: "neutral",
+  Missed: "danger",
   "Follow-Up Needed": "warning",
 };
 
