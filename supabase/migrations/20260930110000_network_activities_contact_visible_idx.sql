@@ -12,11 +12,19 @@
 -- constraint's locks release when its migration commits and this one blocks only
 -- network_activities.
 --
--- DEPLOYMENT NOTE. This build still blocks writes to network_activities while it
--- runs (reads continue). CREATE INDEX CONCURRENTLY is not available: it cannot
--- run inside a transaction block, every migration in this repo runs in one, and
--- no migration here uses it. So check the row count and pick a low-traffic
--- window, as for the generated columns in 20260930083000 and 20260930090000.
+-- DEPLOYMENT NOTE, and read the second paragraph before trusting the first.
+--
+-- This build blocks writes to network_activities while it runs (reads continue).
+-- CREATE INDEX CONCURRENTLY is not available: it cannot run inside a transaction
+-- block, every migration in this repo runs in one, and no migration here uses it.
+--
+-- "Pick a low-traffic window" is NOT advice to a human operator, because nobody
+-- applies this by hand. .github/workflows/db-migrate.yml runs `supabase db push`
+-- against PRODUCTION on every push to main that touches supabase/migrations/**.
+-- So THE MERGE IS THE WINDOW: whoever merges the pull request chooses when this
+-- lock is taken, and there is no later gate. The same is true of the generated
+-- columns in 20260930083000 and 20260930090000, which rewrite this table, and
+-- which were merged before anyone noticed that is how they ship.
 
 create index if not exists network_activities_contact_visible_idx
   on public.network_activities (organization_id, contact_id, occurred_at desc)
