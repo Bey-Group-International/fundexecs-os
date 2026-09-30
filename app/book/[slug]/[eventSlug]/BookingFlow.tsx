@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { SlotPicker } from "@/components/scheduling/SlotPicker";
 import { TimezoneSelect } from "@/components/scheduling/TimezoneSelect";
+import { useRefreshWhenStale } from "@/components/scheduling/useRefreshWhenStale";
 import {
   BOOKING_EMAIL_MAX,
   BOOKING_NAME_MAX,
@@ -70,19 +71,53 @@ export function BookingFlow({
   // and rendering UTC first keeps hydration stable.
   useEffect(() => setTimezone(detectTimezone()), []);
 
-  const loadSlots = useCallback(async () => {
-    setLoading(true);
-    try {
-      const res = await fetch(`/api/scheduling/${slug}/${eventType.slug}/slots`, { cache: "no-store" });
-      if (!res.ok) throw new Error("Could not load available times.");
-      const data = (await res.json()) as { slots: SlotWindow[] };
-      setSlots(data.slots ?? []);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not load available times.");
-    } finally {
-      setLoading(false);
+  // Set after every successful load, below; declared first so the loader can
+  // call it.
+  const markFreshRef = useRef<() => void>(() => {});
+
+  /**
+   * `quiet` is the background refresh when someone comes back to the tab: it
+   * keeps the grid on screen instead of flashing a spinner, and a failure
+   * leaves the times they were looking at rather than replacing them with an
+   * error about a request they never made.
+   */
+  const loadSlots = useCallback(
+    async ({ quiet = false }: { quiet?: boolean } = {}) => {
+      if (!quiet) setLoading(true);
+      try {
+        const res = await fetch(`/api/scheduling/${slug}/${eventType.slug}/slots`, { cache: "no-store" });
+        if (!res.ok) throw new Error("Could not load available times.");
+        const data = (await res.json()) as { slots: SlotWindow[] };
+        const next = data.slots ?? [];
+        setSlots(next);
+        markFreshRef.current();
+      } catch (err) {
+        if (!quiet) setError(err instanceof Error ? err.message : "Could not load available times.");
+      } finally {
+        if (!quiet) setLoading(false);
+      }
+    },
+    [slug, eventType.slug],
+  );
+
+  // The time they had picked went while they were away: say so, rather than
+  // letting them fill in the form for a slot the server will refuse.
+  useEffect(() => {
+    if (selected && !slots.some((s) => s.start === selected)) {
+      setSelected(null);
+      setError("The time you picked is no longer available. Please choose another.");
     }
-  }, [slug, eventType.slug]);
+  }, [slots, selected]);
+
+  // Picking a new time is the answer to any earlier "that time is gone".
+  const selectSlot = useCallback((start: string) => {
+    setSelected(start);
+    setError(null);
+  }, []);
+
+  markFreshRef.current = useRefreshWhenStale(() => void loadSlots({ quiet: true }), {
+    enabled: !booked && !submitting,
+  });
 
   // The first load is skipped when the server sent the slots with the page.
   // It used to be the only load: render, hydrate, THEN ask for times — so every
@@ -204,7 +239,7 @@ export function BookingFlow({
         slots={slots}
         timezone={timezone}
         selected={selected}
-        onSelect={setSelected}
+        onSelect={selectSlot}
         loading={loading}
         emptyMessage={`${hostName} has no open times on this link right now.`}
       />
