@@ -1,4 +1,4 @@
-import { calendarViewUrl, nextSchedulableStart, parseCalendarView } from "./calendar-view";
+import { calendarViewUrl, isGoogleCopyStale, nextSchedulableStart, parseCalendarView } from "./calendar-view";
 
 describe("parseCalendarView", () => {
   it("accepts the two real panes", () => {
@@ -53,5 +53,18 @@ describe("nextSchedulableStart", () => {
     expect(hm(nextSchedulableStart(at(9, 7)))).toBe("10:00");
     expect(hm(nextSchedulableStart(at(9, 31, 20)))).toBe("10:30");
     expect(hm(nextSchedulableStart(at(23, 45)))).toBe("0:30");
+  });
+});
+
+describe("isGoogleCopyStale", () => {
+  const now = Date.UTC(2026, 8, 30, 12, 0);
+  it("is stale past ten minutes, or never synced", () => {
+    expect(isGoogleCopyStale(true, new Date(now - 11 * 60_000).toISOString(), now)).toBe(true);
+    expect(isGoogleCopyStale(true, null, now)).toBe(true);
+    expect(isGoogleCopyStale(true, "garbage", now)).toBe(true);
+  });
+  it("is fresh within ten minutes, and never stale without a connection", () => {
+    expect(isGoogleCopyStale(true, new Date(now - 9 * 60_000).toISOString(), now)).toBe(false);
+    expect(isGoogleCopyStale(false, null, now)).toBe(false);
   });
 });

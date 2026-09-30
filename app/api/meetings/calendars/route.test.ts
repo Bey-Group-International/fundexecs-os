@@ -89,7 +89,7 @@ function client(opts: {
       table === "external_events" ? opts.googleEvents ?? { data: [] } : opts.feedEvents ?? { data: [] };
 
     const b: Record<string, unknown> = {};
-    for (const k of ["select", "eq", "in", "lt", "gt", "order"]) b[k] = () => b;
+    for (const k of ["select", "eq", "neq", "in", "lt", "gt", "order"]) b[k] = () => b;
     b.limit = async () => eventRows();
     b.maybeSingle = async () =>
       table === "google_calendar_connections"
@@ -178,7 +178,7 @@ describe("GET /api/meetings/calendars", () => {
     from.mockImplementation(
       client({
         calls,
-        calendars: [{ ...GOOGLE_CAL, is_visible: false }],
+        calendars: [{ ...GOOGLE_CAL, is_visible: false, blocks_availability: false }],
         feeds: [{ ...FEED, is_active: false }],
       }),
     );
@@ -189,6 +189,38 @@ describe("GET /api/meetings/calendars", () => {
     expect(calls).not.toContain("calendar_feed_events");
     // Nothing failed — a hidden calendar is a choice, not an outage.
     expect(json.unavailable).toEqual([]);
+  });
+
+  // Hidden is not free: a hidden calendar that still counts as busy keeps its
+  // time blocked on the grid, so its spans travel — and nothing else does.
+  it("sends only when a hidden calendar that counts as busy is busy, never what", async () => {
+    from.mockImplementation(
+      client({
+        calendars: [{ ...GOOGLE_CAL, is_visible: false }],
+        googleEvents: { data: [GOOGLE_EVENT] },
+      }),
+    );
+    const json = await (await GET(req())).json();
+
+    expect(json.events).toEqual([
+      {
+        id: "ge-1",
+        calendarId: "cal-1",
+        title: "",
+        location: null,
+        link: null,
+        startsAt: GOOGLE_EVENT.starts_at,
+        endsAt: GOOGLE_EVENT.ends_at,
+        isAllDay: false,
+        isBusy: true,
+      },
+    ]);
+  });
+
+  it("says when Google was last read", async () => {
+    from.mockImplementation(client({ calendars: [GOOGLE_CAL] }));
+    const json = await (await GET(req())).json();
+    expect(json).toHaveProperty("googleSyncedAt", null);
   });
 
   it("drops a cancelled feed event, whatever case the feed spells it in", async () => {
