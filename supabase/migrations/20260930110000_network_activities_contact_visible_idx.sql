@@ -25,6 +25,17 @@
 -- lock is taken, and there is no later gate. The same is true of the generated
 -- columns in 20260930083000 and 20260930090000, which rewrite this table, and
 -- which were merged before anyone noticed that is how they ship.
+--
+-- Except it did not happen, and that is the more important half. Checked
+-- against production rather than assumed: 20260930083000 and 20260930090000 are
+-- NOT in supabase_migrations.schema_migrations, and network_activities has
+-- neither meeting_id nor thread_id. DB Migrate ran on both merges and FAILED at
+-- `supabase link` with {"message":"Unauthorized"} -- an expired
+-- SUPABASE_ACCESS_TOKEN, the failure its own header says once went unnoticed for
+-- a month. A red DB Migrate run does not block a merge, so the merges looked
+-- green. Whoever merges this should confirm DB Migrate went green afterwards,
+-- because "the merge is the window" describes the design and not, right now,
+-- what happens.
 
 create index if not exists network_activities_contact_visible_idx
   on public.network_activities (organization_id, contact_id, occurred_at desc)
