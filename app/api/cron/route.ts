@@ -16,6 +16,7 @@ import {
   type ConfirmationRetryStats,
 } from "@/lib/meetings/booking-confirmation.server";
 import { runBookingRequestExpiry, type RequestExpiryStats } from "@/lib/meetings/booking-expiry.server";
+import { runBookingRequestReminders, type RequestReminderStats } from "@/lib/meetings/booking-request-reminder.server";
 import { runRecordingSweep, type RecordingSweepStats } from "@/lib/meetings/recording-sweep.server";
 import { runEventIdRepair } from "@/lib/calendar/event-id-repair.server";
 import { NO_REPAIRS, summarize, worthReporting, type RepairStats } from "@/lib/calendar/event-id-repair";
@@ -308,6 +309,15 @@ export async function GET(request: Request) {
     console.error("booking_confirmation_retries failed", e);
   }
 
+  // Requests still waiting on their host with under a day to go: the host is
+  // reminded once, so the expiry below is a last resort.
+  let bookingRequestReminders: RequestReminderStats = { reminded: 0, failed: 0 };
+  try {
+    bookingRequestReminders = await runBookingRequestReminders(supabase, { now });
+  } catch (e) {
+    console.error("booking_request_reminders failed", e);
+  }
+
   // Booking requests the host never answered, closed once their time has come
   // so the invitee hears back instead of waiting on a meeting that is over.
   let bookingRequestsExpired: RequestExpiryStats = { expired: 0, notified: 0, failed: 0 };
@@ -436,5 +446,5 @@ export async function GET(request: Request) {
     // best-effort: never let health tracking break the cron response
   }
 
-  return NextResponse.json({ swept: due.length, results, radar, escalated, webhooks, proactive, reminders, bookingConfirmations, bookingRequestsExpired, calendarRepair, subscriptions, settledInvoices, nativeCollections, networkAutomations });
+  return NextResponse.json({ swept: due.length, results, radar, escalated, webhooks, proactive, reminders, bookingConfirmations, bookingRequestReminders, bookingRequestsExpired, calendarRepair, subscriptions, settledInvoices, nativeCollections, networkAutomations });
 }

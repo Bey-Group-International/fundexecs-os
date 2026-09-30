@@ -376,3 +376,19 @@ describe("sendBookingEmails — guests", () => {
     expect(recipients().sort()).toEqual(["ada@example.com", ...GUESTS].sort());
   });
 });
+
+describe("sendBookingEmails — the host's reminder", () => {
+  it("goes to the host alone, with no invite, and says what happens if they wait", async () => {
+    await sendBookingEmails("request_reminder", ctx({ guestEmails: ["grace@example.com"] }));
+    expect(recipients()).toEqual(["rae@fund.test"]);
+    expect(invites()).toHaveLength(0);
+    const html = (sendEmailMock.mock.calls[0][0] as { htmlBody: string }).htmlBody;
+    expect(html).toContain("needs your answer");
+    expect(html).toContain("declined for you");
+  });
+
+  it("sends nothing when the host has no address", async () => {
+    await sendBookingEmails("request_reminder", ctx({ hostEmail: null }));
+    expect(recipients()).toEqual([]);
+  });
+});

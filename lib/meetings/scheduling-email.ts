@@ -167,6 +167,7 @@ export function inviteMethodFor(kind: BookingEmailKind): "REQUEST" | "CANCEL" | 
     case "cancelled_by_host":
       return "CANCEL";
     case "requested":
+    case "request_reminder":
       return null;
   }
 }
@@ -212,6 +213,8 @@ function whenFor(ctx: BookingEmailContext, timezone: string): string {
 
 export type BookingEmailKind =
   | "requested"
+  /** The host's own nudge: a request still waiting on them as its time nears. */
+  | "request_reminder"
   | "confirmed"
   | "declined"
   | "rescheduled"
@@ -330,6 +333,29 @@ function buildBookingMessages(
               ["Their note", ctx.notes ?? ""],
             ],
             cta: ctx.joinUrl ? { label: "Open meeting room", url: ctx.joinUrl } : null,
+          }),
+        });
+      }
+      break;
+
+    case "request_reminder":
+      // The host's alone. The invitee already knows they are waiting.
+      if (hostTo) {
+        messages.push({
+          to: hostTo,
+          subject: `Waiting on you: ${ctx.inviteeName} — ${ctx.eventTitle}`,
+          html: buildSchedulingEmailHtml({
+            heading: "A booking request needs your answer",
+            intro: `${ctx.inviteeName} is still waiting to hear whether you can meet. The requested time is coming up.`,
+            rows: [
+              ["Meeting", ctx.eventTitle],
+              ["Requested", hostWhen],
+              ["From", `${ctx.inviteeName} (${ctx.inviteeEmail})`],
+              ["Guests", (ctx.guestEmails ?? []).join(", ")],
+              ["Their note", ctx.notes ?? ""],
+            ],
+            cta: ctx.hostMeetingsUrl ? { label: "Approve or decline", url: ctx.hostMeetingsUrl } : null,
+            footnote: "If it's still unanswered when the time comes, it will be declined for you and they'll be told.",
           }),
         });
       }
