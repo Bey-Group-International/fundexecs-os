@@ -13,7 +13,8 @@ jest.mock("@/lib/calendar/google.server", () => ({
   googleBusyForUser: (...a: unknown[]) => googleBusyForUserMock(...a),
 }));
 
-import { busyIntervals, resolvePublicPage } from "./scheduling-service";
+import { busyIntervals, rescheduleBooking, resolvePublicPage, SlotUnavailableError } from "./scheduling-service";
+import type { BookingContext } from "./scheduling-service";
 
 const WINDOW = {
   hostUserId: "host-1",
@@ -182,5 +183,97 @@ describe("resolvePublicPage", () => {
     const b: Record<string, unknown> = {};
     Object.assign(b, { select: () => b, eq: () => b, order: () => b, maybeSingle: async () => ({ data: null, error: null }) });
     expect(await resolvePublicPage({ from: () => b } as never, "nobody")).toBeNull();
+  });
+});
+
+describe("rescheduleBooking", () => {
+  /**
+   * Records every write and answers each table's writes from a queue, so a test
+   * can make the booking row reject a move the way the overlap constraint does.
+   */
+  function recordingClient(results: Record<string, Array<{ data: unknown; error: unknown }>>) {
+    const writes: Array<{ table: string; patch: Record<string, unknown> }> = [];
+    return {
+      writes,
+      from(table: string) {
+        const b: Record<string, unknown> = new Proxy(
+          {
+            update(patch: Record<string, unknown>) {
+              writes.push({ table, patch });
+              return b;
+            },
+            then: (res: (v: unknown) => unknown, rej: (e: unknown) => unknown) =>
+              Promise.resolve(results[table]?.shift() ?? { data: null, error: null }).then(res, rej),
+          },
+          {
+            get(target: Record<string, unknown>, prop: string) {
+              if (prop in target) return target[prop];
+              return () => b;
+            },
+          },
+        ) as Record<string, unknown>;
+        return b;
+      },
+    };
+  }
+
+  const ctx = {
+    booking: {
+      id: "bk-1",
+      meeting_id: "mtg-1",
+      status: "confirmed",
+      starts_at: "2026-10-05T14:00:00.000Z",
+      ends_at: "2026-10-05T14:30:00.000Z",
+      rescheduled_at: null,
+    },
+    page: { id: "page-1", user_id: "host-1", timezone: "UTC" },
+    eventType: { id: "et-1", duration_minutes: 30 },
+    roomCode: "abc-defg-hij",
+  } as unknown as BookingContext;
+
+  it("leaves the room where it is when the database rejects the new time", async () => {
+    const client = recordingClient({
+      scheduling_bookings: [{ data: null, error: { code: "23P01", message: "conflicting key value" } }],
+    });
+
+    await expect(
+      rescheduleBooking(client as never, ctx, "2026-10-05T16:00:00.000Z", { enforceAvailability: false }),
+    ).rejects.toBeInstanceOf(SlotUnavailableError);
+
+    // The booking row is the arbiter; nothing else may move until it has.
+    expect(client.writes.filter((w) => w.table === "live_meetings")).toEqual([]);
+  });
+
+  it("moves the booking back if the room can't follow it", async () => {
+    const moved = { ...ctx.booking, starts_at: "2026-10-05T16:00:00.000Z", ends_at: "2026-10-05T16:30:00.000Z" };
+    const client = recordingClient({
+      scheduling_bookings: [{ data: moved, error: null }, { data: ctx.booking, error: null }],
+      live_meetings: [{ data: null, error: { message: "network" } }],
+    });
+
+    await expect(
+      rescheduleBooking(client as never, ctx, "2026-10-05T16:00:00.000Z", { enforceAvailability: false }),
+    ).rejects.toThrow("network");
+
+    const bookingWrites = client.writes.filter((w) => w.table === "scheduling_bookings");
+    expect(bookingWrites).toHaveLength(2);
+    expect(bookingWrites[1].patch).toMatchObject({
+      starts_at: "2026-10-05T14:00:00.000Z",
+      ends_at: "2026-10-05T14:30:00.000Z",
+      rescheduled_at: null,
+    });
+  });
+
+  it("moves the booking, then the room, on the happy path", async () => {
+    const moved = { ...ctx.booking, starts_at: "2026-10-05T16:00:00.000Z", ends_at: "2026-10-05T16:30:00.000Z" };
+    const client = recordingClient({ scheduling_bookings: [{ data: moved, error: null }] });
+
+    const next = await rescheduleBooking(client as never, ctx, "2026-10-05T16:00:00.000Z", {
+      enforceAvailability: false,
+    });
+
+    expect(next.booking.starts_at).toBe("2026-10-05T16:00:00.000Z");
+    expect(client.writes.map((w) => w.table)).toEqual(["scheduling_bookings", "live_meetings"]);
+    expect(client.writes[1].patch).toMatchObject({ scheduled_at: "2026-10-05T16:00:00.000Z" });
   });
 });
