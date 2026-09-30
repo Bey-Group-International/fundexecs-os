@@ -5130,6 +5130,67 @@ Deployed, monitoring               →  live, observability active
              |  the shared loader.
              |  Confidence: Jest 7725 across 545 suites, typecheck and eslint
              |  clean.
+             |
+             |  2026-09-30  A finished meeting now writes itself onto the CRM
+             |  record of everyone who was in it. First CRM slice, and almost none
+             |  of it was new.
+             |  Surveyed before designing, which changed the request: "turn
+             |  meetings and inbox into a CRM feature" was not a CRM to build.
+             |  network_contacts, stages, relationship scoring, opportunities,
+             |  tasks and a per-contact timeline all worked already.
+             |  network_activities has had `meeting` as an activity type, an
+             |  is_system flag documented "system entries come from the engine and
+             |  are not user-editable", and a metadata column documented for
+             |  "machine-generated entries (from/to stage, message id, DURATION)"
+             |  since the day it was created. Nothing had ever written one.
+             |  live_meetings.related_contact_id is selected in every meetings
+             |  query, typed in four files, writable through the API - and set by
+             |  nothing, read by nothing. The schema anticipated this feature down
+             |  to the word "duration" and then nobody wired it.
+             |  So: connective tissue. crm-activity.ts holds every rule and is
+             |  pure; crm-activity.server.ts does the three things needing a
+             |  database; the report route gains a fourth sibling in a Promise.all
+             |  it already had.
+             |  Four decisions, all the author's: system-flagged and always shown;
+             |  EXACT EMAIL ONLY; the entry carries summary + decisions and links
+             |  the rest; sentiment stays in the report.
+             |  That last one is worth keeping. The report holds an AI reading of
+             |  how a meeting went. Putting it on a named person's permanent
+             |  record, org-wide and invisible to them, is a different claim from
+             |  "this meeting happened" - so it was raised as a question rather
+             |  than shipped as a field, and the answer was no.
+             |  Two things found rather than assumed. loadPresentPeople already
+             |  resolves attendance to addresses, handles guests, the row ceiling
+             |  and the NULL-distinct rejoin case, and never throws - so it was
+             |  reused instead of a second resolver being written. And a
+             |  booking-link meeting is indistinguishable by
+             |  live_meetings.source (both read "fundexecs"), so `inbound` needs a
+             |  scheduling_bookings lookup; it runs in parallel and reads as
+             |  outbound if it fails.
+             |  The unsafe part, fixed first: network_activities has NO unique
+             |  constraint, and the report path runs more than once
+             |  (/report/regenerate, the room's retry, two call sites). Without a
+             |  key, a regenerate would add a second copy of one meeting to every
+             |  attendee's record, then a third - and relationship scoring reads
+             |  this table, so duplicates move numbers people decide on. A partial
+             |  unique index on (org, contact, metadata->>'meeting_id') where
+             |  is_system and type='meeting', and the writer upserts on it: a
+             |  regenerate now CORRECTS the entry.
+             |  TWELVE injections, all breaking the test that names them - but
+             |  only after a fix. The first pass had ELEVEN of twelve: stripping
+             |  the URL validation, so a `javascript:` value in metadata would
+             |  render as an href on the contact record, broke NOTHING. That is a
+             |  security guard with no test, found by injecting rather than by
+             |  reading, and five tests now hold it. metadata is jsonb and this
+             |  value becomes a link; only server code writes it today, which is
+             |  exactly the kind of fact that stops being true quietly.
+             |  Also: the contact timeline already rendered system entries - with a
+             |  grey dot instead of a gold one and nothing saying what grey meant.
+             |  It says "Automatic" now. And network-active.ts's comment claiming
+             |  the feed is "meetings people logged by hand" became false with this
+             |  change, so it carries is_system on the event and says so.
+             |  Confidence: Jest 7786 across 547 suites, typecheck and eslint
+             |  clean.
 ```
 
 ---
