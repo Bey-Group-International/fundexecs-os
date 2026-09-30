@@ -121,6 +121,29 @@ describe("token exchange and refresh", () => {
     await expect(refreshAccessToken("rt")).rejects.toThrow(/400/);
   });
 
+  it("names Google's error code, which is what tells a revoked grant from a bad client", async () => {
+    // A revoked grant needs the member to reconnect; a rejected client needs an
+    // admin. Only Google's `error` field tells them apart, so it has to survive
+    // into the message callers match on.
+    fetchMock.mockResolvedValueOnce({
+      ok: false,
+      status: 400,
+      text: async () => JSON.stringify({ error: "invalid_grant", error_description: "Token has been expired or revoked." }),
+    });
+    await expect(refreshAccessToken("rt")).rejects.toThrow("google token refresh failed: 400 invalid_grant");
+
+    fetchMock.mockResolvedValueOnce({
+      ok: false,
+      status: 401,
+      text: async () => JSON.stringify({ error: "invalid_client", error_description: "Unauthorized" }),
+    });
+    await expect(refreshAccessToken("rt")).rejects.toThrow("google token refresh failed: 401 invalid_client");
+
+    // A body that isn't Google's JSON still fails cleanly on the status alone.
+    fetchMock.mockResolvedValueOnce({ ok: false, status: 502, text: async () => "<html>bad gateway</html>" });
+    await expect(refreshAccessToken("rt")).rejects.toThrow(/^google token refresh failed: 502$/);
+  });
+
   it("bounds both token fetches with an abort signal", async () => {
     fetchMock.mockResolvedValue({
       ok: true,
