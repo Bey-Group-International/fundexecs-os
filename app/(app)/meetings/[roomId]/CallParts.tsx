@@ -63,9 +63,10 @@ function VideoTileImpl({
   /**
    * Their voice is in the room right now.
    *
-   * Only consulted when `watchId` is absent, which is how this tile stays
-   * renderable on its own with a plain boolean (MeetingRoom.tile.test.tsx does
-   * exactly that). In the room it is `watchId` that answers.
+   * Only consulted when `watchId` is absent — including inside the room, where a
+   * store is provided but nobody has been named to watch. That is how this tile
+   * stays renderable on its own with a plain boolean, as
+   * MeetingRoom.tile.test.tsx does. Give it a `watchId` and that answers instead.
    */
   speaking?: boolean;
   /**
