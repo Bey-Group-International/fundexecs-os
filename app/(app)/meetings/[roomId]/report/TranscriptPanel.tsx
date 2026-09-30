@@ -11,13 +11,13 @@ import { speakerColorIndex } from "@/lib/meetings/speaker-attribution";
 import { cueAt, cuesAreTimed, cuesCanFollow, type TranscriptCue } from "@/lib/meetings/transcript-cues";
 import {
   findMatches,
-  groupMatches,
+  groupMatchesByTurn,
   matchSummary,
-  matchesIn,
   MIN_QUERY,
   partsFor,
   SPEAKER,
   stepMatch,
+  type TurnMatches,
 } from "@/lib/meetings/transcript-search";
 import { formatClock } from "@/lib/meetings/recording-timeline";
 
@@ -65,14 +65,18 @@ function colorFor(speaker: string): string {
  * thread decoding it.
  *
  * Every prop is a primitive, a stable ref, or a value the panel memoises
- * (`grouped` on the query; `onSeek` by the page). `active` is the only one that
+ * (`hits` on the query; `onSeek` by the page). `active` is the only one that
  * moves as the recording plays, and it moves for exactly two turns: the one being
  * left and the one being reached. `at` changes when somebody steps through search
  * hits, which does re-render the list — a keypress, not a clock.
  *
- * The per-row match lookup happens INSIDE on purpose: `matchesIn` allocates, so
- * calling it in the parent and passing the result would hand every row a fresh
- * array and defeat this entirely.
+ * `hits` is this turn's own matches rather than the whole match table, and that
+ * is the difference between the memo working and not. The table is a new object
+ * on every keystroke, so a row handed the table re-rendered on every keystroke
+ * even though a transcript is hundreds of rows of which a handful match.
+ * `undefined` for a row with no matches compares equal to last keystroke's
+ * `undefined`, so those rows hold still. The per-text lookup stays INSIDE, where
+ * it allocates nothing the parent would have to keep stable.
  */
 const TranscriptTurn = memo(function TranscriptTurn({
   turn,
@@ -81,7 +85,7 @@ const TranscriptTurn = memo(function TranscriptTurn({
   activeRef,
   markRef,
   at,
-  grouped,
+  hits,
   timed,
   onSeek,
 }: {
@@ -93,7 +97,14 @@ const TranscriptTurn = memo(function TranscriptTurn({
   activeRef: React.RefObject<HTMLLIElement | null>;
   markRef: React.RefObject<HTMLElement | null>;
   at: number;
-  grouped: ReturnType<typeof groupMatches>;
+  /**
+   * This turn's matches only — `undefined` when it has none, which is most of
+   * them. Handing every row the whole table meant a new object per keystroke and
+   * so a re-render of every row; `undefined` is the same `undefined` as last
+   * time, so a row with nothing to highlight holds still. See
+   * groupMatchesByTurn.
+   */
+  hits: TurnMatches | undefined;
   timed: boolean;
   onSeek?: (ms: number) => void;
 }) {
@@ -120,7 +131,7 @@ const TranscriptTurn = memo(function TranscriptTurn({
                 replaced matched on it, and "what did Priya say" is
                 half of what anyone asks a transcript. */}
             <span className="w-full truncate text-xs font-medium text-[var(--fg-secondary)]" title={turn.speaker}>
-              {partsFor(turn.speaker, matchesIn(grouped, index, SPEAKER)).map((part, k) =>
+              {partsFor(turn.speaker, hits?.get(SPEAKER)).map((part, k) =>
                 part.match ? (
                   <mark
                     key={k}
@@ -174,7 +185,7 @@ const TranscriptTurn = memo(function TranscriptTurn({
             {/* Painted in place rather than the turn being pulled
                 out of the transcript. Parts, never markup: these
                 are other people's words. */}
-            {partsFor(paragraph, matchesIn(grouped, index, j)).map((part, k) =>
+            {partsFor(paragraph, hits?.get(j)).map((part, k) =>
               part.match ? (
                 <mark
                   key={k}
@@ -244,7 +255,7 @@ export function TranscriptPanel({
   // hit, which is the part that makes a hit mean anything — "Yes, about forty"
   // is not an answer until the question above it is visible.
   const matches = useMemo(() => findMatches(turns, query), [turns, query]);
-  const grouped = useMemo(() => groupMatches(matches), [matches]);
+  const byTurn = useMemo(() => groupMatchesByTurn(matches), [matches]);
   useEffect(() => { setAt(matches.length ? 0 : -1); }, [matches]);
 
   // The line being spoken, when there is a clock worth trusting. See
@@ -386,7 +397,7 @@ export function TranscriptPanel({
                   activeRef={activeRef}
                   markRef={markRef}
                   at={at}
-                  grouped={grouped}
+                  hits={byTurn.get(i)}
                   timed={timed}
                   onSeek={onSeek}
                 />
