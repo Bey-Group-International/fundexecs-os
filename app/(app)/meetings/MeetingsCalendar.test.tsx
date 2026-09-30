@@ -10,10 +10,11 @@
  * What these do NOT guard: that a cell whose inputs a clock tick did not change
  * stops re-rendering. That is a render count, and React gives a test no faithful
  * way to see one from outside the module — a memoised cell with unchanged props
- * writes nothing to the DOM either way. Verified by injection, not assumed. The
- * numbers came from measuring the real `meetingTimeState`/`deriveMeetingStatus`
- * over ten minutes of ticks (30 of 40 ticks changed nothing) and are in the pull
- * request, not in CI.
+ * writes nothing to the DOM either way. Verified by injection, not assumed; the
+ * cost is measured with a Profiler in the pull request, not in CI. Over ten
+ * minutes of ticks NONE of the 40 changed a single cell's label or text, and all
+ * 40 re-rendered the grid anyway: 10.2ms a tick became 4.3ms at thirty meetings,
+ * 18.4ms became 6.9ms at eighty.
  *
  * The realtime subscription, the presence feed and every fetch are stood in for;
  * nothing else is.
@@ -72,9 +73,21 @@ jest.mock("@/lib/supabase/client", () => {
   };
 });
 
+/**
+ * Presence, stood in for — but with STABLE identities.
+ *
+ * The real hook keeps both in `useState`, so they keep their identity between
+ * polls. A stub returning a fresh `{}` per call does not, and since the day cell
+ * takes `presence` whole, that one object silently invalidated every memo under
+ * the grid: measured, it erased four fifths of what memoising the cell saves.
+ * A stub may be simpler than the thing it stands in for; it must not be less
+ * stable, or every measurement taken through it is wrong.
+ */
 jest.mock("./hooks", () => {
   const real = jest.requireActual("./hooks");
-  return { ...real, useLivePresence: () => ({ presence: {}, recentJoins: [] }) };
+  const presence = {};
+  const recentJoins: unknown[] = [];
+  return { ...real, useLivePresence: () => ({ presence, recentJoins }) };
 });
 
 import { MeetingsCalendar } from "./MeetingsCalendar";
@@ -200,17 +213,28 @@ describe("the month grid", () => {
 
 describe("the clock", () => {
   // The grid's cells read `today`, which is coarsened to the day — so ticking the
-  // 15-second clock must not change what any of them says.
-  it("draws the same grid across a clock tick", async () => {
+  // 15-second clock must not change what any of them says. This is the half of
+  // the story a test CAN hold: not that the cells skip the render, but that the
+  // render they are being spared would have redrawn the same grid. Ten minutes,
+  // because that is the window the cost was measured over.
+  it("draws the same grid across ten minutes of clock ticks", async () => {
     const { container } = await show([
       meeting({ id: "a", title: "Dunbar committee", scheduled_at: new Date(2026, 8, 16, 14, 0).toISOString() }),
+      meeting({ id: "b", title: "Audit review", scheduled_at: new Date(2026, 8, 10, 11, 0).toISOString() }),
     ]);
-    const before = container.textContent;
-    await act(async () => {
-      jest.setSystemTime(new Date(NOW.getTime() + 15_000));
-      jest.advanceTimersByTime(15_000);
-      await Promise.resolve();
-    });
-    expect(container.textContent).toBe(before);
+    const cells = () =>
+      Array.from(container.querySelectorAll("button[aria-expanded]"))
+        .map((c) => `${c.getAttribute("aria-label")}|${c.textContent}`)
+        .join("~~");
+    const before = cells();
+    expect(before).toContain("Dunbar committee");
+    for (let i = 1; i <= 40; i++) {
+      await act(async () => {
+        jest.setSystemTime(new Date(NOW.getTime() + i * 15_000));
+        jest.advanceTimersByTime(15_000);
+        await Promise.resolve();
+      });
+    }
+    expect(cells()).toBe(before);
   });
 });

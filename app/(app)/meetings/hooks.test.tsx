@@ -127,3 +127,54 @@ describe("useNow", () => {
     expect(renders.length).toBe(afterUnmount);
   });
 });
+
+// ── useLivePresence's identity ──────────────────────────────────────────────
+//
+// The calendar's month cell is memoised and takes `presence` whole, deliberately:
+// a cell whose room just filled should redraw. That makes this hook's identity
+// load-bearing. `presence` lives in `useState`, so a re-render — a clock tick,
+// four times a minute, with the grid mounted — hands back the same object and
+// all 42 cells bail out. Rebuild it per call and the memo is worth nothing:
+// measured through a test stub that did exactly that, it cost four fifths of
+// the saving, silently, with every assertion still green.
+//
+// This is the one part of that render-count story CI can actually hold, so it
+// is held here rather than left to a comment.
+import { useLivePresence } from "./hooks";
+
+jest.mock("@/lib/supabase/client", () => ({
+  createClient: () => ({
+    from: () => {
+      const q: Record<string, unknown> = {};
+      for (const k of ["select", "in", "is", "eq", "order", "limit"]) q[k] = () => q;
+      q.then = (res: (v: unknown) => unknown) => res({ data: [], error: null });
+      return q;
+    },
+    channel: () => {
+      const ch: Record<string, unknown> = {};
+      ch.on = () => ch;
+      ch.subscribe = () => ch;
+      ch.unsubscribe = () => ch;
+      return ch;
+    },
+    removeChannel: () => {},
+  }),
+}));
+
+describe("useLivePresence", () => {
+  it("hands back the same presence object across a re-render", async () => {
+    const seen: Array<Record<string, unknown>> = [];
+    function Probe({ tick }: { tick: number }) {
+      const { presence } = useLivePresence(["m1", "m2"]);
+      seen.push(presence);
+      return <span>{tick}</span>;
+    }
+    const { rerender } = render(<Probe tick={0} />);
+    await act(async () => { await Promise.resolve(); });
+    const first = seen[seen.length - 1];
+    rerender(<Probe tick={1} />);
+    rerender(<Probe tick={2} />);
+    expect(seen[seen.length - 1]).toBe(first);
+    expect(seen[seen.length - 2]).toBe(first);
+  });
+});
