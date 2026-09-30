@@ -167,7 +167,8 @@ export function EarnCopilotDock({ name }: { name: string }) {
     | { kind: "error"; message: string }
   >({ kind: "idle" });
   const inputRef = useRef<HTMLTextAreaElement>(null);
-  const threadEndRef = useRef<HTMLDivElement>(null);
+  // The dock's scrolling body — the thread's only scroll container.
+  const listRef = useRef<HTMLDivElement>(null);
   // The in-flight answer stream, so Stop can end it and keep what arrived.
   const chatAbortRef = useRef<AbortController | null>(null);
   // Gates the persist effect until the initial hydrate has run, so the empty
@@ -625,9 +626,12 @@ export function EarnCopilotDock({ name }: { name: string }) {
     stopAnswer();
   }, [pathname]);
 
-  // Keep the latest turn in view.
+  // Keep the latest turn in view. Scroll the dock's own list directly rather
+  // than `scrollIntoView`, which also nudges every scrollable ancestor —
+  // including the page behind the dock — on each streamed update.
   useEffect(() => {
-    if (open) threadEndRef.current?.scrollIntoView({ block: "end" });
+    const el = listRef.current;
+    if (open && el) el.scrollTop = el.scrollHeight;
   }, [thread, open]);
 
   // Pull the live briefing for this location when the dock is open.
@@ -884,7 +888,9 @@ export function EarnCopilotDock({ name }: { name: string }) {
           </div>
         </div>
 
-        <div className="relative z-10 flex-1 space-y-5 overflow-y-auto px-4 py-4">
+        {/* overscroll-contain: reaching either end of the dock's list must not
+            chain the wheel/touch scroll into the page behind it. */}
+        <div ref={listRef} className="relative z-10 flex-1 space-y-5 overflow-y-auto overscroll-contain px-4 py-4">
           {/* Live briefing — where things stand in this context */}
           {briefing ? (
             <div className="fx-neural-card p-3">
@@ -1190,7 +1196,6 @@ export function EarnCopilotDock({ name }: { name: string }) {
                     </div>
                   );
                 })}
-                <div ref={threadEndRef} />
               </div>
             </div>
           ) : null}

@@ -354,7 +354,7 @@ export function SessionCommandBar({
               ✕
             </button>
           </div>
-          <div className="flex-1 overflow-y-auto p-2">
+          <div className="flex-1 overflow-y-auto overscroll-contain p-2">
             {tasks.length === 0 ? (
               <p className="p-4 text-center text-sm text-fg-muted">No tasks in this session yet.</p>
             ) : selected ? (

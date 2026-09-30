@@ -76,7 +76,7 @@ export function ArtifactModal({
             </button>
           </div>
         </header>
-        <div className="overflow-y-auto px-5 py-4">
+        <div className="overflow-y-auto overscroll-contain px-5 py-4">
           {annotation ? (
             <AnnotationLayer
               entityType="artifact"

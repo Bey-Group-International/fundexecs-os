@@ -96,7 +96,7 @@ export function VersionHistory({
               Close
             </button>
           </div>
-          <div className="flex-1 overflow-y-auto p-5">
+          <div className="flex-1 overflow-y-auto overscroll-contain p-5">
             <div className="flex gap-4 font-mono text-[11px] uppercase tracking-wider text-fg-muted mb-2">
               <span className="text-red-400">− removed</span>
               <span className="text-emerald-400">+ added</span>

@@ -18,7 +18,10 @@ export function EntityTabs({ overview, tabs }: { overview: ReactNode; tabs: Enti
   return (
     <div>
       {overview}
-      <div className="mb-5 flex gap-0.5 overflow-x-auto border-b border-line">
+      {/* overflow-y pinned + indicator kept inside the box so the strip never
+          becomes a 1px vertical scroller that traps wheel scrolling (same fix
+          as HubTabs). */}
+      <div className="mb-5 flex gap-0.5 overflow-x-auto overflow-y-hidden border-b border-line">
         {tabs.map((t) => {
           const on = t.key === active;
           return (
@@ -27,14 +30,14 @@ export function EntityTabs({ overview, tabs }: { overview: ReactNode; tabs: Enti
               type="button"
               onClick={() => setActive(t.key)}
               aria-current={on ? "page" : undefined}
-              className={`group relative -mb-px whitespace-nowrap rounded-t-md px-3 py-2.5 text-sm transition ${
+              className={`group relative whitespace-nowrap rounded-t-md px-3 py-2.5 text-sm transition ${
                 on ? "font-medium text-fg-primary" : "text-fg-secondary hover:bg-surface-1 hover:text-fg-primary"
               }`}
             >
               {t.label}
               <span
                 aria-hidden
-                className={`absolute inset-x-2 -bottom-px h-0.5 rounded-full bg-gradient-to-r from-gold-300 to-gold-500 transition-opacity ${
+                className={`absolute inset-x-2 bottom-0 h-0.5 rounded-full bg-gradient-to-r from-gold-300 to-gold-500 transition-opacity ${
                   on ? "opacity-100" : "opacity-0 group-hover:opacity-30"
                 }`}
               />

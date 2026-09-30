@@ -141,7 +141,7 @@ export function WarmIntroPanel({ contact, senderName, senderTitle, onClose }: Pr
           </button>
         </div>
 
-        <div className="overflow-y-auto p-6 flex flex-col gap-5">
+        <div className="overflow-y-auto overscroll-contain p-6 flex flex-col gap-5">
           {/* Intro path */}
           {contact.introPath && contact.introPath.length > 0 && (
             <div className="rounded-lg border border-line bg-surface p-3">

@@ -71,13 +71,15 @@ export function playChime(type: "join" | "leave" | "knock") {
 // ─── BodyPortal ───────────────────────────────────────────────────────────────
 
 // Renders children into <body>, escaping the app shell. The meeting page is
-// wrapped by app/(app)/template.tsx in `animate-fade-up`, whose keyframes finish
-// at `transform: translateY(0)` with fill-mode `both` — so a transform stays
-// applied forever. Any non-`none` transform makes that wrapper the containing
-// block for `position: fixed` descendants, which trapped the call overlay inside
-// the scrolling content pane and collapsed its height (invisible video tiles).
-// Portaling to <body> puts the overlay outside that transformed ancestor so
-// `fixed inset-0` resolves against the viewport and the call is truly full-screen.
+// wrapped by app/(app)/template.tsx in `animate-fade-up`. Its keyframes used to
+// finish at `transform: translateY(0)` with fill-mode `both`, so a transform
+// stayed applied forever; they now end at `none` with `backwards`, but the
+// wrapper is still transformed for the ~0.45s entrance. Any non-`none`
+// transform makes that wrapper the containing block for `position: fixed`
+// descendants, which trapped the call overlay inside the page and collapsed its
+// height (invisible video tiles). Portaling to <body> puts the overlay outside
+// any transformed ancestor so `fixed inset-0` always resolves against the
+// viewport and the call is truly full-screen.
 export function BodyPortal({ children }: { children: React.ReactNode }) {
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
@@ -173,7 +175,7 @@ export function FloatingMenu({
     <div
       ref={panelRef}
       style={{ minWidth, ...style }}
-      className="z-[9999] overflow-y-auto rounded-xl border border-[var(--line)] bg-[var(--surface-2)] shadow-xl p-1"
+      className="z-[9999] overflow-y-auto overscroll-contain rounded-xl border border-[var(--line)] bg-[var(--surface-2)] shadow-xl p-1"
       role="menu"
     >
       {children}

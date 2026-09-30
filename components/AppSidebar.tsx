@@ -405,7 +405,7 @@ function SidebarPanel({
         <Logo href="/dashboard" variant="coin-wordmark" />
       </div>
 
-      <nav className="flex-1 overflow-y-auto px-2 py-3 text-sm">
+      <nav className="flex-1 overflow-y-auto overscroll-contain px-2 py-3 text-sm">
         {/* Top-level destinations */}
         <div className="flex flex-col gap-0.5">
           {/* Dashboard — the Private Markets Command Center home base. Sits at
@@ -766,7 +766,10 @@ export function AppSidebar(props: AppSidebarProps) {
 
   return (
     <>
-      <aside className="hidden w-[224px] shrink-0 flex-col border-r border-line/60 bg-surface-1/95 backdrop-blur-xl md:flex">
+      {/* The window is the app's scroller, so the rail pins itself to the
+          viewport (`sticky top-0 h-dvh`) and scrolls its own nav internally
+          rather than riding up with the page. */}
+      <aside className="hidden w-[224px] shrink-0 flex-col border-r border-line/60 bg-surface-1/95 backdrop-blur-xl md:sticky md:top-0 md:flex md:h-dvh">
         <SidebarPanel {...props} />
       </aside>
 

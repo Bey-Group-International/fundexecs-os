@@ -31,7 +31,13 @@ export function HubTabs({
 }) {
   const pathname = usePathname();
   return (
-    <div className="mb-6 flex gap-0.5 overflow-x-auto border-b border-line">
+    // `overflow-x-auto` alone makes the strip a scroll container on BOTH axes
+    // (overflow-y computes to auto). The tabs' underline used to hang 1px past
+    // the bottom edge (-mb-px / -bottom-px), so the strip became a 1px vertical
+    // scroller that swallowed wheel/trackpad scrolling while the pointer was
+    // over it. Pin overflow-y and keep the indicator inside the box so vertical
+    // scrolling passes straight through to the page.
+    <div className="mb-6 flex gap-0.5 overflow-x-auto overflow-y-hidden border-b border-line">
       {modules.map((m) => {
         const href = `/${hubKey}/${m.key}`;
         const active = navHrefActive(pathname, href);
@@ -41,7 +47,7 @@ export function HubTabs({
             key={m.key}
             href={href}
             aria-current={active ? "page" : undefined}
-            className={`group relative -mb-px flex items-center gap-1.5 whitespace-nowrap rounded-t-md px-3 py-2.5 text-sm transition ${
+            className={`group relative flex items-center gap-1.5 whitespace-nowrap rounded-t-md px-3 py-2.5 text-sm transition ${
               active
                 ? "font-medium text-fg-primary"
                 : "text-fg-secondary hover:bg-surface-1 hover:text-fg-primary"
@@ -51,7 +57,7 @@ export function HubTabs({
             {m.label}
             <span
               aria-hidden
-              className={`absolute inset-x-2 -bottom-px h-0.5 rounded-full bg-gradient-to-r from-gold-300 to-gold-500 transition-opacity ${
+              className={`absolute inset-x-2 bottom-0 h-0.5 rounded-full bg-gradient-to-r from-gold-300 to-gold-500 transition-opacity ${
                 active ? "opacity-100" : "opacity-0 group-hover:opacity-30"
               }`}
             />

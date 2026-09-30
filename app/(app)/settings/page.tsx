@@ -177,9 +177,10 @@ export default async function SettingsPage(props: {
       </header>
 
       <div className="grid grid-cols-1 gap-8 md:grid-cols-[180px_1fr]">
-        {/* Sticky section rail */}
+        {/* Sticky section rail — offset by the sticky app top bar
+            (--app-header-h) now that the window, not <main>, scrolls. */}
         <div className="hidden md:block">
-          <div className="sticky top-2">
+          <div className="sticky top-[calc(var(--app-header-h)+0.5rem)]">
             <SettingsNav sections={SECTIONS} />
           </div>
         </div>

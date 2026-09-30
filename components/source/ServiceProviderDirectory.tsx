@@ -477,7 +477,7 @@ function ProviderSlideOver({
         </div>
 
         {/* Body */}
-        <div className="flex-1 overflow-y-auto px-5 py-4 space-y-5">
+        <div className="flex-1 overflow-y-auto overscroll-contain px-5 py-4 space-y-5">
           {/* Contact */}
           {(provider.contactName || provider.contactEmail) && (
             <div>
