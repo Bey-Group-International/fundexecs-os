@@ -180,6 +180,17 @@ describe("connectionHealth", () => {
     expect(h.state).toBe("reauth_required");
   });
 
+  it("says the OAuth client was deleted, and how to get it back", () => {
+    const h = connectionHealth({
+      lastSyncAt: null,
+      lastError: "google token refresh failed: 401 deleted_client",
+      consecutiveFailures: 3,
+    });
+    expect(h.state).toBe("failing");
+    expect(h.message).toMatch(/deleted/i);
+    expect(h.message).toMatch(/restore/i);
+  });
+
   it("points at the app's Google credentials, not the member, when the client is rejected", () => {
     // Reconnecting can't fix a rejected OAuth client — every connection fails
     // at once — so the member shouldn't be sent to do it.
@@ -261,6 +272,26 @@ describe("describeGoogleError", () => {
 // connection never updates that timestamp, so it sorted to the front of the
 // queue forever — retried hourly at full cost, and holding a slot a healthy
 // connection then never reached. These are the rules that stop that.
+
+describe("nextAttemptAt for a rejected OAuth client", () => {
+  it("keeps retrying hourly, so fixing the app's credentials heals every connection within the hour", () => {
+    // An invalid_client is fixed out of band, for everyone at once. Backing off
+    // to a day would leave every connection dark for up to a day after the fix.
+    const now = new Date("2026-09-30T05:00:00Z");
+    const hour = 60 * 60_000;
+    expect(nextAttemptAt(9, now, "google token refresh failed: 401 invalid_client").getTime() - now.getTime()).toBe(hour);
+    // Early retries stay as quick as before.
+    expect(nextAttemptAt(1, now, "google token refresh failed: 401 invalid_client").getTime() - now.getTime()).toBe(
+      retryDelayMs(1),
+    );
+    // A deleted client is the same kind of failure — fixed once, for everyone.
+    expect(nextAttemptAt(9, now, "google token refresh failed: 401 deleted_client").getTime() - now.getTime()).toBe(hour);
+    // A revoked grant still backs off to a day: only the member can fix it.
+    expect(nextAttemptAt(9, now, "google token refresh failed: 400 invalid_grant").getTime() - now.getTime()).toBe(
+      24 * hour,
+    );
+  });
+});
 
 describe("retryDelayMs", () => {
   it("does not delay a connection that has not failed", () => {
