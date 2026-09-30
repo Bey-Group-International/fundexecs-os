@@ -9,9 +9,11 @@ import {
   SLOW_FRAME_RUN,
   UPLOAD_MAX_BYTES,
   MASK_SMOOTHING,
+  MASK_REVERSAL_CONFIRM,
+  MASK_REVERSAL_DEADBAND,
   MASK_SMOOTHING_UNCERTAIN,
-  blendAlphaForCoverage,
-  blendCoverageByCertainty,
+  blendCoverageByAgreement,
+  createMaskAgreement,
   CONFIDENCE_BACKGROUND,
   CONFIDENCE_PERSON,
   blendCoverage,
@@ -101,8 +103,8 @@ describe("personCoverage", () => {
  * twice: it agrees with the author's assumption instead of constraining what
  * ends up on screen.
  */
-describe("blendCoverageByCertainty", () => {
-  /** Settled swing for a pixel oscillating between two confidences. */
+describe("blendCoverageByAgreement", () => {
+  /** Blend `frames` frames and return the settled peak-to-peak swing. */
   function settledSwing(
     lo: number,
     hi: number,
@@ -119,44 +121,174 @@ describe("blendCoverageByCertainty", () => {
     return Math.max(...tail) - Math.min(...tail);
   }
 
-  // The measured case: a chair's edge drifting across the uncertainty band.
-  // Under the uniform blend it settles at 65/255 — a quarter of full opacity,
-  // flipping every other frame, which is the strobe.
-  it("cuts the strobe on a pixel the model cannot decide", () => {
+  /** Frames for one pixel to fall under `threshold` once the model says background. */
+  function framesToHide(from: number, threshold = 8): number {
+    const previous = new Uint8ClampedArray([from]);
+    const agreement = createMaskAgreement(1);
+    const person = new Uint8ClampedArray([from]);
+    // Settled and confidently person first, so the flip that follows is a real
+    // transition with a direction on record rather than a first observation.
+    for (let i = 0; i < 8; i++) blendCoverageByAgreement(previous, person, agreement);
+    const background = new Uint8ClampedArray([0]);
+    let n = 0;
+    while (previous[0] > threshold && n < 300) {
+      blendCoverageByAgreement(previous, background, agreement);
+      n += 1;
+    }
+    return n;
+  }
+
+  const byAgreement = () => {
+    const agreement = createMaskAgreement(1);
+    return (p: Uint8ClampedArray, t: Uint8ClampedArray) =>
+      blendCoverageByAgreement(p, t, agreement);
+  };
+
+  // The measured case: a chair's edge drifting across the uncertainty band. Under
+  // the uniform blend it settles at 65/255 — a quarter of full opacity, flipping
+  // every other frame, which is the strobe.
+  it("cuts the strobe on a pixel the model keeps changing its mind about", () => {
     const uniform = settledSwing(0.05, 0.25, (p, t) => blendCoverage(p, t, MASK_SMOOTHING));
-    const byCertainty = settledSwing(0.05, 0.25, (p, t) => blendCoverageByCertainty(p, t));
+    const agreed = settledSwing(0.05, 0.25, byAgreement());
 
     expect(uniform).toBeGreaterThan(50);
-    expect(byCertainty).toBeLessThan(20);
-    expect(byCertainty).toBeLessThan(uniform / 3);
+    expect(agreed).toBeLessThan(12);
+    expect(agreed).toBeLessThan(uniform / 4);
   });
 
-  // The other half, and the reason this is not just "smooth everything harder":
-  // a confident pixel must keep the responsive rate, or turning your head drags
-  // the mask behind you.
-  it("leaves a settled, confident pixel at the responsive rate", () => {
-    expect(blendAlphaForCoverage(255)).toBeCloseTo(MASK_SMOOTHING, 5);
-    expect(blendAlphaForCoverage(0)).toBeCloseTo(MASK_SMOOTHING, 5);
-    expect(blendAlphaForCoverage(127.5)).toBeCloseTo(MASK_SMOOTHING_UNCERTAIN, 5);
+  /**
+   * The case that killed the obvious design, and the reason this rule asks about
+   * reversals rather than about which side of the midpoint the model chose.
+   *
+   * Headwear oscillates 98<->0 — both values on the BACKGROUND side of 127.5. A
+   * side-agreement rule sees perfect agreement here and smooths it not at all,
+   * leaving the swing exactly where the uniform blend left it (measured: 32.7).
+   */
+  it("catches a flicker that never crosses the midpoint", () => {
+    const uniform = settledSwing(0.20, 0.34, (p, t) => blendCoverage(p, t, MASK_SMOOTHING));
+    const agreed = settledSwing(0.20, 0.34, byAgreement());
+
+    expect(uniform).toBeGreaterThan(25);
+    expect(agreed).toBeLessThan(8);
   });
 
-  // Keyed off the running history, not the incoming frame. Keying off the target
-  // would hand the strobe a fast lane on every frame it happens to read
-  // confidently, and change nothing a viewer could see.
-  it("still converges, and does not stall on an undecided pixel", () => {
+  /**
+   * The privacy property, and the whole reason this rule replaced the previous
+   * one. A pixel the model has decided is background must be hidden as fast as
+   * the uniform blend hid it — the history-keyed rule took 10 frames rather than
+   * 5, which is ~208ms longer that newly exposed room stays on screen.
+   */
+  it("hides a newly exposed background pixel as fast as the uniform blend", () => {
+    // Uniform at 0.5 from 255 reaches <8 in 5 frames: 127.5, 63.8, 31.9, 15.9, 8.0.
+    expect(framesToHide(255)).toBeLessThanOrEqual(5);
+    expect(framesToHide(128)).toBeLessThanOrEqual(4);
+  });
+
+  /**
+   * And it must come BACK to that speed once the flicker stops. A draft that
+   * capped the reversal count at the byte rather than at the confirm threshold
+   * took 18 frames to recover — the same latency defect in a new hat, because a
+   * count the ramp can never read still takes that many quiet frames to unwind.
+   */
+  it("returns to full speed once the model stops contradicting itself", () => {
+    const previous = new Uint8ClampedArray([98]);
+    const agreement = createMaskAgreement(1);
+    const hi = new Uint8ClampedArray([196]);
+    const lo = new Uint8ClampedArray([0]);
+    for (let i = 0; i < 20; i++) {
+      blendCoverageByAgreement(previous, i % 2 ? lo : hi, agreement);
+    }
+    let n = 0;
+    while (previous[0] > 8 && n < 300) {
+      blendCoverageByAgreement(previous, lo, agreement);
+      n += 1;
+    }
+    expect(n).toBeLessThanOrEqual(6);
+  });
+
+  // Steady motion in one direction is not a contradiction, so it must not be
+  // damped: this is what stops the mask dragging behind a turning head.
+  it("leaves motion that keeps going the same way at the responsive rate", () => {
+    const previous = new Uint8ClampedArray([0]);
+    const agreement = createMaskAgreement(1);
+    const seen: number[] = [];
+    for (let i = 1; i <= 5; i++) {
+      blendCoverageByAgreement(previous, new Uint8ClampedArray([255]), agreement);
+      seen.push(previous[0]);
+    }
+    // Uniform 0.5 from 0 toward 255: 128, 191, 223, 239, 247.
+    expect(seen[0]).toBeGreaterThanOrEqual(127);
+    expect(previous[0]).toBeGreaterThan(245);
+  });
+
+  // Dither below the deadband is quantisation, not an opinion. Reading it as a
+  // reversal would carry one slow frame into every real transition that follows.
+  it("ignores a change smaller than the deadband", () => {
+    const previous = new Uint8ClampedArray([200]);
+    const agreement = createMaskAgreement(1);
+    const a = new Uint8ClampedArray([200]);
+    const b = new Uint8ClampedArray([200 + MASK_REVERSAL_DEADBAND]);
+    for (let i = 0; i < 20; i++) blendCoverageByAgreement(previous, i % 2 ? b : a, agreement);
+    // Still at full speed, so the transition that follows is not slowed.
+    const background = new Uint8ClampedArray([0]);
+    let n = 0;
+    while (previous[0] > 8 && n < 300) {
+      blendCoverageByAgreement(previous, background, agreement);
+      n += 1;
+    }
+    expect(n).toBeLessThanOrEqual(5);
+  });
+
+  it("converges rather than stalling on a pixel it has been damping", () => {
     const previous = new Uint8ClampedArray([127]);
-    for (let i = 0; i < 80; i++) blendCoverageByCertainty(previous, new Uint8ClampedArray([255]));
+    const agreement = createMaskAgreement(1);
+    const person = new Uint8ClampedArray([255]);
+    for (let i = 0; i < 80; i++) blendCoverageByAgreement(previous, person, agreement);
     expect(previous[0]).toBeGreaterThan(250);
   });
 
   it("writes in place and allocates nothing", () => {
     const previous = new Uint8ClampedArray([0, 255]);
-    expect(blendCoverageByCertainty(previous, new Uint8ClampedArray([255, 0]))).toBe(previous);
+    const agreement = createMaskAgreement(2);
+    expect(blendCoverageByAgreement(previous, new Uint8ClampedArray([255, 0]), agreement)).toBe(
+      previous,
+    );
   });
 
   it("survives a shorter target without throwing", () => {
     const previous = new Uint8ClampedArray(8);
-    expect(() => blendCoverageByCertainty(previous, new Uint8ClampedArray(2))).not.toThrow();
+    const agreement = createMaskAgreement(8);
+    expect(() =>
+      blendCoverageByAgreement(previous, new Uint8ClampedArray(2), agreement),
+    ).not.toThrow();
+  });
+
+  // The first frame has no previous target, so it has no delta and cannot have a
+  // reversal. Inventing one would damp the opening frames of every effect.
+  it("treats its first frame as confident", () => {
+    const previous = new Uint8ClampedArray([0]);
+    const agreement = createMaskAgreement(1);
+    expect(agreement.primed).toBe(false);
+    blendCoverageByAgreement(previous, new Uint8ClampedArray([255]), agreement);
+    expect(previous[0]).toBeGreaterThanOrEqual(127);
+    expect(agreement.primed).toBe(true);
+  });
+
+  /**
+   * Pins the four constants every measurement in this file was taken at, so
+   * retuning one without re-measuring fails here rather than quietly changing what
+   * the swing and latency assertions above are worth.
+   *
+   * Deliberately NOT asserting the analytic bound a <= 0.097 that a sub-10/255
+   * residue needs: the shipped value is 0.1 and the measured chair residue is
+   * 10.3, slightly over. The swing tests above assert the outcome; this asserts
+   * the inputs it was measured with.
+   */
+  it("keeps the constants it was measured with", () => {
+    expect(MASK_SMOOTHING).toBe(0.5);
+    expect(MASK_SMOOTHING_UNCERTAIN).toBe(0.1);
+    expect(MASK_REVERSAL_DEADBAND).toBe(8);
+    expect(MASK_REVERSAL_CONFIRM).toBe(1);
   });
 });
 
@@ -164,33 +296,48 @@ describe("blendCoverageByCertainty", () => {
  * That the processor actually routes its per-frame mask through the blend above.
  *
  * The tests above establish what the rule DOES. They say nothing about whether
- * anything calls it — reverting the processor to the uniform blend passed all
- * 106 of them, which is the third time this session a rule has been tested and
- * the line wiring it in has not.
+ * anything calls it — reverting the processor to the uniform blend passed all of
+ * them, which happened three times in this area before the habit stuck.
  *
  * Read from source, and weaker than the rest of this file because of it: the
  * processor reaches for MediaPipe through a dynamic import that jsdom cannot
- * resolve, so the segmenter path never executes here and there is no behaviour
- * to assert. A real check needs a segmenter fake, which is a larger piece of work
+ * resolve, so the segmenter path never executes here and there is no behaviour to
+ * assert. A real check needs a segmenter fake, which is a larger piece of work
  * than the change it would guard. This catches the revert; it does not prove the
  * call runs.
  *
- * Matched with its argument rather than by name, so a sentence mentioning the
+ * Matched with its arguments rather than by name, so a sentence mentioning the
  * function cannot satisfy it.
  */
-describe("the processor uses the certainty blend", () => {
-  const processorSource = readFileSync(
-    join(__dirname, "background-processor.ts"),
-    "utf8",
-  );
+describe("the processor uses the agreement blend", () => {
+  const processorSource = readFileSync(join(__dirname, "background-processor.ts"), "utf8");
 
   it("blends its running mask history through it", () => {
-    expect(processorSource).toMatch(/blendCoverageByCertainty\(\s*this\.maskHistory/);
+    expect(processorSource).toMatch(
+      /blendCoverageByAgreement\(\s*this\.maskHistory,\s*target,\s*this\.maskAgreement/,
+    );
   });
 
   it("imports it rather than the uniform primitive", () => {
-    expect(processorSource).toMatch(/^\s*blendCoverageByCertainty,\s*$/m);
+    expect(processorSource).toMatch(/^\s*blendCoverageByAgreement,\s*$/m);
     expect(processorSource).not.toMatch(/blendCoverage\(\s*this\.maskHistory/);
+  });
+
+  /**
+   * The reversal memory must be dropped everywhere the history is. Kept across a
+   * pause or a resize it would damp the first frames back on the strength of a
+   * flicker from before — and a buffer of the wrong length would silently blend
+   * only its first pixels.
+   */
+  it("drops the reversal memory wherever it drops the history", () => {
+    const drops = processorSource.match(/this\.maskHistory = null;/g) ?? [];
+    const agreementDrops = processorSource.match(/this\.maskAgreement = null;/g) ?? [];
+    expect(drops.length).toBeGreaterThan(0);
+    expect(agreementDrops.length).toBe(drops.length);
+  });
+
+  it("reallocates it when the mask size changes", () => {
+    expect(processorSource).toMatch(/createMaskAgreement\(target\.length\)/);
   });
 });
 

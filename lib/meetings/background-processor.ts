@@ -28,7 +28,9 @@
 import {
   FRAME_BUDGET_MS,
   NO_BACKGROUND,
-  blendCoverageByCertainty,
+  blendCoverageByAgreement,
+  createMaskAgreement,
+  type MaskAgreement,
   blurRadiusPx,
   dilateCoverage,
   maskDilatePx,
@@ -179,6 +181,12 @@ export class BackgroundProcessor {
   private destroyed = false;
   /** Coverage carried between frames, so edges settle instead of shimmering. */
   private maskHistory: Uint8ClampedArray | null = null;
+  /**
+   * Which pixels the model keeps contradicting itself about, which is what sets
+   * each pixel's blend rate. Reset alongside maskHistory everywhere, because a
+   * stale reversal record would damp the first frames of a resumed effect.
+   */
+  private maskAgreement: MaskAgreement | null = null;
   /** This frame's coverage, before it is blended into the history. */
   private maskTarget: Uint8ClampedArray | null = null;
   private grid: MaskGrid = maskGrid(640, 480);
@@ -393,8 +401,11 @@ export class BackgroundProcessor {
     // measured from before it paused.
     this.lastDrawnAt = null;
     // Dropped so a resumed effect starts from the live mask rather than blending
-    // out of wherever the person was standing when it paused.
+    // out of wherever the person was standing when it paused. The reversal record
+    // goes with it: kept, it would damp the first frames back on the strength of
+    // a flicker from before the pause.
     this.maskHistory = null;
+    this.maskAgreement = null;
     if (this.raf) cancelAnimationFrame(this.raf);
     this.raf = 0;
     this.slowFrames = 0;
@@ -556,8 +567,12 @@ export class BackgroundProcessor {
       // Seeded from the first mask rather than from zero, so the person does not
       // fade in over the opening frames.
       this.maskHistory = new Uint8ClampedArray(target);
+      this.maskAgreement = createMaskAgreement(target.length);
     } else {
-      blendCoverageByCertainty(this.maskHistory, target);
+      if (!this.maskAgreement || this.maskAgreement.previousTarget.length !== target.length) {
+        this.maskAgreement = createMaskAgreement(target.length);
+      }
+      blendCoverageByAgreement(this.maskHistory, target, this.maskAgreement);
     }
 
     if (!this.maskImage || this.maskImage.width !== grid.width || this.maskImage.height !== grid.height) {
@@ -622,6 +637,7 @@ export class BackgroundProcessor {
     this.maskTarget = new Uint8ClampedArray(this.grid.width * this.grid.height);
     this.maskImage = null;
     this.maskHistory = null;
+    this.maskAgreement = null;
     this.dilateLimit = null;
     this.maskEdge = null;
   }

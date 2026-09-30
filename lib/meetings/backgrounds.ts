@@ -60,79 +60,178 @@ export function blurRadiusPx(strength: BlurStrength, frameWidth: number): number
 export const MASK_SMOOTHING = 0.5;
 
 /**
- * How much of each new mask to believe where the model is UNDECIDED.
+ * How much of each new mask to believe where the model keeps CONTRADICTING itself.
  *
- * Measured, because the constant-alpha blend above turned out to be spending its
- * whole budget in the wrong place. Peak-to-peak coverage swing for a pixel
- * oscillating frame to frame, settled, at MASK_SMOOTHING = 0.5:
+ * Measured, because the constant-alpha blend was spending its whole budget in the
+ * wrong place. Peak-to-peak coverage swing for a pixel oscillating frame to frame,
+ * settled, at MASK_SMOOTHING = 0.5:
  *
  *   chair edge   (0.05<->0.25 confidence)   raw 196/255 -> 65/255
  *   hair wisp    (0.10<->0.30)              raw 196/255 -> 66/255
- *   headwear     (0.20<->0.34)              raw  98/255 -> 32/255
+ *   headwear     (0.20<->0.34)              raw  98/255 -> 33/255
  *   confident body / background             raw   0     ->  0
  *
- * The confident rows are the finding. They are zero before smoothing, so
- * smoothing them achieves nothing — yet they got the same responsive alpha as
+ * The confident row is the finding. Those pixels are stable BEFORE smoothing, so
+ * smoothing them achieves nothing -- yet they got the same responsive alpha as
  * everything else, while the pixels that actually strobe kept a quarter of their
  * swing. A chair's edge flipping 65/255 every other frame is the strobe you see.
  *
- * So alpha follows how settled a pixel already is, not a constant. A square wave
- * of amplitude A blended at alpha a settles to A*a/(2-a); at 0.5 that is the
- * 65/255 measured above, and holding the residue under about 10/255 — below
- * where an eye picks it out of a moving image — needs a <= 0.097.
- *
- * The cost of the slower lane is memory: ~1/a frames to settle, so about 0.4s at
- * 24fps. That is paid ONLY by pixels the model cannot decide, which are by
- * definition the thin boundary band; the confident interior still moves at
- * MASK_SMOOTHING, so turning your head does not drag a ghost.
+ * A square wave of amplitude A blended at alpha a settles to A*a/(2-a), so holding
+ * the residue under about 10/255 -- below where an eye picks it out of a moving
+ * image -- needs a <= 0.097. Hence 0.1.
  */
 export const MASK_SMOOTHING_UNCERTAIN = 0.1;
 
 /**
- * The blend rate for one pixel, from how settled it already is.
+ * How big a frame-to-frame change counts as the model saying something.
  *
- * Driven by the RUNNING history rather than the incoming frame, and that choice
- * is load-bearing. The incoming value is the thing oscillating: a pixel flipping
- * between 2 and 196 looks highly confident on the frame it reads 2, so keying off
- * the target would hand the strobe a fast lane on every other frame and change
- * nothing. The history is the settled state, and a pixel settled mid-band is
- * exactly the pixel the model cannot decide about.
+ * Below this a change is quantisation dither, not an opinion, and must not read as
+ * the model contradicting itself. Measured: a pixel dithering by up to 6 and then
+ * genuinely becoming background hides in 5 frames at this deadband -- the same as
+ * the uniform blend -- against 6 frames at a deadband of 0, because zero reads the
+ * dither as a reversal and carries one slow frame into a real transition. Raising
+ * it to 16 instead cost real motion: a swaying edge lagged 25.3 rather than 20.3.
  */
-export function blendAlphaForCoverage(
-  settled: number,
-  confident: number = MASK_SMOOTHING,
-  uncertain: number = MASK_SMOOTHING_UNCERTAIN,
-): number {
-  const mid = 127.5;
-  const certainty = Math.min(1, Math.abs(settled - mid) / mid);
-  return uncertain + (confident - uncertain) * certainty;
+export const MASK_REVERSAL_DEADBAND = 8;
+
+/**
+ * How many reversals confirm a flicker.
+ *
+ * One. Measured against two and three: all three settle to exactly the same swing,
+ * and one engages soonest -- the second frame of a new flicker is already damped
+ * rather than the third or fourth. There is nothing to buy by waiting.
+ */
+export const MASK_REVERSAL_CONFIRM = 1;
+
+/**
+ * Per-pixel memory for the reversal detector. Allocated once per mask size.
+ *
+ * Two small buffers, ~130KB each at the 481x270 grid, on a stage that costs 0.42ms
+ * per frame against dilateCoverage's 7.55ms. The memory is the price; the time is
+ * noise.
+ */
+export interface MaskAgreement {
+  /** Last frame's target coverage, which is what a delta is measured against. */
+  previousTarget: Uint8ClampedArray;
+  /**
+   * Packed per pixel: bits 0-5 the confirmed-reversal count, bits 6-7 the
+   * direction of the last change that cleared the deadband (0 none, 1 rising,
+   * 2 falling).
+   */
+  state: Uint8Array;
+  /** False until a first frame has filled `previousTarget`, so there is a delta. */
+  primed: boolean;
+}
+
+const SIGN_NONE = 0;
+const SIGN_RISING = 1 << 6;
+const SIGN_FALLING = 2 << 6;
+const SIGN_MASK = 3 << 6;
+const COUNT_MASK = 0x3f;
+
+export function createMaskAgreement(length: number): MaskAgreement {
+  const n = Math.max(0, Math.floor(length));
+  return { previousTarget: new Uint8ClampedArray(n), state: new Uint8Array(n), primed: false };
 }
 
 /**
- * Blend a new coverage map into the running one, in place, at a rate that
- * depends on how decided each pixel already is.
+ * Blend a new coverage map into the running one at a rate set by whether the model
+ * is CONTRADICTING ITSELF on that pixel.
  *
- * Same contract as blendCoverage — writes into `previous`, returns it, allocates
- * nothing — and used in its place by the processor. blendCoverage is kept as the
- * uniform-rate primitive it always was rather than changed underneath its
- * callers and its tests.
+ * The rule this replaces read certainty off the running history, which was the
+ * wrong signal and was caught as a privacy finding on #1203. A pixel settled at
+ * 128 reads as maximally undecided even when the incoming mask has been
+ * confidently calling it background for several frames -- so newly exposed room
+ * stayed partly visible about 208ms longer than the uniform blend, on the one
+ * stage whose entire job is to hide the room. Measured: hiding from 255 took 10
+ * frames rather than 5.
+ *
+ * What separates a real movement from a flicker is not magnitude, and not which
+ * side of the midpoint the mask picked: it is whether successive changes keep
+ * UNDOING each other. A real transition is one large delta and then nothing; a
+ * flicker is +A, -A, +A, -A for as long as it lasts. So the signal is a sign
+ * reversal of the delta, and everything else runs at full speed.
+ *
+ * Measured against both predecessors, and better than each on every axis:
+ *
+ *                    hide 255->0   chair 196<->0   headwear 98<->0   pan lag
+ *   uniform (old)        5 frames        65.3/255          32.7/255      31.8
+ *   history-keyed       10 frames        14.3/255          19.1/255     110.0
+ *   this rule            5 frames        10.3/255           5.2/255      31.8
+ *
+ * Headwear is the row worth naming. It oscillates 98<->0, entirely on the
+ * background side of the midpoint, so a rule asking "which side did the model
+ * pick" sees perfect agreement and smooths it not at all -- an earlier draft of
+ * this did exactly that and left headwear at 32.7. Asking whether the model is
+ * reversing itself catches it, and reaches the analytic floor for the slow rate
+ * (98*0.1/1.9 = 5.2) rather than a fraction of it.
+ *
+ * Same contract as blendCoverage: writes into `previous`, returns it, allocates
+ * nothing. `agreement` is mutated too -- it is this rule's memory.
  */
-export function blendCoverageByCertainty(
+export function blendCoverageByAgreement(
   previous: Uint8ClampedArray,
   target: Uint8ClampedArray,
+  agreement: MaskAgreement,
   confident: number = MASK_SMOOTHING,
   uncertain: number = MASK_SMOOTHING_UNCERTAIN,
+  deadband: number = MASK_REVERSAL_DEADBAND,
+  confirm: number = MASK_REVERSAL_CONFIRM,
 ): Uint8ClampedArray {
   const hi = Math.max(0, Math.min(1, confident));
   const lo = Math.max(0, Math.min(1, uncertain));
-  const n = Math.min(previous.length, target.length);
+  const n = Math.min(previous.length, target.length, agreement.previousTarget.length);
+  const band = Math.max(0, deadband);
+  // Capped at `confirm` rather than at the byte: a count beyond it is evidence the
+  // ramp can never use, and it takes just as many quiet frames to unwind. A draft
+  // that capped at 127 took 18 frames to return to full speed after a flicker
+  // stopped -- the same latency problem this rule exists to fix, in a new hat.
+  const cap = Math.max(1, Math.min(COUNT_MASK, Math.floor(confirm)));
+
+  const prevTarget = agreement.previousTarget;
+  const state = agreement.state;
+
+  // The first frame has nothing to compare against, so every pixel blends at the
+  // confident rate. Seeding the deltas from a fabricated previous frame would
+  // invent reversals that never happened.
+  if (!agreement.primed) {
+    for (let i = 0; i < n; i++) {
+      previous[i] = previous[i] + (target[i] - previous[i]) * hi;
+      prevTarget[i] = target[i];
+      state[i] = 0;
+    }
+    agreement.primed = true;
+    return previous;
+  }
+
   for (let i = 0; i < n; i++) {
-    const p = previous[i];
-    const a = blendAlphaForCoverage(p, hi, lo);
-    previous[i] = p + (target[i] - p) * a;
+    const t = target[i];
+    const delta = t - prevTarget[i];
+    prevTarget[i] = t;
+
+    const packed = state[i];
+    let count = packed & COUNT_MASK;
+    let sign = packed & SIGN_MASK;
+
+    if (delta > band || delta < -band) {
+      const next = delta > 0 ? SIGN_RISING : SIGN_FALLING;
+      // A reversal only counts against a direction already on record: the first
+      // significant change on a pixel is a movement, not a contradiction.
+      count = sign !== SIGN_NONE && next !== sign ? Math.min(count + 1, cap) : 0;
+      sign = next;
+    } else {
+      // A quiet frame. The model is no longer arguing with itself, so the pixel
+      // returns to full speed rather than serving out a sentence.
+      count = 0;
+    }
+    state[i] = sign | count;
+
+    const a = hi - (hi - lo) * Math.min(1, count / cap);
+    previous[i] = previous[i] + (t - previous[i]) * a;
   }
   return previous;
 }
+
 
 /** Feather radius as a fraction of frame width. */
 const FEATHER_FRACTION = 0.004;
