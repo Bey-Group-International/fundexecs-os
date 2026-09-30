@@ -24,6 +24,7 @@ import { useState } from "react";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { VideoTile, videoTrackOf } from "./CallParts";
+import { createSpeakingStore, SpeakingProvider } from "./room-shared";
 
 beforeAll(() => {
   // jsdom has no media pipeline; the component calls play() and catches.
@@ -206,5 +207,51 @@ describe("what the tile reports about a connection", () => {
     );
     expect(screen.getByText("Video paused")).toBeInTheDocument();
     expect(screen.queryByText("Camera off")).not.toBeInTheDocument();
+  });
+});
+
+/**
+ * Where the ring's answer comes from.
+ *
+ * The tile subscribes to the room's speaking store by `watchId` so that a voice
+ * does not re-render the room to deliver a border. The `speaking` prop is the
+ * answer when no id is given — and that has to hold INSIDE the room too, where a
+ * store exists but nobody has been named. It did not, at first: an absent
+ * `watchId` asked the store about the empty id, which is nobody, so the prop was
+ * silently overruled with `false`. Every call site in the room passes a
+ * `watchId`, so nothing was visibly wrong; the next caller would have been.
+ * CodeRabbit caught it on #1176 and these two are the guard.
+ */
+describe("who the ring follows", () => {
+  const speakingStore = () => {
+    const store = createSpeakingStore();
+    store.publish(new Set(["rae"]));
+    return store;
+  };
+
+  it("follows the store for the id it was told to watch", () => {
+    const store = speakingStore();
+    const { rerender } = render(
+      <SpeakingProvider value={store}>
+        <VideoTile stream={null} videoTrack={null} label="Rae Okafor" micOn watchId="rae" />
+      </SpeakingProvider>,
+    );
+    expect(document.querySelector("span.animate-pulse")).toBeTruthy();
+
+    rerender(
+      <SpeakingProvider value={store}>
+        <VideoTile stream={null} videoTrack={null} label="Sam Ayers" micOn watchId="sam" />
+      </SpeakingProvider>,
+    );
+    expect(document.querySelector("span.animate-pulse")).toBeNull();
+  });
+
+  it("keeps the speaking prop's answer when no id is given, store or not", () => {
+    render(
+      <SpeakingProvider value={speakingStore()}>
+        <VideoTile stream={null} videoTrack={null} label="Rae Okafor" micOn speaking />
+      </SpeakingProvider>,
+    );
+    expect(document.querySelector("span.animate-pulse")).toBeTruthy();
   });
 });

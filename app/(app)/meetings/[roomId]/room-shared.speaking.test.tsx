@@ -145,6 +145,31 @@ describe("useSpeaking", () => {
   });
 
   /**
+   * An empty id means there is nobody to watch, so the fallback answers even
+   * though a store is right there.
+   *
+   * This is the assertion that was missing, and its absence is why the first
+   * version of this shipped with a contract it did not keep. `useSpeaking` read
+   * `source.get(id)` whenever a source existed, so an id of "" asked the store
+   * about a participant that cannot exist and got `false` forever — while
+   * VideoTile's own documentation promised that a tile without `watchId` falls
+   * back to its `speaking` prop. Every call site in the room passes `watchId`,
+   * so nothing was visibly broken; the next caller would have been.
+   */
+  it("falls back to the prop for an empty id even inside a provider", () => {
+    const store = createSpeakingStore();
+    store.publish(new Set(["ada"]));
+
+    render(
+      <SpeakingProvider value={store}>
+        <Dot id="" fallback />
+      </SpeakingProvider>,
+    );
+
+    expect(screen.getByTestId("")).toHaveTextContent("talking");
+  });
+
+  /**
    * With no provider the fallback is the answer, which is what keeps VideoTile
    * and the sidebar's rows renderable on their own with a plain boolean —
    * MeetingRoom.tile.test.tsx and CallParts.sidebar.test.tsx both do that, and

@@ -4893,6 +4893,38 @@ Deployed, monitoring               →  live, observability active
              |  Confidence: Jest 7629 across 539 suites, typecheck and eslint
              |  clean. Still jsdom, which has no layout, so every figure above is a
              |  floor rather than a ceiling.
+             |
+             |  2026-09-30  useSpeaking kept a contract it documented but did not
+             |  honour. CodeRabbit found it; the missing assertion is why I did not.
+             |  `useSpeaking(id, fallback)` read `source.get(id)` whenever a store
+             |  was provided, so an id of "" asked the store about a participant
+             |  who cannot exist and got `false` forever. VideoTile's own
+             |  documentation promised the opposite: a tile with no `watchId` falls
+             |  back to its `speaking` prop. Inside the room, where a store always
+             |  exists, it did not - the prop was silently overruled.
+             |  Not a live bug: all six VideoTile call sites in the room pass a
+             |  `watchId`, which is exactly why it survived review and a full suite.
+             |  The next caller to leave it off would have got a tile that never
+             |  rings, with nothing failing to say so.
+             |  Fixed at the root rather than where it was reported. CodeRabbit
+             |  proposed patching VideoTile (`watchId === undefined ? speaking :
+             |  live`), which works and leaves the same trap for PersonRow and
+             |  every future subscriber. One line in the hook instead: no store, OR
+             |  nobody named, means the caller's own answer stands.
+             |  Two guards, and the pair is not redundant - which was checked, not
+             |  assumed. Reverting the exact shipped defect fails 2 (the hook test
+             |  and the tile test). Making VideoTile pass a non-empty sentinel
+             |  instead of "" fails only 1, the TILE test, so that one is catching
+             |  something the hook test cannot see. And over-correcting so the
+             |  fallback always wins fails 3, so the fix cannot be wrong in the
+             |  other direction either.
+             |  The lesson worth keeping: the test file had "falls back to the prop
+             |  when nobody provides a store" and stopped there. The second half of
+             |  that sentence - and when nobody is named, store or not - was the
+             |  whole contract, and an assertion that covers half a rule reads as
+             |  though it covers the rule.
+             |  Confidence: Jest 7651 across 539 suites, typecheck and eslint
+             |  clean.
 ```
 
 ---
