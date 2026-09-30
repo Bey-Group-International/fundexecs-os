@@ -46,7 +46,22 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ tok
     const from = new Date(now - PAST_DAYS * 86_400_000).toISOString();
     const to = new Date(now + FUTURE_DAYS * 86_400_000).toISOString();
 
-    const { data: meetings } = await supabase
+    // Requests still waiting on the host's decision. They already hold their
+    // slot (the booking page offers it to nobody else), so they belong on the
+    // host's calendar too; without them, a host could promise the same hour
+    // elsewhere while a request for it sat unanswered. Once approved, the
+    // request becomes a meeting and shows up as that instead.
+    const pendingQuery = supabase
+      .from("scheduling_bookings")
+      .select("id, starts_at, ends_at, invitee_name, calendar_sequence, scheduling_event_types(title)")
+      .eq("host_user_id", owner.user_id)
+      .eq("status", "pending")
+      .gte("starts_at", new Date(now).toISOString())
+      .lt("starts_at", to)
+      .order("starts_at", { ascending: true })
+      .limit(MAX_EVENTS);
+
+    const meetingsQuery = supabase
       .from("live_meetings")
       .select("id, room_code, title, description, location, scheduled_at, duration_minutes, updated_at, status")
       .eq("host_id", owner.user_id)
@@ -57,6 +72,12 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ tok
       .lt("scheduled_at", to)
       .order("scheduled_at", { ascending: true })
       .limit(MAX_EVENTS);
+
+    // Both keyed on the owner alone, so asked together.
+    const [{ data: meetings }, { data: pending, error: pendingError }] = await Promise.all([
+      meetingsQuery,
+      pendingQuery,
+    ]);
 
     const events: IcsFeedEvent[] = [];
     for (const row of (meetings ?? []) as Array<{
@@ -89,6 +110,31 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ tok
         // derives from updated_at: without it, an edited meeting would keep
         // showing at its old time in every subscribed calendar.
         sequence: sequenceFor(row.updated_at),
+      });
+    }
+
+    // A failure here costs the requests, not the feed: the meetings still go out.
+    if (pendingError) console.error("[/api/calendar/feed] pending bookings", pendingError.message);
+    for (const row of (pending ?? []) as unknown as Array<{
+      id: string;
+      starts_at: string;
+      ends_at: string;
+      invitee_name: string | null;
+      calendar_sequence: number | null;
+      scheduling_event_types: { title: string | null } | { title: string | null }[] | null;
+    }>) {
+      const type = Array.isArray(row.scheduling_event_types) ? row.scheduling_event_types[0] : row.scheduling_event_types;
+      const what = type?.title?.trim() || "Meeting";
+      const who = row.invitee_name?.trim();
+      events.push({
+        uid: `booking-${row.id}@fundexecs`,
+        startIso: row.starts_at,
+        endIso: row.ends_at,
+        summary: `Requested: ${what}${who ? ` with ${who}` : ""}`,
+        description: "Waiting for you to confirm or decline in FundExecs.",
+        url: `${SITE_URL}/meetings`,
+        tentative: true,
+        sequence: row.calendar_sequence ?? 0,
       });
     }
 
