@@ -224,6 +224,12 @@ export type BookingEmailKind =
 export async function sendBookingEmails(
   kind: BookingEmailKind,
   ctx: BookingEmailContext,
+  /**
+   * `inviteeOnly`: skip the host's copy. For re-sending a confirmation the
+   * invitee never got — the host's arrived the first time, and a second would
+   * only look like a second booking.
+   */
+  opts: { inviteeOnly?: boolean } = {},
 ): Promise<{ sent: number; inviteeSent: boolean }> {
   // "Save to calendar", offered on exactly the transitions that put an entry in
   // somebody's calendar in the first place — the ones inviteMethodFor sends a
@@ -499,6 +505,10 @@ export async function sendBookingEmails(
 
   // The same invitation goes to both sides: the host's own calendar entry has
   // to move when a booking is rescheduled, not only the invitee's.
+  if (opts.inviteeOnly) {
+    for (let i = messages.length - 1; i >= 0; i--) if (messages[i].to !== inviteeTo) messages.splice(i, 1);
+  }
+
   const invite = inviteFor(kind, ctx);
   const results = await Promise.allSettled(
     messages.map((m) => send(m.to, m.subject, m.html, ctx.orgId, invite, ctx.credentials)),
