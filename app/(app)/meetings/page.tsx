@@ -10,6 +10,8 @@ import { readOAuthOutcome } from "@/lib/oauth-outcome";
 import { OAuthOutcomeBanner } from "@/components/OAuthOutcomeBanner";
 import { mailboxConfigured } from "@/lib/meetings/mailbox.server";
 import { MailboxWarning } from "./MailboxWarning";
+import { CallRelayWarning } from "./CallRelayWarning";
+import { relayStatus } from "@/lib/meetings/turn-servers.server";
 import { loadMeetingLog } from "@/lib/meetings/meeting-log.server";
 import {
   belongsInLog,
@@ -265,6 +267,9 @@ export default async function MeetingsPage(props: {
   // Both of these go to the calendar overlay and nowhere else, so on a visit
   // that is not opening it they are sent empty rather than sent unread: the
   // overlay only exists at `?view=`, and it reloads its own window on mount.
+  // An environment read, not a request: whether calls can be relayed for
+  // guests on networks that block direct connections.
+  const relay = relayStatus();
   const history = calendarRequested ? meetings : [];
   const past = history.filter((m) => isPastMeeting(m, now));
 
@@ -293,6 +298,10 @@ export default async function MeetingsPage(props: {
         <OAuthOutcomeBanner outcome={oauthOutcome} dismissHref="/meetings" />
       )}
       {!canSendEmail && <MailboxWarning />}
+      {/* Only the people who can set the relay up are told it is missing. */}
+      {!relay.configured && (ctx.role === "owner" || ctx.role === "admin") && (
+        <CallRelayWarning reason={relay.reason} />
+      )}
       <MeetingsLanding
         initialMeetings={history as unknown as CalendarMeeting[]}
         initialUpcoming={upcoming as unknown as UpcomingMeeting[]}
