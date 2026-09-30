@@ -67,6 +67,17 @@
    light, so wording keeps the same contrast on every device. */
 html {
   color-scheme: light;
+  /* Height of the sticky app top bar (GlobalTopBar / SessionCommandBar are
+     `sm:h-12`). In-page sticky rails offset by this so they pin below the bar
+     instead of sliding under it. */
+  --app-header-h: 3rem;
+}
+
+/* The authed app scrolls the window with a sticky top bar, so anchor jumps and
+   scrollIntoView({ block: "start" }) must land below the bar, not under it.
+   Scoped to the app shell so public pages keep flush anchors. */
+html:has([data-app-shell]) {
+  scroll-padding-top: var(--app-header-h);
 }
 
 body {
@@ -74,6 +85,13 @@ body {
   color: var(--foreground);
   font-family: var(--font-sans), system-ui, sans-serif;
   min-height: 100dvh;
+  /* Decorative glows (.fx-ambient / .fx-neural-ambient / .fx-blueprint
+     ::before) use negative horizontal insets and would otherwise widen the
+     page into a sideways scroll. Set on <body> rather than <html>: with <html>
+     left `visible`, body's overflow propagates to the viewport, so the
+     `body.style.overflow = "hidden"` scroll locks (modals, drawers, sheets)
+     still lock the page. `clip` never creates a scroll container. */
+  overflow-x: clip;
 }
 
 ::selection {
@@ -453,9 +471,13 @@ body {
   height: env(safe-area-inset-bottom, 0px);
 }
 /* Reserve room at the foot of scrollable app screens so content clears the
-   fixed bottom tab bar + home indicator. */
-.pb-appnav {
-  padding-bottom: calc(5.25rem + env(safe-area-inset-bottom, 0px));
+   fixed bottom tab bar + home indicator. Scoped to below `md`: this is plain
+   CSS emitted after Tailwind's utilities, so unscoped it beat `md:pb-8` and left
+   ~6rem of dead space under every desktop page, where there is no tab bar. */
+@media (max-width: 767px) {
+  .pb-appnav {
+    padding-bottom: calc(5.25rem + env(safe-area-inset-bottom, 0px));
+  }
 }
 
 /* Bottom tab bar — floating glass dock. */

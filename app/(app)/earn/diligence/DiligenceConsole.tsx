@@ -1,23 +1,64 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useMemo, useState, useTransition } from "react";
 import { DILIGENCE_PRESETS } from "@/lib/brains/diligence";
 import type { DiligenceResponse } from "@/lib/brains/types";
-import { askDiligence } from "../actions";
+import { createClient } from "@/lib/supabase/client";
+import { uploadDocumentFile } from "@/components/documents/DocumentUploader";
+import { askDiligence, readLibraryDocument } from "../actions";
 
-// Upload/paste a document, pick a preset question, and run the routed Brain.
-// Renders the deliverable plus an audit strip (Brain, tools used, reasoning).
-export function DiligenceConsole() {
+const TEXT_EXTS = /\.(txt|md|markdown|csv)$/i;
+const BINARY_ACCEPT = ".pdf,.docx,.xlsx,.pptx";
+
+// Upload/paste/pick a document, pick a preset question, and run the routed
+// Brain. Renders the deliverable plus an audit strip (Brain, tools used,
+// reasoning).
+//
+// Text files are read in the browser. PDF and Office files can't be, so they
+// are saved privately to the Documents library (where Earn's extractor reads
+// them server-side) and the extracted text comes back here.
+export function DiligenceConsole({ library = [] }: { library?: { id: string; name: string }[] }) {
+  const supabase = useMemo(() => createClient(), []);
+  const [loading, setLoading] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [docName, setDocName] = useState("");
   const [docText, setDocText] = useState("");
   const [presetId, setPresetId] = useState(DILIGENCE_PRESETS[0].id);
   const [result, setResult] = useState<DiligenceResponse | null>(null);
   const [pending, startTransition] = useTransition();
 
+  async function loadFromLibrary(id: string) {
+    if (!id) return;
+    setLoadError(null);
+    setLoading("Reading the document…");
+    const res = await readLibraryDocument(id);
+    setLoading(null);
+    if (res.ok) {
+      setDocName(res.name);
+      setDocText(res.text);
+    } else setLoadError(res.error);
+  }
+
   async function onFile(file: File | undefined) {
     if (!file) return;
-    setDocName(file.name);
-    setDocText(await file.text());
+    setLoadError(null);
+    if (TEXT_EXTS.test(file.name)) {
+      setDocName(file.name);
+      setDocText(await file.text());
+      return;
+    }
+    setLoading(`Uploading ${file.name}…`);
+    const up = await uploadDocumentFile(supabase, {
+      file,
+      section: "other",
+      onProgress: (f) => setLoading(`Uploading ${file.name}… ${Math.round(f * 100)}%`),
+    });
+    if (!up.ok) {
+      setLoading(null);
+      setLoadError(up.error);
+      return;
+    }
+    await loadFromLibrary(up.documentId);
   }
 
   function run() {
@@ -49,15 +90,35 @@ export function DiligenceConsole() {
             <span className="font-mono text-[11px] text-fg-muted">
               or{" "}
               <label className="cursor-pointer text-gold-300 hover:underline">
-                upload a .txt/.md
+                upload a file (PDF, Word, Excel, PowerPoint, text)
                 <input
                   type="file"
-                  accept=".txt,.md,.markdown,text/plain"
+                  accept={`${BINARY_ACCEPT},.txt,.md,.markdown,.csv,text/plain`}
                   className="hidden"
                   onChange={(e) => onFile(e.target.files?.[0])}
                 />
               </label>
             </span>
+          </span>
+          {library.length > 0 ? (
+            <select
+              value=""
+              onChange={(e) => void loadFromLibrary(e.target.value)}
+              aria-label="Pick a document from your library"
+              className="rounded-md border border-line bg-surface-0 px-3 py-2 text-xs text-fg-secondary outline-none focus:border-gold-500"
+            >
+              <option value="">…or pick one from your Documents library</option>
+              {library.map((d) => (
+                <option key={d.id} value={d.id}>
+                  {d.name}
+                </option>
+              ))}
+            </select>
+          ) : null}
+          {loading ? <span className="font-mono text-[11px] text-fg-muted">{loading}</span> : null}
+          {loadError ? <span className="text-xs text-status-danger">{loadError}</span> : null}
+          <span className="font-mono text-[11px] text-fg-muted">
+            PDF and Office uploads are saved privately to Documents so Earn can read them.
           </span>
           <textarea
             value={docText}

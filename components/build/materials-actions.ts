@@ -8,18 +8,12 @@
 import { revalidatePath } from "next/cache";
 import { createServerClient } from "@/lib/supabase/server";
 import { getSessionContext } from "@/lib/auth";
-import { sendEmail, shareGrantedEmail, escapeHtml } from "@/lib/email";
+import { escapeHtml } from "@/lib/email";
+import { insertShare } from "@/lib/data-room-shares.server";
 
 const ROOM = "/build/data_room";
 
 // --- Shareable data-room links --------------------------------------------
-
-async function hashPassword(password: string): Promise<string> {
-  const { pbkdf2Sync, randomBytes } = await import("crypto");
-  const salt = randomBytes(16).toString("hex");
-  const hash = pbkdf2Sync(password, salt, 100_000, 32, "sha256").toString("hex");
-  return `pbkdf2:${salt}:${hash}`;
-}
 
 async function comparePassword(password: string, stored: string): Promise<boolean> {
   if (!stored.startsWith("pbkdf2:")) {
@@ -40,26 +34,15 @@ export async function createShare(formData: FormData): Promise<void> {
   if (!ctx?.orgId) return;
   const roomId = String(formData.get("room_id") ?? "").trim();
   if (!roomId) return;
-  const label = String(formData.get("label") ?? "").trim() || null;
   const days = Number(String(formData.get("expires_in_days") ?? "").trim());
-  const expires_at =
-    Number.isFinite(days) && days > 0 ? new Date(Date.now() + days * 86_400_000).toISOString() : null;
-
-  const requireEmail = formData.get("require_email") === "1";
-  const requireNda = formData.get("require_nda") === "1";
-  const ndaText = String(formData.get("nda_text") ?? "").trim() || null;
-  const passwordRaw = String(formData.get("password") ?? "").trim();
-  const password_hash = passwordRaw ? await hashPassword(passwordRaw) : null;
-  const recipientEmail = String(formData.get("recipient_email") ?? "").trim() || null;
-  const notifyOnOpen = formData.get("notify_on_open") === "1";
 
   // Selective sections: serialized as JSON array from the form, or null = full room.
   const sectionsRaw = String(formData.get("allowed_sections") ?? "").trim();
-  let allowed_sections: string[] | null = null;
+  let allowedSections: string[] | null = null;
   if (sectionsRaw) {
     try {
       const parsed = JSON.parse(sectionsRaw);
-      if (Array.isArray(parsed) && parsed.length > 0) allowed_sections = parsed.map(String);
+      if (Array.isArray(parsed) && parsed.length > 0) allowedSections = parsed.map(String);
     } catch {
       // ignore malformed input
     }
@@ -77,43 +60,26 @@ export async function createShare(formData: FormData): Promise<void> {
     .maybeSingle();
   if (!room) return;
 
-  const { data: inserted } = await supabase
-    .from("data_room_shares")
-    .insert({
-      organization_id: ctx.orgId,
-      room_id: roomId,
-      label,
-      expires_at,
-      created_by: ctx.userId,
-      require_email: requireEmail,
-      require_nda: requireNda,
-      nda_text: ndaText,
-      password_hash,
-      recipient_email: recipientEmail,
-      notify_on_open: notifyOnOpen,
-      allowed_sections,
-    } as never)
-    .select("token")
-    .maybeSingle();
+  await insertShare(supabase, {
+    orgId: ctx.orgId,
+    userId: ctx.userId,
+    roomId,
+    label: String(formData.get("label") ?? "").trim() || null,
+    expiresInDays: Number.isFinite(days) && days > 0 ? days : null,
+    requireEmail: formData.get("require_email") === "1",
+    requireNda: formData.get("require_nda") === "1",
+    ndaText: String(formData.get("nda_text") ?? "").trim() || null,
+    password: String(formData.get("password") ?? "").trim() || null,
+    recipientEmail: String(formData.get("recipient_email") ?? "").trim() || null,
+    notifyOnOpen: formData.get("notify_on_open") === "1",
+    allowedSections,
+    // Unchecked boxes are absent from FormData, so "allow download" is sent as
+    // an explicit "0" when turned off; anything else keeps the old default.
+    allowDownload: formData.get("allow_download") !== "0",
+    watermark: formData.get("watermark") === "1",
+  });
 
   revalidatePath(ROOM);
-
-  // Send share-granted email to the recipient if provided.
-  if (recipientEmail && inserted) {
-    const { data: orgRow } = await supabase
-      .from("organizations")
-      .select("name")
-      .eq("id", ctx.orgId)
-      .maybeSingle();
-    if (orgRow) {
-      const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? "https://app.fundexecs.com";
-      const shareUrl = `${baseUrl}/dataroom/${(inserted as { token: string }).token}`;
-      const { subject, html } = shareGrantedEmail(orgRow.name as string, label, shareUrl, expires_at);
-      void sendEmail({ orgId: ctx.orgId, to: { name: "", email: recipientEmail }, subject, htmlBody: html }).catch(
-        () => undefined,
-      );
-    }
-  }
 }
 
 /** Verify a data-room password from the public viewer (no auth required). On

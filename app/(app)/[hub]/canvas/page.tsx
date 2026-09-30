@@ -76,7 +76,11 @@ export default async function CanvasPage(props: PageProps) {
   const initials = toInitials(ctx!.email);
 
   return (
-    <div className="flex h-[calc(100vh-56px)] flex-col">
+    // Fill the visible viewport under the app chrome (3rem top bar + <main>
+    // padding), matching the other full-height screens. `dvh`, not `vh`: on
+    // mobile `100vh` is the toolbar-collapsed height, so the board overflowed
+    // and scrolled the page whenever the browser toolbar was showing.
+    <div className="flex h-[calc(100dvh-8rem)] flex-col">
       {/* Canvas header */}
       <div className="flex items-center gap-3 border-b border-line bg-surface-1 px-4 py-2.5">
         <h1 className="text-sm font-semibold text-fg-primary">{canvas.name}</h1>

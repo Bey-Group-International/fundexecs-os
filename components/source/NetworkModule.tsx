@@ -245,7 +245,9 @@ export function NetworkModule({
             fieldDefs={fieldDefs}
             onSelect={(p) => setSelectedContact(personToContact(p))}
           />
-          <div className="lg:sticky lg:top-6 lg:max-h-[calc(100vh-6rem)]">
+          {/* Pinned below the sticky app top bar (--app-header-h); the cap
+              keeps the feed within the visible viewport under it. */}
+          <div className="lg:sticky lg:top-[calc(var(--app-header-h)+1.5rem)] lg:max-h-[calc(100dvh-var(--app-header-h)-6rem)]">
             <NetworkActivityFeed initialEvents={activityEvents} initialLive={liveCounts} />
           </div>
         </div>

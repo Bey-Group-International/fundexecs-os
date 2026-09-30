@@ -12,6 +12,11 @@
 // tapped destination is the route you're already on; for any other tab it's a
 // no-op so the regular navigation proceeds untouched.
 //
+// It scrolls the window: the app shell (app/(app)/layout.tsx) makes the
+// document the scroller rather than an inner `overflow-y-auto` <main>, so
+// window.scrollY / window.scrollTo are the real page position. (Before that
+// change this hook read a window offset that was always 0 and did nothing.)
+//
 // Two courtesies:
 //  - It only buzzes and scrolls when there's actually somewhere to scroll
 //    (window.scrollY > 0), so a re-tap while already at the top does nothing

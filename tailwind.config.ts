@@ -91,11 +91,18 @@ const config: Config = {
           "0%, 100%": { opacity: "1" },
           "50%": { opacity: "0.35" },
         },
-        // Soft entrance — cards/rows lift into place. Used with `both` so the
-        // pre-animation state (faded, nudged down) holds before it runs.
+        // Soft entrance — cards/rows lift into place. Used with `backwards` so the
+        // pre-animation state (faded, nudged down) holds before it runs (e.g.
+        // under an animation-delay), but nothing is retained once it finishes.
+        // The end state is `transform: none`, not `translateY(0)`: a retained
+        // transform — even an identity one — makes the element the containing
+        // block for every `position: fixed` descendant. The (app) route
+        // template wraps whole pages in this animation, so a lingering
+        // transform there trapped modals/toasts/drawers inside the page box
+        // instead of the viewport, and it also overrode `fx-card-hover` lifts.
         fxFadeUp: {
           "0%": { opacity: "0", transform: "translateY(8px)" },
-          "100%": { opacity: "1", transform: "translateY(0)" },
+          "100%": { opacity: "1", transform: "none" },
         },
         // Slow breathing glow for live/ambient accents (graph nodes, dots).
         fxGlow: {
@@ -212,7 +219,7 @@ const config: Config = {
       },
       animation: {
         pulse: "fxPulse 1.6s ease-in-out infinite",
-        "fade-up": "fxFadeUp 0.45s cubic-bezier(0.22, 1, 0.36, 1) both",
+        "fade-up": "fxFadeUp 0.45s cubic-bezier(0.22, 1, 0.36, 1) backwards",
         glow: "fxGlow 3.2s ease-in-out infinite",
         "data-stream": "fxDataStream 1.35s cubic-bezier(0.22, 1, 0.36, 1) infinite",
         boot: "fxBoot 2.8s ease-in-out infinite",

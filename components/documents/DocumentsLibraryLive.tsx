@@ -5,6 +5,7 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { getSessionContext } from "@/lib/auth";
+import { canWriteOrg } from "@/lib/rbac";
 import { createServerClient } from "@/lib/supabase/server";
 import { DATA_ROOM_SECTIONS } from "@/lib/data-room";
 import { computeBuildReadiness } from "@/lib/build-readiness";
@@ -164,7 +165,11 @@ export async function DocumentsLibraryLive() {
       ) : null}
 
       <SectionHighlighter />
-      <LibraryWorkspace sections={sections} rooms={rooms.map((r) => ({ id: r.id, name: r.name }))} />
+      <LibraryWorkspace
+        sections={sections}
+        rooms={rooms.map((r) => ({ id: r.id, name: r.name }))}
+        canWrite={canWriteOrg(ctx.role)}
+      />
 
       {/* The knowledge-workspace view of the same library — recency and shape
           rather than filing. It used to sit on top of the data room; it belongs

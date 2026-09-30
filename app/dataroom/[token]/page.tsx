@@ -21,8 +21,12 @@ function Unavailable() {
   );
 }
 
-export default async function PublicDataRoom(props: { params: Promise<{ token: string }> }) {
+export default async function PublicDataRoom(props: {
+  params: Promise<{ token: string }>;
+  searchParams: Promise<{ doc?: string }>;
+}) {
   const params = await props.params;
+  const { doc: focusDoc } = await props.searchParams;
   if (!hasSupabaseServiceEnv()) return <Unavailable />;
   const supabase = createServiceClient();
 
@@ -53,6 +57,11 @@ export default async function PublicDataRoom(props: { params: Promise<{ token: s
     requireNda: share.require_nda ?? false,
     ndaText: share.nda_text ?? null,
     passwordProtected: Boolean(share.password_hash),
+  };
+  const viewControls = {
+    allowDownload: share.allow_download ?? true,
+    watermark: share.watermark ?? false,
+    singleDocument: Boolean(share.document_id),
   };
 
   // The gate is enforced HERE, before any confidential data is fetched — not
@@ -102,20 +111,31 @@ export default async function PublicDataRoom(props: { params: Promise<{ token: s
 
   // One builder serves this page and the GP-side preview, so "what will they
   // see?" is answered by the same code that renders what they do see.
-  const payload = await buildViewerPayload(supabase, orgId, roomId, share.allowed_sections ?? null);
+  const payload = await buildViewerPayload(
+    supabase,
+    orgId,
+    roomId,
+    share.allowed_sections ?? null,
+    share.document_id ?? null,
+  );
   if (!payload) return <Unavailable />;
+  // A single-document link shows the document and nothing of the firm's room.
+  const single = viewControls.singleDocument;
 
   return (
     <DataRoomViewer
       token={params.token}
       shareId={share.id}
       org={payload.org}
-      blended={payload.blended}
-      thesis={payload.thesis}
-      team={payload.team}
-      entities={payload.entities}
+      blended={single ? EMPTY_BLENDED : payload.blended}
+      thesis={single ? null : payload.thesis}
+      team={single ? [] : payload.team}
+      entities={single ? [] : payload.entities}
       docSections={payload.docSections}
       gateConfig={gateConfig}
+      viewControls={viewControls}
+      viewerLabel={pass?.email ?? share.recipient_email ?? null}
+      focusDocumentId={focusDoc ?? null}
       contentReady
     />
   );

@@ -29,6 +29,10 @@ import { NdaSignatures } from "./NdaSignatures";
 import { AuditExport } from "./AuditExport";
 import { RoomSwitcher } from "./RoomSwitcher";
 import { RoomWorkspace } from "./RoomWorkspace";
+import { EarnRoomOrganizer } from "./EarnRoomOrganizer";
+import { planRoomOrganization } from "@/lib/earn-room-organizer";
+import { canWriteOrg } from "@/lib/rbac";
+import { DATA_ROOM_SECTIONS } from "@/lib/data-room";
 import type { RoomContentSection, AvailableDoc } from "./RoomContents";
 
 // Materials & Data Room — the firm's institutional sharing surface, shaped like
@@ -70,7 +74,7 @@ export async function MaterialsModule({ roomId }: { roomId?: string } = {}) {
     );
   }
 
-  const [published, libraryRes, sharesRes, payload] = await Promise.all([
+  const [published, libraryRes, sharesRes, payload, reviewsRes] = await Promise.all([
     loadRoomDocuments(orgId, room.id),
     supabase
       .from("documents")
@@ -87,6 +91,10 @@ export async function MaterialsModule({ roomId }: { roomId?: string } = {}) {
     // The preview is built by the same function the live room uses, with no
     // section allowlist — the widest view any link into this room can give.
     buildViewerPayload(supabase, orgId, room.id, null),
+    supabase
+      .from("document_reviews")
+      .select("document_id, storage_key, suggested_section, recommendations")
+      .eq("organization_id", orgId),
   ]);
 
   const libraryDocs = (libraryRes.data ?? []) as Document[];
@@ -153,6 +161,27 @@ export async function MaterialsModule({ roomId }: { roomId?: string } = {}) {
       status: d.status ?? "ready",
     }));
 
+  // Earn's proposals, from reviews of each document's CURRENT file only.
+  const currentKey = new Map(libraryDocs.map((d) => [d.id, d.storage_key]));
+  const reviews = ((reviewsRes.data ?? []) as {
+    document_id: string;
+    storage_key: string;
+    suggested_section: string | null;
+    recommendations: { severity: "blocker" | "suggestion" | "nit"; title: string; detail: string }[];
+  }[]).filter((r) => currentKey.get(r.document_id) === r.storage_key);
+  const organizerItems = planRoomOrganization({
+    library: libraryDocs.map((d) => ({
+      id: d.id,
+      name: d.name,
+      section: d.doc_type ?? "other",
+      status: d.status ?? "ready",
+      hasBody: Boolean(d.storage_key) || Boolean(d.content),
+    })),
+    publishedIds,
+    reviews,
+    sectionLabel,
+  });
+
   const liveShares = shares.filter(
     (s) => !s.revoked_at && !(s.expires_at && new Date(s.expires_at).getTime() < Date.now()),
   );
@@ -190,6 +219,13 @@ export async function MaterialsModule({ roomId }: { roomId?: string } = {}) {
         }}
       />
 
+      <EarnRoomOrganizer
+        roomId={room.id}
+        items={organizerItems}
+        sectionLabels={Object.fromEntries(DATA_ROOM_SECTIONS.map((s) => [s.key, s.label]))}
+        canWrite={canWriteOrg(ctx.role)}
+      />
+
       <RoomWorkspace
         roomId={room.id}
         roomName={room.name}
@@ -224,6 +260,9 @@ export async function MaterialsModule({ roomId }: { roomId?: string } = {}) {
               revoked_at: s.revoked_at,
               created_at: s.created_at,
               allowed_sections: s.allowed_sections ?? null,
+              allow_download: s.allow_download ?? true,
+              watermark: s.watermark ?? false,
+              document_id: s.document_id ?? null,
             }))}
             activeCount={activeShareCount}
           />

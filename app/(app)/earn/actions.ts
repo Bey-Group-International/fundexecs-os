@@ -7,6 +7,37 @@ import { BRAIN_BY_KEY } from "@/lib/brains/catalog";
 import { PRESET_BY_ID } from "@/lib/brains/diligence";
 import { pathFromAnswers, PATHS } from "@/lib/brains/frontdoor";
 import type { BrainContext, DiligenceResponse, ClassifyResponse } from "@/lib/brains/types";
+import { getDocumentText } from "@/lib/document-text.server";
+import type { Document } from "@/lib/supabase/database.types";
+
+/**
+ * The text of a library document, for Earn to read. PDFs, Word, Excel and
+ * PowerPoint files are extracted server-side (and cached); written documents
+ * return their content. The org-scoped read is the authorization.
+ */
+export async function readLibraryDocument(
+  documentId: string,
+): Promise<{ ok: true; name: string; text: string } | { ok: false; error: string }> {
+  const auth = await requireOrgContext();
+  if (!auth.ok) return { ok: false, error: "Not authorized." };
+  const supabase = await createServerClient();
+  const { data } = await supabase
+    .from("documents")
+    .select("id, name, storage_key, content")
+    .eq("id", documentId)
+    .eq("organization_id", auth.ctx.orgId)
+    .maybeSingle();
+  const doc = data as Pick<Document, "id" | "name" | "storage_key" | "content"> | null;
+  if (!doc) return { ok: false, error: "That document no longer exists." };
+  if (doc.content && !doc.storage_key) return { ok: true, name: doc.name, text: doc.content };
+  const result = await getDocumentText({ orgId: auth.ctx.orgId, documentId: doc.id, storageKey: doc.storage_key });
+  if (!result || result.status === "unsupported") {
+    return { ok: false, error: "Earn can't read this file type. Use PDF, .docx, .xlsx, .pptx, or text." };
+  }
+  if (result.status === "empty") return { ok: false, error: "This looks like a scan with no text layer. OCR it and re-upload." };
+  if (result.status === "failed") return { ok: false, error: "Earn couldn't open this file. It may be password-protected." };
+  return { ok: true, name: doc.name, text: result.text };
+}
 
 // Earn Diligence Brain — run a preset query against pasted/uploaded document
 // text. Persists the source as a brain_document, activates the routed Brain, and

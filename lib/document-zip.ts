@@ -22,6 +22,7 @@ import {
   checkUploadCandidate,
   documentNameFromFile,
   fileExtension,
+  formatBytes,
 } from "@/lib/document-files";
 
 /** Ceiling on the archive itself. It is read in memory and never stored. */
@@ -189,7 +190,7 @@ export function planZipImport(
       continue;
     }
     if (entry.uncompressedSize > MAX_UPLOAD_BYTES) {
-      skipped.push({ path: entry.name, reason: "Larger than the 100 MB file limit." });
+      skipped.push({ path: entry.name, reason: `Larger than the ${formatBytes(MAX_UPLOAD_BYTES)} file limit.` });
       continue;
     }
 

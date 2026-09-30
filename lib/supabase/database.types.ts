@@ -907,6 +907,46 @@ export type DataRoomShare = {
   allowed_sections: string[] | null;
   // The room this link opens. Null only for pre-migration rows.
   room_id: string | null;
+  // Per-link view controls (migration 20260930200000). allow_download=false
+  // makes the link view-only; watermark stamps the reader onto served PDFs.
+  allow_download: boolean;
+  watermark: boolean;
+  // Single-document link: opens only this document. Null = the whole room.
+  document_id: string | null;
+};
+
+// Text layer of an uploaded file (migration 20260930200000). Keyed to the
+// object it was read from; a replaced file has a new storage_key.
+export type DocumentTextRow = {
+  document_id: string;
+  organization_id: string;
+  storage_key: string;
+  status: "ok" | "empty" | "unsupported" | "failed";
+  text: string;
+  preview: unknown | null;
+  char_count: number;
+  extracted_at: string;
+};
+
+export type DocumentReviewSeverity = "blocker" | "suggestion" | "nit";
+
+export type DocumentReviewRecommendation = {
+  severity: DocumentReviewSeverity;
+  title: string;
+  detail: string;
+  location?: string | null;
+};
+
+// Earn's review of an uploaded file (migration 20260930200000).
+export type DocumentReview = {
+  document_id: string;
+  organization_id: string;
+  storage_key: string;
+  summary: string;
+  recommendations: DocumentReviewRecommendation[];
+  suggested_section: string | null;
+  source: "earn" | "rules";
+  reviewed_at: string;
 };
 
 export type DataRoomView = {
@@ -3054,6 +3094,8 @@ export type Database = {
       assets: TableShape<Asset>;
       documents: TableShape<Document>;
       document_versions: TableShape<DocumentVersion>;
+      document_texts: TableShape<DocumentTextRow>;
+      document_reviews: TableShape<DocumentReview>;
       underwritings: TableShape<Underwriting>;
       diligence_items: TableShape<DiligenceItem>;
       ic_decisions: TableShape<IcDecision>;

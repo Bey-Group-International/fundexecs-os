@@ -41,9 +41,13 @@ function isEmpty(doc: LibraryDoc): boolean {
 export function LibraryWorkspace({
   sections,
   rooms,
+  canWrite = true,
 }: {
   sections: LibrarySection[];
   rooms: LibraryRoom[];
+  /** False for a view-only member: every control that would be refused by RLS
+   *  is hidden rather than offered and then failed. */
+  canWrite?: boolean;
 }) {
   const [query, setQuery] = useState("");
   const [section, setSection] = useState<string | null>(null);
@@ -117,9 +121,11 @@ export function LibraryWorkspace({
   return (
     <div className="grid gap-6 lg:grid-cols-[15rem_minmax(0,1fr)]">
       {/* ---------------------------------------------------------------- Rail */}
-      <aside className="lg:sticky lg:top-6 lg:self-start">
+      <aside className="lg:sticky lg:top-[calc(var(--app-header-h)+1.5rem)] lg:self-start">
+        {/* Capped to the viewport so the rail's footer is always reachable
+            while it is pinned; the section list scrolls inside it instead. */}
         <div
-          className="rounded-2xl border border-line bg-surface-1"
+          className="rounded-2xl border border-line bg-surface-1 lg:flex lg:max-h-[calc(100dvh-var(--app-header-h)-3rem)] lg:flex-col"
           style={{ boxShadow: "0 2px 12px rgba(0,0,0,0.15)" }}
         >
           <div className="border-b border-line px-4 py-4">
@@ -157,7 +163,7 @@ export function LibraryWorkspace({
             ) : null}
           </div>
 
-          <nav className="flex max-h-[24rem] flex-col gap-0.5 overflow-y-auto p-2">
+          <nav className="flex max-h-[24rem] min-h-0 flex-col gap-0.5 overflow-y-auto overscroll-contain p-2 lg:max-h-none lg:flex-1">
             <button
               type="button"
               onClick={() => setSection(null)}
@@ -241,6 +247,7 @@ export function LibraryWorkspace({
             </p>
           </div>
 
+          {canWrite ? (
           <div className="flex shrink-0 flex-wrap items-center gap-1.5">
             {current?.aiDraftable && current.docs.length === 0 ? (
               <GenerateAiButton sectionKey={current.key} />
@@ -272,9 +279,14 @@ export function LibraryWorkspace({
               </button>
             </form>
           </div>
+          ) : (
+            <span className="shrink-0 rounded-full border border-line px-3 py-1 font-mono text-[11px] uppercase tracking-wider text-fg-muted">
+              View only
+            </span>
+          )}
         </div>
 
-        {linking ? (
+        {linking && canWrite ? (
           <form
             action={(fd) =>
               startTransition(async () => {
@@ -308,9 +320,11 @@ export function LibraryWorkspace({
           </form>
         ) : null}
 
-        <div className="mb-3">
-          <DocumentUploader section={targetSection} sectionLabel={targetLabel} />
-        </div>
+        {canWrite ? (
+          <div className="mb-3">
+            <DocumentUploader section={targetSection} sectionLabel={targetLabel} />
+          </div>
+        ) : null}
 
         {rows.length === 0 ? (
           <div className="rounded-xl border border-dashed border-line bg-surface-0 px-4 py-10 text-center">
@@ -367,8 +381,11 @@ export function LibraryWorkspace({
                         >
                           {d.uploaded ? "▤" : d.storageKey ? "↗" : "≡"}
                         </span>
+                        {/* An uploaded file opens its review page: the file
+                            as-is beside Earn's read of it. Written documents
+                            open in the editor, as before. */}
                         <Link
-                          href={`/document/${d.id}`}
+                          href={d.uploaded ? `/document/${d.id}/review` : `/document/${d.id}`}
                           className="min-w-0 truncate text-fg-secondary transition hover:text-gold-300"
                         >
                           {d.name}
@@ -390,10 +407,22 @@ export function LibraryWorkspace({
                       <QualityBadges doc={d} />
                     </td>
                     <td className="px-3 py-2">
-                      <StatusCycler doc={d} />
+                      {canWrite ? (
+                        <StatusCycler doc={d} />
+                      ) : (
+                        <span className="font-mono text-[11px] uppercase tracking-wider text-fg-muted">
+                          {d.status}
+                        </span>
+                      )}
                     </td>
                     <td className="px-3 py-2">
-                      <PublishControl doc={d} rooms={rooms} />
+                      {canWrite ? (
+                        <PublishControl doc={d} rooms={rooms} />
+                      ) : (
+                        <span className="font-mono text-[11px] text-fg-muted">
+                          {d.roomIds.length > 0 ? `In ${d.roomIds.length} room${d.roomIds.length > 1 ? "s" : ""}` : "Private"}
+                        </span>
+                      )}
                     </td>
                     <td className="px-3 py-2 font-mono text-[11px] text-fg-muted">{d.updatedLabel}</td>
                     <td className="px-3 py-2">
@@ -409,12 +438,23 @@ export function LibraryWorkspace({
                             Open
                           </a>
                         ) : null}
-                        <ReplaceFileButton
-                          documentId={d.id}
-                          section={d.section}
-                          hasFile={d.uploaded}
-                        />
                         {d.uploaded ? (
+                          <Link
+                            href={`/document/${d.id}/review`}
+                            title="See the file as-is with Earn's review beside it"
+                            className="shrink-0 rounded-lg border border-gold-500/40 px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider text-gold-300 transition hover:bg-gold-500/10"
+                          >
+                            Review
+                          </Link>
+                        ) : null}
+                        {canWrite ? (
+                          <ReplaceFileButton
+                            documentId={d.id}
+                            section={d.section}
+                            hasFile={d.uploaded}
+                          />
+                        ) : null}
+                        {d.uploaded && canWrite ? (
                           <form
                             action={(fd) =>
                               startTransition(async () => {
@@ -432,7 +472,7 @@ export function LibraryWorkspace({
                             </button>
                           </form>
                         ) : null}
-                        <DeleteDocumentButton id={d.id} name={d.name} />
+                        {canWrite ? <DeleteDocumentButton id={d.id} name={d.name} /> : null}
                       </div>
                     </td>
                   </tr>

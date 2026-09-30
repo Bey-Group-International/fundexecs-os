@@ -872,12 +872,14 @@ export function CopilotSidebar({
         </div>
       </div>
 
-      {/* Tabs */}
-      <div className="flex border-b border-[var(--line)] shrink-0 overflow-x-auto">
+      {/* Tabs. overflow-y pinned and no -mb-px on the active tab: otherwise
+          the 1px overhang makes this an accidental vertical scroller that
+          traps wheel scrolling (same fix as HubTabs). */}
+      <div className="flex border-b border-[var(--line)] shrink-0 overflow-x-auto overflow-y-hidden">
         {(["chat", "people"] as const).map((t) => (
           <button key={t} onClick={() => setTab(t)}
             className={`relative shrink-0 flex-1 py-2 text-xs font-medium transition-colors capitalize ${
-              tab === t ? "text-[var(--fg-primary)] border-b-2 border-[var(--gold-400)] -mb-px"
+              tab === t ? "text-[var(--fg-primary)] border-b-2 border-[var(--gold-400)]"
                         : "text-[var(--fg-muted)] hover:text-[var(--fg-secondary)]"
             }`}>
             {t === "people" ? `People ${participants.length}` : "Chat"}

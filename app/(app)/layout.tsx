@@ -184,8 +184,17 @@ export default async function AppLayout({
     };
   });
 
+  // The document (window) is the scroller, not an inner pane. A fixed-height
+  // `h-dvh overflow-hidden` shell with an `overflow-y-auto` <main> made every
+  // page scroll inside a nested box: mobile browsers couldn't collapse their
+  // toolbars, anchor/hash jumps and scroll restoration targeted the wrong
+  // element, and body scroll locks (modals, drawers) locked nothing while the
+  // pane kept scrolling underneath. Instead the shell is at least one viewport
+  // tall and grows with the page; the desktop sidebar and the top bar pin
+  // themselves with `sticky` so they stay put while the window scrolls.
+  // `data-app-shell` scopes the anchor scroll-padding in globals.css.
   return (
-    <div className="flex h-dvh overflow-hidden bg-surface-0 text-fg-primary print:block print:h-auto print:overflow-visible">
+    <div data-app-shell className="flex min-h-dvh bg-surface-0 text-fg-primary print:block print:min-h-0">
       <MobileNavProvider>
       <MobileToastProvider>
       <div className="contents print:hidden">
@@ -212,8 +221,14 @@ export default async function AppLayout({
 
       <CoachingToastProvider>
       <ActiveSessionProvider>
-        <div className="flex flex-1 flex-col overflow-hidden print:overflow-visible">
-          <div className="print:hidden">
+        {/* `min-w-0` lets this column shrink below its content's intrinsic
+            width (a flex item defaults to `min-width: auto`), so wide content
+            can't push the page wider than the viewport. */}
+        <div className="flex min-w-0 flex-1 flex-col">
+          {/* Only the bar itself is sticky. MatchToast/DownloadBanner are
+              `position: fixed` and stay outside this z-30 stacking context so
+              their own z-index still competes at the root. */}
+          <div className="sticky top-0 z-30 print:hidden">
             <GlobalTopBar
               balance={balance}
               // Mailbox mirrors the sidebar Inbox badge: unread messages + the
@@ -224,13 +239,21 @@ export default async function AppLayout({
               messagesUnread={(messagesUnread ?? 0) + (approvalsCount ?? 0)}
               dealsUnread={dealsUnread ?? 0}
             />
+          </div>
+          <div className="print:hidden">
             <MatchToast alert={matchAlert} />
             {/* Desktop-only download nudge; mobile gets the PWA install prompt. */}
             <div className="hidden md:block">
               <DownloadBanner />
             </div>
           </div>
-          <main className="flex-1 overflow-y-auto px-4 py-5 pb-appnav sm:px-6 sm:py-6 md:pb-8 lg:px-8 lg:py-8 print:overflow-visible print:p-0">
+          {/* No overflow-y here — the window scrolls. `overflow-x-clip` trims
+              the decorative fx-ambient/fx-blueprint glows (negative insets)
+              at the content edge so they neither paint over the sidebar nor
+              widen the page; unlike `hidden`, `clip` doesn't make <main> a
+              scroll container, so `sticky` descendants still pin to the
+              viewport. */}
+          <main className="min-w-0 flex-1 overflow-x-clip px-4 py-5 pb-appnav sm:px-6 sm:py-6 md:pb-8 lg:px-8 lg:py-8 print:overflow-visible print:p-0">
             {children}
           </main>
         </div>

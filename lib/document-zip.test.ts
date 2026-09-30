@@ -132,9 +132,9 @@ describe("planZipImport", () => {
   });
 
   it("skips an entry larger than the per-file upload limit", () => {
-    const plan = planZipImport([entry("Legal/huge.pdf", 101 * 1024 * 1024)], DEFAULT);
+    const plan = planZipImport([entry("Legal/huge.pdf", 501 * 1024 * 1024)], DEFAULT);
     expect(plan.items).toHaveLength(0);
-    expect(plan.skipped[0].reason).toContain("100 MB");
+    expect(plan.skipped[0].reason).toContain("500 MB");
   });
 
   it("orders the plan by section, then by name", () => {

@@ -127,7 +127,7 @@ export function CommandPalette({
           placeholder="Search commands…"
           className="w-full border-b border-line/70 bg-surface-0 px-4 py-3 text-sm font-medium text-fg-primary outline-none placeholder:text-fg-muted focus:bg-surface-0"
         />
-        <ul className="max-h-80 overflow-y-auto p-1">
+        <ul className="max-h-80 overflow-y-auto overscroll-contain p-1">
           {filtered.length ? (
             filtered.map((c, i) => (
               <li key={c.id}>

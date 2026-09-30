@@ -42,3 +42,9 @@ enable_confirmations = false
 
 [realtime]
 enabled = true
+
+[storage]
+enabled = true
+# Matches the documents bucket ceiling (migration 20260930200000). The bucket
+# limit cannot exceed this global one.
+file_size_limit = "500MiB"

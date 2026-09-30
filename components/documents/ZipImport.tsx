@@ -16,7 +16,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { DATA_ROOM_SECTIONS } from "@/lib/data-room";
-import { MAX_UPLOAD_BYTES, formatBytes } from "@/lib/document-files";
+import { MAX_UPLOAD_BYTES, formatBytes, mimeTypeForName } from "@/lib/document-files";
 import {
   MAX_ZIP_BYTES,
   MAX_ZIP_ENTRIES,
@@ -124,7 +124,10 @@ export function ZipImport({
           // memory stays at one document rather than the whole archive.
           const bytes = await readZipEntry(view, entry, createBudget(MAX_UPLOAD_BYTES));
           const base = item.path.split("/").pop() ?? item.name;
-          const entryFile = new File([bytes as BlobPart], base);
+          // Typed from the extension: a File rebuilt from bytes has no type,
+          // and an untyped object is served as octet-stream, so a PDF would
+          // download instead of opening in the viewer.
+          const entryFile = new File([bytes as BlobPart], base, { type: mimeTypeForName(base) });
           const result = await uploadDocumentFile(supabase, {
             file: entryFile,
             section: sections[item.path] ?? item.section,

@@ -197,6 +197,7 @@ describe("ZipImport", () => {
 
     const sent = uploadDocumentFile.mock.calls[0][1].file;
     expect(sent.name).toBe("Deed.pdf"); // extension kept, so validation passes
+    expect(sent.type).toBe("application/pdf"); // typed, so it opens inline
     await expect(sent.text()).resolves.toBe("deed-bytes");
   });
 

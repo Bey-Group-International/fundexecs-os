@@ -83,8 +83,8 @@ export function CharacterBuilder({
 
   return (
     <div className="grid grid-cols-1 gap-6 md:grid-cols-[300px_1fr]">
-      {/* ── Live preview ── */}
-      <div className="md:sticky md:top-4 md:self-start">
+      {/* ── Live preview ── (pinned below the sticky app top bar) */}
+      <div className="md:sticky md:top-[calc(var(--app-header-h)+1rem)] md:self-start">
         <div className="fx-card overflow-hidden p-0">
           <div className="relative flex items-center justify-center bg-surface-3 py-6">
             <div

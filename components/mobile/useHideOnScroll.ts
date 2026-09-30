@@ -2,24 +2,23 @@
 
 import { useEffect, useState } from "react";
 
-// Tracks scroll direction on the app's main scroll container (the `<main>` in
-// app/(app)/layout.tsx, which is `overflow-y-auto` — so window scroll never
-// fires). Returns `true` when the chrome (bottom nav + FAB) should hide: the
-// user is scrolling DOWN and has moved past a small offset. Scrolling up, or
-// resting near the top, reveals it again. This is the standard native
-// "content-first" behavior and is purely presentational — nothing depends on it.
+// Tracks scroll direction on the document — the app shell in
+// app/(app)/layout.tsx lets the page (window) scroll rather than an inner
+// `overflow-y-auto` <main>, so the browser can hide its toolbars, anchor
+// jumps/scroll restoration work, and fixed overlays resolve to the viewport.
+// Returns `true` when the chrome (bottom nav + FAB) should hide: the user is
+// scrolling DOWN and has moved past a small offset. Scrolling up, or resting
+// near the top, reveals it again. This is the standard native "content-first"
+// behavior and is purely presentational — nothing depends on it.
 export function useHideOnScroll(threshold = 8): boolean {
   const [hidden, setHidden] = useState(false);
 
   useEffect(() => {
-    const scroller = document.querySelector("main");
-    if (!scroller) return;
-
-    let lastY = scroller.scrollTop;
+    let lastY = window.scrollY;
     let ticking = false;
 
     const update = () => {
-      const y = scroller.scrollTop;
+      const y = window.scrollY;
       const dy = y - lastY;
       // Always reveal near the top; ignore tiny jitters and rubber-banding.
       if (y < 24) {
@@ -38,8 +37,8 @@ export function useHideOnScroll(threshold = 8): boolean {
       }
     };
 
-    scroller.addEventListener("scroll", onScroll, { passive: true });
-    return () => scroller.removeEventListener("scroll", onScroll);
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
   }, [threshold]);
 
   return hidden;
