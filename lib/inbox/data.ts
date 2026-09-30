@@ -13,6 +13,8 @@ import {
   type ThreadSummary,
 } from "@/lib/inbox/intelligence";
 import { recordThreadOnTimeline } from "@/lib/inbox/crm-activity.server";
+import { draftsFirst, missingDraftThreadIds, type ThreadDraft } from "@/lib/inbox/drafts";
+import { readThreadDrafts } from "@/lib/inbox/drafts.server";
 
 export interface ThreadContext {
   kind: "deal" | "investor";
@@ -31,6 +33,11 @@ export interface InboxThreadView {
   context: ThreadContext | null;
   // The teammate the thread is routed to, resolved to a name; null if unassigned.
   assignee: ThreadAssignee | null;
+  /**
+   * Unsent reply text waiting on this thread, written by a meeting report's
+   * follow-up. Null for almost every thread.
+   */
+  draft: ThreadDraft | null;
 }
 
 // Sentinel filter value meaning "threads with no assignee".
@@ -108,12 +115,52 @@ export async function getInboxThreads(
     );
   }
 
-  const { data, error } = await query
-    .order("priority", { ascending: false })
-    .order("last_message_at", { ascending: false, nullsFirst: false })
-    .limit(100);
+  // The drafts are independent of the page read and are wanted either way, so
+  // they start together rather than after it.
+  const [pageResult, drafts] = await Promise.all([
+    query
+      .order("priority", { ascending: false })
+      .order("last_message_at", { ascending: false, nullsFirst: false })
+      .limit(100),
+    readThreadDrafts(supabase),
+  ]);
+
+  const { data, error } = pageResult;
   if (error || !data) return [];
-  const threads = data as InboxThread[];
+  let threads = data as InboxThread[];
+
+  /**
+   * Pull in the draft-carrying threads this page missed.
+   *
+   * Not a nicety. A thread created to hold a follow-up has priority 0 and no
+   * messages, so under this query's ordering it sorts to the very bottom of the
+   * hundred — or past it, on any organisation with a busy inbox. The one thread
+   * the operator was told to go and act on would be the one they could not see.
+   *
+   * Skipped entirely while a filter is active, because a filtered board shows
+   * what matches the filter; `missingDraftThreadIds` owns that rule.
+   */
+  const missing = missingDraftThreadIds({
+    draftThreadIds: [...drafts.keys()],
+    onPage: threads.map((t) => t.id),
+    filtered: Boolean(
+      filters.q ||
+        filters.channel ||
+        filters.unreadOnly ||
+        filters.starredOnly ||
+        filters.assignedTo,
+    ),
+  });
+  if (missing.length > 0) {
+    const { data: extra } = await supabase
+      .from("inbox_threads")
+      .select("*")
+      .in("id", missing)
+      // The same exclusion the page read makes: a shared-deal thread belongs to
+      // its own feed whether or not something drafted onto it.
+      .neq("channel", "deal_share");
+    if (extra) threads = [...threads, ...(extra as InboxThread[])];
+  }
 
   const dealIds = [...new Set(threads.map((t) => t.deal_id).filter((v): v is string => !!v))];
   const investorIds = [
@@ -141,14 +188,21 @@ export async function getInboxThreads(
     (assigneesRes.data ?? []).map((p) => [p.id, p.full_name || "Teammate"]),
   );
 
-  return threads.map((thread) => ({
-    thread,
-    context: resolveContext(thread, dealName, investorName),
-    assignee:
-      thread.assigned_to && assigneeName.has(thread.assigned_to)
-        ? { id: thread.assigned_to, name: assigneeName.get(thread.assigned_to)! }
-        : null,
-  }));
+  // Drafts first, then the board's own ordering within each group. A reorder
+  // rather than a written priority: stamping a triage score on the thread would
+  // put a fabricated number in a column the intelligence layer owns.
+  return draftsFirst(
+    threads.map((thread) => ({
+      thread,
+      context: resolveContext(thread, dealName, investorName),
+      assignee:
+        thread.assigned_to && assigneeName.has(thread.assigned_to)
+          ? { id: thread.assigned_to, name: assigneeName.get(thread.assigned_to)! }
+          : null,
+      draft: drafts.get(thread.id) ?? null,
+    })),
+    (view) => view.draft !== null,
+  );
 }
 
 function resolveContext(

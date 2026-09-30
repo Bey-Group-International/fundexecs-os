@@ -32,6 +32,8 @@ export interface ThreadConversationCard {
   channelLabel: string;
   connected: boolean;
   quickReplies: string[];
+  /** An unsent draft waiting on this thread — a meeting report's follow-up. */
+  draft: { body: string; origin: string } | null;
 }
 
 /**
@@ -57,7 +59,15 @@ export function ThreadConversation({
   const router = useRouter();
   const [messages, setMessages] = useState<ThreadMessageView[] | null>(null);
   const [msgLoading, startMsgTransition] = useTransition();
-  const [replyText, setReplyText] = useState("");
+  // Seeded from the draft, so opening a thread the report drafted onto puts the
+  // words in the composer rather than somewhere the operator has to go and find
+  // them. Editable from that moment: it is a draft, and the send is still theirs.
+  const [replyText, setReplyText] = useState(card.draft?.body ?? "");
+  // Cleared the moment a reply goes out. Kept in state rather than read off the
+  // prop, because a sent draft must stop being offered immediately — waiting for
+  // the server round trip would leave "Nothing has been sent" under a message that
+  // just went.
+  const [draftNote, setDraftNote] = useState<string | null>(card.draft?.origin ?? null);
   const [sending, startSendTransition] = useTransition();
   const [drafting, startDraftTransition] = useTransition();
   // AI-personalized reply openers, fetched once when the thread is opened. Null
@@ -116,6 +126,11 @@ export function ThreadConversation({
       onResult(r, "reply");
       if (r.ok) {
         setReplyText("");
+        // The reply has gone (or been queued for approval), so the draft of it is
+        // no longer a draft. `replyToThread` deletes the row; this is the same
+        // fact in the open panel, which would otherwise keep saying an unsent
+        // draft is waiting until the refresh landed.
+        setDraftNote(null);
         loadMessages();
         router.refresh();
       }
@@ -153,6 +168,15 @@ export function ThreadConversation({
 
       {/* Inline composer — routes through the same gate as every outward move. */}
       <div className="mt-3 border-t border-line/60 pt-3">
+        {/* Where the text in the composer came from, and — the part that matters —
+            that it has not gone anywhere. A composer pre-filled with a paragraph
+            somebody else wrote, with no explanation, reads as a message that was
+            already sent. */}
+        {draftNote ? (
+          <p className="mb-2 inline-flex items-center gap-1 rounded-md border border-gold-500/40 bg-gold-500/5 px-2 py-1 font-mono text-[11px] uppercase tracking-wider text-gold-300">
+            <span aria-hidden>✎</span> {draftNote}
+          </p>
+        ) : null}
         {/* One-tap smart replies — populate the composer for review; the
             send is still the operator's gated move. Hidden once they type.
             Category templates show instantly; context-aware AI openers swap

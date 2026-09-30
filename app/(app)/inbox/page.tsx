@@ -14,6 +14,7 @@ import {
   type DigestThread,
 } from "@/lib/inbox/intelligence";
 import { channelMeta, INBOX_CHANNELS } from "@/lib/inbox/channels";
+import { draftOrigin } from "@/lib/inbox/drafts";
 import type { InboxChannel } from "@/lib/supabase/database.types";
 import { UNASSIGNED, type InboxThreadFilters } from "@/lib/inbox/data";
 import { orgConnectedChannels } from "@/lib/integrations/gateway";
@@ -108,7 +109,7 @@ export default async function InboxPage(
 
   // Prepare every comms display field on the server so the client board never
   // imports the intelligence module (and its AI SDK) into the browser bundle.
-  const cards: InboxCardData[] = views.map(({ thread, context, assignee }) => {
+  const cards: InboxCardData[] = views.map(({ thread, context, assignee, draft }) => {
     const meta = channelMeta(thread.channel);
     const move = suggestedAction(thread);
     // Follow-up nudge: hours since the last message drive the "waiting on you /
@@ -167,6 +168,10 @@ export default async function InboxPage(
       nudge,
       canShare: Boolean(context),
       shareTier: tierForAction("share_materials") as GateTier,
+      // The follow-up a meeting report drafted onto this thread, if any. The
+      // origin line is resolved here for the same reason every other display
+      // field is: so the client board never imports the module that computes it.
+      draft: draft ? { body: draft.body, origin: draftOrigin(draft) } : null,
     };
   });
 
