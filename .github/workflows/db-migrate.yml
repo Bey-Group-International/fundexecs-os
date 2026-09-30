@@ -53,10 +53,25 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      # Pinned, not `latest`, and the reason is the token rather than taste.
+      #
+      # The PAT this workflow carries only needs to READ the project: `link`
+      # fetches project status over the Management API, while `db push` and
+      # `migration list` reach the database directly with SUPABASE_DB_PASSWORD.
+      # That is what makes a read-only, project-scoped token sufficient. But
+      # WHICH endpoints `link` calls is the CLI's choice, so on `latest` a new
+      # release could start requiring a scope the token does not carry — and the
+      # first sign would be a red DB Migrate run on a merge that nobody is
+      # watching, which is exactly how this workflow went unnoticed for a month
+      # when the token expired, and again on 2026-09-30.
+      #
+      # 2.118.0 is the version that applied 20260930083000 through
+      # 20260930110000 successfully (run 36731231062). Moving it is a deliberate
+      # change with a run to prove it, not something that happens on its own.
       - name: Setup Supabase CLI
         uses: supabase/setup-cli@ab058987d8d6c725971f6cf9d0b5c98467e30bd1 # v1.7.1
         with:
-          version: latest
+          version: 2.118.0
 
       - name: Link production project
         run: |
