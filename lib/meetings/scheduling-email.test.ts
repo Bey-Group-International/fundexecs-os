@@ -321,3 +321,58 @@ describe("sendBookingEmails — save to calendar", () => {
     expect((hostCall?.[0] as { calendarInvite?: unknown }).calendarInvite).toBeDefined();
   });
 });
+
+describe("sendBookingEmails — guests", () => {
+  const GUESTS = ["grace@example.com", "alan@example.com"];
+
+  function bodyFor(email: string): string {
+    const call = sendEmailMock.mock.calls.find(([args]) => (args as { to: { email: string } }).to.email === email);
+    return (call?.[0] as { htmlBody: string }).htmlBody;
+  }
+
+  it("sends each guest the confirmation, without the invitee's manage link", async () => {
+    await sendBookingEmails("confirmed", ctx({ guestEmails: GUESTS }));
+    expect(recipients()).toEqual(expect.arrayContaining(["ada@example.com", "rae@fund.test", ...GUESTS]));
+    for (const guest of GUESTS) {
+      const html = bodyFor(guest);
+      expect(html).toContain("Your meeting is confirmed");
+      // The manage URL and the calendar link built from it are the invitee's
+      // credential; a guest must not get either.
+      expect(html).not.toContain("https://app.test/b/tok");
+      expect(html).not.toContain("tok");
+    }
+    // The invitee's own copy still carries it.
+    expect(bodyFor("ada@example.com")).toContain("https://app.test/b/tok");
+  });
+
+  it("puts guests on the calendar invite", async () => {
+    await sendBookingEmails("confirmed", ctx({ guestEmails: GUESTS }));
+    // Unfolded first: long iCalendar lines wrap onto a continuation line.
+    const ics = invites()[0].content.replace(/\r\n /g, "");
+    expect(ics).toContain("MAILTO:grace@example.com");
+    expect(ics).toContain("MAILTO:alan@example.com");
+  });
+
+  it("tells the host who else is coming", async () => {
+    await sendBookingEmails("confirmed", ctx({ guestEmails: GUESTS }));
+    expect(bodyFor("rae@fund.test")).toContain("grace@example.com, alan@example.com");
+  });
+
+  it("keeps a request and its decline between the host and the invitee", async () => {
+    for (const kind of ["requested", "declined"] as const) {
+      sendEmailMock.mockClear();
+      await sendBookingEmails(kind, ctx({ guestEmails: GUESTS }));
+      expect(recipients()).not.toContain("grace@example.com");
+    }
+  });
+
+  it("tells guests when the meeting is cancelled", async () => {
+    await sendBookingEmails("cancelled_by_host", ctx({ guestEmails: GUESTS }));
+    expect(recipients()).toEqual(expect.arrayContaining(GUESTS));
+  });
+
+  it("includes guests in an invitee-only retry, but not the host", async () => {
+    await sendBookingEmails("confirmed", ctx({ guestEmails: GUESTS }), { inviteeOnly: true });
+    expect(recipients().sort()).toEqual(["ada@example.com", ...GUESTS].sort());
+  });
+});

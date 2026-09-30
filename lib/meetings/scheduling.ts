@@ -482,6 +482,7 @@ export interface BookingValidation {
   name?: string;
   email?: string;
   notes?: string;
+  guests?: string;
   slot?: string;
 }
 
@@ -497,6 +498,43 @@ export const BOOKING_EMAIL_MAX = 254;
 export const BOOKING_NOTES_MAX = 2000;
 /** Longest cancellation or decline reason kept and emailed. */
 export const BOOKING_REASON_MAX = 1000;
+/** Most extra people an invitee can bring; the column's check matches. */
+export const BOOKING_GUESTS_MAX = 10;
+
+/**
+ * The extra guests an invitee added, as stored: lowercased, deduplicated, the
+ * invitee's own address dropped. Accepts a list or one comma/semicolon/space
+ * separated string, since that is what people paste.
+ *
+ * Every address here receives the meeting's emails, so an invalid one is an
+ * error rather than something to drop quietly: better the invitee fixes a
+ * typo than a colleague never hears about the meeting.
+ */
+export function parseBookingGuests(
+  raw: unknown,
+  inviteeEmail: string,
+): { guests: string[] } | { error: string } {
+  if (raw === undefined || raw === null || raw === "") return { guests: [] };
+  const parts = Array.isArray(raw) ? raw : typeof raw === "string" ? raw.split(/[\s,;]+/) : null;
+  if (!parts) return { error: "List guests as email addresses." };
+
+  const self = inviteeEmail.trim().toLowerCase();
+  const seen = new Set<string>();
+  const guests: string[] = [];
+  for (const part of parts) {
+    if (typeof part !== "string") return { error: "List guests as email addresses." };
+    const email = part.trim().toLowerCase();
+    if (!email) continue;
+    if (email.length > BOOKING_EMAIL_MAX || !EMAIL_RE.test(email) || CONTROL_CHARS.test(email)) {
+      return { error: `"${email.slice(0, 60)}" isn't a valid email address.` };
+    }
+    if (email === self || seen.has(email)) continue;
+    seen.add(email);
+    guests.push(email);
+  }
+  if (guests.length > BOOKING_GUESTS_MAX) return { error: `Add up to ${BOOKING_GUESTS_MAX} guests.` };
+  return { guests };
+}
 
 /**
  * A cancellation or decline reason as it is stored and emailed: text only,

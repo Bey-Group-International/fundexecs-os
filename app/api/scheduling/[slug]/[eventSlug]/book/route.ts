@@ -11,6 +11,7 @@ import {
   buildBookingCalendarUrl,
   buildBookingManageUrl,
   isValidTimezone,
+  parseBookingGuests,
   validateBookingRequest,
 } from "@/lib/meetings/scheduling";
 import {
@@ -34,6 +35,8 @@ interface BookBody {
   email?: string;
   notes?: string;
   timezone?: string;
+  /** Extra guests: a list of emails, or one comma-separated string. */
+  guests?: unknown;
 }
 
 export async function POST(
@@ -61,6 +64,8 @@ export async function POST(
       notes: body.notes,
       startIso: body.startIso,
     });
+    const guestList = parseBookingGuests(body.guests, body.email ?? "");
+    if ("error" in guestList) fieldErrors.guests = guestList.error;
     if (Object.keys(fieldErrors).length > 0) {
       return NextResponse.json({ error: "Check the highlighted fields.", fieldErrors }, { status: 422 });
     }
@@ -78,6 +83,7 @@ export async function POST(
       startIso: body.startIso!,
       inviteeName: body.name!.trim(),
       inviteeEmail: body.email!.trim(),
+      inviteeGuests: "guests" in guestList ? guestList.guests : [],
       inviteeNotes: body.notes ?? null,
       // Anything but a real zone falls back to the host's, rather than being
       // stored and read back into every later email about this booking.
