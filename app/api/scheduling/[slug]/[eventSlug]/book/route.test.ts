@@ -329,6 +329,40 @@ describe("POST /api/scheduling/[slug]/[eventSlug]/book", () => {
     expect(writes.scheduling_bookings).toBeUndefined();
   });
 
+  it("books the invitee's guests with them and puts them on the meeting", async () => {
+    const { client, writes } = makeClient(tables());
+    serviceClient.mockReturnValue(client);
+
+    const res = await POST(
+      request({
+        startIso: nextSlotIso(),
+        name: "Grace Hopper",
+        email: "grace@x.com",
+        guests: "Ada@X.com, alan@x.com",
+      }),
+      { params },
+    );
+
+    expect(res.status).toBe(200);
+    expect(writes.scheduling_bookings[0].invitee_guests).toEqual(["ada@x.com", "alan@x.com"]);
+    const attendees = (writes.live_meetings[0].attendees as Array<{ email: string }>).map((a) => a.email);
+    expect(attendees).toEqual(["grace@x.com", "ada@x.com", "alan@x.com"]);
+  });
+
+  it("refuses a bad guest address before touching the database", async () => {
+    const { client, writes } = makeClient(tables());
+    serviceClient.mockReturnValue(client);
+
+    const res = await POST(
+      request({ startIso: nextSlotIso(), name: "Grace Hopper", email: "grace@x.com", guests: "ada@x.com, oops" }),
+      { params },
+    );
+
+    expect(res.status).toBe(422);
+    expect((await res.json()).fieldErrors.guests).toMatch(/oops/);
+    expect(writes.scheduling_bookings).toBeUndefined();
+  });
+
   it("holds an approval-gated slot as pending and creates no room", async () => {
     const { client, writes } = makeClient(
       tables({ scheduling_event_types: [eventType({ requires_approval: true })] }),

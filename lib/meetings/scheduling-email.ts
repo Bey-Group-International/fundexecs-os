@@ -21,6 +21,8 @@ export interface BookingEmailContext {
   hostEmail?: string | null;
   inviteeName: string;
   inviteeEmail: string;
+  /** Extra people the invitee added; they get the invitee's emails, minus the manage link. */
+  guestEmails?: string[];
   inviteeTimezone: string;
   hostTimezone: string;
   startIso: string;
@@ -187,6 +189,7 @@ function inviteFor(kind: BookingEmailKind, ctx: BookingEmailContext) {
       organizer: { name: ctx.hostName, email: ctx.hostEmail },
       attendees: [
         { name: ctx.inviteeName, email: ctx.inviteeEmail },
+        ...(ctx.guestEmails ?? []).map((email) => ({ name: email.split("@")[0], email })),
         { name: ctx.hostName, email: ctx.hostEmail },
       ],
       sequence:
@@ -216,21 +219,13 @@ export type BookingEmailKind =
   | "cancelled_by_invitee"
   | "cancelled_by_host";
 
-/**
- * Notify both sides about a booking transition. Returns how many messages
- * actually went out, so callers can surface "we couldn't email them" without
- * failing the booking itself.
- */
-export async function sendBookingEmails(
+type BookingMessage = { to: { name: string; email: string }; subject: string; html: string };
+
+/** Every message a transition sends, invitee's and host's, before any are sent. */
+function buildBookingMessages(
   kind: BookingEmailKind,
   ctx: BookingEmailContext,
-  /**
-   * `inviteeOnly`: skip the host's copy. For re-sending a confirmation the
-   * invitee never got — the host's arrived the first time, and a second would
-   * only look like a second booking.
-   */
-  opts: { inviteeOnly?: boolean } = {},
-): Promise<{ sent: number; inviteeSent: boolean }> {
+): { messages: BookingMessage[]; inviteeTo: { name: string; email: string } } {
   // "Save to calendar", offered on exactly the transitions that put an entry in
   // somebody's calendar in the first place — the ones inviteMethodFor sends a
   // REQUEST for. A pending request is a hold the host may still decline, and a
@@ -259,7 +254,7 @@ export async function sendBookingEmails(
   const hostPrevious = ctx.previousStartIso
     ? formatSlotFull(ctx.previousStartIso, ctx.hostTimezone)
     : "";
-  const messages: Array<{ to: { name: string; email: string }; subject: string; html: string }> = [];
+  const messages: BookingMessage[] = [];
 
   const inviteeTo = { name: ctx.inviteeName, email: ctx.inviteeEmail };
   const hostTo = ctx.hostEmail ? { name: ctx.hostName, email: ctx.hostEmail } : null;
@@ -293,6 +288,7 @@ export async function sendBookingEmails(
               ["Meeting", ctx.eventTitle],
               ["Requested", hostWhen],
               ["From", `${ctx.inviteeName} (${ctx.inviteeEmail})`],
+              ["Guests", (ctx.guestEmails ?? []).join(", ")],
               ["Their note", ctx.notes ?? ""],
             ],
             cta: ctx.hostMeetingsUrl ? { label: "Approve or decline", url: ctx.hostMeetingsUrl } : null,
@@ -330,6 +326,7 @@ export async function sendBookingEmails(
               ["Meeting", ctx.eventTitle],
               ["When", hostWhen],
               ["With", `${ctx.inviteeName} (${ctx.inviteeEmail})`],
+              ["Guests", (ctx.guestEmails ?? []).join(", ")],
               ["Their note", ctx.notes ?? ""],
             ],
             cta: ctx.joinUrl ? { label: "Open meeting room", url: ctx.joinUrl } : null,
@@ -503,10 +500,61 @@ export async function sendBookingEmails(
       break;
   }
 
+  return { messages, inviteeTo };
+}
+
+/**
+ * The transitions a guest hears about: the ones that put the meeting in a
+ * calendar, move it, or take it out. A guest is added to a meeting, not to a
+ * request, so a request still waiting on the host (and its decline) stays
+ * between the host and the invitee.
+ */
+const GUEST_KINDS: ReadonlySet<BookingEmailKind> = new Set([
+  "confirmed",
+  "rescheduled",
+  "rescheduled_by_host",
+  "cancelled_by_invitee",
+  "cancelled_by_host",
+]);
+
+/**
+ * Notify both sides about a booking transition. Returns how many messages
+ * actually went out, so callers can surface "we couldn't email them" without
+ * failing the booking itself.
+ */
+export async function sendBookingEmails(
+  kind: BookingEmailKind,
+  ctx: BookingEmailContext,
+  /**
+   * `inviteeOnly`: skip the host's copy. For re-sending a confirmation the
+   * invitee never got — the host's arrived the first time, and a second would
+   * only look like a second booking.
+   */
+  opts: { inviteeOnly?: boolean } = {},
+): Promise<{ sent: number; inviteeSent: boolean }> {
+  const { messages, inviteeTo } = buildBookingMessages(kind, ctx);
+
+  // Each guest gets the invitee's message, built again without the manage
+  // link: that URL is the invitee's credential to reschedule or cancel, and
+  // a guest holding it could do either.
+  const guests = GUEST_KINDS.has(kind) ? ctx.guestEmails ?? [] : [];
+  if (guests.length > 0) {
+    const forGuests = buildBookingMessages(kind, { ...ctx, manageUrl: null, manageToken: null });
+    const template = forGuests.messages.find((m) => m.to === forGuests.inviteeTo);
+    if (template) {
+      for (const email of guests) messages.push({ ...template, to: { name: email.split("@")[0], email } });
+    }
+  }
+
   // The same invitation goes to both sides: the host's own calendar entry has
   // to move when a booking is rescheduled, not only the invitee's.
   if (opts.inviteeOnly) {
-    for (let i = messages.length - 1; i >= 0; i--) if (messages[i].to !== inviteeTo) messages.splice(i, 1);
+    // Guests' copies stay: when the invitee's didn't arrive, theirs most likely
+    // didn't either.
+    const hostEmail = ctx.hostEmail?.toLowerCase();
+    for (let i = messages.length - 1; i >= 0; i--) {
+      if (messages[i].to !== inviteeTo && messages[i].to.email.toLowerCase() === hostEmail) messages.splice(i, 1);
+    }
   }
 
   const invite = inviteFor(kind, ctx);

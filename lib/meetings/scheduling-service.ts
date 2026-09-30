@@ -53,7 +53,7 @@ const PAGE_COLUMNS =
 const EVENT_TYPE_COLUMNS =
   "id, page_id, user_id, organization_id, slug, title, description, duration_minutes, slot_interval_minutes, meeting_type, requires_approval, is_active, sort_order, created_at, updated_at";
 const BOOKING_COLUMNS =
-  "id, page_id, event_type_id, host_user_id, organization_id, meeting_id, invitee_name, invitee_email, invitee_notes, invitee_timezone, starts_at, ends_at, status, cancelled_by, cancellation_reason, manage_token, rescheduled_at, decided_at, calendar_sequence, created_at, updated_at";
+  "id, page_id, event_type_id, host_user_id, organization_id, meeting_id, invitee_name, invitee_email, invitee_notes, invitee_guests, invitee_timezone, starts_at, ends_at, status, cancelled_by, cancellation_reason, manage_token, rescheduled_at, decided_at, calendar_sequence, created_at, updated_at";
 
 
 /**
@@ -550,7 +550,7 @@ export async function createMeetingForBooking(
   args: {
     page: SchedulingPage;
     eventType: SchedulingEventType;
-    booking: Pick<SchedulingBooking, "invitee_name" | "invitee_email" | "invitee_notes" | "starts_at">;
+    booking: Pick<SchedulingBooking, "invitee_name" | "invitee_email" | "invitee_notes" | "starts_at" | "invitee_guests">;
   },
 ): Promise<{ id: string; roomCode: string }> {
   const { page, eventType, booking } = args;
@@ -567,8 +567,11 @@ export async function createMeetingForBooking(
       organization_id: page.organization_id,
       status: "waiting",
       description,
+      // Guests are attendees too, so the reminder sweep and the calendar sync
+      // reach them the same way they reach the person who booked.
       attendees: [
         { name: booking.invitee_name, email: booking.invitee_email, type: "external" },
+        ...(booking.invitee_guests ?? []).map((email) => ({ name: email.split("@")[0], email, type: "external" })),
       ] as unknown as Json,
       source: "fundexecs",
       sync_status: "local_only",
@@ -615,6 +618,8 @@ export async function createBooking(
     inviteeEmail: string;
     inviteeNotes?: string | null;
     inviteeTimezone?: string | null;
+    /** Already parsed by parseBookingGuests. */
+    inviteeGuests?: string[];
     now?: Date;
   },
 ): Promise<BookingResult> {
@@ -632,6 +637,7 @@ export async function createBooking(
     invitee_name: args.inviteeName.trim(),
     invitee_email: args.inviteeEmail.trim().toLowerCase(),
     invitee_notes: args.inviteeNotes?.trim() || null,
+    invitee_guests: args.inviteeGuests ?? [],
   };
 
   let meeting: { id: string; roomCode: string } | null = null;
@@ -1010,6 +1016,7 @@ export function serializeBooking(booking: SchedulingBooking & { event_title?: st
     inviteeName: booking.invitee_name,
     inviteeEmail: booking.invitee_email,
     inviteeNotes: booking.invitee_notes,
+    inviteeGuests: booking.invitee_guests ?? [],
     inviteeTimezone: booking.invitee_timezone,
     startsAt: booking.starts_at,
     endsAt: booking.ends_at,

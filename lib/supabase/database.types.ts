@@ -2732,6 +2732,8 @@ export type SchedulingBooking = {
   invitee_name: string;
   invitee_email: string;
   invitee_notes: string | null;
+  /** Extra guest emails the invitee added; empty when none. */
+  invitee_guests?: string[];
   invitee_timezone: string;
   starts_at: string;
   ends_at: string;

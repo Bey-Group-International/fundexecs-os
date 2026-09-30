@@ -107,6 +107,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tok
       hostEmail: host.email,
       inviteeName: next.booking.invitee_name,
       inviteeEmail: next.booking.invitee_email,
+      guestEmails: next.booking.invitee_guests ?? [],
       inviteeTimezone: next.booking.invitee_timezone,
       hostTimezone: next.page.timezone,
       startIso: next.booking.starts_at,

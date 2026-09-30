@@ -18,6 +18,8 @@ import {
   BOOKING_NAME_MAX,
   BOOKING_NOTES_MAX,
   BOOKING_REASON_MAX,
+  BOOKING_GUESTS_MAX,
+  parseBookingGuests,
   normalizeBookingReason,
   weekdayOfDate,
   buildBookingManageUrl,
@@ -304,6 +306,35 @@ describe("generateSlots daily booking limit", () => {
     const input = { ...base, maxBookingsPerDay: 1, bookingStarts: ["2026-03-02T15:00:00Z"] };
     expect(isSlotAvailable("2026-03-02T09:00:00.000Z", input)).toBe(false);
     expect(isSlotAvailable("2026-03-03T09:00:00.000Z", input)).toBe(true);
+  });
+});
+
+describe("parseBookingGuests", () => {
+  it("reads a pasted list, lowercased and deduplicated, without the invitee", () => {
+    expect(parseBookingGuests("Grace@Example.com, alan@example.com; grace@example.com ada@example.com", "ADA@example.com")).toEqual({
+      guests: ["grace@example.com", "alan@example.com"],
+    });
+    expect(parseBookingGuests(["grace@example.com"], "ada@example.com")).toEqual({ guests: ["grace@example.com"] });
+  });
+
+  it("is empty when nothing was given", () => {
+    for (const raw of [undefined, null, "", "  ,  "]) {
+      expect(parseBookingGuests(raw, "ada@example.com")).toEqual({ guests: [] });
+    }
+  });
+
+  it("refuses a bad address rather than dropping it", () => {
+    expect(parseBookingGuests("grace@example.com, not-an-email", "ada@example.com")).toEqual({
+      error: expect.stringContaining("not-an-email"),
+    });
+    expect(parseBookingGuests(42, "ada@example.com")).toHaveProperty("error");
+    expect(parseBookingGuests([42], "ada@example.com")).toHaveProperty("error");
+  });
+
+  it("caps the list", () => {
+    const many = Array.from({ length: BOOKING_GUESTS_MAX + 1 }, (_, i) => `g${i}@example.com`);
+    expect(parseBookingGuests(many, "ada@example.com")).toHaveProperty("error");
+    expect(parseBookingGuests(many.slice(0, BOOKING_GUESTS_MAX), "ada@example.com")).toEqual({ guests: many.slice(0, BOOKING_GUESTS_MAX) });
   });
 });
 

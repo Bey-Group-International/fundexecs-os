@@ -7,6 +7,7 @@ import { TimezoneSelect } from "@/components/scheduling/TimezoneSelect";
 import { useRefreshWhenStale } from "@/components/scheduling/useRefreshWhenStale";
 import {
   BOOKING_EMAIL_MAX,
+  BOOKING_GUESTS_MAX,
   BOOKING_NAME_MAX,
   BOOKING_NOTES_MAX,
   detectTimezone,
@@ -62,6 +63,8 @@ export function BookingFlow({
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [notes, setNotes] = useState("");
+  const [guests, setGuests] = useState("");
+  const [showGuests, setShowGuests] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
@@ -142,7 +145,7 @@ export function BookingFlow({
       const res = await fetch(`/api/scheduling/${slug}/${eventType.slug}/book`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ startIso: selected, name, email, notes, timezone }),
+        body: JSON.stringify({ startIso: selected, name, email, notes, timezone, guests }),
       });
       const data = (await res.json()) as {
         error?: string;
@@ -271,6 +274,28 @@ export function BookingFlow({
               className="w-full rounded-lg border border-[var(--line)] bg-[var(--surface-0)] px-3 py-2.5 text-sm text-[var(--fg-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--gold-400)]"
             />
           </Field>
+
+          {showGuests || fieldErrors.guests ? (
+            <Field label={`Guests (optional, up to ${BOOKING_GUESTS_MAX})`} error={fieldErrors.guests}>
+              <input
+                type="text"
+                value={guests}
+                onChange={(e) => setGuests(e.target.value)}
+                placeholder="colleague@company.com, partner@firm.com"
+                autoComplete="off"
+                maxLength={BOOKING_GUESTS_MAX * (BOOKING_EMAIL_MAX + 2)}
+                className="w-full rounded-lg border border-[var(--line)] bg-[var(--surface-0)] px-3 py-2.5 text-sm text-[var(--fg-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--gold-400)]"
+              />
+            </Field>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setShowGuests(true)}
+              className="w-fit text-xs font-medium text-[var(--gold-400)] hover:text-[var(--gold-500)]"
+            >
+              + Add guests
+            </button>
+          )}
 
           <Field label="What would you like to cover? (optional)" error={fieldErrors.notes}>
             <textarea

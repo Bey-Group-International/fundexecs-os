@@ -64,6 +64,7 @@ export async function bookingEmailContext(
     hostEmail: host.email,
     inviteeName: booking.invitee_name,
     inviteeEmail: booking.invitee_email,
+    guestEmails: booking.invitee_guests ?? [],
     inviteeTimezone: booking.invitee_timezone,
     hostTimezone: page.timezone,
     startIso: booking.starts_at,

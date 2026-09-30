@@ -386,4 +386,31 @@ describe("createMeetingForBooking", () => {
 
     expect(inserted).toMatchObject({ reminder_minutes: 15 });
   });
+
+  it("puts the invitee's guests on the meeting as attendees", async () => {
+    let inserted: Record<string, unknown> | null = null;
+    const b: Record<string, unknown> = {
+      insert(row: Record<string, unknown>) {
+        inserted = row;
+        return b;
+      },
+      select: () => b,
+      single: () => Promise.resolve({ data: { id: "mtg-1", room_code: "abc-defg-hij" }, error: null }),
+    };
+    await createMeetingForBooking({ from: () => b } as never, {
+      page: { user_id: "host-1", organization_id: "org-1", timezone: "UTC" } as never,
+      eventType: { title: "Intro", duration_minutes: 30, meeting_type: "external" } as never,
+      booking: {
+        invitee_name: "Pat",
+        invitee_email: "pat@example.com",
+        invitee_notes: null,
+        starts_at: "2026-10-05T14:00:00.000Z",
+        invitee_guests: ["sam@example.com"],
+      },
+    });
+    expect((inserted as unknown as { attendees: Array<{ email: string }> }).attendees.map((a) => a.email)).toEqual([
+      "pat@example.com",
+      "sam@example.com",
+    ]);
+  });
 });

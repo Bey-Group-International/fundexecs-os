@@ -38,6 +38,7 @@ export interface HostBooking {
   inviteeName: string;
   inviteeEmail: string;
   inviteeNotes: string | null;
+  inviteeGuests?: string[];
   inviteeTimezone: string;
   startsAt: string;
   endsAt: string;
