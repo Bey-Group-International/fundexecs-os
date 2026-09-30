@@ -1425,6 +1425,11 @@ export type InboxThread = Timestamps & {
   // triage score; the "Starred" saved view filters on it (migration
   // 20260710130000). Defaults false.
   starred: boolean;
+  // lower(counterparty_email), generated (migration 20260930180000). Exists so a
+  // case-insensitive address lookup can be expressed through PostgREST and use an
+  // index — the column itself holds the address as the provider sent it. Never
+  // written directly.
+  counterparty_email_lower: string | null;
 };
 
 // One message within an inbox thread (migration 0038).
