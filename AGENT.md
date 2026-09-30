@@ -4849,6 +4849,50 @@ Deployed, monitoring               →  live, observability active
              |  so measures a floor rather than a ceiling.
              |  Confidence: Jest 7619 across 538 suites, typecheck and eslint
              |  clean.
+             |
+             |  2026-09-30  And then the decision came back: take `speaking` out
+             |  of the room's state. Done, and it is the cleanest result of the
+             |  whole pass.
+             |  The entry above left this open. It is now the same move #70 made
+             |  for the second hand, for the same reason and three times as often:
+             |  `speaking` is read ONLY by leaves - the ring on a tile, the dot on
+             |  a sidebar row - and one person talking changes the answer for one
+             |  of them. As room state it re-ran all 4,858 lines for every
+             |  utterance boundary.
+             |  Now a store in room-shared.tsx: publish a set, and only the ids
+             |  whose membership actually MOVED are notified. VideoTile takes
+             |  `watchId` and PersonRow reads its own id, both through
+             |  useSpeaking(id, fallback) over useSyncExternalStore. The fallback
+             |  is why nothing else broke: pass a boolean and you get a boolean,
+             |  which is exactly how MeetingRoom.tile.test.tsx and
+             |  CallParts.sidebar.test.tsx already render those two on their own.
+             |  One interface, neither path a special case.
+             |  Measured with the SAME probe on both arms, ten seconds of
+             |  conversation with the floor passing every 600ms:
+             |    8 people  - room body 31 -> 16 runs, subtree 71.5-77.0ms -> 33.4-36.4ms
+             |    26 people - room body 32 -> 16 runs, subtree 105.7-112.4ms -> 41.4-48.1ms
+             |    silence   - room body 1-2 -> 0 runs
+             |  and the one that tells the story best: ONE person holding the floor
+             |  for ten seconds re-renders the room ZERO times at twenty-six
+             |  people, where it used to be thirty-one.
+             |  The 16 that remain are not waste and were checked rather than
+             |  assumed: there are exactly 8 real activeSpeakerId switches in that
+             |  window, two renders each. `activeSpeakerId` feeds stageFocus, which
+             |  changes the layout, so it stays state. The doubling per switch was
+             |  not chased.
+             |  What is different about this one, and it is worth saying because
+             |  four PRs in a row have had to admit the opposite: THE EFFICIENCY
+             |  CLAIM HAS A REAL GUARD. A memoised component that skips a render
+             |  writes nothing to the DOM, so no assertion can see it. But "only
+             |  the ids whose answer moved are notified" is plain logic about
+             |  listeners, and counting calls on it is exact. Making publish wake
+             |  every listener instead of the changed ones fails 3 tests. Five
+             |  injections, each failing the test that names it: wake everyone 3,
+             |  wake nobody 7, ignore the store 4, forget the provider in the room
+             |  2, leak an unsubscribed listener 1.
+             |  Confidence: Jest 7629 across 539 suites, typecheck and eslint
+             |  clean. Still jsdom, which has no layout, so every figure above is a
+             |  floor rather than a ceiling.
 ```
 
 ---

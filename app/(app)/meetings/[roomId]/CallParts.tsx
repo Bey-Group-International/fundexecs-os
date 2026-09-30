@@ -4,7 +4,7 @@
 // of MeetingRoom so they load as their own chunk, fetched while the member is
 // still in the green room rather than before it can be drawn.
 
-import { FloatingMenu, useStableHandlers, type RemovedPerson } from "./room-shared";
+import { FloatingMenu, useSpeaking, useStableHandlers, type RemovedPerson } from "./room-shared";
 import React, { memo, useEffect, useMemo, useReducer, useRef, useState, useCallback } from "react";
 import { handsFirst } from "@/lib/meetings/hands";
 import { REACTIONS, reactionLabel, type ActiveReaction } from "@/lib/meetings/reactions";
@@ -21,6 +21,9 @@ import { subjectKey, type RemovalSubject } from "@/lib/meetings/removal";
 import { type WaitingPeer } from "./WaitingScreens";
 
 // Palette for per-speaker colours in the transcript.
+/** No provider and no set: nobody is talking. */
+const NOBODY: ReadonlySet<string> = new Set<string>();
+
 const SPEAKER_COLORS = [
   "var(--gold-400)",
   "#7dd3fc",
@@ -37,7 +40,7 @@ function VideoTileImpl({
   stream, videoTrack, label, muted = false, isLocal = false,
   handRaised = false, reaction = "", large = false,
   micOn = true, speaking = false, camOn = true, videoPaused = false,
-  status = "live",
+  status = "live", watchId,
 }: {
   stream: MediaStream | null;
   /**
@@ -57,8 +60,22 @@ function VideoTileImpl({
   handRaised?: boolean; reaction?: string; large?: boolean;
   /** That participant's own report of their mic track. */
   micOn?: boolean;
-  /** Their voice is in the room right now. */
+  /**
+   * Their voice is in the room right now.
+   *
+   * Only consulted when `watchId` is absent, which is how this tile stays
+   * renderable on its own with a plain boolean (MeetingRoom.tile.test.tsx does
+   * exactly that). In the room it is `watchId` that answers.
+   */
   speaking?: boolean;
+  /**
+   * Whose voice to watch for, read live from the room's speaking store.
+   *
+   * The ring is the one thing on this tile that changes several times a second,
+   * and subscribing to it here is what stops the room re-rendering to deliver
+   * it — see createSpeakingStore's note. Leave it off and `speaking` decides.
+   */
+  watchId?: string;
   /** That participant's own report of their camera, which pixels cannot give us. */
   camOn?: boolean;
   /** Their video is off because the line could not carry it, not because they chose to. */
@@ -68,6 +85,7 @@ function VideoTileImpl({
 }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const track = videoTrack;
+  const isSpeaking = useSpeaking(watchId ?? "", speaking);
   // Re-render when the track's lifecycle changes (ends / mutes / unmutes) so the
   // placeholder appears/disappears in step with the real camera state.
   const [, bump] = useReducer((n: number) => n + 1, 0);
@@ -122,7 +140,7 @@ function VideoTileImpl({
   // Ring the tile of whoever is talking. In a grid of muted faces this is the
   // fastest answer to "who is that?" — and it is the same judgement the
   // transcript is using to decide whose name goes on the words.
-  const ring = speaking && micOn ? "border-[var(--gold-400)] shadow-[0_0_0_2px_var(--gold-400)]" : "border-[var(--line)]";
+  const ring = isSpeaking && micOn ? "border-[var(--gold-400)] shadow-[0_0_0_2px_var(--gold-400)]" : "border-[var(--line)]";
 
   return (
     <div className={`relative rounded-2xl overflow-hidden bg-[var(--surface-2)] border transition-shadow flex items-center justify-center ${ring} ${large ? "w-full h-full" : "aspect-video"}`}>
@@ -139,7 +157,7 @@ function VideoTileImpl({
       )}
       <div className="absolute bottom-2 left-3 flex items-center gap-1.5 rounded-full bg-black/50 backdrop-blur-sm px-2 py-0.5 text-xs text-white">
         {micOn
-          ? speaking && <span className="w-1.5 h-1.5 rounded-full bg-[var(--gold-400)] animate-pulse" />
+          ? isSpeaking && <span className="w-1.5 h-1.5 rounded-full bg-[var(--gold-400)] animate-pulse" />
           : <span title="Muted — not being transcribed" aria-label="Muted">🔇</span>}
         {label}{isLocal ? " (You)" : ""}
       </div>
@@ -684,7 +702,13 @@ const ChatTurnRow = memo(function ChatTurnRow({
  * Takes the flags rather than the participant object, so the comparison does
  * not depend on whether the caller rebuilt its array this render — and so a
  * speaking change re-renders the one row whose dot moved instead of all of
- * them. `speaking` is the only prop here that changes on the fast path.
+ * them.
+ *
+ * The dot now arrives by subscription rather than as a prop, which is what stops
+ * the panel above being rebuilt to deliver it: on the chat tab this list is not
+ * even mounted, and it was still costing a render of the whole sidebar three
+ * times a second. The `speaking` prop remains the answer when nobody provides a
+ * store, which is how this list renders on its own in CallParts.sidebar.test.tsx.
  */
 const PersonRow = memo(function PersonRow({
   id, displayName, micOn, isLocal, speaking, handRaised, color, isHost, onKick,
@@ -693,17 +717,19 @@ const PersonRow = memo(function PersonRow({
   displayName: string;
   micOn: boolean;
   isLocal: boolean;
+  /** Used when no speaking store is provided, as the sidebar's own tests do. */
   speaking: boolean;
   handRaised: boolean;
   color: string;
   isHost: boolean;
   onKick: (id: string) => void;
 }) {
+  const isSpeaking = useSpeaking(id, speaking);
   return (
     <div className="flex items-center gap-2.5 rounded-lg px-2 py-2">
       <div
-        className={`w-7 h-7 rounded-full bg-gold-400/20 flex items-center justify-center text-xs font-semibold transition-colors ${speaking ? "border-2" : "border border-gold-400/30"}`}
-        style={speaking ? { borderColor: color, color } : { color: "var(--gold-400)" }}
+        className={`w-7 h-7 rounded-full bg-gold-400/20 flex items-center justify-center text-xs font-semibold transition-colors ${isSpeaking ? "border-2" : "border border-gold-400/30"}`}
+        style={isSpeaking ? { borderColor: color, color } : { color: "var(--gold-400)" }}
       >
         {displayName.slice(0, 1).toUpperCase()}
       </div>
@@ -712,11 +738,11 @@ const PersonRow = memo(function PersonRow({
           speak" and "nothing they say is reaching the transcript" — worth
           stating, not leaving to inference. */}
       <span
-        title={micOn ? (speaking ? "Speaking now" : "Mic live") : "Muted — not being transcribed"}
-        className={`text-xs ${micOn ? (speaking ? "" : "text-[var(--fg-muted)]") : "text-[var(--status-danger)]"}`}
-        style={micOn && speaking ? { color } : undefined}
+        title={micOn ? (isSpeaking ? "Speaking now" : "Mic live") : "Muted — not being transcribed"}
+        className={`text-xs ${micOn ? (isSpeaking ? "" : "text-[var(--fg-muted)]") : "text-[var(--status-danger)]"}`}
+        style={micOn && isSpeaking ? { color } : undefined}
       >
-        {micOn ? (speaking ? "◉ speaking" : "mic on") : "muted"}
+        {micOn ? (isSpeaking ? "◉ speaking" : "mic on") : "muted"}
       </span>
       {handRaised && <span className="text-sm">✋</span>}
       {isLocal ? (
@@ -736,12 +762,19 @@ export function CopilotSidebar({
   srStatus, participants, roomCode, meetingTitle,
   chatMessages, chatUnread, onSendChat, onRetryChat, isHost, raisedHands, onKick, onAdmit, onDeny, onAdmitAll, waitingPeers, onChatVisibility,
   removedPeople, onAllowBack,
-  speaking, onCollapse,
+  speaking = NOBODY, onCollapse,
 }: {
   srStatus: "idle" | "active" | "error" | "unsupported";
   participants: { id: string; displayName: string; micOn: boolean; isLocal: boolean }[];
   /** Ids of everyone whose voice is in the room right now. */
-  speaking: Set<string>;
+  /**
+   * Only a fallback now. The room provides a speaking store instead, which the
+   * rows below subscribe to individually — passing the set down here meant this
+   * whole panel re-rendered three times a second to deliver a dot, and on the
+   * chat tab the list that draws it is not even mounted. Still accepted so the
+   * panel renders on its own with a plain set, as its own tests do.
+   */
+  speaking?: ReadonlySet<string>;
   roomCode: string; meetingTitle: string; chatMessages: ChatMessage[];
   /** Messages that have arrived since the panel last showed the chat tab. */
   chatUnread: number;
