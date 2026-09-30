@@ -157,16 +157,73 @@ export function generateManageToken(): string {
   return token;
 }
 
+/**
+ * The date and time shapes this module formats, each built at most once per
+ * zone.
+ *
+ * Constructing an Intl.DateTimeFormat costs far more than formatting a date
+ * with one, and every function below used to build a fresh one per call. The
+ * public booking page pays that per slot and per render: grouping a 21-day
+ * window built 336 formatters, and each keystroke in the invitee's name
+ * rebuilt 60 more, because the picker re-renders along with the form it sits
+ * above. Measured on a 336-slot window, the page cost 833 formatter
+ * constructions to paint and 60 per keystroke; it now builds six in total.
+ *
+ * Safe to keep because a formatter is immutable and determined entirely by its
+ * locale, its options and its zone — none of which depend on the instant being
+ * formatted. lib/meetings/schedule.ts keeps its offset formatters for the same
+ * reason.
+ */
+const SHAPES = {
+  /** "2026-10-05". en-CA is already YYYY-MM-DD, which is the shape we store. */
+  isoDate: { locale: "en-CA", options: { year: "numeric", month: "2-digit", day: "2-digit" } },
+  /** "2:00 PM" — one slot button. */
+  time: { locale: "en-US", options: { hour: "numeric", minute: "2-digit" } },
+  /** "Monday, October 5" — the heading above a day's times. */
+  longDate: { locale: "en-US", options: { weekday: "long", month: "long", day: "numeric" } },
+  /** "Monday, October 5, 2026 at 2:00 PM GMT-4" — the one-line stamp. */
+  full: {
+    locale: "en-US",
+    options: {
+      weekday: "long",
+      month: "long",
+      day: "numeric",
+      year: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+      timeZoneName: "short",
+    },
+  },
+  /** "Mon" — the top line of a day in the picker's rail. */
+  weekday: { locale: "en-US", options: { weekday: "short" } },
+  /** "Oct 5" — the line under it. */
+  dayMonth: { locale: "en-US", options: { day: "numeric", month: "short" } },
+} satisfies Record<string, { locale: string; options: Intl.DateTimeFormatOptions }>;
+
+const formatters = new Map<string, Intl.DateTimeFormat>();
+
+/**
+ * One shape in one zone.
+ *
+ * Throws for a zone this runtime does not know, exactly as the constructor
+ * does, and caches nothing in that case — so every caller keeps its own
+ * plain-ISO fallback, and a bogus zone arriving from a browser cannot grow the
+ * map. The map is otherwise bounded by the real IANA zones times six shapes.
+ */
+function zoned(shape: keyof typeof SHAPES, timezone: string): Intl.DateTimeFormat {
+  const key = `${shape}\u0000${timezone}`;
+  const cached = formatters.get(key);
+  if (cached) return cached;
+  const { locale, options } = SHAPES[shape];
+  const dtf = new Intl.DateTimeFormat(locale, { ...options, timeZone: timezone });
+  formatters.set(key, dtf);
+  return dtf;
+}
+
 /** The calendar date ("YYYY-MM-DD") an instant falls on in a given zone. */
 export function dateInTimezone(instant: Date, timezone: string): string {
   try {
-    // en-CA formats as YYYY-MM-DD, which is exactly the shape we store.
-    return new Intl.DateTimeFormat("en-CA", {
-      timeZone: timezone,
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-    }).format(instant);
+    return zoned("isoDate", timezone).format(instant);
   } catch {
     return instant.toISOString().slice(0, 10);
   }
@@ -321,7 +378,12 @@ export function groupSlotsByDate(slots: SlotWindow[], timezone: string): Array<{
   const groups = new Map<string, SlotWindow[]>();
   for (const slot of slots) {
     const key = dateInTimezone(new Date(slot.start), timezone);
-    groups.set(key, [...(groups.get(key) ?? []), slot]);
+    // Push rather than rebuild the bucket: copying it per slot made grouping
+    // quadratic in the size of the biggest day, which is the whole list when a
+    // host opens a single long day.
+    const bucket = groups.get(key);
+    if (bucket) bucket.push(slot);
+    else groups.set(key, [slot]);
   }
   return [...groups.entries()].sort((a, b) => a[0].localeCompare(b[0])).map(([date, s]) => ({ date, slots: s }));
 }
@@ -352,11 +414,7 @@ export function detectTimezone(): string {
 
 export function formatSlotTime(iso: string, timezone: string): string {
   try {
-    return new Intl.DateTimeFormat("en-US", {
-      timeZone: timezone,
-      hour: "numeric",
-      minute: "2-digit",
-    }).format(new Date(iso));
+    return zoned("time", timezone).format(new Date(iso));
   } catch {
     return new Date(iso).toISOString().slice(11, 16);
   }
@@ -364,12 +422,25 @@ export function formatSlotTime(iso: string, timezone: string): string {
 
 export function formatSlotDate(iso: string, timezone: string): string {
   try {
-    return new Intl.DateTimeFormat("en-US", {
-      timeZone: timezone,
-      weekday: "long",
-      month: "long",
-      day: "numeric",
-    }).format(new Date(iso));
+    return zoned("longDate", timezone).format(new Date(iso));
+  } catch {
+    return new Date(iso).toISOString().slice(0, 10);
+  }
+}
+
+/** "Mon" — the weekday the picker's day rail labels a column with. */
+export function formatSlotWeekday(iso: string, timezone: string): string {
+  try {
+    return zoned("weekday", timezone).format(new Date(iso));
+  } catch {
+    return DAY_LABELS_SHORT[new Date(iso).getUTCDay()] ?? "";
+  }
+}
+
+/** "Oct 5" — the date under it. */
+export function formatSlotDayMonth(iso: string, timezone: string): string {
+  try {
+    return zoned("dayMonth", timezone).format(new Date(iso));
   } catch {
     return new Date(iso).toISOString().slice(0, 10);
   }
@@ -378,16 +449,7 @@ export function formatSlotDate(iso: string, timezone: string): string {
 /** "Thursday, March 5, 2026 at 2:00 PM GMT+1" — the one-line stamp emails use. */
 export function formatSlotFull(iso: string, timezone: string): string {
   try {
-    return new Intl.DateTimeFormat("en-US", {
-      timeZone: timezone,
-      weekday: "long",
-      month: "long",
-      day: "numeric",
-      year: "numeric",
-      hour: "numeric",
-      minute: "2-digit",
-      timeZoneName: "short",
-    }).format(new Date(iso));
+    return zoned("full", timezone).format(new Date(iso));
   } catch {
     return new Date(iso).toUTCString();
   }

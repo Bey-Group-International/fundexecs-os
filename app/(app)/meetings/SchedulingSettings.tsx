@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import {
   DAY_LABELS,
   DAY_LABELS_SHORT,
@@ -41,10 +41,15 @@ export function SchedulingSettings({
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
 
-  function patchDraft(patch: Partial<HostSchedulingPage>) {
+  const patchDraft = useCallback((patch: Partial<HostSchedulingPage>) => {
     setDraft((d) => ({ ...d, ...patch }));
     setSaved(false);
-  }
+  }, []);
+
+  // A stable handler, because TimezoneSelect is memoised and renders the
+  // runtime's whole zone table: an arrow built here per render would hand it a
+  // new prop on every keystroke in the fields above and undo that.
+  const setTimezone = useCallback((timezone: string) => patchDraft({ timezone }), [patchDraft]);
 
   function ruleFor(day: number): SchedulingAvailabilityRule | null {
     return draft.availability.find((r) => r.day === day) ?? null;
@@ -149,7 +154,7 @@ export function SchedulingSettings({
       <section className="flex flex-col gap-4">
         <SectionHeading title="Weekly hours" hint="When you're bookable, in your own timezone." />
 
-        <TimezoneSelect value={draft.timezone} onChange={(tz) => patchDraft({ timezone: tz })} id="host-timezone" />
+        <TimezoneSelect value={draft.timezone} onChange={setTimezone} id="host-timezone" />
 
         <div className="flex flex-col gap-2">
           {DAY_LABELS.map((label, day) => {
