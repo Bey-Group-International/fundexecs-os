@@ -19,6 +19,19 @@ jest.mock("@/lib/supabase/server", () => ({
 const mockSession = getSessionContext as jest.Mock;
 const mockWallet = getWallet as jest.Mock;
 
+const ORIGINAL_ENV = process.env;
+
+// A deployment that CAN sell a plan. Without this the gate opens for everyone
+// (lib/feature-access: an unbuyable plan is no basis for a lock), which is
+// correct behaviour and the opposite of what these cases are about.
+beforeEach(() => {
+  process.env = { ...ORIGINAL_ENV, STRIPE_SECRET_KEY: "sk_live_test_fixture" };
+});
+
+afterAll(() => {
+  process.env = ORIGINAL_ENV;
+});
+
 function session(email: string, emailConfirmed = true) {
   return { userId: "u1", email, emailConfirmed, orgId: "org1", role: "owner" };
 }
@@ -80,6 +93,46 @@ describe("requireFeatureAccess", () => {
     mockSession.mockResolvedValue(session("ops@beygroupintl.com", false));
     mockWallet.mockResolvedValue(null);
     const gate = await requireFeatureAccess("office");
+    expect(gate.ok).toBe(false);
+  });
+});
+
+// The wiring, not just the decision: requireFeatureAccess must consult the
+// environment, or the pure rule is unreachable from the place that enforces it.
+describe("requireFeatureAccess when no plan can be bought", () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    delete process.env.ADMIN_EMAILS;
+    orgCreatedAt = "2026-10-01T00:00:00.000Z"; // after the paywall: normally locked
+    // No card rail, no remittance — a deployment that cannot sell anything.
+    process.env = { ...ORIGINAL_ENV };
+    delete process.env.STRIPE_SECRET_KEY;
+    delete process.env.FUNDEXECS_REMITTANCE_BANK_NAME;
+    delete process.env.FUNDEXECS_REMITTANCE_ACCOUNT_NAME;
+    delete process.env.FUNDEXECS_REMITTANCE_ACCOUNT_NUMBER;
+  });
+
+  it("lets a member act rather than 402ing them with no way to pay", async () => {
+    mockSession.mockResolvedValue(session("alex@firm.com"));
+    mockWallet.mockResolvedValue({ plan: "free" });
+    await expect(requireFeatureAccess("automations")).resolves.toEqual({ ok: true });
+  });
+
+  it("still refuses a caller with no session", async () => {
+    // The escape hatch is for stranded MEMBERS; it never admits an anonymous
+    // caller, whatever the billing configuration.
+    mockSession.mockResolvedValue(null);
+    const gate = await requireFeatureAccess("run");
+    expect(gate).toEqual({ ok: false, status: 401, error: "Not authenticated" });
+  });
+
+  it("closes again once remittance details exist", async () => {
+    process.env.FUNDEXECS_REMITTANCE_BANK_NAME = "First Bank";
+    process.env.FUNDEXECS_REMITTANCE_ACCOUNT_NAME = "FundExecs LLC";
+    process.env.FUNDEXECS_REMITTANCE_ACCOUNT_NUMBER = "123456789";
+    mockSession.mockResolvedValue(session("alex@firm.com"));
+    mockWallet.mockResolvedValue({ plan: "free" });
+    const gate = await requireFeatureAccess("automations");
     expect(gate.ok).toBe(false);
   });
 });
