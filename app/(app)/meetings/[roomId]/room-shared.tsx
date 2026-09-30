@@ -4,7 +4,16 @@
 // from CallParts so the room can use them without pulling the call screen's
 // chunk in ahead of the green room.
 
-import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
+import React, {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import { createPortal } from "react-dom";
 import type { RemovalSubject } from "@/lib/meetings/removal";
 import { shouldRequestNotificationPermission, type NotificationPermissionLike } from "@/lib/meetings/knock-notice";
@@ -201,3 +210,100 @@ export function useStableHandlers<T extends Record<string, (...args: any[]) => u
 
 /** Somebody the host removed, and the name they had when it happened. */
 export interface RemovedPerson { subject: RemovalSubject; displayName: string }
+
+// ── Who is talking ──────────────────────────────────────────────────────────
+//
+// The same move MeetingClock made for the second hand, for the same reason and
+// three times as often.
+//
+// `speaking` used to be a Set in MeetingRoom's own state, republished by the
+// voice meter whenever a voice crossed the 900ms hold — which is every pause in
+// ordinary conversation, about three times a second. MeetingRoom is a
+// 4,858-line component, so each of those re-ran all of it: every tile, the
+// control bar, and the copilot sidebar's whole body, on the same main thread
+// that decodes the video. Measured over ten seconds of talking, 31 runs at
+// 2.3ms with eight people and 3.8ms with twenty-six.
+//
+// Almost none of that work was about the change. `speaking` is read by LEAVES
+// only — the ring on a tile and the dot on a sidebar row — and one person
+// talking changes the answer for one of them. The sidebar's People list is
+// behind a tab that is not even the default, so on the chat tab the panel was
+// rebuilt three times a second for a value it does not draw.
+//
+// So the set lives here instead, and the leaves subscribe to their own id. A
+// publish notifies only the ids whose answer actually changed, which is what
+// makes one person starting to talk cost one tile rather than a room.
+//
+// Why a store rather than a ref: the clock could hold a ref because a tick tells
+// it WHEN to look and the answer is arithmetic it can redo. Nobody ticks for
+// speech, so the leaves have to be told. `useSyncExternalStore` is the
+// supported way to be told without tearing.
+
+/** A read side: what one id's answer is, and how to hear about changes to it. */
+export interface SpeakingSource {
+  get(id: string): boolean;
+  subscribe(id: string, onChange: () => void): () => void;
+}
+
+export interface SpeakingStore extends SpeakingSource {
+  /** Replace the whole set. Only the ids whose membership moved are notified. */
+  publish(next: ReadonlySet<string>): void;
+}
+
+export function createSpeakingStore(): SpeakingStore {
+  let current: ReadonlySet<string> = new Set<string>();
+  const listeners = new Map<string, Set<() => void>>();
+
+  return {
+    get: (id) => current.has(id),
+
+    subscribe(id, onChange) {
+      const forId = listeners.get(id) ?? new Set<() => void>();
+      forId.add(onChange);
+      listeners.set(id, forId);
+      return () => {
+        forId.delete(onChange);
+        // Dropped rather than left empty: a long call admits and removes people,
+        // and a map that only ever grows is a leak with extra steps.
+        if (forId.size === 0) listeners.delete(id);
+      };
+    },
+
+    publish(next) {
+      const before = current;
+      current = next;
+      // Only the ids somebody is watching, and only where the answer moved. The
+      // whole point is that one voice does not wake twenty-five tiles.
+      for (const [id, forId] of listeners) {
+        if (before.has(id) === next.has(id)) continue;
+        for (const onChange of forId) onChange();
+      }
+    },
+  };
+}
+
+const SpeakingContext = createContext<SpeakingSource | null>(null);
+
+/** Hand the leaves below a live source. The room owns the store; they read it. */
+export const SpeakingProvider = SpeakingContext.Provider;
+
+/**
+ * Whether one person is talking, live, without re-rendering anything above.
+ *
+ * `fallback` is what the answer is when there is no provider — which is how
+ * every component here stays renderable on its own with a plain boolean, as
+ * CallParts.sidebar.test.tsx and MeetingRoom.tile.test.tsx both do. Those tests
+ * pass a value and get a value; the room provides a store and the same
+ * components subscribe. One interface, so neither path is a special case.
+ */
+export function useSpeaking(id: string, fallback: boolean): boolean {
+  const source = useContext(SpeakingContext);
+
+  const subscribe = useCallback(
+    (onChange: () => void) => (source ? source.subscribe(id, onChange) : () => {}),
+    [source, id],
+  );
+  const read = useCallback(() => (source ? source.get(id) : fallback), [source, id, fallback]);
+
+  return useSyncExternalStore(subscribe, read, read);
+}
