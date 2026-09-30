@@ -12,6 +12,7 @@ import {
   BOOKING_NOTES_MAX,
   detectTimezone,
   formatSlotFull,
+  type BookingPrefill,
   type SlotWindow,
 } from "@/lib/meetings/scheduling";
 
@@ -44,6 +45,7 @@ export function BookingFlow({
   hostName,
   eventType,
   initialSlots,
+  prefill,
 }: {
   slug: string;
   hostName: string;
@@ -54,14 +56,16 @@ export function BookingFlow({
    * it fetches as it always did.
    */
   initialSlots?: SlotWindow[];
+  /** Who the link says is booking, to start the form with. They can still change it. */
+  prefill?: BookingPrefill;
 }) {
   const [timezone, setTimezone] = useState("UTC");
   const [slots, setSlots] = useState<SlotWindow[]>(initialSlots ?? []);
   const [loading, setLoading] = useState(initialSlots === undefined);
   const [selected, setSelected] = useState<string | null>(null);
 
-  const [name, setName] = useState("");
-  const [email, setEmail] = useState("");
+  const [name, setName] = useState(prefill?.name ?? "");
+  const [email, setEmail] = useState(prefill?.email ?? "");
   const [notes, setNotes] = useState("");
   const [guests, setGuests] = useState("");
   const [showGuests, setShowGuests] = useState(false);

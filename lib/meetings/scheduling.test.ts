@@ -24,6 +24,8 @@ import {
   weekdayOfDate,
   buildBookingManageUrl,
   buildBookingPageUrl,
+  bookingPrefillQuery,
+  parseBookingPrefill,
   formatSlotDate,
   formatSlotDayMonth,
   formatSlotFull,
@@ -692,5 +694,40 @@ describe("formatter reuse", () => {
     expect(formatSlotWeekday(iso, "UTC")).toBe("Mon");
     expect(formatSlotDayMonth(iso, "UTC")).toBe("Oct 5");
     expect(formatSlotWeekday(iso, "Mars/Olympus_Mons")).toBe("Mon");
+  });
+});
+
+describe("booking prefill", () => {
+  it("keeps a usable name and email from a link", () => {
+    expect(parseBookingPrefill({ name: "  Ada Lovelace ", email: " ada@example.com " })).toEqual({
+      name: "Ada Lovelace",
+      email: "ada@example.com",
+    });
+    expect(parseBookingPrefill({ name: ["Ada", "Grace"] })).toEqual({ name: "Ada" });
+  });
+
+  it("drops what the form would refuse anyway", () => {
+    expect(parseBookingPrefill({ email: "not-an-email" })).toEqual({});
+    expect(parseBookingPrefill({ name: "Ada\r\nBcc: x@y.com" })).toEqual({});
+    expect(parseBookingPrefill({ name: "a".repeat(201), email: `${"a".repeat(250)}@x.com` })).toEqual({});
+    expect(parseBookingPrefill({ name: 42 as unknown as string })).toEqual({});
+    expect(parseBookingPrefill(undefined)).toEqual({});
+  });
+
+  it("carries it on a booking link, and nothing when there is none", () => {
+    expect(bookingPrefillQuery({})).toBe("");
+    expect(bookingPrefillQuery(null)).toBe("");
+    expect(buildBookingPageUrl("https://fundexecs.com", "ada", undefined, { name: "Grace H", email: "g+1@x.com" })).toBe(
+      "https://fundexecs.com/book/ada?name=Grace+H&email=g%2B1%40x.com",
+    );
+    expect(buildBookingPageUrl("https://fundexecs.com", "ada", "intro", { email: "g@x.com" })).toBe(
+      "https://fundexecs.com/book/ada/intro?email=g%40x.com",
+    );
+  });
+
+  it("round-trips through the query it builds", () => {
+    const prefill = { name: "Zoë O'Brien & co", email: "zoe+tag@example.co.uk" };
+    const query = new URLSearchParams(bookingPrefillQuery(prefill).slice(1));
+    expect(parseBookingPrefill(Object.fromEntries(query))).toEqual(prefill);
   });
 });

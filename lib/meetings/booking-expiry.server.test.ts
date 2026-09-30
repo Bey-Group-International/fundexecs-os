@@ -87,7 +87,8 @@ it("closes a request whose time came unanswered, and tells the invitee", async (
   const [kind, context, opts] = sendBookingEmailsMock.mock.calls[0];
   expect(kind).toBe("declined");
   expect(context).toMatchObject({ reason: EXPIRED_REQUEST_REASON, manageToken: null, inviteeEmail: "ada@example.com" });
-  expect(context.manageUrl).toMatch(/\/book\/rae$/);
+  // Back to the booking page, already knowing who they are.
+  expect(context.manageUrl).toMatch(/\/book\/rae\?name=Ada&email=ada%40example.com$/);
   expect(opts).toEqual({ inviteeOnly: true });
 });
 

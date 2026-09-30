@@ -190,3 +190,20 @@ describe("coming back to a stale tab", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 });
+
+describe("BookingFlow prefill", () => {
+  it("starts the form with the name and email the link carried", async () => {
+    render(
+      <BookingFlow
+        slug="ana"
+        hostName="Ana"
+        eventType={EVENT}
+        initialSlots={[SLOT]}
+        prefill={{ name: "Ada Lovelace", email: "ada@example.com" }}
+      />,
+    );
+    fireEvent.click(await screen.findByRole("button", { name: /\d{1,2}:\d{2}/ }));
+    expect(screen.getByLabelText(/your name/i)).toHaveValue("Ada Lovelace");
+    expect(screen.getByLabelText(/email/i)).toHaveValue("ada@example.com");
+  });
+});

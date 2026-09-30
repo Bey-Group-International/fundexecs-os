@@ -91,8 +91,12 @@ export async function runBookingRequestExpiry(
       const context = await bookingEmailContext(client, ctx, {
         reason: EXPIRED_REQUEST_REASON,
         // A closed request has nothing to manage; the invitee gets the booking
-        // page back to pick another time, as a host's decline sends.
-        manageUrl: buildBookingPageUrl(SITE_URL, ctx.page.slug),
+        // page back to pick another time, as a host's decline sends, already
+        // knowing who they are.
+        manageUrl: buildBookingPageUrl(SITE_URL, ctx.page.slug, undefined, {
+          name: ctx.booking.invitee_name,
+          email: ctx.booking.invitee_email,
+        }),
         manageToken: null,
       });
       const result = await sendBookingEmails("declined", context, { inviteeOnly: true });
