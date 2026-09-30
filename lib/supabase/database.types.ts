@@ -3419,6 +3419,8 @@ export type Database = {
           activity_id: string;
           misattributed: boolean;
           contact_id: string | null;
+          /** The activity's own org — what the admin right was checked against. */
+          organization_id: string;
         };
       };
     };

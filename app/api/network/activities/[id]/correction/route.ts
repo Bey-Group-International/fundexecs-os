@@ -25,7 +25,6 @@ import { requireOrgContext } from "@/lib/auth";
 import { statusForPgCode } from "@/lib/pg-error-status";
 import { createServerClient } from "@/lib/supabase/server";
 import { checkRateLimit, rateLimitHeaders } from "@/lib/rate-limit";
-import { recordNetworkAudit } from "@/lib/network-audit";
 
 export const dynamic = "force-dynamic";
 
@@ -94,21 +93,12 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
     );
   }
 
-  // Audited because it changes what a permanent record says. The reason is
-  // recorded as given; the entry's body is not copied here — the trail records
-  // that something happened, not a second copy of the content.
-  await recordNetworkAudit(supabase, {
-    orgId: auth.ctx.orgId,
-    actorId: auth.ctx.userId,
-    action: "update",
-    entityType: "network_activity",
-    entityId: id,
-    metadata: {
-      misattributed: body.misattributed,
-      reason,
-      contact_id: data?.contact_id ?? null,
-    },
-  });
-
+  // No audit write here on purpose. flag_network_activity_misattributed writes
+  // the trail itself, inside the same transaction as the correction, so the two
+  // commit together. Doing it from here was neither atomic — recordNetworkAudit
+  // swallows its failures, and the correction had already committed — nor
+  // reliably attributed, because auth.ctx.orgId is the caller's CURRENT
+  // organisation, which for an admin of two is not necessarily the one this
+  // entry belongs to.
   return NextResponse.json({ ok: true, result: data });
 }

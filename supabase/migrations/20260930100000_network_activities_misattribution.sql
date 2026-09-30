@@ -174,10 +174,49 @@ begin
        and (c.last_activity_at is null or c.last_activity_at <> sub.newest);
   end if;
 
+  -- The trail is written HERE, not by the caller, and that is the point.
+  --
+  -- This is a privileged act whose whole effect is to hide machine-written
+  -- evidence from a record, so "it happened and nobody can tell who did it" is
+  -- the one outcome that must be impossible. Audited from the route instead, it
+  -- was neither atomic nor reliably attributed:
+  --
+  --   * recordNetworkAudit swallows its own failures (lib/network-audit.ts: it
+  --     catches and console.warns). The correction had already committed by then,
+  --     so a failed insert left a hidden entry and no record of the hiding.
+  --   * the route passed the CALLER'S CURRENT org, which is not necessarily this
+  --     activity's org. A principal who administers two organisations, acting in
+  --     one session context on an entry belonging to the other, filed the trail
+  --     under the wrong organisation -- where the people who would notice cannot
+  --     see it.
+  --
+  -- In here it shares the statement's transaction: the correction and its trail
+  -- commit together or not at all, and `row_org` is the organisation the admin
+  -- right was actually checked against.
+  --
+  -- 'update' because network_audit_log.action has a CHECK constraint and there is
+  -- no 'correct' in it; the metadata carries which direction this was.
+  insert into public.network_audit_log (
+    organization_id, actor_id, action, entity_type, entity_id, metadata
+  )
+  values (
+    row_org,
+    caller,
+    'update',
+    'network_activity',
+    activity_id,
+    jsonb_build_object(
+      'misattributed', flag,
+      'reason', nullif(btrim(coalesce(reason, '')), ''),
+      'contact_id', row_contact
+    )
+  );
+
   return jsonb_build_object(
     'activity_id', activity_id,
     'misattributed', flag,
-    'contact_id', row_contact
+    'contact_id', row_contact,
+    'organization_id', row_org
   );
 end;
 $$;

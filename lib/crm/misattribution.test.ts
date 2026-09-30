@@ -153,6 +153,49 @@ describe("the authorization the definer function does itself", () => {
   });
 
   /**
+   * The trail is written inside the transaction, and under the right org.
+   *
+   * This is the one act where "it happened and nobody can tell who did it" must
+   * be impossible: its whole effect is hiding machine-written evidence. Audited
+   * from the route it was neither atomic (recordNetworkAudit catches and warns,
+   * after the correction has committed) nor reliably attributed (the route passed
+   * the caller's CURRENT org, which for an admin of two is not necessarily the
+   * entry's). CodeRabbit observed both.
+   */
+  it("writes its own audit row, in the same transaction, under the activity's org", () => {
+    const sql = migrationSql();
+    // Inside the function body, so it shares the statement's transaction.
+    expect(sql).toMatch(/insert into public\.network_audit_log/i);
+    // row_org is what is_org_admin was checked against — not a caller-supplied org.
+    expect(sql).toMatch(/values \(\s*row_org,\s*caller,/i);
+    // 'update' because network_audit_log.action's CHECK has no 'correct'.
+    expect(sql).toMatch(/'network_activity',/);
+
+    // These assertions read SQL TEXT, so they prove the statement is written, not
+    // that it is reachable — an injection that wrapped the insert in `if false
+    // then` passed all of the above. Only a real database proves execution. This
+    // catches that specific evasion and its obvious relatives; it is a guard, not
+    // a proof, and the PR says so.
+    expect(sql).not.toMatch(/if\s+false\s+then/i);
+    expect(sql).not.toMatch(/^\s*--\s*insert into public\.network_audit_log/im);
+  });
+
+  it("does not leave the audit to the route, where a failure is swallowed", () => {
+    const route = readFileSync(
+      join(__dirname, "..", "..", "app", "api", "network", "activities", "[id]", "correction", "route.ts"),
+      "utf8",
+    );
+    // The CALL and the import, not the name. The first version of this asserted
+    // the name did not appear anywhere and failed immediately — on the route's own
+    // comment explaining why recordNetworkAudit is not used. Same oracle mistake
+    // as the `security definer` one two tests down, in the same file, an hour
+    // apart: a regex over a whole file matches the prose about the code as
+    // readily as the code.
+    expect(route).not.toMatch(/recordNetworkAudit\s*\(/);
+    expect(route).not.toMatch(/import\s*\{[^}]*recordNetworkAudit/);
+  });
+
+  /**
    * The reference stays NOT VALID.
    *
    * Declared inline it validates immediately, scanning network_activities and
