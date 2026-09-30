@@ -21,7 +21,7 @@ interface Rows {
   recordings?: Array<Record<string, unknown>>;
   chat?: Array<Record<string, unknown>>;
   transcript?: Array<Record<string, unknown>>;
-  viewer?: { id: string } | null;
+  viewer?: { id: string; email?: string } | null;
 }
 
 const MEETING = {
@@ -34,6 +34,11 @@ const MEETING = {
   scheduled_at: null,
   kind: "meeting",
   recording_consent: null,
+  // Read for the inbox history panel, which loads separately: this pass already
+  // has both facts in hand, so reading them again there would be two more round
+  // trips for things the page is holding.
+  organization_id: "org-1",
+  attendees: [{ name: "Ana Diaz", email: "ana@acme.com" }],
 };
 
 const NOW = Date.parse("2026-09-23T14:41:00.000Z");
@@ -70,7 +75,11 @@ function client(rows: Rows = {}) {
     auth: {
       getUser: async () => {
         started.push("auth");
-        return { data: { user: "viewer" in rows ? rows.viewer : { id: "host-1" } } };
+        return {
+          data: {
+            user: "viewer" in rows ? rows.viewer : { id: "host-1", email: "Host@Fundexecs.com" },
+          },
+        };
       },
     },
     from(table: string) {
@@ -215,6 +224,29 @@ describe("loadReportPage", () => {
     expect(data.recordings).toEqual([]);
     expect(data.chat).toEqual([]);
     expect(data.cueRows).toEqual([]);
+    // And the two facts the inbox history is keyed off. Handing them over would
+    // mean the page could still answer "what is the inbox holding on these
+    // people" for a reader it has just told this report is not theirs.
+    expect(data.organizationId).toBeNull();
+    expect(data.invited).toBeNull();
+  });
+
+  it("carries the organisation, the invite list and the reader's own address", async () => {
+    // The inbox history panel needs exactly these three, and nothing else on the
+    // page uses any of them — so a refactor dropping one would break only the
+    // sidebar, silently, and only for meetings that have correspondence.
+    const { api } = client({ report: { summary: "x" } });
+    const data = await loadReportPage(api as never, "abc-def-gh", NOW);
+    expect(data.organizationId).toBe("org-1");
+    expect(data.invited).toEqual([{ name: "Ana Diaz", email: "ana@acme.com" }]);
+    // Lowercased here so the one place that compares it against an attendee
+    // address does not have to. Stored capitalised by the provider.
+    expect(data.viewerEmail).toBe("host@fundexecs.com");
+  });
+
+  it("reports no reader address when nobody is signed in", async () => {
+    const { api } = client({ viewer: null, report: { summary: "x" } });
+    expect((await loadReportPage(api as never, "abc-def-gh", NOW)).viewerEmail).toBeNull();
   });
 
   it("decides forbidden before generating, so a non-attendee is told rather than left waiting", async () => {

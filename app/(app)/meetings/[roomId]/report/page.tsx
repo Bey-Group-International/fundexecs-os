@@ -1,6 +1,8 @@
+import { Suspense } from "react";
 import Link from "next/link";
 import type { Metadata } from "next";
 import { createServerClient } from "@/lib/supabase/server";
+import { AttendeeHistoryPanel } from "./AttendeeHistory";
 import { FollowUpPanel } from "./FollowUpPanel";
 import { ExportMenu } from "./ExportMenu";
 import { ChatPanel } from "./ChatPanel";
@@ -251,6 +253,22 @@ export default async function MeetingReportPage({
       {content.followUp && (
         <FollowUpPanel meetingId={meeting.id} draft={content.followUp} canSend={data.isHost} />
       )}
+
+      {/* What the inbox holds on the people who were here.
+          Suspended on purpose: its reads are keyed off the attendance rows, so
+          awaiting it in loadReportPage would have put a third round trip in
+          front of the summary. The report renders; this arrives after. The
+          fallback is nothing rather than a skeleton, because on most meetings
+          the answer is nothing and a skeleton that resolves to an absent panel
+          reads as a failure. */}
+      <Suspense fallback={null}>
+        <AttendeeHistoryPanel
+          meetingId={meeting.id}
+          organizationId={data.organizationId}
+          invited={data.invited}
+          viewerEmail={data.viewerEmail}
+        />
+      </Suspense>
 
       {/* The recording and the transcript, which are the one pair that has to
           share state: a line seeks the player, and the playhead moves the

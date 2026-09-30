@@ -83,6 +83,12 @@ export interface InboxCardData {
   nudge: { kind: "awaiting_you" | "going_cold"; label: string; tone: "warn" | "muted" } | null;
   canShare: boolean;
   shareTier: GateTier;
+  /**
+   * Unsent reply text waiting on this thread — written by a meeting report's
+   * follow-up, and sendable only from the composer below. Null for almost every
+   * thread.
+   */
+  draft: { body: string; origin: string; revision: string } | null;
 }
 
 // How many thread cards mount before the operator asks for more.
@@ -586,6 +592,19 @@ const ThreadCard = memo(function ThreadCard({
       </div>
 
       {card.summary ? <p className="mt-2 line-clamp-2 text-sm text-fg-secondary">{card.summary}</p> : null}
+
+      {/* An unsent draft is the one thing on this card that somebody was told to
+          come and do, so it is said on the COLLAPSED card. The board already puts
+          these threads first; a badge that only appeared once you expanded would
+          make the ordering the only clue. */}
+      {card.draft ? (
+        <p
+          className="mt-2 inline-flex items-center gap-1 rounded-full border border-gold-500/50 bg-gold-500/10 px-2 py-0.5 text-[11px] text-gold-300"
+          title="An unsent reply is waiting on this thread"
+        >
+          <span aria-hidden>✎</span> Draft ready to send
+        </p>
+      ) : null}
 
       {card.nudge ? (
         <p

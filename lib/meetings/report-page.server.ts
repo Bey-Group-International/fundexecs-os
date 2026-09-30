@@ -59,6 +59,19 @@ export interface ReportPageData {
   chat: ChatMessage[];
   /** The timed rows, which are what let a transcript line drive the recording. */
   cueRows: CueRow[];
+  /**
+   * The reader's own address, and the meeting's organisation.
+   *
+   * Both exist for the inbox history beside the report, which is loaded
+   * separately (see report-inbox.server.ts) and needs the two facts this pass
+   * already has in hand: which organisation's inbox to read, and who to leave
+   * out of it. Reading them again there would be two more round trips for
+   * things already on this page.
+   */
+  viewerEmail: string | null;
+  organizationId: string | null;
+  /** `live_meetings.attendees` as stored, which the history keys off. */
+  invited: unknown;
 }
 
 const EMPTY: ReportPageData = {
@@ -72,6 +85,9 @@ const EMPTY: ReportPageData = {
   recordings: [],
   chat: [],
   cueRows: [],
+  viewerEmail: null,
+  organizationId: null,
+  invited: null,
 };
 
 /** The meeting columns the state decision needs, and nothing else. */
@@ -168,19 +184,24 @@ export async function loadReportPage(
     supabase
       .from("live_meetings")
       .select(
-        "id, host_id, title, created_at, started_at, ended_at, scheduled_at, kind, recording_consent",
+        "id, host_id, title, created_at, started_at, ended_at, scheduled_at, kind, recording_consent, organization_id, attendees",
       )
       .eq("room_code", roomCode)
       .maybeSingle(),
   ]);
 
   const viewerId = viewerResult?.data?.user?.id ?? null;
+  const viewerEmail = (viewerResult?.data?.user?.email ?? "").trim().toLowerCase() || null;
   const meetingRow = meetingResult?.data as
-    | (ReportMeeting & { recording_consent?: unknown })
+    | (ReportMeeting & {
+        recording_consent?: unknown;
+        organization_id?: string | null;
+        attendees?: unknown;
+      })
     | null
     | undefined;
 
-  if (!meetingRow) return { ...EMPTY, viewerId };
+  if (!meetingRow) return { ...EMPTY, viewerId, viewerEmail };
 
   const meeting: ReportMeeting = {
     id: meetingRow.id,
@@ -279,5 +300,12 @@ export async function loadReportPage(
     recordings: state === "forbidden" ? [] : recordings,
     chat: state === "forbidden" ? [] : storedChatMessages(chatRows),
     cueRows: state === "forbidden" ? [] : cueRows,
+    viewerEmail,
+    // Cleared for a reader who may not read the report at all, for the same
+    // reason the rest is: the history load is keyed off these two, so handing
+    // them over would mean answering "what is the inbox holding on these people"
+    // for somebody who has just been told this report is not theirs.
+    organizationId: state === "forbidden" ? null : meetingRow.organization_id ?? null,
+    invited: state === "forbidden" ? null : meetingRow.attendees ?? null,
   };
 }

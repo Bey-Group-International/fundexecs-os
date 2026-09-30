@@ -18,7 +18,11 @@ type SendState =
   | { kind: "idle" }
   | { kind: "sending" }
   | { kind: "sent"; sent: number; total: number; unreachable: string[]; failed: string[] }
-  | { kind: "failed"; message: string };
+  | { kind: "failed"; message: string }
+  // Drafting is not a kind of sending, and sharing the state is what keeps the
+  // two from being confused in the UI: "Drafted" must never read as "Sent".
+  | { kind: "drafting" }
+  | { kind: "drafted"; message: string };
 
 /**
  * Memoised because the report page holds the recording's playhead in its own
@@ -40,6 +44,40 @@ export const FollowUpPanel = memo(function FollowUpPanel({
   const [body, setBody] = useState(draft);
   const [editing, setEditing] = useState(false);
   const [state, setState] = useState<SendState>({ kind: "idle" });
+
+  /**
+   * Put the follow-up in the inbox instead of in the post.
+   *
+   * The other half of this panel's job, and the half that matches how the rest of
+   * the product treats an outward move: it becomes a draft on each attendee's own
+   * thread, read in the context of everything else that person has said, and sent
+   * by a person through the composer that is already gated. This press reaches
+   * nobody.
+   */
+  async function draftInInbox() {
+    setState({ kind: "drafting" });
+    try {
+      const res = await fetch(`/api/meetings/${meetingId}/follow-up/draft`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ body }),
+      });
+      const json = (await res.json().catch(() => ({}))) as { message?: string; error?: string };
+      if (!res.ok) {
+        setState({ kind: "failed", message: json.error ?? "The follow-up could not be drafted." });
+        return;
+      }
+      setState({
+        kind: "drafted",
+        message: json.message ?? "Drafted in the inbox. Nothing has been sent.",
+      });
+    } catch {
+      setState({
+        kind: "failed",
+        message: "The follow-up could not be drafted. Check your connection.",
+      });
+    }
+  }
 
   async function send() {
     setState({ kind: "sending" });
@@ -73,6 +111,8 @@ export const FollowUpPanel = memo(function FollowUpPanel({
   }
 
   const sending = state.kind === "sending";
+  const drafting = state.kind === "drafting";
+  const busy = sending || drafting;
 
   return (
     <section className="rounded-xl border border-[var(--line)] bg-[var(--surface-1)] p-4">
@@ -106,12 +146,24 @@ export const FollowUpPanel = memo(function FollowUpPanel({
 
       {canSend && (
         <div className="mt-3 flex flex-wrap items-center gap-3 border-t border-[var(--line)] pt-3">
+          {/* Drafting first, and it is the primary of the two. Sending from here
+              reaches everybody who was in the room the moment it is pressed;
+              drafting puts the same words where they can be read in context,
+              edited, and sent through the gate every other outward move goes
+              through. The louder button should be the reversible one. */}
           <button
-            onClick={send}
-            disabled={sending || !body.trim()}
+            onClick={draftInInbox}
+            disabled={busy || !body.trim()}
             className="rounded-lg bg-[var(--gold-400)] px-3 py-1.5 text-xs font-semibold text-[#0d0d10] transition-opacity disabled:opacity-50"
           >
-            {sending ? "Sending…" : state.kind === "sent" ? "Send again" : "Send to attendees"}
+            {drafting ? "Drafting…" : state.kind === "drafted" ? "Draft again" : "Draft in inbox"}
+          </button>
+          <button
+            onClick={send}
+            disabled={busy || !body.trim()}
+            className="rounded-lg border border-[var(--line)] px-3 py-1.5 text-xs font-semibold text-[var(--fg-primary)] transition-opacity disabled:opacity-50"
+          >
+            {sending ? "Sending…" : state.kind === "sent" ? "Send again" : "Send now"}
           </button>
           {/* What actually happened, in the terms the host cares about: which of
               the people in the room heard from them, which addresses bounced,
@@ -128,13 +180,22 @@ export const FollowUpPanel = memo(function FollowUpPanel({
               })}
             </p>
           )}
+          {state.kind === "drafted" && (
+            <p className="text-xs text-[var(--fg-muted)]">
+              {state.message}{" "}
+              <a href="/inbox" className="text-[var(--gold-400)] hover:underline">
+                Open inbox
+              </a>
+            </p>
+          )}
           {state.kind === "failed" && (
             <p className="text-xs text-[var(--status-danger,#ef4444)]">{state.message}</p>
           )}
           {state.kind === "idle" && (
             <p className="text-xs text-[var(--fg-muted)]">
-              Goes to everyone who was invited or in the room and has an email address here, from
-              your connected mailbox. Not to you.
+              Drafting puts it on each attendee&rsquo;s inbox thread for someone to send. Sending now
+              goes straight to everyone who was invited or in the room and has an email address
+              here, from your connected mailbox — not to you.
             </p>
           )}
         </div>

@@ -13,6 +13,8 @@ import { decideApproval } from "@/lib/engine";
 import { recordOperatorFeedback } from "@/lib/team-tasks";
 import { computePriority, fallbackSummary, draftReply, smartReplies } from "@/lib/inbox/intelligence";
 import { INBOX_CHANNELS } from "@/lib/inbox/channels";
+import { shouldClearDraft } from "@/lib/inbox/drafts";
+import { clearThreadDraft } from "@/lib/inbox/drafts.server";
 import type {
   AgentKey,
   Hub,
@@ -76,7 +78,13 @@ type BackingArtifact = { verification_status: string; grounding_score: number };
 async function performThreadAction(
   threadId: string,
   action: ActionKind,
-  opts: { sharePreface?: string; backingArtifact?: BackingArtifact; replyBody?: string } = {},
+  opts: {
+    sharePreface?: string;
+    backingArtifact?: BackingArtifact;
+    replyBody?: string;
+    /** The draft's `updated_at` as the composer was seeded with it, if it was. */
+    draftRevision?: string;
+  } = {},
 ): Promise<ThreadActionResult> {
   const auth = await requireOrgContext();
   if (!auth.ok) return { ok: false, error: "Not authorized." };
@@ -147,7 +155,7 @@ async function performThreadAction(
   // Gated (Tier 2/3): nothing goes out now. Open an approval and stop — the
   // approval-decision path dispatches with the same context once cleared.
   if (decision.requiresApproval) {
-    const { data: approval } = await supabase
+    const { data: approval, error: approvalError } = await supabase
       .from("approvals")
       .insert({
         organization_id: orgId,
@@ -158,14 +166,43 @@ async function performThreadAction(
       .select("id")
       .single();
 
+    // The approval IS the release mechanism, so a failure here is not cosmetic:
+    // without a row, the task holds the composed reply and nothing can ever clear
+    // it. The task insert above was already checked; this one was not, and the
+    // draft deletion added below turned a recoverable state into a lossy one —
+    // the operator would be told "sent to your approvals", find no approval, and
+    // no longer have the draft to try again from.
+    if (approvalError || !approval) {
+      // Marked failed rather than left at awaiting_approval, which is a queue
+      // entry no approver can act on and no sweep clears.
+      await supabase
+        .from("tasks")
+        .update({ status: "failed", result: { error: "approval not created" } as unknown as Json })
+        .eq("organization_id", orgId)
+        .eq("id", task.id);
+      return {
+        ok: false,
+        gated: true,
+        tier: decision.tier,
+        error: approvalError?.message ?? "Could not open an approval for this reply.",
+      };
+    }
+
     await supabase.from("task_events").insert({
       organization_id: orgId,
       task_id: task.id,
       event_type: "approval.requested",
       agent,
       hub: "source",
-      payload: { approval_id: approval?.id, gate_tier: decision.tier, summary: title } as Json,
+      payload: { approval_id: approval.id, gate_tier: decision.tier, summary: title } as Json,
     });
+
+    // The composed text is now on the task, waiting for an approver. A draft of it
+    // left on the thread would be the same words in two places, and the composer
+    // would keep offering to send them again — a second approval for one reply.
+    if (shouldClearDraft(action, opts.replyBody, opts.draftRevision)) {
+      await clearThreadDraft(supabase, threadId, opts.draftRevision);
+    }
 
     revalidatePath("/inbox");
     revalidatePath("/dashboard");
@@ -267,10 +304,18 @@ async function performThreadAction(
     payload: { ok: result.ok, channel: result.channel, live: result.live, detail: result.detail } as Json,
   });
 
+  // Only on a dispatch that actually got somewhere. A draft removed after a failed
+  // send would leave the operator with nothing to retry from once they reloaded —
+  // and unlike the gated branch above, nothing else is holding the text for them.
+  if (result.ok && shouldClearDraft(action, opts.replyBody, opts.draftRevision)) {
+    await clearThreadDraft(supabase, threadId, opts.draftRevision);
+  }
+
   revalidatePath("/inbox");
   revalidatePath("/dashboard");
   return { ok: result.ok, gated: false, tier: decision.tier, message: result.detail, error: result.ok ? undefined : result.error };
 }
+
 
 /** Run a thread's suggested next move (reply / propose / confirm / video). */
 export async function actOnThread(formData: FormData): Promise<ThreadActionResult> {
@@ -432,7 +477,10 @@ export async function replyToThread(formData: FormData): Promise<ThreadActionRes
   const body = String(formData.get("body") ?? "").trim();
   if (!threadId) return { ok: false, error: "Missing thread." };
   if (!body) return { ok: false, error: "Write a reply first." };
-  return performThreadAction(threadId, "send_reply", { replyBody: body });
+  // Present only when the composer was seeded from a draft. It identifies WHICH
+  // draft, so sending cannot delete one saved after this composer opened.
+  const draftRevision = String(formData.get("draft_revision") ?? "") || undefined;
+  return performThreadAction(threadId, "send_reply", { replyBody: body, draftRevision });
 }
 
 /**

@@ -42,7 +42,7 @@ const db: {
   recordings: Array<Record<string, unknown>>;
   chat: Array<Record<string, unknown>>;
   transcript: Array<Record<string, unknown>>;
-  viewer: { id: string } | null;
+  viewer: { id: string; email?: string } | null;
 } = {
   meeting: null,
   report: null,
@@ -50,7 +50,7 @@ const db: {
   recordings: [],
   chat: [],
   transcript: [],
-  viewer: { id: "host-1" },
+  viewer: { id: "host-1", email: "host@fundexecs.com" },
 };
 
 jest.mock("@/lib/supabase/server", () => ({
@@ -96,6 +96,32 @@ jest.mock("./ChatPanel", () => ({
   ),
 }));
 jest.mock("./ExportMenu", () => ({ ExportMenu: () => null }));
+// The inbox history does its own reads and streams in behind Suspense. Rendered
+// as a marker that reports exactly what the page handed it, because the three
+// props it takes are used by nothing else on the page — so dropping one would
+// break only this sidebar, only for meetings that have correspondence, and
+// nothing else in this file would notice.
+jest.mock("./AttendeeHistory", () => ({
+  AttendeeHistoryPanel: ({
+    meetingId,
+    organizationId,
+    invited,
+    viewerEmail,
+  }: {
+    meetingId: string;
+    organizationId: string | null;
+    invited: unknown;
+    viewerEmail: string | null;
+  }) => (
+    <div
+      data-testid="attendee-history"
+      data-meeting={meetingId}
+      data-org={String(organizationId)}
+      data-invited={JSON.stringify(invited)}
+      data-viewer={String(viewerEmail)}
+    />
+  ),
+}));
 jest.mock("./FollowUpPanel", () => ({
   FollowUpPanel: ({ canSend }: { canSend: boolean }) => (
     <div data-testid="follow-up" data-can-send={String(canSend)} />
@@ -122,6 +148,8 @@ const MEETING = {
   scheduled_at: null,
   kind: "meeting",
   recording_consent: null,
+  organization_id: "org-1",
+  attendees: [{ name: "Ana Diaz", email: "ana@acme.com" }],
 };
 
 /** Just after the meeting ended, so a missing report is still plausibly coming. */
@@ -142,7 +170,7 @@ beforeEach(() => {
   db.recordings = [];
   db.chat = [];
   db.transcript = [];
-  db.viewer = { id: "host-1" };
+  db.viewer = { id: "host-1", email: "host@fundexecs.com" };
 });
 
 afterEach(() => {
@@ -380,5 +408,73 @@ describe("a recorded call's own facts", () => {
     await renderPage();
 
     expect(screen.getByText(/12:34/)).toBeInTheDocument();
+  });
+});
+
+/**
+ * The seam between the report and the inbox: one JSX element and four props.
+ *
+ * Neither the pure rule's tests nor the loader's tests can see it. That is the
+ * exact shape of the gap that let a correction UI ship with its read-path flag
+ * inverted and 7,888 tests pass — a rule tested, and the single line wiring it in
+ * not.
+ */
+describe("the inbox history beside the report", () => {
+  const ready = {
+    summary: "They agreed to wire on Friday.",
+    key_points: [],
+    action_items: [],
+    analysis: {},
+    full_transcript: "Ana: Friday.",
+  };
+
+  it("is handed the meeting, its organisation, its invite list and the reader", async () => {
+    db.report = { ...ready };
+    await renderPage();
+
+    const panel = screen.getByTestId("attendee-history");
+    expect(panel).toHaveAttribute("data-meeting", "m1");
+    expect(panel).toHaveAttribute("data-org", "org-1");
+    expect(panel).toHaveAttribute(
+      "data-invited",
+      JSON.stringify([{ name: "Ana Diaz", email: "ana@acme.com" }]),
+    );
+    expect(panel).toHaveAttribute("data-viewer", "host@fundexecs.com");
+  });
+
+  /**
+   * A reader who was not in the meeting gets the page that says so, and the
+   * history must not be one of the things that still renders on it. Asserted on
+   * the panel's absence rather than on its props, because the loader clearing the
+   * organisation and the page not rendering the panel are two separate
+   * protections and this is the one the page owns.
+   */
+  it("is not rendered for somebody who was not in the meeting", async () => {
+    db.viewer = { id: "outsider", email: "outsider@elsewhere.com" };
+    db.attended = false;
+    db.report = { ...ready };
+    await renderPage();
+
+    expect(screen.getByText(/limited to the people who were in the meeting/i)).toBeInTheDocument();
+    expect(screen.queryByTestId("attendee-history")).toBeNull();
+  });
+
+  // Nor on any of the pages that are not the report: there is nothing to be
+  // beside yet, and the reads would be spent on a document that has not arrived.
+  it("is not rendered while the report is still being written", async () => {
+    db.report = null;
+    await renderPage();
+    expect(screen.getByText(/Generating your report/i)).toBeInTheDocument();
+    expect(screen.queryByTestId("attendee-history")).toBeNull();
+  });
+
+  // A meeting with no organisation still renders the panel; the loader is what
+  // decides there is nothing to read. Asserted so the null is seen to travel,
+  // rather than the page quietly deciding for it and the two disagreeing.
+  it("passes a missing organisation through rather than hiding the panel", async () => {
+    db.meeting = { ...MEETING, organization_id: null };
+    db.report = { ...ready };
+    await renderPage();
+    expect(screen.getByTestId("attendee-history")).toHaveAttribute("data-org", "null");
   });
 });
