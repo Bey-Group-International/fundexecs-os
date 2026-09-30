@@ -356,3 +356,51 @@ describe("time a connected calendar has taken", () => {
     expect(document.querySelector('[data-busy="true"]')).toBeNull();
   });
 });
+
+describe("a stale copy of Google", () => {
+  function withGoogle(syncedAt: string | null, connectedAs: string | null = "rae@x.test") {
+    const calls: Array<{ url: string; method: string }> = [];
+    global.fetch = (async (url: string, init?: { method?: string }) => {
+      calls.push({ url: String(url), method: init?.method ?? "GET" });
+      return {
+        ok: true,
+        status: 200,
+        json: async () =>
+          String(url).startsWith("/api/meetings/calendars?")
+            ? { layers: [], events: [], connectedAs, googleSyncedAt: syncedAt }
+            : { blocks: [], calendars: [], events: [] },
+      };
+    }) as unknown as typeof fetch;
+    return calls;
+  }
+  const syncs = (calls: Array<{ url: string; method: string }>) =>
+    calls.filter((c) => c.url === "/api/meetings/calendars/sync" && c.method === "POST").length;
+  const loads = (calls: Array<{ url: string; method: string }>) =>
+    calls.filter((c) => c.url.startsWith("/api/meetings/calendars?")).length;
+  async function settle() {
+    for (let i = 0; i < 5; i++) await act(async () => { await Promise.resolve(); });
+  }
+
+  it("is refreshed once when the calendar opens, and the grid reloaded", async () => {
+    const calls = withGoogle(new Date(NOW.getTime() - 45 * 60_000).toISOString());
+    await show([]);
+    await settle();
+    expect(syncs(calls)).toBe(1);
+    expect(loads(calls)).toBe(2);
+  });
+
+  it("is left alone when it is recent", async () => {
+    const calls = withGoogle(new Date(NOW.getTime() - 2 * 60_000).toISOString());
+    await show([]);
+    await settle();
+    expect(syncs(calls)).toBe(0);
+    expect(loads(calls)).toBe(1);
+  });
+
+  it("is not asked for when Google is not connected", async () => {
+    const calls = withGoogle(null, null);
+    await show([]);
+    await settle();
+    expect(syncs(calls)).toBe(0);
+  });
+});

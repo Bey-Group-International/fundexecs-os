@@ -147,6 +147,12 @@ export async function GET(req: NextRequest) {
     // rather than in the client keeps a hidden calendar's contents off the wire
     // entirely — the checkbox hides the data, not just the pixels.
     const visibleGoogle = layers.filter((l) => l.source === "google" && l.isVisible).map((l) => l.id);
+    // A hidden Google calendar that still counts as busy keeps its time
+    // blocked, so the grid needs to know WHEN it is busy — but not what, which
+    // is what hiding it asked for. Spans only, below, with nothing to name them.
+    const hiddenBusyGoogle = layers
+      .filter((l) => l.source === "google" && !l.isVisible && l.blocksAvailability)
+      .map((l) => l.id);
     const visibleFeeds = layers.filter((l) => l.source === "ics" && l.isVisible).map((l) => l.id);
 
     // The two sources are stored apart — one is Google's shape, one iCalendar's
@@ -154,7 +160,7 @@ export async function GET(req: NextRequest) {
     // are normalized to one list here. Each keeps its own layer's id as
     // `calendarId`, which is how the client colours it and how the layer
     // checkbox hides it.
-    const [googleEvents, feedEvents] = await Promise.all([
+    const [googleEvents, feedEvents, hiddenBusy] = await Promise.all([
       visibleGoogle.length
         ? supabase
             .from("external_events")
@@ -172,6 +178,18 @@ export async function GET(req: NextRequest) {
             .select("id, feed_id, summary, location, starts_at, ends_at, is_all_day, status, transparent")
             .eq("user_id", userId)
             .in("feed_id", visibleFeeds)
+            .lt("starts_at", window.to)
+            .gt("ends_at", window.from)
+            .order("starts_at", { ascending: true })
+            .limit(MAX_EVENTS)
+        : Promise.resolve({ data: [] }),
+      hiddenBusyGoogle.length
+        ? supabase
+            .from("external_events")
+            .select("id, calendar_id, starts_at, ends_at, is_all_day, status, transparency")
+            .eq("user_id", userId)
+            .in("calendar_id", hiddenBusyGoogle)
+            .neq("transparency", "transparent")
             .lt("starts_at", window.to)
             .gt("ends_at", window.from)
             .order("starts_at", { ascending: true })
@@ -217,6 +235,21 @@ export async function GET(req: NextRequest) {
       });
     }
 
+    for (const e of (hiddenBusy.data ?? []) as Array<Record<string, unknown>>) {
+      if (e.status === "cancelled") continue;
+      events.push({
+        id: String(e.id),
+        calendarId: String(e.calendar_id),
+        title: "",
+        location: null,
+        link: null,
+        startsAt: String(e.starts_at),
+        endsAt: String(e.ends_at),
+        isAllDay: Boolean(e.is_all_day),
+        isBusy: true,
+      });
+    }
+
     for (const e of (feedEvents.data ?? []) as Array<Record<string, unknown>>) {
       // A feed can carry its own tombstones; a cancelled event is not on the
       // calendar any more than a cancelled Google one is.
@@ -243,6 +276,9 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json({
       connectedAs: conn?.google_email ?? null,
+      // When Google was last read, so the calendar can refresh a stale copy
+      // before anyone trusts it to say what is free.
+      googleSyncedAt: conn?.last_sync_at ?? null,
       // The client cannot know this: without OAuth credentials deployed there
       // is nothing to connect to, and offering the button would dead-end.
       googleConfigured: googleOAuthConfigured(),

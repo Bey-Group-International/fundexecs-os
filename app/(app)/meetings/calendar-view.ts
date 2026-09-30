@@ -58,3 +58,14 @@ export function nextSchedulableStart(now: Date): Date {
 
 /** Remembered per browser: whether the calendar's side panel is showing. */
 export const CALENDAR_RAIL_KEY = "fx.meetings.calendar.rail";
+
+/** Older than this, a Google copy is refreshed when the calendar opens. */
+export const GOOGLE_FRESH_MS = 10 * 60_000;
+
+/** Whether a connected Google calendar's stored copy is too old to trust. */
+export function isGoogleCopyStale(connected: boolean, syncedAt: string | null, now: number): boolean {
+  if (!connected) return false;
+  if (!syncedAt) return true;
+  const at = new Date(syncedAt).getTime();
+  return !Number.isFinite(at) || now - at > GOOGLE_FRESH_MS;
+}

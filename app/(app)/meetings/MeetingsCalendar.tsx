@@ -2,7 +2,7 @@
 
 import { Fragment, memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import CalendarLayers from "./CalendarLayers";
-import { CALENDAR_RAIL_KEY, nextSchedulableStart } from "./calendar-view";
+import { CALENDAR_RAIL_KEY, isGoogleCopyStale, nextSchedulableStart } from "./calendar-view";
 import {
   type CalendarLayer,
   type ExternalEvent,
@@ -534,6 +534,7 @@ export function MeetingsCalendar({
         layers?: CalendarLayer[];
         events?: ExternalEvent[];
         connectedAs?: string | null;
+        googleSyncedAt?: string | null;
         googleConfigured?: boolean;
         unavailable?: Array<"google" | "ics">;
       };
@@ -542,14 +543,32 @@ export function MeetingsCalendar({
       setConnectedAs(body.connectedAs ?? null);
       setGoogleConfigured(Boolean(body.googleConfigured));
       setUnavailable(body.unavailable ?? []);
+      return { connected: Boolean(body.connectedAs), syncedAt: body.googleSyncedAt ?? null };
     } catch {
       // A calendar rail that fails to load must not take the grid down with
       // it: the member's own meetings are the part that matters.
     }
   }, [windowRange.from, windowRange.to]);
 
+  // Busy time is only as current as the last read of Google, and the hourly
+  // sweep can leave that most of an hour old — long enough to miss a meeting
+  // accepted there a moment ago, which this calendar refuses to book over only
+  // if it knows about it. So the first load of an opening checks the copy's
+  // age, and a stale one is refreshed quietly and the grid redrawn from it.
+  // Later loads (the window moving) are not a reason to sync again.
+  const freshenedRef = useRef(false);
   useEffect(() => {
-    void loadCalendars();
+    void loadCalendars().then(async (loaded) => {
+      if (freshenedRef.current || !loaded) return;
+      freshenedRef.current = true;
+      if (!isGoogleCopyStale(loaded.connected, loaded.syncedAt, Date.now())) return;
+      try {
+        const res = await fetch("/api/meetings/calendars/sync", { method: "POST" });
+        if (res.ok) await loadCalendars();
+      } catch {
+        // The stored copy stands; "Sync now" is still there.
+      }
+    });
   }, [loadCalendars]);
 
   // Only events from layers the member is showing, and indexed so each draws
