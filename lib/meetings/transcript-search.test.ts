@@ -2,9 +2,9 @@ import {
   MIN_QUERY,
   SPEAKER,
   findMatches,
-  groupMatches,
+  groupMatchesByTurn,
+  type PlacedMatch,
   matchSummary,
-  matchesIn,
   partsFor,
   splitParagraph,
   stepMatch,
@@ -203,23 +203,49 @@ describe("offsets under a lowercase that changes length", () => {
   });
 });
 
-describe("groupMatches", () => {
-  it("buckets by the text each match sits in, keeping the global index", () => {
+describe("groupMatchesByTurn", () => {
+  it("buckets by turn and then by the text each match sits in, keeping the global index", () => {
     const turns = [
       { speaker: "Ada", paragraphs: ["one two", "two three"] },
     ];
-    const hits = findMatches(turns, "two");
-    const grouped = groupMatches(hits);
-    expect(matchesIn(grouped, 0, 0)?.map((p) => p.index)).toEqual([0]);
-    expect(matchesIn(grouped, 0, 1)?.map((p) => p.index)).toEqual([1]);
-    expect(matchesIn(grouped, 0, 2)).toBeUndefined();
+    const byTurn = groupMatchesByTurn(findMatches(turns, "two"));
+    const mine = byTurn.get(0);
+    expect(mine?.get(0)?.map((p: PlacedMatch) => p.index)).toEqual([0]);
+    expect(mine?.get(1)?.map((p: PlacedMatch) => p.index)).toEqual([1]);
+    expect(mine?.get(2)).toBeUndefined();
   });
 
-  it("agrees with splitParagraph", () => {
+  it("puts a speaker-name match under SPEAKER, not under a paragraph", () => {
+    const turns = [{ speaker: "Two Rivers", paragraphs: ["nothing here"] }];
+    const byTurn = groupMatchesByTurn(findMatches(turns, "two"));
+    expect(byTurn.get(0)?.get(SPEAKER)?.length).toBe(1);
+    expect(byTurn.get(0)?.get(0)).toBeUndefined();
+  });
+
+  /**
+   * The property the panel's memo rests on: a turn with no matches is absent
+   * from the map, so the row is handed `undefined` — and `undefined` from this
+   * keystroke compares equal to `undefined` from the last one, which is what
+   * lets hundreds of unmatched rows hold still while somebody types.
+   */
+  it("omits turns with no matches entirely", () => {
+    const turns = [
+      { speaker: "Ada", paragraphs: ["two"] },
+      { speaker: "Bo", paragraphs: ["nothing relevant"] },
+      { speaker: "Cy", paragraphs: ["two again"] },
+    ];
+    const byTurn = groupMatchesByTurn(findMatches(turns, "two"));
+    expect(byTurn.has(0)).toBe(true);
+    expect(byTurn.has(1)).toBe(false);
+    expect(byTurn.get(1)).toBeUndefined();
+    expect(byTurn.has(2)).toBe(true);
+  });
+
+  it("agrees with splitParagraph, which shares none of its machinery", () => {
     const turns = [{ speaker: "Ada", paragraphs: ["a two b two c"] }];
     const hits = findMatches(turns, "two");
-    const grouped = groupMatches(hits);
-    expect(partsFor(turns[0].paragraphs[0], matchesIn(grouped, 0, 0))).toEqual(
+    const byTurn = groupMatchesByTurn(hits);
+    expect(partsFor(turns[0].paragraphs[0], byTurn.get(0)?.get(0))).toEqual(
       splitParagraph(turns[0].paragraphs[0], hits, 0, 0),
     );
   });

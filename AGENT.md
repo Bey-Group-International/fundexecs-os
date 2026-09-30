@@ -4925,6 +4925,57 @@ Deployed, monitoring               →  live, observability active
              |  though it covers the rule.
              |  Confidence: Jest 7651 across 539 suites, typecheck and eslint
              |  clean.
+             |
+             |  2026-09-30  Transcript search: a keystroke re-rendered every turn
+             |  in the transcript, most of which had nothing to highlight.
+             |  The report page is the most worked-over page here - #87-#92 made
+             |  it a server component with one load, #83-#85 dealt with the
+             |  transcript and playhead, #45 stopped the five-second re-reads -
+             |  and almost all of it holds up. The panel is collapsed by default,
+             |  so a long transcript costs nothing until somebody opens it; four
+             |  panels and the transcript turn are memoised; the turn's own doc
+             |  explains why its match lookup is inside rather than hoisted.
+             |  What was left was the search box. Every turn was handed the WHOLE
+             |  match table, and that table is a new Map on every keystroke, so
+             |  every memo missed and all N turns re-ran `partsFor` to produce
+             |  the identical text they already showed. The find itself was never
+             |  the problem: sweeping 1500 turns costs 5-9ms, and the render cost
+             |  110-142ms.
+             |  The giveaway was the SHAPE of the before numbers: flat in the
+             |  number of matches. 1500 turns cost ~125ms a keystroke whether 5
+             |  turns matched or 100, because the count that mattered was the
+             |  count of turns, not of hits.
+             |  Now `groupMatchesByTurn` buckets by turn first and the panel hands
+             |  each row `byTurn.get(i)` - its own matches, or `undefined`. And
+             |  `undefined` this keystroke is the same `undefined` as last
+             |  keystroke, so the hundreds of rows with nothing to highlight hold
+             |  still. One keystroke on 1500 turns: 110-142ms -> 14-25ms, and it
+             |  stops depending on transcript length at all.
+             |  THIRD fixture that lied, and this time twice in one sitting. The
+             |  first cycled six sentences, so any query matched a third of all
+             |  turns - and a third of turns genuinely matching means a third
+             |  genuinely must re-render, which caps the possible gain at ~3x and
+             |  made the fix look weak. The second tried a 100-word vocabulary and
+             |  a hand-rolled PRNG, which was not uniform enough: still 41%
+             |  matching. What worked was giving up on emergent match rates and
+             |  PLANTING the needle in exactly K turns, so the variable that
+             |  decides the cost is the one being set. A measurement whose
+             |  dominant variable is accidental is not a measurement.
+             |  Also made splitParagraph an independent oracle. It called
+             |  groupMatches, and the test named "agrees with splitParagraph" was
+             |  therefore checking the grouping against itself. It is a plain
+             |  filter now. Nothing fails when that change is reverted - it is
+             |  test architecture, not a guarded property, and worth saying so.
+             |  The efficiency claim IS guarded, though, for the same reason as
+             |  the speaking store: "a turn with no matches is absent from the
+             |  map" is a fact about a pure function, not a render count. Keeping
+             |  every turn in the map fails 1 test. Filing a speaker match under a
+             |  paragraph fails 4; handing every row the same bucket fails 3.
+             |  Not done: no debounce and no virtualisation. At 14-25ms a keystroke
+             |  both would be complexity bought for nothing, and a debounced
+             |  search box is its own kind of laggy.
+             |  Confidence: Jest 7656 across 539 suites, typecheck and eslint
+             |  clean.
 ```
 
 ---
