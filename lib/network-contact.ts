@@ -101,6 +101,16 @@ export interface TimelineEntry {
   actorName: string | null;
   isSystem: boolean;
   metadata: Record<string, unknown>;
+  /**
+   * Set when an admin established this machine-written entry is about the wrong
+   * contact. Null on every entry a member can see: the loader only returns
+   * corrected rows when the caller has the right to correct them, so a reader
+   * without that right cannot tell a corrected entry from one that never
+   * existed. See 20260930100000_network_activities_misattribution.sql.
+   */
+  misattributedAt: string | null;
+  misattributionReason: string | null;
+  misattributedByName: string | null;
 }
 
 export interface ContactTask {
@@ -228,9 +238,14 @@ export async function loadContactRecord(
   client: SupabaseClient,
   orgId: string,
   contactId: string,
-  options: { timelineLimit?: number } = {},
+  options: { timelineLimit?: number; includeCorrected?: boolean } = {},
 ): Promise<ContactRecordView | null> {
   const timelineLimit = options.timelineLimit ?? 100;
+  // Defaults to FALSE deliberately, and every existing caller leaves it that
+  // way. Corrected entries are hidden from the record; only a caller who could
+  // undo the correction has any business seeing one, and the page passes this
+  // from the same admin check the RPC itself makes.
+  const includeCorrected = options.includeCorrected === true;
 
   const { data: contactRow, error } = await client
     .from("network_contacts")
@@ -245,18 +260,26 @@ export async function loadContactRecord(
 
   const [names, timelineRes, tasksRes, dupes] = await Promise.all([
     loadPrincipalNames(client, orgId),
-    client
-      .from("network_activities")
-      .select("id, activity_type, direction, subject, body, occurred_at, actor_id, is_system, metadata")
-      .eq("organization_id", orgId)
-      .eq("contact_id", contactId)
-      // Entries established as being about the wrong person are kept as
-      // evidence and hidden here. The row stays so a later message updates it
-      // instead of arriving unmarked as a new one — see
-      // 20260930100000_network_activities_misattribution.sql.
-      .is("misattributed_at", null)
-      .order("occurred_at", { ascending: false })
-      .limit(timelineLimit),
+    // Entries established as being about the wrong person are kept as evidence
+    // and hidden here. The row stays so a later message updates it instead of
+    // arriving unmarked as a new one — see
+    // 20260930100000_network_activities_misattribution.sql.
+    //
+    // The filter is applied unless the caller asked for the corrected ones AND
+    // has the right to act on them. Built as a variable rather than a ternary
+    // inside the chain because dropping a `.is()` by accident is invisible in a
+    // diff, and this way the two paths are one line apart.
+    (() => {
+      const q = client
+        .from("network_activities")
+        .select(
+          "id, activity_type, direction, subject, body, occurred_at, actor_id, is_system, metadata, misattributed_at, misattributed_by, misattribution_reason",
+        )
+        .eq("organization_id", orgId)
+        .eq("contact_id", contactId);
+      const scoped = includeCorrected ? q : q.is("misattributed_at", null);
+      return scoped.order("occurred_at", { ascending: false }).limit(timelineLimit);
+    })(),
     client
       .from("network_tasks")
       .select("id, title, notes, due_at, priority, status, assignee_id, completed_at, created_at")
@@ -291,6 +314,13 @@ export async function loadContactRecord(
     actorName: a.actor_id ? (names.get(String(a.actor_id)) ?? null) : null,
     isSystem: a.is_system === true,
     metadata: (a.metadata as Record<string, unknown>) ?? {},
+    misattributedAt: str(a.misattributed_at),
+    misattributionReason: str(a.misattribution_reason),
+    // Resolved from the map the loader already awaits for actor names, so
+    // saying WHO corrected an entry costs no extra query.
+    misattributedByName: a.misattributed_by
+      ? (names.get(String(a.misattributed_by)) ?? null)
+      : null,
   }));
 
   const tasks: ContactTask[] = ((tasksRes.data ?? []) as Row[]).map((t) => ({

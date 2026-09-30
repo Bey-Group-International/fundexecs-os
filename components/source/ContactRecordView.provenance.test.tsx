@@ -18,6 +18,8 @@ import { threadActivity } from "@/lib/inbox/crm-activity";
 import { meetingActivities } from "@/lib/meetings/crm-activity";
 import type { ContactRecord, TimelineEntry } from "@/lib/network-contact";
 
+jest.mock("next/navigation", () => ({ useRouter: () => ({ refresh: () => {} }) }));
+
 const CONTACT: ContactRecord = {
   id: "contact-ana",
   fullName: "Ana Diaz",
@@ -84,6 +86,9 @@ function inboxEntry(): TimelineEntry {
     actorName: null,
     isSystem: row.isSystem,
     metadata: row.metadata as unknown as Record<string, unknown>,
+    misattributedAt: null,
+    misattributionReason: null,
+    misattributedByName: null,
   };
 }
 
@@ -118,6 +123,9 @@ function meetingEntry(): TimelineEntry {
     actorName: null,
     isSystem: row.isSystem,
     metadata: row.metadata as unknown as Record<string, unknown>,
+    misattributedAt: null,
+    misattributionReason: null,
+    misattributedByName: null,
   };
 }
 
@@ -128,6 +136,7 @@ function view(timeline: TimelineEntry[]) {
       owners={[]}
       currentUserId="principal-1"
       canDelete={false}
+      canCorrect={false}
     />,
   );
 }
@@ -157,6 +166,9 @@ describe("how the timeline labels what it knows", () => {
         subject: "Called Ana",
         body: "She is in.",
         occurredAt: "2026-09-23T14:00:00.000Z",
+        misattributedAt: null,
+        misattributionReason: null,
+        misattributedByName: null,
         actorId: "principal-1",
         actorName: "Me",
         isSystem: false,
