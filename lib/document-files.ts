@@ -14,8 +14,22 @@
 /** Storage bucket holding library files. Private; every read is signed. */
 export const DOCUMENT_BUCKET = "documents";
 
-/** Matches the bucket's own `file_size_limit` (migration 20260912140000). */
-export const MAX_UPLOAD_BYTES = 100 * 1024 * 1024;
+/**
+ * Per-file ceiling. Matches the bucket's own `file_size_limit` (migration
+ * 20260930200000, 500 MB). Deployments on a smaller Supabase plan can lower it
+ * with NEXT_PUBLIC_DOCUMENT_MAX_UPLOAD_MB so the drop zone tells the truth
+ * instead of failing at Storage — the bucket can never accept more than the
+ * project's global upload limit.
+ */
+export const MAX_UPLOAD_BYTES = resolveMaxUploadBytes(process.env.NEXT_PUBLIC_DOCUMENT_MAX_UPLOAD_MB);
+
+/** Parse the env override; anything unusable falls back to 500 MB. */
+export function resolveMaxUploadBytes(raw: string | undefined): number {
+  const DEFAULT_MB = 500;
+  const mb = Number(raw);
+  const value = Number.isFinite(mb) && mb > 0 ? Math.min(mb, DEFAULT_MB) : DEFAULT_MB;
+  return Math.floor(value * 1024 * 1024);
+}
 
 export interface DocumentFileType {
   /** Lowercased extension including the dot. */
@@ -64,6 +78,10 @@ export const DOCUMENT_FILE_TYPES: DocumentFileType[] = [
   { ext: ".gif", label: "Image", mimeTypes: ["image/gif"] },
   { ext: ".webp", label: "Image", mimeTypes: ["image/webp"] },
   { ext: ".svg", label: "Image", mimeTypes: ["image/svg+xml"] },
+  // Recorded walkthroughs and pitch videos. Large, which is why uploads are
+  // resumable; played in the viewer rather than downloaded.
+  { ext: ".mp4", label: "Video", mimeTypes: ["video/mp4"] },
+  { ext: ".mov", label: "Video", mimeTypes: ["video/quicktime"] },
 ];
 
 const BY_EXT = new Map(DOCUMENT_FILE_TYPES.map((t) => [t.ext, t]));
@@ -73,7 +91,7 @@ export const ACCEPTED_DOCUMENT_ATTR = DOCUMENT_FILE_TYPES.map((t) => t.ext).join
 
 /** The one rejection sentence the whole upload path uses. */
 export const UNSUPPORTED_DOCUMENT_MESSAGE =
-  "That file type can't be stored in the library. Upload a PDF, Office document, text file, or image.";
+  "That file type can't be stored in the library. Upload a PDF, Office document, text file, image, or video (.mp4, .mov).";
 
 /** Lowercased extension of a filename or storage key, including the dot. */
 export function fileExtension(name: string): string {
@@ -100,6 +118,47 @@ export function isExternalLink(storageKey: string | null | undefined): boolean {
   } catch {
     return false;
   }
+}
+
+/**
+ * Canonical MIME type for a filename or storage key, from its extension.
+ *
+ * Uploads are stored under this rather than whatever the browser reported: a
+ * file rebuilt from a zip entry has no type at all, and a machine without Office
+ * reports an .xlsx as application/octet-stream. Stored as octet-stream, a PDF
+ * downloads instead of opening in the viewer.
+ */
+export function mimeTypeForName(name: string): string {
+  return BY_EXT.get(fileExtension(name))?.mimeTypes[0] ?? "application/octet-stream";
+}
+
+/** How the in-app viewer can show a file. */
+export type PreviewKind = "pdf" | "image" | "video" | "office" | "text" | "none";
+
+const OFFICE_EXTS = new Set([".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx", ".rtf"]);
+const TEXT_EXTS = new Set([".txt", ".md", ".csv"]);
+
+/**
+ * PDFs, raster images and video render natively in the browser. Office formats
+ * render from the text layer we extract (`document_texts.preview`). SVG is
+ * deliberately `none`: it can carry script, so it is only ever downloaded.
+ */
+export function previewKindFor(storageKey: string | null | undefined): PreviewKind {
+  if (!storageKey || isExternalLink(storageKey)) return "none";
+  const ext = fileExtension(storageKey);
+  if (ext === ".pdf") return "pdf";
+  if (ext === ".mp4" || ext === ".mov") return "video";
+  if ([".png", ".jpg", ".jpeg", ".gif", ".webp"].includes(ext)) return "image";
+  if (OFFICE_EXTS.has(ext)) return "office";
+  if (TEXT_EXTS.has(ext)) return "text";
+  return "none";
+}
+
+/** Whether Earn can pull a text layer out of this file. */
+export function isExtractable(storageKey: string | null | undefined): boolean {
+  if (!isUploadedFile(storageKey)) return false;
+  const ext = fileExtension(storageKey as string);
+  return ext === ".pdf" || [".docx", ".xlsx", ".pptx"].includes(ext) || TEXT_EXTS.has(ext);
 }
 
 /** Whether a `documents.storage_key` points at an object in our bucket. */
@@ -210,9 +269,14 @@ export function documentNameFromFile(fileName: string): string {
   return (cleaned || base || "Untitled document").slice(0, 200);
 }
 
-/** Result of minting an upload ticket (components/documents/upload-actions). */
+/**
+ * Result of minting an upload ticket (components/documents/upload-actions).
+ * The ticket names the path; the bytes go up over resumable (TUS) upload under
+ * the operator's own session, so Storage's writer-only RLS applies to the write
+ * itself rather than being bypassed by a service-signed URL.
+ */
 export type UploadTicket =
-  | { ok: true; documentId: string; path: string; token: string }
+  | { ok: true; documentId: string; path: string; contentType: string }
   | { ok: false; error: string };
 
 /** Result of finalizing or abandoning an upload. */

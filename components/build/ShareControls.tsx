@@ -4,7 +4,8 @@
 // actually publishes — a link can never expose something that was never
 // published, and the operator isn't picking from a list of sections that don't
 // exist here.
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
+import { suggestRoomShareSettings } from "@/lib/document-review";
 import { inputClass } from "./DraftWithEarn";
 import { createShare, revokeShare } from "./materials-actions";
 
@@ -23,6 +24,10 @@ export interface ShareView {
   revoked_at: string | null;
   created_at: string | null;
   allowed_sections: string[] | null;
+  allow_download?: boolean;
+  watermark?: boolean;
+  /** Set on a single-document link made from a document's review page. */
+  document_id?: string | null;
 }
 
 function status(s: ShareView): { label: string; tone: string } {
@@ -54,6 +59,21 @@ function ShareRow({ share }: { share: ShareView }) {
         </div>
 
         <span className="text-sm font-medium text-fg-primary">{share.label || "Untitled link"}</span>
+
+        {[
+          share.document_id ? "One document" : null,
+          share.allow_download === false ? "View-only" : null,
+          share.watermark ? "Watermarked" : null,
+        ]
+          .filter(Boolean)
+          .map((tag) => (
+            <span
+              key={tag}
+              className="rounded-full border border-line px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider text-fg-muted"
+            >
+              {tag}
+            </span>
+          ))}
 
         {share.expires_at && !share.revoked_at ? (
           <span className="font-mono text-[11px] text-fg-muted">
@@ -114,19 +134,38 @@ function ShareRow({ share }: { share: ShareView }) {
 
 function CreateShareForm({
   roomId,
+  roomName,
   publishedSections,
   onDone,
 }: {
   roomId: string;
+  roomName: string;
   publishedSections: PublishedSection[];
   onDone: () => void;
 }) {
+  const earn = useMemo(
+    () => suggestRoomShareSettings({ roomName, sections: publishedSections.map((s) => s.key) }),
+    [roomName, publishedSections],
+  );
+  const [label, setLabel] = useState("");
+  const [expiresDays, setExpiresDays] = useState("");
   const [pending, startTransition] = useTransition();
   const [requireEmail, setRequireEmail] = useState(false);
   const [requireNda, setRequireNda] = useState(false);
   const [showNdaText, setShowNdaText] = useState(false);
   const [requirePassword, setRequirePassword] = useState(false);
   const [notifyOnOpen, setNotifyOnOpen] = useState(false);
+  const applyEarn = () => {
+    setLabel((v) => v || earn.label);
+    setExpiresDays(String(earn.expiresInDays));
+    setRequireEmail(earn.requireEmail);
+    setRequireNda(earn.requireNda);
+    setAllowDownload(earn.allowDownload);
+    setWatermark(earn.watermark);
+    setNotifyOnOpen(true);
+  };
+  const [allowDownload, setAllowDownload] = useState(true);
+  const [watermark, setWatermark] = useState(false);
   const [limitSections, setLimitSections] = useState(false);
   const [selectedSections, setSelectedSections] = useState<Set<string>>(new Set());
 
@@ -142,6 +181,9 @@ function CreateShareForm({
   return (
     <form
       action={(fd) => {
+        // An unchecked box is absent from FormData, so turning downloads off
+        // has to be said explicitly.
+        fd.set("allow_download", allowDownload ? "1" : "0");
         if (limitSections && selectedSections.size > 0) {
           fd.set("allowed_sections", JSON.stringify([...selectedSections]));
         }
@@ -154,13 +196,38 @@ function CreateShareForm({
     >
       <input type="hidden" name="room_id" value={roomId} />
 
+      {/* Earn's suggestion — applied only when the operator asks. */}
+      <div className="mb-3 flex items-start gap-3 rounded-lg border border-gold-500/20 bg-gold-500/5 px-3 py-2">
+        <p className="min-w-0 flex-1 text-xs leading-relaxed text-fg-secondary">
+          <span className="text-gold-300">Earn suggests:</span> {earn.expiresInDays}-day link
+          {earn.requireNda ? ", NDA" : earn.requireEmail ? ", email capture" : ""}
+          {earn.allowDownload ? "" : ", view-only"}
+          {earn.watermark ? ", watermarked" : ""}. {earn.rationale}
+        </p>
+        <button
+          type="button"
+          onClick={applyEarn}
+          className="shrink-0 font-mono text-[11px] uppercase tracking-wider text-gold-300 hover:underline"
+        >
+          Apply
+        </button>
+      </div>
+
       {/* Basic fields */}
       <div className="grid gap-3 sm:grid-cols-2">
-        <input name="label" placeholder="Label (e.g. 'Q3 2025 raise')" className={inputClass} />
+        <input
+          name="label"
+          value={label}
+          onChange={(e) => setLabel(e.target.value)}
+          placeholder="Label (e.g. 'Q3 2025 raise')"
+          className={inputClass}
+        />
         <input
           name="expires_in_days"
           type="number"
           min={1}
+          value={expiresDays}
+          onChange={(e) => setExpiresDays(e.target.value)}
           placeholder="Expires in days (optional)"
           className={inputClass}
         />
@@ -254,6 +321,37 @@ function CreateShareForm({
           />
           <span className="text-sm text-fg-secondary">Notify me when this link is opened</span>
         </label>
+      </div>
+
+      {/* View controls */}
+      <div className="mt-3 space-y-2 rounded-lg border border-line bg-surface-0 p-3">
+        <p className="mb-2 font-mono text-[11px] uppercase tracking-wider text-fg-muted">Viewing</p>
+        <label className="flex cursor-pointer items-center gap-2.5">
+          <input
+            type="checkbox"
+            checked={allowDownload}
+            onChange={(e) => setAllowDownload(e.target.checked)}
+            className="h-3.5 w-3.5 accent-gold-400"
+          />
+          <span className="text-sm text-fg-secondary">Allow downloads</span>
+          <span className="ml-auto text-[11px] text-fg-muted">{allowDownload ? "" : "View-only in the room"}</span>
+        </label>
+        <label className="flex cursor-pointer items-center gap-2.5">
+          <input
+            type="checkbox"
+            name="watermark"
+            value="1"
+            checked={watermark}
+            onChange={(e) => setWatermark(e.target.checked)}
+            className="h-3.5 w-3.5 accent-gold-400"
+          />
+          <span className="text-sm text-fg-secondary">Watermark PDFs with the reader&apos;s email and time</span>
+        </label>
+        {watermark && !requireEmail ? (
+          <p className="text-[11px] text-amber-400/80">
+            Turn on &quot;Require viewer email&quot; so the watermark names the reader, not just the link.
+          </p>
+        ) : null}
       </div>
 
       {/* Section scope — only what this room publishes */}
@@ -361,7 +459,12 @@ export function ShareControls({
       </div>
 
       {open ? (
-        <CreateShareForm roomId={roomId} publishedSections={publishedSections} onDone={() => setOpen(false)} />
+        <CreateShareForm
+          roomId={roomId}
+          roomName={roomName}
+          publishedSections={publishedSections}
+          onDone={() => setOpen(false)}
+        />
       ) : null}
 
       {active.length === 0 && !open ? (

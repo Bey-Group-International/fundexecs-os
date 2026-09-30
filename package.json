@@ -14,7 +14,9 @@
     "react-dom": "^19.2.7",
     "react-markdown": "^9.1.0",
     "remark-gfm": "^4.0.1",
-    "stripe": "^17.7.0"
+    "stripe": "^17.7.0",
+    "tus-js-client": "^4.3.1",
+    "unpdf": "^1.8.1"
   },
   "description": "An AI-native operating system for private-market participants.",
   "devDependencies": {

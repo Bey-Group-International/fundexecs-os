@@ -2,17 +2,24 @@
 
 // Drag-and-drop, multi-file upload for the library.
 //
-// The file never passes through the app: `createUploadTicket` returns a signed
-// path, the browser PUTs straight to Storage, and `finalizeUpload` re-reads the
-// object server-side and writes the real size and type onto the row. That is
-// what makes a 60 MB PPM work at all — a Server Action body is capped around a
-// megabyte.
+// The file never passes through the app: `createUploadTicket` names the path,
+// the browser sends the bytes straight to Storage over resumable (TUS) upload,
+// and `finalizeUpload` re-reads the object server-side and writes the real size
+// and type onto the row. That is what makes a 400 MB PPM or a recorded
+// walkthrough work at all — a Server Action body is capped around a megabyte.
 //
-// Uploads run one at a time. A fund operator dropping twelve files is usually
-// on the same connection as everything else they are doing; six parallel PUTs
-// would finish no sooner and would make each individual failure harder to read.
+// Resumable matters at these sizes: the file goes up in 6 MB chunks, a dropped
+// connection retries the chunk rather than the file, and the operator watches a
+// real percentage instead of a word. The upload runs under the operator's own
+// session, so Storage's writer-only RLS governs the write itself.
+//
+// Up to three files upload at once. Each row carries its own bar and its own
+// error, so parallel transfers stay legible, and a twelve-file drop no longer
+// waits on the slowest file at the front of the line.
 import { useCallback, useId, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { Upload as TusUpload } from "tus-js-client";
 import { createClient } from "@/lib/supabase/client";
 import {
   ACCEPTED_DOCUMENT_ATTR,
@@ -27,6 +34,62 @@ import { ZipImport } from "./ZipImport";
 
 type Supabase = ReturnType<typeof createClient>;
 
+/** Supabase requires exactly 6 MB chunks for resumable uploads. */
+const CHUNK_BYTES = 6 * 1024 * 1024;
+const PARALLEL_UPLOADS = 3;
+
+/** Turn a Storage/TUS failure into a sentence an operator can act on. */
+export function uploadErrorMessage(err: unknown): string {
+  const status =
+    (err as { originalResponse?: { getStatus?: () => number } })?.originalResponse?.getStatus?.() ?? 0;
+  const text = err instanceof Error ? err.message : String(err ?? "");
+  if (status === 413 || /payload too large|maximum allowed size|exceeded the maximum/i.test(text)) {
+    return `That file is larger than storage will accept. The limit is ${formatBytes(MAX_UPLOAD_BYTES)}.`;
+  }
+  if (status === 401 || status === 403 || /row-level security|unauthori[sz]ed/i.test(text)) {
+    return "You don't have permission to upload here. Ask an owner or admin.";
+  }
+  if (status === 409 || /already exists/i.test(text)) {
+    return "A file is already stored at that location. Try the upload again.";
+  }
+  return "That upload didn't finish. Check your connection and try again — it resumes where it stopped.";
+}
+
+function sendResumable(
+  supabase: Supabase,
+  input: { file: File; path: string; contentType: string; onProgress?: (fraction: number) => void },
+): Promise<void> {
+  return new Promise((resolve, reject) => {
+    void supabase.auth.getSession().then(({ data }) => {
+      const token = data.session?.access_token;
+      if (!token) {
+        reject(new Error("unauthorized"));
+        return;
+      }
+      const base = (process.env.NEXT_PUBLIC_SUPABASE_URL ?? "").trim().replace(/\/$/, "");
+      const upload = new TusUpload(input.file, {
+        endpoint: `${base}/storage/v1/upload/resumable`,
+        retryDelays: [0, 1000, 3000, 5000, 10000, 20000],
+        headers: { authorization: `Bearer ${token}`, "x-upsert": "false" },
+        uploadDataDuringCreation: true,
+        // Lets a retried chunk continue the same upload instead of starting over.
+        removeFingerprintOnSuccess: true,
+        chunkSize: CHUNK_BYTES,
+        metadata: {
+          bucketName: DOCUMENT_BUCKET,
+          objectName: input.path,
+          contentType: input.contentType,
+          cacheControl: "3600",
+        },
+        onProgress: (sent, total) => input.onProgress?.(total > 0 ? sent / total : 0),
+        onError: reject,
+        onSuccess: () => resolve(),
+      });
+      upload.start();
+    }, reject);
+  });
+}
+
 /**
  * Put one file in the bucket and attach it to a document.
  *
@@ -36,9 +99,14 @@ type Supabase = ReturnType<typeof createClient>;
  */
 export async function uploadDocumentFile(
   supabase: Supabase,
-  input: { file: File; section: string; documentId?: string },
+  input: {
+    file: File;
+    section: string;
+    documentId?: string;
+    onProgress?: (fraction: number) => void;
+  },
 ): Promise<{ ok: true; documentId: string } | { ok: false; error: string }> {
-  const { file, section, documentId } = input;
+  const { file, section, documentId, onProgress } = input;
 
   // Check before minting anything, so an unsupported file costs no round trip
   // and the operator hears the same sentence the server would have said.
@@ -55,17 +123,17 @@ export async function uploadDocumentFile(
   if (!ticket.ok) return { ok: false, error: ticket.error };
 
   try {
-    const { error } = await supabase.storage
-      .from(DOCUMENT_BUCKET)
-      .uploadToSignedUrl(ticket.path, ticket.token, file, {
-        contentType: file.type || undefined,
-      });
-    if (error) throw error;
-  } catch {
+    await sendResumable(supabase, {
+      file,
+      path: ticket.path,
+      contentType: ticket.contentType,
+      onProgress,
+    });
+  } catch (err) {
     // Leave nothing half-made: the object if any of it landed, and the shell
     // row if this upload is the only reason it exists.
     await abandonUpload({ documentId: ticket.documentId, path: ticket.path });
-    return { ok: false, error: "That upload didn't finish. Check your connection and try again." };
+    return { ok: false, error: uploadErrorMessage(err) };
   }
 
   const done = await finalizeUpload({ documentId: ticket.documentId, path: ticket.path });
@@ -81,6 +149,9 @@ interface QueueItem {
   name: string;
   size: number;
   state: "waiting" | "uploading" | "done" | "failed";
+  /** 0–1 while uploading. */
+  progress: number;
+  documentId?: string;
   error?: string;
 }
 
@@ -117,28 +188,49 @@ export function DocumentUploader({
         name: f.name,
         size: f.size,
         state: "waiting",
+        progress: 0,
       }));
       // Keep finished rows on screen: after a twelve-file drop the operator
       // needs to see which two failed, not an empty box.
       setQueue((prev) => [...prev.filter((q) => q.state === "failed"), ...items]);
 
+      const patch = (key: string, next: Partial<QueueItem>) =>
+        setQueue((prev) => prev.map((q) => (q.key === key ? { ...q, ...next } : q)));
+
       busy.current = true;
       let landed = false;
-      for (let i = 0; i < files.length; i += 1) {
-        const key = items[i].key;
-        setQueue((prev) => prev.map((q) => (q.key === key ? { ...q, state: "uploading" } : q)));
-        const result = await uploadDocumentFile(supabase, { file: files[i], section });
-        landed ||= result.ok;
-        setQueue((prev) =>
-          prev.map((q) =>
-            q.key === key
-              ? result.ok
-                ? { ...q, state: "done" }
-                : { ...q, state: "failed", error: result.error }
-              : q,
-          ),
-        );
-      }
+      let cursor = 0;
+      const worker = async () => {
+        while (cursor < files.length) {
+          const i = cursor++;
+          const key = items[i].key;
+          patch(key, { state: "uploading" });
+          // Progress events fire per chunk; round to whole percents so a fast
+          // connection does not re-render the list hundreds of times.
+          let shown = -1;
+          const result = await uploadDocumentFile(supabase, {
+            file: files[i],
+            section,
+            onProgress: (f) => {
+              const pct = Math.floor(f * 100);
+              if (pct !== shown) {
+                shown = pct;
+                patch(key, { progress: f });
+              }
+            },
+          });
+          landed ||= result.ok;
+          patch(
+            key,
+            result.ok
+              ? { state: "done", progress: 1, documentId: result.documentId }
+              : { state: "failed", error: result.error },
+          );
+        }
+      };
+      await Promise.all(
+        Array.from({ length: Math.min(PARALLEL_UPLOADS, files.length) }, () => worker()),
+      );
       busy.current = false;
       if (landed) router.refresh();
     },
@@ -179,7 +271,7 @@ export function DocumentUploader({
           {active > 0 ? `Uploading ${active} file${active > 1 ? "s" : ""}…` : "Drop files to upload"}
         </span>
         <span className="text-xs text-fg-muted">
-          Filed under {sectionLabel} · PDF, Office, text, or image · up to{" "}
+          Filed under {sectionLabel} · PDF, Word, Excel, PowerPoint, text, image, or video · up to{" "}
           {formatBytes(MAX_UPLOAD_BYTES)} each
         </span>
         <span className="text-xs text-fg-muted">
@@ -205,28 +297,45 @@ export function DocumentUploader({
           {queue.map((q) => (
             <li
               key={q.key}
-              className="flex items-center gap-2 rounded-lg border border-line/60 bg-surface-0 px-3 py-1.5 text-xs"
+              className="relative overflow-hidden rounded-lg border border-line/60 bg-surface-0 px-3 py-1.5 text-xs"
             >
-              <span
-                className={`shrink-0 font-mono text-[11px] uppercase tracking-wider ${
-                  q.state === "done"
-                    ? "text-emerald-400"
+              {q.state === "uploading" ? (
+                <span
+                  aria-hidden
+                  className="absolute inset-y-0 left-0 bg-gold-500/10 transition-[width] duration-200"
+                  style={{ width: `${Math.round(q.progress * 100)}%` }}
+                />
+              ) : null}
+              <span className="relative flex items-center gap-2">
+                <span
+                  className={`shrink-0 font-mono text-[11px] uppercase tracking-wider ${
+                    q.state === "done"
+                      ? "text-emerald-400"
+                      : q.state === "failed"
+                        ? "text-red-400"
+                        : "text-fg-muted"
+                  }`}
+                >
+                  {q.state === "done"
+                    ? "Added"
                     : q.state === "failed"
-                      ? "text-red-400"
-                      : "text-fg-muted"
-                }`}
-              >
-                {q.state === "done"
-                  ? "Added"
-                  : q.state === "failed"
-                    ? "Failed"
-                    : q.state === "uploading"
-                      ? "Uploading"
-                      : "Queued"}
-              </span>
-              <span className="min-w-0 flex-1 truncate text-fg-secondary">{q.name}</span>
-              <span className="shrink-0 font-mono text-[11px] text-fg-muted">
-                {formatBytes(q.size)}
+                      ? "Failed"
+                      : q.state === "uploading"
+                        ? `${Math.round(q.progress * 100)}%`
+                        : "Queued"}
+                </span>
+                <span className="min-w-0 flex-1 truncate text-fg-secondary">{q.name}</span>
+                <span className="shrink-0 font-mono text-[11px] text-fg-muted">
+                  {formatBytes(q.size)}
+                </span>
+                {q.state === "done" && q.documentId ? (
+                  <Link
+                    href={`/document/${q.documentId}/review`}
+                    className="shrink-0 font-mono text-[11px] uppercase tracking-wider text-gold-300 hover:underline"
+                  >
+                    Review with Earn →
+                  </Link>
+                ) : null}
               </span>
             </li>
           ))}
@@ -277,6 +386,7 @@ export function ReplaceFileButton({
   const inputId = useId();
   const [state, setState] = useState<"idle" | "busy" | "error">("idle");
   const [error, setError] = useState("");
+  const [pct, setPct] = useState(0);
 
   return (
     <>
@@ -295,7 +405,7 @@ export function ReplaceFileButton({
             : "border-line text-fg-muted hover:border-gold-500/40 hover:text-gold-300"
         }`}
       >
-        {state === "busy" ? "…" : state === "error" ? "Retry" : hasFile ? "Replace" : "Attach"}
+        {state === "busy" ? `${pct}%` : state === "error" ? "Retry" : hasFile ? "Replace" : "Attach"}
       </label>
       <input
         id={inputId}
@@ -307,7 +417,13 @@ export function ReplaceFileButton({
           e.target.value = "";
           if (!file) return;
           setState("busy");
-          const result = await uploadDocumentFile(supabase, { file, section, documentId });
+          const result = await uploadDocumentFile(supabase, {
+            file,
+            section,
+            documentId,
+            onProgress: (f) => setPct(Math.round(f * 100)),
+          });
+          setPct(0);
           if (result.ok) {
             setState("idle");
             router.refresh();

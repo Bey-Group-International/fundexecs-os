@@ -11,6 +11,7 @@ import { buildContactAppendix, detectSourcingIntent } from "@/lib/chat-enrichmen
 import { StreamingContactRedactor, redactContacts } from "@/lib/contact-sanitize";
 import { loadMeetingPrepContext, loadMeetingFollowupContext } from "@/lib/meetings/meeting-context";
 import { getActiveMandateRow, mandateContextBlock } from "@/lib/mandates";
+import { documentContextBlock } from "@/lib/earn-documents-context.server";
 import { formatOperatorIdentity, loadOperatorIdentity, sanitizeTimeZone } from "@/lib/copilot/identity";
 
 // Conversational replies stream token-by-token; give Claude room beyond the
@@ -232,6 +233,16 @@ export async function POST(request: Request) {
       if (mandateBlock) liveContext += `\n${mandateBlock}\n`;
     } catch {
       // Mandate context is an enhancement — never block the reply.
+    }
+
+    // The firm's own documents: prompt-triggered like the relationship block —
+    // added only when the question is about documents or names one, so a
+    // fresh open is still not preloaded with org state.
+    try {
+      const docBlock = await documentContextBlock(supabase, orgId, body);
+      if (docBlock) liveContext += `\n${docBlock}\n`;
+    } catch {
+      // Document context is an enhancement — never block the reply.
     }
   } catch {
     // proceed without live context

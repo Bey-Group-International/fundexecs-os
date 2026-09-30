@@ -6,6 +6,8 @@ import { MarkdownRenderer } from "./MarkdownRenderer";
 import { ViewerGate } from "./ViewerGate";
 import type { GateConfig } from "./ViewerGate";
 import { trackDwell } from "@/components/build/materials-actions";
+import { FilePreview } from "@/components/documents/FilePreview";
+import type { PreviewKind } from "@/lib/document-files";
 
 export type { GateConfig };
 
@@ -58,7 +60,21 @@ export interface ViewerDoc {
   content: string | null;
   storage_key: string | null;
   doc_type: string | null;
+  /** How the in-app viewer can show the file (set by the payload builder). */
+  preview_kind?: PreviewKind;
+  /** A file in our bucket, as opposed to an external link. */
+  uploaded?: boolean;
 }
+
+/** Per-link controls set when the link was created. */
+export interface ViewControls {
+  allowDownload: boolean;
+  watermark: boolean;
+  /** The link opens one document, not a room. */
+  singleDocument: boolean;
+}
+
+const DEFAULT_CONTROLS: ViewControls = { allowDownload: true, watermark: false, singleDocument: false };
 
 export interface ViewerSection {
   key: string;
@@ -87,6 +103,11 @@ interface Props {
    * rather than the whole screen. The payload is built by the same function the
    * public room uses, so what shows here is what a recipient gets. */
   preview?: boolean;
+  viewControls?: ViewControls;
+  /** Who is reading, for the preview watermark overlay. */
+  viewerLabel?: string | null;
+  /** Open on this document's section (the `?doc=` a view-only open redirects to). */
+  focusDocumentId?: string | null;
 }
 
 function compactUsd(n: number | null): string | null {
@@ -137,6 +158,9 @@ export function DataRoomViewer({
   gateConfig,
   contentReady,
   preview = false,
+  viewControls = DEFAULT_CONTROLS,
+  viewerLabel = null,
+  focusDocumentId = null,
 }: Props) {
   const accent =
     org.brand_color && /^#[0-9a-fA-F]{3,8}$/.test(org.brand_color)
@@ -152,7 +176,8 @@ export function DataRoomViewer({
   // Build nav
   const nav: NavItem[] = useMemo(() => {
     const items: NavItem[] = [];
-    items.push({ key: "overview", label: "Overview" });
+    // A single-document link has no firm overview to show — just the document.
+    if (!viewControls.singleDocument) items.push({ key: "overview", label: "Overview" });
     if (blended.dealCount > 0) items.push({ key: "track_record", label: "Track Record" });
     if (thesis) items.push({ key: "thesis", label: "Investment Thesis" });
     if (team.length > 0) items.push({ key: "team", label: "Team" });
@@ -161,9 +186,13 @@ export function DataRoomViewer({
       if (s.docs.length > 0) items.push({ key: s.key, label: s.label, docs: s.docs } as NavItem);
     }
     return items;
-  }, [blended.dealCount, thesis, team.length, entities.length, docSections]);
+  }, [blended.dealCount, thesis, team.length, entities.length, docSections, viewControls.singleDocument]);
 
-  const [selected, setSelected] = useState<string>(nav[0]?.key ?? "overview");
+  const focusSection = focusDocumentId
+    ? docSections.find((s) => s.docs.some((d) => d.id === focusDocumentId))?.key
+    : undefined;
+  const [selected, setSelected] = useState<string>(focusSection ?? nav[0]?.key ?? "overview");
+  const mainRef = useRef<HTMLElement>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   // The nav can change under a live selection — most visibly in the GP preview,
@@ -219,8 +248,11 @@ export function DataRoomViewer({
       dwellStart.current = Date.now();
       setSelected(key);
       setSidebarOpen(false);
+      // A new section starts at its top, not wherever the last one was scrolled.
+      mainRef.current?.scrollTo({ top: 0 });
+      if (!preview) window.scrollTo({ top: 0 });
     },
-    [effectiveSelected, fireDwell],
+    [effectiveSelected, fireDwell, preview],
   );
 
   // Fire dwell on page unload.
@@ -289,7 +321,10 @@ export function DataRoomViewer({
   return (
     <div
       className={`flex flex-col bg-surface-0 text-fg-primary ${
-        preview ? "h-full min-h-0" : "min-h-screen"
+        // Exactly the viewport, so the contents rail stays put and only the
+        // reading pane scrolls. With min-h-screen the row grew with its
+        // content and the whole window scrolled the rail away.
+        preview ? "h-full min-h-0" : "h-dvh"
       }`}
     >
       {/* Top bar */}
@@ -337,11 +372,11 @@ export function DataRoomViewer({
               : "border-line bg-surface-1 text-fg-muted"
           }`}
         >
-          {preview ? "Preview" : "Read-only"}
+          {preview ? "Preview" : viewControls.allowDownload ? "Read-only" : "View-only"}
         </span>
       </header>
 
-      <div className="flex flex-1 overflow-hidden">
+      <div className="flex min-h-0 flex-1 overflow-hidden">
         {/* Sidebar */}
         <aside
           className={
@@ -363,7 +398,7 @@ export function DataRoomViewer({
             />
           ) : null}
 
-          <div className="relative z-10 flex flex-1 flex-col overflow-y-auto py-4">
+          <div className="relative z-10 flex flex-1 flex-col overflow-y-auto overscroll-contain py-4">
             <p className="px-4 pb-2 font-mono text-[11px] uppercase tracking-[0.16em] text-fg-muted">Contents</p>
             <nav className="flex flex-col gap-0.5 px-2">
               {nav.map((item) => {
@@ -402,7 +437,7 @@ export function DataRoomViewer({
         </aside>
 
         {/* Content panel */}
-        <main className="min-w-0 flex-1 overflow-y-auto px-6 py-8 lg:px-10">
+        <main ref={mainRef} className="min-w-0 flex-1 overflow-y-auto overscroll-contain px-6 py-8 lg:px-10">
           <ContentPanel
             selected={effectiveSelected}
             org={org}
@@ -415,6 +450,9 @@ export function DataRoomViewer({
             accent={accent}
             current={current}
             preview={preview}
+            controls={viewControls}
+            viewerLabel={viewerLabel}
+            focusDocumentId={focusDocumentId}
           />
         </main>
       </div>
@@ -433,6 +471,9 @@ function ContentPanel({
   token,
   accent,
   preview,
+  controls,
+  viewerLabel,
+  focusDocumentId,
 }: {
   selected: string;
   org: ViewerOrg;
@@ -445,6 +486,9 @@ function ContentPanel({
   accent: string;
   preview?: boolean;
   current: NavItem;
+  controls: ViewControls;
+  viewerLabel: string | null;
+  focusDocumentId: string | null;
 }) {
   if (selected === "overview") {
     return (
@@ -553,11 +597,21 @@ function ContentPanel({
   if (!sec) return null;
 
   return (
-    <div className="max-w-2xl">
+    <div className="max-w-4xl">
       <SectionHeader title={sec.label} accent={accent} />
       <div className="mt-4 space-y-6">
         {sec.docs.map((doc) => (
-          <DocCard key={doc.id} doc={doc} token={token} accent={accent} preview={preview} />
+          <DocCard
+            key={doc.id}
+            doc={doc}
+            token={token}
+            accent={accent}
+            preview={preview}
+            controls={controls}
+            viewerLabel={viewerLabel}
+            // One document on the page, or the one a link pointed at: open it.
+            startOpen={controls.singleDocument || doc.id === focusDocumentId || sec.docs.length === 1}
+          />
         ))}
       </div>
     </div>
@@ -578,21 +632,33 @@ function DocCard({
   token,
   accent,
   preview,
+  controls,
+  viewerLabel,
+  startOpen,
 }: {
   doc: ViewerDoc;
   token: string;
   accent: string;
   preview?: boolean;
+  controls: ViewControls;
+  viewerLabel: string | null;
+  startOpen: boolean;
 }) {
   const [expanded, setExpanded] = useState(true);
   const href = hasFile(doc.storage_key);
+  const kind = doc.preview_kind ?? "none";
+  // Uploaded files read in the page. External links still open where they live.
+  const previewable = Boolean(doc.uploaded) && kind !== "none";
+  const [showFile, setShowFile] = useState(startOpen && previewable);
+  const fileUrl = `/dataroom/${token}/d/${doc.id}`;
+  const btn = "rounded-lg border px-3 py-1.5 font-mono text-[11px] uppercase tracking-wider transition hover:bg-surface-0";
 
   return (
     <div className="overflow-hidden rounded-xl border border-line bg-surface-1" style={{ boxShadow: "0 1px 4px rgba(0,0,0,0.1)" }}>
       {/* Doc header */}
-      <div className="flex items-center gap-3 px-5 py-3">
-        <span className="font-mono text-[11px] text-fg-muted">{href ? "↗" : "≡"}</span>
-        <p className="flex-1 text-sm font-medium text-fg-primary">{doc.name}</p>
+      <div className="flex flex-wrap items-center gap-3 px-5 py-3">
+        <span className="font-mono text-[11px] text-fg-muted">{href ? (doc.uploaded ? "▤" : "↗") : "≡"}</span>
+        <p className="min-w-0 flex-1 text-sm font-medium text-fg-primary">{doc.name}</p>
         {doc.content ? (
           <button
             type="button"
@@ -602,27 +668,61 @@ function DocCard({
             {expanded ? "Collapse" : "Expand"}
           </button>
         ) : null}
-        {href && !preview ? (
+        {previewable && !preview ? (
+          <button
+            type="button"
+            onClick={() => setShowFile((v) => !v)}
+            aria-expanded={showFile}
+            className={btn}
+            style={{ borderColor: `${accent}55`, color: accent }}
+          >
+            {showFile ? "Hide" : "View"}
+          </button>
+        ) : null}
+        {href && !preview && (controls.allowDownload || !doc.uploaded) ? (
           <a
-            href={`/dataroom/${token}/d/${doc.id}`}
+            href={fileUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="rounded-lg border px-3 py-1.5 font-mono text-[11px] uppercase tracking-wider transition hover:bg-surface-0"
+            className={btn}
             style={{ borderColor: `${accent}55`, color: accent }}
           >
             Open →
           </a>
         ) : null}
+        {doc.uploaded && !preview && controls.allowDownload ? (
+          <a href={`${fileUrl}?download=1`} className={`${btn} border-line text-fg-muted`}>
+            Download
+          </a>
+        ) : null}
         {href && preview ? (
           // No live token in a preview: the real link is minted per recipient.
           <span
-            title="Opens the linked file for the recipient. Inert in preview."
+            title="Opens the file for the recipient. Inert in preview."
             className="rounded-lg border border-line px-3 py-1.5 font-mono text-[11px] uppercase tracking-wider text-fg-muted"
           >
             Open →
           </span>
         ) : null}
       </div>
+
+      {showFile && previewable && !preview ? (
+        <div className="border-t border-line/50 bg-surface-0 p-3">
+          <FilePreview
+            kind={kind}
+            src={`${fileUrl}?embed=1`}
+            previewUrl={`${fileUrl}/preview`}
+            name={doc.name}
+            viewOnly={!controls.allowDownload}
+            overlayLabel={controls.watermark ? viewerLabel || "Confidential" : null}
+          />
+          {!controls.allowDownload ? (
+            <p className="mt-2 font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+              View-only — downloads are turned off for this link
+            </p>
+          ) : null}
+        </div>
+      ) : null}
 
       {/* Native content */}
       {doc.content && expanded ? (

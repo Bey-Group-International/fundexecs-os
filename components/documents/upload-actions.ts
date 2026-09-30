@@ -2,8 +2,9 @@
 
 // Uploading a file into the library.
 //
-// The browser never sends the file through the app. It asks for a ticket, PUTs
-// the bytes straight to Storage with it, then asks the server to finalize —
+// The browser never sends the file through the app. It asks for a ticket, sends
+// the bytes straight to Storage over resumable (TUS) upload, then asks the
+// server to finalize —
 // three steps instead of one, for two reasons that matter at institutional file
 // sizes: a Server Action body is capped around a megabyte (a PPM is not), and a
 // 60 MB round trip through a serverless function is paid for twice.
@@ -16,8 +17,10 @@
 // Like everything else in this module, uploading publishes nothing: a file
 // reaches an outside reader only by being published into a data room.
 import { revalidatePath } from "next/cache";
-import { createServerClient, createServiceClient, hasSupabaseServiceEnv } from "@/lib/supabase/server";
+import { after } from "next/server";
+import { createServerClient, hasSupabaseServiceEnv } from "@/lib/supabase/server";
 import { getSessionContext } from "@/lib/auth";
+import { canWriteOrg } from "@/lib/rbac";
 import { DATA_ROOM_SECTIONS } from "@/lib/data-room";
 import {
   DOCUMENT_BUCKET,
@@ -28,6 +31,7 @@ import {
   formatBytes,
   isDocumentObjectPath,
   isUploadedFile,
+  mimeTypeForName,
   type UploadOutcome,
   type UploadTicket,
 } from "@/lib/document-files";
@@ -35,6 +39,7 @@ import {
   removeDocumentObjects,
   statDocumentObject,
 } from "@/lib/document-storage.server";
+import { extractAndStoreDocumentText } from "@/lib/document-text.server";
 import type { Document } from "@/lib/supabase/database.types";
 
 const SECTION_KEYS = new Set(DATA_ROOM_SECTIONS.map((s) => s.key));
@@ -70,6 +75,12 @@ export async function createUploadTicket(input: {
 }): Promise<UploadTicket> {
   const ctx = await getSessionContext();
   if (!ctx?.orgId) return { ok: false, error: "Sign in to upload." };
+  // Checked here as well as by RLS so a viewer hears why, instead of a generic
+  // failure — and so the replace path below, which only reads the row, cannot
+  // hand a read-only member a ticket.
+  if (!canWriteOrg(ctx.role)) {
+    return { ok: false, error: "Your role is view-only. Ask an owner or admin to upload this." };
+  }
   if (!hasSupabaseServiceEnv()) return { ok: false, error: "File storage is not configured." };
 
   const check = checkUploadCandidate({
@@ -112,18 +123,7 @@ export async function createUploadTicket(input: {
   }
 
   const path = documentObjectPath(ctx.orgId, documentId, crypto.randomUUID(), check.ext);
-  const { data: signed, error: signError } = await createServiceClient()
-    .storage.from(DOCUMENT_BUCKET)
-    .createSignedUploadUrl(path);
-  if (signError || !signed?.token) {
-    // Don't strand a row that will never get a file.
-    if (!input.documentId) {
-      await supabase.from("documents").delete().eq("id", documentId).eq("organization_id", ctx.orgId);
-    }
-    return { ok: false, error: "Could not start that upload." };
-  }
-
-  return { ok: true, documentId, path, token: signed.token };
+  return { ok: true, documentId, path, contentType: mimeTypeForName(input.fileName) };
 }
 
 /**
@@ -190,13 +190,20 @@ export async function finalizeUpload(input: {
     .from("documents")
     .update({
       storage_key: input.path,
-      // Trust Storage's own reading of the object over the browser's.
-      mime_type: object.mimeType ?? null,
+      // The extension is authoritative (lib/document-files): Storage records
+      // whatever content type the client sent, which may be octet-stream.
+      mime_type: mimeTypeForName(input.path),
       size_bytes: object.size,
     })
     .eq("id", input.documentId)
     .eq("organization_id", ctx.orgId);
   if (error) return { ok: false, error: "Could not attach that file." };
+
+  // Read the text layer after the response is sent, so the operator is not kept
+  // waiting on a 200-page PPM before the next file starts. Earn and the Office
+  // preview pick it up from `document_texts`; a miss is retried on first read.
+  const orgId = ctx.orgId;
+  after(() => extractAndStoreDocumentText({ orgId, documentId: input.documentId, storageKey: input.path }));
 
   revalidateBoth(input.documentId);
   return { ok: true };

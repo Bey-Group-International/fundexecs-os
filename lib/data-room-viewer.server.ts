@@ -12,6 +12,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { blendTrackRecord } from "@/lib/track-record";
 import { DATA_ROOM_SECTIONS } from "@/lib/data-room";
 import { sectionsAllowedBy } from "@/lib/data-rooms";
+import { isUploadedFile, previewKindFor } from "@/lib/document-files";
 import type { Database } from "@/lib/supabase/database.types";
 import type {
   Organization,
@@ -96,16 +97,23 @@ export async function buildViewerPayload(
   roomId: string,
   /** A link's section allowlist. `null` = unrestricted; `[]` allows nothing. */
   allowedSections: string[] | null,
+  /** Single-document link: show only this document, published or not. */
+  documentId: string | null = null,
 ): Promise<ViewerPayload | null> {
   if (!(await isRoomOpen(supabase, orgId, roomId))) return null;
 
-  const { data: manifestRows } = await supabase
-    .from("data_room_documents")
-    .select("document_id, sort_order")
-    .eq("organization_id", orgId)
-    .eq("room_id", roomId)
-    .order("sort_order", { ascending: true });
-  const manifest = (manifestRows ?? []) as { document_id: string; sort_order: number }[];
+  let manifest: { document_id: string; sort_order: number }[];
+  if (documentId) {
+    manifest = [{ document_id: documentId, sort_order: 0 }];
+  } else {
+    const { data: manifestRows } = await supabase
+      .from("data_room_documents")
+      .select("document_id, sort_order")
+      .eq("organization_id", orgId)
+      .eq("room_id", roomId)
+      .order("sort_order", { ascending: true });
+    manifest = (manifestRows ?? []) as { document_id: string; sort_order: number }[];
+  }
   const manifestOrder = new Map(manifest.map((m) => [m.document_id, m.sort_order ?? 0]));
 
   const [orgRes, thesisRes, recordsRes, entitiesRes, membersRes, docsRes] = await Promise.all([
@@ -168,6 +176,8 @@ export async function buildViewerPayload(
       content: d.content ?? null,
       storage_key: d.storage_key ?? null,
       doc_type: d.doc_type ?? null,
+      preview_kind: previewKindFor(d.storage_key),
+      uploaded: isUploadedFile(d.storage_key),
     };
     const bucket = docsBySection.get(k);
     if (bucket) bucket.push(doc);
@@ -175,7 +185,8 @@ export async function buildViewerPayload(
   }
 
   const docSections: ViewerSection[] = sectionsAllowedBy(
-    allowedSections,
+    // A document link is scoped by its document, never narrowed by sections.
+    documentId ? null : allowedSections,
     DATA_ROOM_SECTIONS.map((s) => ({
       key: s.key,
       label: s.label,
