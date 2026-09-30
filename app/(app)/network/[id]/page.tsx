@@ -43,8 +43,15 @@ export default async function ContactPage({ params }: Props) {
   const { id } = await params;
   const supabase = (await createServerClient()) as any;
 
+  // The same right flag_network_activity_misattributed checks for itself, read
+  // here so the page can both SHOW corrected entries and offer the action. A
+  // member must receive neither: if a corrected entry reached an ordinary
+  // reader the correction would be cosmetic, and an action they cannot perform
+  // is a button whose only outcome is a 403.
+  const canCorrect = ctx.role === "owner" || ctx.role === "admin";
+
   const [view, names] = await Promise.all([
-    loadContactRecord(supabase, ctx.orgId, id),
+    loadContactRecord(supabase, ctx.orgId, id, { includeCorrected: canCorrect }),
     loadPrincipalNames(supabase, ctx.orgId),
   ]);
 
@@ -78,7 +85,8 @@ export default async function ContactPage({ params }: Props) {
         initial={view}
         owners={owners}
         currentUserId={ctx.userId}
-        canDelete={ctx.role === "owner" || ctx.role === "admin"}
+        canDelete={canCorrect}
+        canCorrect={canCorrect}
       />
     </div>
   );

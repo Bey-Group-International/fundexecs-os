@@ -346,4 +346,43 @@ describe("the readers skip corrected entries", () => {
     expect(filters.network_activities).toContainEqual(["organization_id", "org-1"]);
     expect(filters.network_activities).toContainEqual(["contact_id", "contact-ana"]);
   });
+
+  /**
+   * The option that lets an admin see what they corrected, asserted in BOTH
+   * directions.
+   *
+   * One direction alone is worthless here: a loader that ignored the option
+   * entirely would pass "filtered by default", and a loader that dropped the
+   * filter unconditionally would pass "unfiltered when asked". Only the pair
+   * establishes that the option is what decides.
+   */
+  it("keeps the filter when the option is absent or false", async () => {
+    for (const options of [undefined, {}, { includeCorrected: false }]) {
+      const { client, filters } = filterRecordingClient();
+      await loadContactRecord(client as never, "org-1", "contact-ana", options);
+      expect(filters.network_activities).toContainEqual(["misattributed_at", null]);
+    }
+  });
+
+  it("drops the filter only when a caller who may correct asks for it", async () => {
+    const { client, filters } = filterRecordingClient();
+    await loadContactRecord(client as never, "org-1", "contact-ana", { includeCorrected: true });
+
+    expect(filters.network_activities).not.toContainEqual(["misattributed_at", null]);
+    // The org and contact scoping is NOT what was relaxed.
+    expect(filters.network_activities).toContainEqual(["organization_id", "org-1"]);
+    expect(filters.network_activities).toContainEqual(["contact_id", "contact-ana"]);
+  });
+
+  // Truthiness is not enough: the page passes a boolean from a role check, and a
+  // stray string or 1 arriving from anywhere else must not open the record.
+  it("treats anything but true as false", async () => {
+    for (const value of ["yes", 1, {}] as unknown[]) {
+      const { client, filters } = filterRecordingClient();
+      await loadContactRecord(client as never, "org-1", "contact-ana", {
+        includeCorrected: value as boolean,
+      });
+      expect(filters.network_activities).toContainEqual(["misattributed_at", null]);
+    }
+  });
 });

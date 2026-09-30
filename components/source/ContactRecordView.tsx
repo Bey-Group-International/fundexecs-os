@@ -12,6 +12,7 @@
 
 import { useCallback, useMemo, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { CONTACT_STAGES, STAGE_LABEL, type ContactStage } from "@/lib/network-stages";
 import { LOGGABLE_TYPES } from "@/lib/network-contact";
 import { reportUrlFromMetadata } from "@/lib/meetings/crm-activity";
@@ -81,14 +82,62 @@ interface Props {
   owners: { id: string; name: string }[];
   currentUserId: string;
   canDelete: boolean;
+  /**
+   * Whether this viewer may correct a machine-written entry — the org-admin
+   * right flag_network_activity_misattributed checks for itself. It also
+   * governs whether corrected entries were LOADED at all, so a false here means
+   * `entries` contains none and there is nothing to reveal.
+   */
+  canCorrect: boolean;
 }
 
-export function ContactRecordView({ initial, owners, currentUserId }: Props) {
+export function ContactRecordView({ initial, owners, currentUserId, canCorrect }: Props) {
   const [contact, setContact] = useState<ContactRecord>(initial.contact);
   const [timeline, setTimeline] = useState<TimelineEntry[]>(initial.timeline);
   const [tasks, setTasks] = useState<ContactTask[]>(initial.tasks);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<{ tone: "ok" | "error"; text: string } | null>(null);
+  const router = useRouter();
+
+  /**
+   * Mark an automatic entry as being about the wrong person, or put it back.
+   *
+   * Refreshes the server component rather than patching the row in state. The
+   * RPC does two things: it marks the row AND recomputes the contact's
+   * last_activity_at from the entries that remain. Patching one entry would
+   * leave the header showing a recency the database no longer agrees with —
+   * the same half-a-fix the function exists to avoid.
+   */
+  const correctEntry = useCallback(
+    async (entryId: string, misattributed: boolean, reason: string | null) => {
+      try {
+        const res = await fetch(`/api/network/activities/${entryId}/correction`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          // Sent explicitly in both directions. The route requires a boolean and
+          // has no default, so an omitted field is a 400 rather than a restore.
+          body: JSON.stringify({ misattributed, reason }),
+        });
+        if (!res.ok) {
+          const body = (await res.json().catch(() => null)) as { error?: string } | null;
+          throw new Error(body?.error ?? "Couldn't update that entry.");
+        }
+        setMessage({
+          tone: "ok",
+          text: misattributed
+            ? "Entry marked as the wrong person. It is kept as evidence and hidden from the record."
+            : "Entry restored to the record.",
+        });
+        router.refresh();
+      } catch (err) {
+        setMessage({
+          tone: "error",
+          text: err instanceof Error ? err.message : "Couldn't update that entry.",
+        });
+      }
+    },
+    [router],
+  );
 
   const openTasks = useMemo(() => tasks.filter((t) => t.status === "open"), [tasks]);
 
@@ -258,7 +307,7 @@ export function ContactRecordView({ initial, owners, currentUserId }: Props) {
         {/* Timeline */}
         <section className="flex flex-col gap-4">
           <ActivityComposer onLog={logActivity} onError={(t) => setMessage({ tone: "error", text: t })} />
-          <Timeline entries={timeline} />
+          <Timeline entries={timeline} canCorrect={canCorrect} onCorrect={correctEntry} />
         </section>
 
         {/* Relationship state */}
@@ -466,30 +515,70 @@ function ActivityComposer({
   );
 }
 
-function Timeline({ entries }: { entries: TimelineEntry[] }) {
-  if (entries.length === 0) {
+function Timeline({
+  entries,
+  canCorrect,
+  onCorrect,
+}: {
+  entries: TimelineEntry[];
+  canCorrect: boolean;
+  onCorrect: (entryId: string, misattributed: boolean, reason: string | null) => Promise<void>;
+}) {
+  const [showCorrected, setShowCorrected] = useState(false);
+
+  const corrected = useMemo(() => entries.filter((e) => e.misattributedAt !== null), [entries]);
+  const visible = useMemo(
+    () => (showCorrected ? entries : entries.filter((e) => e.misattributedAt === null)),
+    [entries, showCorrected],
+  );
+
+  // Never reached by a member: the loader does not return corrected rows unless
+  // the caller may correct them, so `corrected` is empty and this renders
+  // nothing. The canCorrect check is belt and braces on top of that.
+  const toggle =
+    canCorrect && corrected.length > 0 ? (
+      <button
+        type="button"
+        onClick={() => setShowCorrected((v) => !v)}
+        className="mb-3 text-[11px] text-fg-muted underline-offset-2 transition hover:text-fg-primary hover:underline"
+      >
+        {showCorrected
+          ? "Hide corrected entries"
+          : `Show ${corrected.length} corrected ${corrected.length === 1 ? "entry" : "entries"}`}
+      </button>
+    ) : null;
+
+  if (visible.length === 0) {
     return (
-      <div className="fx-card p-8 text-center">
+      <div>
+        {toggle}
+        <div className="fx-card p-8 text-center">
         <p className="text-sm font-medium text-fg-primary">Nothing logged yet</p>
         <p className="mx-auto mt-2 max-w-sm text-xs text-fg-muted">
           Log the first call, meeting, or note above. From then on this is the relationship&apos;s record —
           what happened, when, and who was there.
         </p>
+        </div>
       </div>
     );
   }
 
   return (
-    <ol className="flex flex-col">
-      {entries.map((e, i) => (
-        <li key={e.id} className="relative flex gap-3 pb-4 pl-1">
+    <div>
+      {toggle}
+      <ol className="flex flex-col">
+      {visible.map((e, i) => (
+        <li
+          key={e.id}
+          className={`relative flex gap-3 pb-4 pl-1 ${e.misattributedAt ? "opacity-55" : ""}`}
+        >
           <div className="flex flex-col items-center">
             <span
               className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${
-                e.isSystem ? "bg-fg-muted/50" : "bg-gold-400"
+                e.misattributedAt ? "bg-fg-muted/30" : e.isSystem ? "bg-fg-muted/50" : "bg-gold-400"
               }`}
             />
-            {i < entries.length - 1 && <span className="mt-1 w-px flex-1 bg-line" />}
+            {i < visible.length - 1 && <span className="mt-1 w-px flex-1 bg-line" />}
           </div>
           <div className="min-w-0 flex-1 pb-1">
             <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
@@ -528,6 +617,14 @@ function Timeline({ entries }: { entries: TimelineEntry[] }) {
                   Sender unverified
                 </span>
               )}
+              {e.misattributedAt && (
+                <span
+                  className="rounded border border-line px-1 font-mono text-[10px] uppercase tracking-wider text-fg-muted/70"
+                  title="Established as being about the wrong person. The entry is kept as evidence and hidden from this record."
+                >
+                  Corrected
+                </span>
+              )}
             </div>
             {e.subject && <p className="mt-0.5 text-sm text-fg-primary">{e.subject}</p>}
             {e.body && (
@@ -541,10 +638,124 @@ function Timeline({ entries }: { entries: TimelineEntry[] }) {
                 Open the full report →
               </a>
             )}
+            {e.misattributedAt && (
+              <p className="mt-1 text-[11px] text-fg-muted">
+                Marked as the wrong person
+                {e.misattributedByName ? ` by ${e.misattributedByName}` : ""}
+                {e.misattributionReason ? ` — ${e.misattributionReason}` : ""}
+              </p>
+            )}
+            {/*
+              Offered on SYSTEM entries only. A hand-written note has an owner
+              and ordinary edit and delete rights, and the function refuses it
+              with 22023 — so offering this there would be a control whose only
+              possible outcome is an error.
+            */}
+            {canCorrect && e.isSystem && (
+              <CorrectionControl
+                entry={e}
+                onCorrect={onCorrect}
+              />
+            )}
           </div>
         </li>
       ))}
-    </ol>
+      </ol>
+    </div>
+  );
+}
+
+/**
+ * The control that takes a machine-written entry off the wrong record, and the
+ * one that puts it back.
+ *
+ * Marking asks for a reason first. The reason is what makes the correction
+ * reviewable later — an entry hidden with no stated cause is indistinguishable
+ * from one hidden by mistake — but it is optional, because refusing to accept a
+ * correction without one would leave the wrong entry on the record.
+ */
+function CorrectionControl({
+  entry,
+  onCorrect,
+}: {
+  entry: TimelineEntry;
+  onCorrect: (entryId: string, misattributed: boolean, reason: string | null) => Promise<void>;
+}) {
+  const [asking, setAsking] = useState(false);
+  const [reason, setReason] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  async function run(misattributed: boolean, why: string | null) {
+    setBusy(true);
+    try {
+      await onCorrect(entry.id, misattributed, why);
+      setAsking(false);
+      setReason("");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (entry.misattributedAt) {
+    return (
+      <button
+        type="button"
+        disabled={busy}
+        onClick={() => run(false, null)}
+        className="mt-1 text-[11px] text-fg-muted underline-offset-2 transition hover:text-fg-primary hover:underline disabled:opacity-50"
+      >
+        {busy ? "Restoring…" : "Restore to the record"}
+      </button>
+    );
+  }
+
+  if (!asking) {
+    return (
+      <button
+        type="button"
+        onClick={() => setAsking(true)}
+        className="mt-1 text-[11px] text-fg-muted underline-offset-2 transition hover:text-fg-primary hover:underline"
+      >
+        Wrong person?
+      </button>
+    );
+  }
+
+  return (
+    <div className="mt-2 flex flex-col gap-2">
+      <label className="text-[11px] text-fg-muted" htmlFor={`why-${entry.id}`}>
+        Why is this the wrong person? (optional)
+      </label>
+      <input
+        id={`why-${entry.id}`}
+        value={reason}
+        onChange={(ev) => setReason(ev.target.value)}
+        maxLength={500}
+        placeholder="A colleague's address was on the invite"
+        className="fx-input text-xs"
+      />
+      <div className="flex gap-2">
+        <button
+          type="button"
+          disabled={busy}
+          onClick={() => run(true, reason.trim() || null)}
+          className="fx-btn-secondary px-2 py-1 text-[11px] disabled:opacity-50"
+        >
+          {busy ? "Marking…" : "Take it off this record"}
+        </button>
+        <button
+          type="button"
+          disabled={busy}
+          onClick={() => {
+            setAsking(false);
+            setReason("");
+          }}
+          className="text-[11px] text-fg-muted transition hover:text-fg-primary"
+        >
+          Cancel
+        </button>
+      </div>
+    </div>
   );
 }
 
