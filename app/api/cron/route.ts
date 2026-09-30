@@ -11,6 +11,10 @@ import { runIntelligenceSyncAllOrgs } from "@/lib/intelligence/sweep";
 import { refreshStaleFeeds } from "@/lib/calendar/feeds.server";
 import { syncStaleGoogleConnections } from "@/lib/calendar/google.server";
 import { runMeetingReminders, type ReminderSweepStats } from "@/lib/meetings/reminder-sweep.server";
+import {
+  runBookingConfirmationRetries,
+  type ConfirmationRetryStats,
+} from "@/lib/meetings/booking-confirmation.server";
 import { runRecordingSweep, type RecordingSweepStats } from "@/lib/meetings/recording-sweep.server";
 import { runEventIdRepair } from "@/lib/calendar/event-id-repair.server";
 import { NO_REPAIRS, summarize, worthReporting, type RepairStats } from "@/lib/calendar/event-id-repair";
@@ -293,6 +297,16 @@ export async function GET(request: Request) {
     console.error("meeting_reminders failed", e);
   }
 
+  // Booking confirmations that never reached the invitee — no host mailbox, or
+  // the mail provider refusing. Re-sent (invitee's copy only) until delivered,
+  // the booking stops being live, the meeting starts, or ~two days pass.
+  let bookingConfirmations: ConfirmationRetryStats = { due: 0, delivered: 0, failed: 0 };
+  try {
+    bookingConfirmations = await runBookingConfirmationRetries(supabase, { now });
+  } catch (e) {
+    console.error("booking_confirmation_retries failed", e);
+  }
+
   // Meeting recordings: retention, closing out recordings nobody stopped, and
   // the ones whose meeting was deleted out from under them.
   //
@@ -412,5 +426,5 @@ export async function GET(request: Request) {
     // best-effort: never let health tracking break the cron response
   }
 
-  return NextResponse.json({ swept: due.length, results, radar, escalated, webhooks, proactive, reminders, calendarRepair, subscriptions, settledInvoices, nativeCollections, networkAutomations });
+  return NextResponse.json({ swept: due.length, results, radar, escalated, webhooks, proactive, reminders, bookingConfirmations, calendarRepair, subscriptions, settledInvoices, nativeCollections, networkAutomations });
 }

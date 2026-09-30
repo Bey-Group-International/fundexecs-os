@@ -157,6 +157,11 @@ describe("sendBookingEmails — the invitation", () => {
     }
   });
 
+  it("can send the invitee's copy alone, for a retry the host already has", async () => {
+    await sendBookingEmails("confirmed", ctx(), { inviteeOnly: true });
+    expect(recipients()).toEqual(["ada@example.com"]);
+  });
+
   it("reports how many messages actually went out", async () => {
     sendEmailMock.mockResolvedValue({ ok: false, channel: "in-app", detail: "no mailbox" });
     const result = await sendBookingEmails("confirmed", ctx());

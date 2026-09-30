@@ -19,9 +19,7 @@ import {
   resolvePublicPage,
   serializeBooking,
 } from "@/lib/meetings/scheduling-service";
-import { sendBookingEmails } from "@/lib/meetings/scheduling-email";
-import { hostContactFor } from "@/lib/meetings/scheduling-host";
-import { hostCredentials } from "@/lib/meetings/mailbox.server";
+import { sendBookingConfirmation } from "@/lib/meetings/booking-confirmation.server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -86,39 +84,11 @@ export async function POST(
       inviteeTimezone: isValidTimezone(body.timezone) ? body.timezone : null,
     });
 
-    const host = await hostContactFor(service, resolved.page);
     const joinUrl = roomCode ? buildMeetingInviteUrl(SITE_URL, roomCode) : null;
     const manageUrl = buildBookingManageUrl(SITE_URL, booking.manage_token);
 
-    const mail = await sendBookingEmails(booking.status === "pending" ? "requested" : "confirmed", {
-      // The invitee is anonymous, so there is no acting user to send as. The
-      // person this is from is the host whose link was booked, so it goes out
-      // from their mailbox; without one it falls back to the org's, because a
-      // booking confirmation the invitee never receives is worse than one from
-      // a shared address.
-      credentials: await hostCredentials(service, resolved.page.user_id, resolved.page.organization_id ?? undefined),
-      orgId: resolved.page.organization_id ?? undefined,
-      eventTitle: eventType.title,
-      hostName: resolved.page.display_name,
-      hostEmail: host.email,
-      inviteeName: booking.invitee_name,
-      inviteeEmail: booking.invitee_email,
-      inviteeTimezone: booking.invitee_timezone,
-      hostTimezone: resolved.page.timezone,
-      startIso: booking.starts_at,
-      endIso: booking.ends_at,
-      durationMinutes: eventType.duration_minutes,
-      notes: booking.invitee_notes,
-      joinUrl,
-      manageUrl,
-      manageToken: booking.manage_token,
-      hostMeetingsUrl: `${SITE_URL}/meetings`,
-      bookingId: booking.id,
-      bookingCreatedAt: booking.created_at,
-      bookingUpdatedAt: booking.updated_at,
-      bookingSequence: booking.calendar_sequence,
-      siteUrl: SITE_URL,
-    });
+    // Marks the booking for the cron to retry if the invitee's copy fails.
+    const mail = await sendBookingConfirmation(service, { booking, page: resolved.page, eventType, roomCode });
 
     return NextResponse.json({
       booking: serializeBooking({ ...booking, event_title: eventType.title }),
