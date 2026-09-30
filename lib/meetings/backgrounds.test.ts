@@ -1,3 +1,6 @@
+import { readFileSync } from "fs";
+import { join } from "path";
+
 import {
   BACKGROUND_PREF_KEY,
   FRAME_BUDGET_MS,
@@ -6,6 +9,9 @@ import {
   SLOW_FRAME_RUN,
   UPLOAD_MAX_BYTES,
   MASK_SMOOTHING,
+  MASK_SMOOTHING_UNCERTAIN,
+  blendAlphaForCoverage,
+  blendCoverageByCertainty,
   CONFIDENCE_BACKGROUND,
   CONFIDENCE_PERSON,
   blendCoverage,
@@ -83,6 +89,108 @@ describe("personCoverage", () => {
     expect(personCoverage(255)).toBe(0);
     expect(personCoverage(1)).toBe(0);
     expect(personCoverage(7)).toBe(0);
+  });
+});
+
+/**
+ * The blend that stopped the chair strobing.
+ *
+ * Asserted as the OUTCOME a person sees — the settled peak-to-peak swing of a
+ * pixel the model keeps changing its mind about — and not as "the alpha varies".
+ * A test that the mechanism fired is the mistake this session has already made
+ * twice: it agrees with the author's assumption instead of constraining what
+ * ends up on screen.
+ */
+describe("blendCoverageByCertainty", () => {
+  /** Settled swing for a pixel oscillating between two confidences. */
+  function settledSwing(
+    lo: number,
+    hi: number,
+    blend: (p: Uint8ClampedArray, t: Uint8ClampedArray) => void,
+    frames = 60,
+  ): number {
+    const previous = new Uint8ClampedArray(1);
+    const seen: number[] = [];
+    for (let i = 0; i < frames; i++) {
+      blend(previous, new Uint8ClampedArray([coverageFromConfidence(i % 2 === 0 ? lo : hi)]));
+      seen.push(previous[0]);
+    }
+    const tail = seen.slice(frames / 2);
+    return Math.max(...tail) - Math.min(...tail);
+  }
+
+  // The measured case: a chair's edge drifting across the uncertainty band.
+  // Under the uniform blend it settles at 65/255 — a quarter of full opacity,
+  // flipping every other frame, which is the strobe.
+  it("cuts the strobe on a pixel the model cannot decide", () => {
+    const uniform = settledSwing(0.05, 0.25, (p, t) => blendCoverage(p, t, MASK_SMOOTHING));
+    const byCertainty = settledSwing(0.05, 0.25, (p, t) => blendCoverageByCertainty(p, t));
+
+    expect(uniform).toBeGreaterThan(50);
+    expect(byCertainty).toBeLessThan(20);
+    expect(byCertainty).toBeLessThan(uniform / 3);
+  });
+
+  // The other half, and the reason this is not just "smooth everything harder":
+  // a confident pixel must keep the responsive rate, or turning your head drags
+  // the mask behind you.
+  it("leaves a settled, confident pixel at the responsive rate", () => {
+    expect(blendAlphaForCoverage(255)).toBeCloseTo(MASK_SMOOTHING, 5);
+    expect(blendAlphaForCoverage(0)).toBeCloseTo(MASK_SMOOTHING, 5);
+    expect(blendAlphaForCoverage(127.5)).toBeCloseTo(MASK_SMOOTHING_UNCERTAIN, 5);
+  });
+
+  // Keyed off the running history, not the incoming frame. Keying off the target
+  // would hand the strobe a fast lane on every frame it happens to read
+  // confidently, and change nothing a viewer could see.
+  it("still converges, and does not stall on an undecided pixel", () => {
+    const previous = new Uint8ClampedArray([127]);
+    for (let i = 0; i < 80; i++) blendCoverageByCertainty(previous, new Uint8ClampedArray([255]));
+    expect(previous[0]).toBeGreaterThan(250);
+  });
+
+  it("writes in place and allocates nothing", () => {
+    const previous = new Uint8ClampedArray([0, 255]);
+    expect(blendCoverageByCertainty(previous, new Uint8ClampedArray([255, 0]))).toBe(previous);
+  });
+
+  it("survives a shorter target without throwing", () => {
+    const previous = new Uint8ClampedArray(8);
+    expect(() => blendCoverageByCertainty(previous, new Uint8ClampedArray(2))).not.toThrow();
+  });
+});
+
+/**
+ * That the processor actually routes its per-frame mask through the blend above.
+ *
+ * The tests above establish what the rule DOES. They say nothing about whether
+ * anything calls it — reverting the processor to the uniform blend passed all
+ * 106 of them, which is the third time this session a rule has been tested and
+ * the line wiring it in has not.
+ *
+ * Read from source, and weaker than the rest of this file because of it: the
+ * processor reaches for MediaPipe through a dynamic import that jsdom cannot
+ * resolve, so the segmenter path never executes here and there is no behaviour
+ * to assert. A real check needs a segmenter fake, which is a larger piece of work
+ * than the change it would guard. This catches the revert; it does not prove the
+ * call runs.
+ *
+ * Matched with its argument rather than by name, so a sentence mentioning the
+ * function cannot satisfy it.
+ */
+describe("the processor uses the certainty blend", () => {
+  const processorSource = readFileSync(
+    join(__dirname, "background-processor.ts"),
+    "utf8",
+  );
+
+  it("blends its running mask history through it", () => {
+    expect(processorSource).toMatch(/blendCoverageByCertainty\(\s*this\.maskHistory/);
+  });
+
+  it("imports it rather than the uniform primitive", () => {
+    expect(processorSource).toMatch(/^\s*blendCoverageByCertainty,\s*$/m);
+    expect(processorSource).not.toMatch(/blendCoverage\(\s*this\.maskHistory/);
   });
 });
 
