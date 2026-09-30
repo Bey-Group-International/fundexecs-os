@@ -223,7 +223,13 @@ it("strips control characters out of a session id before logging it", async () =
 
   const repairLog = spy.mock.calls.flat().join(" ");
   expect(repairLog).toContain("needs manual repair"); // the path really ran
-  expect(repairLog).not.toContain("\n");
-  expect(repairLog).not.toContain("FAKE ENTRY");
+
+  // The property that matters is that the forged text cannot become its own
+  // LINE. Asserting "FAKE ENTRY" is absent would be weak — it survives as
+  // "FAKEENTRY" once the space is stripped, and passes for the wrong reason.
+  // What must hold is that no line break reaches the log at all.
+  expect(repairLog).not.toMatch(/[\r\n]/);
+  // And the mangled remains stay inside the one line the repair message owns.
+  expect(repairLog.split("\n")).toHaveLength(1);
   spy.mockRestore();
 });

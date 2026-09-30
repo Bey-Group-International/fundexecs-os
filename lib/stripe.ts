@@ -689,7 +689,15 @@ type ClaimResult = "won" | "taken" | "error";
  * dropped and the result is capped.
  */
 function logSafe(value: string): string {
-  return value.replace(/[^A-Za-z0-9_-]/g, "").slice(0, 80);
+  // The CR/LF strip is the barrier that matters and is written separately on
+  // purpose: an allowlist replace removes newlines too, but static analysis
+  // does not model it as a log-injection barrier, so CodeQL kept flagging this
+  // line. Explicit first, allowlist second for everything else an id should not
+  // carry, then a length cap.
+  return value
+    .replace(/[\r\n]/g, "")
+    .replace(/[^A-Za-z0-9_-]/g, "")
+    .slice(0, 80);
 }
 
 /**
