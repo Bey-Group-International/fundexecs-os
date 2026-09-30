@@ -163,13 +163,13 @@ export async function getInvoiceByToken(token: string): Promise<PaymentInvoice |
 export async function markInvoicePaid(
   invoiceId: string,
   stripe: { sessionId?: string | null; paymentIntent?: string | null },
-): Promise<void> {
+): Promise<{ ok: boolean; error?: string }> {
   const service = createServiceClient();
   const paidAt = new Date().toISOString();
   // `.select("*")` returns the row ONLY when the `neq('paid')` guard actually
   // flipped it — so a redelivered webhook that no-ops returns no row. That makes
   // the receipt send-once: we only email on the real open→paid transition.
-  const { data } = await service
+  const { data, error } = await service
     .from("payment_invoices")
     .update({
       status: "paid",
@@ -181,6 +181,11 @@ export async function markInvoicePaid(
     .neq("status", "paid")
     .select("*")
     .maybeSingle();
+
+  // supabase-js reports a failed update in `error` rather than throwing, so
+  // dropping it made a write that never landed indistinguishable from one that
+  // did. The caller settles a paid checkout on this answer.
+  if (error) return { ok: false, error: error.message };
 
   const row = (data as PaymentInvoice | null) ?? null;
 
@@ -222,4 +227,8 @@ export async function markInvoicePaid(
       console.error("[invoices] receipt-email failed:", err);
     }
   }
+
+  // No row means the invoice was already paid — a redelivered webhook, which is
+  // a successful no-op, not a failure.
+  return { ok: true };
 }
