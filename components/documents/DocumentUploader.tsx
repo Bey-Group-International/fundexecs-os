@@ -475,7 +475,6 @@ export function ReplaceFileButton({
       {state === "error" && upgrade ? (
         <Link
           href="/wallet"
-          title={error}
           className="shrink-0 rounded-lg border border-gold-500/40 px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider text-gold-300 transition hover:bg-gold-500/10"
         >
           Upgrade
