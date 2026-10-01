@@ -1,0 +1,110 @@
+# Check a migration BEFORE it merges.
+#
+# Why this workflow exists: until it did, nothing checked migrations at all.
+# `ci.yml` runs lint, typecheck and build; `jest.yml` filters its paths to
+# `**/*.ts` and friends. Neither matches `supabase/migrations/**`, so a
+# migration-only pull request ran no check that had an opinion about the
+# migration. The first automated opinion arrived from `db-migrate.yml` AFTER
+# the merge, against production.
+#
+# For a migration that is merely broken, that is survivable: main goes red and
+# someone fixes it. The three shapes this check exists for are not, because
+# every existing check is GREEN for all of them:
+#
+#   - editing a migration that already merged, whose version production has
+#     already recorded, so `db push` never runs the edit;
+#   - deleting one, which leaves production holding a version this directory
+#     cannot explain and makes `db push` refuse to run anything at all;
+#   - stamping a new migration with a version that is already recorded.
+#
+# The reasoning for each is in lib/db/migration-rules.ts, and the recovery
+# procedure is in supabase/migrations/README.md.
+#
+# NO SECRETS, DELIBERATELY. On `pull_request` the workflow file comes from the
+# branch under test, so any secret available here is available to anything
+# anyone pushes. Every rule this job enforces is a fact about the diff, so it
+# needs no database access -- and the one shape that DOES need the remote
+# history (a version already recorded out of band) is detected by
+# `db-migrate.yml` instead, which already holds those credentials and only ever
+# runs from main. Keep it that way: if a future check here seems to need
+# production, it belongs in db-migrate.yml.
+name: Migration check
+
+on:
+  pull_request:
+    # `reopened` and `ready_for_review` are both deliberate, for the reasons
+    # written up at length in ci.yml: without the first, a pull request closed
+    # and reopened runs nothing; without the second, a missed `opened` delivery
+    # has no second chance. #1103 and #1097 each lost their runs that way.
+    types: [opened, synchronize, reopened, ready_for_review]
+    # No `branches:` filter -- it matches the PR's BASE, so a stacked pull
+    # request would run nothing. Again, see ci.yml.
+    paths:
+      - "supabase/migrations/**"
+      - "lib/db/migration-rules.ts"
+      - "scripts/check-migrations.ts"
+      - ".github/workflows/migration-check.yml"
+  # Also on main, so a migration that reached main without this check having run
+  # (a missed event, or a merge made before this workflow existed) still gets
+  # looked at, and so the rules themselves are exercised on every push.
+  push:
+    branches: [main]
+    paths:
+      - "supabase/migrations/**"
+      - "lib/db/migration-rules.ts"
+      - "scripts/check-migrations.ts"
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  # A pull request groups by number so a new push supersedes the old run;
+  # everything else groups by commit, so a merged commit's run is never
+  # cancelled. Same shape as jest.yml.
+  group: migration-check-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  check:
+    name: Check migrations
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          # The check compares against the merge base with the base branch, so
+          # it needs that branch present. A shallow clone has neither, and the
+          # script fails loudly rather than passing on a diff it cannot compute.
+          fetch-depth: 0
+          # Keep this job's token out of .git/config, where every later step
+          # could read it (zizmor: artipacked). Nothing here pushes.
+          persist-credentials: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      # `npm ci`, not `npm install tsx`, even though tsx is the only dependency
+      # this job actually needs. An ad-hoc install resolves outside the
+      # lockfile, which zizmor reports as `adhoc-packages` and which this
+      # repository has a stated position on -- .github/zizmor.yml exists
+      # precisely to write the pinning rules down rather than silence them. The
+      # extra time is the honest price of a pinned dependency tree.
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Check migrations
+        run: npx tsx scripts/check-migrations.ts
+        env:
+          # Read by the script to decide whether a missing merge base is fatal
+          # (on a pull request it is) and whether to emit workflow commands.
+          GITHUB_EVENT_NAME: ${{ github.event_name }}
+          GITHUB_BASE_REF: ${{ github.base_ref }}
+          # On a push to main the base is the commit before it, not `main` --
+          # which on that event IS the commit being checked. Without this the
+          # main run would compare main against itself and always report that
+          # nothing changed.
+          GITHUB_EVENT_BEFORE: ${{ github.event.before }}
