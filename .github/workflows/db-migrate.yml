@@ -128,8 +128,25 @@ jobs:
       # Best-effort: if the history cannot be read the push step below will fail
       # on the same credentials and say so properly, so this does not exit 1 and
       # pre-empt a clearer error.
+      #
+      # /tmp/pre-push-trusted is what check (c) keys off, NOT whether the version
+      # file is empty. Three states produce an empty version file and they are
+      # not the same thing:
+      #
+      #   the read FAILED                no answer          -> do not compare
+      #   the read worked, 0 recorded    an answer of none  -> DO compare
+      #   the read worked, parse broke   no answer          -> do not compare
+      #
+      # Branching on emptiness alone treats the middle state as the other two,
+      # which is the very conflation of "could not check" with "nothing to
+      # check" that this workflow exists to stop making. The marker is written
+      # only when the snapshot is trustworthy, INCLUDING when it is legitimately
+      # empty.
       - name: Record the remote history before pushing
         run: |
+          : > /tmp/pre-push-versions.txt
+          rm -f /tmp/pre-push-trusted
+
           if supabase migration list --linked > /tmp/pre-push-list.txt 2>&1; then
             # Field 2 is the REMOTE column. Depending only on `|` as the column
             # separator is deliberate: the CLI has already changed how it
@@ -139,11 +156,33 @@ jobs:
             sed -e 's/\x1b\[[0-9;]*m//g' -e 's/`//g' /tmp/pre-push-list.txt \
               | awk -F'|' 'NF>=2 { v=$2; gsub(/[^0-9]/,"",v); if (v != "") print v }' \
               | sort -u > /tmp/pre-push-versions.txt
-            echo "Remote history before this push: $(wc -l < /tmp/pre-push-versions.txt) version(s)."
+
+            count="$(wc -l < /tmp/pre-push-versions.txt | tr -d ' ')"
+            repo_total="$(ls supabase/migrations/*.sql 2>/dev/null | wc -l | tr -d ' ')"
+
+            # Parsing nothing out of a repository that HAS migrations is the
+            # signature of a broken parse, not of an empty database -- the same
+            # reasoning as the post-push guard, which exists because the CLI
+            # once started wrapping values in backticks and all 237 migrations
+            # read as missing. Erring toward "not trustworthy" is deliberate:
+            # trusting a broken parse makes the comparison silently vacuous,
+            # which looks exactly like a clean result.
+            #
+            # A genuinely empty production against a non-empty repository (a
+            # brand-new project) is indistinguishable from that here and would
+            # draw this warning once. That is the right way round: the only cost
+            # is a skipped comparison on a first-ever push, where nothing can
+            # have been applied out of band anyway.
+            if [ "$count" -eq 0 ] && [ "$repo_total" -gt 0 ]; then
+              echo "::warning title=Could not parse the remote history before pushing::'migration list' succeeded but no versions could be read out of it, while this repository has ${repo_total} migration(s). Treating the snapshot as untrustworthy rather than as an empty history."
+              cat /tmp/pre-push-list.txt
+            else
+              : > /tmp/pre-push-trusted
+              echo "Remote history before this push: ${count} version(s)."
+            fi
           else
-            echo "::warning title=Could not read the remote history before pushing::The out-of-band check below will be skipped. The push step should explain why."
+            echo "::warning title=Could not read the remote history before pushing::The out-of-band check below cannot run. The push step should explain why."
             cat /tmp/pre-push-list.txt
-            : > /tmp/pre-push-versions.txt
           fi
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
@@ -266,10 +305,24 @@ jobs:
           # first-attempt push that introduces the file.
           if [ "$GITHUB_EVENT_NAME" != "push" ] || [ "${GITHUB_RUN_ATTEMPT:-1}" != "1" ]; then
             echo "::notice title=Out-of-band check skipped::Only the first attempt of a push event can distinguish this push's migrations from ones an earlier attempt already applied (event=${GITHUB_EVENT_NAME}, attempt=${GITHUB_RUN_ATTEMPT:-1})."
-          elif [ ! -s /tmp/pre-push-versions.txt ]; then
-            echo "::notice title=Out-of-band check skipped::The remote history before this push was not readable."
+          elif [ ! -f /tmp/pre-push-trusted ]; then
+            # The MARKER, not emptiness. An empty version file can also mean a
+            # production with nothing recorded yet, and that is an answer, not
+            # the lack of one -- it falls through to the comparison below, which
+            # correctly finds nothing out of band. The step above writes this
+            # marker only when the snapshot is trustworthy.
+            #
+            # A WARNING, not a notice. This branch means the check WANTED to run
+            # and could not, which is absence of evidence -- the one thing this
+            # whole workflow exists to stop reading as evidence of absence. The
+            # run still passes, because the drift check makes its own
+            # `migration list` call and exits 1 if that fails, so reaching here
+            # needs a transient failure that recovered. Failing the run instead
+            # would turn an API blip into a red migration push, which is the
+            # cry-wolf problem the first branch above is about.
+            echo "::warning title=Out-of-band check COULD NOT RUN::The remote history before this push could not be read or parsed, so nothing was compared. A genuine out-of-band apply in this push would not have been detected. An empty history that READ cleanly is NOT this case -- that is compared against normally."
           elif [ -z "$base" ]; then
-            echo "::notice title=Out-of-band check skipped::Could not resolve the commit before this push, so the set of newly added migrations is unknown."
+            echo "::warning title=Out-of-band check COULD NOT RUN::Could not resolve the commit before this push, so the set of newly added migrations is unknown and nothing was compared."
           else
             git diff --name-status --diff-filter=A --no-renames "$base" HEAD \
               -- supabase/migrations/ \
