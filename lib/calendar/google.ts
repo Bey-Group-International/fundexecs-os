@@ -223,6 +223,107 @@ export function decideSyncMode(syncToken: string | null, tokenExpired = false): 
   return { kind: "full", reason: "no_token" };
 }
 
+/**
+ * Reaping events Google no longer has.
+ *
+ * `applyEvents` is additive plus tombstones: it writes what arrived and deletes
+ * only what Google explicitly marked `cancelled`. That is deliberately safe --
+ * a short or partial response can never wipe a calendar -- but it leaves one
+ * deletion invisible, and the gap is not exotic:
+ *
+ *   1. A calendar's sync token goes null. A 410 does this and `syncConnection`
+ *      rightly calls it routine; so does a first sync, and so does a response
+ *      truncated at MAX_PAGES.
+ *   2. Someone deletes an event in Google.
+ *   3. The next sync is therefore a FULL read. Full mode passes a time window
+ *      and no `showDeleted`, so Google returns live events only -- the deleted
+ *      one is simply ABSENT, never tombstoned.
+ *   4. Nothing deletes the local row. It survives indefinitely, and it keeps
+ *      occupying the owner's availability.
+ *
+ * The result is a free slot that reads as busy forever, with nothing in the
+ * product able to clear it -- which blocks public booking slots and raises
+ * false conflict warnings, both in the direction that costs a booking.
+ *
+ * A full response IS a census of the window, so absence from it is proof of
+ * deletion. Two conditions have to hold before that proof is usable, and both
+ * are refusals rather than best-effort:
+ *
+ *   - INCREMENTAL responses are deltas, not censuses. Absence means "unchanged",
+ *     so reaping on one would delete the entire untouched calendar.
+ *   - A TRUNCATED full response is a partial census. Absence means "possibly on
+ *     page 41", so reaping on one would delete real events.
+ *
+ * Hence the shape: this returns what to delete, or declines and says why. It
+ * never guesses.
+ */
+export interface ReapCandidate {
+  /** Local `external_events.id`. */
+  id: string;
+  googleEventId: string;
+  startsAt: string;
+  endsAt: string;
+}
+
+export type ReapRefusal = "incremental" | "truncated";
+
+export interface ReapDecision {
+  /** Local ids to delete. Empty whenever `refused` is set. */
+  deleteIds: string[];
+  /** Why no reap happened, or null when one did. */
+  refused: ReapRefusal | null;
+  /**
+   * Rows outside the synced window, which the response never covered and whose
+   * absence therefore proves nothing. Reported so a caller can see the reap
+   * considered fewer rows than it was given, rather than inferring it.
+   */
+  outOfWindow: number;
+}
+
+/**
+ * Which local rows Google's response proves are gone.
+ *
+ * `fetchedEventIds` must come from the RAW response, including events that
+ * failed to normalize and including tombstones -- not from the rows that were
+ * upserted. An event Google returned but this app could not represent still
+ * EXISTS; building the set from stored rows instead would reap it on every
+ * sync and re-report it as a deletion each time.
+ */
+export function decideReap(input: {
+  mode: SyncMode["kind"];
+  truncated: boolean;
+  fetchedEventIds: Iterable<string>;
+  window: SyncWindow;
+  localRows: readonly ReapCandidate[];
+}): ReapDecision {
+  if (input.mode === "incremental") return { deleteIds: [], refused: "incremental", outOfWindow: 0 };
+  if (input.truncated) return { deleteIds: [], refused: "truncated", outOfWindow: 0 };
+
+  const present = new Set(input.fetchedEventIds);
+  const min = Date.parse(input.window.timeMin);
+  const max = Date.parse(input.window.timeMax);
+  const deleteIds: string[] = [];
+  let outOfWindow = 0;
+
+  for (const row of input.localRows) {
+    const starts = Date.parse(row.startsAt);
+    const ends = Date.parse(row.endsAt);
+    // Google returns an event whose span INTERSECTS the window, so that is the
+    // same test for whether this row should have come back. An unparseable
+    // timestamp counts as out of window: it cannot be shown to overlap, and the
+    // safe reading of "cannot tell" is "do not delete".
+    const overlaps =
+      Number.isFinite(starts) && Number.isFinite(ends) && ends > min && starts < max;
+    if (!overlaps) {
+      outOfWindow++;
+      continue;
+    }
+    if (!present.has(row.googleEventId)) deleteIds.push(row.id);
+  }
+
+  return { deleteIds, refused: null, outOfWindow };
+}
+
 export interface ConnectionHealth {
   state: "ok" | "never_synced" | "stale" | "failing" | "reauth_required";
   message: string | null;
