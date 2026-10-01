@@ -7,12 +7,18 @@ import { MeetingEditScreen } from "./MeetingEditScreen";
 
 let busy: Array<{ start: string; end: string }> = [];
 const calls: string[] = [];
+const posts: Array<{ url: string; body: Record<string, unknown> }> = [];
 
 beforeEach(() => {
   busy = [];
   calls.length = 0;
-  global.fetch = (async (url: string) => {
+  posts.length = 0;
+  global.fetch = (async (url: string, init?: { method?: string; body?: string }) => {
     calls.push(String(url));
+    if (init?.method === "POST") {
+      posts.push({ url: String(url), body: JSON.parse(init.body ?? "{}") });
+      return { ok: true, status: 200, json: async () => ({ id: "m1", roomCode: "abc", seriesCount: 4 }) };
+    }
     if (String(url).startsWith("/api/meetings/busy")) return { ok: true, json: async () => ({ busy }) };
     return { ok: false, json: async () => null };
   }) as unknown as typeof fetch;
@@ -77,4 +83,28 @@ it("leaves a free time alone", async () => {
   await waitFor(() => expect(calls.some((u) => u.startsWith("/api/meetings/busy"))).toBe(true));
   expect(screen.getByRole("button", { name: "Schedule" })).toBeEnabled();
   expect(screen.queryByText(/busy on your connected calendar/i)).toBeNull();
+});
+
+it("schedules a repeating meeting as a series, and says how many", async () => {
+  open();
+  fireEvent.change(screen.getByPlaceholderText("Add title"), { target: { value: "Weekly sync" } });
+  fireEvent.change(screen.getByLabelText("Repeat"), { target: { value: "weekly" } });
+  fireEvent.change(screen.getByLabelText("Number of meetings"), { target: { value: "4" } });
+  expect(screen.getByText(/^Weekly on .+, 4 times$/)).toBeInTheDocument();
+
+  await waitFor(() => expect(screen.getByRole("button", { name: "Schedule" })).toBeEnabled());
+  fireEvent.click(screen.getByRole("button", { name: "Schedule" }));
+
+  await waitFor(() => expect(posts.some((p) => p.url === "/api/meetings/schedule")).toBe(true));
+  expect(posts.find((p) => p.url === "/api/meetings/schedule")!.body.repeat).toEqual({ freq: "weekly", count: 4 });
+  expect(await screen.findByText(/4 meetings scheduled in the series/)).toBeInTheDocument();
+});
+
+it("sends no repeat for a meeting that does not repeat", async () => {
+  open();
+  fireEvent.change(screen.getByPlaceholderText("Add title"), { target: { value: "One-off" } });
+  await waitFor(() => expect(screen.getByRole("button", { name: "Schedule" })).toBeEnabled());
+  fireEvent.click(screen.getByRole("button", { name: "Schedule" }));
+  await waitFor(() => expect(posts.some((p) => p.url === "/api/meetings/schedule")).toBe(true));
+  expect(posts.find((p) => p.url === "/api/meetings/schedule")!.body.repeat).toBeUndefined();
 });

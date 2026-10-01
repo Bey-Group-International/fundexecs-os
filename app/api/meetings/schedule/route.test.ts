@@ -7,6 +7,7 @@ const mailboxForMock = jest.fn();
 const canWriteCalendarMock = jest.fn();
 const syncMeetingExternalMock = jest.fn();
 const loadExternalConflictsMock = jest.fn();
+const markSeriesOccurrenceMock = jest.fn();
 
 jest.mock("@/lib/auth", () => ({
   requireOrgContext: () => authMock(),
@@ -26,6 +27,7 @@ jest.mock("@/lib/calendar/google-write.server", () => ({
 jest.mock("@/lib/meetings/service", () => ({
   saveScheduledMeeting: (...args: unknown[]) => saveScheduledMeetingMock(...args),
   syncMeetingExternal: (...args: unknown[]) => syncMeetingExternalMock(...args),
+  markSeriesOccurrence: (...args: unknown[]) => markSeriesOccurrenceMock(...args),
   buildMeetingInviteUrl: (origin: string, code: string) => `${origin}/meeting-invite/${code}`,
   buildMeetingRoomUrl: (origin: string, code: string) => `${origin}/meetings/${code}`,
 }));
@@ -41,6 +43,7 @@ jest.mock("@/lib/meetings/blocks.server", () => ({
 
 jest.mock("@/lib/meetings/conflicts.server", () => ({
   loadExternalConflicts: (...args: unknown[]) => loadExternalConflictsMock(...args),
+  loadSeriesExternalConflicts: (...args: unknown[]) => loadExternalConflictsMock(...args),
 }));
 
 jest.mock("@/lib/meetings/mailbox.server", () => ({
@@ -386,5 +389,84 @@ describe("POST /api/meetings/schedule over a connected calendar's busy time", ()
     const res = await POST(req({ ...VALID, draft: true }));
     expect(res.status).toBe(200);
     expect(loadExternalConflictsMock).not.toHaveBeenCalled();
+  });
+});
+
+describe("POST /api/meetings/schedule with a repeat", () => {
+  beforeEach(() => {
+    let n = 0;
+    saveScheduledMeetingMock.mockImplementation(async (_s: unknown, input: { scheduledAt: string }) => {
+      n += 1;
+      return {
+        id: `m${n}`,
+        roomCode: `room-${n}`,
+        scheduledAt: input.scheduledAt,
+        durationMinutes: 60,
+        isDraft: false,
+        lockedAt: "2026-09-01T00:00:00.000Z",
+        internalCalendarEventId: `cal${n}`,
+      };
+    });
+  });
+
+  const WEEKLY = { ...VALID, attendees: [{ name: "Ada", email: "ada@lp.test", type: "external" }], repeat: { freq: "weekly", count: 3 } };
+
+  it("makes every meeting of the series, each at its own week", async () => {
+    const res = await POST(req(WEEKLY));
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ id: "m1", seriesCount: 3 });
+
+    // 10:00 in New York, three Thursdays running.
+    expect(saveScheduledMeetingMock.mock.calls.map(([, input]) => (input as { scheduledAt: string }).scheduledAt)).toEqual([
+      "2026-09-10T14:00:00.000Z",
+      "2026-09-17T14:00:00.000Z",
+      "2026-09-24T14:00:00.000Z",
+    ]);
+    // All three point back at the first as the series, in order.
+    expect(markSeriesOccurrenceMock.mock.calls.map(([, id, s]) => [id, (s as { seriesId: string; index: number }).seriesId, (s as { index: number }).index])).toEqual([
+      ["m1", "m1", 0],
+      ["m2", "m1", 1],
+      ["m3", "m1", 2],
+    ]);
+  });
+
+  it("sends one invitation for the series, not one per meeting", async () => {
+    await POST(req(WEEKLY));
+    expect(sendMeetingInvitesMock).toHaveBeenCalledTimes(1);
+    expect(sendMeetingInvitesMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        meetingId: "m1",
+        series: { seriesId: "m1", rrule: "FREQ=WEEKLY;COUNT=3", timezone: "America/New_York" },
+        whenLabel: expect.stringMatching(/^Weekly on Thursday at 10:00 AM EDT, 3 times$/),
+      }),
+    );
+  });
+
+  it("checks every meeting of the series against the connected calendar, and refuses it whole", async () => {
+    loadExternalConflictsMock.mockResolvedValue([{ start: "2026-09-24T14:00:00.000Z", end: "2026-09-24T14:30:00.000Z" }]);
+    const res = await POST(req(WEEKLY));
+    expect(res.status).toBe(409);
+    expect(loadExternalConflictsMock.mock.calls[0][1]).toMatchObject({
+      starts: ["2026-09-10T14:00:00.000Z", "2026-09-17T14:00:00.000Z", "2026-09-24T14:00:00.000Z"],
+    });
+    expect(saveScheduledMeetingMock).not.toHaveBeenCalled();
+  });
+
+  it("pushes every meeting to the calendar when one is connected", async () => {
+    canWriteCalendarMock.mockResolvedValue(true);
+    await POST(req(WEEKLY));
+    expect(syncMeetingExternalMock.mock.calls.map(([, , id]) => id)).toEqual(["m1", "m2", "m3"]);
+  });
+
+  it("refuses a repeat it cannot read", async () => {
+    const res = await POST(req({ ...VALID, repeat: { freq: "daily", count: 3 } }));
+    expect(res.status).toBe(422);
+    expect(saveScheduledMeetingMock).not.toHaveBeenCalled();
+  });
+
+  it("keeps a draft as one meeting", async () => {
+    await POST(req({ ...WEEKLY, draft: true }));
+    expect(saveScheduledMeetingMock).toHaveBeenCalledTimes(1);
+    expect(markSeriesOccurrenceMock).not.toHaveBeenCalled();
   });
 });

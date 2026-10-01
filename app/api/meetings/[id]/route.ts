@@ -7,7 +7,7 @@ import { deleteMeetingLocal, updateMeeting, buildMeetingInviteUrl } from "@/lib/
 import { sendMeetingInvites, guestEmails } from "@/lib/meetings/invite";
 import { planCalendarSync } from "@/lib/meetings/calendar-sync";
 import { canWriteCalendar } from "@/lib/calendar/google-write.server";
-import { diffMeetingPlace, diffMeetingTiming, sendMeetingUpdates } from "@/lib/meetings/meeting-updates";
+import { diffMeetingPlace, diffMeetingTiming, sendMeetingUpdates, seriesUpdateContext } from "@/lib/meetings/meeting-updates";
 import { BUSY_ELSEWHERE_MESSAGE, conflictGate, conflictMessage, findConflicts, type ConflictCandidate } from "@/lib/meetings/schedule";
 import { loadBlockConflicts } from "@/lib/meetings/blocks.server";
 import { loadExternalConflicts } from "@/lib/meetings/conflicts.server";
@@ -64,7 +64,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Params }
   const { data: prior } = await supabase
     .from("live_meetings")
     .select(
-      "attendees, room_code, is_draft, host_id, scheduled_at, duration_minutes, title, timezone, calendar_sequence, location, meeting_url",
+      "attendees, room_code, is_draft, host_id, scheduled_at, duration_minutes, title, timezone, calendar_sequence, location, meeting_url, series_id, series_original_start",
     )
     .eq("id", id)
     .eq("organization_id", auth.ctx.orgId)
@@ -92,6 +92,9 @@ export async function PATCH(request: NextRequest, { params }: { params: Params }
   const priorGuestEmails = new Set(priorEmails);
   const roomCode = (prior?.room_code as string | null) ?? "";
   const isDraft = (prior?.is_draft as boolean | null) ?? false;
+  // One meeting of a repeating series: guests hold the series, so what they are
+  // told about this meeting has to name the series and this instance of it.
+  const series = seriesUpdateContext(prior);
 
   // What the meeting's timing looks like on either side of this edit. An
   // untouched field keeps its prior value, so re-saving the same instant is
@@ -370,6 +373,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Params }
         // Same calendar entry as the invitation, at the sequence the trigger
         // has since bumped — so this moves or clears it rather than adding one.
         meetingId: id,
+        series,
         hostEmail: auth.ctx.email ?? null,
         sequence,
         orgId: auth.ctx.orgId,
@@ -395,6 +399,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Params }
       const res = await sendMeetingUpdates("relocated", {
         credentials: senderMailbox,
         meetingId: id,
+        series,
         hostEmail: auth.ctx.email ?? null,
         sequence,
         orgId: auth.ctx.orgId,
@@ -420,6 +425,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Params }
         // Same calendar entry as the invitation, at the sequence the trigger
         // has since bumped — so this moves or clears it rather than adding one.
         meetingId: id,
+        series,
         hostEmail: auth.ctx.email ?? null,
         sequence,
         orgId: auth.ctx.orgId,
@@ -488,7 +494,7 @@ export async function DELETE(request: NextRequest, { params }: { params: Params 
 
   const { data: prior } = await supabase
     .from("live_meetings")
-    .select("attendees, room_code, is_draft, scheduled_at, duration_minutes, title, timezone, calendar_sequence")
+    .select("attendees, room_code, is_draft, scheduled_at, duration_minutes, title, timezone, calendar_sequence, series_id, series_original_start")
     .eq("id", id)
     .eq("organization_id", auth.ctx.orgId)
     .maybeSingle();
@@ -532,6 +538,8 @@ export async function DELETE(request: NextRequest, { params }: { params: Params 
         // delete just bumped — a CANCEL at a sequence the client already holds
         // leaves the meeting sitting in their calendar.
         meetingId: id,
+        // One meeting of a series is cancelled as that instance, not the series.
+        series: seriesUpdateContext(prior),
         hostEmail: auth.ctx.email ?? null,
         sequence: result.calendarSequence ?? ((prior?.calendar_sequence as number | null) ?? null),
         orgId: auth.ctx.orgId,

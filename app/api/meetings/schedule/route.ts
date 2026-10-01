@@ -4,7 +4,7 @@ import { mailboxFor } from "@/lib/meetings/mailbox.server";
 import { mailboxProblemMessage } from "@/lib/meetings/mailbox";
 import { formatSlotFull } from "@/lib/meetings/scheduling";
 import { requireOrgContext } from "@/lib/auth";
-import { buildMeetingInviteUrl, buildMeetingRoomUrl, saveScheduledMeeting, syncMeetingExternal } from "@/lib/meetings/service";
+import { buildMeetingInviteUrl, buildMeetingRoomUrl, markSeriesOccurrence, saveScheduledMeeting, syncMeetingExternal } from "@/lib/meetings/service";
 import { normalizeAttendees, parseAttendeeInput, type MeetingAttendeeInput } from "@/lib/meetings/attendees";
 import { needsDirectory, resolveAttendeeDirectory } from "@/lib/meetings/directory";
 import { loadOrgDirectory } from "@/lib/meetings/directory.server";
@@ -12,7 +12,8 @@ import { sendMeetingInvites, guestEmails } from "@/lib/meetings/invite";
 import { planCalendarSync } from "@/lib/meetings/calendar-sync";
 import { canWriteCalendar } from "@/lib/calendar/google-write.server";
 import { loadBlockConflicts } from "@/lib/meetings/blocks.server";
-import { loadExternalConflicts } from "@/lib/meetings/conflicts.server";
+import { loadSeriesExternalConflicts } from "@/lib/meetings/conflicts.server";
+import { describeRepeat, occurrenceDates, parseRepeat, seriesRrule } from "@/lib/meetings/recurrence";
 import { BUSY_ELSEWHERE_MESSAGE, conflictGate, conflictMessage } from "@/lib/meetings/schedule";
 import { SITE_URL } from "@/lib/site";
 import {
@@ -54,6 +55,8 @@ interface ScheduleBody {
   externalCalendarSyncEnabled?: boolean;
   guestQuickAccess?: boolean;
   externalCalendarProvider?: string;
+  /** Repeat the meeting: { freq: "weekly" | "monthly", count }. */
+  repeat?: unknown;
 }
 
 export async function POST(req: NextRequest) {
@@ -87,6 +90,17 @@ export async function POST(req: NextRequest) {
     // stored — otherwise the 409 check and the saved row could disagree.
     const durationMinutes = Math.min(480, Math.max(15, durationMinutesFromTimes(startTime, endTime) || 60));
     const endIso = new Date(new Date(scheduledAt).getTime() + durationMinutes * 60_000).toISOString();
+
+    // A repeating meeting is decided here, once, and every later step works
+    // from the same list of starts. Drafts do not repeat: a series is created
+    // when it is scheduled.
+    const repeat = isDraft ? null : parseRepeat(body.repeat);
+    if (repeat && "error" in repeat) {
+      return NextResponse.json({ error: repeat.error, fieldErrors: { repeat: repeat.error } }, { status: 422 });
+    }
+    const occurrenceStarts = repeat
+      ? occurrenceDates(date, repeat).map((d) => localToIso(d, startTime, timezone))
+      : [scheduledAt];
 
     // The body is untrusted: an array element that is not an attendee reaches
     // code that reads fields off it, so it is rejected as a bad request rather
@@ -151,7 +165,14 @@ export async function POST(req: NextRequest) {
           .lt("scheduled_at", endIso)
           .limit(200),
         loadBlockConflicts(supabase, auth.ctx.userId, scheduledAt, endIso),
-        loadExternalConflicts(supabase, { userId: auth.ctx.userId, startIso: scheduledAt, endIso, timezone }),
+        // Every meeting of a series, not just the first: a clash in week five
+        // is as real as one today, and the series is refused as a whole.
+        loadSeriesExternalConflicts(supabase, {
+          userId: auth.ctx.userId,
+          starts: occurrenceStarts,
+          durationMinutes,
+          timezone,
+        }),
       ]);
       conflicts = findConflicts((existing ?? []) as ConflictCandidate[], scheduledAt, endIso, {
         excludeId: body.meetingId ?? null,
@@ -201,7 +222,7 @@ export async function POST(req: NextRequest) {
       isDraft,
     });
 
-    const saved = await saveScheduledMeeting(supabase, {
+    const meetingInput = {
       meetingId: body.meetingId ?? null,
       orgId: auth.ctx.orgId,
       hostId: auth.ctx.userId,
@@ -235,7 +256,27 @@ export async function POST(req: NextRequest) {
       // Calendly and iCal, none of which has a writer — so a meeting could be
       // stored as syncing to Outlook and then pushed to Google or skipped.
       externalCalendarProvider: calendarPlan.provider,
-    });
+    };
+    const saved = await saveScheduledMeeting(supabase, meetingInput);
+
+    // The rest of a series: its own meetings, each a copy of the first at its
+    // own start, all pointing back at the first as the series. They are
+    // marked before anything is pushed to Google, because a series meeting is
+    // pushed without its guests (they get the series invitation instead).
+    const seriesIds: string[] = [saved.id];
+    if (repeat && !saved.isDraft) {
+      const rule = seriesRrule(repeat);
+      await markSeriesOccurrence(supabase, saved.id, { seriesId: saved.id, index: 0, rule, start: occurrenceStarts[0] });
+      for (let i = 1; i < occurrenceStarts.length; i += 1) {
+        const next = await saveScheduledMeeting(supabase, {
+          ...meetingInput,
+          meetingId: null,
+          scheduledAt: occurrenceStarts[i],
+        });
+        await markSeriesOccurrence(supabase, next.id, { seriesId: saved.id, index: i, rule, start: occurrenceStarts[i] });
+        seriesIds.push(next.id);
+      }
+    }
 
     // Third-party sync happens only after the native meeting is saved, and its
     // failure must not break meeting creation.
@@ -252,6 +293,17 @@ export async function POST(req: NextRequest) {
         saved.externalCalendarSyncStatus = result.status;
       } catch (err) {
         externalSyncError = err instanceof Error ? err.message : "External sync failed";
+      }
+      // The rest of the series, a few at a time. A failure on one is recorded
+      // on its own row and retried by the sync sweep; it does not undo the
+      // meetings already made.
+      const rest = seriesIds.slice(1);
+      for (let i = 0; i < rest.length; i += 4) {
+        await Promise.allSettled(
+          rest
+            .slice(i, i + 4)
+            .map((id) => syncMeetingExternal(supabase, { orgId: auth.ctx.orgId, userId: auth.ctx.userId }, id)),
+        );
       }
     }
 
@@ -303,7 +355,17 @@ export async function POST(req: NextRequest) {
             // A meeting that was just created has never been updated, so its
             // trigger-maintained sequence is still zero.
             sequence: 0,
-            whenLabel: saved.scheduledAt ? formatSlotFull(saved.scheduledAt, timezone) : null,
+            whenLabel: repeat && saved.scheduledAt
+              ? describeRepeat(repeat, saved.scheduledAt, timezone)
+              : saved.scheduledAt
+                ? formatSlotFull(saved.scheduledAt, timezone)
+                : null,
+            // One invitation for the whole series, which each guest's calendar
+            // expands from its rule.
+            series:
+              repeat && seriesIds.length > 1
+                ? { seriesId: saved.id, rrule: seriesRrule(repeat), timezone }
+                : null,
           });
           invited = result.sent;
           attempted = result.attempted;
@@ -348,6 +410,8 @@ export async function POST(req: NextRequest) {
       mailboxConnected,
       mailboxProblem,
       conflicts,
+      // How many meetings this save made: 1, or the length of the series.
+      seriesCount: seriesIds.length,
       roomUrl: buildMeetingRoomUrl(SITE_URL, saved.roomCode),
       inviteUrl: buildMeetingInviteUrl(SITE_URL, saved.roomCode),
     });

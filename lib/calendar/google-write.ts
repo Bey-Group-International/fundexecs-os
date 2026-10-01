@@ -37,6 +37,13 @@ export interface WritableMeeting {
   external_calendar_event_id: string | null;
   external_calendar_sync_enabled: boolean | null;
   external_calendar_provider: string | null;
+  /**
+   * One meeting of a repeating series. Guests hold the series from its own
+   * invitation, so the host's Google copy of each meeting carries no guest
+   * list: Google would otherwise email every guest about every meeting, and
+   * put a second copy of each in their calendars.
+   */
+  series_id?: string | null;
 }
 
 export interface GoogleEventWrite {
@@ -168,7 +175,7 @@ export function toGoogleEvent(meeting: WritableMeeting, opts: { joinUrl?: string
     // omits these silently keeps whatever was there before.
     description: buildDescription(meeting, opts.joinUrl ?? meeting.meeting_url ?? null),
     location: meeting.location?.trim() || opts.joinUrl?.trim() || meeting.meeting_url?.trim() || "",
-    attendees: attendeesFor(meeting),
+    attendees: meeting.series_id ? [] : attendeesFor(meeting),
     visibility: mapVisibility(meeting.calendar_visibility) ?? "default",
     reminders: hasReminder
       ? { useDefault: false, overrides: [{ method: "popup", minutes: Math.min(40_320, Math.trunc(reminder!)) }] }

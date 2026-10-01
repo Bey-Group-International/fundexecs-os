@@ -267,6 +267,30 @@ describe("/api/meetings/[id]", () => {
     );
   });
 
+  it("tells guests a series meeting moved as that one meeting of the series", async () => {
+    updateMeetingMock.mockResolvedValue({ ok: true, calendarSequence: 8 });
+    sendMeetingUpdatesMock.mockResolvedValue({ sent: 2, total: 2 });
+    from.mockReturnValue(
+      makeBuilder({
+        maybeSingle: {
+          data: {
+            ...PRIOR_ROW,
+            attendees: GUESTS,
+            series_id: "s1",
+            series_original_start: "2026-07-10T10:00:00.000Z",
+          },
+        },
+      }),
+    );
+
+    await PATCH(req({ scheduledAt: "2026-07-11T15:00:00.000Z" }), params);
+
+    expect(sendMeetingUpdatesMock).toHaveBeenCalledWith(
+      "rescheduled",
+      expect.objectContaining({ series: { seriesId: "s1", originalStartIso: "2026-07-10T10:00:00.000Z" } }),
+    );
+  });
+
   it("stays quiet when an edit leaves the timing alone", async () => {
     updateMeetingMock.mockResolvedValue({ ok: true, calendarSequence: 8 });
     from.mockReturnValue(makeBuilder({ maybeSingle: { data: { ...PRIOR_ROW, attendees: GUESTS } } }));

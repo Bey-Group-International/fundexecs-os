@@ -133,6 +133,13 @@ export async function sendMeetingInvites(args: {
    * meeting again.
    */
   notifyHost?: boolean;
+  /**
+   * A repeating meeting: one invitation for the whole series instead of one
+   * per meeting. Its identity is the series (the first meeting's id), its
+   * link opens whichever meeting is next, and its rule is expanded by each
+   * guest's own calendar.
+   */
+  series?: { seriesId: string; rrule: string; timezone: string } | null;
 }): Promise<InviteSendOutcome> {
   const guests = [...new Set(args.emails.map((e) => e.trim().toLowerCase()).filter(Boolean))];
   // Everyone on the meeting — the organizer and the attendee list the calendar
@@ -142,7 +149,9 @@ export async function sendMeetingInvites(args: {
   if (mailTo.length === 0) return { sent: 0, total: 0, attempted: 0, failed: [], reasons: [] };
 
   const origin = (args.origin || "").replace(/\/$/, "");
-  const inviteUrl = `${origin}/meeting-invite/${args.roomCode}`;
+  const inviteUrl = args.series
+    ? buildSeriesInviteUrl(origin, args.series.seriesId)
+    : `${origin}/meeting-invite/${args.roomCode}`;
 
   // A real calendar invitation rather than a link somebody has to notice and
   // act on. Same iTIP builder the booking flow uses, so a meeting scheduled in
@@ -166,7 +175,9 @@ export async function sendMeetingInvites(args: {
           whenLabel: args.whenLabel,
           // Only for a meeting that has a time — the endpoint 404s otherwise,
           // and a button that leads nowhere is worse than no button.
-          calendarUrl: args.startIso ? buildMeetingCalendarUrl(origin, args.roomCode) : null,
+          // A series is already in the attached invitation as a series; the
+          // one-meeting .ics link would save only its first date.
+          calendarUrl: args.startIso && !args.series ? buildMeetingCalendarUrl(origin, args.roomCode) : null,
           role: r.role,
         }),
         calendarInvite: invite,
@@ -201,6 +212,7 @@ function buildScheduledInvite(args: {
   durationMinutes?: number | null;
   sequence?: number | null;
   recipients: ScheduledRecipient[];
+  series?: { seriesId: string; rrule: string; timezone: string } | null;
 }): { content: string; method: "REQUEST"; filename: string } | undefined {
   if (
     !canInviteToCalendar({
@@ -215,8 +227,9 @@ function buildScheduledInvite(args: {
   try {
     return {
       content: buildInviteIcs({
-        uid: meetingInviteUid(args.meetingId!, args.origin),
+        uid: meetingInviteUid(args.series?.seriesId ?? args.meetingId!, args.origin),
         method: "REQUEST",
+        recurrence: args.series ? { rrule: args.series.rrule, timezone: args.series.timezone } : undefined,
         title: args.title || "Meeting",
         startIso: args.startIso!,
         endIso: inviteEndIso(args.startIso!, args.durationMinutes),
@@ -247,4 +260,12 @@ export function guestEmails(attendees: MeetingAttendeeInput[] | null | undefined
         .filter((e): e is string => !!e),
     ),
   ];
+}
+
+/**
+ * The link a series invitation carries: it opens whichever meeting of the
+ * series is on now or next, since one link has to serve every week.
+ */
+export function buildSeriesInviteUrl(origin: string, seriesId: string): string {
+  return `${(origin || "").replace(/\/$/, "")}/meeting-invite/series/${seriesId}`;
 }

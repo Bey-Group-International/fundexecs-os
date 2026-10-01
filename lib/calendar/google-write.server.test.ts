@@ -164,6 +164,19 @@ describe("pushMeetingToGoogle — create", () => {
     expect(String(writeCall()![0])).toContain("sendUpdates=all");
   });
 
+  it("puts a series meeting on the host's calendar alone, telling no guest", async () => {
+    fetchMock.mockImplementation(routeFetch({ existing: null, write: respond(200, { id: "gcal-new" }) }));
+    const { api } = client();
+    await pushMeetingToGoogle(
+      api,
+      meeting({ series_id: "s1", attendees: [{ name: "Ada", email: "ada@lp.test" }] }),
+      "u1",
+    );
+    const [url, init] = writeCall()!;
+    expect(String(url)).toContain("sendUpdates=none");
+    expect(JSON.parse(String((init as { body?: string }).body)).attendees).toEqual([]);
+  });
+
   it("creates rather than patches when the id is a legacy stub", async () => {
     fetchMock.mockImplementation(routeFetch({ existing: null, write: respond(200, { id: "gcal-real" }) }));
     const { api } = client();

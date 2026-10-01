@@ -157,6 +157,9 @@ export async function pushMeetingToGoogle(
 ): Promise<PushResult> {
   const target = await writeTargetFor(client, userId);
   const decision = decideWrite(meeting, { connected: Boolean(target) });
+  // A series meeting is the host's own copy, with no guests on it to notify;
+  // they hear about the series from its invitation.
+  const notify = meeting.series_id ? "none" : "all";
 
   if (decision.kind === "skip") {
     const status: WriteOutcome = !target
@@ -181,7 +184,7 @@ export async function pushMeetingToGoogle(
 
   if (decision.kind === "delete") {
     const res = await apiWrite(token.data, "DELETE", `/calendars/${encodedCal}/events/${encodeURIComponent(decision.eventId)}`, undefined, {
-      sendUpdates: "all",
+      sendUpdates: notify,
     });
     // Already gone is the outcome we wanted; treat it as success rather than
     // leaving a dead id on the row forever.
@@ -218,9 +221,9 @@ export async function pushMeetingToGoogle(
         "PATCH",
         `/calendars/${encodedCal}/events/${encodeURIComponent(targetEventId)}`,
         body,
-        { sendUpdates: "all" },
+        { sendUpdates: notify },
       )
-    : await apiWrite(token.data, "POST", `/calendars/${encodedCal}/events`, body, { sendUpdates: "all" });
+    : await apiWrite(token.data, "POST", `/calendars/${encodedCal}/events`, body, { sendUpdates: notify });
 
   const verdict = outcomeForStatus(res.status);
 
