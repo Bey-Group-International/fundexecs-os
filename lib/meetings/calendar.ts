@@ -47,6 +47,10 @@ export interface CalendarMeeting {
   external_calendar_sync_enabled: boolean | null;
   guest_quick_access?: boolean | null;
   external_calendar_sync_status: string | null;
+  /** Set on every meeting of a repeating series; see lib/meetings/recurrence. */
+  series_id?: string | null;
+  series_index?: number | null;
+  series_rule?: string | null;
 }
 
 // ── Date primitives (local wall-clock) ─────────────────────────────────────

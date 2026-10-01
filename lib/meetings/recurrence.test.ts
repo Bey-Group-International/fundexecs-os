@@ -4,7 +4,9 @@ import {
   parseRepeat,
   pickSeriesOccurrence,
   ruleFromRrule,
+  seriesPositionLabel,
   seriesRrule,
+  truncateRule,
 } from "./recurrence";
 
 describe("parseRepeat", () => {
@@ -80,5 +82,34 @@ describe("pickSeriesOccurrence", () => {
   it("opens the last one once the series is over, and nothing for an empty series", () => {
     expect(pickSeriesOccurrence(rows, Date.parse("2027-01-01T00:00:00Z"))).toBe("c");
     expect(pickSeriesOccurrence([], Date.now())).toBeNull();
+  });
+});
+
+describe("cutting a series short", () => {
+  it("keeps the meetings before the cut", () => {
+    expect(truncateRule({ freq: "weekly", count: 12 }, 5)).toEqual({ freq: "weekly", count: 5 });
+  });
+
+  it("leaves nothing when the cut is at the first meeting", () => {
+    expect(truncateRule({ freq: "monthly", count: 6 }, 0)).toBeNull();
+  });
+
+  it("never grows a series", () => {
+    expect(truncateRule({ freq: "weekly", count: 3 }, 10)).toEqual({ freq: "weekly", count: 3 });
+  });
+});
+
+describe("seriesPositionLabel", () => {
+  it("says how the meeting repeats and where it sits", () => {
+    expect(seriesPositionLabel("FREQ=WEEKLY;COUNT=12", 2)).toBe("Repeats weekly · 3 of 12");
+    expect(seriesPositionLabel("FREQ=MONTHLY;COUNT=6", 0)).toBe("Repeats monthly · 1 of 6");
+  });
+
+  it("is nothing for a meeting that does not repeat", () => {
+    expect(seriesPositionLabel(null, null)).toBeNull();
+  });
+
+  it("says only how it repeats when the slot is unknown", () => {
+    expect(seriesPositionLabel("FREQ=WEEKLY;COUNT=4", null)).toBe("Repeats weekly");
   });
 });

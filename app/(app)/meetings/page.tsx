@@ -79,7 +79,7 @@ interface LiveMeeting {
 }
 
 const MEETING_SELECT =
-  "id, room_code, title, description, location, meeting_url, status, host_id, created_at, started_at, ended_at, scheduled_at, duration_minutes, timezone, meeting_type, priority, tags, attendees, source, sync_status, source_event_id, source_calendar_id, deal_id, related_contact_id, related_company_id, related_fund_id, objective, agenda, preparation_requirements, preparation_status, followup_status, assigned_copilot_agent, related_record_type, related_record_id, calendar_visibility, reminder_minutes, external_calendar_provider, external_calendar_sync_enabled, external_calendar_sync_status, is_draft, locked_at, updated_at, guest_quick_access";
+  "id, room_code, title, description, location, meeting_url, status, host_id, created_at, started_at, ended_at, scheduled_at, duration_minutes, timezone, meeting_type, priority, tags, attendees, source, sync_status, source_event_id, source_calendar_id, deal_id, related_contact_id, related_company_id, related_fund_id, objective, agenda, preparation_requirements, preparation_status, followup_status, assigned_copilot_agent, related_record_type, related_record_id, calendar_visibility, reminder_minutes, external_calendar_provider, external_calendar_sync_enabled, external_calendar_sync_status, is_draft, locked_at, updated_at, guest_quick_access, series_id, series_index, series_rule";
 
 /**
  * Meetings this page renders at once.

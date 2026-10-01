@@ -3,11 +3,24 @@ import { requireOrgContext } from "@/lib/auth";
 import { createServerClient, createServiceClient, hasSupabaseServiceEnv } from "@/lib/supabase/server";
 import { mailboxFor } from "@/lib/meetings/mailbox.server";
 import { mailboxProblemMessage } from "@/lib/meetings/mailbox";
-import { deleteMeetingLocal, updateMeeting, buildMeetingInviteUrl } from "@/lib/meetings/service";
+import {
+  deleteMeetingLocal,
+  loadSeriesRows,
+  setSeriesRule,
+  updateMeeting,
+  buildMeetingInviteUrl,
+} from "@/lib/meetings/service";
 import { sendMeetingInvites, guestEmails } from "@/lib/meetings/invite";
 import { planCalendarSync } from "@/lib/meetings/calendar-sync";
 import { canWriteCalendar } from "@/lib/calendar/google-write.server";
-import { diffMeetingPlace, diffMeetingTiming, sendMeetingUpdates, seriesUpdateContext } from "@/lib/meetings/meeting-updates";
+import {
+  diffMeetingPlace,
+  diffMeetingTiming,
+  sendMeetingUpdates,
+  sendSeriesEnded,
+  seriesUpdateContext,
+} from "@/lib/meetings/meeting-updates";
+import { ruleFromRrule, seriesRrule, truncateRule } from "@/lib/meetings/recurrence";
 import { BUSY_ELSEWHERE_MESSAGE, conflictGate, conflictMessage, findConflicts, type ConflictCandidate } from "@/lib/meetings/schedule";
 import { loadBlockConflicts } from "@/lib/meetings/blocks.server";
 import { loadExternalConflicts } from "@/lib/meetings/conflicts.server";
@@ -489,15 +502,43 @@ export async function DELETE(request: NextRequest, { params }: { params: Params 
   if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: auth.status });
   const { id } = await params;
   const supabase = await createServerClient();
-  const body = (await request.json().catch(() => ({}))) as { reason?: string };
+  const body = (await request.json().catch(() => ({}))) as { reason?: string; scope?: string };
   const reason = typeof body?.reason === "string" ? body.reason.trim() || null : null;
 
   const { data: prior } = await supabase
     .from("live_meetings")
-    .select("attendees, room_code, is_draft, scheduled_at, duration_minutes, title, timezone, calendar_sequence, series_id, series_original_start")
+    .select("attendees, room_code, is_draft, scheduled_at, duration_minutes, title, timezone, calendar_sequence, series_id, series_index, series_original_start")
     .eq("id", id)
     .eq("organization_id", auth.ctx.orgId)
     .maybeSingle();
+
+  // "This and following": the rest of a repeating series goes with this one.
+  // Anything else, or a meeting that does not repeat, is the one meeting.
+  if (
+    body?.scope === "following" &&
+    prior &&
+    !prior.is_draft &&
+    typeof prior.series_id === "string" &&
+    typeof prior.series_index === "number"
+  ) {
+    try {
+      return NextResponse.json(
+        await cancelSeriesFrom(supabase, auth.ctx, {
+          seriesId: prior.series_id,
+          fromIndex: prior.series_index,
+          title: (prior.title as string | null) ?? "Meeting",
+          timezone: ((prior.timezone as string | null) ?? "UTC") || "UTC",
+          attendees: (prior.attendees as MeetingAttendeeInput[] | null) ?? [],
+          reason,
+        }),
+      );
+    } catch (error) {
+      return NextResponse.json(
+        { error: error instanceof Error ? error.message : "Failed to cancel the meetings" },
+        { status: 500 },
+      );
+    }
+  }
 
   try {
     // Cancel the booking first, for the same reason a reschedule moves it
@@ -591,4 +632,85 @@ export async function DELETE(request: NextRequest, { params }: { params: Params 
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "Failed to delete meeting" }, { status: 500 });
   }
+}
+
+/**
+ * Cancel one meeting of a series and every one after it.
+ *
+ * Each meeting is its own row and is cancelled as one, but guests hold the
+ * series as a single repeating entry, so they get one email about the series:
+ * it now ends sooner, or (from its first meeting) is off altogether. The
+ * meetings that stay carry the shortened rule, so the next cut starts from it.
+ */
+async function cancelSeriesFrom(
+  supabase: Awaited<ReturnType<typeof createServerClient>>,
+  actor: { orgId: string; userId: string; email?: string | null },
+  opts: {
+    seriesId: string;
+    fromIndex: number;
+    title: string;
+    timezone: string;
+    attendees: MeetingAttendeeInput[];
+    reason: string | null;
+  },
+): Promise<{ ok: true; cancelled: number; notified: number }> {
+  const rows = await loadSeriesRows(supabase, actor.orgId, opts.seriesId);
+  const live = rows.filter((r) => !r.deleted_at);
+  const tail = live.filter((r) => (r.series_index ?? -1) >= opts.fromIndex);
+  const kept = live.filter((r) => (r.series_index ?? -1) < opts.fromIndex);
+
+  // Each meeting is soft-deleted the same way a single cancel does it, so its
+  // room, reminders and audit trail behave exactly as they always have.
+  let sequence = 0;
+  for (const row of tail) {
+    const result = await deleteMeetingLocal(supabase, { orgId: actor.orgId, userId: actor.userId }, row.id);
+    sequence = Math.max(sequence, result.calendarSequence ?? row.calendar_sequence ?? 0);
+  }
+
+  const first = rows.find((r) => r.series_index === 0) ?? rows[0];
+  const rule = ruleFromRrule(first?.series_rule ?? tail[0]?.series_rule);
+  const keepRule = rule ? truncateRule(rule, opts.fromIndex) : null;
+  const keepRrule = keepRule ? seriesRrule(keepRule) : null;
+  if (keepRrule) {
+    sequence = Math.max(
+      sequence,
+      await setSeriesRule(
+        supabase,
+        actor.orgId,
+        kept.map((r) => r.id),
+        keepRrule,
+      ),
+    );
+  }
+
+  const emails = guestEmails(opts.attendees);
+  const fromStartIso = tail[0]?.series_original_start ?? tail[0]?.scheduled_at ?? null;
+  const firstStartIso = first?.series_original_start ?? first?.scheduled_at ?? null;
+  let notified = 0;
+  if (tail.length > 0 && emails.length > 0 && fromStartIso && firstStartIso) {
+    const mailbox = await mailboxFor(supabase, actor.userId, actor.orgId);
+    const res = await sendSeriesEnded({
+      credentials: mailbox.ok ? { gmailAccessToken: mailbox.token } : undefined,
+      orgId: actor.orgId,
+      origin: SITE_URL,
+      title: opts.title,
+      senderName: actor.email ?? "Someone",
+      hostEmail: actor.email ?? null,
+      emails,
+      timezone: opts.timezone,
+      seriesId: opts.seriesId,
+      // Above every sequence the series' meetings have carried, which is above
+      // the one guests hold for the series itself.
+      sequence: Math.max(sequence, ...rows.map((r) => r.calendar_sequence ?? 0)) + 1,
+      firstStartIso,
+      durationMinutes: first?.duration_minutes ?? null,
+      keepRrule,
+      fromStartIso,
+      cancelled: tail.length,
+      reason: opts.reason,
+    });
+    notified = res.sent;
+  }
+
+  return { ok: true, cancelled: tail.length, notified };
 }
