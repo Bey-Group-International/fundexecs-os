@@ -2564,7 +2564,6 @@ export type LiveMeeting = {
   organization_id: string | null;
   deal_id: string | null;
   related_contact_id: string | null;
-  related_company_id: string | null;
   related_fund_id: string | null;
   status: string;
   scheduled_at: string | null;
