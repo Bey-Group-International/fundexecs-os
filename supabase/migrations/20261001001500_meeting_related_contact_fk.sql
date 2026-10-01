@@ -53,11 +53,26 @@ create unique index if not exists network_contacts_id_org_uniq
 -- ON UPDATE stays at NO ACTION: moving a contact between organisations while a
 -- meeting references it should fail loudly rather than silently re-point the
 -- meeting or detach it.
-alter table public.live_meetings
-  add constraint live_meetings_related_contact_org_fk
-  foreign key (related_contact_id, organization_id)
-  references public.network_contacts (id, organization_id)
-  on delete set null (related_contact_id);
+-- Guarded, like the other fourteen migrations in this directory that add a
+-- constraint, and for a reason this repository has demonstrated three times in
+-- one day: migrations here get applied out of band by hand. A bare
+-- `add constraint` fails with 42710 on a second run, so a hand-run that got
+-- halfway cannot simply be repeated. `create index if not exists` below is
+-- already idempotent; this makes the two constraints match it.
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conname = 'live_meetings_related_contact_org_fk'
+      and conrelid = 'public.live_meetings'::regclass
+  ) then
+    alter table public.live_meetings
+      add constraint live_meetings_related_contact_org_fk
+      foreign key (related_contact_id, organization_id)
+      references public.network_contacts (id, organization_id)
+      on delete set null (related_contact_id);
+  end if;
+end $$;
 
 -- A composite foreign key is MATCH SIMPLE: if ANY of its columns is NULL, the
 -- constraint is not checked AT ALL. live_meetings.organization_id is nullable,
@@ -69,9 +84,18 @@ alter table public.live_meetings
 -- 0 of 59 production rows have a NULL organization_id, so this forbids a shape
 -- that currently exists only in the schema. That is precisely when forbidding
 -- it is cheap.
-alter table public.live_meetings
-  add constraint live_meetings_related_contact_needs_org
-  check (related_contact_id is null or organization_id is not null);
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conname = 'live_meetings_related_contact_needs_org'
+      and conrelid = 'public.live_meetings'::regclass
+  ) then
+    alter table public.live_meetings
+      add constraint live_meetings_related_contact_needs_org
+      check (related_contact_id is null or organization_id is not null);
+  end if;
+end $$;
 
 -- Partial, for two reasons rather than one.
 --
