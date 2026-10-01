@@ -278,7 +278,10 @@ describe("applyEvents — echoes of our own writes", () => {
           };
         }
         return {
-          delete: () => ({ eq: () => ({ in: async () => ({ error: null }) }) }),
+          delete: () => ({
+          eq: () => ({ in: async () => ({ error: null }) }),
+          in: async () => ({ error: null }),
+        }),
           upsert: async (rows: unknown[]) => {
             upserts.push(rows);
             return { error: null };
@@ -393,10 +396,17 @@ describe("syncConnection — time budget", () => {
   function budgetClient(updates: Array<{ table: string; patch: Record<string, unknown> }>) {
     return {
       from: (table: string) => ({
-        select: () => ({
-          eq: async () => ({ data: table === "google_calendars" ? CALENDARS : [], error: null }),
-          in: async () => ({ data: [], error: null }),
-        }),
+        select: () => {
+          const result = { data: table === "google_calendars" ? CALENDARS : [], error: null };
+          // The reap reads external_events through .eq().lt().gt(); the calendar
+          // list through .eq() alone. Both chains have to resolve, so `eq`
+          // returns a thenable that also carries the range methods.
+          const terminal = Object.assign(Promise.resolve(result), {
+            lt: () => Object.assign(Promise.resolve(result), { gt: async () => result }),
+            gt: () => Object.assign(Promise.resolve(result), { lt: async () => result }),
+          });
+          return { eq: () => terminal, in: async () => result };
+        },
         upsert: async () => ({ error: null }),
         delete: () => ({ eq: () => ({ in: async () => ({ error: null }) }) }),
         update: (patch: Record<string, unknown>) => ({
@@ -664,5 +674,97 @@ describe("googleBusyForUser and copies of the member's own invites", () => {
       { start: "2026-09-02T09:00:00.000Z", end: "2026-09-02T10:00:00.000Z" },
     ]);
     spy.mockRestore();
+  });
+});
+
+describe("syncConnection — reaping events Google no longer has", () => {
+  const ONE_CAL = [{ id: "cal-1", google_calendar_id: "a@group.calendar.google.com", sync_token: null }];
+
+  /** A local row for an event that no longer exists in Google. */
+  const ORPHAN = {
+    id: "orphan-row",
+    google_event_id: "deleted-in-google",
+    // Inside the window around NOW (2026-09-01), which spans 2026-07-03 to
+    // 2027-09-01. An earlier draft of this fixture used June and the reap
+    // correctly refused it as out of window -- the test was wrong, not the code.
+    starts_at: "2026-09-10T09:00:00.000Z",
+    ends_at: "2026-09-10T10:00:00.000Z",
+  };
+
+  /**
+   * Records the DELETE ids actually issued against external_events, so the
+   * assertion reads what the database was told rather than trusting that a
+   * function was called.
+   */
+  function reapClient(deleted: string[][], storedSyncToken: string | null = null) {
+    const calendars = [{ ...ONE_CAL[0], sync_token: storedSyncToken }];
+    return {
+      from: (table: string) => ({
+        select: () => {
+          const rows = table === "google_calendars" ? calendars : [ORPHAN];
+          const result = { data: rows, error: null };
+          // external_events is read through .eq().lt().gt(); google_calendars
+          // through .eq() alone. Both chains have to terminate in the rows.
+          const terminal = Object.assign(Promise.resolve(result), {
+            lt: () => Object.assign(Promise.resolve(result), { gt: async () => result }),
+            gt: () => Object.assign(Promise.resolve(result), { lt: async () => result }),
+          });
+          return { eq: () => terminal, in: async () => result };
+        },
+        upsert: async () => ({ error: null }),
+        delete: () => ({
+          eq: () => ({ in: async () => ({ error: null }) }),
+          in: async (_col: string, ids: string[]) => {
+            if (table === "external_events") deleted.push(ids);
+            return { error: null };
+          },
+        }),
+        update: () => ({ eq: async () => ({ error: null }) }),
+      }),
+      rpc: async () => ({ error: null }),
+    } as never;
+  }
+
+  beforeEach(() => {
+    jest.restoreAllMocks();
+    decryptSecretMock.mockReturnValue("refresh-token");
+    refreshAccessTokenMock.mockResolvedValue({ accessToken: "at", expiresIn: 3600 });
+    global.fetch = fetchMock as never;
+    fetchMock.mockReset();
+  });
+
+  /** A complete full response that simply does not contain the orphan. */
+  function respondWithoutTheOrphan() {
+    fetchMock.mockImplementation(async (url: string) => ({
+      ok: true,
+      status: 200,
+      json: async () =>
+        String(url).includes("/users/me/calendarList")
+          ? { items: [{ id: "a@group.calendar.google.com", summary: "A" }] }
+          : { items: [], nextSyncToken: "fresh-token" },
+    }));
+  }
+
+  it("deletes the orphaned row, through syncConnection and not just the rule", async () => {
+    respondWithoutTheOrphan();
+    const deleted: string[][] = [];
+    const summary = await syncConnection(reapClient(deleted), CONN as never, NOW);
+
+    // What the database was actually told to remove. This is the assertion that
+    // fails if the reapAbsentEvents call site is reverted -- decideReap's own
+    // tests would all still pass.
+    expect(deleted).toEqual([["orphan-row"]]);
+    expect(summary.deleted).toBe(1);
+  });
+
+  it("does not reap on an incremental sync, where absence means unchanged", async () => {
+    respondWithoutTheOrphan();
+    const deleted: string[][] = [];
+    // A stored sync token makes this a delta. The same empty response now means
+    // "nothing changed", and reaping on it would wipe the calendar.
+    const summary = await syncConnection(reapClient(deleted, "stored-token"), CONN as never, NOW);
+
+    expect(deleted).toEqual([]);
+    expect(summary.deleted).toBe(0);
   });
 });

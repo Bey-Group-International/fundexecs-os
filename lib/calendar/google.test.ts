@@ -1,5 +1,6 @@
 import {
   CONNECTION_FAILURE_ALERT_THRESHOLD,
+  decideReap,
   blocksTime,
   connectionHealth,
   decideSyncMode,
@@ -374,5 +375,170 @@ describe("isDueForSync", () => {
   it("treats an unreadable timestamp as due rather than as never", () => {
     expect(isDueForSync({ lastSyncAt: "not a date", nextAttemptAt: null }, now)).toBe(true);
     expect(isDueForSync({ lastSyncAt: ago(60_000), nextAttemptAt: "not a date" }, now)).toBe(false);
+  });
+});
+
+describe("decideReap", () => {
+  // now = 2026-06-01, so the window is 2026-04-02 .. 2027-06-01.
+  const NOW = new Date("2026-06-01T00:00:00.000Z");
+  const WINDOW = syncWindow(NOW);
+
+  /** An in-window row: comfortably inside the 60-back/365-forward span. */
+  const inWindow = (id: string, googleEventId: string) => ({
+    id,
+    googleEventId,
+    startsAt: "2026-06-10T09:00:00.000Z",
+    endsAt: "2026-06-10T10:00:00.000Z",
+  });
+
+  it("deletes an in-window row that a complete full response did not contain", () => {
+    const d = decideReap({
+      mode: "full",
+      truncated: false,
+      fetchedEventIds: ["still-there"],
+      window: WINDOW,
+      localRows: [inWindow("row-gone", "deleted-in-google"), inWindow("row-kept", "still-there")],
+    });
+    expect(d.refused).toBeNull();
+    // The ids, not the count: a count passes just as well when the wrong row
+    // was chosen.
+    expect(d.deleteIds).toEqual(["row-gone"]);
+  });
+
+  it("refuses on an incremental response, which is a delta and not a census", () => {
+    const rows = [inWindow("row-a", "a"), inWindow("row-b", "b")];
+    const incremental = decideReap({
+      mode: "incremental",
+      truncated: false,
+      fetchedEventIds: [],
+      window: WINDOW,
+      localRows: rows,
+    });
+    expect(incremental.refused).toBe("incremental");
+    expect(incremental.deleteIds).toEqual([]);
+
+    // The contrast is the point. With everything else held identical, `full`
+    // would have deleted BOTH rows -- an untouched calendar wiped. Asserting
+    // only the empty list above would pass just as well if the rule happened to
+    // find nothing to delete for some unrelated reason.
+    const asFull = decideReap({
+      mode: "full",
+      truncated: false,
+      fetchedEventIds: [],
+      window: WINDOW,
+      localRows: rows,
+    });
+    expect(asFull.deleteIds).toEqual(["row-a", "row-b"]);
+  });
+
+  it("refuses on a truncated full response, where absence may mean page 41", () => {
+    const rows = [inWindow("row-a", "a")];
+    const truncated = decideReap({
+      mode: "full",
+      truncated: true,
+      fetchedEventIds: [],
+      window: WINDOW,
+      localRows: rows,
+    });
+    expect(truncated.refused).toBe("truncated");
+    expect(truncated.deleteIds).toEqual([]);
+
+    // Same contrast: untruncated, this row is deleted.
+    expect(
+      decideReap({
+        mode: "full",
+        truncated: false,
+        fetchedEventIds: [],
+        window: WINDOW,
+        localRows: rows,
+      }).deleteIds,
+    ).toEqual(["row-a"]);
+  });
+
+  it("keeps a row outside the window, whose absence proves nothing", () => {
+    const d = decideReap({
+      mode: "full",
+      truncated: false,
+      fetchedEventIds: [],
+      window: WINDOW,
+      localRows: [
+        // Two years out: never fetched, so never expected in the response.
+        { id: "far-future", googleEventId: "ff", startsAt: "2028-01-01T09:00:00.000Z", endsAt: "2028-01-01T10:00:00.000Z" },
+        // Last year: likewise behind timeMin.
+        { id: "long-past", googleEventId: "lp", startsAt: "2025-01-01T09:00:00.000Z", endsAt: "2025-01-01T10:00:00.000Z" },
+      ],
+    });
+    expect(d.deleteIds).toEqual([]);
+    expect(d.outOfWindow).toBe(2);
+  });
+
+  it("keeps an event Google returned but this app could not normalize", () => {
+    // The present-set is built from the RAW response, so an id that arrived and
+    // was then skipped still counts as existing. Building it from stored rows
+    // instead would reap this row on every single sync.
+    const d = decideReap({
+      mode: "full",
+      truncated: false,
+      fetchedEventIds: ["unnormalizable"],
+      window: WINDOW,
+      localRows: [inWindow("row", "unnormalizable")],
+    });
+    expect(d.deleteIds).toEqual([]);
+  });
+
+  it("keeps a row whose timestamps do not parse", () => {
+    const d = decideReap({
+      mode: "full",
+      truncated: false,
+      fetchedEventIds: [],
+      window: WINDOW,
+      localRows: [{ id: "junk", googleEventId: "j", startsAt: "not-a-date", endsAt: "also-not" }],
+    });
+    // "Cannot tell whether it should have come back" must read as "do not
+    // delete", never as "absent".
+    expect(d.deleteIds).toEqual([]);
+    expect(d.outOfWindow).toBe(1);
+  });
+
+  it("treats the window as half-open at both ends", () => {
+    const d = decideReap({
+      mode: "full",
+      truncated: false,
+      fetchedEventIds: [],
+      window: WINDOW,
+      localRows: [
+        // Ends exactly at timeMin: does not overlap, so it was never fetched.
+        { id: "ends-at-min", googleEventId: "a", startsAt: "2026-04-01T00:00:00.000Z", endsAt: WINDOW.timeMin },
+        // Starts exactly at timeMax: likewise.
+        { id: "starts-at-max", googleEventId: "b", startsAt: WINDOW.timeMax, endsAt: "2027-06-02T00:00:00.000Z" },
+        // Straddles timeMin by a minute: Google would have returned it.
+        { id: "straddles-min", googleEventId: "c", startsAt: "2026-04-01T23:00:00.000Z", endsAt: "2026-04-02T01:00:00.000Z" },
+      ],
+    });
+    expect(d.deleteIds).toEqual(["straddles-min"]);
+    expect(d.outOfWindow).toBe(2);
+  });
+
+  it("reproduces finding 1: the deletion a full read after a 410 used to miss", () => {
+    // The sequence that made a free slot read busy forever.
+    //
+    // 1. An event is synced and stored locally.
+    const stored = [inWindow("local-row", "ev-1")];
+    // 2. The sync token ages out. syncConnection nulls it and re-reads in full,
+    //    which decideSyncMode reports as a full read.
+    expect(decideSyncMode(null, true).kind).toBe("full");
+    // 3. Meanwhile the event is deleted in Google. Full mode sends no
+    //    showDeleted, so the response simply omits it -- no tombstone arrives,
+    //    which is why applyEvents alone could never clear the row.
+    const responseWithoutIt: string[] = [];
+    // 4. The reap is what notices.
+    const d = decideReap({
+      mode: "full",
+      truncated: false,
+      fetchedEventIds: responseWithoutIt,
+      window: WINDOW,
+      localRows: stored,
+    });
+    expect(d.deleteIds).toEqual(["local-row"]);
   });
 });

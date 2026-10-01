@@ -14,6 +14,9 @@ import {
   type GoogleCalendarListEntry,
   type GoogleEvent,
   type NormalizedEvent,
+  type ReapRefusal,
+  type SyncMode,
+  decideReap,
   decideSyncMode,
   describeGoogleError,
   isTombstone,
@@ -194,6 +197,18 @@ interface EventsResponse {
 export interface EventPage {
   events: GoogleEvent[];
   nextSyncToken: string | null;
+  /** Which request shape produced this page set. */
+  mode: SyncMode["kind"];
+  /**
+   * True when MAX_PAGES was reached with another page still waiting, so this is
+   * a PARTIAL view of the calendar.
+   *
+   * Reported rather than inferred from the event count, because the only safe
+   * reading of a truncated full response is that absence proves nothing --
+   * `decideReap` refuses on it. Previously the loop simply stopped and the
+   * caller could not tell a complete census from a cut-off one.
+   */
+  truncated: boolean;
 }
 
 /**
@@ -213,6 +228,7 @@ export async function listEvents(
   const events: GoogleEvent[] = [];
   let pageToken = "";
   let nextSyncToken: string | null = null;
+  let truncated = false;
 
   for (let page = 0; page < MAX_PAGES; page++) {
     const params: Record<string, string> =
@@ -238,9 +254,14 @@ export async function listEvents(
     if (res.data?.nextSyncToken) nextSyncToken = res.data.nextSyncToken;
     if (!res.data?.nextPageToken) break;
     pageToken = res.data.nextPageToken;
+    // Another page exists and this was the last iteration allowed, so the view
+    // is incomplete. Set inside the loop rather than tested after it: `page` is
+    // out of scope by then, and a flag derived from the loop variable afterwards
+    // is the kind of off-by-one that silently disables the reap's interlock.
+    if (page === MAX_PAGES - 1) truncated = true;
   }
 
-  return { ok: true, data: { events, nextSyncToken } };
+  return { ok: true, data: { events, nextSyncToken, mode: mode.kind, truncated } };
 }
 
 export interface CalendarSyncSummary {
@@ -365,6 +386,72 @@ export async function applyEvents(
   }
 
   return summary;
+}
+
+/**
+ * Delete the rows a complete full response proves Google no longer has.
+ *
+ * Thin on purpose: `decideReap` owns every judgement, including the refusals.
+ * This loads the window's rows, asks, and deletes what it is told to.
+ *
+ * The window query is an optimization and nothing more -- it narrows what is
+ * read, and `decideReap` re-checks overlap itself, so a wider or sloppier
+ * prefilter could not change the answer.
+ */
+export async function reapAbsentEvents(
+  client: Client,
+  calendarRowId: string,
+  page: EventPage,
+  now: Date,
+): Promise<{ deleted: number; refused: ReapRefusal | null }> {
+  // Ask before reading: an incremental or truncated page set is refused
+  // outright, and there is no reason to query for rows nobody may delete.
+  const dry = decideReap({
+    mode: page.mode,
+    truncated: page.truncated,
+    fetchedEventIds: [],
+    window: syncWindow(now),
+    localRows: [],
+  });
+  if (dry.refused) return { deleted: 0, refused: dry.refused };
+
+  const window = syncWindow(now);
+  const { data, error } = await client
+    .from("external_events")
+    .select("id, google_event_id, starts_at, ends_at")
+    .eq("calendar_id", calendarRowId)
+    .lt("starts_at", window.timeMax)
+    .gt("ends_at", window.timeMin);
+  if (error) {
+    console.error("[google-calendar] reap query failed", error);
+    return { deleted: 0, refused: null };
+  }
+
+  const decision = decideReap({
+    mode: page.mode,
+    truncated: page.truncated,
+    // From the RAW response: an event Google returned but this app could not
+    // normalize still exists, and tombstones are handled separately.
+    fetchedEventIds: page.events.map((e) => e.id).filter((id): id is string => Boolean(id)),
+    window,
+    localRows: (data ?? []).map((r) => ({
+      id: (r as { id: string }).id,
+      googleEventId: (r as { google_event_id: string }).google_event_id,
+      startsAt: (r as { starts_at: string }).starts_at,
+      endsAt: (r as { ends_at: string }).ends_at,
+    })),
+  });
+
+  if (!decision.deleteIds.length) return { deleted: 0, refused: null };
+
+  let deleted = 0;
+  for (let i = 0; i < decision.deleteIds.length; i += 500) {
+    const chunk = decision.deleteIds.slice(i, i + 500);
+    const { error: delErr } = await client.from("external_events").delete().in("id", chunk);
+    if (delErr) console.error("[google-calendar] reap delete failed", delErr);
+    else deleted += chunk.length;
+  }
+  return { deleted, refused: null };
 }
 
 function toRow(calendarRowId: string, userId: string, e: NormalizedEvent): Record<string, unknown> {
@@ -520,6 +607,16 @@ export async function syncConnection(
     summary.upserted += applied.upserted;
     summary.deleted += applied.deleted;
     summary.skipped += applied.skipped;
+
+    // A full response is a census of the window, so anything local and absent
+    // from it was deleted in Google without ever being tombstoned -- full mode
+    // sends no `showDeleted`, so a deleted event is simply missing rather than
+    // marked cancelled, and `applyEvents` only deletes on a tombstone. Without
+    // this the row survives forever and keeps blocking the owner's
+    // availability. Refused on an incremental or truncated page set; see
+    // decideReap.
+    const reaped = await reapAbsentEvents(client, cal.id, page.data, now);
+    summary.deleted += reaped.deleted;
 
     await client
       .from("google_calendars")
