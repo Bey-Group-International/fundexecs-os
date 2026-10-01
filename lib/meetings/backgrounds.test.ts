@@ -42,6 +42,7 @@ import {
   shouldDrawFrame,
   type BackgroundEffect,
   type DilateRadii,
+  type MaskGrid,
 } from "@/lib/meetings/backgrounds";
 
 describe("blurRadiusPx", () => {
@@ -1171,5 +1172,160 @@ describe("sharpenEdge", () => {
 
   it("does not read past a shorter output", () => {
     expect(() => sharpenEdge(new Uint8ClampedArray(2), buf(1, 2, 3, 4))).not.toThrow();
+  });
+});
+
+describe("the sampling fast path", () => {
+  // The claim the fast path rests on: when the mask arrives at grid size -- which
+  // is what the processor always asks for -- the four taps are four reads of the
+  // same pixel. These tests are what stops it being an unverified assumption.
+
+  it("resolves all four taps to the same pixel when source and grid agree", () => {
+    for (const [fw, fh] of [[640, 480], [1280, 720], [1920, 1080], [320, 240]] as const) {
+      const grid = maskGrid(fw, fh);
+      const sx = 1, sy = 1; // source === grid
+      let differing = 0;
+      for (let gy = 0; gy < grid.height; gy++) {
+        const cy = (gy + 0.5) * sy;
+        const y0 = Math.floor(cy - sy / 4);
+        const y1 = Math.floor(cy + sy / 4);
+        for (let gx = 0; gx < grid.width; gx++) {
+          const cx = (gx + 0.5) * sx;
+          if (Math.floor(cx - sx / 4) !== Math.floor(cx + sx / 4) || y0 !== y1) differing += 1;
+        }
+      }
+      expect(differing).toBe(0);
+    }
+  });
+
+  it("agrees with coverageFromConfidence on every cell", () => {
+    // The ramp is inlined into the loop -- that inlining is most of the saving,
+    // and it is also a second copy of the rule. This is the test that keeps the
+    // copy honest.
+    const grid = maskGrid(640, 480);
+    const n = grid.width * grid.height;
+    const conf = new Float32Array(n);
+    for (let i = 0; i < n; i++) conf[i] = (i % 101) / 100;
+
+    const out = sampleCoverageFromConfidence(new Uint8ClampedArray(n), conf, grid.width, grid.height, grid);
+    for (let i = 0; i < n; i++) expect(out[i]).toBe(coverageFromConfidence(conf[i]));
+  });
+
+  it("agrees with coverageFromConfidence across the whole float range, not just 0-1", () => {
+    const probes = [
+      -1, -0.0001, 0, 0.0001, 0.039, 0.04, 0.0401, 0.1, 0.17, 0.2999, 0.3, 0.3001,
+      0.5, 0.9999, 1, 1.5, 1e6,
+      Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY,
+    ];
+    const grid: MaskGrid = { width: probes.length, height: 1, scale: 1 };
+    const conf = new Float32Array(probes);
+    const out = sampleCoverageFromConfidence(new Uint8ClampedArray(probes.length), conf, probes.length, 1, grid);
+    probes.forEach((p, i) => expect(out[i]).toBe(coverageFromConfidence(Math.fround(p))));
+  });
+
+  it("agrees with personCoverage on the category path", () => {
+    const grid: MaskGrid = { width: 4, height: 2, scale: 1 };
+    const labels = new Uint8Array([0, 255, 7, 0, 255, 0, 0, 128]);
+    const out = sampleCoverageFromCategory(new Uint8ClampedArray(8), labels, 4, 2, grid);
+    labels.forEach((label, i) => expect(out[i]).toBe(personCoverage(label)));
+  });
+
+  it("still averages four taps when the mask does NOT arrive at grid size", () => {
+    // The general path has to survive a model or a MediaPipe version that hands
+    // back a different size. A 4x1 source into a 2x1 grid samples columns 0 and
+    // 1 for the left cell and 2 and 3 for the right.
+    const grid: MaskGrid = { width: 2, height: 1, scale: 2 };
+    const conf = new Float32Array([1, 0, 0, 1]);
+    const out = sampleCoverageFromConfidence(new Uint8ClampedArray(2), conf, 4, 1, grid);
+    // Each cell reads its two columns twice (one row, two x taps), so each is
+    // (255 + 0 + 255 + 0) / 4 -- rounded by the clamped array.
+    expect([...out]).toEqual([128, 128]);
+  });
+
+  it("refuses a source with no size rather than reading out of bounds", () => {
+    const grid: MaskGrid = { width: 2, height: 2, scale: 1 };
+    const out = new Uint8ClampedArray([9, 9, 9, 9]);
+    expect([...sampleCoverageFromConfidence(out, new Float32Array(4), 0, 2, grid)]).toEqual([9, 9, 9, 9]);
+    expect([...sampleCoverageFromCategory(out, new Uint8Array(4), 2, -1, grid)]).toEqual([9, 9, 9, 9]);
+  });
+
+  it("does not reuse one grid's column taps for another", () => {
+    // The taps are cached across frames, because the grid does not change
+    // between them. It DOES change when the camera does, and a stale table
+    // would sample the wrong columns for the rest of the call.
+    const wide: MaskGrid = { width: 2, height: 1, scale: 2 };
+    const narrow: MaskGrid = { width: 4, height: 1, scale: 1 };
+    const conf = new Float32Array([1, 0, 0, 1]);
+
+    const first = [...sampleCoverageFromConfidence(new Uint8ClampedArray(2), conf, 4, 1, wide)];
+    const second = [...sampleCoverageFromConfidence(new Uint8ClampedArray(4), conf, 4, 1, narrow)];
+    const again = [...sampleCoverageFromConfidence(new Uint8ClampedArray(2), conf, 4, 1, wide)];
+
+    expect(second).toEqual([255, 0, 0, 255]);
+    expect(again).toEqual(first);
+  });
+
+  it("does not reuse one source size's taps for another at the same grid width", () => {
+    const grid: MaskGrid = { width: 2, height: 1, scale: 2 };
+    const four = new Float32Array([1, 0, 0, 1]);
+    const two = new Float32Array([1, 0]);
+
+    expect([...sampleCoverageFromConfidence(new Uint8ClampedArray(2), four, 4, 1, grid)]).toEqual([128, 128]);
+    // A 2x1 source into a 2x1 grid is the 1:1 path, so no taps are consulted at
+    // all; then back to 4x1, which must rebuild them.
+    expect([...sampleCoverageFromConfidence(new Uint8ClampedArray(2), two, 2, 1, grid)]).toEqual([255, 0]);
+    expect([...sampleCoverageFromConfidence(new Uint8ClampedArray(2), four, 4, 1, grid)]).toEqual([128, 128]);
+  });
+});
+
+describe("the blend's rate table", () => {
+  it("gives the same result as computing the rate per pixel", () => {
+    // The table is cached by (confident, uncertain, confirm). Swapping the
+    // parameters has to rebuild it, or a caller passing different rates would
+    // silently get the previous caller's.
+    const n = 64;
+    const target = new Uint8ClampedArray(n);
+    for (let i = 0; i < n; i++) target[i] = (i * 4) % 256;
+
+    const run = (confident: number, uncertain: number, confirm: number) => {
+      const previous = new Uint8ClampedArray(n);
+      const agreement = createMaskAgreement(n);
+      // Prime, then a frame that reverses, then a frame that reverses back --
+      // which is what drives the count off zero and onto the slow rate.
+      blendCoverageByAgreement(previous, target, agreement, confident, uncertain, 8, confirm);
+      const up = new Uint8ClampedArray(n).fill(255);
+      const down = new Uint8ClampedArray(n).fill(0);
+      blendCoverageByAgreement(previous, up, agreement, confident, uncertain, 8, confirm);
+      blendCoverageByAgreement(previous, down, agreement, confident, uncertain, 8, confirm);
+      return [...previous];
+    };
+
+    const a = run(0.5, 0.1, 1);
+    const b = run(0.9, 0.9, 1);
+    const c = run(0.5, 0.1, 1);
+
+    expect(c).toEqual(a);
+    expect(b).not.toEqual(a);
+  });
+
+  it("walks the rate down over a cap larger than one", () => {
+    // With confirm > 1 the rate is a ramp rather than a switch, and the table
+    // has to hold every step of it.
+    const n = 8;
+    const previous = new Uint8ClampedArray(n).fill(0);
+    const agreement = createMaskAgreement(n);
+    const up = new Uint8ClampedArray(n).fill(255);
+    const down = new Uint8ClampedArray(n).fill(0);
+
+    blendCoverageByAgreement(previous, down, agreement, 1, 0, 8, 3);
+    const seen: number[] = [];
+    for (let frame = 0; frame < 6; frame++) {
+      blendCoverageByAgreement(previous, frame % 2 === 0 ? up : down, agreement, 1, 0, 8, 3);
+      seen.push(previous[0]);
+    }
+    // Each reversal slows it further; by the third the rate is 0 and the value
+    // stops moving.
+    expect(seen[0]).toBe(255);
+    expect(seen[seen.length - 1]).toBe(seen[seen.length - 2]);
   });
 });
