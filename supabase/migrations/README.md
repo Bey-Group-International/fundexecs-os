@@ -163,15 +163,59 @@ against their files. As of 2026-10-01 there are five
 `20260930080000`); every object they describe was confirmed present in
 production on that date.
 
-## Not fixed by anything in this repository
+## Making these checks actually block
 
-**A red `DB Migrate` run does not block anything.** It is not a required status
-check, so a migration can fail to reach production and the next pull request
-still merges green on top of it. That is how the expired
+Everything above reports. Nothing above prevents, until the checks are required
+in branch protection — which is a repository setting, not a commit: Settings →
+Branches → branch protection for `main` → Require status checks to pass.
+
+**Add these, exactly as written.** Branch protection matches the CHECK RUN
+name, which is the job's `name:` — not the workflow's. Typing the workflow name
+produces a required check that never reports, which is the deadlock described
+below.
+
+```
+Check migrations              # migration-check.yml, job `check`
+Lint, Typecheck & Build       # ci.yml, job `lint-and-typecheck`
+Visual layout checks          # ci.yml, job `visual`
+test                          # jest.yml, job `test` — it has no `name:`, so this is its id
+zizmor                        # workflow-security.yml, job `zizmor`
+```
+
+### Why `paths:` and required checks cannot be combined
+
+`migration-check.yml` and `jest.yml` both carried a `paths:` filter on their
+`pull_request` trigger, and both have had it removed, because a path-filtered
+workflow **does not report a skipped check — it reports nothing at all**.
+Branch protection reads a required check that never arrives as still expected,
+so the pull request can never merge, and there is nothing red on the page to
+explain why. The two checks carrying the most signal were the two that could
+not be made to gate anything.
+
+The "skip companion" pattern — a sibling workflow with the inverse
+`paths-ignore` and a job of the same name reporting green — was considered and
+rejected. Getting the inverse wrong is worse than the problem in both
+directions: too narrow restores the deadlock, and too wide runs BOTH, putting a
+check of the same name that always passes beside the real one, where it can
+mask a red run.
+
+So both now run on every pull request. `scripts/check-migrations.ts` exits 0
+and says "No migrations changed" when the diff holds none, so the common case
+is a fast green.
+
+### `DB Migrate` cannot be a required check, and this is the residual
+
+**A red `DB Migrate` run still blocks nothing.** That is how the expired
 `SUPABASE_ACCESS_TOKEN` went unnoticed from 2026-07-19 for a month: every run
 died at `supabase link` and every merge looked fine.
 
-Fixing it is a repository setting, not a commit — Settings → Branches → branch
-protection for `main` → require status checks → add **DB Migrate** and
-**Migration check**. Until that is done, every check described above reports
-rather than prevents.
+It cannot be fixed by requiring it, and the reason is structural rather than an
+oversight: `db-migrate.yml` runs on `push: main`. It only ever executes AFTER
+the merge, so it has no check run on the pull request for branch protection to
+wait on. Requiring it would block every pull request forever.
+
+What that leaves: a migration can still fail to reach production and the next
+pull request will merge green on top of it. The pull-request checks above stop
+a migration that is *wrong*; nothing stops one that is *right* and fails to
+apply. Watching `DB Migrate` on `main` after a merge is a human obligation, and
+this paragraph exists so that nobody has to rediscover why.

@@ -10,14 +10,35 @@ on:
     types: [opened, synchronize, reopened, ready_for_review]
     # No `branches:` filter on purpose — it matches the PR's BASE, so a stacked
     # pull request ran no tests. See the note in ci.yml.
-    paths:
-      - '**/*.ts'
-      - '**/*.tsx'
-      - '**/*.js'
-      - '**/*.jsx'
-      - package.json
-      - package-lock.json
-      - '!.github/workflows/**'
+    #
+    # AND NO `paths:` FILTER EITHER, which is a deliberate reversal. There used
+    # to be one, listing the source extensions and excluding
+    # `.github/workflows/**`. It cost two things, and the second is the one that
+    # matters:
+    #
+    #   It skipped tests on changes that can break them. `.github/workflows/**`
+    #   was excluded, so a pull request touching only this file ran no tests at
+    #   all -- #1235 was exactly that, and the thing it changed was a workflow
+    #   that other workflows' behaviour depends on.
+    #
+    #   IT MADE THIS CHECK IMPOSSIBLE TO REQUIRE. A path-filtered workflow does
+    #   not report a skipped check; it reports NOTHING. Branch protection reads
+    #   a required check that never arrives as "expected", and the pull request
+    #   can never merge -- with nothing red on the page to fix. So the check
+    #   carrying 8,500 tests was the one check that could not be made to gate
+    #   anything.
+    #
+    # The alternative is the "skip companion" pattern: a sibling workflow with
+    # the inverse `paths-ignore` and a job of the same name that reports green.
+    # Rejected, because getting the inverse wrong in either direction is worse
+    # than the problem. Too narrow and the deadlock returns; too wide and BOTH
+    # run, which puts a check named `test` that always passes beside the real
+    # one -- a green stand-in able to mask a red run. That trade is not worth
+    # the runner minutes it saves.
+    #
+    # So this runs on every pull request. On one that touches no code, jest
+    # finds nothing to do and the check is honest: "tests passed" now means
+    # they ran.
   # Run tests after merge and collect coverage as canonical source of truth
   push:
     # Your production branch. If not the default, update here and set Target Branch at https://gitauto.ai/dashboard/rules to match
