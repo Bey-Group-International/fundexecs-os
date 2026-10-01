@@ -5,6 +5,8 @@
 // the rules here — which device to pick, what to call one with no label, how
 // loud is "loud" — can be tested without a media stack.
 
+import { isDefaultSink } from "@/lib/meetings/echo";
+
 export type DeviceKind = "audioinput" | "videoinput" | "audiooutput";
 
 export interface Device {
@@ -278,4 +280,52 @@ export function canJoin(state: { micDenied: boolean; mics: number }): boolean {
   // A member with no working mic can still listen, so this never blocks —
   // it exists so the button can say "Join to listen" rather than lie.
   return !(state.micDenied && state.mics === 0);
+}
+
+// ── Routing call audio to the chosen speaker ─────────────────────────────────
+
+/** The part of a media element the routing rule reads. */
+export interface SinkableElement {
+  /** A live MediaStream means this is call media; a `src` URL means it is not. */
+  srcObject: unknown;
+  /** A muted element renders nothing, so its sink is immaterial. */
+  muted: boolean;
+  /** The device it is currently routed to. `""` means the system default. */
+  sinkId?: string;
+  setSinkId?: (id: string) => Promise<void>;
+}
+
+/**
+ * Whether this element actually needs re-routing to `deviceId`.
+ *
+ * The room used to ask `document.querySelectorAll("video, audio")` and await
+ * `setSinkId` on every result in turn, on every change to the roster. Three
+ * things were wrong with that and all three cost something real:
+ *
+ *  1. **It was the whole document.** Any other media on the page — a player on
+ *     a route rendered behind the call, a background clip — was re-routed too.
+ *     Call media is identifiable: it carries a `srcObject`, and nothing else
+ *     does.
+ *
+ *  2. **It included the local tile, which is muted.** The local tile renders no
+ *     audio at all; that is what stops a member hearing themselves. Routing it
+ *     is an audio-pipeline rebuild for an element that will never play.
+ *
+ *  3. **The "already there" check never fired for the system default.** A
+ *     never-routed element reports `sinkId === ""`, while the chosen id is a
+ *     concrete string even when the member picked the entry labelled Default.
+ *     So the comparison failed every time and every element was rebuilt on
+ *     every roster change, which is precisely what the check existed to
+ *     prevent. `isDefaultSink` collapses both spellings.
+ */
+export function needsSinkChange(el: SinkableElement, deviceId: string): boolean {
+  if (typeof el.setSinkId !== "function") return false;
+  // Not call media.
+  if (!el.srcObject) return false;
+  // Renders no audio, so its sink is immaterial.
+  if (el.muted) return false;
+  // Both the empty string and "default" mean the system default, so a member
+  // who picked "Default" is not re-routed away from where they already are.
+  if (isDefaultSink(el.sinkId) && isDefaultSink(deviceId)) return false;
+  return el.sinkId !== deviceId;
 }

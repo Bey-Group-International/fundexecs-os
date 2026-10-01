@@ -93,3 +93,82 @@ export async function authorizeMeetingCaller(
 
   return admission ? { ok: true, userId: null } : DENIED;
 }
+
+/** A caller who is a signed-in member of the meeting's organization. */
+export interface MeetingMember {
+  ok: boolean;
+  /** The signed-in account. Never null when `ok`. */
+  userId: string | null;
+  /** The meeting's organization. Never null when `ok`. */
+  orgId: string | null;
+  /** Whether they are the meeting's host, as opposed to a colleague in the room. */
+  isHost: boolean;
+}
+
+const NOT_A_MEMBER: MeetingMember = { ok: false, userId: null, orgId: null, isHost: false };
+
+/**
+ * Decide whether this request may act on the ORGANIZATION'S OWN ASSETS from
+ * inside a meeting.
+ *
+ * Strictly narrower than `authorizeMeetingCaller`, and the gap is the point.
+ * That function answers "may you take part in this call", which is true of an
+ * admitted guest with no account and of an outside participant. This one
+ * answers "may you reach into the firm's data room and hand a document out",
+ * which is true of neither:
+ *
+ *   a GUEST has no account at all, so there is no membership to check and
+ *   nothing that could make them a member -- they are the person being shared
+ *   WITH;
+ *
+ *   a PARTICIPANT ROW is not membership. A co-investor's analyst invited into
+ *   one call has a participant row, and that must not become the ability to
+ *   mint links to the firm's materials.
+ *
+ * So the one accepted door is: signed in, and either the meeting's host or a
+ * member of the organization that owns the meeting. The organization id is
+ * returned rather than left to the caller to re-read, because every caller
+ * needs it to scope its own reads and a second read is a second chance to
+ * scope them to a different org.
+ *
+ * This still establishes only WHO is asking. Whether they may WRITE is left to
+ * the row-level policies on the caller's own client -- `is_org_writer` for a
+ * share -- so a reader-role member is refused there rather than by a second
+ * copy of the role rules here.
+ */
+export async function authorizeMeetingMember(
+  meetingId: string,
+): Promise<MeetingMember> {
+  const authed = await createServerClient();
+  const { data: { user } } = await authed.auth.getUser();
+  if (!user) return NOT_A_MEMBER;
+
+  const svc: SupabaseLike = hasSupabaseServiceEnv() ? createServiceClient() : (authed as SupabaseLike);
+
+  const { data } = await svc
+    .from("live_meetings")
+    .select("id, host_id, organization_id")
+    .eq("id", meetingId)
+    .is("deleted_at", null)
+    .maybeSingle();
+  const meeting = data as { id: string; host_id: string | null; organization_id: string | null } | null;
+  if (!meeting || !meeting.organization_id) return NOT_A_MEMBER;
+
+  const isHost = meeting.host_id === user.id;
+
+  // The host is let in without the membership read, as elsewhere -- but the
+  // organization still has to be the one on the meeting, because that is what
+  // scopes every read the caller goes on to make.
+  if (isHost) return { ok: true, userId: user.id, orgId: meeting.organization_id, isHost: true };
+
+  const { data: member } = await svc
+    .from("organization_members")
+    .select("id")
+    .eq("organization_id", meeting.organization_id)
+    .eq("principal_id", user.id)
+    .maybeSingle();
+
+  return member
+    ? { ok: true, userId: user.id, orgId: meeting.organization_id, isHost: false }
+    : NOT_A_MEMBER;
+}

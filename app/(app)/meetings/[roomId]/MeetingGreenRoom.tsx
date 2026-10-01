@@ -15,6 +15,7 @@ import {
   type Device,
   type DeviceKind,
 } from "@/lib/meetings/devices";
+import { echoRisk, echoRiskNotice } from "@/lib/meetings/echo";
 import {
   RETRY_SAME_DEVICE_MS,
   canRetrySameDevice,
@@ -415,6 +416,25 @@ export function MeetingGreenRoom({
   const cameras = useMemo(() => devicesOfKind(devices, "videoinput"), [devices]);
   const mics = useMemo(() => devicesOfKind(devices, "audioinput"), [devices]);
   const speakers = useMemo(() => devicesOfKind(devices, "audiooutput"), [devices]);
+
+  /**
+   * Whether the chosen output leaves the browser's echo canceller blind.
+   *
+   * The canceller subtracts what is being played from what is being captured,
+   * and it holds that reference for the DEFAULT render device. Choosing another
+   * output moves the audio off it; the capture does not follow. So sound comes
+   * out of a speaker the canceller cannot hear, nothing is subtracted, and
+   * everybody else hears themselves back — while the member who chose it is the
+   * one person who cannot hear the problem.
+   *
+   * `echoRisk` reads `groupId`, so "this is a headset" is a fact from the
+   * device list rather than a guess at a product name, and a headset is
+   * correctly silent here.
+   */
+  const echoWarning = useMemo(
+    () => echoRiskNotice(echoRisk({ micId, speakerId, devices })),
+    [micId, speakerId, devices],
+  );
 
   const refreshDevices = useCallback(async () => {
     try {
@@ -940,6 +960,19 @@ export function MeetingGreenRoom({
                     {speakers.map((d) => <option key={d.deviceId} value={d.deviceId}>{d.label}</option>)}
                   </select>
                 </label>
+              )}
+
+              {/* Echo, before anybody can hear it.
+                  This is the better of the two places to say it: here nothing
+                  is live, so the member can change the device without a room
+                  full of people listening to themselves while they work it out.
+                  The room says the same thing on a mid-call switch, because
+                  that path exists too. */}
+              {echoWarning && (
+                <p className="flex items-start gap-1.5 text-[11px] leading-snug text-amber-600 dark:text-amber-400">
+                  <span className="shrink-0">🔊</span>
+                  <span>{echoWarning}</span>
+                </p>
               )}
             </div>
           </div>

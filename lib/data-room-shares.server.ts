@@ -47,7 +47,7 @@ export function shareUrl(token: string): string {
 export async function insertShare(
   supabase: SupabaseClient<Database>,
   input: ShareInput,
-): Promise<{ token: string } | null> {
+): Promise<{ id: string; token: string } | null> {
   const expires_at =
     input.expiresInDays && input.expiresInDays > 0
       ? new Date(Date.now() + input.expiresInDays * 86_400_000).toISOString()
@@ -75,10 +75,15 @@ export async function insertShare(
       allow_download: input.allowDownload,
       watermark: input.watermark,
     } as never)
-    .select("token")
+    // `id` as well as the token: a caller that files the share against
+    // something else -- a meeting, say -- needs the row's identity, and
+    // re-reading it by token afterwards is a second query that can come back
+    // with a different row if two mints race on the same label.
+    .select("id, token")
     .maybeSingle();
-  const token = (inserted as { token: string } | null)?.token;
-  if (!token) return null;
+  const row = inserted as { id: string; token: string } | null;
+  if (!row?.token) return null;
+  const token = row.token;
 
   if (input.recipientEmail) {
     const { data: orgRow } = await supabase
@@ -101,5 +106,5 @@ export async function insertShare(
       }).catch(() => undefined);
     }
   }
-  return { token };
+  return { id: row.id, token };
 }

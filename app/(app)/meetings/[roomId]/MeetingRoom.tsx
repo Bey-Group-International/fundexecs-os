@@ -23,8 +23,17 @@ import {
   constraintsFor,
   displayConstraints,
   levelFromSamples,
+  needsSinkChange,
   smoothLevel,
 } from "@/lib/meetings/devices";
+import {
+  ECHO_DETECTED_NOTICE,
+  createEchoWatch,
+  echoRisk,
+  echoRiskNotice,
+  observeEcho,
+  type EchoWatch,
+} from "@/lib/meetings/echo";
 import {
   LOCAL_SPEAKER_ID,
   SPEAKING_LEVEL,
@@ -906,6 +915,19 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
   const [shareStarting, setShareStarting] = useState(false);
   const sharePendingRef = useRef(false);
   const [selectedSpeakerId, setSelectedSpeakerId] = useState("");
+
+  /**
+   * Echo advice, kept apart from `mediaError` on purpose.
+   *
+   * A device that failed to open and "others can hear themselves" are different
+   * kinds of thing: one is a failure, the other is advice about a room and a
+   * pair of speakers. Sharing one slot would mean dismissing the echo notice
+   * also dismissed a dead microphone, or that a camera failure silently replaced
+   * the only hint anybody had about why the call sounded wrong.
+   */
+  const [echoNotice, setEchoNotice] = useState<string | null>(null);
+  /** The detector's memory. Allocated once; `observeEcho` never grows it. */
+  const echoWatchRef = useRef<EchoWatch>(createEchoWatch());
   // Read synchronously by `enterRoom`, which runs in the same tick as the click
   // that produced the choice — a state update would not be visible to it yet.
   const joinChoiceRef = useRef<GreenRoomChoice | null>(null);
@@ -2835,19 +2857,27 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
    * `setSinkId` is per-element, so this has to be re-run over the current
    * elements rather than set once. Not every browser has it (Firefox), which is
    * why the capability is checked per element rather than assumed.
+   *
+   * `needsSinkChange` owns which elements that is, and why. It narrowed this
+   * from "every video and audio element in the document" to the call's own
+   * unmuted media, and fixed an "already there" check that never fired for the
+   * system default — so a roster change used to rebuild the audio pipeline of
+   * every element on the page, including the muted local tile, every time.
+   *
+   * In parallel, not in turn. Each call is a pipeline rebuild, and on a
+   * twelve-person call awaiting them one after another serialised twelve of
+   * them behind each other on a path that runs whenever anybody joins.
+   * `allSettled`, because one device disappearing must not abandon the rest.
    */
   const applySpeakerSink = useCallback(async (deviceId: string) => {
     if (!deviceId) return;
     type Sinkable = HTMLMediaElement & { sinkId?: string; setSinkId?: (id: string) => Promise<void> };
-    const elements = document.querySelectorAll<HTMLMediaElement>("video, audio");
-    for (const el of Array.from(elements) as Sinkable[]) {
-      if (typeof el.setSinkId !== "function") continue;
-      // Already there. This runs on every change to the roster, and re-routing
-      // an element that is already on the right device is an audio-pipeline
-      // rebuild for nothing.
-      if (el.sinkId === deviceId) continue;
-      try { await el.setSinkId(deviceId); } catch { /* device gone, or no permission for it */ }
-    }
+    const elements = Array.from(document.querySelectorAll<HTMLMediaElement>("video, audio")) as Sinkable[];
+    await Promise.allSettled(
+      elements
+        .filter((el) => needsSinkChange(el, deviceId))
+        .map((el) => el.setSinkId!(deviceId)),
+    );
   }, []);
 
   // Apply the chosen speaker — on join, and again whenever the set of people in
@@ -3042,6 +3072,8 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
       const now = Date.now();
       let loudest = 0;
       let loudestId: string | null = null;
+      let localLevel = 0;
+      let remoteLevel = 0;
 
       for (const tap of taps.values()) {
         tap.analyser.getFloatTimeDomainData(tap.buffer);
@@ -3055,7 +3087,28 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
         voiceLogRef.current.record(tap.id, level, now);
         if (level >= SPEAKING_LEVEL) lastAudibleRef.current.set(tap.id, now);
         if (level > loudest) { loudest = level; loudestId = tap.id; }
+
+        // Echo detection rides along on the levels this loop already has. The
+        // local tap's RAW smoothed level, not `level`: `level` is forced to
+        // zero for a muted mic, and `observeEcho` wants to know the mic is
+        // muted rather than that it is silent -- those are the same number and
+        // different facts.
+        if (tap.id === LOCAL_SPEAKER_ID) localLevel = tap.smoothed;
+        else if (level > remoteLevel) remoteLevel = level;
       }
+
+      // One sample per tick, from signals already computed: no second
+      // AudioContext, no second analyser, no extra pass over the audio.
+      const verdict = observeEcho(echoWatchRef.current, {
+        now,
+        localLevel,
+        remoteLevel,
+        micLive: micOnRef.current,
+      });
+      // Only on the edge. The verdict is true for as long as the echo lasts,
+      // and setting state on every one of the eight samples a second would
+      // re-render the room for a string that has not changed.
+      if (verdict.started) setEchoNotice(ECHO_DETECTED_NOTICE);
 
       if (loudestId && loudest >= SPEAKING_LEVEL) {
         if (loudestId === shownSpeaker) {
@@ -3997,10 +4050,47 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     }
   }, [adoptCameraTrack]);
 
+  /**
+   * Move call audio to another output device, and say so if that breaks echo
+   * cancellation.
+   *
+   * The browser's echo canceller works by subtracting what is being PLAYED
+   * from what is being CAPTURED, and it has that reference for its own default
+   * render device. `setSinkId` moves the audio off that device and the capture
+   * does not follow — so sound comes out of a speaker the canceller cannot
+   * hear, nothing is subtracted, and everyone else starts hearing themselves
+   * back. The member who caused it is the one person who cannot hear it.
+   *
+   * Exactly the shape of bug `switchMic` carried until it was fixed: a device
+   * picker quietly dropping echo cancellation. That was the input side; this is
+   * the output side, which was never looked at.
+   *
+   * Reported, not refused. A member routing audio to a conference speakerphone
+   * usually has a reason, and some of that hardware cancels better than the
+   * browser does. `echoRisk` is also the one place that can say "a headset" out
+   * loud, because `groupId` makes it a fact rather than a guess at a product
+   * name.
+   *
+   * The enumeration is here rather than held in state because this is the only
+   * moment the answer matters, and it is a deliberate click rather than
+   * anything on the frame path.
+   */
   const switchSpeaker = useCallback(async (deviceId: string) => {
     setSelectedSpeakerId(deviceId);
     rememberDevice("audiooutput", deviceId);
     await applySpeakerSink(deviceId);
+
+    try {
+      const all = await navigator.mediaDevices.enumerateDevices();
+      const notice = echoRiskNotice(echoRisk({
+        micId: selectedMicIdRef.current,
+        speakerId: deviceId,
+        devices: all.map((d) => ({ deviceId: d.deviceId, groupId: d.groupId })),
+      }));
+      // Never over an echo the detector has actually OBSERVED: that is
+      // evidence, and this is a prediction about hardware.
+      if (notice) setEchoNotice((held) => (held === ECHO_DETECTED_NOTICE ? held : notice));
+    } catch { /* enumeration refused; the detector is still watching */ }
   }, [applySpeakerSink]);
 
   /**
@@ -5054,6 +5144,14 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
               <button onClick={() => setMediaError(null)} className="shrink-0 text-amber-500 hover:text-amber-600 text-xs font-medium underline">Dismiss</button>
             </div>
           )}
+          {/* Echo. Its own banner, not `mediaError`: see `echoNotice`. */}
+          {echoNotice && (
+            <div className="flex items-start gap-3 px-4 py-3 bg-amber-500/10 border-b border-amber-500/30 shrink-0">
+              <span className="text-amber-500 mt-0.5 shrink-0">🔊</span>
+              <p className="flex-1 text-sm text-amber-600 dark:text-amber-400">{echoNotice}</p>
+              <button onClick={() => setEchoNotice(null)} className="shrink-0 text-amber-500 hover:text-amber-600 text-xs font-medium underline">Dismiss</button>
+            </div>
+          )}
           {/* Guest upsell banner */}
           {isGuest && (
             <div className="flex items-center gap-3 px-4 py-2 bg-gold-400/10 border-b border-gold-400/20 shrink-0">
@@ -5191,6 +5289,12 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
               removedPeople={removedPeople} onAllowBack={(s) => void allowBack(s)}
               onChatVisibility={handleChatVisibility}
               onCollapse={collapseCopilot}
+              meetingId={meetingId}
+              // Signed in, not a guest. A guest has no firm behind them to
+              // share from; whether a signed-in viewer is a MEMBER of the
+              // host's firm is not something the room can tell from attendance,
+              // so the route decides and the panel reports the refusal.
+              canShareDocs={!isGuest}
             />
             </CopilotErrorBoundary>
             </div>

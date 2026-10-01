@@ -190,6 +190,7 @@ export function blendCoverageByAgreement(
 
   const prevTarget = agreement.previousTarget;
   const state = agreement.state;
+  const rates = blendRates(hi, lo, cap);
 
   // The first frame has nothing to compare against, so every pixel blends at the
   // confident rate. Seeding the deltas from a fabricated previous frame would
@@ -233,10 +234,47 @@ export function blendCoverageByAgreement(
     }
     state[i] = sign | count;
 
-    const a = hi - (hi - lo) * Math.min(1, count / cap);
-    previous[i] = previous[i] + (t - previous[i]) * a;
+    previous[i] = previous[i] + (t - previous[i]) * rates[count];
   }
   return previous;
+}
+
+/**
+ * The blend rate for each reversal count, computed once per configuration.
+ *
+ * The expression is the one that used to run per pixel:
+ * `hi - (hi - lo) * min(1, count / cap)`. It depends on nothing but the three
+ * parameters, and `count` is bounded by `cap`, so there are `cap + 1` possible
+ * answers and the loop was computing a division, a `Math.min`, a multiply and a
+ * subtract 130,000 times a frame to keep rediscovering two of them.
+ *
+ * Measured at 1280x720, with the coverage and the packed state byte-identical:
+ *
+ *   per-pixel arithmetic      1.40 ms per frame
+ *   this table                0.78 ms per frame
+ *
+ * Kept as the SAME expression rather than the algebraically equivalent
+ * `hi - step * count`. That form is one operation shorter and can differ in the
+ * last bit of the mantissa, and the result is written into a Uint8ClampedArray
+ * — which rounds — so a 1-ulp difference is a coverage value that flips at a
+ * .5 boundary. A faster edge is not worth an edge in a different place.
+ *
+ * Cached rather than allocated per frame: `blendCoverage*` promises to allocate
+ * nothing, because it runs 24 times a second for the length of every call, and
+ * the parameters are compile-time constants in every real caller.
+ */
+let rateCache: { hi: number; lo: number; cap: number; rates: Float64Array } | null = null;
+
+function blendRates(hi: number, lo: number, cap: number): Float64Array {
+  const held = rateCache;
+  if (held && held.hi === hi && held.lo === lo && held.cap === cap) return held.rates;
+
+  const rates = new Float64Array(cap + 1);
+  for (let count = 0; count <= cap; count++) {
+    rates[count] = hi - (hi - lo) * Math.min(1, count / cap);
+  }
+  rateCache = { hi, lo, cap, rates };
+  return rates;
 }
 
 
@@ -426,8 +464,20 @@ export function coverageFromConfidence(confidence: number): number {
 //
 // Measured on a 1280x720 frame: growing the mask at full resolution adds ~10ms
 // per frame, a quarter of the budget, before the compositor has drawn anything.
-// On the grid it is a fraction of a millisecond. A widened mask that made modest
-// laptops drop frames would have traded one visible fault for another.
+// On the grid it is ~1.4ms, which is where the growth now runs. A widened mask
+// that made modest laptops drop frames would have traded one visible fault for
+// another.
+//
+// "A fraction of a millisecond" is what this comment and `maskGrid` below used
+// to say, and it was wrong by an order of magnitude. Timed as one block, the
+// whole pure per-frame chain -- sample, ceiling, grow, blend, sharpen, write the
+// alpha plane -- cost ~5.4ms per frame, which at OUTPUT_FPS is ~130ms of main
+// thread per second of video, in a tab that is also decoding everyone else's
+// camera. It is now ~2.9ms, ~70ms per second; see `sampleCoverageFromConfidence`
+// and `blendRates` for where the rest went. The remaining largest item is the
+// growth itself, and a row-major rewrite of its vertical passes was tried and
+// measured at 2.04 -> 1.88ms -- 8%, for a scratch buffer and a less obvious
+// loop. Not taken.
 
 /**
  * How many pixels of mask one frame is allowed to cost.
@@ -441,9 +491,9 @@ export function coverageFromConfidence(confidence: number): number {
  *
  * Bounding the pixel count instead makes the per-frame cost the same whatever
  * the camera, and spends it on as fine a mask as that buys. ~130k is 480x270,
- * measured at a fraction of a millisecond for the sampling and growth passes
- * against a 45ms budget — and reachable now because pacing the loop to the rate
- * the canvas is captured at freed two to five times the budget it used to waste.
+ * measured at ~2.9ms for the whole pure chain against a 45ms budget — and
+ * reachable now because pacing the loop to the rate the canvas is captured at
+ * freed two to five times the budget it used to waste.
  */
 const MASK_GRID_PIXELS = 130_000;
 
@@ -474,13 +524,35 @@ export function maskGrid(frameWidth: number, frameHeight: number): MaskGrid {
 }
 
 /**
- * Fill a grid-sized coverage buffer from a frame-sized confidence mask.
+ * Fill a grid-sized coverage buffer from the segmenter's confidence mask.
  *
- * Each grid cell averages the four frame pixels nearest its centre rather than
- * taking one. A single sample is cheaper, but it makes the edge land on whichever
- * pixel it happened to hit, and that choice changes frame to frame — which is
- * the crawling edge the temporal blend exists to suppress. Averaging keeps the
- * boundary where it actually is.
+ * Each grid cell averages the four source pixels nearest its centre rather than
+ * taking one. A single sample is cheaper, but it makes the edge land on
+ * whichever pixel it happened to hit, and that choice changes frame to frame —
+ * which is the crawling edge the temporal blend exists to suppress. Averaging
+ * keeps the boundary where it actually is.
+ *
+ * THE FOUR TAPS COLLAPSE TO ONE IN PRODUCTION, and that is worth a fast path
+ * rather than four reads of the same byte. The processor segments a canvas it
+ * drew at grid size, so the mask comes back at grid size, so the source and the
+ * grid are the same shape: with sx = sy = 1 the two x taps are floor(gx + 0.25)
+ * and floor(gx + 0.75), which are both gx, and likewise for y. Measured at
+ * 1280x720 (481x270 grid), byte-identical output:
+ *
+ *   four taps through a callback      4.04 ms per frame
+ *   one tap, ramp inlined             1.50 ms per frame
+ *
+ * Two things each cost about as much as the extra reads. The ramp was reached
+ * through a `coverageAt` function reference, which cannot be inlined into the
+ * loop — calling the exported `coverageFromConfidence` once per cell measured
+ * SLOWER than the whole four-tap version does now (4.74 ms). And the x taps
+ * were recomputed on every row although they depend only on the column, which
+ * is `grid.height` times more arithmetic than the answer needs.
+ *
+ * So both paths inline the ramp, and the general path hoists the x taps. The
+ * general path stays because the mask's own dimensions are the ones to trust —
+ * a model or a MediaPipe version that hands back a different size must still
+ * work, just not at this speed.
  */
 export function sampleCoverageFromConfidence(
   out: Uint8ClampedArray,
@@ -489,32 +561,26 @@ export function sampleCoverageFromConfidence(
   srcHeight: number,
   grid: MaskGrid,
 ): Uint8ClampedArray {
-  return sampleInto(out, grid, srcWidth, srcHeight, (i) => coverageFromConfidence(confidences[i]));
-}
-
-/** The same, from the hard category mask — the fallback when no confidence mask arrives. */
-export function sampleCoverageFromCategory(
-  out: Uint8ClampedArray,
-  labels: Uint8Array,
-  srcWidth: number,
-  srcHeight: number,
-  grid: MaskGrid,
-): Uint8ClampedArray {
-  return sampleInto(out, grid, srcWidth, srcHeight, (i) => personCoverage(labels[i]));
-}
-
-function sampleInto(
-  out: Uint8ClampedArray,
-  grid: MaskGrid,
-  srcWidth: number,
-  srcHeight: number,
-  coverageAt: (index: number) => number,
-): Uint8ClampedArray {
   if (!(srcWidth > 0) || !(srcHeight > 0)) return out;
-  const sx = srcWidth / grid.width;
+
+  // The ramp, inlined. Identical to `coverageFromConfidence`, which stays
+  // exported and is what the tests pin — there is a test asserting these two
+  // agree on every representable input, because a divergence here would be a
+  // silent change to where every edge in the picture falls.
+  const span = CONFIDENCE_PERSON - CONFIDENCE_BACKGROUND;
+
+  if (srcWidth === grid.width && srcHeight === grid.height) {
+    const n = Math.min(out.length, confidences.length);
+    for (let i = 0; i < n; i++) {
+      const c = confidences[i];
+      out[i] = ramp(c, span);
+    }
+    return out;
+  }
+
   const sy = srcHeight / grid.height;
-  const lastX = srcWidth - 1;
   const lastY = srcHeight - 1;
+  const [tapA, tapB] = columnTaps(grid, srcWidth);
 
   for (let gy = 0; gy < grid.height; gy++) {
     const cy = (gy + 0.5) * sy;
@@ -525,15 +591,104 @@ function sampleInto(
     const outRow = gy * grid.width;
 
     for (let gx = 0; gx < grid.width; gx++) {
-      const cx = (gx + 0.5) * sx;
-      const x0 = Math.min(lastX, Math.max(0, Math.floor(cx - sx / 4)));
-      const x1 = Math.min(lastX, Math.max(0, Math.floor(cx + sx / 4)));
-      const sum = coverageAt(row0 + x0) + coverageAt(row0 + x1)
-                + coverageAt(row1 + x0) + coverageAt(row1 + x1);
+      const xa = tapA[gx];
+      const xb = tapB[gx];
+      const sum =
+        ramp(confidences[row0 + xa], span) +
+        ramp(confidences[row0 + xb], span) +
+        ramp(confidences[row1 + xa], span) +
+        ramp(confidences[row1 + xb], span);
       out[outRow + gx] = sum / 4;
     }
   }
   return out;
+}
+
+/**
+ * The ramp, as a function small enough for the engine to inline.
+ *
+ * `!(c > lo && c < Infinity)` rather than `c <= lo`, and that detail is not
+ * decoration. The exported `coverageFromConfidence` opens with
+ * `Number.isFinite`, so it answers 0 for NaN and for BOTH infinities. A first
+ * draft of this inlining dropped that guard, and `+Infinity` then fell through
+ * to `c >= CONFIDENCE_PERSON` and came back 255 — the opposite answer, on a
+ * value that would have painted a pixel as fully a person. The equivalence test
+ * over the whole float range caught it; nothing in a camera would have.
+ */
+function ramp(c: number, span: number): number {
+  if (!(c > CONFIDENCE_BACKGROUND && c < Number.POSITIVE_INFINITY)) return 0;
+  if (c >= CONFIDENCE_PERSON) return 255;
+  return Math.round(((c - CONFIDENCE_BACKGROUND) / span) * 255);
+}
+
+/** The same, from the hard category mask — the fallback when no confidence mask arrives. */
+export function sampleCoverageFromCategory(
+  out: Uint8ClampedArray,
+  labels: Uint8Array,
+  srcWidth: number,
+  srcHeight: number,
+  grid: MaskGrid,
+): Uint8ClampedArray {
+  if (!(srcWidth > 0) || !(srcHeight > 0)) return out;
+
+  if (srcWidth === grid.width && srcHeight === grid.height) {
+    const n = Math.min(out.length, labels.length);
+    for (let i = 0; i < n; i++) out[i] = labels[i] === PERSON_LABEL ? 255 : 0;
+    return out;
+  }
+
+  const sy = srcHeight / grid.height;
+  const lastY = srcHeight - 1;
+  const [tapA, tapB] = columnTaps(grid, srcWidth);
+
+  for (let gy = 0; gy < grid.height; gy++) {
+    const cy = (gy + 0.5) * sy;
+    const y0 = Math.min(lastY, Math.max(0, Math.floor(cy - sy / 4)));
+    const y1 = Math.min(lastY, Math.max(0, Math.floor(cy + sy / 4)));
+    const row0 = y0 * srcWidth;
+    const row1 = y1 * srcWidth;
+    const outRow = gy * grid.width;
+
+    for (let gx = 0; gx < grid.width; gx++) {
+      const xa = tapA[gx];
+      const xb = tapB[gx];
+      const sum =
+        (labels[row0 + xa] === PERSON_LABEL ? 255 : 0) +
+        (labels[row0 + xb] === PERSON_LABEL ? 255 : 0) +
+        (labels[row1 + xa] === PERSON_LABEL ? 255 : 0) +
+        (labels[row1 + xb] === PERSON_LABEL ? 255 : 0);
+      out[outRow + gx] = sum / 4;
+    }
+  }
+  return out;
+}
+
+/**
+ * The two source columns each grid column samples, computed once.
+ *
+ * They depend only on the column, so recomputing them per row was
+ * `grid.height` times more `floor`, `min` and `max` than the answer needs.
+ * Cached across frames as well, because the grid and the mask size do not
+ * change from one frame to the next — only when the camera does, which
+ * `resizeMask` already treats as a reconfiguration.
+ */
+let tapCache: { width: number; srcWidth: number; a: Int32Array; b: Int32Array } | null = null;
+
+function columnTaps(grid: MaskGrid, srcWidth: number): [Int32Array, Int32Array] {
+  const held = tapCache;
+  if (held && held.width === grid.width && held.srcWidth === srcWidth) return [held.a, held.b];
+
+  const sx = srcWidth / grid.width;
+  const lastX = srcWidth - 1;
+  const a = new Int32Array(grid.width);
+  const b = new Int32Array(grid.width);
+  for (let gx = 0; gx < grid.width; gx++) {
+    const cx = (gx + 0.5) * sx;
+    a[gx] = Math.min(lastX, Math.max(0, Math.floor(cx - sx / 4)));
+    b[gx] = Math.min(lastX, Math.max(0, Math.floor(cx + sx / 4)));
+  }
+  tapCache = { width: grid.width, srcWidth, a, b };
+  return [a, b];
 }
 
 /**
