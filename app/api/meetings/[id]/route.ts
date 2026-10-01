@@ -23,7 +23,15 @@ import {
   seriesUpdateContext,
 } from "@/lib/meetings/meeting-updates";
 import { ruleFromRrule, seriesRrule, shiftSeriesStarts, truncateRule } from "@/lib/meetings/recurrence";
-import { BUSY_ELSEWHERE_MESSAGE, conflictGate, conflictMessage, findConflicts, type ConflictCandidate } from "@/lib/meetings/schedule";
+import {
+  BUSY_ELSEWHERE_MESSAGE,
+  conflictGate,
+  conflictMessage,
+  findConflicts,
+  findConflictsAcross,
+  overlapsAnyWindow,
+  type ConflictCandidate,
+} from "@/lib/meetings/schedule";
 import { loadBlockConflicts } from "@/lib/meetings/blocks.server";
 import { loadExternalConflicts, loadSeriesExternalConflicts } from "@/lib/meetings/conflicts.server";
 import { normalizeAttendees, type MeetingAttendeeInput } from "@/lib/meetings/attendees";
@@ -261,6 +269,8 @@ export async function PATCH(request: NextRequest, { params }: { params: Params }
         timezone: (cleanString(body.timezone) ?? (prior.timezone as string | null)) || "UTC",
         title: body.title ? String(body.title) : ((prior.title as string | null) ?? "Meeting"),
         timingChanged: timing.changed,
+        allowConflict: body.allowConflict === true,
+        hostId: (prior.host_id as string | null) ?? null,
         guestsCareAbout:
           timing.changed ||
           place.changed ||
@@ -786,6 +796,9 @@ async function editSeriesFrom(
     timezone: string;
     title: string;
     timingChanged: boolean;
+    allowConflict: boolean;
+    /** Whose meeting this is, for telling a clash with a shared person apart. */
+    hostId: string | null;
     guestsCareAbout: boolean;
     priorEmails: string[];
     nextEmails: string[];
@@ -833,6 +846,55 @@ async function editSeriesFrom(
         { error: BUSY_ELSEWHERE_MESSAGE, overridable: false, conflicts: [], blockedBy: [], busyElsewhere },
         { status: 409 },
       );
+    }
+
+    // Other meetings and time blocked by hand, across every later meeting, as
+    // for a new series: a warning with "Save anyway", never a refusal. The
+    // series' own meetings are moving with this edit, so they are left out.
+    if (!opts.allowConflict) {
+      const windows = starts
+        .map((startIso, i) => ({ startIso, id: tail[i].id }))
+        .filter((w) => w.id !== opts.meetingId)
+        .map(({ startIso }) => ({
+          startIso,
+          endIso: new Date(new Date(startIso).getTime() + (opts.nextDuration ?? 60) * 60_000).toISOString(),
+        }));
+      if (windows.length > 0) {
+        const spanStart = new Date(new Date(windows[0].startIso).getTime() - 8 * 3600_000).toISOString();
+        const spanEnd = windows[windows.length - 1].endIso;
+        const moving = new Set(tail.map((r) => r.id));
+        const [{ data: candidates }, blocks] = await Promise.all([
+          supabase
+            .from("live_meetings")
+            .select("id, title, scheduled_at, duration_minutes, host_id, attendees")
+            .eq("organization_id", actor.orgId)
+            .is("deleted_at", null)
+            .eq("is_draft", false)
+            .neq("status", "ended")
+            .gte("scheduled_at", spanStart)
+            .lt("scheduled_at", spanEnd)
+            .limit(1000),
+          loadBlockConflicts(supabase, actor.userId, windows[0].startIso, spanEnd),
+        ]);
+        const conflicts = findConflictsAcross(
+          ((candidates ?? []) as ConflictCandidate[]).filter((c) => !moving.has(c.id)),
+          windows,
+          { subjectHostId: opts.hostId, subjectEmails: opts.nextEmails },
+        );
+        const blockedBy = blocks.filter((b) => overlapsAnyWindow(b.startsAt, b.endsAt, windows));
+        if (conflicts.length > 0 || blockedBy.length > 0) {
+          return NextResponse.json(
+            {
+              error: conflictMessage(conflicts.length, blockedBy.length, 0),
+              overridable: true,
+              conflicts,
+              blockedBy,
+              busyElsewhere: [],
+            },
+            { status: 409 },
+          );
+        }
+      }
     }
   }
 

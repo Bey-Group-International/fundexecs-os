@@ -852,6 +852,41 @@ describe("/api/meetings/[id]", () => {
       expect(updateMeetingMock).not.toHaveBeenCalled();
     });
 
+    describe("other meetings on the later weeks", () => {
+      // Week four (s3) moves to 11:00 and lands on a board call there.
+      const BOARD = {
+        id: "board",
+        title: "Board call",
+        scheduled_at: new Date(Date.UTC(2026, 9, 27, 16, 15)).toISOString(),
+        duration_minutes: 60,
+        host_id: "u1",
+        attendees: [],
+      };
+      function withCandidates(rows: unknown[]) {
+        from.mockReturnValue(makeBuilder({ maybeSingle: { data: SERIES_PRIOR }, limit: { data: rows } }));
+      }
+
+      it("warns, and offers Save anyway", async () => {
+        withCandidates([BOARD]);
+        const res = await PATCH(req({ scope: "following", scheduledAt: ELEVEN }), params);
+        expect(res.status).toBe(409);
+        expect(await res.json()).toMatchObject({ overridable: true, conflicts: [{ id: "board" }] });
+        expect(updateMeetingMock).not.toHaveBeenCalled();
+      });
+
+      it("moves them anyway when asked", async () => {
+        withCandidates([BOARD]);
+        const res = await PATCH(req({ scope: "following", scheduledAt: ELEVEN, allowConflict: true }), params);
+        expect(res.status).toBe(200);
+        expect(updateMeetingMock).toHaveBeenCalledTimes(3);
+      });
+
+      it("does not count the series' own meetings, which move with it", async () => {
+        withCandidates([{ ...BOARD, id: "s4", scheduled_at: new Date(Date.UTC(2026, 10, 3, 17)).toISOString() }]);
+        expect((await PATCH(req({ scope: "following", scheduledAt: ELEVEN }), params)).status).toBe(200);
+      });
+    });
+
     it("drops a guest from the rest of the series and tells them so", async () => {
       await PATCH(req({ scope: "following", attendees: [GUESTS[0]] }), params);
       expect(sendSeriesEndedMock).toHaveBeenCalledWith(
