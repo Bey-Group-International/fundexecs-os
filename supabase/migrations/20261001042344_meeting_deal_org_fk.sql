@@ -93,20 +93,34 @@ begin
       references public.deals (id, organization_id)
       on delete set null (deal_id);
   end if;
-end $$;
 
--- A composite foreign key is MATCH SIMPLE: if ANY of its columns is NULL the
--- constraint is not checked AT ALL. live_meetings.organization_id is nullable,
--- so without this check a row with organization_id = NULL could carry any value
--- whatever in deal_id and the key above would never look.
---
--- Note that deals.organization_id is NOT NULL, which does NOT help: the hole is
--- on the REFERENCING side, in live_meetings. Measured with the key in place and
--- the check dropped, a null-organisation row carrying a random UUID was
--- ACCEPTED; with the check it is refused. 0 of 62 production rows have a NULL
--- organization_id, so this forbids a shape that exists only in the schema.
-do $$
-begin
+  -- The check belongs INSIDE this block, not after it, and that is not a
+  -- stylistic choice -- it closes a window in which this migration would have
+  -- left the table WEAKER than it found it.
+  --
+  -- A composite foreign key is MATCH SIMPLE: if ANY of its columns is NULL the
+  -- constraint is not checked AT ALL. live_meetings.organization_id is
+  -- nullable, so the composite key alone does not cover a null-organisation
+  -- row -- while the id-only key it replaces DID, because it looked at deal_id
+  -- regardless of organisation.
+  --
+  -- With the check as a separate statement, a statement-by-statement apply that
+  -- stopped in between would commit exactly that gap. Measured, in three states:
+  --
+  --   id-only fk, as production stood   null org + arbitrary uuid   REFUSED
+  --   composite fk, no check            null org + arbitrary uuid   ACCEPTED
+  --   composite fk + check              null org + arbitrary uuid   REFUSED
+  --
+  -- The middle row is the regression. A DO block is a single statement, so
+  -- everything in here commits together even under autocommit, which makes that
+  -- state unreachable however the file is applied. Each object keeps its own
+  -- `if not exists` guard, so re-running still repairs either one alone.
+  --
+  -- deals.organization_id is NOT NULL, and that does not help: the hole is on
+  -- the REFERENCING side, in live_meetings.
+  --
+  -- 0 of 62 production rows have a NULL organization_id, so the check forbids a
+  -- shape that currently exists only in the schema.
   if not exists (
     select 1 from pg_constraint
     where conname = 'live_meetings_deal_needs_org'
