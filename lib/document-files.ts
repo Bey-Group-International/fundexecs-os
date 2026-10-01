@@ -15,19 +15,28 @@
 export const DOCUMENT_BUCKET = "documents";
 
 /**
- * Per-file ceiling. Matches the bucket's own `file_size_limit` (migration
- * 20260930200000, 500 MB). Deployments on a smaller Supabase plan can lower it
- * with NEXT_PUBLIC_DOCUMENT_MAX_UPLOAD_MB so the drop zone tells the truth
- * instead of failing at Storage — the bucket can never accept more than the
- * project's global upload limit.
+ * Per-file ceiling for library uploads.
+ *
+ * Two limits sit between a file and the bucket: the `documents` bucket's own
+ * `file_size_limit` (500 MB, migration 20260930200000) and the Supabase
+ * project's GLOBAL upload limit, which the bucket can never exceed. On the Free
+ * plan that global limit is fixed at 50 MB; paid plans can raise it.
+ *
+ * So the default here is the Free-plan truth, and NEXT_PUBLIC_DOCUMENT_MAX_UPLOAD_MB
+ * raises it (up to the bucket's 500 MB) once the project is upgraded and its
+ * global limit raised to match — see docs/DOCUMENT_UPLOAD_LIMIT.md. A drop zone
+ * that promises more than Storage accepts fails at the last step; one that
+ * states the real number refuses the file before anything is sent.
  */
+export const FREE_PLAN_UPLOAD_MB = 50;
+export const BUCKET_UPLOAD_MB = 500;
+
 export const MAX_UPLOAD_BYTES = resolveMaxUploadBytes(process.env.NEXT_PUBLIC_DOCUMENT_MAX_UPLOAD_MB);
 
-/** Parse the env override; anything unusable falls back to 500 MB. */
+/** Parse the env override, clamped to the bucket; anything unusable is the Free-plan limit. */
 export function resolveMaxUploadBytes(raw: string | undefined): number {
-  const DEFAULT_MB = 500;
   const mb = Number(raw);
-  const value = Number.isFinite(mb) && mb > 0 ? Math.min(mb, DEFAULT_MB) : DEFAULT_MB;
+  const value = Number.isFinite(mb) && mb > 0 ? Math.min(mb, BUCKET_UPLOAD_MB) : FREE_PLAN_UPLOAD_MB;
   return Math.floor(value * 1024 * 1024);
 }
 
