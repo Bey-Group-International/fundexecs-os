@@ -18,7 +18,19 @@
 jest.mock("server-only", () => ({}), { virtual: true });
 
 const insertShare = jest.fn();
+/** Reads and the share mint: the RLS-bound client the caller's session owns. */
 const from = jest.fn();
+/**
+ * Writes to the join table: the service role.
+ *
+ * Kept as a SEPARATE mock on purpose. The first version of this file pointed
+ * both clients at one `from`, which made the distinction invisible — and the
+ * code was in fact writing the join row through the RLS client, against a table
+ * whose only policy is FOR SELECT, so every insert was refused and the feature
+ * did not work at all. A test cannot catch that while both clients are the same
+ * object.
+ */
+const serviceFrom = jest.fn();
 
 jest.mock("@/lib/data-room-shares.server", () => ({
   insertShare: (...a: unknown[]) => insertShare(...a),
@@ -26,12 +38,12 @@ jest.mock("@/lib/data-room-shares.server", () => ({
 }));
 jest.mock("@/lib/supabase/server", () => ({
   createServerClient: async () => ({ from: (t: string) => from(t) }),
-  createServiceClient: () => ({ from: (t: string) => from(t) }),
+  createServiceClient: () => ({ from: (t: string) => serviceFrom(t) }),
   hasSupabaseServiceEnv: () => true,
 }));
 
 import { DOC_SHARE_EXPIRY_DAYS } from "@/lib/meetings/doc-share";
-import { shareDocumentInMeeting } from "@/lib/meetings/doc-share.server";
+import { loadSharedInMeeting, shareDocumentInMeeting } from "@/lib/meetings/doc-share.server";
 
 /** Rows the fake database hands back, per table. */
 interface Tables {
@@ -42,11 +54,16 @@ interface Tables {
     storage_key: string | null; content: string | null;
   }[];
   /** Join rows, in the order a read returns them. */
-  shared: { document_id: string; created_at: string; data_room_shares: { token: string } }[];
+  shared: {
+    id: string;
+    document_id: string;
+    created_at: string;
+    data_room_shares: { token: string; expires_at: string | null; revoked_at: string | null };
+  }[];
 }
 
-const inserts: { table: string; row: Record<string, unknown> }[] = [];
-const updates: { table: string; row: Record<string, unknown>; id: string }[] = [];
+const inserts: { table: string; row: Record<string, unknown>; via: string }[] = [];
+const updates: { table: string; row: Record<string, unknown>; id: string; via: string }[] = [];
 
 /**
  * A fake just deep enough to exercise the real query shapes.
@@ -66,6 +83,7 @@ function wire(opts: {
   tables: Partial<Tables>;
   sharedReads?: Tables["shared"][];
   insertError?: { message: string } | null;
+  updateError?: { message: string } | null;
 }) {
   const tables: Tables = { rooms: [], entries: [], documents: [], shared: [], ...opts.tables };
   let sharedCall = 0;
@@ -82,7 +100,12 @@ function wire(opts: {
     return [];
   }
 
-  from.mockImplementation((table: string) => {
+  /**
+   * `via` names which client this builder belongs to, so a test can assert that
+   * the join row was written as the service role rather than merely that it was
+   * written.
+   */
+  const build = (via: "authed" | "service") => (table: string) => {
     const builder: Record<string, unknown> = {};
     const chain = () => builder;
     for (const method of ["select", "eq", "is", "in", "order", "limit", "not", "neq"]) {
@@ -90,19 +113,46 @@ function wire(opts: {
     }
     builder.maybeSingle = async () => ({ data: null, error: null });
     builder.insert = async (row: Record<string, unknown>) => {
-      inserts.push({ table, row });
+      inserts.push({ table, row, via });
       return { error: opts.insertError ?? null };
     };
     builder.update = (row: Record<string, unknown>) => ({
       eq: async (_col: string, id: string) => {
-        updates.push({ table, row, id });
-        return { error: null };
+        updates.push({ table, row, id, via });
+        return { error: opts.updateError ?? null };
       },
     });
     builder.then = (resolve: (v: unknown) => unknown, reject?: (e: unknown) => unknown) =>
       Promise.resolve({ data: rowsFor(table), error: null }).then(resolve, reject);
     return builder;
-  });
+  };
+
+  from.mockImplementation(build("authed"));
+  serviceFrom.mockImplementation(build("service"));
+}
+
+/** A join row whose link still opens. */
+function live(documentId: string, token: string) {
+  return {
+    id: `row-${documentId}`,
+    document_id: documentId,
+    created_at: "2026-09-01T00:00:00.000Z",
+    data_room_shares: { token, expires_at: null, revoked_at: null },
+  };
+}
+/** A join row whose link has been revoked from the Shares panel. */
+function revoked(documentId: string, token: string) {
+  return {
+    ...live(documentId, token),
+    data_room_shares: { token, expires_at: null, revoked_at: "2026-09-02T00:00:00.000Z" },
+  };
+}
+/** A join row whose link has run past its expiry. */
+function expired(documentId: string, token: string) {
+  return {
+    ...live(documentId, token),
+    data_room_shares: { token, expires_at: "2026-09-10T00:00:00.000Z", revoked_at: null },
+  };
 }
 
 const ROOMS = [{ id: "room-1", name: "Primary Data Room", is_default: true }];
@@ -145,6 +195,7 @@ describe("the happy path", () => {
     expect(inserts).toEqual([
       {
         table: "live_meeting_shared_documents",
+        via: "service",
         row: {
           meeting_id: "m1",
           organization_id: "org-1",
@@ -193,7 +244,7 @@ describe("the second tap", () => {
   it("hands back the first link without minting another", async () => {
     wire({
       tables: { rooms: ROOMS, entries: ENTRIES, documents: DOCS },
-      sharedReads: [[{ document_id: "d1", created_at: "t", data_room_shares: { token: "already" } }]],
+      sharedReads: [[live("d1", "already")]],
     });
 
     const out = await shareDocumentInMeeting(INPUT);
@@ -217,7 +268,7 @@ describe("the second tap", () => {
         entries: ENTRIES,
         documents: [{ ...DOCS[0], status: "draft" }],
       },
-      sharedReads: [[{ document_id: "d1", created_at: "t", data_room_shares: { token: "already" } }]],
+      sharedReads: [[live("d1", "already")]],
     });
 
     expect(await shareDocumentInMeeting(INPUT)).toEqual({ ok: false, reason: "not-shareable" });
@@ -259,7 +310,7 @@ describe("losing the race on the unique index", () => {
       // is refused: the other call's row.
       sharedReads: [
         [],
-        [{ document_id: "d1", created_at: "t", data_room_shares: { token: "winner" } }],
+        [live("d1", "winner")],
       ],
       insertError: { message: "duplicate key value violates unique constraint" },
     });
@@ -276,6 +327,9 @@ describe("losing the race on the unique index", () => {
       {
         table: "data_room_shares",
         id: "share-1",
+        // The caller's own client: that table has `is_org_writer`, and they
+        // just minted through it. Only the join table needs the service role.
+        via: "authed",
         row: { revoked_at: new Date(INPUT.now).toISOString() },
       },
     ]);
@@ -293,5 +347,151 @@ describe("losing the race on the unique index", () => {
     expect(await shareDocumentInMeeting(INPUT)).toEqual({ ok: false, reason: "record-failed" });
     expect(updates).toHaveLength(1);
     expect(updates[0].id).toBe("share-1");
+  });
+});
+
+describe("the join row is written as the service role", () => {
+  // The bug this catches: `live_meeting_shared_documents` has RLS on and a
+  // SELECT policy and nothing else, deliberately, because writes come through
+  // this path after the caller has been authorized. The function was written
+  // against the RLS-bound client, so every insert was refused by the absent
+  // INSERT policy -- the link minted, the row did not record, and the caller
+  // got `record-failed` on the happy path. The feature did not work at all.
+  //
+  // It was invisible to the first version of these tests because they pointed
+  // both clients at one mock.
+  it("inserts through the service client, not the caller's", async () => {
+    wire({ tables: { rooms: ROOMS, entries: ENTRIES, documents: DOCS } });
+    await shareDocumentInMeeting(INPUT);
+
+    const join = inserts.filter((i) => i.table === "live_meeting_shared_documents");
+    expect(join).toHaveLength(1);
+    expect(join[0].via).toBe("service");
+  });
+
+  it("mints the share through the CALLER's client, so is_org_writer still applies", async () => {
+    // The other half of the same decision. Elevating this one would silently
+    // delete the check that stops a reader-role member handing out the firm's
+    // materials.
+    wire({ tables: { rooms: ROOMS, entries: ENTRIES, documents: DOCS } });
+    await shareDocumentInMeeting(INPUT);
+
+    // Identity comparison will not do -- `createServerClient` hands back a
+    // fresh object per call. Ask the client it was given to route a query and
+    // see which mock answers.
+    const [client] = insertShare.mock.calls[0] as [{ from: (t: string) => unknown }];
+    from.mockClear();
+    serviceFrom.mockClear();
+    client.from("probe");
+    expect(from).toHaveBeenCalledWith("probe");
+    expect(serviceFrom).not.toHaveBeenCalled();
+  });
+});
+
+describe("a link that no longer opens", () => {
+  // The second bug: `loadSharedInMeeting` kept every row whose share existed,
+  // without reading `revoked_at` or `expires_at`. A revoked or expired link was
+  // returned as the meeting's current one, the panel offered "Send again" on a
+  // URL that does not open, and the unique index on (meeting_id, document_id)
+  // then refused every attempt to mint a replacement. The host could not share
+  // that document in that meeting again, ever.
+
+  it("is left out of what the panel is told has been shared", async () => {
+    wire({
+      tables: { rooms: ROOMS, entries: ENTRIES, documents: DOCS },
+      sharedReads: [[revoked("d1", "dead"), live("d2", "good")]],
+    });
+    const shared = await loadSharedInMeeting("m1", INPUT.now);
+    expect(shared.map((s) => s.documentId)).toEqual(["d2"]);
+  });
+
+  it("counts an expiry that has passed, not only a revocation", async () => {
+    wire({
+      tables: { rooms: ROOMS, entries: ENTRIES, documents: DOCS },
+      // Expiry is 2026-09-10; the clock is 2026-10-01.
+      sharedReads: [[expired("d1", "stale")]],
+    });
+    expect(await loadSharedInMeeting("m1", INPUT.now)).toEqual([]);
+  });
+
+  it("keeps a link whose expiry is still ahead", async () => {
+    wire({
+      tables: { rooms: ROOMS, entries: ENTRIES, documents: DOCS },
+      sharedReads: [[{
+        ...live("d1", "fresh"),
+        data_room_shares: { token: "fresh", expires_at: "2026-10-20T00:00:00.000Z", revoked_at: null },
+      }]],
+    });
+    expect((await loadSharedInMeeting("m1", INPUT.now)).map((s) => s.url))
+      .toEqual(["https://app.test/dataroom/fresh"]);
+  });
+
+  it("mints a replacement and REPOINTS the row rather than being blocked by it", async () => {
+    wire({
+      tables: { rooms: ROOMS, entries: ENTRIES, documents: DOCS },
+      sharedReads: [[revoked("d1", "dead")]],
+    });
+
+    const out = await shareDocumentInMeeting(INPUT);
+
+    expect(out).toEqual({
+      ok: true,
+      url: "https://app.test/dataroom/tok1",
+      documentName: "Investor Deck",
+      // Not `alreadyShared`: what the room is being handed is a new link.
+      alreadyShared: false,
+    });
+    // An insert would have lost to the unique index. The row is updated, so the
+    // index's one-row-per-document guarantee still holds.
+    expect(inserts.filter((i) => i.table === "live_meeting_shared_documents")).toEqual([]);
+    expect(updates).toEqual([
+      {
+        table: "live_meeting_shared_documents",
+        id: "row-d1",
+        via: "service",
+        row: { share_id: "share-1", shared_by: "user-1" },
+      },
+    ]);
+  });
+
+  it("does not repoint a row whose link is still live", async () => {
+    // The ordinary second tap. Nothing is minted and nothing is written.
+    wire({
+      tables: { rooms: ROOMS, entries: ENTRIES, documents: DOCS },
+      sharedReads: [[live("d1", "already")]],
+    });
+
+    const out = await shareDocumentInMeeting(INPUT);
+
+    expect(out).toEqual({
+      ok: true,
+      url: "https://app.test/dataroom/already",
+      documentName: "Investor Deck",
+      alreadyShared: true,
+    });
+    expect(insertShare).not.toHaveBeenCalled();
+    expect(updates).toEqual([]);
+  });
+
+  it("still refuses to repoint for a document that has since been unpublished", async () => {
+    wire({
+      tables: {
+        rooms: ROOMS,
+        entries: ENTRIES,
+        documents: [{ ...DOCS[0], status: "draft" }],
+      },
+      sharedReads: [[revoked("d1", "dead")]],
+    });
+    expect(await shareDocumentInMeeting(INPUT)).toEqual({ ok: false, reason: "not-shareable" });
+    expect(insertShare).not.toHaveBeenCalled();
+  });
+
+  it("reports a repoint that failed, rather than announcing an unrecorded link", async () => {
+    wire({
+      tables: { rooms: ROOMS, entries: ENTRIES, documents: DOCS },
+      sharedReads: [[revoked("d1", "dead")], [revoked("d1", "dead")]],
+      updateError: { message: "write refused" },
+    });
+    expect(await shareDocumentInMeeting(INPUT)).toEqual({ ok: false, reason: "record-failed" });
   });
 });
