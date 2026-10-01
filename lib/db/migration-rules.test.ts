@@ -90,6 +90,37 @@ describe("stripNonCode", () => {
     expect(stripNonCode("do $body$ drop table x; $body$;")).not.toContain("drop table");
   });
 
+  it("keeps an E-string's backslash-escaped quote inside the literal", () => {
+    // Six migrations here use E-strings. Before this was handled, closing the
+    // literal at `\'` inverted the in-string/in-code state for the rest of the
+    // file: the literal was scanned as code and the real SQL after it was
+    // blanked as a phantom string, so the `create table` below went unreported.
+    const sql = String.raw`select E'it\'s fine';
+create table t (id int);`;
+    const stripped = stripNonCode(sql);
+    expect(stripped).toContain("create table t (id int);");
+    expect(stripped).not.toContain("fine");
+    expect(rules(lintRerunnability("20260101000000_x.sql", sql))).toEqual([
+      "create-table-unguarded",
+    ]);
+  });
+
+  it("treats a lower-case e-string the same way", () => {
+    const sql = String.raw`select e'a\'b'; create table t (id int);`;
+    expect(rules(lintRerunnability("20260101000000_x.sql", sql))).toEqual([
+      "create-table-unguarded",
+    ]);
+  });
+
+  it("does not mistake an identifier ending in e for an E-string prefix", () => {
+    // `value'...'` is not valid SQL, but the guard must not fire on a trailing
+    // `e` that belongs to a longer word -- otherwise a backslash in an ordinary
+    // string would start consuming pairs.
+    const sql = String.raw`select 'a\', 'b'; create table t (id int);`;
+    const stripped = stripNonCode(sql);
+    expect(stripped).toContain("create table t (id int);");
+  });
+
   it("does not treat a different closing tag as the end of a block", () => {
     const stripped = stripNonCode("do $a$ select $$ drop table x; $a$; select 2;");
     expect(stripped).not.toContain("drop table");

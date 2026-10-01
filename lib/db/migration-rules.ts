@@ -175,9 +175,32 @@ export function stripNonCode(sql: string): string {
     }
 
     if (sql[i] === "'") {
+      // `E'...'` is an escape string, where a backslash escapes the next
+      // character -- so `E'it\'s'` is ONE literal and the `\'` does not end it.
+      // An ordinary `'...'` has no backslash escape while
+      // standard_conforming_strings is on, which is the default.
+      //
+      // Getting this wrong is not cosmetic, and it is not hypothetical: six
+      // migrations here use E-strings. Treating `\'` as the closing quote
+      // inverts the in-string/in-code state for the rest of the file -- the
+      // literal's contents get scanned as code, and the real SQL after it gets
+      // blanked as though it were a string. Measured before this branch
+      // existed, `select E'it\'s fine'; create table t (id int);` reported NO
+      // findings, because the `create table` had been swallowed into a
+      // phantom string. A false negative here ships an unguarded migration
+      // silently, which is the one outcome this lint exists to prevent.
+      const prev = i > 0 ? sql[i - 1] : "";
+      const beforePrev = i > 1 ? sql[i - 2] : "";
+      const isEscapeString =
+        (prev === "E" || prev === "e") && !/[A-Za-z0-9_$]/.test(beforePrev);
+
       const start = i;
       i += 1;
       while (i < n) {
+        if (isEscapeString && sql[i] === "\\") {
+          i += 2;
+          continue;
+        }
         if (sql[i] === "'" && sql[i + 1] === "'") {
           i += 2;
           continue;
