@@ -592,3 +592,77 @@ describe("googleBusyForUser", () => {
     spy.mockRestore();
   });
 });
+
+describe("googleBusyForUser and copies of the member's own invites", () => {
+  const FROM = new Date("2026-09-02T00:00:00.000Z");
+  const TO = new Date("2026-09-03T00:00:00.000Z");
+  const MINE = "11111111-1111-4111-8111-111111111111";
+  const THEIRS = "22222222-2222-4222-8222-222222222222";
+
+  /** Events from external_events; ids the member hosts from live_meetings. */
+  function client(events: unknown[], hosted: string[], opts: { lookupFails?: boolean } = {}) {
+    const hostFilters: Array<[string, unknown]> = [];
+    return {
+      hostFilters,
+      from(table: string) {
+        const b: Record<string, unknown> = {};
+        for (const k of ["select", "lt", "gt", "limit", "in"]) b[k] = () => b;
+        b.eq = (c: string, v: unknown) => {
+          if (table === "live_meetings") hostFilters.push([c, v]);
+          return b;
+        };
+        b.then = (res: (v: unknown) => unknown, rej: (e: unknown) => unknown) => {
+          if (table === "external_events") return Promise.resolve({ data: events, error: null }).then(res, rej);
+          if (opts.lookupFails) return Promise.reject(new Error("down")).then(res, rej);
+          const ids = table === "live_meetings" ? hosted : [];
+          return Promise.resolve({ data: ids.map((id) => ({ id })), error: null }).then(res, rej);
+        };
+        return b;
+      },
+    };
+  }
+  const event = (uid: string | null, start: string, end: string) => ({
+    starts_at: start,
+    ends_at: end,
+    is_all_day: false,
+    ical_uid: uid,
+  });
+
+  it("does not count a copy of the member's own meeting invite as busy", async () => {
+    const c = client(
+      [
+        event(`meeting-${MINE}@fundexecs.com`, "2026-09-02T09:00:00.000Z", "2026-09-02T10:00:00.000Z"),
+        event("abc@google.com", "2026-09-02T12:00:00.000Z", "2026-09-02T13:00:00.000Z"),
+      ],
+      [MINE],
+    );
+    await expect(googleBusyForUser(c as never, "user-1", FROM, TO, "UTC")).resolves.toEqual([
+      { start: "2026-09-02T12:00:00.000Z", end: "2026-09-02T13:00:00.000Z" },
+    ]);
+    // Ownership is the host, not the shape of the UID.
+    expect(c.hostFilters).toContainEqual(["host_id", "user-1"]);
+  });
+
+  it("keeps an invite to somebody else's meeting, which the member is only a guest on", async () => {
+    const c = client(
+      [event(`meeting-${THEIRS}@fundexecs.com`, "2026-09-02T09:00:00.000Z", "2026-09-02T10:00:00.000Z")],
+      [],
+    );
+    await expect(googleBusyForUser(c as never, "user-1", FROM, TO, "UTC")).resolves.toEqual([
+      { start: "2026-09-02T09:00:00.000Z", end: "2026-09-02T10:00:00.000Z" },
+    ]);
+  });
+
+  it("keeps everything when ownership cannot be checked", async () => {
+    const spy = jest.spyOn(console, "error").mockImplementation(() => undefined);
+    const c = client(
+      [event(`meeting-${MINE}@fundexecs.com`, "2026-09-02T09:00:00.000Z", "2026-09-02T10:00:00.000Z")],
+      [MINE],
+      { lookupFails: true },
+    );
+    await expect(googleBusyForUser(c as never, "user-1", FROM, TO, "UTC")).resolves.toEqual([
+      { start: "2026-09-02T09:00:00.000Z", end: "2026-09-02T10:00:00.000Z" },
+    ]);
+    spy.mockRestore();
+  });
+});

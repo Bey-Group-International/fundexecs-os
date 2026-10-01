@@ -10,6 +10,7 @@ import { createServerClient } from "@/lib/supabase/server";
 import { connectionHealth } from "@/lib/calendar/google";
 import { feedHealth } from "@/lib/calendar/feeds";
 import { googleOAuthConfigured } from "@/lib/google-oauth";
+import { ownInviteEchoes } from "@/lib/calendar/google.server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -164,7 +165,7 @@ export async function GET(req: NextRequest) {
       visibleGoogle.length
         ? supabase
             .from("external_events")
-            .select("id, calendar_id, summary, location, html_link, starts_at, ends_at, is_all_day, status, transparency")
+            .select("id, calendar_id, summary, location, html_link, starts_at, ends_at, is_all_day, status, transparency, ical_uid")
             .eq("user_id", userId)
             .in("calendar_id", visibleGoogle)
             .lt("starts_at", window.to)
@@ -186,7 +187,7 @@ export async function GET(req: NextRequest) {
       hiddenBusyGoogle.length
         ? supabase
             .from("external_events")
-            .select("id, calendar_id, starts_at, ends_at, is_all_day, status, transparency")
+            .select("id, calendar_id, starts_at, ends_at, is_all_day, status, transparency, ical_uid")
             .eq("user_id", userId)
             .in("calendar_id", hiddenBusyGoogle)
             .neq("transparency", "transparent")
@@ -219,8 +220,17 @@ export async function GET(req: NextRequest) {
 
     const events: ClientEvent[] = [];
 
+    // A copy of an invite this member sent for their own meeting or booking is
+    // that meeting again. The grid already draws the meeting; drawing the copy
+    // too put a blocked-out band over it.
+    const echoes = await ownInviteEchoes(supabase as never, userId, [
+      ...((googleEvents.data ?? []) as Array<{ ical_uid?: string | null }>),
+      ...((hiddenBusy.data ?? []) as Array<{ ical_uid?: string | null }>),
+    ]);
+    const isEcho = (e: Record<string, unknown>) => typeof e.ical_uid === "string" && echoes.has(e.ical_uid);
+
     for (const e of (googleEvents.data ?? []) as Array<Record<string, unknown>>) {
-      if (e.status === "cancelled") continue;
+      if (e.status === "cancelled" || isEcho(e)) continue;
       events.push({
         id: String(e.id),
         calendarId: String(e.calendar_id),
@@ -236,7 +246,7 @@ export async function GET(req: NextRequest) {
     }
 
     for (const e of (hiddenBusy.data ?? []) as Array<Record<string, unknown>>) {
-      if (e.status === "cancelled") continue;
+      if (e.status === "cancelled" || isEcho(e)) continue;
       events.push({
         id: String(e.id),
         calendarId: String(e.calendar_id),

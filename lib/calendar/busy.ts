@@ -111,3 +111,26 @@ export function clipToWindow(
   }
   return out;
 }
+
+/** What an invite UID this app wrote points back at. */
+export interface OwnInviteRef {
+  kind: "meeting" | "booking";
+  id: string;
+}
+
+const OWN_INVITE_UID = /^(meeting|booking)-([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})@/i;
+
+/**
+ * The meeting or booking an event's iCalendar UID names, when this app wrote
+ * the invite it came from, or null.
+ *
+ * Every invitation the app emails carries `meeting-<id>@…` or `booking-<id>@…`,
+ * and a calendar that accepts it (Gmail does so on its own) keeps a copy under
+ * that UID. The copy then syncs back down as an ordinary busy event — a shadow
+ * of the meeting itself, which the app already counts as the meeting.
+ */
+export function ownInviteRef(icalUid: string | null | undefined): OwnInviteRef | null {
+  const match = OWN_INVITE_UID.exec((icalUid ?? "").trim());
+  if (!match) return null;
+  return { kind: match[1].toLowerCase() as OwnInviteRef["kind"], id: match[2].toLowerCase() };
+}
