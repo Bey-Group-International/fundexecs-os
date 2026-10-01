@@ -119,30 +119,32 @@ export function isPlausibleTimestamp(version: string): boolean {
 }
 
 /**
- * Blank out everything that is not executable SQL, preserving line structure so
- * reported line numbers still match the file.
+ * Walk SQL once, handing each region to the caller classified as comment,
+ * literal or code.
  *
- * Replaced with spaces: `--` comments, `/* *\/` comments (nested, as
- * PostgreSQL allows), single-quoted strings, and dollar-quoted blocks.
+ * There is one scanner because there are two consumers that must agree on where
+ * the boundaries are and disagree on what to do with them:
  *
- * Blanking dollar-quoted blocks is not incidental -- it is what makes the
- * re-runnability lint below agree with this repository's convention. The
- * convention is to wrap a non-idempotent statement in
+ *   - the re-runnability lint needs literals and dollar-quoted bodies BLANKED,
+ *     so a statement inside a `do $$ ... $$` guard is invisible to it;
+ *   - the merged-migration comparison needs them KEPT, because a change inside
+ *     a guard body or a string literal is a change to what executes.
  *
- *   do $$ begin if not exists (select 1 from pg_constraint where ...) then ...
+ * Writing the scan twice is how those two drift apart, so it is written once.
  *
- * and the body of that block is exactly where an unguarded-looking statement is
- * in fact guarded. Blanking the body means a correctly guarded migration
- * produces no finding, and an unguarded one at top level still does.
- *
- * It also stops the lint reading the prose. These files are mostly commentary
- * and the commentary quotes SQL constantly -- the file this module was written
- * alongside contains the words "add constraint live_meetings_deal_org_fk" four
- * times in comments. Linting the raw text would flag every one.
+ * `--` comments, nested `/* *\/` comments (PostgreSQL allows nesting),
+ * single-quoted strings (including `E'...'` escape strings) and dollar-quoted
+ * blocks are each recognised. The quote handling is shared, which is what stops
+ * a `--` inside a literal being read as a comment.
  */
-export function stripNonCode(sql: string): string {
-  const blank = (s: string) => s.replace(/[^\n]/g, " ");
-  let out = "";
+function scanSql(
+  sql: string,
+  on: {
+    comment: (raw: string) => void;
+    literal: (raw: string) => void;
+    code: (ch: string) => void;
+  },
+): void {
   let i = 0;
   const n = sql.length;
 
@@ -150,7 +152,7 @@ export function stripNonCode(sql: string): string {
     if (sql.startsWith("--", i)) {
       const end = sql.indexOf("\n", i);
       const stop = end === -1 ? n : end;
-      out += blank(sql.slice(i, stop));
+      on.comment(sql.slice(i, stop));
       i = stop;
       continue;
     }
@@ -170,7 +172,7 @@ export function stripNonCode(sql: string): string {
           i += 1;
         }
       }
-      out += blank(sql.slice(start, i));
+      on.comment(sql.slice(start, i));
       continue;
     }
 
@@ -211,7 +213,7 @@ export function stripNonCode(sql: string): string {
         }
         i += 1;
       }
-      out += blank(sql.slice(start, i));
+      on.literal(sql.slice(start, i));
       continue;
     }
 
@@ -222,15 +224,106 @@ export function stripNonCode(sql: string): string {
       i += tag.length;
       const close = sql.indexOf(tag, i);
       i = close === -1 ? n : close + tag.length;
-      out += blank(sql.slice(start, i));
+      on.literal(sql.slice(start, i));
       continue;
     }
 
-    out += sql[i];
+    on.code(sql[i]);
     i += 1;
   }
+}
 
+/**
+ * Blank out everything that is not executable SQL, preserving line structure so
+ * reported line numbers still match the file.
+ *
+ * Blanking dollar-quoted blocks is not incidental -- it is what makes the
+ * re-runnability lint agree with this repository's convention. The convention is
+ * to wrap a non-idempotent statement in
+ *
+ *   do $$ begin if not exists (select 1 from pg_constraint where ...) then ...
+ *
+ * and the body of that block is exactly where an unguarded-looking statement is
+ * in fact guarded. Blanking the body means a correctly guarded migration
+ * produces no finding, and an unguarded one at top level still does.
+ *
+ * It also stops the lint reading the prose. These files are mostly commentary
+ * and the commentary quotes SQL constantly -- the file this module was written
+ * alongside contains the words "add constraint live_meetings_deal_org_fk" four
+ * times in comments. Linting the raw text would flag every one.
+ *
+ * This is the WRONG function for asking whether two versions of a migration
+ * differ: it erases the literals, so a changed string or a rewritten guard body
+ * compares equal. Use executableSignature for that.
+ */
+export function stripNonCode(sql: string): string {
+  const blank = (s: string) => s.replace(/[^\n]/g, " ");
+  let out = "";
+  scanSql(sql, {
+    comment: (raw) => {
+      out += blank(raw);
+    },
+    literal: (raw) => {
+      out += blank(raw);
+    },
+    code: (ch) => {
+      out += ch;
+    },
+  });
   return out;
+}
+
+/**
+ * A canonical form of everything in a migration that EXECUTES, for deciding
+ * whether two versions of a file differ in substance.
+ *
+ * Comments count as whitespace. Code is whitespace-normalised, so reflowing a
+ * statement is not a change. Literals and dollar-quoted bodies are kept
+ * VERBATIM and compared exactly.
+ *
+ * That last part is the whole point, and it was got wrong first time round.
+ * This comparison used stripNonCode, which blanks literals -- so every one of
+ * these read as "comments only" and was reported as a harmless note:
+ *
+ *   a rewritten `do $$ ... $$` guard body   <- the dominant idiom in this repo
+ *   `values ('a')` changed to `values ('b')`
+ *   `check (s in ('x'))` changed to `('y')`
+ *
+ * Each is an edit to a migration whose version production has already recorded,
+ * which means it will never run -- failure shape 1 at the top of this file,
+ * waved through with a message saying nothing executable had changed. Literals
+ * are kept as separate parts rather than concatenated into the code so that
+ * whitespace normalisation cannot reach inside them: a literal differing only
+ * in internal spacing is still a difference.
+ */
+export function executableSignature(sql: string): string {
+  const parts: string[] = [];
+  let code = "";
+
+  const flushCode = () => {
+    const normalized = code.replace(/\s+/g, " ").trim();
+    if (normalized) parts.push(`c:${normalized}`);
+    code = "";
+  };
+
+  scanSql(sql, {
+    // A comment separates tokens exactly as whitespace does: `a--x\nb` is the
+    // same two tokens as `a b`. Appending a space rather than nothing is what
+    // keeps `a--x\nb` from collapsing to `ab`.
+    comment: () => {
+      code += " ";
+    },
+    literal: (raw) => {
+      flushCode();
+      parts.push(`l:${raw}`);
+    },
+    code: (ch) => {
+      code += ch;
+    },
+  });
+
+  flushCode();
+  return parts.join("\u0000");
 }
 
 interface Statement {
@@ -531,8 +624,11 @@ export function checkMigrations(input: CheckInput): Finding[] {
     if (!baseNames.has(file.name)) continue; // Added and edited in the same change.
     const path = `${MIGRATIONS_DIR}/${file.name}`;
 
-    const before = stripNonCode(file.baseSql).replace(/\s+/g, " ").trim();
-    const after = stripNonCode(file.sql).replace(/\s+/g, " ").trim();
+    // executableSignature, NOT stripNonCode: the latter blanks literals, so a
+    // rewritten `do $$ ... $$` guard body or a changed string compared equal
+    // and was reported as a harmless comment-only note. See its doc comment.
+    const before = executableSignature(file.baseSql);
+    const after = executableSignature(file.sql);
 
     if (before === after) {
       // Comment-only. These files are mostly prose and improving it is welcome.

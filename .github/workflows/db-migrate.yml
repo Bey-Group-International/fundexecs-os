@@ -243,7 +243,30 @@ jobs:
             base="$(git rev-parse --verify HEAD~1 2>/dev/null || true)"
           fi
 
-          if [ ! -s /tmp/pre-push-versions.txt ]; then
+          # Only the FIRST ATTEMPT of a PUSH can tell this push's migrations
+          # apart from ones an earlier attempt already applied. Two paths break
+          # the comparison otherwise, and both would fail a run that is fine:
+          #
+          #   A re-run. `db push` records each migration as it applies it, so if
+          #   migration 2 of 3 fails, migration 1 stays recorded. The re-run
+          #   replays the same event payload, so `before` is unchanged, but the
+          #   snapshot above is taken fresh and now contains migration 1 --
+          #   which this push did add. Check (c) would call it out of band.
+          #   That is the recovery path README.md tells people to use, so this
+          #   check would have broken the procedure this PR documents.
+          #
+          #   A workflow_dispatch. `github.event.before` does not exist, so
+          #   `base` falls back to HEAD~1 and the diff is the last merge --
+          #   every migration in which is already recorded. All of them would
+          #   be reported.
+          #
+          # Both produce false failures, and a check that cries wolf is how the
+          # real signal stops being read. Skipping is the right answer rather
+          # than guessing: a genuine out-of-band apply is still caught by the
+          # first-attempt push that introduces the file.
+          if [ "$GITHUB_EVENT_NAME" != "push" ] || [ "${GITHUB_RUN_ATTEMPT:-1}" != "1" ]; then
+            echo "::notice title=Out-of-band check skipped::Only the first attempt of a push event can distinguish this push's migrations from ones an earlier attempt already applied (event=${GITHUB_EVENT_NAME}, attempt=${GITHUB_RUN_ATTEMPT:-1})."
+          elif [ ! -s /tmp/pre-push-versions.txt ]; then
             echo "::notice title=Out-of-band check skipped::The remote history before this push was not readable."
           elif [ -z "$base" ]; then
             echo "::notice title=Out-of-band check skipped::Could not resolve the commit before this push, so the set of newly added migrations is unknown."
@@ -276,3 +299,6 @@ jobs:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
           SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
           GITHUB_EVENT_BEFORE: ${{ github.event.before }}
+          # Both read by check (c) to decide whether it can run at all.
+          GITHUB_EVENT_NAME: ${{ github.event_name }}
+          GITHUB_RUN_ATTEMPT: ${{ github.run_attempt }}

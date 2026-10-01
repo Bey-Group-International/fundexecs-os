@@ -9,6 +9,7 @@ import {
   lintRerunnability,
   statementsOf,
   stripNonCode,
+  executableSignature,
   versionOf,
   type CheckInput,
 } from "./migration-rules";
@@ -130,6 +131,38 @@ create table t (id int);`;
   it("leaves an unterminated block blanked to the end rather than throwing", () => {
     expect(() => stripNonCode("do $$ drop table x;")).not.toThrow();
     expect(stripNonCode("do $$ drop table x;")).not.toContain("drop table");
+  });
+});
+
+describe("executableSignature", () => {
+  it("ignores comments", () => {
+    expect(executableSignature("-- a\nselect 1;")).toBe(
+      executableSignature("-- a much longer note\nselect 1;"),
+    );
+  });
+
+  it("ignores whitespace in code", () => {
+    expect(executableSignature("create table if not exists a (id int);")).toBe(
+      executableSignature("create  table if not exists\n  a (id int);\n"),
+    );
+  });
+
+  it("treats a comment as a token separator, not as nothing", () => {
+    // `a--x\nb` is the same two tokens as `a b`, and must not collapse to `ab`.
+    expect(executableSignature("a--x\nb;")).toBe(executableSignature("a b;"));
+    expect(executableSignature("a--x\nb;")).not.toBe(executableSignature("ab;"));
+  });
+
+  it("keeps literals verbatim, so a changed literal changes the signature", () => {
+    expect(executableSignature("select 'a';")).not.toBe(executableSignature("select 'b';"));
+    expect(executableSignature("select 'a  b';")).not.toBe(executableSignature("select 'a b';"));
+    expect(executableSignature("do $$ x $$;")).not.toBe(executableSignature("do $$ y $$;"));
+  });
+
+  it("does not let a literal merge with neighbouring code", () => {
+    // Parts are joined with a separator, so `'a' 'b'` cannot be confused with
+    // a single literal `'ab'`.
+    expect(executableSignature("select 'a','b';")).not.toBe(executableSignature("select 'ab';"));
   });
 });
 
@@ -344,6 +377,70 @@ describe("checkMigrations: a merged migration must not be edited", () => {
     );
     expect(rules(findings)).toEqual(["merged-migration-edited"]);
     expect(hasErrors(findings)).toBe(true);
+  });
+
+  it("errors when a dollar-quoted guard body changes", () => {
+    // The dominant idiom in this directory, and the case the first version of
+    // this comparison got wrong: it used stripNonCode, which blanks the body,
+    // so a rewritten guard compared equal and was reported as comment-only.
+    const findings = checkMigrations(
+      input({
+        baseNames: base,
+        headNames: base,
+        modified: [
+          {
+            name: "20260101000000_thing.sql",
+            baseSql:
+              "do $$ begin if not exists (select 1 from pg_constraint where conname = 'a') then null; end if; end $$;",
+            sql:
+              "do $$ begin if not exists (select 1 from pg_constraint where conname = 'DIFFERENT') then null; end if; end $$;",
+          },
+        ],
+      }),
+    );
+    expect(rules(findings)).toEqual(["merged-migration-edited"]);
+    expect(hasErrors(findings)).toBe(true);
+  });
+
+  it("errors when only a string literal changes", () => {
+    for (const [baseSql, sql] of [
+      [
+        "insert into t (c) values ('a') on conflict do nothing;",
+        "insert into t (c) values ('b') on conflict do nothing;",
+      ],
+      [
+        "alter table t add constraint k check (s in ('x'));",
+        "alter table t add constraint k check (s in ('y'));",
+      ],
+    ]) {
+      const findings = checkMigrations(
+        input({
+          baseNames: base,
+          headNames: base,
+          modified: [{ name: "20260101000000_thing.sql", baseSql, sql }],
+        }),
+      );
+      expect(rules(findings)).toEqual(["merged-migration-edited"]);
+    }
+  });
+
+  it("errors when a literal changes only in internal whitespace", () => {
+    // Literals are kept as separate parts precisely so whitespace
+    // normalisation of the code cannot reach inside them.
+    const findings = checkMigrations(
+      input({
+        baseNames: base,
+        headNames: base,
+        modified: [
+          {
+            name: "20260101000000_thing.sql",
+            baseSql: "select 'a  b';",
+            sql: "select 'a b';",
+          },
+        ],
+      }),
+    );
+    expect(rules(findings)).toEqual(["merged-migration-edited"]);
   });
 
   it("only warns when nothing but comments changed", () => {
