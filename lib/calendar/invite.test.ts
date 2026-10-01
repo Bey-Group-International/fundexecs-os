@@ -1,4 +1,4 @@
-import { buildInviteIcs, inviteSequence, inviteUid, toIcsLocal } from "./invite";
+import { buildInviteIcs, buildVtimezone, inviteSequence, inviteUid, toIcsLocal } from "./invite";
 import { unfoldLines } from "./ics";
 
 const NOW = new Date("2026-09-01T12:00:00.000Z");
@@ -20,8 +20,13 @@ function props(ics: string): string[] {
   return unfoldLines(ics);
 }
 
+/** A property of the calendar or its event, not of a VTIMEZONE beside them. */
 function prop(ics: string, name: string): string | undefined {
-  return props(ics).find((l) => l.startsWith(name));
+  const lines = props(ics);
+  const from = lines.indexOf("BEGIN:VTIMEZONE");
+  const to = lines.indexOf("END:VTIMEZONE");
+  const outside = from < 0 ? lines : [...lines.slice(0, from), ...lines.slice(to + 1)];
+  return outside.find((l) => l.startsWith(name));
 }
 
 describe("inviteUid", () => {
@@ -196,6 +201,57 @@ describe("buildInviteIcs — a repeating series", () => {
     });
     expect(prop(ics, "RRULE:")).toBe("RRULE:FREQ=WEEKLY;COUNT=2ATTENDEE");
     expect(props(ics).filter((l) => l.startsWith("ATTENDEE"))).toHaveLength(1);
+  });
+});
+
+describe("the zone a series is written in", () => {
+  // Outlook does not reliably know IANA names; without a VTIMEZONE it reads a
+  // TZID it cannot resolve as its own zone or as UTC.
+  it("is defined in the invitation, with its real clock changes", () => {
+    const ics = buildInviteIcs({
+      ...base(),
+      recurrence: { rrule: "FREQ=WEEKLY;COUNT=12", timezone: "America/Chicago" },
+    });
+    const lines = props(ics);
+    const zone = lines.slice(lines.indexOf("BEGIN:VTIMEZONE"), lines.indexOf("END:VTIMEZONE") + 1);
+    expect(zone[1]).toBe("TZID:America/Chicago");
+    // Ahead of the event that names it.
+    expect(lines.indexOf("BEGIN:VTIMEZONE")).toBeLessThan(lines.indexOf("BEGIN:VEVENT"));
+    // November 2026: 02:00 CDT back to 01:00 CST.
+    const fall = zone.indexOf("DTSTART:20261101T020000");
+    expect(fall).toBeGreaterThan(0);
+    expect(zone[fall - 1]).toBe("BEGIN:STANDARD");
+    expect(zone.slice(fall, fall + 3)).toEqual(["DTSTART:20261101T020000", "TZOFFSETFROM:-0500", "TZOFFSETTO:-0600"]);
+    // March 2027: forward again.
+    const spring = zone.indexOf("DTSTART:20270314T020000");
+    expect(zone[spring - 1]).toBe("BEGIN:DAYLIGHT");
+    expect(zone.slice(spring + 1, spring + 3)).toEqual(["TZOFFSETFROM:-0600", "TZOFFSETTO:-0500"]);
+  });
+
+  it("is one fixed offset for a zone without clock changes", () => {
+    const zone = buildVtimezone("Asia/Tokyo", Date.parse("2026-10-06T00:00:00Z"), Date.parse("2027-10-06T00:00:00Z"))!;
+    expect(zone.filter((l) => l.startsWith("TZOFFSETTO"))).toEqual(["TZOFFSETTO:+0900"]);
+  });
+
+  it("covers half-hour shifts", () => {
+    const zone = buildVtimezone("Australia/Lord_Howe", Date.parse("2026-10-06T00:00:00Z"), Date.parse("2027-10-06T00:00:00Z"))!;
+    expect(zone).toContain("TZOFFSETTO:+1030");
+  });
+
+  it("is left out for an unknown zone rather than failing the invitation", () => {
+    expect(buildVtimezone("Not/AZone", 0, 86_400_000)).toBeNull();
+  });
+
+  it("is left out of a one-off meeting, which is written in UTC", () => {
+    expect(buildInviteIcs(base())).not.toContain("VTIMEZONE");
+  });
+
+  it("is included for an update to one meeting of a series", () => {
+    const ics = buildInviteIcs({
+      ...base(),
+      recurrenceId: { timezone: "America/Chicago", originalStartIso: "2026-09-17T15:00:00.000Z" },
+    });
+    expect(ics).toContain("TZID:America/Chicago");
   });
 });
 

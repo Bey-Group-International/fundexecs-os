@@ -64,6 +64,108 @@ export function toIcsLocal(instant: Date, timezone: string): string {
   return `${get("year")}${get("month")}${get("day")}T${hour}${get("minute")}${get("second")}`;
 }
 
+const zoneFormatters = new Map<string, Intl.DateTimeFormat>();
+
+/** Minutes the zone's wall clock is ahead of UTC at an instant. */
+function offsetMinutes(ms: number, timezone: string): number {
+  let dtf = zoneFormatters.get(timezone);
+  if (!dtf) {
+    dtf = new Intl.DateTimeFormat("en-US", {
+      timeZone: timezone,
+      hourCycle: "h23",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+    zoneFormatters.set(timezone, dtf);
+  }
+  const parts = dtf.formatToParts(new Date(ms));
+  const get = (type: string) => Number(parts.find((p) => p.type === type)?.value ?? 0);
+  const hour = get("hour") === 24 ? 0 : get("hour");
+  const wall = Date.UTC(get("year"), get("month") - 1, get("day"), hour, get("minute"));
+  return Math.round((wall - Math.floor(ms / 60_000) * 60_000) / 60_000);
+}
+
+/** "-0500" */
+function icsOffset(minutes: number): string {
+  const sign = minutes < 0 ? "-" : "+";
+  const abs = Math.abs(minutes);
+  return `${sign}${String(Math.floor(abs / 60)).padStart(2, "0")}${String(abs % 60).padStart(2, "0")}`;
+}
+
+/** "20261101T020000": an instant as a wall clock at a fixed offset. */
+function icsAtOffset(ms: number, minutes: number): string {
+  return new Date(ms + minutes * 60_000).toISOString().replace(/[-:]/g, "").slice(0, 15);
+}
+
+const DAY_MS = 86_400_000;
+
+/**
+ * A VTIMEZONE for an IANA zone, covering the years a series can run.
+ *
+ * A TZID with no VTIMEZONE beside it is legal only when every client knows the
+ * name. Google and Apple do; Outlook does not reliably, and falls back to
+ * reading the time as its own or as UTC, which puts every meeting of a series
+ * at the wrong hour for exactly the guests most likely to be on Outlook.
+ *
+ * Written as the zone's actual clock changes over the span, each with its
+ * offsets before and after, rather than as a rule: the zone database is the
+ * authority on when they happen, and a rule would restate it, possibly wrong.
+ * Null when the zone cannot be resolved, so the event still goes out.
+ */
+export function buildVtimezone(timezone: string, fromMs: number, toMs: number): string[] | null {
+  try {
+    const transitions: Array<{ at: number; from: number; to: number }> = [];
+    let prev = offsetMinutes(fromMs, timezone);
+    const initial = prev;
+    for (let day = fromMs + DAY_MS; day <= toMs + DAY_MS; day += DAY_MS) {
+      const now = offsetMinutes(day, timezone);
+      if (now === prev) continue;
+      // The change happened inside the last day: find its minute.
+      let lo = day - DAY_MS;
+      let hi = day;
+      while (hi - lo > 60_000) {
+        const mid = lo + Math.floor((hi - lo) / 120_000) * 60_000;
+        if (offsetMinutes(mid, timezone) === prev) lo = mid;
+        else hi = mid;
+      }
+      transitions.push({ at: hi, from: prev, to: now });
+      prev = now;
+    }
+    // Which side of each change is summer time: the larger offset of the two.
+    const offsets = [initial, ...transitions.map((t) => t.to)];
+    const standard = Math.min(...offsets);
+    const kind = (to: number) => (to > standard ? "DAYLIGHT" : "STANDARD");
+    const lines = ["BEGIN:VTIMEZONE", `TZID:${tzid(timezone)}`];
+    lines.push(
+      `BEGIN:${kind(initial)}`,
+      `DTSTART:${icsAtOffset(fromMs - DAY_MS, initial)}`,
+      `TZOFFSETFROM:${icsOffset(initial)}`,
+      `TZOFFSETTO:${icsOffset(initial)}`,
+      `END:${kind(initial)}`,
+    );
+    for (const t of transitions) {
+      lines.push(
+        `BEGIN:${kind(t.to)}`,
+        // The moment of the change, as the clock read it just before.
+        `DTSTART:${icsAtOffset(t.at, t.from)}`,
+        `TZOFFSETFROM:${icsOffset(t.from)}`,
+        `TZOFFSETTO:${icsOffset(t.to)}`,
+        `END:${kind(t.to)}`,
+      );
+    }
+    lines.push("END:VTIMEZONE");
+    return lines;
+  } catch {
+    return null;
+  }
+}
+
+/** How far ahead a series' zone is written out: past the longest series. */
+const VTIMEZONE_YEARS = 5;
+
 /** A TZID parameter value: an IANA name, nothing that could break the line. */
 function tzid(timezone: string): string {
   return timezone.replace(/[^A-Za-z0-9_+\-/]/g, "");
@@ -152,6 +254,7 @@ export function buildInviteIcs(opts: BuildInviteOptions): string {
     "PRODID:-//FundExecs OS//Scheduling//EN",
     "CALSCALE:GREGORIAN",
     `METHOD:${opts.method}`,
+    ...zoneDefinition(opts, start),
     "BEGIN:VEVENT",
     `UID:${opts.uid}`,
     `DTSTAMP:${toIcsUtc(opts.now ?? new Date())}`,
@@ -195,3 +298,28 @@ export function buildInviteIcs(opts: BuildInviteOptions): string {
   // CRLF is required by RFC 5545, and several clients enforce it.
   return lines.map(foldLine).join("\r\n") + "\r\n";
 }
+
+/**
+ * The VTIMEZONE an event needs: one for the zone its local times are written
+ * in, when any are. A one-off meeting is written in UTC and needs none.
+ */
+function zoneDefinition(opts: BuildInviteOptions, start: Date): string[] {
+  const zone = opts.recurrence?.timezone ?? opts.recurrenceId?.timezone;
+  if (!zone) return [];
+  const from = Math.min(
+    start.getTime(),
+    opts.recurrenceId ? new Date(opts.recurrenceId.originalStartIso).getTime() || start.getTime() : start.getTime(),
+  );
+  // Every email of one send carries the same zone from the same day, and
+  // working the clock changes out is a few thousand lookups; do it once.
+  const key = `${zone}|${Math.floor(from / DAY_MS)}`;
+  let lines = vtimezoneCache.get(key);
+  if (lines === undefined) {
+    lines = buildVtimezone(zone, from, from + VTIMEZONE_YEARS * 366 * DAY_MS);
+    if (vtimezoneCache.size > 200) vtimezoneCache.clear();
+    vtimezoneCache.set(key, lines);
+  }
+  return lines ?? [];
+}
+
+const vtimezoneCache = new Map<string, string[] | null>();
