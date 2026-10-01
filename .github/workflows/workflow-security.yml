@@ -1,0 +1,78 @@
+# Audits this repository's own GitHub Actions workflows with zizmor.
+#
+# WHY THIS EXISTS. #1211 fixed zizmor's `artipacked` finding by hand — four
+# workflows were leaving the job's GITHUB_TOKEN in .git/config. Nothing in the
+# repository could have caught that, or noticed it coming back, because zizmor
+# was never run here. This is that missing guard, and it covers every audit
+# zizmor has rather than the one we happened to fix.
+#
+# Configuration lives in .github/zizmor.yml, which encodes two decisions this
+# repo had already made in comments: which actions must be SHA-pinned, and why
+# office-hourly.yml keeps its credentials.
+
+name: Workflow security
+
+on:
+  push:
+    branches: [main]
+  # No `branches:` filter, deliberately: that matches the pull request's BASE,
+  # so a PR stacked on another branch would be audited not at all. ci.yml
+  # carries the longer version of this note, and #997 reached main that way.
+  pull_request:
+    # `ready_for_review` is not in the default set, and a PR opened as a draft
+    # otherwise never gets a first run. Same reasoning as ci.yml and jest.yml.
+    types: [opened, synchronize, reopened, ready_for_review]
+
+# Nothing by default; the one job below asks for exactly what it needs.
+permissions: {}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  zizmor:
+    name: zizmor
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          # The audit only reads files. Leaving the token in .git/config here
+          # would be this workflow failing its own `artipacked` check.
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      # PINNED ON PURPOSE. A security gate that floats fails on somebody else's
+      # release schedule: a new audit, or a severity that moves up a notch, turns
+      # main red without anything in this repo changing. Bump it deliberately.
+      - name: Install zizmor
+        run: pip install zizmor==1.30.1
+
+      # Everything zizmor has to say, as inline annotations on the diff. This
+      # step cannot fail the build: informational and low findings belong in
+      # front of a reviewer, not in the way of a merge. Online, so the audits
+      # that need the GitHub API (ref-confusion, stale action refs) run too.
+      - name: Report all findings
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: zizmor --format=github --min-severity=informational .
+
+      # The gate, and deliberately OFFLINE. The audits above that call the
+      # GitHub API are worth seeing but not worth blocking on: a rate limit or
+      # an API blip would fail a merge for reasons unrelated to the diff. This
+      # pass is a pure function of the files in the repository.
+      #
+      # medium and above. As of 2026-09-30 this is clean, with three findings
+      # below it: two `template-injection` in ci.yml (the Playwright version out
+      # of the lockfile, interpolated into a run block) and one `adhoc-packages`
+      # in jest.yml. They show up as annotations from the step above.
+      - name: Fail on medium or higher
+        run: zizmor --offline --min-severity=medium .

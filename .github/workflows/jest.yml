@@ -47,6 +47,13 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
+# Least privilege, stated rather than inherited. Without this block the job ran
+# with the repository's DEFAULT token permissions, which can be read-write
+# (zizmor: excessive-permissions). Nothing here writes: it checks out, installs,
+# runs jest and uploads an artifact, and upload-artifact needs no extra scope.
+permissions:
+  contents: read
+
 jobs:
   test:
     runs-on: ubuntu-latest

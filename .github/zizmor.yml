@@ -1,0 +1,31 @@
+# zizmor configuration. See .github/workflows/workflow-security.yml for how it runs.
+#
+# ONE rule is configured, and it encodes a decision this repository had already
+# made and documented in comments, rather than silencing findings to get green.
+#
+# There is deliberately no `artipacked` ignore. An earlier draft had one, for
+# office-hourly.yml, the single workflow that kept its checkout credentials
+# because its agent pushes. Review pointed out that `npm ci` runs between that
+# checkout and the agent, so a write-scoped token sat in .git/config while
+# lifecycle scripts executed -- the strongest instance of the finding in the
+# repo, not an acceptable exception. It now installs a push credential in its
+# own step afterwards, so nothing here needs excusing.
+
+rules:
+  # zizmor's default policy is `"*": hash-pin` — every action, first-party or
+  # not, must be pinned to a full SHA. That is stricter than this repository's
+  # own convention, which db-migrate.yml and office-hourly.yml already state in
+  # comments: pin NON-IMMUTABLE THIRD-PARTY actions to a SHA, and take GitHub's
+  # own actions at a major tag so they keep receiving patches.
+  #
+  # So the policy below is the repo's rule written down where a tool can read
+  # it. It is not a blanket exemption: a new third-party action added at a tag
+  # fails the audit, which is the case that actually matters for supply chain.
+  unpinned-uses:
+    config:
+      policies:
+        # GitHub's own actions, at a major tag. Immutable-ish, and freezing them
+        # means missing their security patches.
+        actions/*: ref-pin
+        # Everything else: a full SHA, no exceptions.
+        "*": hash-pin
