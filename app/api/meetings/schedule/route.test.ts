@@ -452,6 +452,64 @@ describe("POST /api/meetings/schedule with a repeat", () => {
     expect(saveScheduledMeetingMock).not.toHaveBeenCalled();
   });
 
+  // A clash with another meeting, or with time blocked by hand, in week three
+  // is as real as one in week one. It warns, as it would for one meeting, and
+  // "Save anyway" still saves.
+  describe("other meetings and blocked time across the series", () => {
+    const WEEK_THREE_BOARD = {
+      id: "board",
+      title: "Board call",
+      scheduled_at: "2026-09-24T14:30:00.000Z",
+      duration_minutes: 60,
+      host_id: "u1",
+      attendees: [],
+    };
+    function withMeetings(rows: unknown[]) {
+      from.mockImplementation((table: string) =>
+        table === "live_meetings" ? makeBuilder({ limit: { data: rows } }) : withTeam([])(table),
+      );
+    }
+
+    it("warns about a meeting that clashes with a later week", async () => {
+      withMeetings([WEEK_THREE_BOARD]);
+      const res = await POST(req(WEEKLY));
+      expect(res.status).toBe(409);
+      expect(await res.json()).toMatchObject({
+        overridable: true,
+        conflicts: [{ id: "board", title: "Board call", scheduledAt: "2026-09-24T14:30:00.000Z" }],
+      });
+      expect(saveScheduledMeetingMock).not.toHaveBeenCalled();
+    });
+
+    it("saves the series over it when asked", async () => {
+      withMeetings([WEEK_THREE_BOARD]);
+      const res = await POST(req({ ...WEEKLY, allowConflict: true }));
+      expect(res.status).toBe(200);
+      expect(saveScheduledMeetingMock).toHaveBeenCalledTimes(3);
+    });
+
+    it("does not count a meeting between the weeks of the series", async () => {
+      withMeetings([{ ...WEEK_THREE_BOARD, scheduled_at: "2026-09-21T14:00:00.000Z" }]);
+      expect((await POST(req(WEEKLY))).status).toBe(200);
+    });
+
+    it("reads blocked time across the whole series, and keeps what falls on a meeting", async () => {
+      loadBlockConflictsMock.mockResolvedValue([
+        { id: "b-wk2", title: "Dentist", startsAt: "2026-09-17T14:00:00.000Z", endsAt: "2026-09-17T15:00:00.000Z" },
+        { id: "b-off", title: "Gym", startsAt: "2026-09-18T14:00:00.000Z", endsAt: "2026-09-18T15:00:00.000Z" },
+      ]);
+      const res = await POST(req(WEEKLY));
+      expect(loadBlockConflictsMock).toHaveBeenCalledWith(
+        expect.anything(),
+        "u1",
+        "2026-09-10T14:00:00.000Z",
+        "2026-09-24T15:00:00.000Z",
+      );
+      expect(res.status).toBe(409);
+      expect((await res.json()).blockedBy.map((b: { id: string }) => b.id)).toEqual(["b-wk2"]);
+    });
+  });
+
   it("pushes every meeting to the calendar when one is connected", async () => {
     canWriteCalendarMock.mockResolvedValue(true);
     await POST(req(WEEKLY));

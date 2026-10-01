@@ -600,6 +600,41 @@ export function findConflicts(
   return conflicts;
 }
 
+/** One meeting's time, as a half-open window. */
+export interface TimeWindow {
+  startIso: string;
+  endIso: string;
+}
+
+/**
+ * `findConflicts` for every meeting of a series at once: each meeting that
+ * clashes with any of them, once, earliest first. A single meeting is a series
+ * of one, and gets exactly what `findConflicts` would give it.
+ */
+export function findConflictsAcross(
+  candidates: ConflictCandidate[],
+  windows: TimeWindow[],
+  options?: ConflictOptions,
+): MeetingConflict[] {
+  const seen = new Map<string, MeetingConflict>();
+  for (const w of windows) {
+    for (const c of findConflicts(candidates, w.startIso, w.endIso, options ?? null)) {
+      if (!seen.has(c.id)) seen.set(c.id, c);
+    }
+  }
+  return [...seen.values()].sort(
+    (a, b) => new Date(a.scheduledAt).getTime() - new Date(b.scheduledAt).getTime(),
+  );
+}
+
+/** Whether [startIso, endIso) overlaps any of the windows. */
+export function overlapsAnyWindow(startIso: string, endIso: string, windows: TimeWindow[]): boolean {
+  const s = new Date(startIso).getTime();
+  const e = new Date(endIso).getTime();
+  if (!Number.isFinite(s) || !Number.isFinite(e)) return false;
+  return windows.some((w) => s < new Date(w.endIso).getTime() && e > new Date(w.startIso).getTime());
+}
+
 /**
  * Resolve the external sync status when the user saves/edits a meeting.
  * - Sync disabled          -> not_connected / sync_off

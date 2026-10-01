@@ -13,6 +13,8 @@ import {
   MAX_MEETING_MINUTES,
   wasEditedAfterSave,
   findConflicts,
+  findConflictsAcross,
+  overlapsAnyWindow,
   nextExternalSyncStatus,
   meetingTimeState,
   pastMeetingDate,
@@ -672,5 +674,34 @@ describe("zonedDateTime", () => {
     const iso = localToIso("2026-10-05", "11:30", "America/Chicago");
     expect(zonedDateTime(new Date(iso), "America/Chicago")).toEqual({ date: "2026-10-05", time: "11:30" });
     expect(zonedDateTime(new Date("2026-10-05T23:30:00Z"), "Asia/Tokyo")).toEqual({ date: "2026-10-06", time: "08:30" });
+  });
+});
+
+describe("findConflictsAcross", () => {
+  const W = (start: string, end: string) => ({ startIso: start, endIso: end });
+  const row = (id: string, at: string) => ({ id, title: id, scheduled_at: at, duration_minutes: 60, host_id: "u1", attendees: [] });
+
+  it("finds a clash with any meeting of a series, once, earliest first", () => {
+    const out = findConflictsAcross(
+      [row("late", "2026-09-24T14:00:00.000Z"), row("early", "2026-09-10T14:30:00.000Z")],
+      [W("2026-09-10T14:00:00.000Z", "2026-09-10T15:00:00.000Z"), W("2026-09-24T14:00:00.000Z", "2026-09-24T15:00:00.000Z")],
+      { subjectHostId: "u1" },
+    );
+    expect(out.map((c) => c.id)).toEqual(["early", "late"]);
+  });
+
+  it("is findConflicts for a single meeting", () => {
+    const rows = [row("a", "2026-09-10T14:30:00.000Z")];
+    expect(findConflictsAcross(rows, [W("2026-09-10T14:00:00.000Z", "2026-09-10T15:00:00.000Z")], { subjectHostId: "u1" })).toEqual(
+      findConflicts(rows, "2026-09-10T14:00:00.000Z", "2026-09-10T15:00:00.000Z", { subjectHostId: "u1" }),
+    );
+  });
+});
+
+describe("overlapsAnyWindow", () => {
+  const windows = [{ startIso: "2026-09-10T14:00:00.000Z", endIso: "2026-09-10T15:00:00.000Z" }];
+  it("is true for an overlap and false for time that only touches", () => {
+    expect(overlapsAnyWindow("2026-09-10T14:30:00.000Z", "2026-09-10T16:00:00.000Z", windows)).toBe(true);
+    expect(overlapsAnyWindow("2026-09-10T15:00:00.000Z", "2026-09-10T16:00:00.000Z", windows)).toBe(false);
   });
 });

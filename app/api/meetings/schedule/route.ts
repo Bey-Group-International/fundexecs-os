@@ -20,8 +20,10 @@ import {
   validateMeetingDraft,
   localToIso,
   durationMinutesFromTimes,
-  findConflicts,
+  findConflictsAcross,
+  overlapsAnyWindow,
   type ConflictCandidate,
+  type MeetingConflict,
 } from "@/lib/meetings/schedule";
 
 export const runtime = "nodejs";
@@ -139,12 +141,20 @@ export async function POST(req: NextRequest) {
     // user explicitly chose to save anyway. Drafts never block on conflicts. The
     // conflict is scoped to a shared person (host or attendee), so unrelated
     // meetings in the org don't false-alarm.
-    let conflicts: ReturnType<typeof findConflicts> = [];
+    let conflicts: MeetingConflict[] = [];
     if (!isDraft) {
       // A candidate can only overlap [scheduledAt, endIso) if it starts within a
       // max-meeting-length window before the end — bound the fetch accordingly
       // (durations are capped at 480 min) instead of scanning all future rows.
       const windowStart = new Date(new Date(scheduledAt).getTime() - 8 * 3600_000).toISOString();
+      // Every meeting of a series is checked, not just the first: a clash in
+      // week five is as real as one today. One read spans them all; a single
+      // meeting is a series of one.
+      const windows = occurrenceStarts.map((startIso) => ({
+        startIso,
+        endIso: new Date(new Date(startIso).getTime() + durationMinutes * 60_000).toISOString(),
+      }));
+      const spanEnd = windows[windows.length - 1]?.endIso ?? endIso;
       // All three checks at once — they are independent, and asking them one
       // after another put two extra round trips in front of every save.
       //
@@ -153,7 +163,7 @@ export async function POST(req: NextRequest) {
       // themselves rather than a commitment to someone else. So does time
       // already taken in a calendar they only connected: the commitment is
       // just as real for being kept somewhere else.
-      const [{ data: existing }, blockedBy, busyElsewhere] = await Promise.all([
+      const [{ data: existing }, blockedAcrossSpan, busyElsewhere] = await Promise.all([
         supabase
           .from("live_meetings")
           .select("id, title, scheduled_at, duration_minutes, host_id, attendees")
@@ -162,9 +172,9 @@ export async function POST(req: NextRequest) {
           .eq("is_draft", false)
           .neq("status", "ended")
           .gte("scheduled_at", windowStart)
-          .lt("scheduled_at", endIso)
-          .limit(200),
-        loadBlockConflicts(supabase, auth.ctx.userId, scheduledAt, endIso),
+          .lt("scheduled_at", spanEnd)
+          .limit(windows.length > 1 ? 1000 : 200),
+        loadBlockConflicts(supabase, auth.ctx.userId, scheduledAt, spanEnd),
         // Every meeting of a series, not just the first: a clash in week five
         // is as real as one today, and the series is refused as a whole.
         loadSeriesExternalConflicts(supabase, {
@@ -174,11 +184,14 @@ export async function POST(req: NextRequest) {
           timezone,
         }),
       ]);
-      conflicts = findConflicts((existing ?? []) as ConflictCandidate[], scheduledAt, endIso, {
+      conflicts = findConflictsAcross((existing ?? []) as ConflictCandidate[], windows, {
         excludeId: body.meetingId ?? null,
         subjectHostId: auth.ctx.userId,
         subjectEmails: [auth.ctx.email, ...guestEmails(attendees)],
       });
+      // The block read spans the whole series; keep the blocks that actually
+      // fall on one of its meetings.
+      const blockedBy = blockedAcrossSpan.filter((b) => overlapsAnyWindow(b.startsAt, b.endsAt, windows));
       // Time taken in a connected calendar cannot be saved over, "Save anyway"
       // or not; the rest of the clash can.
       const gate = conflictGate(
