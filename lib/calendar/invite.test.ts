@@ -1,4 +1,4 @@
-import { buildInviteIcs, inviteSequence, inviteUid } from "./invite";
+import { buildInviteIcs, inviteSequence, inviteUid, toIcsLocal } from "./invite";
 import { unfoldLines } from "./ics";
 
 const NOW = new Date("2026-09-01T12:00:00.000Z");
@@ -166,5 +166,42 @@ describe("buildInviteIcs — hostile input", () => {
 
   it("never emits a negative sequence", () => {
     expect(prop(buildInviteIcs({ ...base(), sequence: -5 }), "SEQUENCE:")).toBe("SEQUENCE:0");
+  });
+});
+
+describe("buildInviteIcs — a repeating series", () => {
+  it("writes the start in the meeting's zone with its rule, so the hour survives a clock change", () => {
+    const ics = buildInviteIcs({
+      ...base(),
+      recurrence: { rrule: "FREQ=WEEKLY;COUNT=12", timezone: "America/Chicago" },
+    });
+    expect(prop(ics, "DTSTART")).toBe("DTSTART;TZID=America/Chicago:20260910T100000");
+    expect(prop(ics, "DTEND")).toBe("DTEND;TZID=America/Chicago:20260910T103000");
+    expect(prop(ics, "RRULE:")).toBe("RRULE:FREQ=WEEKLY;COUNT=12");
+  });
+
+  it("names the instance an update is about", () => {
+    const ics = buildInviteIcs({
+      ...base(),
+      recurrenceId: { timezone: "America/Chicago", originalStartIso: "2026-09-17T15:00:00.000Z" },
+    });
+    expect(prop(ics, "RECURRENCE-ID")).toBe("RECURRENCE-ID;TZID=America/Chicago:20260917T100000");
+    expect(prop(ics, "RRULE")).toBeUndefined();
+  });
+
+  it("keeps a hostile rule or zone on its own line", () => {
+    const ics = buildInviteIcs({
+      ...base(),
+      recurrence: { rrule: "FREQ=WEEKLY;COUNT=2\r\nATTENDEE:x@evil", timezone: "UTC" },
+    });
+    expect(prop(ics, "RRULE:")).toBe("RRULE:FREQ=WEEKLY;COUNT=2ATTENDEE");
+    expect(props(ics).filter((l) => l.startsWith("ATTENDEE"))).toHaveLength(1);
+  });
+});
+
+describe("toIcsLocal", () => {
+  it("reads an instant as the wall clock in a zone, across a clock change", () => {
+    expect(toIcsLocal(new Date("2026-10-06T15:00:00Z"), "America/Chicago")).toBe("20261006T100000");
+    expect(toIcsLocal(new Date("2026-11-10T16:00:00Z"), "America/Chicago")).toBe("20261110T100000");
   });
 });

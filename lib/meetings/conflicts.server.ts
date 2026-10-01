@@ -47,3 +47,34 @@ export async function loadExternalConflicts(
   // back already overlaps the proposed meeting.
   return mergeIntervals([...feeds, ...google]);
 }
+
+/**
+ * Busy time a connected calendar holds against ANY meeting of a series, or
+ * against the one meeting when there is no series.
+ *
+ * One read across the whole span rather than one per meeting: a year of weekly
+ * meetings is 52 windows, and they are all answered from the same stored copy.
+ * What comes back is only the busy time that actually overlaps a meeting.
+ */
+export async function loadSeriesExternalConflicts(
+  supabase: Client,
+  opts: { userId: string; starts: string[]; durationMinutes: number; timezone: string },
+): Promise<BusyInterval[]> {
+  const windows = opts.starts
+    .map((iso) => new Date(iso).getTime())
+    .filter((ms) => Number.isFinite(ms))
+    .map((ms) => [ms, ms + opts.durationMinutes * 60_000] as const);
+  if (windows.length === 0) return [];
+  const busy = await loadExternalConflicts(supabase, {
+    userId: opts.userId,
+    startIso: new Date(Math.min(...windows.map(([s]) => s))).toISOString(),
+    endIso: new Date(Math.max(...windows.map(([, e]) => e))).toISOString(),
+    timezone: opts.timezone,
+  });
+  if (windows.length === 1) return busy;
+  return busy.filter((b) => {
+    const s = new Date(b.start).getTime();
+    const e = new Date(b.end).getTime();
+    return windows.some(([ws, we]) => s < we && e > ws);
+  });
+}

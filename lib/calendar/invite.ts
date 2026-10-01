@@ -32,6 +32,41 @@ export interface BuildInviteOptions {
   sequence?: number;
   /** Overrides "now" for DTSTAMP — tests need it stable. */
   now?: Date;
+  /**
+   * A repeating series. DTSTART and DTEND are then written in the meeting's
+   * own zone rather than UTC: a rule expanded from a UTC start keeps the UTC
+   * hour, so a weekly 10:00 in Chicago would become 9:00 when the clocks
+   * change.
+   */
+  recurrence?: { rrule: string; timezone: string };
+  /**
+   * An update to ONE meeting of a series: which instance, by the slot it was
+   * first given. A client applies the message to that instance instead of
+   * adding a stray event beside the series.
+   */
+  recurrenceId?: { timezone: string; originalStartIso: string };
+}
+
+/** "20261006T100000" — an instant as the wall clock in a zone reads it. */
+export function toIcsLocal(instant: Date, timezone: string): string {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: timezone,
+    hourCycle: "h23",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  }).formatToParts(instant);
+  const get = (type: string) => parts.find((p) => p.type === type)?.value ?? "00";
+  const hour = get("hour") === "24" ? "00" : get("hour");
+  return `${get("year")}${get("month")}${get("day")}T${hour}${get("minute")}${get("second")}`;
+}
+
+/** A TZID parameter value: an IANA name, nothing that could break the line. */
+function tzid(timezone: string): string {
+  return timezone.replace(/[^A-Za-z0-9_+\-/]/g, "");
 }
 
 /**
@@ -120,8 +155,21 @@ export function buildInviteIcs(opts: BuildInviteOptions): string {
     "BEGIN:VEVENT",
     `UID:${opts.uid}`,
     `DTSTAMP:${toIcsUtc(opts.now ?? new Date())}`,
-    `DTSTART:${toIcsUtc(start)}`,
-    `DTEND:${toIcsUtc(safeEnd)}`,
+    ...(opts.recurrence
+      ? [
+          `DTSTART;TZID=${tzid(opts.recurrence.timezone)}:${toIcsLocal(start, opts.recurrence.timezone)}`,
+          `DTEND;TZID=${tzid(opts.recurrence.timezone)}:${toIcsLocal(safeEnd, opts.recurrence.timezone)}`,
+          `RRULE:${opts.recurrence.rrule.replace(/[^A-Z0-9=;,]/g, "")}`,
+        ]
+      : [`DTSTART:${toIcsUtc(start)}`, `DTEND:${toIcsUtc(safeEnd)}`]),
+    ...(opts.recurrenceId
+      ? [
+          `RECURRENCE-ID;TZID=${tzid(opts.recurrenceId.timezone)}:${toIcsLocal(
+            new Date(opts.recurrenceId.originalStartIso),
+            opts.recurrenceId.timezone,
+          )}`,
+        ]
+      : []),
     `SUMMARY:${escapeText(opts.title || "Meeting")}`,
     `ORGANIZER${cn(opts.organizer.name)}:${mailto(opts.organizer.email)}`,
   ];

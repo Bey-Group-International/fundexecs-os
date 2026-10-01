@@ -2605,6 +2605,14 @@ export type LiveMeeting = {
   last_reminder_sent_at: string | null;
   /** iCalendar SEQUENCE. Bumped by a trigger on every update — never derived. */
   calendar_sequence: number;
+  /** A repeating meeting: the id of its first occurrence, shared by all of them. */
+  series_id?: string | null;
+  /** This occurrence's place in its series, from 0. */
+  series_index?: number | null;
+  /** The series' RRULE, e.g. "FREQ=WEEKLY;COUNT=12". */
+  series_rule?: string | null;
+  /** When this occurrence was first scheduled: its RECURRENCE-ID, kept when it moves. */
+  series_original_start?: string | null;
   is_draft: boolean;
   locked_at: string | null;
   updated_at: string;

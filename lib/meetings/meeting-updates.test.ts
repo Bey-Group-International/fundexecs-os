@@ -6,7 +6,7 @@ jest.mock("@/lib/email", () => ({
   escapeHtml: (v: string) => String(v).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"),
 }));
 
-import { buildMeetingUpdateEmail, diffMeetingTiming, sendMeetingUpdates, updateInviteMethod, diffMeetingPlace } from "./meeting-updates";
+import { buildMeetingUpdateEmail, diffMeetingTiming, sendMeetingUpdates, seriesUpdateContext, updateInviteMethod, diffMeetingPlace } from "./meeting-updates";
 
 const CTX = {
   origin: "https://app.test",
@@ -189,6 +189,33 @@ describe("sendMeetingUpdates — the calendar entry", () => {
     expect(ics.content).toContain("DTSTART:20260910T150000Z");
   });
 
+  it("updates one meeting of a series as that instance of the series", async () => {
+    await sendMeetingUpdates("rescheduled", {
+      ...CAL,
+      timezone: "America/Chicago",
+      series: { seriesId: "s1", originalStartIso: "2026-09-10T15:00:00.000Z" },
+    });
+    const ics = invite()!;
+    // The guest holds the series, so the update is about the series' UID …
+    expect(ics.content).toContain("UID:meeting-s1@app.test");
+    // … and names which meeting of it moved.
+    expect(ics.content).toContain("RECURRENCE-ID;TZID=America/Chicago:20260910T100000");
+    expect(ics.content).not.toContain("RRULE");
+  });
+
+  it("cancels one meeting of a series without cancelling the rest", async () => {
+    await sendMeetingUpdates("cancelled", {
+      ...CAL,
+      startIso: null,
+      timezone: "UTC",
+      series: { seriesId: "s1", originalStartIso: "2026-09-10T15:00:00.000Z" },
+    });
+    const ics = invite()!;
+    expect(ics.method).toBe("CANCEL");
+    expect(ics.content).toContain("UID:meeting-s1@app.test");
+    expect(ics.content).toContain("RECURRENCE-ID;TZID=UTC:20260910T150000");
+  });
+
   it("still emails when the meeting has no calendar identity", async () => {
     await sendMeetingUpdates("rescheduled", { ...CAL, meetingId: null });
     expect(sendEmailMock).toHaveBeenCalled();
@@ -275,5 +302,16 @@ describe("save-to-calendar on an update", () => {
   it("is omitted for a meeting with no time to save", () => {
     const { html } = buildMeetingUpdateEmail("relocated", { ...BASE, startIso: null });
     expect(html).not.toContain("calendar.ics");
+  });
+});
+
+describe("seriesUpdateContext", () => {
+  it("reads the series off a stored meeting, or nothing for one that does not repeat", () => {
+    expect(seriesUpdateContext({ series_id: "s1", series_original_start: "2026-09-10T15:00:00Z" })).toEqual({
+      seriesId: "s1",
+      originalStartIso: "2026-09-10T15:00:00Z",
+    });
+    expect(seriesUpdateContext({ series_id: null, series_original_start: null })).toBeNull();
+    expect(seriesUpdateContext(null)).toBeNull();
   });
 });

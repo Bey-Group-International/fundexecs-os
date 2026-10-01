@@ -138,6 +138,11 @@ export interface MeetingUpdateContext {
   hostEmail?: string | null;
   /** The meeting's stored calendar_sequence, which must rise on every change. */
   sequence?: number | null;
+  /**
+   * The meeting is one of a repeating series. Guests hold the series, not this
+   * meeting, so the update names the series and which instance it changes.
+   */
+  series?: { seriesId: string; originalStartIso: string } | null;
 }
 
 function whenIn(iso: string | null | undefined, timezone: string, durationMinutes?: number | null): string {
@@ -302,8 +307,11 @@ function buildUpdateInvite(
   try {
     return {
       content: buildInviteIcs({
-        uid: meetingInviteUid(ctx.meetingId!, origin),
+        uid: meetingInviteUid(ctx.series?.seriesId ?? ctx.meetingId!, origin),
         method,
+        recurrenceId: ctx.series
+          ? { timezone: ctx.timezone || "UTC", originalStartIso: ctx.series.originalStartIso }
+          : undefined,
         title: ctx.title || "Meeting",
         startIso: startIso!,
         endIso: inviteEndIso(startIso!, ctx.durationMinutes),
@@ -322,4 +330,16 @@ function buildUpdateInvite(
     console.error("[meetings/updates] could not build calendar invite", err);
     return undefined;
   }
+}
+
+/**
+ * The series context for an update about one meeting, from its stored row, or
+ * null for a meeting that does not repeat.
+ */
+export function seriesUpdateContext(
+  row: { series_id?: unknown; series_original_start?: unknown } | null | undefined,
+): { seriesId: string; originalStartIso: string } | null {
+  const seriesId = typeof row?.series_id === "string" ? row.series_id : null;
+  const originalStartIso = typeof row?.series_original_start === "string" ? row.series_original_start : null;
+  return seriesId && originalStartIso ? { seriesId, originalStartIso } : null;
 }

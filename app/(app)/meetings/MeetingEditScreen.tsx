@@ -19,6 +19,13 @@ import {
   zonedDateTime,
   type FieldErrors,
 } from "@/lib/meetings/schedule";
+import {
+  REPEAT_DEFAULT_COUNT,
+  REPEAT_MAX,
+  REPEAT_MIN,
+  describeRepeat,
+  type RepeatFreq,
+} from "@/lib/meetings/recurrence";
 
 /** How far past the picked start to look for the next free time. */
 const SUGGESTION_HORIZON_MS = 12 * 3600_000;
@@ -158,6 +165,9 @@ export function MeetingEditScreen({
   // the presets, keeping the common path down to a single tap.
   const [customEnd, setCustomEnd] = useState(!DURATION_PRESETS.some((p) => p.minutes === initialDuration));
   const [timezone, setTimezone] = useState(initial?.timezone ?? browserTz);
+  // Repeating: offered only when creating, since a series is made at once.
+  const [repeatFreq, setRepeatFreq] = useState<"none" | RepeatFreq>("none");
+  const [repeatCount, setRepeatCount] = useState(REPEAT_DEFAULT_COUNT.weekly);
   // One list, not two boxes. Seeded from `attendees` where the caller has the
   // real rows, otherwise parsed out of the legacy strings, so a meeting saved
   // before the picker existed still opens with its guests intact.
@@ -401,6 +411,7 @@ export function MeetingEditScreen({
       reminderMinutes: reminderMinutes ? Number(reminderMinutes) : null,
       externalCalendarSyncEnabled: syncEnabled,
       guestQuickAccess,
+      repeat: mode === "create" && !draft && repeatFreq !== "none" ? { freq: repeatFreq, count: repeatCount } : undefined,
     };
   }
 
@@ -510,6 +521,7 @@ export function MeetingEditScreen({
         notified?: number;
         mailboxConnected?: boolean;
         mailboxProblem?: string | null;
+        seriesCount?: number;
       };
       const result: MeetingSaveResult = {
         id: json.id ?? initial?.meetingId ?? "",
@@ -523,6 +535,10 @@ export function MeetingEditScreen({
       // sync failed); otherwise close immediately. The list refreshes either way
       // via its realtime subscription.
       const messages: string[] = [];
+      // A series is several meetings from one save; say how many.
+      if (json.seriesCount && json.seriesCount > 1) {
+        messages.push(`${json.seriesCount} meetings scheduled in the series`);
+      }
       const invited = json.invited ?? 0;
       const attempted = json.attempted ?? 0;
       if (invited > 0) {
@@ -728,6 +744,47 @@ export function MeetingEditScreen({
                 Time zone
               </button>
             </p>
+            {mode === "create" ? (
+              <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-[var(--fg-secondary)]">
+                <label className="flex items-center gap-1.5">
+                  <span className="sr-only">Repeat</span>
+                  <select
+                    aria-label="Repeat"
+                    value={repeatFreq}
+                    onChange={(e) => {
+                      const next = e.target.value as "none" | RepeatFreq;
+                      setRepeatFreq(next);
+                      if (next !== "none") setRepeatCount(REPEAT_DEFAULT_COUNT[next]);
+                    }}
+                    className="rounded-md border border-[var(--line)] bg-[var(--surface-0)] px-2 py-1 text-xs text-[var(--fg-primary)]"
+                  >
+                    <option value="none">Does not repeat</option>
+                    <option value="weekly">Weekly</option>
+                    <option value="monthly">Monthly</option>
+                  </select>
+                </label>
+                {repeatFreq !== "none" ? (
+                  <label className="flex items-center gap-1.5">
+                    for
+                    <input
+                      type="number"
+                      aria-label="Number of meetings"
+                      min={REPEAT_MIN}
+                      max={REPEAT_MAX}
+                      value={repeatCount}
+                      onChange={(e) =>
+                        setRepeatCount(Math.min(REPEAT_MAX, Math.max(REPEAT_MIN, Math.trunc(Number(e.target.value) || REPEAT_MIN))))
+                      }
+                      className="w-14 rounded-md border border-[var(--line)] bg-[var(--surface-0)] px-2 py-1 text-xs text-[var(--fg-primary)]"
+                    />
+                    meetings
+                  </label>
+                ) : null}
+                {repeatFreq !== "none" && date && startTime ? (
+                  <span className="text-[11px] text-[var(--fg-muted)]">{repeatSummary(repeatFreq, repeatCount, date, startTime, timezone)}</span>
+                ) : null}
+              </div>
+            ) : null}
             {(fieldErrors.date || fieldErrors.startTime || fieldErrors.endTime) ? (
               <span className="mt-1 block text-[11px] text-[var(--status-danger)]">
                 {fieldErrors.date || fieldErrors.startTime || fieldErrors.endTime}
@@ -1298,5 +1355,14 @@ function formatSuggestion(ms: number, timezone: string): string {
     }).format(new Date(ms));
   } catch {
     return new Date(ms).toLocaleString();
+  }
+}
+
+/** "Weekly on Tuesday at 10:00 AM CDT, 12 times", or "" if the time is not valid yet. */
+function repeatSummary(freq: RepeatFreq, count: number, date: string, time: string, timezone: string): string {
+  try {
+    return describeRepeat({ freq, count }, localToIso(date, time, timezone), timezone);
+  } catch {
+    return "";
   }
 }

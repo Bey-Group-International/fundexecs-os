@@ -383,7 +383,7 @@ export async function syncMeetingExternal(
   const before = await supabase
     .from("live_meetings")
     .select(
-      "id, title, description, location, meeting_url, objective, agenda, scheduled_at, duration_minutes, timezone, calendar_visibility, reminder_minutes, attendees, is_draft, locked_at, deleted_at, external_calendar_provider, external_calendar_event_id, external_calendar_sync_enabled",
+      "id, title, description, location, meeting_url, objective, agenda, scheduled_at, duration_minutes, timezone, calendar_visibility, reminder_minutes, attendees, is_draft, locked_at, deleted_at, external_calendar_provider, external_calendar_event_id, external_calendar_sync_enabled, series_id",
     )
     .eq("id", meetingId)
     .eq("organization_id", actor.orgId)
@@ -684,4 +684,25 @@ function reportWriteFailure(
   }
   const error = (result.value as { error?: { message?: string } | null } | null)?.error;
   if (error) console.error(`[meetings/service] ${what} not written for ${meetingId}`, error.message ?? error);
+}
+
+/**
+ * Mark a saved meeting as one of a repeating series. Written separately from
+ * the save so the one-meeting path is untouched by it.
+ */
+export async function markSeriesOccurrence(
+  supabase: ServerClient,
+  meetingId: string,
+  series: { seriesId: string; index: number; rule: string; start: string },
+): Promise<void> {
+  const { error } = await supabase
+    .from("live_meetings")
+    .update({
+      series_id: series.seriesId,
+      series_index: series.index,
+      series_rule: series.rule,
+      series_original_start: series.start,
+    } as never)
+    .eq("id", meetingId);
+  if (error) throw new Error(error.message);
 }
