@@ -4,11 +4,11 @@ How large a file the Documents library accepts, and how to raise it.
 
 ## Three limits, smallest wins
 
-| Limit | Where it lives | Value |
-| --- | --- | --- |
-| App cap | `NEXT_PUBLIC_DOCUMENT_MAX_UPLOAD_MB` (Vercel env, build-time) | **50 MB** today; code default is 50 when unset, never above 500 |
-| Project global upload limit | Supabase Management API / Dashboard → Storage → Settings | **50 MB** — the Free-plan maximum |
-| `documents` bucket limit | `storage.buckets.file_size_limit` (migration `20260930200000`) | 500 MB |
+|            Limit            |                         Where it lives                         |                              Value                              |
+|-----------------------------|----------------------------------------------------------------|-----------------------------------------------------------------|
+| App cap                     | `NEXT_PUBLIC_DOCUMENT_MAX_UPLOAD_MB` (Vercel env, build-time)  | **50 MB** today; code default is 50 when unset, never above 500 |
+| Project global upload limit | Supabase Management API / Dashboard → Storage → Settings       | **50 MB** — the Free-plan maximum                               |
+| `documents` bucket limit    | `storage.buckets.file_size_limit` (migration `20260930200000`) | 500 MB                                                          |
 
 The app cap is the only one a user sees: the drop zone states it and refuses a larger file before anything is uploaded. It must never be higher than the project's global limit, or a file between the two uploads for minutes and then fails at Storage.
 
