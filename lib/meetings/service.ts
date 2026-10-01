@@ -55,7 +55,6 @@ export interface UpdateMeetingInput {
   tags?: string[];
   attendees?: Array<{ name: string; email?: string; type?: "internal" | "external" }>;
   relatedContactId?: string | null;
-  relatedCompanyId?: string | null;
   relatedDealId?: string | null;
   relatedFundId?: string | null;
   syncMode?: "local_only" | "pending_external";
@@ -447,7 +446,6 @@ export async function updateMeeting(
   if (input.tags !== undefined) update.tags = cleanTags(input.tags);
   if (input.attendees !== undefined) update.attendees = input.attendees as Json;
   if (input.relatedContactId !== undefined) update.related_contact_id = input.relatedContactId;
-  if (input.relatedCompanyId !== undefined) update.related_company_id = input.relatedCompanyId;
   if (input.relatedDealId !== undefined) update.deal_id = input.relatedDealId;
   if (input.relatedFundId !== undefined) update.related_fund_id = input.relatedFundId;
   if (input.syncMode !== undefined) update.sync_status = input.syncMode === "pending_external" ? "pending_sync" : "local_only";

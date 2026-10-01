@@ -161,7 +161,6 @@ export interface UpcomingMeeting {
   source_calendar_id: string | null;
   deal_id: string | null;
   related_contact_id: string | null;
-  related_company_id: string | null;
   related_fund_id: string | null;
   objective: string | null;
   agenda: string | null;

@@ -229,7 +229,6 @@ export async function PATCH(request: NextRequest, { params }: { params: Params }
     tags: Array.isArray(body.tags) ? body.tags.map(String) : undefined,
     attendees: nextAttendees,
     relatedContactId: cleanString(body.relatedContactId),
-    relatedCompanyId: cleanString(body.relatedCompanyId),
     relatedDealId: cleanString(body.relatedDealId),
     relatedFundId: cleanString(body.relatedFundId),
     syncMode: body.syncMode === "pending_external" ? "pending_external" : "local_only",
