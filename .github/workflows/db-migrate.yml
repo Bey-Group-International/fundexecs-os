@@ -267,9 +267,17 @@ jobs:
           if [ "$GITHUB_EVENT_NAME" != "push" ] || [ "${GITHUB_RUN_ATTEMPT:-1}" != "1" ]; then
             echo "::notice title=Out-of-band check skipped::Only the first attempt of a push event can distinguish this push's migrations from ones an earlier attempt already applied (event=${GITHUB_EVENT_NAME}, attempt=${GITHUB_RUN_ATTEMPT:-1})."
           elif [ ! -s /tmp/pre-push-versions.txt ]; then
-            echo "::notice title=Out-of-band check skipped::The remote history before this push was not readable."
+            # A WARNING, not a notice. This branch means the check WANTED to run
+            # and could not, which is absence of evidence -- the one thing this
+            # whole workflow exists to stop reading as evidence of absence. The
+            # run still passes, because the drift check makes its own
+            # `migration list` call and exits 1 if that fails, so reaching here
+            # needs a transient failure that recovered. Failing the run instead
+            # would turn an API blip into a red migration push, which is the
+            # cry-wolf problem the first branch above is about.
+            echo "::warning title=Out-of-band check COULD NOT RUN::The remote history before this push was not readable, so nothing was compared. A genuine out-of-band apply in this push would not have been detected."
           elif [ -z "$base" ]; then
-            echo "::notice title=Out-of-band check skipped::Could not resolve the commit before this push, so the set of newly added migrations is unknown."
+            echo "::warning title=Out-of-band check COULD NOT RUN::Could not resolve the commit before this push, so the set of newly added migrations is unknown and nothing was compared."
           else
             git diff --name-status --diff-filter=A --no-renames "$base" HEAD \
               -- supabase/migrations/ \
