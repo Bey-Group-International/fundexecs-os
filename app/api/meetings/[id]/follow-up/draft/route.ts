@@ -25,6 +25,8 @@ import { normalizeNoteText } from "@/lib/meetings/live-notes";
 import { meetingRecipients } from "@/lib/meetings/recipients";
 import { loadPresentPeople } from "@/lib/meetings/recipients.server";
 import { followUpBody, followUpSubject } from "@/lib/meetings/follow-up";
+import { personalizeFollowUp } from "@/lib/meetings/follow-up-greeting";
+import { loadHost } from "@/lib/meetings/report-roles.server";
 import {
   DRAFT_CHANNEL,
   draftMessage,
@@ -88,7 +90,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const payload = (await req.json().catch(() => ({}))) as DraftRequest;
   const edited = followUpBody(typeof payload.body === "string" ? payload.body : "");
 
-  const [draft, present] = await Promise.all([
+  const [draft, present, host] = await Promise.all([
     edited
       ? edited
       : supabase
@@ -103,6 +105,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
             return followUpBody(normalizeNoteText(analysis?.follow_up_draft));
           }),
     loadPresentPeople(supabase, id),
+    loadHost(supabase, auth.ctx.userId),
   ]);
 
   if (!draft) {
@@ -186,7 +189,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         {
           thread_id: threadId,
           organization_id: auth.ctx.orgId,
-          body: draft,
+          // This attendee's own copy: greeted by name, never as the host.
+          body: personalizeFollowUp(draft, target.name, { hostName: host?.full_name ?? null }),
           source: "meeting_follow_up",
           source_meeting_id: id,
           created_by: auth.ctx.userId,

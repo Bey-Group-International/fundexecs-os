@@ -25,6 +25,8 @@ import {
   followUpHtml,
   followUpSubject,
 } from "@/lib/meetings/follow-up";
+import { personalizeFollowUp } from "@/lib/meetings/follow-up-greeting";
+import { loadHost } from "@/lib/meetings/report-roles.server";
 
 export const runtime = "nodejs";
 
@@ -76,7 +78,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   // report, the same ordering the report page and the log use, so a
   // regenerated follow-up is the one that gets sent.
   const edited = followUpBody(typeof payload.body === "string" ? payload.body : "");
-  const [draft, present] = await Promise.all([
+  const [draft, present, host] = await Promise.all([
     edited
       ? edited
       : supabase
@@ -91,6 +93,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
             return followUpBody(normalizeNoteText(analysis?.follow_up_draft));
           }),
     loadPresentPeople(supabase, id),
+    // Only to recognise a greeting that names the host; see personalizeFollowUp.
+    loadHost(supabase, auth.ctx.userId),
   ]);
 
   if (!draft) {
@@ -137,10 +141,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   }
 
   const subject = followUpSubject(meeting.title);
-  const htmlBody = followUpHtml(draft);
+  const hostName = host?.full_name ?? null;
 
   // Per recipient, and settled: one bad address must not stop the rest of the
-  // room hearing from the meeting they were in.
+  // room hearing from the meeting they were in. And personalised per recipient:
+  // each copy greets its own reader, never the host who is sending it.
   const results = await Promise.allSettled(
     recipients.map((r) =>
       sendEmail({
@@ -148,7 +153,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         credentials: { gmailAccessToken: mailbox.token },
         to: { name: r.name, email: r.email },
         subject,
-        htmlBody,
+        htmlBody: followUpHtml(personalizeFollowUp(draft, r.name, { hostName })),
       }),
     ),
   );

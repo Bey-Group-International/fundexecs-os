@@ -54,6 +54,14 @@ export interface FollowupNotes {
   summary?: string | null;
   actionItems?: string[] | null;
   keyPoints?: string[] | null;
+  /** What the host said was wrong with the report, when they corrected it. */
+  correction?: string | null;
+}
+
+/** Who ran the meeting, and so who the follow-up email is from. */
+export interface FollowupSender {
+  name?: string | null;
+  email?: string | null;
 }
 
 function clean(v: string | null | undefined): string | null {
@@ -96,9 +104,25 @@ function formatWhen(iso: string | null | undefined, timezone: string | null | un
   return `${when}${dur}`;
 }
 
-function attendeeLines(attendees: FollowupAttendee[] | null | undefined): string | null {
+/** Whether an attendee is the sender, by address first and then by name. */
+function isSender(a: FollowupAttendee, sender: FollowupSender | null | undefined): boolean {
+  if (!sender) return false;
+  const email = clean(a.email)?.toLowerCase();
+  const senderEmail = clean(sender.email)?.toLowerCase();
+  if (email && senderEmail) return email === senderEmail;
+  const name = clean(a.name)?.toLowerCase();
+  return Boolean(name && name === clean(sender.name)?.toLowerCase());
+}
+
+function attendeeLines(
+  attendees: FollowupAttendee[] | null | undefined,
+  sender?: FollowupSender | null,
+): string | null {
   if (!attendees || attendees.length === 0) return null;
   const lines = attendees
+    // The host is named on their own line as the sender. Listed here as well,
+    // they read as one more person to write to.
+    .filter((a) => !isSender(a, sender))
     .map((a) => {
       const name = clean(a.name);
       if (!name) return null;
@@ -132,8 +156,10 @@ export function buildFollowupPrompt(input: {
   deal?: FollowupDeal | null;
   fund?: FollowupFund | null;
   notes?: FollowupNotes | null;
+  sender?: FollowupSender | null;
 }): string {
-  const { meeting, deal, fund, notes } = input;
+  const { meeting, deal, fund, notes, sender } = input;
+  const senderName = clean(sender?.name) ?? clean(sender?.email);
 
   const blocks: string[] = [];
 
@@ -154,8 +180,19 @@ export function buildFollowupPrompt(input: {
   ]);
   if (meetingBlock) blocks.push(meetingBlock);
 
-  const att = attendeeLines(meeting.attendees);
-  if (att) blocks.push(`ATTENDEES\n${att}`);
+  // Said outright. Without it the pack's email went to whoever the attendee
+  // list happened to start with — often the person who would be sending it.
+  if (senderName) {
+    const email = clean(sender?.email);
+    blocks.push(
+      `SENDER (host — the follow-up email is FROM them, never addressed to them)\n- ${senderName}${
+        email && email.toLowerCase() !== senderName.toLowerCase() ? ` (${email})` : ""
+      }`,
+    );
+  }
+
+  const att = attendeeLines(meeting.attendees, sender);
+  if (att) blocks.push(`${senderName ? "RECIPIENTS / OTHER ATTENDEES" : "ATTENDEES"}\n${att}`);
 
   if (deal) {
     const dealBlock = section("DEAL", [
@@ -191,6 +228,10 @@ export function buildFollowupPrompt(input: {
     if (keyPoints) blocks.push(`CAPTURED KEY POINTS\n${keyPoints}`);
     const actionItems = bulletList(notes.actionItems);
     if (actionItems) blocks.push(`CAPTURED ACTION ITEMS\n${actionItems}`);
+    const correction = clean(notes.correction);
+    if (correction) {
+      blocks.push(`HOST CORRECTIONS (authoritative — they override anything above)\n${correction}`);
+    }
   }
 
   blocks.push(
@@ -202,7 +243,9 @@ export function buildFollowupPrompt(input: {
       "4. Risks & watch-items — open issues, dependencies, and anything to monitor, with how to manage each.",
       "5. Approval-sensitive language — flag any statements, commitments, or figures that require compliance, LP, or regulatory review, with suggested wording appropriate for LP/regulatory contexts.",
       "6. CRM / next-step updates — the fields, stages, and records to update in the CRM as a result of this meeting.",
-      "7. Follow-up email — a ready-to-send draft (greeting, brief recap, decisions, numbered action items with owners and dates, and a professional sign-off).",
+      senderName
+        ? `7. Follow-up email — a ready-to-send draft written by ${senderName} in their own voice and addressed to the other attendees, never to ${senderName} (greeting the recipients by first name, brief recap, decisions, numbered action items with owners and dates, and a sign-off as ${senderName}).`
+        : "7. Follow-up email — a ready-to-send draft from the meeting host to the other attendees, never addressed to the host (greeting, brief recap, decisions, numbered action items with owners and dates, and a professional sign-off).",
       "8. Proposed next meeting — a recommended purpose, timing, and required attendees.",
       "",
       "End with a short 'Confirm before sending' list of anything ambiguous in the context above that I should verify before acting.",

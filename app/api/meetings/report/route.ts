@@ -11,6 +11,7 @@ import { EMPTY_REPORT, clampTranscript, generateMeetingReport } from "@/lib/meet
 import { mergeTranscripts, restoreTranscript, type StoredLine } from "@/lib/meetings/transcript-restore";
 import { readAllTranscriptRows } from "@/lib/meetings/transcript-read";
 import { ONE_WAY_KIND } from "@/lib/meetings/one-way";
+import { loadReportRoles } from "@/lib/meetings/report-roles.server";
 import {
   recordMeetingOnTimelines,
   type MeetingForCrm,
@@ -164,6 +165,15 @@ export async function POST(req: Request) {
     // thousand — so a long meeting was summarised from its opening and not its
     // end. `id` is the tiebreak: rows sharing a timestamp need a total order,
     // or a page boundary landing inside a tie drops a row or repeats one.
+    // Who the follow-up is from and who it is to, started now so it overlaps
+    // the transcript read below rather than queueing behind it.
+    const rolesLookup = loadReportRoles(supabase, {
+      meetingId: body.meetingId,
+      hostId: user.id,
+      hostEmail: user.email ?? null,
+      invited: (meeting as { attendees?: unknown }).attendees ?? null,
+    });
+
     let stored = "";
     try {
       const rows = await readAllTranscriptRows((from, to) =>
@@ -197,6 +207,7 @@ export async function POST(req: Request) {
     //
     // A missing API key is NOT a failure and still takes the success path:
     // generateMeetingReport returns the empty report rather than throwing.
+    const roles = await rolesLookup;
     let analysis: Record<string, unknown>;
     try {
       analysis = await generateMeetingReport(client, MODEL, {
@@ -204,6 +215,8 @@ export async function POST(req: Request) {
         participants: body.participants ?? [],
         transcript,
         durationSeconds: body.duration ?? null,
+        host: roles.host,
+        recipients: roles.recipients,
       });
     } catch (err) {
       console.error("[/api/meetings/report] analysis failed", err);

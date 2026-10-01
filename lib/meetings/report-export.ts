@@ -14,6 +14,7 @@
 // Pure: no DOM, no Supabase, no model calls.
 
 import { normalizeNoteList, normalizeNoteText } from "@/lib/meetings/live-notes";
+import { displayFollowUp } from "@/lib/meetings/follow-up-greeting";
 import { parseTranscript } from "@/lib/meetings/transcript-view";
 import { captureLabel, readAcknowledgement } from "@/lib/meetings/one-way";
 
@@ -324,7 +325,9 @@ export function buildReportMarkdown(
   const keyPoints = normalizeNoteList(input.keyPoints);
   const actionItems = normalizeNoteList(input.actionItems);
   const decisions = normalizeNoteList(analysis?.decisions);
-  const followUp = normalizeNoteText(analysis?.follow_up_draft);
+  // The per-recipient greeting reads as a placeholder in a document nobody is
+  // being greeted by.
+  const followUp = displayFollowUp(normalizeNoteText(analysis?.follow_up_draft));
   const nextMeeting = normalizeNoteText(analysis?.next_meeting_suggestion);
   const sentiment = normalizeNoteText(analysis?.sentiment);
 

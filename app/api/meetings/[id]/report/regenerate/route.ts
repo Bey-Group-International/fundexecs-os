@@ -11,6 +11,8 @@ import { toLogEntry } from "@/lib/meetings/meeting-log";
 import { createActionItemTasks } from "@/lib/meetings/action-items.server";
 import { parseActionItem } from "@/lib/meetings/action-items";
 import { loadOrgDirectory } from "@/lib/meetings/directory.server";
+import { loadReportRoles } from "@/lib/meetings/report-roles.server";
+import { CORRECTION_KEY, cleanCorrection } from "@/lib/meetings/report-versions";
 import type { Json } from "@/lib/supabase/database.types";
 
 export const runtime = "nodejs";
@@ -41,12 +43,22 @@ const client = process.env.ANTHROPIC_API_KEY
  *
  * Host only, mirroring `/api/meetings/report`: the report is a shared record,
  * and rewriting what a meeting decided belongs to the person who ran it.
+ *
+ * **Takes a correction.** `{ correction: "The follow-up is to Jane, not me" }`
+ * is handed to the model as overriding the transcript, alongside the version it
+ * corrects, and is kept on the new row so the history can say why it exists.
+ * Without one this is the plain re-read it always was. Regenerating blind is a
+ * coin toss on a report that read wrong for a reason the model cannot see; the
+ * host knows the reason and now has somewhere to say it.
  */
-export async function POST(_req: Request, { params }: { params: Promise<{ id: string }> }) {
+export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
 
   const auth = await requireOrgContext();
   if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: auth.status });
+
+  const payload = (await req.json().catch(() => ({}))) as { correction?: unknown };
+  const correction = cleanCorrection(payload?.correction);
 
   const supabase = await createServerClient();
 
@@ -66,7 +78,7 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
   // report was built on, not whichever row the database happens to return.
   const existingRead = supabase
     .from("live_meeting_reports")
-    .select("id, full_transcript")
+    .select("id, full_transcript, summary, analysis")
     .eq("meeting_id", id)
     .order("created_at", { ascending: false })
     .limit(1)
@@ -104,7 +116,15 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
       console.warn("[regenerate] stored transcript unavailable", err);
       return "";
     });
-  const [{ data: existing }, stored] = await Promise.all([existingRead, storedRead]);
+  // Who the follow-up is from and to. The attendee list alone left the host
+  // out entirely, so the model was writing an email with no idea who sent it.
+  const rolesRead = loadReportRoles(supabase, {
+    meetingId: id,
+    hostId: auth.ctx.userId,
+    hostEmail: auth.ctx.email || null,
+    invited: meeting.attendees,
+  });
+  const [{ data: existing }, stored, roles] = await Promise.all([existingRead, storedRead, rolesRead]);
 
   const transcript = mergeTranscripts((existing?.full_transcript ?? "").trim(), stored).trim();
   if (!transcript) {
@@ -133,7 +153,12 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
       return name || email;
     })
     .filter(Boolean);
+  const hostName = roles.host?.name ?? "";
+  if (hostName && !participants.some((p) => p.toLowerCase() === hostName.toLowerCase())) {
+    participants.unshift(hostName);
+  }
 
+  const previousAnalysis = (existing?.analysis ?? null) as Record<string, unknown> | null;
   let analysis: Record<string, unknown>;
   try {
     analysis = await generateMeetingReport(client, MODEL, {
@@ -141,6 +166,15 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
       participants,
       transcript,
       durationSeconds: meeting.duration_minutes ? meeting.duration_minutes * 60 : null,
+      host: roles.host,
+      recipients: roles.recipients,
+      correction: correction || null,
+      previous: correction
+        ? {
+            summary: existing?.summary ?? null,
+            followUp: normalizeNoteText(previousAnalysis?.follow_up_draft),
+          }
+        : null,
     });
   } catch (err) {
     console.error("[/api/meetings/:id/report/regenerate]", err);
@@ -156,6 +190,10 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
       { status: 502 },
     );
   }
+
+  // Kept with the version it produced, so the history can say why it exists —
+  // and dropped when there was none, so a plain re-read never inherits one.
+  if (correction) analysis = { ...analysis, [CORRECTION_KEY]: correction };
 
   const { data: saved, error } = await supabase
     .from("live_meeting_reports")
