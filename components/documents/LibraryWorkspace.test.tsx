@@ -110,6 +110,22 @@ function tableRows(): HTMLElement[] {
   return within(table).getAllByRole("row").slice(1); // drop the header row
 }
 
+// The workspace renders the table at Tailwind's 2xl and cards below it.
+function setViewport(wide: boolean) {
+  Object.defineProperty(window, "matchMedia", {
+    configurable: true,
+    writable: true,
+    value: (query: string) => ({
+      matches: wide && query === "(min-width: 1536px)",
+      media: query,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+    }),
+  });
+}
+
+beforeEach(() => setViewport(true));
+
 afterEach(() => {
   window.location.hash = "";
 });
@@ -215,5 +231,36 @@ describe("LibraryWorkspace", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Clear filters" }));
     expect(tableRows()).toHaveLength(3);
+  });
+});
+
+describe("LibraryWorkspace below 2xl", () => {
+  beforeEach(() => setViewport(false));
+
+  function cards(): HTMLElement[] {
+    return screen.getAllByRole("listitem");
+  }
+
+  it("lists documents as cards instead of a table that scrolls sideways", () => {
+    renderWorkspace();
+    expect(screen.queryByRole("table")).not.toBeInTheDocument();
+    expect(cards()).toHaveLength(3);
+  });
+
+  it("keeps every row's actions inside its card, with nothing off-screen", () => {
+    renderWorkspace();
+    const lpa = cards().find((c) => within(c).queryByRole("link", { name: "Fund IV LPA" }))!;
+    expect(within(lpa).getByRole("link", { name: "Open" })).toBeInTheDocument();
+    expect(within(lpa).getByRole("link", { name: "Review" })).toBeInTheDocument();
+    expect(within(lpa).getByRole("button", { name: "Replace" })).toBeInTheDocument();
+    expect(within(lpa).getByRole("button", { name: "Detach" })).toBeInTheDocument();
+    expect(within(lpa).getByText(/PDF · 2.3 MB/)).toBeInTheDocument();
+  });
+
+  it("offers a one-line section picker that filters the list", () => {
+    renderWorkspace();
+    fireEvent.change(screen.getByLabelText("Section"), { target: { value: "marketing" } });
+    expect(cards()).toHaveLength(1);
+    expect(within(cards()[0]).getByRole("link", { name: "Investor Deck" })).toBeInTheDocument();
   });
 });
