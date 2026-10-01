@@ -54,15 +54,15 @@ through `0066_artifact_grounding.sql` — predate this and are left alone.)
 
 **Make it re-runnable.** Every statement should be safe to apply twice:
 
-| statement | safe form |
-|---|---|
-| `create table` / `index` / `schema` / `extension` / `materialized view` | add `if not exists` |
-| `add column` | `add column if not exists` |
-| any `drop` | add `if exists` |
-| `create function` / `view` / `procedure` / `trigger` | `create or replace` |
-| `add constraint` | wrap in a `do $$ … if not exists (select 1 from pg_constraint where conname = … and conrelid = …::regclass) then … end $$` block |
-| `create policy` / `create type` | `drop … if exists` the same name first, or use a guard block |
-| `insert` | `on conflict do nothing` |
+|                                statement                                |                                                            safe form                                                             |
+|-------------------------------------------------------------------------|----------------------------------------------------------------------------------------------------------------------------------|
+| `create table` / `index` / `schema` / `extension` / `materialized view` | add `if not exists`                                                                                                              |
+| `add column`                                                            | `add column if not exists`                                                                                                       |
+| any `drop`                                                              | add `if exists`                                                                                                                  |
+| `create function` / `view` / `procedure` / `trigger`                    | `create or replace`                                                                                                              |
+| `add constraint`                                                        | wrap in a `do $$ … if not exists (select 1 from pg_constraint where conname = … and conrelid = …::regclass) then … end $$` block |
+| `create policy` / `create type`                                         | `drop … if exists` the same name first, or use a guard block                                                                     |
+| `insert`                                                                | `on conflict do nothing`                                                                                                         |
 
 PostgreSQL has no `if not exists` for constraints, policies or types, which is
 why those three need a guard block or a preceding drop. A `do $$ … $$` block is
@@ -76,11 +76,11 @@ repair procedure below works by letting `db push` apply the file again.
 
 ## What is checked, and when
 
-| check | runs | catches |
-|---|---|---|
-| `migration-check.yml` | every pull request touching this directory | editing a merged migration, deleting one, a malformed or colliding version, an out-of-order version, statements that cannot be applied twice |
-| `db-migrate.yml` — push | push to `main` | the migration failing to apply |
-| `db-migrate.yml` — drift | push to `main` | a repo migration missing from production; a production version with no file here; **a migration this push added that production had already recorded** |
+|          check           |                    runs                    |                                                                        catches                                                                         |
+|--------------------------|--------------------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `migration-check.yml`    | every pull request touching this directory | editing a merged migration, deleting one, a malformed or colliding version, an out-of-order version, statements that cannot be applied twice           |
+| `db-migrate.yml` — push  | push to `main`                             | the migration failing to apply                                                                                                                         |
+| `db-migrate.yml` — drift | push to `main`                             | a repo migration missing from production; a production version with no file here; **a migration this push added that production had already recorded** |
 
 The pull-request check holds no database credentials, deliberately: on
 `pull_request` the workflow file comes from the branch under test, so a secret
