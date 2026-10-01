@@ -63,77 +63,115 @@ describe("readPipelineSupport", () => {
 });
 
 describe("pipelineRoute, per browser shape", () => {
-  it("takes the worker with the standardised generator", () => {
-    // Firefox's shape: MediaStreamTrackProcessor plus VideoTrackGenerator.
-    const route = pipelineRoute(without({ mediaStreamTrackGenerator: false }));
-    expect(route).toEqual({ route: "worker", generator: "video-track-generator", reason: "supported" });
-  });
+  /** Nothing at all: an old browser, or a worker that never reported. */
+  const none: PipelineSupport = {
+    worker: false,
+    trackProcessor: false,
+    videoTrackGenerator: false,
+    mediaStreamTrackGenerator: false,
+    offscreenCanvas: false,
+    videoFrame: false,
+  };
 
-  it("takes the worker with Chrome's pre-standard generator", () => {
-    const route = pipelineRoute(without({ videoTrackGenerator: false }));
-    expect(route).toEqual({
+  /** Chrome: both halves on the main thread, under the pre-standard names. */
+  const chromeMain = without({ videoTrackGenerator: false });
+
+  /**
+   * Firefox: the main scope has NEITHER insertable-streams constructor. This is
+   * the shape that makes two-scope detection necessary.
+   */
+  const standardMain: PipelineSupport = {
+    ...none,
+    worker: true,
+    offscreenCanvas: true,
+  };
+  const standardWorker: PipelineSupport = {
+    worker: false,
+    trackProcessor: true,
+    videoTrackGenerator: true,
+    mediaStreamTrackGenerator: false,
+    offscreenCanvas: true,
+    videoFrame: true,
+  };
+
+  it("sends streams into the worker on Chrome's pre-standard pair", () => {
+    expect(pipelineRoute(chromeMain, null)).toEqual({
       route: "worker",
-      generator: "media-stream-track-generator",
+      protocol: "transfer-streams",
       reason: "supported",
     });
   });
 
-  it("prefers the standard name when a browser has both", () => {
-    // So a browser that grows the standard name migrates onto it with no edit
-    // here. Chrome shipped its own in 2021, before the API was standardised.
-    expect(pipelineRoute(all).generator).toBe("video-track-generator");
+  it("takes the worker route on a browser whose MAIN scope has neither constructor", () => {
+    // The trap. Firefox puts MediaStreamTrackProcessor in the worker and not on
+    // window, so detecting on the main scope alone would report "no fast path"
+    // on exactly the browser the standard was written for.
+    expect(pipelineRoute(standardMain, null).route).toBe("main");
+    expect(pipelineRoute(standardMain, standardWorker)).toEqual({
+      route: "worker",
+      protocol: "transfer-track",
+      reason: "supported",
+    });
   });
 
-  it("stays on the main thread when only the input half exists", () => {
-    // The dangerous case: frames can be read but never written back, so a
-    // pipeline that checked one half would hand the room a black tile.
-    const route = pipelineRoute(
-      without({ videoTrackGenerator: false, mediaStreamTrackGenerator: false }),
-    );
-    expect(route.route).toBe("main");
-    expect(route.reason).toBe("no-generator");
-    expect(route.generator).toBeNull();
+  it("prefers the standard route when a browser could do both", () => {
+    // So a browser that grows the standard names migrates onto them with no edit
+    // here, and the pre-standard pair becomes dead weight rather than the default.
+    expect(pipelineRoute(all, standardWorker).protocol).toBe("transfer-track");
   });
 
-  it("stays on the main thread when only the output half exists", () => {
-    const route = pipelineRoute(without({ trackProcessor: false }));
-    expect(route.route).toBe("main");
-    expect(route.reason).toBe("no-track-processor");
+  it("waits on the main thread until the worker has reported", () => {
+    // Not an error state: holding a member's camera hostage to a worker that may
+    // never start is worse than a call that costs more CPU.
+    const route = pipelineRoute(standardMain, null);
+    expect(route.reason).toBe("worker-not-probed");
+    expect(route.protocol).toBeNull();
   });
 
-  it("names each missing capability it refuses on", () => {
-    expect(pipelineRoute(without({ worker: false })).reason).toBe("no-worker");
-    expect(pipelineRoute(without({ offscreenCanvas: false })).reason).toBe("no-offscreen-canvas");
-    expect(pipelineRoute(without({ videoFrame: false })).reason).toBe("no-video-frame");
+  it("refuses when the worker reports only half the standard pair", () => {
+    // Frames readable and never writable back, or the reverse: the black tile.
+    const halfIn = { ...standardWorker, videoTrackGenerator: false };
+    const halfOut = { ...standardWorker, trackProcessor: false };
+    expect(pipelineRoute(standardMain, halfIn).route).toBe("main");
+    expect(pipelineRoute(standardMain, halfOut).route).toBe("main");
+    expect(pipelineRoute(standardMain, halfIn).reason).toBe("no-insertable-streams");
   });
 
-  it("reports the most structural reason first", () => {
-    // A browser with nothing is "no-worker", not whichever check ran first --
-    // the reason reaches telemetry, and "this browser has no workers" is a
+  it("refuses when the main scope has only half the pre-standard pair", () => {
+    expect(pipelineRoute(without({ mediaStreamTrackGenerator: false, videoTrackGenerator: false }), none).route).toBe("main");
+    expect(pipelineRoute(without({ trackProcessor: false, videoTrackGenerator: false }), none).route).toBe("main");
+  });
+
+  it("falls back to Chrome's route when the worker cannot drive the standard one", () => {
+    // A browser with both main-thread constructors and a worker lacking
+    // VideoTrackGenerator should still get the fast path, by the other protocol.
+    expect(pipelineRoute(chromeMain, none).protocol).toBe("transfer-streams");
+  });
+
+  it("names no-worker before anything else", () => {
+    // The reason reaches telemetry, and "this browser has no workers" is a
     // different fact from "this browser lacks one media API".
-    const nothing: PipelineSupport = {
-      worker: false,
-      trackProcessor: false,
-      videoTrackGenerator: false,
-      mediaStreamTrackGenerator: false,
-      offscreenCanvas: false,
-      videoFrame: false,
-    };
-    expect(pipelineRoute(nothing).reason).toBe("no-worker");
+    expect(pipelineRoute(none, null).reason).toBe("no-worker");
+    expect(pipelineRoute({ ...all, worker: false }, standardWorker).reason).toBe("no-worker");
   });
 
-  it("never returns a generator on the main route", () => {
-    const refusals = [
-      without({ worker: false }),
-      without({ trackProcessor: false }),
-      without({ offscreenCanvas: false }),
-      without({ videoFrame: false }),
-      without({ videoTrackGenerator: false, mediaStreamTrackGenerator: false }),
+  it("names a missing OffscreenCanvas when neither scope has one", () => {
+    const mainNoCanvas = { ...standardMain, offscreenCanvas: false };
+    const workerNoCanvas = { ...standardWorker, offscreenCanvas: false };
+    expect(pipelineRoute(mainNoCanvas, workerNoCanvas).reason).toBe("no-offscreen-canvas");
+  });
+
+  it("never returns a protocol on the main route", () => {
+    const refusals: Array<[PipelineSupport, PipelineSupport | null]> = [
+      [none, null],
+      [standardMain, null],
+      [standardMain, none],
+      [{ ...all, worker: false }, standardWorker],
     ];
-    for (const support of refusals) {
-      const route = pipelineRoute(support);
+    for (const [main, worker] of refusals) {
+      const route = pipelineRoute(main, worker);
       expect(route.route).toBe("main");
-      expect(route.generator).toBeNull();
+      expect(route.protocol).toBeNull();
     }
   });
 });

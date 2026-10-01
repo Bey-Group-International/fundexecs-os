@@ -23,10 +23,22 @@
 // a pure function of a capability snapshot, and it is tested against the shape
 // each browser family actually presents.
 //
-// And the generator has two names. Chrome shipped `MediaStreamTrackGenerator` in
-// 2021, before the API was standardised; the standard that followed splits the
-// job out as `VideoTrackGenerator`, which is what Firefox implements. A pipeline
-// that knows only one name silently excludes half the browsers that can run it.
+// And there are two routes, not one API with two spellings. Chrome shipped
+// `MediaStreamTrackProcessor` and `MediaStreamTrackGenerator` in 2021, before
+// standardisation, exposed on the MAIN thread: you build both there and transfer
+// the streams in. The standard that followed is deliberately worker-only and
+// splits the output half out as `VideoTrackGenerator`: the PROCESSOR is built in
+// the worker, so the camera track is sent to it, and the generator's `.track`
+// comes back out. Different objects, different construction sites, and the track
+// travels the opposite way.
+//
+// Which produces the trap this module exists to not fall into. On a browser that
+// implements only the standard, `MediaStreamTrackProcessor` is absent from the
+// main scope and present in the worker. Feature-detecting on `window` alone
+// therefore reports "no fast path" on exactly the browsers the standard was
+// written for. So the decision takes TWO snapshots -- the main scope's and the
+// worker's own, which the worker reports when it starts -- and the worker is
+// probed before it is trusted.
 
 /**
  * What the pipeline needs from whatever global scope it is asked to run in.
@@ -50,34 +62,14 @@ export interface PipelineSupport {
   videoFrame: boolean;
 }
 
-/** Which constructor builds the outgoing track. */
-export type GeneratorKind = "video-track-generator" | "media-stream-track-generator";
-
-/** Where the pipeline will run, and why. */
-export interface PipelineRoute {
-  route: "worker" | "main";
-  /** Set only on the worker route. */
-  generator: GeneratorKind | null;
-  /**
-   * Why the main thread was chosen. One of a closed set rather than a sentence,
-   * so it can be counted in telemetry without parsing prose.
-   */
-  reason:
-    | "supported"
-    | "no-worker"
-    | "no-track-processor"
-    | "no-generator"
-    | "no-offscreen-canvas"
-    | "no-video-frame";
-}
-
 /**
  * Read the capability snapshot from a global scope.
  *
- * Takes the scope rather than reaching for `globalThis` so a test can hand it an
- * object. Everything is a `typeof` check on a constructor name: there is no way
- * to ask these APIs whether they work without building one, and building one
- * costs a real track.
+ * Takes the scope rather than reaching for `globalThis`, which is what lets the
+ * same function run on the main thread and inside the worker and lets a test
+ * hand it an object. Everything is a `typeof` check on a constructor name: there
+ * is no way to ask these APIs whether they work without building one, and
+ * building one costs a real track.
  */
 export function readPipelineSupport(scope: Record<string, unknown>): PipelineSupport {
   const has = (name: string) => typeof scope[name] === "function";
@@ -92,37 +84,99 @@ export function readPipelineSupport(scope: Record<string, unknown>): PipelineSup
 }
 
 /**
- * Decide where the pipeline runs.
+ * How the two halves are built, and therefore what crosses the thread boundary.
  *
- * Every requirement is checked, and a missing one names itself. The order is
- * from the most structural outward, so the reason reported is the most useful
- * one rather than whichever check happened to run first.
- *
- * The standardised `VideoTrackGenerator` is preferred wherever it exists, and
- * Chrome's older `MediaStreamTrackGenerator` is the fallback rather than the
- * default. A browser that grows the standard name should move onto it without
- * anybody editing this.
+ * Not a cosmetic distinction. `transfer-streams` means the main thread owns both
+ * objects and hands the worker a `readable` and a `writable`; `transfer-track`
+ * means the worker owns both and the camera track goes in while the output track
+ * comes back. The message protocol, the teardown, and which side can even see
+ * the constructors all follow from this.
  */
-export function pipelineRoute(support: PipelineSupport): PipelineRoute {
-  const main = (reason: PipelineRoute["reason"]): PipelineRoute => ({
+export type PipelineProtocol = "transfer-streams" | "transfer-track";
+
+/** Where the pipeline will run, and why. */
+export interface PipelineRoute {
+  route: "worker" | "main";
+  /** Set only on the worker route. */
+  protocol: PipelineProtocol | null;
+  /**
+   * Why the main thread was chosen. One of a closed set rather than a sentence,
+   * so it can be counted in telemetry without parsing prose.
+   */
+  reason:
+    | "supported"
+    | "no-worker"
+    | "no-offscreen-canvas"
+    | "worker-not-probed"
+    | "no-insertable-streams";
+}
+
+/**
+ * Whether the main scope can drive Chrome's pre-standard pair itself.
+ *
+ * Both halves have to be there. One without the other is the black-tile case:
+ * frames can be read and never written back, or the reverse.
+ */
+export function mainScopeDrivesPipeline(main: PipelineSupport): boolean {
+  return main.trackProcessor && main.mediaStreamTrackGenerator;
+}
+
+/**
+ * Whether the worker can drive the standardised pair itself.
+ *
+ * `VideoFrame` and `OffscreenCanvas` are checked in the WORKER's snapshot rather
+ * than the main scope's, because the worker is where they will be used, and a
+ * browser is free to differ between the two.
+ */
+export function workerScopeDrivesPipeline(worker: PipelineSupport): boolean {
+  return (
+    worker.trackProcessor &&
+    worker.videoTrackGenerator &&
+    worker.videoFrame &&
+    worker.offscreenCanvas
+  );
+}
+
+/**
+ * Decide where the pipeline runs, from both scopes' capabilities.
+ *
+ * `worker` is null until the worker has reported in. That is a real state rather
+ * than a missing argument: until it answers, the honest route is the main thread,
+ * because the alternative is holding the member's camera hostage to a worker that
+ * may never start.
+ *
+ * The standard route is preferred where both are possible, so a browser that
+ * grows the standard names migrates onto them with no edit here.
+ */
+export function pipelineRoute(
+  main: PipelineSupport,
+  worker: PipelineSupport | null,
+): PipelineRoute {
+  const stay = (reason: PipelineRoute["reason"]): PipelineRoute => ({
     route: "main",
-    generator: null,
+    protocol: null,
     reason,
   });
 
-  if (!support.worker) return main("no-worker");
-  if (!support.offscreenCanvas) return main("no-offscreen-canvas");
-  if (!support.videoFrame) return main("no-video-frame");
-  if (!support.trackProcessor) return main("no-track-processor");
+  if (!main.worker) return stay("no-worker");
 
-  const generator: GeneratorKind | null = support.videoTrackGenerator
-    ? "video-track-generator"
-    : support.mediaStreamTrackGenerator
-      ? "media-stream-track-generator"
-      : null;
-  if (!generator) return main("no-generator");
+  if (worker === null) {
+    // Chrome can start without waiting: it owns both halves on this thread, so
+    // there is nothing to ask the worker about except that it exists.
+    if (mainScopeDrivesPipeline(main) && main.offscreenCanvas && main.videoFrame) {
+      return { route: "worker", protocol: "transfer-streams", reason: "supported" };
+    }
+    return stay("worker-not-probed");
+  }
 
-  return { route: "worker", generator, reason: "supported" };
+  if (workerScopeDrivesPipeline(worker)) {
+    return { route: "worker", protocol: "transfer-track", reason: "supported" };
+  }
+  if (mainScopeDrivesPipeline(main) && main.offscreenCanvas && main.videoFrame) {
+    return { route: "worker", protocol: "transfer-streams", reason: "supported" };
+  }
+  if (!main.offscreenCanvas && !worker.offscreenCanvas) return stay("no-offscreen-canvas");
+  return stay("no-insertable-streams");
 }
 
 /**
