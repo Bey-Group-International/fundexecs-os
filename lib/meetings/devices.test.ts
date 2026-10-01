@@ -11,6 +11,8 @@ import {
   displayConstraints,
   SCREEN_SHARE_FPS,
   SCREEN_SHARE_MAX_HEIGHT,
+  needsSinkChange,
+  type SinkableElement,
 } from "./devices";
 
 const d = (over: Partial<Device>): Device => ({
@@ -307,5 +309,49 @@ describe("what to ask for when sharing a screen", () => {
   // audio" indicator while sending silence.
   it("does not ask for audio it has nowhere to send", () => {
     expect(displayConstraints().audio).toBe(false);
+  });
+});
+
+describe("needsSinkChange", () => {
+  const el = (over: Partial<SinkableElement> = {}): SinkableElement => ({
+    srcObject: {},
+    muted: false,
+    sinkId: "",
+    setSinkId: async () => {},
+    ...over,
+  });
+
+  it("routes an unmuted call element that is on the wrong device", () => {
+    expect(needsSinkChange(el({ sinkId: "" }), "out-desk")).toBe(true);
+    expect(needsSinkChange(el({ sinkId: "out-old" }), "out-desk")).toBe(true);
+  });
+
+  it("skips an element already on that device", () => {
+    expect(needsSinkChange(el({ sinkId: "out-desk" }), "out-desk")).toBe(false);
+  });
+
+  it("skips a never-routed element when the choice IS the system default", () => {
+    // The bug this rule replaced: a fresh element reports "" while the chosen
+    // id is "default", so the equality check failed every time and every
+    // element on the page was rebuilt on every change to the roster.
+    expect(needsSinkChange(el({ sinkId: "" }), "default")).toBe(false);
+  });
+
+  it("skips anything that is not call media", () => {
+    // A player on a route rendered behind the call, a background clip: those
+    // carry a `src`, not a `srcObject`, and are nobody's business here.
+    expect(needsSinkChange(el({ srcObject: null }), "out-desk")).toBe(false);
+    expect(needsSinkChange(el({ srcObject: undefined }), "out-desk")).toBe(false);
+  });
+
+  it("skips a muted element, which renders no audio at all", () => {
+    // The local tile. Routing it is a pipeline rebuild for something that will
+    // never play — and it is muted precisely so the member does not hear
+    // themselves.
+    expect(needsSinkChange(el({ muted: true }), "out-desk")).toBe(false);
+  });
+
+  it("skips a browser with no setSinkId", () => {
+    expect(needsSinkChange(el({ setSinkId: undefined }), "out-desk")).toBe(false);
   });
 });
