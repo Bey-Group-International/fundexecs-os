@@ -12,6 +12,7 @@
 // sentence is back where they started.
 import { memo, useState } from "react";
 import { deliveryMessage } from "@/lib/meetings/recipients";
+import { FIRST_NAME_TOKEN, displayFollowUp } from "@/lib/meetings/follow-up-greeting";
 import { CopyButton } from "./CopyButton";
 
 type SendState =
@@ -127,7 +128,7 @@ export const FollowUpPanel = memo(function FollowUpPanel({
           >
             {editing ? "Done" : "Edit"}
           </button>
-          <CopyButton text={body} />
+          <CopyButton text={displayFollowUp(body)} />
         </div>
       </div>
 
@@ -142,6 +143,13 @@ export const FollowUpPanel = memo(function FollowUpPanel({
         <pre className="text-sm text-[var(--fg-primary)] whitespace-pre-wrap font-sans leading-relaxed">
           {body}
         </pre>
+      )}
+
+      {body.includes(FIRST_NAME_TOKEN) && (
+        <p className="mt-2 text-xs text-[var(--fg-muted)]">
+          <code className="text-[var(--fg-secondary)]">{FIRST_NAME_TOKEN}</code> is replaced with each
+          recipient&rsquo;s first name, so everyone gets their own copy addressed to them.
+        </p>
       )}
 
       {canSend && (

@@ -10,6 +10,8 @@
 // off `analysis` and exists in no other column.
 import Anthropic from "@anthropic-ai/sdk";
 import { normalizeNoteList, normalizeNoteText } from "@/lib/meetings/live-notes";
+import { FIRST_NAME_TOKEN } from "@/lib/meetings/follow-up-greeting";
+import { cleanCorrection } from "@/lib/meetings/report-versions";
 
 /**
  * Model context / cost budget, in characters. The tail is kept: a meeting ends
@@ -119,15 +121,32 @@ export const MEETING_REPORT_SCHEMA = {
     follow_up_draft: {
       type: "string",
       description:
-        "Complete follow-up email including: greeting, 1-paragraph summary, bullet list of decisions made, numbered action items with owners, next meeting proposal (if applicable), and professional sign-off. Use plain text, no markdown.",
+        `Complete follow-up email written BY the host TO the recipients, opening with the line "Hi ${FIRST_NAME_TOKEN},", then: 1-paragraph summary, bullet list of decisions made, numbered action items with owners, next meeting proposal (if applicable), and a sign-off with the host's name. Use plain text, no markdown.`,
     },
   },
   required: ["summary", "key_points", "action_items", "decisions", "sentiment", "next_meeting_suggestion", "follow_up_draft"],
 };
 
+/**
+ * Who sends the follow-up and who receives it, said in so many words.
+ *
+ * This prompt used to name nobody's role. The model was handed "Participants:"
+ * as a flat list with the host first — or, from the room, with the host as
+ * "You" — and asked for "a ready-to-send professional email". So it wrote one to
+ * the first name it saw: the host, thanking them for their time, in an email
+ * that was then sent from the host's own mailbox to everybody else. The host was
+ * only removed from the recipient list at send time, long after the words had
+ * been chosen.
+ *
+ * The greeting is a token rather than a name because one draft goes to several
+ * people; it is filled in per recipient when it is sent (follow-up-greeting.ts).
+ */
 const SYSTEM = `You are an expert meeting analyst for a venture-capital / investor-relations platform.
-Produce comprehensive, actionable meeting reports. Transcript lines are prefixed "SpeakerName: text" — use speaker names when assigning action items.
-For the follow_up_draft, write a ready-to-send professional email covering: (1) brief summary paragraph, (2) decisions made, (3) numbered action items with owners and deadlines where stated, (4) proposed next meeting if relevant, (5) professional closing. Plain text only.`;
+Produce comprehensive, actionable meeting reports. Transcript lines are prefixed "SpeakerName: text" — use speaker names when assigning action items. A speaker labelled "You" is the host.
+For the follow_up_draft, write a ready-to-send professional email covering: (1) brief summary paragraph, (2) decisions made, (3) numbered action items with owners and deadlines where stated, (4) proposed next meeting if relevant, (5) professional closing. Plain text only.
+The follow_up_draft is written BY the host and sent FROM the host's mailbox TO the recipients — the other people in the meeting. Write it in the host's voice ("Thanks for your time today", "I will send…"). Never address it to the host, never thank the host as though they were the reader, and sign it off with the host's name.
+Begin the follow_up_draft with exactly the line "Hi ${FIRST_NAME_TOKEN}," — that placeholder is replaced with each recipient's first name when the email is sent. Do not put anybody's name in the greeting.
+When the host gives corrections, they are authoritative: they override anything you would otherwise infer from the transcript, and they apply to the whole report, not only the follow-up.`;
 
 /**
  * What a report holds before it is written. Empty is a valid answer.
@@ -148,12 +167,84 @@ export const EMPTY_REPORT: Record<string, unknown> = {
   follow_up_draft: "",
 };
 
+/** Somebody the report is about, by the name the transcript uses. */
+export interface ReportPerson {
+  name: string;
+  email?: string | null;
+}
+
 export interface ReportAnalysisInput {
   title: string;
   participants: string[];
   transcript: string;
   /** Meeting length in seconds, if known. */
   durationSeconds?: number | null;
+  /** Who ran the meeting, and therefore who the follow-up is from. */
+  host?: ReportPerson | null;
+  /** Who the follow-up is to: everyone invited or present, minus the host. */
+  recipients?: ReportPerson[] | null;
+  /**
+   * What the host says the last version got wrong — "the follow-up is to Jane,
+   * not me", "Mark owns the deck, not Sarah". Passed to the model as overriding
+   * the transcript, because the host was in the room and the model was not.
+   */
+  correction?: string | null;
+  /** The version being corrected, so the model can see what the correction is about. */
+  previous?: { summary?: string | null; followUp?: string | null } | null;
+}
+
+/** "Maria Chen <maria@x.test>", or whichever half there is. */
+function personLine(person: ReportPerson): string {
+  const name = (person.name ?? "").trim();
+  const email = (person.email ?? "").trim();
+  if (name && email && name.toLowerCase() !== email.toLowerCase()) return `${name} <${email}>`;
+  return name || email;
+}
+
+/**
+ * The user turn: the meeting, who is who in it, any correction, and the
+ * transcript. Exported so the roles can be tested without a model.
+ */
+export function reportPrompt(input: ReportAnalysisInput): string {
+  const durationMin = input.durationSeconds ? Math.round(input.durationSeconds / 60) : null;
+  const host = input.host && personLine(input.host) ? personLine(input.host) : "";
+  const recipients = (input.recipients ?? []).map(personLine).filter(Boolean);
+  const correction = cleanCorrection(input.correction);
+  const previousSummary = normalizeNoteText(input.previous?.summary);
+  const previousFollowUp = normalizeNoteText(input.previous?.followUp);
+
+  const lines = [
+    `Meeting: ${input.title || "Untitled"}`,
+    `Participants: ${input.participants.join(", ") || "Unknown"}`,
+  ];
+  if (host) lines.push(`Host (sends the follow-up; never its recipient): ${host}`);
+  if (recipients.length) lines.push(`Follow-up recipients: ${recipients.join("; ")}`);
+  if (durationMin) lines.push(`Duration: ~${durationMin} minutes`);
+
+  if (correction) {
+    lines.push(
+      "",
+      "HOST CORRECTIONS (authoritative — apply these throughout the report):",
+      correction,
+    );
+    if (previousSummary || previousFollowUp) {
+      lines.push(
+        "",
+        "PREVIOUS VERSION (the host found it wrong; use it only to understand the corrections):",
+      );
+      if (previousSummary) lines.push(`Summary: ${previousSummary}`);
+      if (previousFollowUp) lines.push(`Follow-up draft:\n${previousFollowUp}`);
+    }
+  }
+
+  lines.push(
+    "",
+    "FULL TRANSCRIPT:",
+    clampTranscript(input.transcript),
+    "",
+    "Generate a comprehensive post-meeting report.",
+  );
+  return lines.join("\n");
 }
 
 /**
@@ -174,25 +265,11 @@ export async function generateMeetingReport(
 ): Promise<Record<string, unknown>> {
   if (!client) return { ...EMPTY_REPORT };
 
-  const durationMin = input.durationSeconds ? Math.round(input.durationSeconds / 60) : null;
-
   const msg = await client.messages.create({
     model,
     max_tokens: REPORT_MAX_TOKENS,
     system: SYSTEM,
-    messages: [
-      {
-        role: "user",
-        content: `Meeting: ${input.title || "Untitled"}
-Participants: ${input.participants.join(", ") || "Unknown"}
-${durationMin ? `Duration: ~${durationMin} minutes` : ""}
-
-FULL TRANSCRIPT:
-${clampTranscript(input.transcript)}
-
-Generate a comprehensive post-meeting report.`,
-      },
-    ],
+    messages: [{ role: "user", content: reportPrompt(input) }],
     tools: [
       {
         name: "meeting_report",

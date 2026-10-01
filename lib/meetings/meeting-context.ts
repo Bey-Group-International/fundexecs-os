@@ -12,7 +12,13 @@
 
 import type { createServerClient } from "@/lib/supabase/server";
 import { buildPrepPrompt, type PrepAttendee } from "@/lib/meetings/prep";
-import { buildFollowupPrompt, type FollowupAttendee } from "@/lib/meetings/followup";
+import {
+  buildFollowupPrompt,
+  type FollowupAttendee,
+  type FollowupNotes,
+  type FollowupSender,
+} from "@/lib/meetings/followup";
+import { CORRECTION_KEY, cleanCorrection } from "@/lib/meetings/report-versions";
 
 type Supabase = Awaited<ReturnType<typeof createServerClient>>;
 
@@ -32,6 +38,7 @@ type MeetingRow = {
   attendees: (PrepAttendee & FollowupAttendee)[] | null;
   deal_id: string | null;
   related_fund_id: string | null;
+  host_id?: string | null;
 };
 type DealRow = {
   name: string; stage: string | null; asset_class: string | null; geography: string | null;
@@ -43,10 +50,10 @@ type FundRow = {
   name: string; fund_type: string | null; vintage_year: number | null; target_size: number | null;
   committed_capital: number | null; called_capital: number | null; distributed_capital: number | null; currency: string | null;
 };
-type ReportRow = { summary: string | null; key_points: unknown; action_items: unknown };
+type ReportRow = { summary: string | null; key_points: unknown; action_items: unknown; analysis?: unknown };
 
 const MEETING_COLUMNS =
-  "id, title, meeting_type, priority, scheduled_at, timezone, duration_minutes, objective, agenda, preparation_requirements, description, location, tags, attendees, deal_id, related_fund_id";
+  "id, title, meeting_type, priority, scheduled_at, timezone, duration_minutes, objective, agenda, preparation_requirements, description, location, tags, attendees, deal_id, related_fund_id, host_id";
 
 // Coerce a jsonb column that should hold an array of strings into string[].
 function toStringArray(v: unknown): string[] | null {
@@ -196,11 +203,11 @@ export async function loadMeetingFollowupContext(
   // Optional saved report notes. live_meeting_reports is keyed by meeting_id;
   // since the meeting is already verified org-scoped above, loading its latest
   // report is transitively org-scoped. Skip gracefully if the table/row is absent.
-  let notes: { summary?: string | null; actionItems?: string[] | null; keyPoints?: string[] | null } | null = null;
+  let notes: FollowupNotes | null = null;
   try {
     const { data } = await supabase
       .from("live_meeting_reports")
-      .select("summary, key_points, action_items")
+      .select("summary, key_points, action_items, analysis")
       .eq("meeting_id", meetingId)
       .order("created_at", { ascending: false })
       .limit(1)
@@ -211,10 +218,28 @@ export async function loadMeetingFollowupContext(
         summary: r.summary,
         actionItems: toStringArray(r.action_items),
         keyPoints: toStringArray(r.key_points),
+        correction: cleanCorrection(
+          r.analysis && typeof r.analysis === "object"
+            ? (r.analysis as Record<string, unknown>)[CORRECTION_KEY]
+            : null,
+        ) || null,
       };
     }
   } catch {
     notes = null;
+  }
+
+  // The host, so the email in the pack is written from them rather than to
+  // them. Same unscoped principals read as the deal lead above.
+  let sender: FollowupSender | null = null;
+  if (m.host_id) {
+    const { data } = await supabase
+      .from("principals")
+      .select("full_name, email")
+      .eq("id", m.host_id)
+      .maybeSingle();
+    const row = (data as { full_name: string | null; email: string | null } | null) ?? null;
+    if (row) sender = { name: row.full_name, email: row.email };
   }
 
   return buildFollowupPrompt({
@@ -222,5 +247,6 @@ export async function loadMeetingFollowupContext(
     deal: dealForPrompt(deal),
     fund: fundForPrompt(fund),
     notes,
+    sender,
   });
 }

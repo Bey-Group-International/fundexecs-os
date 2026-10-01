@@ -248,3 +248,42 @@ describe("lookups", () => {
     expect(res.status).toBe(409);
   });
 });
+
+describe("who each copy greets", () => {
+  it("fills the greeting in with each recipient's own first name", async () => {
+    wire({ report: { analysis: { follow_up_draft: "Hi {{first_name}},\n\nGood meeting." } } });
+    await POST(req(), { params });
+    const html = sendEmail.mock.calls.map((c) => (c[0] as { htmlBody: string }).htmlBody);
+    expect(html.some((h) => h.includes("Hi Sarah,"))).toBe(true);
+    expect(html.some((h) => h.includes("{{first_name}}"))).toBe(false);
+  });
+
+  // A draft written before the prompt named the host, greeting the host, must
+  // not go out to everyone else that way.
+  it("never sends a greeting addressed to the host", async () => {
+    from.mockImplementation((table: string) => {
+      const b: Record<string, unknown> = {
+        select: () => b,
+        eq: () => Object.assign(Promise.resolve({ error: null }), b),
+        is: () => b,
+        order: () => b,
+        limit: () => b,
+        update: () => b,
+        maybeSingle: async () => ({
+          data:
+            table === "live_meetings"
+              ? MEETING
+              : table === "principals"
+                ? { full_name: "Alex Rivera", email: "host@fund.test" }
+                : { analysis: { follow_up_draft: "Hi Alex,\n\nThanks for your time." } },
+          error: null,
+        }),
+      };
+      return b;
+    });
+    await POST(req(), { params });
+    const html = (sendEmail.mock.calls[0][0] as { htmlBody: string }).htmlBody;
+    expect(html).toContain("Hi Sarah,");
+    expect(html).not.toContain("Hi Alex,");
+  });
+});

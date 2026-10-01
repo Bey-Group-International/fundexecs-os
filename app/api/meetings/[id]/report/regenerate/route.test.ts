@@ -290,3 +290,48 @@ describe("after the new report is saved", () => {
     expect((await pending).status).toBe(200);
   });
 });
+
+describe("a correction from the host", () => {
+  const correctionReq = (correction: unknown) =>
+    new Request("http://localhost/api/meetings/m1/report/regenerate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ correction }),
+    });
+
+  it("is handed to the model with the version it corrects", async () => {
+    wire({
+      report: {
+        id: "r1",
+        full_transcript: "Ana: we agreed to wire on Friday.",
+        summary: "Old summary",
+        analysis: { follow_up_draft: "Hi Host," },
+      },
+    });
+    await POST(correctionReq("  The follow-up is to Ana, not me.  "), params);
+    expect(generateMeetingReport.mock.calls[0][2]).toMatchObject({
+      correction: "The follow-up is to Ana, not me.",
+      previous: { summary: "Old summary", followUp: "Hi Host," },
+    });
+  });
+
+  it("is kept on the new version so the history can say why it exists", async () => {
+    wire();
+    await POST(correctionReq("Mark owns the deck."), params);
+    expect((writes.inserted?.analysis as Record<string, unknown>).correction_note).toBe("Mark owns the deck.");
+  });
+
+  it("is absent from a plain regenerate", async () => {
+    wire();
+    await POST(req(), params);
+    expect(generateMeetingReport.mock.calls[0][2]).toMatchObject({ correction: null, previous: null });
+    expect((writes.inserted?.analysis as Record<string, unknown>).correction_note).toBeUndefined();
+  });
+
+  it("tells the model who the host is, not only who was invited", async () => {
+    wire();
+    await POST(req(), params);
+    expect(generateMeetingReport.mock.calls[0][2]).toHaveProperty("host");
+    expect(generateMeetingReport.mock.calls[0][2]).toHaveProperty("recipients");
+  });
+});

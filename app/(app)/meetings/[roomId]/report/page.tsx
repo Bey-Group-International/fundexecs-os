@@ -4,6 +4,7 @@ import type { Metadata } from "next";
 import { createServerClient } from "@/lib/supabase/server";
 import { AttendeeHistoryPanel } from "./AttendeeHistory";
 import { FollowUpPanel } from "./FollowUpPanel";
+import { ReportRevisions } from "./ReportRevisions";
 import { ExportMenu } from "./ExportMenu";
 import { ChatPanel } from "./ChatPanel";
 import { ReportMedia } from "./ReportMedia";
@@ -249,10 +250,21 @@ export default async function MeetingReportPage({
         </div>
       )}
 
-      {/* Follow-up draft — editable, and sendable by the host. */}
+      {/* Follow-up draft — editable, and sendable by the host. Keyed on the
+          draft so a corrected or restored report replaces what the panel holds
+          rather than leaving the old words in its local state. */}
       {content.followUp && (
-        <FollowUpPanel meetingId={meeting.id} draft={content.followUp} canSend={data.isHost} />
+        <FollowUpPanel
+          key={content.followUp}
+          meetingId={meeting.id}
+          draft={content.followUp}
+          canSend={data.isHost}
+        />
       )}
+
+      {/* Correct-and-regenerate for the host; the version history for anyone
+          who may read the report. */}
+      <ReportRevisions meetingId={meeting.id} isHost={data.isHost} />
 
       {/* What the inbox holds on the people who were here.
           Suspended on purpose: its reads are keyed off the attendance rows, so

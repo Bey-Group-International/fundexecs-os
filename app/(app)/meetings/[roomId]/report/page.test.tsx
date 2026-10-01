@@ -122,6 +122,11 @@ jest.mock("./AttendeeHistory", () => ({
     />
   ),
 }));
+jest.mock("./ReportRevisions", () => ({
+  ReportRevisions: ({ isHost }: { isHost: boolean }) => (
+    <div data-testid="report-revisions" data-host={String(isHost)} />
+  ),
+}));
 jest.mock("./FollowUpPanel", () => ({
   FollowUpPanel: ({ canSend }: { canSend: boolean }) => (
     <div data-testid="follow-up" data-can-send={String(canSend)} />

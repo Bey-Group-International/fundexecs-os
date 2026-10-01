@@ -88,4 +88,37 @@ describe("buildFollowupPrompt", () => {
     expect(prompt).not.toContain("CAPTURED ACTION ITEMS");
     expect(prompt).not.toContain("CAPTURED KEY POINTS");
   });
+
+  it("names the host as the sender and leaves them off the recipients", () => {
+    const prompt = buildFollowupPrompt({
+      meeting: {
+        title: "LP Update",
+        attendees: [
+          { name: "Alex Rivera", email: "alex@fund.test", type: "internal" },
+          { name: "Jane Doe", email: "jane@lp.test", type: "external" },
+        ],
+      },
+      sender: { name: "Alex Rivera", email: "alex@fund.test" },
+    });
+    expect(prompt).toContain("SENDER (host");
+    expect(prompt).toContain("- Alex Rivera (alex@fund.test)");
+    const recipients = prompt.slice(prompt.indexOf("RECIPIENTS / OTHER ATTENDEES"));
+    expect(recipients).toContain("Jane Doe");
+    expect(recipients.split("\n\n")[0]).not.toContain("Alex Rivera");
+    expect(prompt).toContain("written by Alex Rivera in their own voice and addressed to the other attendees, never to Alex Rivera");
+  });
+
+  it("still says the email is never to the host when the host is unknown", () => {
+    const prompt = buildFollowupPrompt({ meeting: { title: "Quick sync" } });
+    expect(prompt).toContain("never addressed to the host");
+  });
+
+  it("carries the host's correction to the report", () => {
+    const prompt = buildFollowupPrompt({
+      meeting: { title: "Debrief" },
+      notes: { correction: "The follow-up is to Jane, not me." },
+    });
+    expect(prompt).toContain("HOST CORRECTIONS");
+    expect(prompt).toContain("The follow-up is to Jane, not me.");
+  });
 });
