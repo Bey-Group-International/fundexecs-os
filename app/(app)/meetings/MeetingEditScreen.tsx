@@ -24,6 +24,7 @@ import {
   REPEAT_MAX,
   REPEAT_MIN,
   describeRepeat,
+  seriesPositionLabel,
   type RepeatFreq,
 } from "@/lib/meetings/recurrence";
 
@@ -72,6 +73,9 @@ export interface MeetingEditInitial {
   externalCalendarSyncEnabled?: boolean;
   guestQuickAccess?: boolean;
   externalCalendarProvider?: string | null;
+  /** Set when the meeting is one of a repeating series. */
+  seriesId?: string | null;
+  seriesRule?: string | null;
 }
 
 export interface MeetingSaveResult {
@@ -168,6 +172,9 @@ export function MeetingEditScreen({
   // Repeating: offered only when creating, since a series is made at once.
   const [repeatFreq, setRepeatFreq] = useState<"none" | RepeatFreq>("none");
   const [repeatCount, setRepeatCount] = useState(REPEAT_DEFAULT_COUNT.weekly);
+  // Editing one meeting of a series: just this one, or it and every later one.
+  const inSeries = mode === "edit" && !!initial?.seriesId && !initial?.isDraft;
+  const [seriesScope, setSeriesScope] = useState<"one" | "following">("one");
   // One list, not two boxes. Seeded from `attendees` where the caller has the
   // real rows, otherwise parsed out of the legacy strings, so a meeting saved
   // before the picker existed still opens with its guests intact.
@@ -478,6 +485,7 @@ export function MeetingEditScreen({
                 // the column, and a host who switched quick access OFF keeps a
                 // meeting that lets anyone holding the link walk straight in.
                 guestQuickAccess: payload.guestQuickAccess,
+                ...(inSeries && seriesScope === "following" ? { scope: "following" } : {}),
               }
             : payload,
         ),
@@ -522,6 +530,7 @@ export function MeetingEditScreen({
         mailboxConnected?: boolean;
         mailboxProblem?: string | null;
         seriesCount?: number;
+        seriesUpdated?: number;
       };
       const result: MeetingSaveResult = {
         id: json.id ?? initial?.meetingId ?? "",
@@ -538,6 +547,9 @@ export function MeetingEditScreen({
       // A series is several meetings from one save; say how many.
       if (json.seriesCount && json.seriesCount > 1) {
         messages.push(`${json.seriesCount} meetings scheduled in the series`);
+      }
+      if (json.seriesUpdated && json.seriesUpdated > 1) {
+        messages.push(`${json.seriesUpdated} meetings in the series updated`);
       }
       const invited = json.invited ?? 0;
       const attempted = json.attempted ?? 0;
@@ -784,6 +796,30 @@ export function MeetingEditScreen({
                   <span className="text-[11px] text-[var(--fg-muted)]">{repeatSummary(repeatFreq, repeatCount, date, startTime, timezone)}</span>
                 ) : null}
               </div>
+            ) : null}
+            {inSeries ? (
+              <fieldset className="mt-2 flex flex-wrap items-center gap-3 text-xs text-[var(--fg-secondary)]">
+                <legend className="sr-only">Apply changes to</legend>
+                <span aria-hidden="true">↻ {seriesPositionLabel(initial?.seriesRule, null) ?? "Repeating meeting"} · change</span>
+                <label className="flex items-center gap-1.5">
+                  <input
+                    type="radio"
+                    name="series-scope"
+                    checked={seriesScope === "one"}
+                    onChange={() => setSeriesScope("one")}
+                  />
+                  This meeting
+                </label>
+                <label className="flex items-center gap-1.5">
+                  <input
+                    type="radio"
+                    name="series-scope"
+                    checked={seriesScope === "following"}
+                    onChange={() => setSeriesScope("following")}
+                  />
+                  This and following meetings
+                </label>
+              </fieldset>
             ) : null}
             {(fieldErrors.date || fieldErrors.startTime || fieldErrors.endTime) ? (
               <span className="mt-1 block text-[11px] text-[var(--status-danger)]">

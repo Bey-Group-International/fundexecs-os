@@ -6,6 +6,7 @@ import {
   ruleFromRrule,
   seriesPositionLabel,
   seriesRrule,
+  shiftSeriesStarts,
   truncateRule,
 } from "./recurrence";
 
@@ -111,5 +112,25 @@ describe("seriesPositionLabel", () => {
 
   it("says only how it repeats when the slot is unknown", () => {
     expect(seriesPositionLabel("FREQ=WEEKLY;COUNT=4", null)).toBe("Repeats weekly");
+  });
+});
+
+describe("shiftSeriesStarts", () => {
+  // Tuesdays at 10:00 in Chicago, across the clock change on 1 November 2026.
+  const SLOTS = ["2026-10-20T15:00:00.000Z", "2026-10-27T15:00:00.000Z", "2026-11-03T16:00:00.000Z"];
+
+  it("moves every later meeting by the same day and time of day, on the local clock", () => {
+    // Week one moves to Wednesday at 14:00.
+    const out = shiftSeriesStarts(SLOTS, SLOTS[0], "2026-10-21T19:00:00.000Z", "America/Chicago");
+    expect(out).toEqual([
+      "2026-10-21T19:00:00.000Z", // Wed 14:00 CDT
+      "2026-10-28T19:00:00.000Z", // Wed 14:00 CDT
+      "2026-11-04T20:00:00.000Z", // Wed 14:00 CST, not 13:00
+    ]);
+  });
+
+  it("changes only the time when the day stays", () => {
+    const out = shiftSeriesStarts(SLOTS, SLOTS[0], "2026-10-20T14:30:00.000Z", "America/Chicago");
+    expect(out).toEqual(["2026-10-20T14:30:00.000Z", "2026-10-27T14:30:00.000Z", "2026-11-03T15:30:00.000Z"]);
   });
 });

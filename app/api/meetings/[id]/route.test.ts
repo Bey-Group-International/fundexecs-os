@@ -12,6 +12,8 @@ const cancelBookingMock = jest.fn();
 const loadSeriesRowsMock = jest.fn();
 const setSeriesRuleMock = jest.fn();
 const sendSeriesEndedMock = jest.fn();
+const markSeriesOccurrenceMock = jest.fn();
+const loadSeriesExternalConflictsMock = jest.fn(async () => [] as Array<{ start: string; end: string }>);
 
 // A stand-in for the real error class: the route branches on `instanceof`, so
 // the mock has to hand back something that actually is one.
@@ -20,6 +22,7 @@ class SlotUnavailable extends Error {}
 const loadExternalConflictsMock = jest.fn(async () => [] as Array<{ start: string; end: string }>);
 jest.mock("@/lib/meetings/conflicts.server", () => ({
   loadExternalConflicts: (...args: unknown[]) => loadExternalConflictsMock(...(args as [])),
+  loadSeriesExternalConflicts: (...args: unknown[]) => loadSeriesExternalConflictsMock(...(args as [])),
 }));
 
 jest.mock("@/lib/auth", () => ({
@@ -37,6 +40,7 @@ jest.mock("@/lib/meetings/service", () => ({
   deleteMeetingLocal: (...args: unknown[]) => deleteMeetingLocalMock(...args),
   loadSeriesRows: (...args: unknown[]) => loadSeriesRowsMock(...args),
   setSeriesRule: (...args: unknown[]) => setSeriesRuleMock(...args),
+  markSeriesOccurrence: (...args: unknown[]) => markSeriesOccurrenceMock(...args),
   buildMeetingInviteUrl: (origin: string, code: string) => `${origin}/meeting-invite/${code}`,
 }));
 
@@ -732,6 +736,134 @@ describe("/api/meetings/[id]", () => {
       await del({ scope: "following" });
       expect(loadSeriesRowsMock).not.toHaveBeenCalled();
       expect(deleteMeetingLocalMock).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe("editing this and following meetings of a series", () => {
+    // Five weekly meetings, Tuesdays 10:00 Chicago; the third is the one opened.
+    const SLOT = (i: number) => new Date(Date.UTC(2026, 9, 6 + 7 * i, 15)).toISOString();
+    const SERIES = [0, 1, 2, 3, 4].map((i) => ({
+      id: i === 2 ? "m1" : `s${i}`,
+      series_index: i,
+      series_rule: "FREQ=WEEKLY;COUNT=5",
+      series_original_start: SLOT(i),
+      scheduled_at: SLOT(i),
+      duration_minutes: 30,
+      calendar_sequence: 1,
+      deleted_at: null as string | null,
+    }));
+    const SERIES_PRIOR = {
+      ...PRIOR_ROW,
+      attendees: GUESTS,
+      title: "Weekly sync",
+      timezone: "America/Chicago",
+      scheduled_at: SLOT(2),
+      duration_minutes: 30,
+      series_id: "s0",
+      series_index: 2,
+      series_original_start: SLOT(2),
+    };
+    // Week three moved to 11:00, every later week with it.
+    const ELEVEN = new Date(Date.UTC(2026, 9, 20, 16)).toISOString();
+
+    beforeEach(() => {
+      from.mockReturnValue(makeBuilder({ maybeSingle: { data: SERIES_PRIOR } }));
+      loadSeriesRowsMock.mockResolvedValue(SERIES);
+      updateMeetingMock.mockResolvedValue({ ok: true, calendarSequence: 2 });
+      setSeriesRuleMock.mockResolvedValue(2);
+      sendSeriesEndedMock.mockResolvedValue({ sent: 2, total: 2 });
+      sendMeetingInvitesMock.mockResolvedValue({ sent: 2, total: 2, attempted: 2, failed: [], reasons: [] });
+    });
+
+    it("moves this meeting and every later one, and leaves the earlier ones", async () => {
+      const res = await PATCH(req({ scope: "following", scheduledAt: ELEVEN, durationMinutes: 30 }), params);
+      expect(res.status).toBe(200);
+      expect(await res.json()).toMatchObject({ seriesUpdated: 3 });
+      expect(updateMeetingMock.mock.calls.map((c) => [c[2], c[3].scheduledAt])).toEqual([
+        ["m1", new Date(Date.UTC(2026, 9, 20, 16)).toISOString()],
+        ["s3", new Date(Date.UTC(2026, 9, 27, 16)).toISOString()],
+        // After the clock change: still 11:00 in Chicago.
+        ["s4", new Date(Date.UTC(2026, 10, 3, 17)).toISOString()],
+      ]);
+    });
+
+    it("splits the series: the rest becomes its own, with this meeting first", async () => {
+      await PATCH(req({ scope: "following", scheduledAt: ELEVEN }), params);
+      expect(markSeriesOccurrenceMock.mock.calls.map((c) => [c[1], c[2].seriesId, c[2].index, c[2].rule])).toEqual([
+        ["m1", "m1", 0, "FREQ=WEEKLY;COUNT=3"],
+        ["s3", "m1", 1, "FREQ=WEEKLY;COUNT=3"],
+        ["s4", "m1", 2, "FREQ=WEEKLY;COUNT=3"],
+      ]);
+      expect(setSeriesRuleMock).toHaveBeenCalledWith(expect.anything(), "org1", ["s0", "s1"], "FREQ=WEEKLY;COUNT=2");
+    });
+
+    it("tells guests the old series now ends, and invites them to the new one", async () => {
+      await PATCH(req({ scope: "following", scheduledAt: ELEVEN }), params);
+      expect(sendSeriesEndedMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          variant: "changed",
+          seriesId: "s0",
+          keepRrule: "FREQ=WEEKLY;COUNT=2",
+          emails: ["ada@lp.test", "ben@lp.test"],
+        }),
+      );
+      expect(sendMeetingInvitesMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          emails: ["ada@lp.test", "ben@lp.test"],
+          startIso: ELEVEN,
+          series: { seriesId: "m1", rrule: "FREQ=WEEKLY;COUNT=3", timezone: "America/Chicago" },
+        }),
+      );
+      // Not one reschedule notice per meeting.
+      expect(sendMeetingUpdatesMock).not.toHaveBeenCalled();
+    });
+
+    it("re-issues the same series from its first meeting, with no split", async () => {
+      from.mockReturnValue(
+        makeBuilder({ maybeSingle: { data: { ...SERIES_PRIOR, series_index: 0, scheduled_at: SLOT(0), series_original_start: SLOT(0) } } }),
+      );
+      const res = await PATCH(
+        new NextRequest("http://localhost/api/meetings/s0", {
+          method: "PATCH",
+          body: JSON.stringify({ scope: "following", title: "Weekly LP sync" }),
+        }),
+        { params: Promise.resolve({ id: "s0" }) },
+      );
+      expect(await res.json()).toMatchObject({ seriesUpdated: 5 });
+      expect(setSeriesRuleMock).not.toHaveBeenCalled();
+      expect(sendSeriesEndedMock).not.toHaveBeenCalled();
+      expect(sendMeetingInvitesMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          title: "Weekly LP sync",
+          series: { seriesId: "s0", rrule: "FREQ=WEEKLY;COUNT=5", timezone: "America/Chicago" },
+          // Above every sequence the series has carried.
+          sequence: 3,
+        }),
+      );
+    });
+
+    it("refuses the whole change when a later meeting would land on busy time", async () => {
+      loadSeriesExternalConflictsMock.mockResolvedValueOnce([
+        { start: "2026-10-27T16:00:00.000Z", end: "2026-10-27T17:00:00.000Z" },
+      ]);
+      const res = await PATCH(req({ scope: "following", scheduledAt: ELEVEN }), params);
+      expect(res.status).toBe(409);
+      expect(await res.json()).toMatchObject({ overridable: false });
+      expect(updateMeetingMock).not.toHaveBeenCalled();
+    });
+
+    it("drops a guest from the rest of the series and tells them so", async () => {
+      await PATCH(req({ scope: "following", attendees: [GUESTS[0]] }), params);
+      expect(sendSeriesEndedMock).toHaveBeenCalledWith(
+        expect.objectContaining({ variant: "removed", emails: ["ben@lp.test"] }),
+      );
+      expect(sendMeetingInvitesMock).toHaveBeenCalledWith(expect.objectContaining({ emails: ["ada@lp.test"] }));
+    });
+
+    it("edits only the one meeting without the scope", async () => {
+      await PATCH(req({ scheduledAt: ELEVEN }), params);
+      expect(loadSeriesRowsMock).not.toHaveBeenCalled();
+      expect(updateMeetingMock).toHaveBeenCalledTimes(1);
     });
   });
 });
