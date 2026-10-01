@@ -174,3 +174,66 @@ describe("the list around the rows", () => {
     expect(screen.getAllByRole("link", { name: /^Join/ })).toHaveLength(3);
   });
 });
+
+describe("deleting a meeting of a repeating series", () => {
+  const SERIES = [0, 1, 2].map((i) =>
+    meeting({
+      id: `w${i}`,
+      title: `Weekly sync ${i + 1}`,
+      scheduled_at: new Date(NOW + (1 + 7 * 24 * i) * 60 * 60_000).toISOString(),
+      series_id: "w0",
+      series_index: i,
+      series_rule: "FREQ=WEEKLY;COUNT=3",
+    }),
+  );
+  let fetchMock: jest.Mock;
+  beforeEach(() => {
+    fetchMock = jest.fn(async () => ({ ok: true, json: async () => ({ ok: true }) }));
+    global.fetch = fetchMock as unknown as typeof fetch;
+  });
+
+  function openDelete(title: string) {
+    fireEvent.click(rowToggle(title));
+    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+  }
+
+  it("says where the meeting sits in its series", () => {
+    show(SERIES);
+    fireEvent.click(rowToggle("Weekly sync 2"));
+    expect(screen.getByText(/repeats weekly · 2 of 3/)).toBeTruthy();
+  });
+
+  it("offers this meeting alone, or it and the rest of the series", async () => {
+    show(SERIES);
+    openDelete("Weekly sync 2");
+    expect(screen.getByRole("alertdialog", { name: "Delete a repeating meeting?" })).toBeTruthy();
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "This and following meetings" }));
+    });
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/meetings/w1",
+      expect.objectContaining({ method: "DELETE", body: JSON.stringify({ scope: "following" }) }),
+    );
+    // The meeting and the ones after it leave the list; the one before stays.
+    expect(screen.queryByText("Weekly sync 2")).toBeNull();
+    expect(screen.queryByText("Weekly sync 3")).toBeNull();
+    expect(screen.getByText("Weekly sync 1")).toBeTruthy();
+  });
+
+  it("deletes just the one meeting when asked", async () => {
+    show(SERIES);
+    openDelete("Weekly sync 2");
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Delete this meeting" }));
+    });
+    expect(fetchMock).toHaveBeenCalledWith("/api/meetings/w1", { method: "DELETE" });
+    expect(screen.getByText("Weekly sync 3")).toBeTruthy();
+  });
+
+  it("offers no series option on a meeting that does not repeat", () => {
+    show([meeting({ id: "a", title: "One-off" })]);
+    openDelete("One-off");
+    expect(screen.queryByRole("button", { name: "This and following meetings" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Delete from FundExecs only" })).toBeTruthy();
+  });
+});

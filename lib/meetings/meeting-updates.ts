@@ -15,6 +15,7 @@ import { buildInviteIcs, meetingInviteUid } from "@/lib/calendar/invite";
 import { buildMeetingCalendarUrl, canInviteToCalendar, inviteEndIso } from "@/lib/meetings/scheduled-invite";
 import { buildSchedulingEmailHtml } from "@/lib/meetings/scheduling-email";
 import { formatSlotFull } from "@/lib/meetings/scheduling";
+import { buildSeriesInviteUrl } from "@/lib/meetings/invite";
 
 export type MeetingUpdateKind = "rescheduled" | "relocated" | "cancelled" | "removed";
 
@@ -342,4 +343,132 @@ export function seriesUpdateContext(
   const seriesId = typeof row?.series_id === "string" ? row.series_id : null;
   const originalStartIso = typeof row?.series_original_start === "string" ? row.series_original_start : null;
   return seriesId && originalStartIso ? { seriesId, originalStartIso } : null;
+}
+
+export interface SeriesEndContext {
+  origin: string;
+  orgId?: string;
+  credentials?: SendEmailCredentials;
+  title: string;
+  senderName: string;
+  emails: string[];
+  /** The series' own zone, which its invitation was written in. */
+  timezone: string;
+  /** The series, as its invitation named it: the first meeting's id. */
+  seriesId: string;
+  hostEmail?: string | null;
+  /** Must exceed the sequence guests hold for the series. */
+  sequence: number;
+  /** Where the series began (its first slot) and how long each meeting runs. */
+  firstStartIso: string;
+  durationMinutes?: number | null;
+  /**
+   * The rule for the meetings that stay, or null when none do and the whole
+   * series is off.
+   */
+  keepRrule: string | null;
+  /** The first meeting that no longer happens. */
+  fromStartIso: string;
+  /** How many meetings were cancelled. */
+  cancelled: number;
+  reason?: string | null;
+}
+
+/**
+ * The email for a series cut short. Exported so the copy is testable without
+ * a mail provider.
+ */
+export function buildSeriesEndEmail(ctx: SeriesEndContext): { subject: string; html: string } {
+  const from = whenIn(ctx.fromStartIso, ctx.timezone);
+  const count = `${ctx.cancelled} meeting${ctx.cancelled === 1 ? "" : "s"}`;
+  if (!ctx.keepRrule) {
+    return {
+      subject: `Cancelled: ${ctx.title} (all meetings)`,
+      html: buildSchedulingEmailHtml({
+        heading: "This repeating meeting was cancelled",
+        intro: `${ctx.senderName} cancelled every remaining meeting in this series. Nothing else is needed from you.`,
+        rows: [
+          ["Meeting", ctx.title],
+          ["Cancelled", `${count}, from ${from}`],
+          ["Reason", ctx.reason ?? ""],
+        ],
+        footnote: "You can delete the series from your own calendar.",
+      }),
+    };
+  }
+  return {
+    subject: `Updated: ${ctx.title} ends early`,
+    html: buildSchedulingEmailHtml({
+      heading: "This repeating meeting ends early",
+      intro: `${ctx.senderName} cancelled this meeting from ${from} onward. The meetings before then are unchanged.`,
+      rows: [
+        ["Meeting", ctx.title],
+        ["Cancelled", `${count}, from ${from}`],
+        ["Reason", ctx.reason ?? ""],
+      ],
+      cta: { label: "Open the series", url: buildSeriesInviteUrl(ctx.origin, ctx.seriesId) },
+      footnote: "Your calendar entry for the series updates to the new last meeting.",
+    }),
+  };
+}
+
+/**
+ * Tell a series' guests that it stops early, or stops altogether.
+ *
+ * Guests hold the series as one repeating entry, so cancelling its tail meeting
+ * by meeting would mean one email per week. Instead the series itself is
+ * revised: the same UID, REQUESTed again with a shorter COUNT, which every
+ * calendar reads as "the series now ends sooner". When nothing is left it is
+ * CANCELled as a whole. Never throws, like every other notice here.
+ */
+export async function sendSeriesEnded(ctx: SeriesEndContext): Promise<{ sent: number; total: number }> {
+  const emails = [...new Set(ctx.emails.map((e) => e.trim().toLowerCase()).filter(Boolean))];
+  if (emails.length === 0) return { sent: 0, total: 0 };
+  const { subject, html } = buildSeriesEndEmail(ctx);
+
+  const origin = (ctx.origin || "").replace(/\/$/, "");
+  const seriesUrl = buildSeriesInviteUrl(origin, ctx.seriesId);
+  let invite: { content: string; method: "REQUEST" | "CANCEL"; filename: string } | undefined;
+  if (canInviteToCalendar({ meetingId: ctx.seriesId, startIso: ctx.firstStartIso, hostEmail: ctx.hostEmail })) {
+    const method = ctx.keepRrule ? "REQUEST" : "CANCEL";
+    try {
+      invite = {
+        content: buildInviteIcs({
+          uid: meetingInviteUid(ctx.seriesId, origin),
+          method,
+          // The series begins where it always did; only its end moves. A CANCEL
+          // names the series by UID alone, with no instance, so all of it goes.
+          recurrence: ctx.keepRrule ? { rrule: ctx.keepRrule, timezone: ctx.timezone || "UTC" } : undefined,
+          title: ctx.title || "Meeting",
+          startIso: ctx.firstStartIso,
+          endIso: inviteEndIso(ctx.firstStartIso, ctx.durationMinutes),
+          description: `Join: ${seriesUrl}`,
+          location: seriesUrl,
+          url: seriesUrl,
+          organizer: { name: ctx.senderName, email: ctx.hostEmail! },
+          attendees: emails.map((email) => ({ name: email.split("@")[0] ?? email, email })),
+          sequence: Math.max(0, Math.floor(ctx.sequence)),
+        }),
+        method,
+        filename: "invite.ics",
+      };
+    } catch (err) {
+      console.error("[meetings/updates] could not build series invite", err);
+    }
+  }
+
+  const results = await Promise.allSettled(
+    emails.map((email) =>
+      sendEmail({
+        orgId: ctx.orgId,
+        credentials: ctx.credentials,
+        to: { name: email.split("@")[0] ?? email, email },
+        subject,
+        htmlBody: html,
+        calendarInvite: invite,
+      }),
+    ),
+  );
+  const sent = results.filter((r) => r.status === "fulfilled" && (r.value as { ok: boolean }).ok).length;
+  return { sent, total: emails.length };
 }

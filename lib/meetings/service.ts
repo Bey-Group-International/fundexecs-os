@@ -706,3 +706,58 @@ export async function markSeriesOccurrence(
     .eq("id", meetingId);
   if (error) throw new Error(error.message);
 }
+
+/** One meeting of a series, as the series-wide edits need it. */
+export interface SeriesRow {
+  id: string;
+  series_index: number | null;
+  series_rule: string | null;
+  series_original_start: string | null;
+  scheduled_at: string | null;
+  duration_minutes: number | null;
+  calendar_sequence: number | null;
+  deleted_at: string | null;
+}
+
+/**
+ * Every meeting of a series, cancelled ones included, in slot order. The
+ * cancelled ones still say where the series began.
+ */
+export async function loadSeriesRows(
+  supabase: ServerClient,
+  orgId: string,
+  seriesId: string,
+): Promise<SeriesRow[]> {
+  const { data, error } = await supabase
+    .from("live_meetings")
+    .select("id, series_index, series_rule, series_original_start, scheduled_at, duration_minutes, calendar_sequence, deleted_at")
+    .eq("organization_id", orgId)
+    .eq("series_id", seriesId)
+    .order("series_index", { ascending: true })
+    .limit(200);
+  if (error) throw new Error(error.message);
+  return (data ?? []) as unknown as SeriesRow[];
+}
+
+/**
+ * Rewrite the rule the remaining meetings of a series carry, and report the
+ * highest calendar sequence among them afterwards. The write bumps each row's
+ * sequence, which is what lets a second cut to the same series outrank the
+ * first in guests' calendars.
+ */
+export async function setSeriesRule(
+  supabase: ServerClient,
+  orgId: string,
+  meetingIds: string[],
+  rule: string,
+): Promise<number> {
+  if (meetingIds.length === 0) return 0;
+  const { data, error } = await supabase
+    .from("live_meetings")
+    .update({ series_rule: rule } as never)
+    .eq("organization_id", orgId)
+    .in("id", meetingIds)
+    .select("calendar_sequence");
+  if (error) throw new Error(error.message);
+  return Math.max(0, ...((data ?? []) as Array<{ calendar_sequence: number | null }>).map((r) => r.calendar_sequence ?? 0));
+}

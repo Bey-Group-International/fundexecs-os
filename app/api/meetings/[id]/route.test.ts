@@ -9,6 +9,9 @@ const sendBookingEmailsMock = jest.fn();
 const loadLiveBookingMock = jest.fn();
 const rescheduleBookingMock = jest.fn();
 const cancelBookingMock = jest.fn();
+const loadSeriesRowsMock = jest.fn();
+const setSeriesRuleMock = jest.fn();
+const sendSeriesEndedMock = jest.fn();
 
 // A stand-in for the real error class: the route branches on `instanceof`, so
 // the mock has to hand back something that actually is one.
@@ -32,6 +35,8 @@ jest.mock("@/lib/supabase/server", () => ({
 jest.mock("@/lib/meetings/service", () => ({
   updateMeeting: (...args: unknown[]) => updateMeetingMock(...args),
   deleteMeetingLocal: (...args: unknown[]) => deleteMeetingLocalMock(...args),
+  loadSeriesRows: (...args: unknown[]) => loadSeriesRowsMock(...args),
+  setSeriesRule: (...args: unknown[]) => setSeriesRuleMock(...args),
   buildMeetingInviteUrl: (origin: string, code: string) => `${origin}/meeting-invite/${code}`,
 }));
 
@@ -43,6 +48,7 @@ jest.mock("@/lib/meetings/invite", () => ({
 jest.mock("@/lib/meetings/meeting-updates", () => ({
   ...jest.requireActual("@/lib/meetings/meeting-updates"),
   sendMeetingUpdates: (...args: unknown[]) => sendMeetingUpdatesMock(...args),
+  sendSeriesEnded: (...args: unknown[]) => sendSeriesEndedMock(...args),
 }));
 
 jest.mock("@/lib/meetings/scheduling-email", () => ({
@@ -168,6 +174,8 @@ beforeEach(() => {
   sendMeetingInvitesMock.mockResolvedValue({ sent: 0, total: 0 });
   sendMeetingUpdatesMock.mockResolvedValue({ sent: 0, total: 0 });
   sendBookingEmailsMock.mockResolvedValue({ sent: 0 });
+  sendSeriesEndedMock.mockResolvedValue({ sent: 0, total: 0 });
+  setSeriesRuleMock.mockResolvedValue(0);
 });
 
 describe("/api/meetings/[id]", () => {
@@ -631,5 +639,99 @@ describe("/api/meetings/[id]", () => {
       "cancelled",
       expect.objectContaining({ emails: ["ben@lp.test"] }),
     );
+  });
+
+  describe("cancelling this and following meetings of a series", () => {
+    // Five weekly meetings; the third is the one opened.
+    const SERIES = [0, 1, 2, 3, 4].map((i) => ({
+      id: i === 2 ? "m1" : `s${i}`,
+      series_index: i,
+      series_rule: "FREQ=WEEKLY;COUNT=5",
+      series_original_start: `2026-10-${String(6 + 7 * i).padStart(2, "0")}T15:00:00.000Z`,
+      scheduled_at: `2026-10-${String(6 + 7 * i).padStart(2, "0")}T15:00:00.000Z`,
+      duration_minutes: 30,
+      calendar_sequence: 1,
+      deleted_at: null as string | null,
+    }));
+    const SERIES_PRIOR = {
+      ...PRIOR_ROW,
+      attendees: GUESTS,
+      title: "Weekly sync",
+      timezone: "America/Chicago",
+      series_id: "s0",
+      series_index: 2,
+      series_original_start: SERIES[2].series_original_start,
+    };
+    function del(body: unknown) {
+      return DELETE(
+        new NextRequest("http://localhost/api/meetings/m1", { method: "DELETE", body: JSON.stringify(body) }),
+        params,
+      );
+    }
+
+    beforeEach(() => {
+      from.mockReturnValue(makeBuilder({ maybeSingle: { data: SERIES_PRIOR } }));
+      loadSeriesRowsMock.mockResolvedValue(SERIES);
+      deleteMeetingLocalMock.mockResolvedValue({ ok: true, calendarSequence: 2 });
+      setSeriesRuleMock.mockResolvedValue(3);
+      sendSeriesEndedMock.mockResolvedValue({ sent: 2, total: 2 });
+    });
+
+    it("cancels this meeting and every later one, and keeps the earlier ones", async () => {
+      const res = await del({ scope: "following" });
+      expect(res.status).toBe(200);
+      expect(await res.json()).toMatchObject({ cancelled: 3, notified: 2 });
+      expect(deleteMeetingLocalMock.mock.calls.map((c) => c[2])).toEqual(["m1", "s3", "s4"]);
+      expect(setSeriesRuleMock).toHaveBeenCalledWith(expect.anything(), "org1", ["s0", "s1"], "FREQ=WEEKLY;COUNT=2");
+    });
+
+    it("tells guests once, about the series, instead of once per meeting", async () => {
+      await del({ scope: "following", reason: "Fund closed" });
+      expect(sendMeetingUpdatesMock).not.toHaveBeenCalled();
+      expect(sendSeriesEndedMock).toHaveBeenCalledTimes(1);
+      expect(sendSeriesEndedMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          seriesId: "s0",
+          emails: ["ada@lp.test", "ben@lp.test"],
+          keepRrule: "FREQ=WEEKLY;COUNT=2",
+          firstStartIso: SERIES[0].series_original_start,
+          fromStartIso: SERIES[2].series_original_start,
+          timezone: "America/Chicago",
+          cancelled: 3,
+          reason: "Fund closed",
+          // Above the sequence the remaining meetings were bumped to.
+          sequence: 4,
+        }),
+      );
+    });
+
+    it("cancels the whole series from its first meeting", async () => {
+      from.mockReturnValue(makeBuilder({ maybeSingle: { data: { ...SERIES_PRIOR, series_index: 0 } } }));
+      const res = await del({ scope: "following" });
+      expect(await res.json()).toMatchObject({ cancelled: 5 });
+      expect(setSeriesRuleMock).not.toHaveBeenCalled();
+      expect(sendSeriesEndedMock).toHaveBeenCalledWith(expect.objectContaining({ keepRrule: null, cancelled: 5 }));
+    });
+
+    it("skips meetings of the series that were already cancelled", async () => {
+      loadSeriesRowsMock.mockResolvedValue(SERIES.map((r) => (r.series_index === 3 ? { ...r, deleted_at: "2026-09-01T00:00:00Z" } : r)));
+      const res = await del({ scope: "following" });
+      expect(await res.json()).toMatchObject({ cancelled: 2 });
+      expect(deleteMeetingLocalMock.mock.calls.map((c) => c[2])).toEqual(["m1", "s4"]);
+    });
+
+    it("cancels only the one meeting without the scope", async () => {
+      await del({});
+      expect(loadSeriesRowsMock).not.toHaveBeenCalled();
+      expect(deleteMeetingLocalMock).toHaveBeenCalledTimes(1);
+      expect(sendSeriesEndedMock).not.toHaveBeenCalled();
+    });
+
+    it("treats the scope as one meeting for a meeting that does not repeat", async () => {
+      from.mockReturnValue(makeBuilder({ maybeSingle: { data: PRIOR_ROW } }));
+      await del({ scope: "following" });
+      expect(loadSeriesRowsMock).not.toHaveBeenCalled();
+      expect(deleteMeetingLocalMock).toHaveBeenCalledTimes(1);
+    });
   });
 });

@@ -209,6 +209,25 @@ describe("the month grid", () => {
     expect(screen.getAllByRole("button", { name: /2 items$/ }).length).toBe(1);
   });
 
+  // A weekly series is a dozen meetings; the mark is what makes them read as
+  // one thing.
+  it("marks a meeting of a repeating series, and only that one", async () => {
+    await show([
+      meeting({
+        id: "a",
+        title: "Weekly sync",
+        scheduled_at: new Date(2026, 8, 16, 9, 0).toISOString(),
+        series_id: "a",
+        series_index: 1,
+        series_rule: "FREQ=WEEKLY;COUNT=6",
+      }),
+      meeting({ id: "b", title: "One-off", scheduled_at: new Date(2026, 8, 17, 9, 0).toISOString() }),
+    ]);
+    const marks = screen.getAllByRole("img", { name: "Repeats weekly · 2 of 6" });
+    expect(marks.length).toBeGreaterThan(0);
+    expect(document.querySelectorAll("[data-repeat]").length).toBe(marks.length);
+  });
+
   it("draws an empty month without falling over", async () => {
     const { container } = await show([]);
     expect(container.textContent).toBeTruthy();

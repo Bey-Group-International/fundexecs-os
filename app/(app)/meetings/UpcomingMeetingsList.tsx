@@ -18,6 +18,7 @@ import type { MeetingEditInitial } from "./MeetingEditScreen";
 import { MeetingShareLink } from "./MeetingShareLink";
 import { useNow, useLivePresence, nextChannelName } from "./hooks";
 import { fetchUpcoming, forgetUpcoming, recentUpcoming } from "./upcoming-cache";
+import { seriesPositionLabel } from "@/lib/meetings/recurrence";
 
 /** How often the list re-reads the clock. */
 const CLOCK_TICK_MS = 15_000;
@@ -179,6 +180,10 @@ export interface UpcomingMeeting {
   locked_at: string | null;
   updated_at: string | null;
   guest_quick_access: boolean | null;
+  /** Set on every meeting of a repeating series. */
+  series_id?: string | null;
+  series_index?: number | null;
+  series_rule?: string | null;
 }
 
 function formatScheduled(iso: string) {
@@ -340,15 +345,37 @@ export function UpcomingMeetingsList({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [channelName]);
 
-  async function deleteMeeting(id: string) {
+  /**
+   * Delete one meeting, or ("following") it and the rest of its series. The
+   * series' later meetings are dropped from the list here too, so the list
+   * does not show them until the realtime refresh catches up.
+   */
+  async function deleteMeeting(id: string, scope: "one" | "following" = "one") {
     setBusy(id);
     setError(null);
-    const res = await fetch(`/api/meetings/${id}`, { method: "DELETE" });
+    const target = meetings.find((m) => m.id === id);
+    const res = await fetch(`/api/meetings/${id}`, {
+      method: "DELETE",
+      ...(scope === "following"
+        ? { headers: { "Content-Type": "application/json" }, body: JSON.stringify({ scope }) }
+        : {}),
+    });
     if (!res.ok) {
       const json = (await res.json().catch(() => ({}))) as { error?: string };
       setError(json.error ?? "Failed to delete meeting");
     } else {
-      setMeetings((prev) => prev.filter((m) => m.id !== id));
+      setMeetings((prev) =>
+        prev.filter(
+          (m) =>
+            m.id !== id &&
+            !(
+              scope === "following" &&
+              target?.series_id &&
+              m.series_id === target.series_id &&
+              (m.series_index ?? -1) >= (target.series_index ?? 0)
+            ),
+        ),
+      );
       // The shared answer still lists it; a copy mounting next must not.
       forgetUpcoming();
     }
@@ -627,6 +654,7 @@ export function UpcomingMeetingsList({
                         `prep: ${prep}`,
                         copilot ? `copilot: ${copilot}` : null,
                         `calendar: ${EXTERNAL_SYNC_STATUS_LABELS[syncStatus]}`,
+                        seriesPositionLabel(meeting.series_rule, meeting.series_index)?.toLowerCase() ?? null,
                         meeting.attendees?.length
                           ? `${meeting.attendees.length} attendee${meeting.attendees.length === 1 ? "" : "s"}`
                           : null,
@@ -691,7 +719,7 @@ export function UpcomingMeetingsList({
 
                     {deleteId === meeting.id ? (
                       <ConfirmBox
-                        title="Delete this meeting?"
+                        title={meeting.series_id ? "Delete a repeating meeting?" : "Delete this meeting?"}
                         body={
                           // Deleting now emails the guests. Say so before the click,
                           // not after — a host should never mail their LPs by accident.
@@ -701,8 +729,19 @@ export function UpcomingMeetingsList({
                               } will be emailed that it's cancelled.`
                             : "This deletes the local FundExecs meeting record only. Connected calendar events are not deleted unless separately approved and synced."
                         }
-                        confirmLabel={busy === meeting.id ? "Deleting..." : "Delete from FundExecs only"}
+                        confirmLabel={
+                          busy === meeting.id
+                            ? "Deleting..."
+                            : meeting.series_id
+                              ? "Delete this meeting"
+                              : "Delete from FundExecs only"
+                        }
                         onConfirm={() => void deleteMeeting(meeting.id)}
+                        // One meeting of a series can go alone, or take the
+                        // rest of the series with it. Guests then get one email
+                        // about the series, not one per meeting.
+                        alsoLabel={meeting.series_id && busy !== meeting.id ? "This and following meetings" : undefined}
+                        onAlso={() => void deleteMeeting(meeting.id, "following")}
                         onCancel={() => setDeleteId(null)}
                       />
                     ) : null}
@@ -885,12 +924,17 @@ function ConfirmBox({
   body,
   confirmLabel,
   onConfirm,
+  alsoLabel,
+  onAlso,
   onCancel,
 }: {
   title: string;
   body: string;
   confirmLabel: string;
   onConfirm: () => void;
+  /** A second, wider way to confirm, such as the rest of a series. */
+  alsoLabel?: string;
+  onAlso?: () => void;
   onCancel: () => void;
 }) {
   return (
@@ -909,6 +953,15 @@ function ConfirmBox({
         >
           {confirmLabel}
         </button>
+        {alsoLabel && onAlso ? (
+          <button
+            type="button"
+            onClick={onAlso}
+            className="fx-btn rounded-lg border border-status-danger/50 px-3 py-1.5 text-xs font-semibold text-[var(--status-danger)] hover:bg-status-danger/10"
+          >
+            {alsoLabel}
+          </button>
+        ) : null}
         <button
           type="button"
           onClick={onCancel}

@@ -83,6 +83,7 @@ import {
   type DragPreview,
 } from "@/lib/meetings/calendar-drag";
 import { MeetingEditScreen, type MeetingEditInitial } from "./MeetingEditScreen";
+import { seriesPositionLabel } from "@/lib/meetings/recurrence";
 import { UpcomingMeetingsList, type UpcomingMeeting } from "./UpcomingMeetingsList";
 import { PastMeetingsList, type PastMeeting } from "./PastMeetingsList";
 import { useNow, useLivePresence, nextChannelName, type RoomPresence } from "./hooks";
@@ -94,7 +95,7 @@ const CLOCK_TICK_MS = 15_000;
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 const CAL_SELECT =
-  "id, room_code, title, status, host_id, created_at, started_at, ended_at, scheduled_at, duration_minutes, timezone, meeting_type, attendees, preparation_status, followup_status, assigned_copilot_agent, is_draft, locked_at, updated_at, description, location, meeting_url, objective, agenda, preparation_requirements, related_record_type, related_record_id, calendar_visibility, reminder_minutes, priority, tags, external_calendar_provider, external_calendar_sync_enabled, external_calendar_sync_status, guest_quick_access";
+  "id, room_code, title, status, host_id, created_at, started_at, ended_at, scheduled_at, duration_minutes, timezone, meeting_type, attendees, preparation_status, followup_status, assigned_copilot_agent, is_draft, locked_at, updated_at, description, location, meeting_url, objective, agenda, preparation_requirements, related_record_type, related_record_id, calendar_visibility, reminder_minutes, priority, tags, external_calendar_provider, external_calendar_sync_enabled, external_calendar_sync_status, guest_quick_access, series_id, series_index, series_rule";
 
 const HOUR_PX = 46; // row height in the week/day time grid
 const DAY_SCROLL_HOUR = 7; // initial scroll position for time views
@@ -1840,6 +1841,20 @@ function BlockChip({ b, onClick }: { b: BlockSpan; onClick: (e: React.MouseEvent
   );
 }
 
+/**
+ * The mark a repeating meeting carries on the calendar, so a weekly series
+ * reads as one thing rather than a dozen unrelated meetings.
+ */
+function RepeatMark({ m }: { m: CalendarMeeting }) {
+  const label = m.series_id ? seriesPositionLabel(m.series_rule, m.series_index) : null;
+  if (!label) return null;
+  return (
+    <span data-repeat="" role="img" aria-label={label} title={label} className="shrink-0 text-[10px] leading-none opacity-70">
+      ↻
+    </span>
+  );
+}
+
 function MonthChip({ m, live, onClick }: { m: CalendarMeeting; live: boolean; onClick: (e: React.MouseEvent) => void }) {
   const meta = typeMeta(m.meeting_type);
   return (
@@ -1854,6 +1869,7 @@ function MonthChip({ m, live, onClick }: { m: CalendarMeeting; live: boolean; on
       {live ? <span className="h-1.5 w-1.5 shrink-0 animate-pulse rounded-full bg-[var(--status-success)]" /> : <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${meta.dot}`} />}
       <span className="shrink-0 tabular-nums opacity-80">{m.scheduled_at ? shortTime(m.scheduled_at) : ""}</span>
       <span className="truncate">{m.title}</span>
+      <RepeatMark m={m} />
     </span>
   );
 }
@@ -2215,6 +2231,7 @@ function TimeGridView({ days, meetings, blocks, externalEvents, busyEvents, laye
                     <div className="flex items-center gap-1">
                       {live ? <span className="h-1.5 w-1.5 shrink-0 animate-pulse rounded-full bg-[var(--status-success)]" /> : null}
                       <span className="truncate text-[11px] font-medium text-[var(--fg-primary)]">{m.title}</span>
+                      <RepeatMark m={m} />
                     </div>
                     <div className="truncate text-[11px] text-[var(--fg-muted)]">
                       {inThisColumn
@@ -2302,6 +2319,7 @@ function AgendaView({ anchor, meetings, now, today, presence, statusOf, onSelect
                     <div className="flex items-center gap-1.5">
                       {live ? <span className="h-1.5 w-1.5 shrink-0 animate-pulse rounded-full bg-[var(--status-success)]" /> : null}
                       <span className="truncate text-sm font-medium text-[var(--fg-primary)]">{m.title}</span>
+                      <RepeatMark m={m} />
                     </div>
                     <div className="truncate text-xs text-[var(--fg-muted)]">
                       {meta.label}
@@ -2473,6 +2491,9 @@ function MeetingDetailHeading({
         {meeting.duration_minutes ? ` · ${meeting.duration_minutes} min` : ""}
         {ts && ts.phase !== "ended" ? ` · ${ts.phase === "in_progress" ? "In progress" : ts.label}` : ""}
       </p>
+      {meeting.series_id && seriesPositionLabel(meeting.series_rule, meeting.series_index) ? (
+        <p className="mt-0.5 text-xs text-[var(--fg-muted)]">↻ {seriesPositionLabel(meeting.series_rule, meeting.series_index)}</p>
+      ) : null}
     </>
   );
 }

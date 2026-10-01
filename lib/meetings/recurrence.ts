@@ -126,3 +126,30 @@ export function pickSeriesOccurrence(
   );
   return (current ?? timed[timed.length - 1]).room_code;
 }
+
+/**
+ * The rule that is left once a series stops before the meeting in slot
+ * `keep` (0-based): the first `keep` meetings stay. Null when nothing does,
+ * which is the whole series being cancelled.
+ */
+export function truncateRule(rule: RepeatRule, keep: number): RepeatRule | null {
+  const count = Math.min(rule.count, Math.floor(keep));
+  return count >= 1 ? { freq: rule.freq, count } : null;
+}
+
+/**
+ * "Repeats weekly · 3 of 12" — where one meeting sits in its series, for the
+ * calendar and the meeting's details. Null for a meeting that does not repeat.
+ */
+export function seriesPositionLabel(
+  rrule: string | null | undefined,
+  index: number | null | undefined,
+): string | null {
+  const rule = ruleFromRrule(rrule);
+  if (!rule) return null;
+  const head = `Repeats ${rule.freq}`;
+  if (typeof index !== "number" || !Number.isInteger(index) || index < 0) return head;
+  // The slot is the meeting's place in the rule as first written, so a series
+  // cut short keeps reading "3 of 3" for its last meeting, not "3 of 12".
+  return `${head} · ${index + 1} of ${Math.max(rule.count, index + 1)}`;
+}

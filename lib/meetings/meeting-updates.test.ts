@@ -6,7 +6,7 @@ jest.mock("@/lib/email", () => ({
   escapeHtml: (v: string) => String(v).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"),
 }));
 
-import { buildMeetingUpdateEmail, diffMeetingTiming, sendMeetingUpdates, seriesUpdateContext, updateInviteMethod, diffMeetingPlace } from "./meeting-updates";
+import { buildMeetingUpdateEmail, buildSeriesEndEmail, diffMeetingTiming, sendMeetingUpdates, sendSeriesEnded, seriesUpdateContext, updateInviteMethod, diffMeetingPlace } from "./meeting-updates";
 
 const CTX = {
   origin: "https://app.test",
@@ -313,5 +313,57 @@ describe("seriesUpdateContext", () => {
     });
     expect(seriesUpdateContext({ series_id: null, series_original_start: null })).toBeNull();
     expect(seriesUpdateContext(null)).toBeNull();
+  });
+});
+
+describe("cancelling the rest of a series", () => {
+  const END = {
+    origin: "https://app.test",
+    title: "Weekly sync",
+    senderName: "nia@fund.test",
+    hostEmail: "nia@fund.test",
+    emails: ["ada@lp.test", "Ada@lp.test", "ben@lp.test"],
+    timezone: "America/Chicago",
+    seriesId: "s1",
+    sequence: 4,
+    firstStartIso: "2026-10-06T15:00:00.000Z",
+    durationMinutes: 30,
+    keepRrule: "FREQ=WEEKLY;COUNT=3",
+    fromStartIso: "2026-10-27T15:00:00.000Z",
+    cancelled: 9,
+  };
+
+  it("revises the series to end sooner, in one email per guest", async () => {
+    const res = await sendSeriesEnded(END);
+    expect(res).toEqual({ sent: 2, total: 2 });
+    const invite = sendEmailMock.mock.calls[0][0].calendarInvite;
+    expect(invite.method).toBe("REQUEST");
+    expect(invite.content).toContain("UID:meeting-s1@app.test");
+    expect(invite.content).toContain("RRULE:FREQ=WEEKLY;COUNT=3");
+    expect(invite.content).toContain("DTSTART;TZID=America/Chicago:20261006T100000");
+    expect(invite.content).toContain("SEQUENCE:4");
+    expect(invite.content).not.toContain("RECURRENCE-ID");
+  });
+
+  it("cancels the whole series when nothing is left", async () => {
+    await sendSeriesEnded({ ...END, keepRrule: null, fromStartIso: END.firstStartIso, cancelled: 12 });
+    const call = sendEmailMock.mock.calls[0][0];
+    expect(call.calendarInvite.method).toBe("CANCEL");
+    expect(call.calendarInvite.content).toContain("UID:meeting-s1@app.test");
+    expect(call.calendarInvite.content).not.toContain("RRULE");
+    expect(call.subject).toBe("Cancelled: Weekly sync (all meetings)");
+  });
+
+  it("says from when, and that the earlier meetings stand", () => {
+    const { subject, html } = buildSeriesEndEmail(END);
+    expect(subject).toBe("Updated: Weekly sync ends early");
+    expect(html).toContain("9 meetings");
+    expect(html).toContain("unchanged");
+    expect(html).toContain("/meeting-invite/series/s1");
+  });
+
+  it("mails nobody when the series has no guests", async () => {
+    expect(await sendSeriesEnded({ ...END, emails: [] })).toEqual({ sent: 0, total: 0 });
+    expect(sendEmailMock).not.toHaveBeenCalled();
   });
 });
