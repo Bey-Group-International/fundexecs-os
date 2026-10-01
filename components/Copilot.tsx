@@ -23,6 +23,13 @@ import {
   type EarnModelKey,
   type EarnModeKey,
 } from "@/lib/earn-conversation";
+import {
+  DEFAULT_EARN_PERSONA,
+  EARN_PERSONA_STORAGE_KEY,
+  SPICY_PERSONA,
+  parseEarnPersona,
+  type EarnPersonaKey,
+} from "@/lib/earn-persona";
 import type { ActiveIntegration } from "@/lib/integrations/active";
 import type { AgentPlan } from "@/lib/claude";
 import type { EarnPlan } from "@/lib/earn-plan";
@@ -176,6 +183,16 @@ export default function Copilot({
     if (typeof window === "undefined") return DEFAULT_EARN_MODE;
     return (localStorage.getItem("earn:mode") as EarnModeKey) ?? DEFAULT_EARN_MODE;
   });
+  // Spicy mode: Earn's Grok-style voice (blunt, witty, live fact-checks).
+  // Opt-in per operator and remembered across reloads.
+  const [persona, setPersona] = useState<EarnPersonaKey>(() => {
+    if (typeof window === "undefined") return DEFAULT_EARN_PERSONA;
+    try {
+      return parseEarnPersona(localStorage.getItem(EARN_PERSONA_STORAGE_KEY));
+    } catch {
+      return DEFAULT_EARN_PERSONA;
+    }
+  });
   const [attachments, setAttachments] = useState<EarnAttachmentInput[]>([]);
   const [voiceUsed, setVoiceUsed] = useState(false);
   const [listening, setListening] = useState(false);
@@ -305,6 +322,9 @@ export default function Copilot({
   // Persist model/mode selections so they survive reload.
   useEffect(() => { localStorage.setItem("earn:model", model); }, [model]);
   useEffect(() => { localStorage.setItem("earn:mode", mode); }, [mode]);
+  useEffect(() => {
+    try { localStorage.setItem(EARN_PERSONA_STORAGE_KEY, persona); } catch { /* storage unavailable */ }
+  }, [persona]);
 
   // Close any open composer popover on an outside click or Escape.
   useEffect(() => {
@@ -626,6 +646,7 @@ export default function Copilot({
           body,
           model,
           prior,
+          persona,
           ...(sessionId ? { session_id: sessionId } : {}),
         }),
         signal: controller.signal,
@@ -1316,6 +1337,13 @@ export default function Copilot({
       hint: m.key === mode ? "current" : undefined,
       run: () => setMode(m.key),
     })),
+    {
+      id: "persona-spicy",
+      group: "Mode",
+      label: persona === "spicy" ? "Turn off Spicy mode" : "Turn on Spicy mode",
+      hint: SPICY_PERSONA.hint,
+      run: () => setPersona((p) => (p === "spicy" ? "standard" : "spicy")),
+    },
     ...SLASH_COMMANDS.map((c) => ({
       id: `slash-${c.command}`,
       group: "Insert",
@@ -1777,6 +1805,22 @@ export default function Copilot({
 
                 {/* Right: model + mode pickers */}
                 <div className="flex items-center gap-1">
+                  {/* Spicy mode toggle */}
+                  <button
+                    type="button"
+                    onClick={() => setPersona((p) => (p === "spicy" ? "standard" : "spicy"))}
+                    aria-pressed={persona === "spicy"}
+                    className={`inline-flex h-7 items-center gap-1 rounded-md border px-2 font-mono text-[11px] uppercase tracking-wider transition ${
+                      persona === "spicy"
+                        ? "border-gold-500/60 bg-gold-500/10 text-gold-300"
+                        : "border-line/50 bg-surface-2/60 text-fg-muted hover:border-gold-500/40 hover:text-fg-primary"
+                    }`}
+                    title={`${SPICY_PERSONA.label} mode — ${SPICY_PERSONA.hint}`}
+                  >
+                    <span aria-hidden>🌶</span>
+                    {SPICY_PERSONA.label}
+                  </button>
+
                   {/* Model picker */}
                   <div className="relative">
                     <button

@@ -12,6 +12,15 @@ import { StreamingContactRedactor, redactContacts } from "@/lib/contact-sanitize
 import { loadMeetingPrepContext, loadMeetingFollowupContext } from "@/lib/meetings/meeting-context";
 import { getActiveMandateRow, mandateContextBlock } from "@/lib/mandates";
 import { documentContextBlock } from "@/lib/earn-documents-context.server";
+import {
+  earnWebSearchEnabled,
+  extractWebSources,
+  formatSourcesBlock,
+  parseEarnPersona,
+  webSearchCount,
+  WEB_SEARCH_CREDIT_COST,
+} from "@/lib/earn-persona";
+import { spendCredits } from "@/lib/credits";
 import { formatOperatorIdentity, loadOperatorIdentity, sanitizeTimeZone } from "@/lib/copilot/identity";
 
 // Conversational replies stream token-by-token; give Claude room beyond the
@@ -45,7 +54,7 @@ export async function POST(request: Request) {
     });
   }
 
-  const { body, model: requestedModel, prior, session_id, meeting_context, start_session, pathname, timezone } =
+  const { body, model: requestedModel, prior, session_id, meeting_context, start_session, pathname, timezone, persona: rawPersona } =
     await request.json().catch(() => ({ body: "" }));
   if (!body || typeof body !== "string") {
     return new Response(JSON.stringify({ error: "Missing 'body'" }), {
@@ -100,9 +109,19 @@ export async function POST(request: Request) {
   // A meeting prep/follow-up briefing is substantive work — keep it off the fast
   // path even though the visible one-liner is short.
   const isSimple = !meetingCtx && wordCount < 15 && !body.match(/draft|memo|analysis|report|summarize|compare/i);
+  // The composer sends its picker key ("earn", "claude", …), not an Anthropic
+  // model id — only a real claude-* id may pass straight through to the API.
+  const requestedModelId =
+    typeof requestedModel === "string" && requestedModel.startsWith("claude-") ? requestedModel : undefined;
   const model = isSimple
     ? "claude-haiku-4-5-20251001"
-    : (requestedModel ?? process.env.CLAUDE_MODEL ?? "claude-sonnet-4-6");
+    : (requestedModelId ?? process.env.CLAUDE_MODEL ?? "claude-sonnet-4-6");
+
+  // --- Spicy persona (Grok-style voice) + live web search ---
+  // Live search rides with Spicy mode and only when the deployment opts in
+  // (EARN_WEB_SEARCH); the model decides per turn whether to search.
+  const persona = parseEarnPersona(rawPersona);
+  const webSearch = persona === "spicy" && earnWebSearchEnabled();
 
   // --- Web search detection ---
   const needsWebSearch =
@@ -220,7 +239,7 @@ export async function POST(request: Request) {
       }
     }
 
-    if (needsWebSearch) {
+    if (needsWebSearch && !webSearch) {
       liveContext += "\n[Web search recommended for this query — live data not fetched]\n";
     }
 
@@ -388,6 +407,8 @@ export async function POST(request: Request) {
     priorArtifacts,
     identity: identityBlock || undefined,
     model,
+    persona,
+    webSearch,
   });
 
   // No API key — stream the deterministic fallback as a single chunk (still
@@ -419,11 +440,27 @@ export async function POST(request: Request) {
             controller.enqueue(encoder.encode(safe));
           }
         });
-        await stream.finalMessage();
+        const finalMessage = await stream.finalMessage();
         const tail = redactor.flush();
         if (tail) {
           reply += tail;
           controller.enqueue(encoder.encode(tail));
+        }
+        if (webSearch) {
+          const sources = formatSourcesBlock(extractWebSources(finalMessage));
+          if (sources) {
+            reply += sources;
+            controller.enqueue(encoder.encode(sources));
+          }
+          // Searches bill per use, so they're metered after the fact on top of
+          // the flat pre-flight chat cost (the count is only known once the
+          // model finishes). Best-effort: the reply has already been served.
+          const searches = webSearchCount(finalMessage);
+          if (searches > 0) {
+            void spendCredits(orgId, searches * WEB_SEARCH_CREDIT_COST, "chat_web_search").catch((err) => {
+              console.error("[chat] web search credit debit failed:", err);
+            });
+          }
         }
         // Verified contacts: if the reply named a real company/person, look up
         // real, Apollo-sourced phone/email and stream a contact block into the
@@ -457,6 +494,7 @@ export async function POST(request: Request) {
       "Cache-Control": "no-store",
       "X-Accel-Buffering": "no",
       "X-Earn-Model": model,
+      "X-Earn-Persona": persona,
       // The dock adopts this as its conversation's session id.
       ...(openedSessionId ? { "X-Earn-Session": openedSessionId } : {}),
     },

@@ -6,6 +6,7 @@
 // so the app — and CI/preview builds — keep working.
 import Anthropic from "@anthropic-ai/sdk";
 import { anthropicClient } from "@/lib/anthropic-client";
+import { spicyPersonaBlock, webSearchTool, type EarnPersonaKey } from "@/lib/earn-persona";
 import type { AgentKey, Hub, AssetType } from "@/lib/supabase/database.types";
 import { AGENTS } from "@/lib/agents";
 import { classifyArtifact, frameworkPromptFor } from "@/lib/pe-frameworks";
@@ -216,6 +217,10 @@ export function earnChatStream(args: {
    *  than part of liveContext: the person asking is not workspace state. */
   identity?: string;
   model?: string;
+  /** "spicy" layers the Grok-style voice over the base persona. */
+  persona?: EarnPersonaKey;
+  /** Give the model the web_search server tool (caller checks the env flag). */
+  webSearch?: boolean;
 }) {
   const anthropic = client();
   if (!anthropic) return null;
@@ -235,6 +240,9 @@ export function earnChatStream(args: {
         : { role: (turn.role === "assistant" ? "assistant" : "user") as "user" | "assistant", content: cleanContent(turn.content) }
     );
   let systemContent = earnChatSystem(args.modelLabel);
+  if (args.persona === "spicy") {
+    systemContent += `\n\n${spicyPersonaBlock({ webSearch: Boolean(args.webSearch) })}`;
+  }
   // Identity comes first: every other block is read in reference to who is
   // asking and what day it is for them.
   if (args.identity) {
@@ -257,6 +265,7 @@ export function earnChatStream(args: {
     // but only on models that accept it (Haiku 4.5 400s on output_config.effort,
     // which the simple-query router selects — that 400 surfaced as the chat error).
     ...effortConfig(streamModel, "low"),
+    ...(args.webSearch ? { tools: [webSearchTool(streamModel)] } : {}),
     messages: [...history, { role: "user", content: args.body }],
   });
 }
