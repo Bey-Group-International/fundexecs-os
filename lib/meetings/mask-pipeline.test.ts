@@ -142,10 +142,49 @@ describe("pipelineRoute, per browser shape", () => {
     expect(pipelineRoute(without({ trackProcessor: false, videoTrackGenerator: false }), none).route).toBe("main");
   });
 
+  /**
+   * A worker that can paint but has neither insertable-streams constructor --
+   * Chrome's shape, where the pair lives on the main thread. Rendering still has
+   * to be present HERE, because `transfer-streams` moves only the constructors
+   * to the main thread; the frames are read, drawn and written back in the
+   * worker.
+   */
+  const rendersOnly: PipelineSupport = {
+    ...none,
+    offscreenCanvas: true,
+    videoFrame: true,
+  };
+
   it("falls back to Chrome's route when the worker cannot drive the standard one", () => {
-    // A browser with both main-thread constructors and a worker lacking
-    // VideoTrackGenerator should still get the fast path, by the other protocol.
-    expect(pipelineRoute(chromeMain, none).protocol).toBe("transfer-streams");
+    // Both main-thread constructors, and a worker that can paint but has no
+    // VideoTrackGenerator: the fast path is still available, by the other
+    // protocol.
+    expect(pipelineRoute(chromeMain, rendersOnly).protocol).toBe("transfer-streams");
+  });
+
+  it("refuses the Chrome route when the WORKER cannot paint", () => {
+    // The main scope's OffscreenCanvas is not evidence about the worker, and the
+    // worker is where the compositing happens under both protocols. Asking the
+    // wrong thread whether it can paint gets answered as a black tile.
+    const cannotPaint = { ...rendersOnly, offscreenCanvas: false };
+    const route = pipelineRoute(chromeMain, cannotPaint);
+    expect(route.route).toBe("main");
+    expect(route.reason).toBe("no-offscreen-canvas");
+  });
+
+  it("refuses when the worker has no VideoFrame", () => {
+    const noFrames = { ...rendersOnly, videoFrame: false };
+    const route = pipelineRoute(chromeMain, noFrames);
+    expect(route.route).toBe("main");
+    expect(route.reason).toBe("no-video-frame");
+  });
+
+  it("refuses the standard route too when the worker cannot paint", () => {
+    // Same rule, other protocol: holding the whole pipeline does not help a
+    // worker that cannot composite.
+    const pairNoCanvas = { ...standardWorker, offscreenCanvas: false };
+    expect(pipelineRoute(standardMain, pairNoCanvas).route).toBe("main");
+    expect(pipelineRoute(standardMain, pairNoCanvas).reason).toBe("no-offscreen-canvas");
   });
 
   it("names no-worker before anything else", () => {
@@ -155,17 +194,18 @@ describe("pipelineRoute, per browser shape", () => {
     expect(pipelineRoute({ ...all, worker: false }, standardWorker).reason).toBe("no-worker");
   });
 
-  it("names a missing OffscreenCanvas when neither scope has one", () => {
-    const mainNoCanvas = { ...standardMain, offscreenCanvas: false };
+  it("names a missing OffscreenCanvas from the worker's snapshot, not the main scope's", () => {
+    // A main thread that can paint does not rescue a worker that cannot, and the
+    // reason reported should say which capability is actually absent.
     const workerNoCanvas = { ...standardWorker, offscreenCanvas: false };
-    expect(pipelineRoute(mainNoCanvas, workerNoCanvas).reason).toBe("no-offscreen-canvas");
+    expect(pipelineRoute(all, workerNoCanvas).reason).toBe("no-offscreen-canvas");
   });
 
   it("never returns a protocol on the main route", () => {
     const refusals: Array<[PipelineSupport, PipelineSupport | null]> = [
       [none, null],
       [standardMain, null],
-      [standardMain, none],
+      [standardMain, rendersOnly],
       [{ ...all, worker: false }, standardWorker],
     ];
     for (const [main, worker] of refusals) {

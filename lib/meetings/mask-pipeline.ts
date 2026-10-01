@@ -107,6 +107,7 @@ export interface PipelineRoute {
     | "supported"
     | "no-worker"
     | "no-offscreen-canvas"
+    | "no-video-frame"
     | "worker-not-probed"
     | "no-insertable-streams";
 }
@@ -122,19 +123,16 @@ export function mainScopeDrivesPipeline(main: PipelineSupport): boolean {
 }
 
 /**
- * Whether the worker can drive the standardised pair itself.
+ * Whether the worker holds the standardised insertable-streams pair.
  *
- * `VideoFrame` and `OffscreenCanvas` are checked in the WORKER's snapshot rather
- * than the main scope's, because the worker is where they will be used, and a
- * browser is free to differ between the two.
+ * The PAIR only. Rendering capability is deliberately not folded in here,
+ * because `OffscreenCanvas` and `VideoFrame` are needed in the worker under
+ * BOTH protocols -- the worker is where the compositing happens either way --
+ * so `pipelineRoute` checks them once, before it picks between the two, rather
+ * than once per protocol.
  */
 export function workerScopeDrivesPipeline(worker: PipelineSupport): boolean {
-  return (
-    worker.trackProcessor &&
-    worker.videoTrackGenerator &&
-    worker.videoFrame &&
-    worker.offscreenCanvas
-  );
+  return worker.trackProcessor && worker.videoTrackGenerator;
 }
 
 /**
@@ -161,21 +159,34 @@ export function pipelineRoute(
   if (!main.worker) return stay("no-worker");
 
   if (worker === null) {
-    // Chrome can start without waiting: it owns both halves on this thread, so
-    // there is nothing to ask the worker about except that it exists.
+    // Chrome can start without waiting, because it owns both insertable-streams
+    // halves on this thread. The rendering check here is explicitly a PROXY: the
+    // compositing will happen in a worker that has not reported yet, so the main
+    // scope's answer is the only one available. It is a heuristic to let the
+    // common browser start a beat sooner, and the first-frame deadline is what
+    // catches it being wrong.
     if (mainScopeDrivesPipeline(main) && main.offscreenCanvas && main.videoFrame) {
       return { route: "worker", protocol: "transfer-streams", reason: "supported" };
     }
     return stay("worker-not-probed");
   }
 
+  // The worker has reported, so stop guessing. Rendering is checked on ITS
+  // snapshot and before either protocol is chosen, because the worker composites
+  // under both: `transfer-track` builds the whole pipeline there, and
+  // `transfer-streams` only moves the CONSTRUCTORS to the main thread -- the
+  // frames are still read, drawn and written back inside the worker. Authorising
+  // that route on the main scope's `OffscreenCanvas` would be asking the wrong
+  // thread whether it can paint, and the answer arrives as a black tile.
+  if (!worker.offscreenCanvas) return stay("no-offscreen-canvas");
+  if (!worker.videoFrame) return stay("no-video-frame");
+
   if (workerScopeDrivesPipeline(worker)) {
     return { route: "worker", protocol: "transfer-track", reason: "supported" };
   }
-  if (mainScopeDrivesPipeline(main) && main.offscreenCanvas && main.videoFrame) {
+  if (mainScopeDrivesPipeline(main)) {
     return { route: "worker", protocol: "transfer-streams", reason: "supported" };
   }
-  if (!main.offscreenCanvas && !worker.offscreenCanvas) return stay("no-offscreen-canvas");
   return stay("no-insertable-streams");
 }
 
