@@ -16,9 +16,15 @@
 # `supabase link` with {"message":"Unauthorized"}. Nothing blocks a merge on a
 # red DB Migrate run, so migrations quietly stopped reaching production while
 # the merges kept looking green. The steps below exist to make that state
-# loud: the link step names the credential when it fails, and a drift check
-# afterwards compares repo migrations against the remote history and fails
-# with the exact list of versions that did not make it.
+# loud: the link step names the credential when it fails, and the drift check
+# afterwards compares the repository against the remote history IN BOTH
+# DIRECTIONS, naming the exact versions involved -- migrations that did not
+# apply, versions recorded with no file here, and migrations this push added
+# that production had already recorded (which means they were applied out of
+# band and `db push` skipped the committed file).
+#
+# The one legal path for a schema change, and how to recover when one has
+# already been applied by hand, are in supabase/migrations/README.md.
 #
 # `supabase db push --include-all` applies every local migration whose version is
 # not already in the remote history — including files whose timestamps sort before
@@ -53,6 +59,11 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
+          # Enough history to see which migrations THIS push added, which is
+          # what the out-of-band check below compares against the pre-push
+          # remote history. A squash merge is one commit, so 50 is generous;
+          # `fetch-depth: 0` would clone 220MB of history to read one diff.
+          fetch-depth: 50
           # Keep this job's token out of .git/config. checkout persists it there
           # by default, where every later step can read it (zizmor: artipacked).
           # Nothing here pushes, so it is dead weight with a blast radius.
@@ -101,17 +112,70 @@ jobs:
           SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
           SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
 
+      # Read the remote history BEFORE pushing, because afterwards it is too
+      # late to tell the two cases apart.
+      #
+      # After `db push` runs, a version being recorded remotely means either
+      # "this push applied it" or "it was already there" -- and the second case
+      # is the one that matters. A migration whose version was ALREADY recorded
+      # is skipped by `db push`: the committed file never executes, and whatever
+      # was actually run against production (by hand, or by `apply_migration`
+      # against the live project, both of which stamp a version immediately) is
+      # never compared with it. That is the only one of the three out-of-band
+      # shapes that leaves every check green, and this snapshot is what makes it
+      # visible. The other two are caught before merging, by migration-check.yml.
+      #
+      # Best-effort: if the history cannot be read the push step below will fail
+      # on the same credentials and say so properly, so this does not exit 1 and
+      # pre-empt a clearer error.
+      - name: Record the remote history before pushing
+        run: |
+          if supabase migration list --linked > /tmp/pre-push-list.txt 2>&1; then
+            # Field 2 is the REMOTE column. Depending only on `|` as the column
+            # separator is deliberate: the CLI has already changed how it
+            # decorates these cells once -- it started wrapping every value in
+            # backticks, which silently broke a stricter parse here and reported
+            # all 237 migrations missing.
+            sed -e 's/\x1b\[[0-9;]*m//g' -e 's/`//g' /tmp/pre-push-list.txt \
+              | awk -F'|' 'NF>=2 { v=$2; gsub(/[^0-9]/,"",v); if (v != "") print v }' \
+              | sort -u > /tmp/pre-push-versions.txt
+            echo "Remote history before this push: $(wc -l < /tmp/pre-push-versions.txt) version(s)."
+          else
+            echo "::warning title=Could not read the remote history before pushing::The out-of-band check below will be skipped. The push step should explain why."
+            cat /tmp/pre-push-list.txt
+            : > /tmp/pre-push-versions.txt
+          fi
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+
       - name: Push migrations to production
         run: supabase db push --include-all
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
           SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
 
-      # Prove the push actually landed. `db push` exiting 0 is not by itself
-      # evidence that every repo migration is now recorded remotely — an
-      # out-of-band apply can record a different version, and a partial run can
-      # stop early. This compares the two lists and names what is missing, so
-      # drift is a specific failure rather than something noticed a month later.
+      # Prove the push actually landed, in BOTH directions, and say which of the
+      # several possible problems it is.
+      #
+      # `db push` exiting 0 is not evidence that the repository and production
+      # agree. Three distinct things can be wrong, they need different fixes,
+      # and lumping them together is how the last one went unnoticed:
+      #
+      #   (a) a repo migration is not recorded remotely -- it did not apply.
+      #   (b) a version is recorded remotely with no file in this directory --
+      #       bookkeeping for something this repo cannot explain. `db push`
+      #       normally refuses outright in this state ("Remote migration
+      #       versions not found in local migrations directory"), blocking
+      #       EVERY later migration; July 2026 lost a month to it, see
+      #       docs/removed-migrations/README.md.
+      #   (c) a migration this push ADDED was already recorded before the push
+      #       -- so it was applied out of band and `db push` skipped the file.
+      #       The schema may well be right, but nothing has compared what ran
+      #       against what was committed, and nothing ever will.
+      #
+      # (a) and (b) are checked against the post-push history. (c) needs the
+      # snapshot taken before the push, and is the reason that step exists.
       - name: Verify no migration drift
         run: |
           supabase migration list --linked > /tmp/migration-list.txt 2>&1 || {
@@ -122,50 +186,93 @@ jobs:
 
           # Normalize before parsing. The CLI decorates this table and has
           # changed how: it now wraps every cell in backticks (`20260825170000`
-          # rather than 20260825170000), which silently broke the match below
-          # and reported all 237 migrations missing. Stripping the decoration
-          # leaves the parse depending only on the column layout, which is the
-          # part that is actually load-bearing.
-          sed -e 's/\x1b\[[0-9;]*m//g' -e 's/`//g' /tmp/migration-list.txt > /tmp/migration-list-clean.txt
+          # rather than 20260825170000), which silently broke an earlier parse
+          # and reported all 237 migrations missing. Splitting on `|` and
+          # keeping only digits leaves this depending on the column layout
+          # alone, which is the part that is actually load-bearing.
+          sed -e 's/\x1b\[[0-9;]*m//g' -e 's/`//g' /tmp/migration-list.txt > /tmp/list-clean.txt
+          column() {
+            awk -F'|' -v col="$1" 'NF>=2 { v=$col; gsub(/[^0-9]/,"",v); if (v != "") print v }' \
+              /tmp/list-clean.txt | sort -u
+          }
+          column 2 > /tmp/remote-versions.txt
 
-          # Collect first, annotate later. A broken parse makes every migration
-          # look missing, and emitting the per-migration error inside this loop
-          # meant a parse bug shouted 237 wrong diagnoses before the guard below
-          # got to say what had actually happened.
-          missing=0
-          : > /tmp/missing-migrations.txt
-          for file in supabase/migrations/*.sql; do
-            version="$(basename "$file" | cut -d_ -f1)"
-            # `migration list` prints local and remote columns; a version present
-            # remotely appears in the remote column of its row.
-            if ! grep -qE "^[[:space:]]*${version}[[:space:]]*\|[[:space:]]*${version}[[:space:]]*\|" /tmp/migration-list-clean.txt; then
-              missing=$((missing + 1))
-              echo "${version} ($(basename "$file"))" >> /tmp/missing-migrations.txt
-            fi
-          done
+          ls supabase/migrations/*.sql | xargs -n1 basename | cut -d_ -f1 \
+            | sort -u > /tmp/repo-versions.txt
 
-          total="$(ls supabase/migrations/*.sql | wc -l)"
+          total="$(wc -l < /tmp/repo-versions.txt | tr -d ' ')"
+          remote_total="$(wc -l < /tmp/remote-versions.txt | tr -d ' ')"
 
-          # Every single migration reporting missing is far more likely to mean
-          # this parse no longer matches the CLI's output than that production
-          # is empty. Say which of the two it is: a wrong diagnosis here sends
+          # A parse that sees nothing remotely is far more likely to be a parse
+          # that no longer matches the CLI than a production database with no
+          # migrations. Say which of the two it is: a wrong diagnosis here sends
           # someone hunting a schema problem that does not exist.
-          if [ "$missing" -eq "$total" ]; then
-            echo "::error title=Drift check could not parse the migration list::Expected 'local | remote | time' rows; got the output below. Fix this parse rather than the schema."
+          if [ "$remote_total" -eq 0 ] && [ "$total" -gt 0 ]; then
+            echo "::error title=Drift check could not parse the migration list::Expected 'local | remote | time' rows and found no remote versions at all. Fix this parse rather than the schema."
             cat /tmp/migration-list.txt
             exit 1
           fi
 
-          if [ "$missing" -gt 0 ]; then
-            while IFS= read -r entry; do
-              echo "::error title=Migration not applied::${entry} is in the repo but not in the production history."
-            done < /tmp/missing-migrations.txt
-            echo "::error::${missing} of ${total} migration(s) are missing from production. The schema does not match the merged code."
+          failed=0
+
+          # (a) In the repo, not in production.
+          comm -23 /tmp/repo-versions.txt /tmp/remote-versions.txt > /tmp/not-applied.txt
+          if [ -s /tmp/not-applied.txt ]; then
+            while IFS= read -r v; do
+              f="$(ls supabase/migrations/${v}_*.sql 2>/dev/null | head -1)"
+              echo "::error title=Migration not applied::${v} ($(basename "${f:-unknown}")) is in the repo but not in the production history."
+            done < /tmp/not-applied.txt
+            echo "::error::$(wc -l < /tmp/not-applied.txt | tr -d ' ') of ${total} migration(s) are missing from production. The schema does not match the merged code."
+            failed=1
+          fi
+
+          # (b) In production, not in the repo.
+          comm -13 /tmp/repo-versions.txt /tmp/remote-versions.txt > /tmp/orphan-versions.txt
+          if [ -s /tmp/orphan-versions.txt ]; then
+            while IFS= read -r v; do
+              echo "::error title=Remote version has no migration file::${v} is recorded in production but no file in supabase/migrations matches it. Until this is resolved, 'supabase db push' refuses to apply ANY migration."
+            done < /tmp/orphan-versions.txt
+            echo "::error::Resolve each by restoring its file, or by clearing the row with 'supabase migration repair --status reverted <version>' after copying its SQL into docs/removed-migrations/."
+            failed=1
+          fi
+
+          # (c) Added by this push, but already recorded before it.
+          base="$GITHUB_EVENT_BEFORE"
+          if [ -z "$base" ] || [ "$base" = "0000000000000000000000000000000000000000" ] \
+             || ! git cat-file -e "${base}^{commit}" 2>/dev/null; then
+            base="$(git rev-parse --verify HEAD~1 2>/dev/null || true)"
+          fi
+
+          if [ ! -s /tmp/pre-push-versions.txt ]; then
+            echo "::notice title=Out-of-band check skipped::The remote history before this push was not readable."
+          elif [ -z "$base" ]; then
+            echo "::notice title=Out-of-band check skipped::Could not resolve the commit before this push, so the set of newly added migrations is unknown."
+          else
+            git diff --name-status --diff-filter=A --no-renames "$base" HEAD \
+              -- supabase/migrations/ \
+              | awk '{ print $2 }' | xargs -r -n1 basename | cut -d_ -f1 \
+              | sort -u > /tmp/added-versions.txt
+            comm -12 /tmp/added-versions.txt /tmp/pre-push-versions.txt > /tmp/out-of-band.txt
+
+            if [ -s /tmp/out-of-band.txt ]; then
+              while IFS= read -r v; do
+                f="$(ls supabase/migrations/${v}_*.sql 2>/dev/null | head -1)"
+                echo "::error title=Migration was applied out of band::${v} ($(basename "${f:-unknown}")) was added to the repo by this push, but production had already recorded it. 'db push' therefore SKIPPED the file -- what ran against production was whatever was applied by hand, which nothing has compared with the committed SQL."
+              done < /tmp/out-of-band.txt
+              echo "::error::Confirm production matches the file, then either accept it or re-apply properly: 'supabase migration repair --status reverted <version>' and let the next run of this workflow apply the file (which needs the file to be idempotent). See supabase/migrations/README.md."
+              failed=1
+            fi
+          fi
+
+          if [ "$failed" -ne 0 ]; then
             echo "--- supabase migration list --linked ---"
             cat /tmp/migration-list.txt
             exit 1
           fi
+
           echo "All ${total} repo migrations are recorded in production."
+          echo "No remote version is unaccounted for, and nothing in this push was applied out of band."
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
           SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+          GITHUB_EVENT_BEFORE: ${{ github.event.before }}
