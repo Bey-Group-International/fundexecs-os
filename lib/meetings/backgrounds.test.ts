@@ -36,6 +36,8 @@ import {
   templateById,
   validateBackgroundUpload,
   dilateCeiling,
+  bridgeCoverageGaps,
+  maskBridgePx,
   sharpenEdge,
   OUTPUT_FPS,
   frameIntervalMs,
@@ -378,6 +380,44 @@ describe("the processor uses the agreement blend", () => {
   });
 });
 
+describe("the processor bridges before it builds the growth ceiling", () => {
+  const processorSource = readFileSync(join(__dirname, "background-processor.ts"), "utf8");
+
+  /**
+   * The ordering IS the fix, which is why it is pinned here rather than left to
+   * a comment. `dilateCeiling` is built from the coverage buffer and forbids
+   * growth anywhere the model gave nothing — so if the gap between two people is
+   * still open when the ceiling is taken, the ceiling records it as forbidden and
+   * the pair can never become one shape. Bridging afterwards would leave growth
+   * working outward from two separate silhouettes.
+   */
+  it("calls bridgeCoverageGaps before dilateCeiling", () => {
+    const bridge = processorSource.indexOf("bridgeCoverageGaps(target");
+    const ceiling = processorSource.indexOf("dilateCeiling(this.dilateLimit");
+    expect(bridge).toBeGreaterThan(-1);
+    expect(ceiling).toBeGreaterThan(-1);
+    expect(bridge).toBeLessThan(ceiling);
+  });
+
+  it("bridges on the category path too, where the gap is hardest-edged", () => {
+    // The call must not sit inside the `graded` branch: a category mask is a bare
+    // yes/no with no uncertainty band at all, so a gap there is as abrupt as a
+    // gap gets and needs this more, not less.
+    const bridge = processorSource.indexOf("bridgeCoverageGaps(target");
+    const gradedBranch = processorSource.indexOf("if (graded) {");
+    expect(bridge).toBeLessThan(gradedBranch);
+  });
+
+  it("keeps the reach in step with the grid it is measured in", () => {
+    // A stale reach after a device switch or a phone rotation would be measured
+    // in the old grid's pixels, so it is recomputed wherever the radii are.
+    expect(processorSource).toMatch(/this\.bridgeReach = maskBridgePx\(frameWidth, this\.grid\)/);
+    const radii = processorSource.match(/this\.dilateRadii = maskDilatePx\(/g) ?? [];
+    const reach = processorSource.match(/this\.bridgeReach = maskBridgePx\(/g) ?? [];
+    expect(reach.length).toBe(radii.length);
+  });
+});
+
 describe("blendCoverage", () => {
   const person = (n: number) => new Uint8ClampedArray(n).fill(255);
   const background = (n: number) => new Uint8ClampedArray(n).fill(0);
@@ -656,6 +696,183 @@ describe("dilateCoverage", () => {
 // fabric of a headwrap from the wall behind a shoulder — both are only "not yet
 // covered" — and the wall is the commoner neighbour. The model already knows the
 // difference, and the confidence ramp already carries it.
+describe("bridgeCoverageGaps", () => {
+  /** A grid of `width` x `height`, row-major, from rows of 0-255 values. */
+  const gridOf = (rows: number[][]) => new Uint8ClampedArray(rows.flat());
+  const rowsOf = (g: Uint8ClampedArray, width: number) => {
+    const out: number[][] = [];
+    for (let i = 0; i < g.length; i += width) out.push([...g.slice(i, i + width)]);
+    return out;
+  };
+
+  it("closes the sliver between two people sitting close", () => {
+    // Two solid shoulders, three cells of confident room between them. This is
+    // the case the whole rule exists for: the model is right that the gap is
+    // background, and the pair still has to composite as one shape.
+    const g = gridOf([[255, 255, 0, 0, 0, 255, 255]]);
+    bridgeCoverageGaps(g, 7, 1, 4);
+    expect(rowsOf(g, 7)[0]).toEqual([255, 255, 255, 255, 255, 255, 255]);
+  });
+
+  it("leaves a gap wider than the bound alone", () => {
+    // Two people sitting apart, not close. Nothing should join them, and the
+    // failure mode is visible rather than silent: the gap looks as it does today.
+    const g = gridOf([[255, 0, 0, 0, 0, 0, 255]]);
+    bridgeCoverageGaps(g, 7, 1, 3);
+    expect(rowsOf(g, 7)[0]).toEqual([255, 0, 0, 0, 0, 0, 255]);
+  });
+
+  it("refuses a run with only one flank, which is the room beside them", () => {
+    // Leading and trailing runs have a person on one side and the edge of the
+    // frame on the other. Filling those would paint the wall as a person.
+    const g = gridOf([[0, 0, 255, 255, 0, 0]]);
+    bridgeCoverageGaps(g, 6, 1, 5);
+    expect(rowsOf(g, 6)[0]).toEqual([0, 0, 255, 255, 0, 0]);
+  });
+
+  it("will not let a weak flank authorise a fill", () => {
+    // 120 is the uncertainty band -- hair, a headwrap, the edge of a face. It is
+    // not evidence of a torso, so it cannot anchor a gap.
+    const g = gridOf([[120, 0, 0, 120]]);
+    bridgeCoverageGaps(g, 4, 1, 4);
+    expect(rowsOf(g, 4)[0]).toEqual([120, 0, 0, 120]);
+  });
+
+  it("fills to the lower of the two flanks, never beyond the weaker evidence", () => {
+    const g = gridOf([[255, 0, 0, 210]]);
+    bridgeCoverageGaps(g, 4, 1, 4);
+    expect(rowsOf(g, 4)[0]).toEqual([255, 210, 210, 210]);
+  });
+
+  it("never lowers a cell, so it cannot take a bite out of either person", () => {
+    // The join is 210, but the middle cell already has more coverage than that
+    // from the model. Monotone means the model's value wins.
+    const g = gridOf([[255, 240, 0, 210]]);
+    bridgeCoverageGaps(g, 4, 1, 4);
+    expect(rowsOf(g, 4)[0]).toEqual([255, 240, 210, 210]);
+  });
+
+  it("does not let one row's anchors authorise a fill in another", () => {
+    // Row 0 has two shoulders; row 1 is empty room below them. If the scan
+    // carried its anchor across the row boundary, row 1 would fill from row 0's
+    // last solid cell and the desk would join the pair.
+    const g = gridOf([
+      [255, 0, 255],
+      [0, 0, 0],
+    ]);
+    bridgeCoverageGaps(g, 3, 2, 3);
+    expect(rowsOf(g, 3)).toEqual([
+      [255, 255, 255],
+      [0, 0, 0],
+    ]);
+  });
+
+  it("closes each row of a diagonal gap on its own", () => {
+    // Two people at different heights. There is no horizontal row in which the
+    // gap is not a horizontal run, which is why one axis answers the case.
+    const g = gridOf([
+      [255, 0, 0, 255, 0],
+      [0, 255, 0, 0, 255],
+    ]);
+    bridgeCoverageGaps(g, 5, 2, 3);
+    expect(rowsOf(g, 5)).toEqual([
+      [255, 255, 255, 255, 0],
+      [0, 255, 255, 255, 255],
+    ]);
+  });
+
+  it("is a no-op with no reach, and returns the buffer it was given", () => {
+    const g = gridOf([[255, 0, 255]]);
+    const same = bridgeCoverageGaps(g, 3, 1, 0);
+    expect(same).toBe(g);
+    expect(rowsOf(g, 3)[0]).toEqual([255, 0, 255]);
+  });
+
+  it("survives a grid too narrow to contain a gap", () => {
+    const g = gridOf([[255, 255]]);
+    expect(() => bridgeCoverageGaps(g, 2, 1, 4)).not.toThrow();
+    expect(rowsOf(g, 2)[0]).toEqual([255, 255]);
+  });
+
+  it("does not spend the budget on a body's own feathered edge", () => {
+    // The distinction the whole rule turns on, and the one the first draft got
+    // wrong. Each body arrives with a soft edge, so the run between two solid
+    // anchors is wider than the true gap. Here: 10 cells between anchors, of
+    // which only 2 are actual room. With a reach of 4 it must close, because the
+    // faint cells were already part of a person.
+    const g = gridOf([[255, 180, 120, 60, 0, 0, 60, 120, 180, 255]]);
+    bridgeCoverageGaps(g, 10, 1, 4);
+    expect(rowsOf(g, 10)[0].filter((v) => v === 0)).toHaveLength(0);
+  });
+
+  it("still refuses when the invented core itself is too wide", () => {
+    // Same soft edges, but now 6 cells of true room and a reach of 4. The free
+    // pass for uncertainty does not extend to the room between them.
+    const g = gridOf([[255, 180, 0, 0, 0, 0, 0, 0, 180, 255]]);
+    bridgeCoverageGaps(g, 10, 1, 4);
+    expect(rowsOf(g, 10)[0]).toEqual([255, 180, 0, 0, 0, 0, 0, 0, 180, 255]);
+  });
+
+  it("refuses a run of unlimited faintness, which is what the backstop is for", () => {
+    // No cell here is confident room, so nothing is charged against the reach —
+    // without a span backstop this would join end to end however long it ran.
+    // Reach 2, so the backstop bites at 3 x 2 = 6 cells; this run is 8.
+    const g = gridOf([[255, 60, 60, 60, 60, 60, 60, 60, 60, 255]]);
+    bridgeCoverageGaps(g, 10, 1, 2);
+    expect(rowsOf(g, 10)[0]).toEqual([255, 60, 60, 60, 60, 60, 60, 60, 60, 255]);
+  });
+
+  it("closes an all-faint run that is within the backstop", () => {
+    // Reach 2 allows a span of 6; this run is 4, and every cell of it is
+    // uncertainty rather than room, so joining it invents nothing.
+    const g = gridOf([[255, 60, 60, 60, 60, 255]]);
+    bridgeCoverageGaps(g, 6, 1, 2);
+    expect(rowsOf(g, 6)[0]).toEqual([255, 255, 255, 255, 255, 255]);
+  });
+
+  it("closes small holes inside one person too", () => {
+    // Not the case it was written for, but the right behaviour for it: a hole
+    // between fingers or through hair is a short run flanked by a person on both
+    // sides, and filling it is what the model would have done with more
+    // resolution.
+    const g = gridOf([[255, 255, 0, 255, 255]]);
+    bridgeCoverageGaps(g, 5, 1, 2);
+    expect(rowsOf(g, 5)[0]).toEqual([255, 255, 255, 255, 255]);
+  });
+});
+
+describe("maskBridgePx", () => {
+  it("is the same share of a person on any camera", () => {
+    // The reach is a fraction of the FRAME, converted through the grid, so two
+    // cameras of different sizes close the same real-world gap.
+    const big = maskBridgePx(1280, maskGrid(1280, 720));
+    const small = maskBridgePx(640, maskGrid(640, 480));
+    const asFrameFraction = (gridPx: number, g: MaskGrid, w: number) => (gridPx * g.scale) / w;
+    expect(asFrameFraction(big, maskGrid(1280, 720), 1280)).toBeCloseTo(
+      asFrameFraction(small, maskGrid(640, 480), 640),
+      2,
+    );
+  });
+
+  it("is wide enough for a shoulder gap and far short of an arm's width", () => {
+    // Sanity on the actual number rather than only its scaling: at 720p the
+    // reach is tens of frame pixels, not hundreds.
+    const grid = maskGrid(1280, 720);
+    const inFramePx = maskBridgePx(1280, grid) * grid.scale;
+    expect(inFramePx).toBeGreaterThan(16);
+    expect(inFramePx).toBeLessThan(64);
+  });
+
+  it("never returns zero, so a configured bridge always bridges something", () => {
+    expect(maskBridgePx(1, maskGrid(1, 1))).toBeGreaterThanOrEqual(1);
+  });
+
+  it("falls back on a nonsense frame width rather than returning NaN", () => {
+    expect(maskBridgePx(Number.NaN, maskGrid(1280, 720))).toBeGreaterThanOrEqual(1);
+    expect(maskBridgePx(-10, maskGrid(1280, 720))).toBeGreaterThanOrEqual(1);
+  });
+});
+
 describe("dilateCeiling", () => {
   it("permits growth wherever the model is unsure and nowhere else", () => {
     const coverage = new Uint8ClampedArray([0, 1, 128, 254, 255]);

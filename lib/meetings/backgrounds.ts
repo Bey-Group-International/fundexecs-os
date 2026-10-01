@@ -743,6 +743,184 @@ export function maskDilatePx(frameWidth: number, grid: MaskGrid): DilateRadii {
   };
 }
 
+// ── Two people, sitting close ────────────────────────────────────────
+
+// Everything above was written for one person in front of one camera, which is
+// what selfie_segmenter was trained on. Two people sharing a laptop break it in
+// a specific place, and it is not the place it looks like.
+//
+// The model usually finds both of them. What it will not do is give up the
+// sliver of room between them -- a shoulder-to-shoulder gap is confident
+// background, and it is right that it is. So the pair comes back as two
+// silhouettes separated by a few cells of nothing, and `dilateCeiling` then
+// forbids growth from closing that gap, because the whole point of the ceiling
+// is that growth may fill uncertainty and may not invent coverage. Correct for
+// a wall behind a shoulder. Wrong for the two inches between two colleagues.
+//
+// A few cells wide is also the worst possible width. It is narrow enough that
+// sampling lands differently frame to frame and wide enough to see, so the gap
+// does not sit there quietly: it crawls between them, and the temporal blend
+// cannot settle something whose true value really is changing.
+//
+// So the gap is closed before the ceiling is built, which is what makes the two
+// of them one shape for everything downstream -- one region to grow upward from,
+// one edge to feather. Closing it afterwards would leave growth still working
+// from two separate silhouettes.
+//
+// This is a bounded closing, not a general one, and the bound is what keeps it
+// honest. Fill a short run of uncovered cells flanked on BOTH sides by cells the
+// model is confident are a person; leave a long one alone. The gap between two
+// people sitting close is short. The gap between two people sitting apart is
+// not, and neither is the room to the left of the left-hand one.
+
+/**
+ * The widest gap to close, as a fraction of frame width.
+ *
+ * This is a budget for INVENTED coverage, and that is narrower than it sounds:
+ * only cells the model gave nothing at all are charged against it. See
+ * `bridgeCoverageGaps` for why, and for the measurement that forced it.
+ *
+ * Two people sitting close enough to share a camera leave something like an inch
+ * or two of true room between their shoulders, which at a 1280-wide frame is tens
+ * of pixels, not hundreds. 0.025 is 32 of them.
+ *
+ * The number is bounded on both sides by a mistake. Too small and the gap it was
+ * written for survives, still crawling. Too large and it starts closing the
+ * triangle between a relaxed arm and a torso, which is real room and reads as a
+ * web between someone's elbow and their waist.
+ *
+ * It degrades the right way, which is why this value and not a larger one: a gap
+ * slightly too wide to close stays open and looks exactly as it does today,
+ * whereas a fill slightly too eager puts background-coloured webbing on a
+ * person. The first is the status quo; the second is a new defect.
+ */
+const BRIDGE_FRACTION = 0.025;
+
+/**
+ * How covered a cell must be to anchor one side of a gap.
+ *
+ * High deliberately. The flanks are the evidence that there is a person on each
+ * side of this gap rather than noise on each side of a wall, and the whole
+ * safety of the bound rests on them. A pixel in the uncertainty band -- hair, a
+ * headwrap, the edge of a face -- is not evidence of a torso, so it cannot
+ * authorise a fill.
+ */
+const BRIDGE_SOLID = 200;
+
+/**
+ * How much wider than its invented core a whole run may be, as a multiple.
+ *
+ * A backstop, not the real bound. Because partial coverage is free (it is
+ * uncertainty, not invention), a run made ENTIRELY of faint cells would
+ * otherwise be filled however long it was, and a wide band of 0.04-0.30
+ * confidence between two people would be joined end to end.
+ *
+ * Three, because the runs this has to clear are about twice their own core: with
+ * a soft edge from each body, the measured below-anchor runs between two seated
+ * people were 14-30 grid cells around all-zero cores of 6-22. Three leaves that
+ * room and still refuses a run of indefinite faintness.
+ */
+const BRIDGE_SPAN_MULTIPLE = 3;
+
+/**
+ * The widest gap to close, in GRID pixels, for a given frame.
+ *
+ * Expressed against the frame and converted like `maskDilatePx`, so the reach is
+ * the same share of a person whatever the camera resolution and whatever grid
+ * the mask is carried on.
+ */
+export function maskBridgePx(frameWidth: number, grid: MaskGrid): number {
+  const width = Number.isFinite(frameWidth) && frameWidth > 0 ? frameWidth : 640;
+  const scale = Number.isFinite(grid.scale) && grid.scale > 0 ? grid.scale : 1;
+  return Math.max(1, Math.round((width * BRIDGE_FRACTION) / scale));
+}
+
+/**
+ * Close short gaps between covered regions, in place, row by row.
+ *
+ * Horizontal only. Two people sitting side by side are separated horizontally,
+ * and every row of that gap is a horizontal run, so one axis answers the case --
+ * including when they are at different heights, because each row is closed on its
+ * own. Running it vertically as well would close the gap between a chin and a
+ * shoulder, and between a head and the desk edge behind it, which are real room
+ * and would read as a blob rather than a person.
+ *
+ * WHAT COUNTS AGAINST THE BUDGET IS ONLY THE CELLS WITH NO COVERAGE AT ALL, and
+ * that distinction is the whole rule. The first draft measured the run from one
+ * solid anchor to the other, and it did not close a realistic gap: both bodies
+ * arrive with a feathered edge, so an 8-cell core of true room sat inside a
+ * 14-cell run of sub-anchor cells and spent nearly half the budget on pixels
+ * that were already part of a person. Measured on a two-body fixture at 720p,
+ * below-anchor runs of 14-30 cells wrapped all-zero cores of 6-22.
+ *
+ * Charging only the zeros also makes this consistent with the doctrine the rest
+ * of the file is built on, in `dilateCeiling`: filling uncertainty is allowed,
+ * inventing coverage is not. A faint cell between two people is uncertainty and
+ * is free. A cell the model is confident is room is invention, and those are
+ * what the budget is for. `BRIDGE_SPAN_MULTIPLE` is the backstop that stops a
+ * run of unlimited faintness riding the free pass.
+ *
+ * Monotone: a cell is only ever raised, never lowered. That is deliberate and it
+ * is the same bias as the confidence ramp -- this rule may add a person's
+ * neighbour to them, and may never take a bite out of either.
+ *
+ * Each run is filled to the LOWER of its two flanks rather than to full
+ * coverage. Where the pair genuinely touch, both flanks are solid and the join
+ * is solid with them. Where one side is only just past the anchor threshold, the
+ * join is no more confident than the weaker evidence for it.
+ *
+ * One pass, left to right, carrying the last solid column and the zeros seen
+ * since it. Linear in the number of cells and independent of the gap width, for
+ * the same reason `dilateCoverage` is: anything that costs the radius per pixel
+ * cannot run on every frame. Allocates nothing.
+ */
+export function bridgeCoverageGaps(
+  coverage: Uint8ClampedArray,
+  gridWidth: number,
+  gridHeight: number,
+  maxGap: number,
+  solid: number = BRIDGE_SOLID,
+): Uint8ClampedArray {
+  const width = Math.max(0, Math.floor(gridWidth));
+  const height = Math.max(0, Math.floor(gridHeight));
+  const reach = Math.floor(maxGap);
+  if (width <= 2 || height <= 0 || reach <= 0) return coverage;
+  const widest = reach * BRIDGE_SPAN_MULTIPLE;
+
+  for (let y = 0; y < height; y++) {
+    const row = y * width;
+    // The last column in this row solid enough to anchor a gap, or -1 before the
+    // first one. Reset per row: a run only ever sees its own row's anchors, so a
+    // person in the row above cannot authorise a fill in this one.
+    let anchor = -1;
+    // Cells with NO coverage since that anchor -- the ones a fill would invent.
+    let invented = 0;
+
+    for (let x = 0; x < width; x++) {
+      const i = row + x;
+      const v = coverage[i];
+
+      if (v < solid) {
+        if (v === 0) invented++;
+        continue;
+      }
+
+      const span = x - anchor - 1;
+      // `anchor >= 0` is what refuses a run with only one flank -- the room to
+      // the left of the left-hand person is not a gap between two of them.
+      if (anchor >= 0 && span > 0 && invented <= reach && span <= widest) {
+        const fill = Math.min(coverage[row + anchor], v);
+        for (let j = anchor + 1; j < x; j++) {
+          if (coverage[row + j] < fill) coverage[row + j] = fill;
+        }
+      }
+      anchor = x;
+      invented = 0;
+    }
+  }
+  return coverage;
+}
+
 /**
  * The limit on what growth may claim, one value per pixel.
  *
