@@ -29,10 +29,12 @@ import {
   FRAME_BUDGET_MS,
   NO_BACKGROUND,
   blendCoverageByAgreement,
+  bridgeCoverageGaps,
   createMaskAgreement,
   type MaskAgreement,
   blurRadiusPx,
   dilateCoverage,
+  maskBridgePx,
   maskDilatePx,
   maskFeatherPx,
   maskGrid,
@@ -191,6 +193,8 @@ export class BackgroundProcessor {
   private maskTarget: Uint8ClampedArray | null = null;
   private grid: MaskGrid = maskGrid(640, 480);
   private dilateRadii: DilateRadii = { up: 1, down: 0, side: 1 };
+  /** How wide a gap between two people may be and still be closed, in grid pixels. */
+  private bridgeReach = 1;
   /** What growth may claim, rebuilt from each frame's own coverage. */
   private dilateLimit: Uint8ClampedArray | null = null;
   /** The smoothed mask with its ramp tightened — never the history itself. */
@@ -535,6 +539,19 @@ export class BackgroundProcessor {
       return;
     }
 
+    // Join two people sitting close into one shape, BEFORE the ceiling below is
+    // built from this buffer. The order is the point: the model is confident the
+    // sliver between two colleagues is room, so the ceiling would forbid growth
+    // from ever closing it, and the pair would stay two silhouettes with a
+    // crawling gap down the middle. Closing it here instead means everything
+    // downstream sees one region -- one silhouette to grow upward from, one edge
+    // to feather, one shape for the blend to settle.
+    //
+    // Runs on the category path too, where it matters more rather than less: that
+    // mask is a bare yes/no with no uncertainty band at all, so a gap there is as
+    // hard-edged as a gap gets.
+    bridgeCoverageGaps(target, grid.width, grid.height, this.bridgeReach);
+
     // Grow it, upward mostly, and only into pixels the model was unsure about.
     //
     // Two separate things stop this becoming the halo it used to be. The radii
@@ -625,6 +642,7 @@ export class BackgroundProcessor {
   private resizeMask(frameWidth: number, frameHeight: number): void {
     this.grid = maskGrid(frameWidth, frameHeight);
     this.dilateRadii = maskDilatePx(frameWidth, this.grid);
+    this.bridgeReach = maskBridgePx(frameWidth, this.grid);
     this.mask.width = this.grid.width;
     this.mask.height = this.grid.height;
     this.segInput.width = this.grid.width;
