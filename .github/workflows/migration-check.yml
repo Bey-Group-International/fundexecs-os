@@ -39,11 +39,25 @@ on:
     types: [opened, synchronize, reopened, ready_for_review]
     # No `branches:` filter -- it matches the PR's BASE, so a stacked pull
     # request would run nothing. Again, see ci.yml.
-    paths:
-      - "supabase/migrations/**"
-      - "lib/db/migration-rules.ts"
-      - "scripts/check-migrations.ts"
-      - ".github/workflows/migration-check.yml"
+    #
+    # And no `paths:` filter, which this workflow shipped with and has now had
+    # removed. The filter was the obvious thing to write -- there is no point
+    # scanning migrations on a pull request that touches none -- and it made
+    # this check unrequirable, which defeats the entire purpose of building it.
+    #
+    # A path-filtered workflow does not report a SKIPPED check. It reports
+    # nothing at all. Branch protection reads a required check that never
+    # arrives as still expected, so the pull request can never merge and there
+    # is nothing red on the page to fix. The three failure shapes this file
+    # exists to catch -- editing a merged migration, deleting one, colliding
+    # with a recorded version -- would have gone on being caught by a check
+    # that could only ever advise.
+    #
+    # Running unconditionally costs a checkout and an `npm ci` on every pull
+    # request. `scripts/check-migrations.ts` exits 0 and prints "No migrations
+    # changed" when the diff holds none, which is verified in its own tests, so
+    # the common case is a fast green. That is the price of a check that can
+    # actually block a bad migration, and it is worth paying.
   # Also on main, so a migration that reached main without this check having run
   # (a missed event, or a merge made before this workflow existed) still gets
   # looked at, and so the rules themselves are exercised on every push.
