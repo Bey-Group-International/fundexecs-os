@@ -173,6 +173,15 @@ describe("POST", () => {
     expect((await res.json()).error).toMatch(/nothing was shared/i);
   });
 
+  it("says 503 when the deployment cannot record a share at all", async () => {
+    // An operator problem, not the host's: dressing it up as a permission
+    // failure would send them looking for a role change that cannot help.
+    shareDocumentInMeeting.mockResolvedValue({ ok: false, reason: "not-configured" });
+    const res = await POST(post({ documentId: "d1" }), params);
+    expect(res.status).toBe(503);
+    expect((await res.json()).error).toMatch(/not configured/i);
+  });
+
   it("is rate limited, because each call is a write against the firm's materials", async () => {
     checkRateLimit.mockReturnValue({ ok: false, remaining: 0, resetAt: 0, retryAfter: 30 });
     expect((await POST(post({ documentId: "d1" }), params)).status).toBe(429);

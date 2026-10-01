@@ -207,7 +207,15 @@ export async function loadSharedInMeeting(
 
 export type ShareOutcome =
   | { ok: true; url: string; documentName: string; alreadyShared: boolean }
-  | { ok: false; reason: "not-shareable" | "mint-failed" | "record-failed" };
+  | {
+      ok: false;
+      reason:
+        | "not-shareable"
+        | "mint-failed"
+        | "record-failed"
+        /** The deployment has no service-role credential, which this path needs. */
+        | "not-configured";
+    };
 
 /**
  * Hand one document over, or hand back the link already minted for it.
@@ -254,25 +262,34 @@ export async function shareDocumentInMeeting(input: {
   now?: number;
 }): Promise<ShareOutcome> {
   const now = input.now ?? Date.now();
-  const authed = await createServerClient();
 
-  // THE SERVICE ROLE, for the join row only.
+  // NO SERVICE CREDENTIAL, NO SHARE — checked first, before anything is read
+  // and well before anything is minted.
   //
   // `live_meeting_shared_documents` has RLS on and a SELECT policy and nothing
-  // else — deliberately, as its migration says, because writes come through
-  // this path after `authorizeMeetingMember` has established who is asking.
-  // This function was then written against the RLS-bound client, so every
-  // insert was refused by the absent INSERT policy: the link minted, the row
-  // did not record, and the caller got `record-failed` on the happy path. The
-  // feature did not work at all.
+  // else, deliberately, as its migration says: writes come through this path
+  // after `authorizeMeetingMember` has established who is asking. So the join
+  // row REQUIRES the service role. There is no degraded mode.
+  //
+  // The obvious shape — `hasSupabaseServiceEnv() ? service : authed` — is the
+  // idiom the chat route uses, and it is wrong here in a way that costs
+  // something: the authed client cannot insert into this table either, so the
+  // fallback does not rescue the write, it just moves the failure later. By
+  // then a real, live, 14-day link to the firm's materials has been minted, and
+  // the only thing left to do with it is revoke it. Every attempt would churn a
+  // share row and hand back `record-failed`. Failing here instead costs one
+  // boolean.
+  if (!hasSupabaseServiceEnv()) return { ok: false, reason: "not-configured" };
+
+  const authed = await createServerClient();
+
+  // The service role, for the join row and nothing else.
   //
   // `insertShare` keeps the AUTHED client on purpose. The share itself has a
   // real write policy (`is_org_writer`), and that is the check that stops a
   // reader-role member handing out the firm's materials. Running it as the
   // service role would quietly delete that check.
-  const svc = (hasSupabaseServiceEnv()
-    ? createServiceClient()
-    : (authed as unknown)) as SupabaseLike;
+  const svc = createServiceClient() as unknown as SupabaseLike;
   /**
    * The caller's own client, for everything that has a policy of its own.
    *

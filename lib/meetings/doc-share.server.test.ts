@@ -36,10 +36,13 @@ jest.mock("@/lib/data-room-shares.server", () => ({
   insertShare: (...a: unknown[]) => insertShare(...a),
   shareUrl: (token: string) => `https://app.test/dataroom/${token}`,
 }));
+/** Flipped per test, so the no-service-credential path can be exercised. */
+const hasServiceEnv = jest.fn(() => true);
+
 jest.mock("@/lib/supabase/server", () => ({
   createServerClient: async () => ({ from: (t: string) => from(t) }),
   createServiceClient: () => ({ from: (t: string) => serviceFrom(t) }),
-  hasSupabaseServiceEnv: () => true,
+  hasSupabaseServiceEnv: () => hasServiceEnv(),
 }));
 
 import { DOC_SHARE_EXPIRY_DAYS } from "@/lib/meetings/doc-share";
@@ -178,6 +181,7 @@ beforeEach(() => {
   inserts.length = 0;
   updates.length = 0;
   insertShare.mockResolvedValue({ id: "share-1", token: "tok1" });
+  hasServiceEnv.mockReturnValue(true);
 });
 
 describe("the happy path", () => {
@@ -493,5 +497,36 @@ describe("a link that no longer opens", () => {
       updateError: { message: "write refused" },
     });
     expect(await shareDocumentInMeeting(INPUT)).toEqual({ ok: false, reason: "record-failed" });
+  });
+});
+
+describe("a deployment with no service-role credential", () => {
+  // The join table needs the service role and there is no degraded mode. The
+  // first fix for this used `hasSupabaseServiceEnv() ? service : authed`, which
+  // is the idiom the chat route uses and is wrong here: the authed client
+  // cannot insert into this table either, so the fallback does not rescue the
+  // write, it moves the failure later -- by which point a real, live, 14-day
+  // link to the firm's materials exists and the only thing to do with it is
+  // revoke it. Every attempt would churn a share row.
+  beforeEach(() => {
+    hasServiceEnv.mockReturnValue(false);
+    wire({ tables: { rooms: ROOMS, entries: ENTRIES, documents: DOCS } });
+  });
+
+  it("refuses before minting anything", async () => {
+    expect(await shareDocumentInMeeting(INPUT)).toEqual({ ok: false, reason: "not-configured" });
+    expect(insertShare).not.toHaveBeenCalled();
+  });
+
+  it("does not attempt the join-table write through the authed client", async () => {
+    await shareDocumentInMeeting(INPUT);
+    expect(inserts).toEqual([]);
+    expect(updates).toEqual([]);
+  });
+
+  it("does not even read, since the answer cannot change", async () => {
+    await shareDocumentInMeeting(INPUT);
+    expect(from).not.toHaveBeenCalled();
+    expect(serviceFrom).not.toHaveBeenCalled();
   });
 });

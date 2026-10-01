@@ -108,6 +108,15 @@ export async function POST(req: NextRequest, { params }: { params: Params }) {
         { status: 409 },
       );
     }
+    if (outcome.reason === "not-configured") {
+      // An operator problem, not the host's. Said plainly rather than dressed
+      // up as a permission failure, which would send them looking for a role
+      // change that would not help.
+      return NextResponse.json(
+        { error: "Document sharing is not configured on this deployment. Nothing was shared." },
+        { status: 503 },
+      );
+    }
     if (outcome.reason === "mint-failed") {
       return NextResponse.json(
         { error: "Could not create a link. You may not have permission to share this firm's materials." },
