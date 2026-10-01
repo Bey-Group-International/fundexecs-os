@@ -5219,7 +5219,7 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
           )}
           {stageLayout === "grid" ? (
             <div className={`flex-1 grid ${gridClass} gap-3 p-4 content-center`}>
-              <VideoTile stream={localStream} videoTrack={videoTrackOf(localStream)} label={localName} muted isLocal handRaised={handRaised} reaction={getReaction("local")} micOn={micOn} watchId={LOCAL_SPEAKER_ID} camOn={camOn} videoPaused={bwMode === "audio-only"} />
+              <VideoTile stream={localStream} videoTrack={videoTrackOf(localStream)} label={localName} muted isLocal showingScreenShare={shareOn} handRaised={handRaised} reaction={getReaction("local")} micOn={micOn} watchId={LOCAL_SPEAKER_ID} camOn={camOn} videoPaused={bwMode === "audio-only"} />
               {allPeers.map((peer: Peer) => (
                 <VideoTile key={peer.id} stream={peer.stream} videoTrack={videoTrackOf(peer.stream)} label={peer.displayName} handRaised={raisedHands.has(peer.id)} reaction={getReaction(peer.id)} micOn={peerMicOn.get(peer.id) ?? true} watchId={peer.id} camOn={videoOf(peer.id).camOn} videoPaused={videoOf(peer.id).paused} status={statusOf(peer.id)} />
               ))}
@@ -5229,11 +5229,11 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
               {/* Main speaker tile */}
               <div className="flex-1 min-h-0">
                 {speakerIsLocal ? (
-                  <VideoTile stream={localStream} videoTrack={videoTrackOf(localStream)} label={localName} muted isLocal handRaised={handRaised} reaction={getReaction("local")} micOn={micOn} watchId={LOCAL_SPEAKER_ID} camOn={camOn} videoPaused={bwMode === "audio-only"} large />
+                  <VideoTile stream={localStream} videoTrack={videoTrackOf(localStream)} label={localName} muted isLocal showingScreenShare={shareOn} handRaised={handRaised} reaction={getReaction("local")} micOn={micOn} watchId={LOCAL_SPEAKER_ID} camOn={camOn} videoPaused={bwMode === "audio-only"} large />
                 ) : speakerPeer ? (
                   <VideoTile stream={speakerPeer.stream} videoTrack={videoTrackOf(speakerPeer.stream)} label={speakerPeer.displayName} handRaised={isHandRaised(speakerPeer.id)} reaction={getReaction(speakerPeer.id)} micOn={peerMicOn.get(speakerPeer.id) ?? true} watchId={speakerPeer.id} camOn={videoOf(speakerPeer.id).camOn} videoPaused={videoOf(speakerPeer.id).paused} status={statusOf(speakerPeer.id)} large />
                 ) : (
-                  <VideoTile stream={localStream} videoTrack={videoTrackOf(localStream)} label={localName} muted isLocal handRaised={handRaised} reaction={getReaction("local")} micOn={micOn} watchId={LOCAL_SPEAKER_ID} camOn={camOn} videoPaused={bwMode === "audio-only"} large />
+                  <VideoTile stream={localStream} videoTrack={videoTrackOf(localStream)} label={localName} muted isLocal showingScreenShare={shareOn} handRaised={handRaised} reaction={getReaction("local")} micOn={micOn} watchId={LOCAL_SPEAKER_ID} camOn={camOn} videoPaused={bwMode === "audio-only"} large />
                 )}
               </div>
               {/* Thumbnail strip */}
@@ -5241,7 +5241,7 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
                 <div className="flex gap-2 h-24 shrink-0 overflow-x-auto">
                   {stripItems.map((item) => (
                     <div key={item.id} className="h-full aspect-video shrink-0">
-                      <VideoTile stream={item.stream} videoTrack={videoTrackOf(item.stream)} label={item.displayName} muted={item.isLocal} isLocal={item.isLocal} handRaised={isHandRaised(item.id)} reaction={getReaction(item.id)} micOn={item.isLocal ? micOn : (peerMicOn.get(item.id) ?? true)} watchId={item.id} camOn={item.isLocal ? camOn : videoOf(item.id).camOn} videoPaused={item.isLocal ? bwMode === "audio-only" : videoOf(item.id).paused} status={item.isLocal ? "live" : statusOf(item.id)} />
+                      <VideoTile stream={item.stream} videoTrack={videoTrackOf(item.stream)} label={item.displayName} muted={item.isLocal} isLocal={item.isLocal} showingScreenShare={item.isLocal && shareOn} handRaised={isHandRaised(item.id)} reaction={getReaction(item.id)} micOn={item.isLocal ? micOn : (peerMicOn.get(item.id) ?? true)} watchId={item.id} camOn={item.isLocal ? camOn : videoOf(item.id).camOn} videoPaused={item.isLocal ? bwMode === "audio-only" : videoOf(item.id).paused} status={item.isLocal ? "live" : statusOf(item.id)} />
                     </div>
                   ))}
                 </div>
