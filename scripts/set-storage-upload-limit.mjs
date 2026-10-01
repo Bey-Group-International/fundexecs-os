@@ -19,20 +19,26 @@
 
 const API = "https://api.supabase.com/v1";
 
+function fail(message) {
+  console.error(`✖ ${message}`);
+  process.exit(1);
+}
+
+// A flag that is present must carry a value. `--mb` at the end of the line, or
+// followed by another flag, is a typo — falling back to the default would
+// silently change production to a number nobody typed.
 function arg(name) {
   const i = process.argv.indexOf(`--${name}`);
-  return i > -1 ? process.argv[i + 1] : undefined;
+  if (i === -1) return undefined;
+  const value = process.argv[i + 1];
+  if (value === undefined || value.startsWith("--")) fail(`--${name} needs a value.`);
+  return value;
 }
 
 const project = arg("project") ?? process.env.SUPABASE_PROJECT_REF;
 const mb = Number(arg("mb") ?? "500");
 const dryRun = process.argv.includes("--dry-run");
 const token = process.env.SUPABASE_ACCESS_TOKEN;
-
-function fail(message) {
-  console.error(`✖ ${message}`);
-  process.exit(1);
-}
 
 if (!token) fail("Set SUPABASE_ACCESS_TOKEN (a personal access token with write access).");
 if (!project) fail("Pass --project <ref> or set SUPABASE_PROJECT_REF.");
