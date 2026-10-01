@@ -60,7 +60,7 @@ function meeting(over: Partial<UpcomingMeeting> & { id: string }): UpcomingMeeti
     duration_minutes: 60, timezone: null, meeting_type: "board_meeting",
     priority: null, tags: null, attendees: null, source: null, sync_status: null,
     source_event_id: null, source_calendar_id: null, deal_id: null,
-    related_contact_id: null, related_company_id: null, related_fund_id: null,
+    related_contact_id: null, related_fund_id: null,
     objective: null, agenda: null, preparation_requirements: null,
     preparation_status: null, followup_status: null, assigned_copilot_agent: null,
     related_record_type: null, related_record_id: null, calendar_visibility: null,
