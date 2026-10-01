@@ -255,3 +255,42 @@ describe("who the ring follows", () => {
     expect(document.querySelector("span.animate-pulse")).toBeTruthy();
   });
 });
+
+/**
+ * A self-view is mirrored. A shared screen is not a face.
+ *
+ * The pure rule is tested in stage.test.ts; these render the tile, because what
+ * broke was not the rule's logic -- there was no rule -- but a class name keyed
+ * on `isLocal` alone, and a miswired prop would leave that exactly as it was.
+ */
+describe("mirroring the self-view", () => {
+  const mirrored = (el: HTMLElement | null) => !!el?.className.includes("scale-x-[-1]");
+  const video = () => document.querySelector("video");
+
+  const renderTile = (props: Record<string, unknown>) => {
+    const stream = fakeStream(track("v1"));
+    render(
+      <VideoTile
+        stream={stream as unknown as MediaStream}
+        videoTrack={videoTrackOf(stream as unknown as MediaStream)}
+        label="Ada Bey"
+        {...props}
+      />,
+    );
+  };
+
+  it("mirrors your own camera", () => {
+    renderTile({ isLocal: true });
+    expect(mirrored(video() as HTMLElement)).toBe(true);
+  });
+
+  it("does not mirror your own shared screen, which would read backwards", () => {
+    renderTile({ isLocal: true, showingScreenShare: true });
+    expect(mirrored(video() as HTMLElement)).toBe(false);
+  });
+
+  it("does not mirror anybody else, sharing or not", () => {
+    renderTile({ isLocal: false, showingScreenShare: true });
+    expect(mirrored(video() as HTMLElement)).toBe(false);
+  });
+});

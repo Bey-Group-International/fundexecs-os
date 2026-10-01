@@ -4,7 +4,7 @@
 // none of them, which is why screen sharing did not really work: the share was
 // tracked, broadcast, and drawn as one grid cell the size of a face.
 
-import { effectiveLayout, layoutIsForced, screenSharerId, stageFocusId } from "./stage";
+import { effectiveLayout, layoutIsForced, mirrorSelfView, screenSharerId, stageFocusId } from "./stage";
 
 const peer = (sharing: boolean) => ({ camOn: true, paused: false, sharing });
 
@@ -87,5 +87,24 @@ describe("the layout a share forces", () => {
     expect(layoutIsForced("grid", "a")).toBe(true);
     expect(layoutIsForced("speaker", "a")).toBe(false);
     expect(layoutIsForced("grid", null)).toBe(false);
+  });
+});
+
+describe("mirrorSelfView", () => {
+  it("mirrors your own camera, because a self-view is a mirror", () => {
+    expect(mirrorSelfView({ isLocal: true, showingScreenShare: false })).toBe(true);
+  });
+
+  it("does NOT mirror your own shared screen", () => {
+    // The bug this exists for. Starting a share swaps the camera track out of
+    // the local stream and the display capture in, so the self-view tile is
+    // showing a document -- and a mirrored document has its text backwards.
+    expect(mirrorSelfView({ isLocal: true, showingScreenShare: true })).toBe(false);
+  });
+
+  it("never mirrors anybody else, sharing or not", () => {
+    // For them it is not a mirror, it is a photograph.
+    expect(mirrorSelfView({ isLocal: false, showingScreenShare: false })).toBe(false);
+    expect(mirrorSelfView({ isLocal: false, showingScreenShare: true })).toBe(false);
   });
 });

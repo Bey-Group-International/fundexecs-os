@@ -82,3 +82,30 @@ export function screenSharerId(input: {
   for (const [id, state] of input.peers) if (state.sharing) return id;
   return null;
 }
+
+/**
+ * Whether a tile's video should be mirrored.
+ *
+ * A self-view is mirrored because that is what a person expects of their own
+ * face: raise your right hand and the hand on the right goes up. Nobody else's
+ * tile is mirrored, because for them it is not a mirror, it is a photograph.
+ *
+ * A SHARED SCREEN IS NOT A FACE, and that is the whole reason this is a function
+ * rather than `isLocal`. Starting a share takes the camera track out of the local
+ * stream and puts the display capture in its place, so the self-view tile is
+ * suddenly showing a document — and a mirrored document has its text backwards.
+ * The sharer is the only person who sees it that way: no remote tile is
+ * mirrored, and the transform is CSS on the local element, so what the peers
+ * receive and what the recording composes were always correct. It reads as the
+ * share itself having gone wrong, which is why it is worth a rule and a test
+ * rather than a condition inlined in a class name.
+ *
+ * Deliberately keyed on what the tile is SHOWING rather than on the capture's
+ * own metadata. `MediaTrackSettings.displaySurface` would say "monitor" or
+ * "window" for a display capture and is the tidier signal, but it is not
+ * reported everywhere, and a tile that silently stops mirroring on a browser
+ * that omits it is a worse failure than the one being fixed.
+ */
+export function mirrorSelfView(input: { isLocal: boolean; showingScreenShare: boolean }): boolean {
+  return input.isLocal && !input.showingScreenShare;
+}

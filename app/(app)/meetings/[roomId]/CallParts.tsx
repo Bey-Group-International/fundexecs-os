@@ -7,6 +7,7 @@
 import { FloatingMenu, useSpeaking, useStableHandlers, type RemovedPerson } from "./room-shared";
 import React, { memo, useEffect, useMemo, useReducer, useRef, useState, useCallback } from "react";
 import { handsFirst } from "@/lib/meetings/hands";
+import { mirrorSelfView } from "@/lib/meetings/stage";
 import { REACTIONS, reactionLabel, type ActiveReaction } from "@/lib/meetings/reactions";
 import { ChatText } from "./ChatText";
 import { speakerColorIndex } from "@/lib/meetings/speaker-attribution";
@@ -38,7 +39,7 @@ const SPEAKER_COLORS = [
 
 /** The markup for one face. Exported memoised, as `VideoTile` below. */
 function VideoTileImpl({
-  stream, videoTrack, label, muted = false, isLocal = false,
+  stream, videoTrack, label, muted = false, isLocal = false, showingScreenShare = false,
   handRaised = false, reaction = "", large = false,
   micOn = true, speaking = false, camOn = true, videoPaused = false,
   status = "live", watchId,
@@ -58,6 +59,15 @@ function VideoTileImpl({
    */
   videoTrack: MediaStreamTrack | null;
   label: string; muted?: boolean; isLocal?: boolean;
+  /**
+   * Whether this tile's video is a display capture rather than a camera.
+   *
+   * Only meaningful on the local tile, and only used to decide mirroring -- see
+   * `mirrorSelfView`. Starting a share swaps the display capture into the same
+   * local stream the camera was in, so the tile cannot tell from the stream
+   * alone that it has stopped showing a face.
+   */
+  showingScreenShare?: boolean;
   handRaised?: boolean; reaction?: string; large?: boolean;
   /** That participant's own report of their mic track. */
   micOn?: boolean;
@@ -148,7 +158,7 @@ function VideoTileImpl({
     <div className={`relative rounded-2xl overflow-hidden bg-[var(--surface-2)] border transition-shadow flex items-center justify-center ${ring} ${large ? "w-full h-full" : "aspect-video"}`}>
       <video ref={videoRef} autoPlay playsInline muted={muted}
         onCanPlay={(e) => void (e.currentTarget as HTMLVideoElement).play().catch(() => {})}
-        className={`w-full h-full object-cover ${isLocal ? "scale-x-[-1]" : ""} ${hasVideo ? "" : "opacity-0"}`} />
+        className={`w-full h-full object-cover ${mirrorSelfView({ isLocal, showingScreenShare }) ? "scale-x-[-1]" : ""} ${hasVideo ? "" : "opacity-0"}`} />
       {!hasVideo && (
         <div className="absolute inset-0 flex flex-col items-center justify-center gap-2">
           <div className="w-12 h-12 rounded-full bg-[var(--surface-3)] flex items-center justify-center text-lg font-semibold text-[var(--fg-primary)]">
