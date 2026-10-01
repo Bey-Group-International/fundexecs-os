@@ -29,12 +29,12 @@ import {
   FRAME_BUDGET_MS,
   NO_BACKGROUND,
   blendCoverageByAgreement,
-  bridgeCoverageGaps,
+  quietCoverageGaps,
   createMaskAgreement,
   type MaskAgreement,
   blurRadiusPx,
   dilateCoverage,
-  maskBridgePx,
+  maskGapSpanPx,
   maskDilatePx,
   maskFeatherPx,
   maskGrid,
@@ -193,8 +193,8 @@ export class BackgroundProcessor {
   private maskTarget: Uint8ClampedArray | null = null;
   private grid: MaskGrid = maskGrid(640, 480);
   private dilateRadii: DilateRadii = { up: 1, down: 0, side: 1 };
-  /** How wide a gap between two people may be and still be closed, in grid pixels. */
-  private bridgeReach = 1;
+  /** How wide an enclosed gap may be and still be quieted, in grid pixels. */
+  private gapSpanReach = 1;
   /** What growth may claim, rebuilt from each frame's own coverage. */
   private dilateLimit: Uint8ClampedArray | null = null;
   /** The smoothed mask with its ramp tightened — never the history itself. */
@@ -539,18 +539,25 @@ export class BackgroundProcessor {
       return;
     }
 
-    // Join two people sitting close into one shape, BEFORE the ceiling below is
-    // built from this buffer. The order is the point: the model is confident the
-    // sliver between two colleagues is room, so the ceiling would forbid growth
-    // from ever closing it, and the pair would stay two silhouettes with a
-    // crawling gap down the middle. Closing it here instead means everything
-    // downstream sees one region -- one silhouette to grow upward from, one edge
-    // to feather, one shape for the blend to settle.
+    // Quiet the room between two people sitting close, BEFORE the ceiling below
+    // is built from this buffer.
     //
-    // Runs on the category path too, where it matters more rather than less: that
-    // mask is a bare yes/no with no uncertainty band at all, so a gap there is as
-    // hard-edged as a gap gets.
-    bridgeCoverageGaps(target, grid.width, grid.height, this.bridgeReach);
+    // The mask is an alpha channel and the composite is `destination-in`, so it
+    // keeps the camera frame WHERE THE MASK COVERS. Coverage wandering in the low
+    // tens across the gap between two colleagues is therefore a faint,
+    // shimmering, sharp strip of their real room reaching the outgoing track
+    // while they have a background effect switched on. Holding that tail at zero
+    // stops the wander and shows the effect there instead.
+    //
+    // Before the ceiling, because the ceiling is built from this buffer and
+    // records which cells growth may later fill. Quieting first means those cells
+    // are closed to growth as well, so nothing puts the strip back.
+    //
+    // Runs on the category path too. That mask is a bare yes/no with no
+    // uncertainty band, so there is usually nothing under the ceiling for this to
+    // find -- but a build that returns graded values through that path should not
+    // quietly start leaking.
+    quietCoverageGaps(target, grid.width, grid.height, this.gapSpanReach);
 
     // Grow it, upward mostly, and only into pixels the model was unsure about.
     //
@@ -642,7 +649,7 @@ export class BackgroundProcessor {
   private resizeMask(frameWidth: number, frameHeight: number): void {
     this.grid = maskGrid(frameWidth, frameHeight);
     this.dilateRadii = maskDilatePx(frameWidth, this.grid);
-    this.bridgeReach = maskBridgePx(frameWidth, this.grid);
+    this.gapSpanReach = maskGapSpanPx(frameWidth, this.grid);
     this.mask.width = this.grid.width;
     this.mask.height = this.grid.height;
     this.segInput.width = this.grid.width;
