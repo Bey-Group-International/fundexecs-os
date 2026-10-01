@@ -279,3 +279,28 @@ describe("the panel still says what it said", () => {
     expect(screen.getByText("✋")).toBeInTheDocument();
   });
 });
+
+describe("the data-room tab", () => {
+  it("is absent for a guest, who has no firm to share from", () => {
+    render(<CopilotSidebar {...props({ canShareDocs: false })} />);
+    expect(screen.queryByRole("button", { name: /^Docs$/ })).not.toBeInTheDocument();
+  });
+
+  it("is offered to anyone signed in", () => {
+    render(<CopilotSidebar {...props({ canShareDocs: true, meetingId: "m1" })} />);
+    expect(screen.getByRole("button", { name: /^Docs$/ })).toBeInTheDocument();
+  });
+
+  it("does not touch the data room until the tab is opened", async () => {
+    // A call where nobody shares a document must not read the firm's materials.
+    // The panel is mounted by the tab, not by the sidebar.
+    const fetchMock = jest.fn(async () => ({ ok: true, status: 200, json: async () => ({ docs: [], shared: [] }) }) as unknown as Response);
+    global.fetch = fetchMock as unknown as typeof fetch;
+
+    render(<CopilotSidebar {...props({ canShareDocs: true, meetingId: "m1" })} />);
+    expect(fetchMock).not.toHaveBeenCalled();
+
+    await userEvent.click(screen.getByRole("button", { name: /^Docs$/ }));
+    expect(fetchMock).toHaveBeenCalledWith("/api/meetings/m1/documents", { cache: "no-store" });
+  });
+});

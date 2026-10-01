@@ -19,6 +19,7 @@ import { exitLabel, hostLeaveNote, leaveWithoutEndingLabel } from "@/lib/meeting
 import { linkNotice, peerStatusLabel, type BandwidthMode, type PeerLinkStatus } from "@/lib/meetings/connection";
 import { subjectKey, type RemovalSubject } from "@/lib/meetings/removal";
 import { type WaitingPeer } from "./WaitingScreens";
+import { MeetingDocsPanel } from "./MeetingDocsPanel";
 
 // Palette for per-speaker colours in the transcript.
 /** No provider and no set: nobody is talking. */
@@ -762,6 +763,7 @@ const PersonRow = memo(function PersonRow({
 export function CopilotSidebar({
   srStatus, participants, roomCode, meetingTitle,
   chatMessages, chatUnread, onSendChat, onRetryChat, isHost, raisedHands, onKick, onAdmit, onDeny, onAdmitAll, waitingPeers, onChatVisibility,
+  meetingId = null, canShareDocs = false,
   removedPeople, onAllowBack,
   speaking = NOBODY, onCollapse,
 }: {
@@ -793,8 +795,24 @@ export function CopilotSidebar({
   onChatVisibility: (visible: boolean) => void;
   /** Collapse the panel. The only way out on mobile, where it covers the screen. */
   onCollapse: () => void;
+  /**
+   * The meeting's row id, for the documents tab. Null until the room has
+   * resolved it, and on the standalone renders this panel's own tests do.
+   */
+  meetingId?: string | null;
+  /**
+   * Whether to offer the data-room tab at all.
+   *
+   * False for a guest: there is no firm behind them to share from, and a tab
+   * that only ever says so is worse than no tab. True for anyone signed in --
+   * including a signed-in participant from another firm, because the room
+   * cannot tell membership apart from attendance. The route refuses them and
+   * the panel says why, which is the honest version of a check the client is
+   * not in a position to make.
+   */
+  canShareDocs?: boolean;
 }) {
-  const [tab, setTab] = useState<"chat" | "people">("chat");
+  const [tab, setTab] = useState<"chat" | "people" | "docs">("chat");
   const [chatInput, setChatInput] = useState("");
   const chatBottomRef = useRef<HTMLDivElement>(null);
   const [emailInput, setEmailInput] = useState("");
@@ -821,6 +839,12 @@ export function CopilotSidebar({
 
   // Sorted when the hands or the people change, not on the fast path.
   const orderedPeople = useMemo(() => handsFirst(participants, raisedHands), [participants, raisedHands]);
+
+  // The tab strip. A guest gets two tabs, a member three -- see canShareDocs.
+  const tabs = useMemo(
+    () => (canShareDocs ? (["chat", "people", "docs"] as const) : (["chat", "people"] as const)),
+    [canShareDocs],
+  );
 
   const sendChat = () => {
     const text = chatInput.trim();
@@ -876,13 +900,13 @@ export function CopilotSidebar({
           the 1px overhang makes this an accidental vertical scroller that
           traps wheel scrolling (same fix as HubTabs). */}
       <div className="flex border-b border-[var(--line)] shrink-0 overflow-x-auto overflow-y-hidden">
-        {(["chat", "people"] as const).map((t) => (
+        {tabs.map((t) => (
           <button key={t} onClick={() => setTab(t)}
             className={`relative shrink-0 flex-1 py-2 text-xs font-medium transition-colors capitalize ${
               tab === t ? "text-[var(--fg-primary)] border-b-2 border-[var(--gold-400)]"
                         : "text-[var(--fg-muted)] hover:text-[var(--fg-secondary)]"
             }`}>
-            {t === "people" ? `People ${participants.length}` : "Chat"}
+            {t === "people" ? `People ${participants.length}` : t === "docs" ? "Docs" : "Chat"}
             {/* The only place an unread count can appear while the panel is
                 open: the toolbar badge is suppressed for exactly that case. */}
             {t === "chat" && tab !== "chat" && chatUnread > 0 && (
@@ -919,6 +943,13 @@ export function CopilotSidebar({
             )}
             <div ref={chatBottomRef} />
           </>
+        )}
+
+        {tab === "docs" && (
+          // Mounted only while the tab is open, so a call where nobody opens it
+          // never loads the firm's materials -- and closing the tab drops the
+          // list rather than holding it for the rest of the call.
+          <MeetingDocsPanel meetingId={meetingId} onShare={onSendChat} />
         )}
 
         {tab === "people" && (

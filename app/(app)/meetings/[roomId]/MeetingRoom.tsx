@@ -5191,6 +5191,12 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
               removedPeople={removedPeople} onAllowBack={(s) => void allowBack(s)}
               onChatVisibility={handleChatVisibility}
               onCollapse={collapseCopilot}
+              meetingId={meetingId}
+              // Signed in, not a guest. A guest has no firm behind them to
+              // share from; whether a signed-in viewer is a MEMBER of the
+              // host's firm is not something the room can tell from attendance,
+              // so the route decides and the panel reports the refusal.
+              canShareDocs={!isGuest}
             />
             </CopilotErrorBoundary>
             </div>
