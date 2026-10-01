@@ -366,4 +366,19 @@ describe("cancelling the rest of a series", () => {
     expect(await sendSeriesEnded({ ...END, emails: [] })).toEqual({ sent: 0, total: 0 });
     expect(sendEmailMock).not.toHaveBeenCalled();
   });
+
+  it("tells guests staying on that the rest continues under a new invitation", () => {
+    const { subject, html } = buildSeriesEndEmail({ ...END, variant: "changed" });
+    expect(subject).toMatch(/^Updated: Weekly sync changes from /);
+    expect(html).toContain("new invitation");
+  });
+
+  it("tells a dropped guest they are off the rest of the series", () => {
+    const { subject, html } = buildSeriesEndEmail({ ...END, variant: "removed" });
+    expect(subject).toBe("Removed: Weekly sync");
+    expect(html).toContain("taken off the rest of this series");
+    expect(buildSeriesEndEmail({ ...END, keepRrule: null, variant: "removed" }).html).toContain(
+      "taken off this repeating meeting",
+    );
+  });
 });

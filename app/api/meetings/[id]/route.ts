@@ -6,9 +6,11 @@ import { mailboxProblemMessage } from "@/lib/meetings/mailbox";
 import {
   deleteMeetingLocal,
   loadSeriesRows,
+  markSeriesOccurrence,
   setSeriesRule,
   updateMeeting,
   buildMeetingInviteUrl,
+  type UpdateMeetingInput,
 } from "@/lib/meetings/service";
 import { sendMeetingInvites, guestEmails } from "@/lib/meetings/invite";
 import { planCalendarSync } from "@/lib/meetings/calendar-sync";
@@ -20,10 +22,10 @@ import {
   sendSeriesEnded,
   seriesUpdateContext,
 } from "@/lib/meetings/meeting-updates";
-import { ruleFromRrule, seriesRrule, truncateRule } from "@/lib/meetings/recurrence";
+import { ruleFromRrule, seriesRrule, shiftSeriesStarts, truncateRule } from "@/lib/meetings/recurrence";
 import { BUSY_ELSEWHERE_MESSAGE, conflictGate, conflictMessage, findConflicts, type ConflictCandidate } from "@/lib/meetings/schedule";
 import { loadBlockConflicts } from "@/lib/meetings/blocks.server";
-import { loadExternalConflicts } from "@/lib/meetings/conflicts.server";
+import { loadExternalConflicts, loadSeriesExternalConflicts } from "@/lib/meetings/conflicts.server";
 import { normalizeAttendees, type MeetingAttendeeInput } from "@/lib/meetings/attendees";
 import { needsDirectory, resolveAttendeeDirectory } from "@/lib/meetings/directory";
 import { loadOrgDirectory } from "@/lib/meetings/directory.server";
@@ -77,7 +79,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Params }
   const { data: prior } = await supabase
     .from("live_meetings")
     .select(
-      "attendees, room_code, is_draft, host_id, scheduled_at, duration_minutes, title, timezone, calendar_sequence, location, meeting_url, series_id, series_original_start",
+      "attendees, room_code, is_draft, host_id, scheduled_at, duration_minutes, title, timezone, calendar_sequence, location, meeting_url, series_id, series_index, series_original_start",
     )
     .eq("id", id)
     .eq("organization_id", auth.ctx.orgId)
@@ -204,6 +206,77 @@ export async function PATCH(request: NextRequest, { params }: { params: Params }
     }
   }
 
+  // Every column this edit writes, shared by the one meeting and, for "this
+  // and following", by every later meeting of its series.
+  const editInput: UpdateMeetingInput = {
+    title: body.title === undefined ? undefined : String(body.title),
+    description: cleanString(body.description),
+    location: cleanString(body.location),
+    meetingUrl: cleanString(body.meetingUrl),
+    scheduledAt: cleanString(body.scheduledAt),
+    durationMinutes: body.durationMinutes === undefined ? undefined : Number(body.durationMinutes),
+    timezone: cleanString(body.timezone),
+    meetingType: cleanString(body.meetingType),
+    priority: body.priority,
+    tags: Array.isArray(body.tags) ? body.tags.map(String) : undefined,
+    attendees: nextAttendees,
+    relatedContactId: cleanString(body.relatedContactId),
+    relatedCompanyId: cleanString(body.relatedCompanyId),
+    relatedDealId: cleanString(body.relatedDealId),
+    relatedFundId: cleanString(body.relatedFundId),
+    syncMode: body.syncMode === "pending_external" ? "pending_external" : "local_only",
+    objective: cleanString(body.objective),
+    agenda: cleanString(body.agenda),
+    preparationRequirements: cleanString(body.preparationRequirements),
+    attachments: Array.isArray(body.attachments) ? body.attachments : undefined,
+    calendarVisibility: body.calendarVisibility === undefined ? undefined : String(body.calendarVisibility),
+    reminderMinutes: body.reminderMinutes === undefined ? undefined : (body.reminderMinutes === null ? null : Number(body.reminderMinutes)),
+    assignedCopilotAgent: cleanString(body.assignedCopilotAgent),
+    relatedRecordType: cleanString(body.relatedRecordType),
+    relatedRecordId: cleanString(body.relatedRecordId),
+    // Only an explicit boolean changes it — anything else leaves the
+    // meeting's current admission policy exactly as the host set it.
+    guestQuickAccess: typeof body.guestQuickAccess === "boolean" ? body.guestQuickAccess : undefined,
+  };
+
+  // "This and following": the edit applies to this meeting and every later
+  // one of its series, which then continue as a series of their own.
+  if (
+    body.scope === "following" &&
+    prior &&
+    !isDraft &&
+    typeof prior.series_id === "string" &&
+    typeof prior.series_index === "number"
+  ) {
+    try {
+      return await editSeriesFrom(supabase, auth.ctx, {
+        meetingId: id,
+        seriesId: prior.series_id,
+        fromIndex: prior.series_index,
+        roomCode,
+        editInput,
+        priorStart,
+        nextStart,
+        nextDuration,
+        timezone: (cleanString(body.timezone) ?? (prior.timezone as string | null)) || "UTC",
+        title: body.title ? String(body.title) : ((prior.title as string | null) ?? "Meeting"),
+        timingChanged: timing.changed,
+        guestsCareAbout:
+          timing.changed ||
+          place.changed ||
+          (body.title !== undefined && String(body.title).trim() !== ((prior.title as string | null) ?? "")),
+        priorEmails,
+        nextEmails: nextAttendees ? guestEmails(nextAttendees) : priorEmails,
+        uninvited,
+      });
+    } catch (error) {
+      return NextResponse.json(
+        { error: error instanceof Error ? error.message : "Failed to update the meetings" },
+        { status: 500 },
+      );
+    }
+  }
+
   // A meeting booked through a scheduling link owns a booking row, and the
   // database forbids one host holding two live bookings over the same time.
   // Move the booking BEFORE the meeting: a rejected move then aborts the whole
@@ -255,40 +328,13 @@ export async function PATCH(request: NextRequest, { params }: { params: Params }
       { orgId: auth.ctx.orgId, userId: auth.ctx.userId },
       id,
       {
-        title: body.title === undefined ? undefined : String(body.title),
-        description: cleanString(body.description),
-        location: cleanString(body.location),
-        meetingUrl: cleanString(body.meetingUrl),
-        scheduledAt: cleanString(body.scheduledAt),
-        durationMinutes: body.durationMinutes === undefined ? undefined : Number(body.durationMinutes),
-        timezone: cleanString(body.timezone),
-        meetingType: cleanString(body.meetingType),
-        priority: body.priority,
-        tags: Array.isArray(body.tags) ? body.tags.map(String) : undefined,
-        attendees: nextAttendees,
-        relatedContactId: cleanString(body.relatedContactId),
-        relatedCompanyId: cleanString(body.relatedCompanyId),
-        relatedDealId: cleanString(body.relatedDealId),
-        relatedFundId: cleanString(body.relatedFundId),
-        syncMode: body.syncMode === "pending_external" ? "pending_external" : "local_only",
-        objective: cleanString(body.objective),
-        agenda: cleanString(body.agenda),
-        preparationRequirements: cleanString(body.preparationRequirements),
-        attachments: Array.isArray(body.attachments) ? body.attachments : undefined,
-        calendarVisibility: body.calendarVisibility === undefined ? undefined : String(body.calendarVisibility),
-        reminderMinutes: body.reminderMinutes === undefined ? undefined : (body.reminderMinutes === null ? null : Number(body.reminderMinutes)),
-        assignedCopilotAgent: cleanString(body.assignedCopilotAgent),
-        relatedRecordType: cleanString(body.relatedRecordType),
-        relatedRecordId: cleanString(body.relatedRecordId),
+        ...editInput,
         // Derived from the connection, never read off the request. The form used
         // to offer Outlook, Calendly and iCal alongside Google, and
         // pushMeetingToGoogle is the only writer — so a meeting could be stored
         // as syncing to Outlook and then be pushed to Google or skipped.
         externalCalendarProvider: editCalendarPlan?.provider,
         externalCalendarSyncEnabled: editCalendarPlan?.enabled,
-        // Only an explicit boolean changes it — anything else leaves the
-        // meeting's current admission policy exactly as the host set it.
-        guestQuickAccess: typeof body.guestQuickAccess === "boolean" ? body.guestQuickAccess : undefined,
       },
     );
 
@@ -713,4 +759,199 @@ async function cancelSeriesFrom(
   }
 
   return { ok: true, cancelled: tail.length, notified };
+}
+
+/**
+ * Apply an edit to one meeting of a series and every meeting after it.
+ *
+ * Guests hold the series as one repeating entry, and an entry cannot change
+ * from its middle. So the series is split, as calendars themselves do it: the
+ * original now ends before this meeting, and this meeting and the rest become
+ * a series of their own, with this meeting as its first, and a new invitation.
+ * From the first meeting there is nothing to split; the series is re-issued
+ * under the identity guests already hold.
+ */
+async function editSeriesFrom(
+  supabase: Awaited<ReturnType<typeof createServerClient>>,
+  actor: { orgId: string; userId: string; email?: string | null },
+  opts: {
+    meetingId: string;
+    seriesId: string;
+    fromIndex: number;
+    roomCode: string;
+    editInput: UpdateMeetingInput;
+    priorStart: string | null;
+    nextStart: string | null;
+    nextDuration: number | null;
+    timezone: string;
+    title: string;
+    timingChanged: boolean;
+    guestsCareAbout: boolean;
+    priorEmails: string[];
+    nextEmails: string[];
+    uninvited: number;
+  },
+): Promise<NextResponse> {
+  const rows = await loadSeriesRows(supabase, actor.orgId, opts.seriesId);
+  const live = rows.filter((r) => !r.deleted_at);
+  const tail = live.filter((r) => (r.series_index ?? -1) >= opts.fromIndex);
+  const kept = live.filter((r) => (r.series_index ?? -1) < opts.fromIndex);
+  const first = rows.find((r) => r.series_index === 0) ?? rows[0];
+  const self = tail.find((r) => r.id === opts.meetingId);
+  if (!self) throw new Error("Meeting not found in its series");
+
+  const rule = ruleFromRrule(first?.series_rule ?? self.series_rule);
+  if (!rule) throw new Error("This meeting's series has no repeat rule");
+  // The rest of the rule from this slot on, whichever of its meetings are
+  // still live: a meeting cancelled on its own stays cancelled.
+  const restRrule = seriesRrule({ freq: rule.freq, count: Math.max(1, rule.count - opts.fromIndex) });
+
+  const slotOf = (r: { series_original_start: string | null; scheduled_at: string | null }) =>
+    r.series_original_start ?? r.scheduled_at ?? "";
+  const startMoved =
+    !!opts.nextStart &&
+    !!opts.priorStart &&
+    new Date(opts.nextStart).getTime() !== new Date(opts.priorStart).getTime();
+  // Where each meeting now falls, and the slot the new rule gives it.
+  const slots = startMoved
+    ? shiftSeriesStarts(tail.map(slotOf), slotOf(self), opts.nextStart!, opts.timezone)
+    : tail.map(slotOf);
+  const starts = startMoved ? slots : tail.map((r) => r.scheduled_at ?? slotOf(r));
+
+  // This meeting was checked on the way in; the rest are checked here. Busy
+  // time in a connected calendar cannot be saved over, so one clash refuses
+  // the whole change rather than leaving the series half moved.
+  if (opts.timingChanged) {
+    const busyElsewhere = await loadSeriesExternalConflicts(supabase, {
+      userId: actor.userId,
+      starts: starts.filter((_, i) => tail[i].id !== opts.meetingId),
+      durationMinutes: opts.nextDuration ?? 60,
+      timezone: opts.timezone,
+    });
+    if (busyElsewhere.length > 0) {
+      return NextResponse.json(
+        { error: BUSY_ELSEWHERE_MESSAGE, overridable: false, conflicts: [], blockedBy: [], busyElsewhere },
+        { status: 409 },
+      );
+    }
+  }
+
+  let sequence = 0;
+  let selfSequence: number | null = null;
+  for (let i = 0; i < tail.length; i += 1) {
+    const row = tail[i];
+    const result = await updateMeeting(supabase, { orgId: actor.orgId, userId: actor.userId }, row.id, {
+      ...opts.editInput,
+      scheduledAt: startMoved ? starts[i] : undefined,
+    });
+    // The rest of the series is a series of its own now, with this meeting
+    // first. From the first meeting that is the same series it always was.
+    await markSeriesOccurrence(supabase, row.id, {
+      seriesId: opts.meetingId,
+      index: i,
+      rule: restRrule,
+      start: slots[i],
+    });
+    sequence = Math.max(sequence, result.calendarSequence ?? 0);
+    if (row.id === opts.meetingId) selfSequence = result.calendarSequence;
+  }
+  const split = opts.fromIndex > 0;
+  const keepRrule = split ? seriesRrule({ freq: rule.freq, count: opts.fromIndex }) : null;
+  if (keepRrule && kept.length > 0) {
+    sequence = Math.max(
+      sequence,
+      await setSeriesRule(
+        supabase,
+        actor.orgId,
+        kept.map((r) => r.id),
+        keepRrule,
+      ),
+    );
+  }
+  sequence = Math.max(sequence, ...rows.map((r) => r.calendar_sequence ?? 0)) + 1;
+
+  const mailbox = await mailboxFor(supabase, actor.userId, actor.orgId);
+  const credentials = mailbox.ok ? { gmailAccessToken: mailbox.token } : undefined;
+  const senderName = actor.email ?? "Someone";
+  const removedEmails = opts.priorEmails.filter((e) => !opts.nextEmails.includes(e));
+  const addedEmails = opts.nextEmails.filter((e) => !opts.priorEmails.includes(e));
+  const retainedEmails = opts.priorEmails.filter((e) => opts.nextEmails.includes(e));
+  const ending = {
+    origin: SITE_URL,
+    orgId: actor.orgId,
+    credentials,
+    title: opts.title,
+    senderName,
+    hostEmail: actor.email ?? null,
+    timezone: opts.timezone,
+    seriesId: opts.seriesId,
+    sequence,
+    firstStartIso: slotOf(first ?? self),
+    durationMinutes: first?.duration_minutes ?? opts.nextDuration,
+    keepRrule,
+    fromStartIso: slotOf(self),
+    cancelled: tail.length,
+  };
+
+  let notified = 0;
+  let invited = 0;
+  let attempted = 0;
+  let inviteFailures: string[] = [];
+  let inviteReasons: string[] = [];
+  const somethingToSay = opts.guestsCareAbout || removedEmails.length > 0 || addedEmails.length > 0;
+  if (opts.roomCode && somethingToSay) {
+    // The old series, told where it now ends: those staying on hear that the
+    // rest moved to a new invitation, those dropped that they are off it.
+    if (split && retainedEmails.length > 0) {
+      notified += (await sendSeriesEnded({ ...ending, emails: retainedEmails, variant: "changed" })).sent;
+    }
+    if (removedEmails.length > 0) {
+      notified += (await sendSeriesEnded({ ...ending, emails: removedEmails, variant: "removed" })).sent;
+    }
+    // The rest of the series as it now is, to everyone on it: a new series
+    // after a split, or the same one re-issued from its first meeting.
+    const audience = split ? opts.nextEmails : [...retainedEmails, ...addedEmails];
+    if (audience.length > 0 && (split || opts.guestsCareAbout || addedEmails.length > 0)) {
+      try {
+        const sent = await sendMeetingInvites({
+          credentials,
+          orgId: actor.orgId,
+          origin: SITE_URL,
+          roomCode: opts.roomCode,
+          title: opts.title,
+          senderName,
+          emails: split || opts.guestsCareAbout ? audience : addedEmails,
+          hostEmail: actor.email ?? null,
+          meetingId: opts.meetingId,
+          startIso: slots[tail.indexOf(self)] ?? opts.nextStart,
+          durationMinutes: opts.nextDuration,
+          sequence: split ? (selfSequence ?? 0) : sequence,
+          whenLabel: opts.nextStart ? formatSlotFull(opts.nextStart, opts.timezone) : null,
+          notifyHost: false,
+          series: { seriesId: opts.meetingId, rrule: restRrule, timezone: opts.timezone },
+        });
+        invited = sent.sent;
+        attempted = sent.attempted;
+        inviteFailures = sent.failed;
+        inviteReasons = sent.reasons;
+      } catch (err) {
+        console.error("[/api/meetings/[id]] series invite failed", err);
+        inviteReasons = [err instanceof Error ? err.message : "the send failed"];
+      }
+    }
+  }
+
+  return NextResponse.json({
+    ok: true,
+    calendarSequence: selfSequence,
+    seriesUpdated: tail.length,
+    invited,
+    attempted,
+    inviteFailures,
+    inviteReasons,
+    uninvited: opts.uninvited,
+    notified,
+    mailboxConnected: mailbox.ok,
+    mailboxProblem: mailbox.ok ? null : mailboxProblemMessage(mailbox.problem),
+  });
 }

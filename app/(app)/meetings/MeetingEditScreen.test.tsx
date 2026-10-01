@@ -15,9 +15,9 @@ beforeEach(() => {
   posts.length = 0;
   global.fetch = (async (url: string, init?: { method?: string; body?: string }) => {
     calls.push(String(url));
-    if (init?.method === "POST") {
+    if (init?.method === "POST" || init?.method === "PATCH") {
       posts.push({ url: String(url), body: JSON.parse(init.body ?? "{}") });
-      return { ok: true, status: 200, json: async () => ({ id: "m1", roomCode: "abc", seriesCount: 4 }) };
+      return { ok: true, status: 200, json: async () => ({ id: "m1", roomCode: "abc", seriesCount: 4, seriesUpdated: 3 }) };
     }
     if (String(url).startsWith("/api/meetings/busy")) return { ok: true, json: async () => ({ busy }) };
     return { ok: false, json: async () => null };
@@ -107,4 +107,49 @@ it("sends no repeat for a meeting that does not repeat", async () => {
   fireEvent.click(screen.getByRole("button", { name: "Schedule" }));
   await waitFor(() => expect(posts.some((p) => p.url === "/api/meetings/schedule")).toBe(true));
   expect(posts.find((p) => p.url === "/api/meetings/schedule")!.body.repeat).toBeUndefined();
+});
+
+describe("editing a meeting of a repeating series", () => {
+  function openSeries(seriesId: string | null) {
+    render(
+      <MeetingEditScreen
+        mode="edit"
+        initial={{
+          meetingId: "m3",
+          title: "Weekly sync",
+          scheduledAt: new Date(2026, 9, 20, 10, 0).toISOString(),
+          durationMinutes: 30,
+          seriesId,
+          seriesRule: "FREQ=WEEKLY;COUNT=5",
+        }}
+        onClose={() => {}}
+        onSaved={() => {}}
+      />,
+    );
+  }
+
+  async function save() {
+    await waitFor(() => expect(screen.getByRole("button", { name: "Save" })).toBeEnabled());
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(posts.some((p) => p.url === "/api/meetings/m3")).toBe(true));
+    return posts.find((p) => p.url === "/api/meetings/m3")!.body;
+  }
+
+  it("changes this meeting alone unless asked otherwise", async () => {
+    openSeries("m1");
+    expect(screen.getByRole("radio", { name: "This meeting" })).toBeChecked();
+    expect((await save()).scope).toBeUndefined();
+  });
+
+  it("changes this and every later meeting when asked, and says how many", async () => {
+    openSeries("m1");
+    fireEvent.click(screen.getByRole("radio", { name: "This and following meetings" }));
+    expect((await save()).scope).toBe("following");
+    expect(await screen.findByText(/3 meetings in the series updated/)).toBeInTheDocument();
+  });
+
+  it("offers no choice on a meeting that does not repeat", () => {
+    openSeries(null);
+    expect(screen.queryByRole("radio", { name: "This and following meetings" })).toBeNull();
+  });
 });

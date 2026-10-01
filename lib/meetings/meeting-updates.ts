@@ -372,6 +372,14 @@ export interface SeriesEndContext {
   /** How many meetings were cancelled. */
   cancelled: number;
   reason?: string | null;
+  /**
+   * Why the series stops where it does, for the email's wording; the calendar
+   * instruction is the same either way.
+   *  - "ended" (default): the meetings from here on are cancelled.
+   *  - "changed": they continue under a new invitation, with new details.
+   *  - "removed": they continue without this guest.
+   */
+  variant?: "ended" | "changed" | "removed";
 }
 
 /**
@@ -381,6 +389,30 @@ export interface SeriesEndContext {
 export function buildSeriesEndEmail(ctx: SeriesEndContext): { subject: string; html: string } {
   const from = whenIn(ctx.fromStartIso, ctx.timezone);
   const count = `${ctx.cancelled} meeting${ctx.cancelled === 1 ? "" : "s"}`;
+  if (ctx.variant === "removed") {
+    return {
+      subject: `Removed: ${ctx.title}`,
+      html: buildSchedulingEmailHtml({
+        heading: ctx.keepRrule ? "You were taken off the rest of this series" : "You were taken off this repeating meeting",
+        intro: ctx.keepRrule
+          ? `${ctx.senderName} updated the guest list from ${from} onward. You're no longer expected at those meetings; the ones before then are unchanged.`
+          : `${ctx.senderName} updated the guest list. You're no longer expected at these meetings.`,
+        rows: [["Meeting", ctx.title]],
+        footnote: "The meetings are still going ahead without you.",
+      }),
+    };
+  }
+  if (ctx.variant === "changed") {
+    return {
+      subject: `Updated: ${ctx.title} changes from ${from}`,
+      html: buildSchedulingEmailHtml({
+        heading: "This repeating meeting changes",
+        intro: `${ctx.senderName} changed this meeting from ${from} onward. The meetings before then are unchanged, and a new invitation covers the rest.`,
+        rows: [["Meeting", ctx.title]],
+        footnote: "Your calendar entry for the series now ends before the change; accept the new invitation for the meetings after it.",
+      }),
+    };
+  }
   if (!ctx.keepRrule) {
     return {
       subject: `Cancelled: ${ctx.title} (all meetings)`,

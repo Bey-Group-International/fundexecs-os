@@ -158,6 +158,8 @@ function toEditInitial(m: CalendarMeeting): MeetingEditInitial {
     externalCalendarSyncEnabled: m.external_calendar_sync_enabled ?? false,
     externalCalendarProvider: m.external_calendar_provider,
     guestQuickAccess: m.guest_quick_access ?? false,
+    seriesId: m.series_id ?? null,
+    seriesRule: m.series_rule ?? null,
   };
 }
 

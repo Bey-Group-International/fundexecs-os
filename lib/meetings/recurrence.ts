@@ -7,6 +7,7 @@
 //
 // Pure.
 import { addCalendarDays } from "@/lib/meetings/scheduling";
+import { localToIso, zonedDateTime } from "@/lib/meetings/schedule";
 
 export type RepeatFreq = "weekly" | "monthly";
 
@@ -152,4 +153,39 @@ export function seriesPositionLabel(
   // The slot is the meeting's place in the rule as first written, so a series
   // cut short keeps reading "3 of 3" for its last meeting, not "3 of 12".
   return `${head} · ${index + 1} of ${Math.max(rule.count, index + 1)}`;
+}
+
+function daysBetween(fromDate: string, toDate: string): number {
+  const [fy, fm, fd] = fromDate.split("-").map(Number);
+  const [ty, tm, td] = toDate.split("-").map(Number);
+  return Math.round((Date.UTC(ty, tm - 1, td) - Date.UTC(fy, fm - 1, fd)) / 86_400_000);
+}
+
+/**
+ * Where each meeting of a series lands when one of them moves "this and
+ * following".
+ *
+ * The move is read on the wall clock of the series' zone: the moved meeting's
+ * slot to its new start is some number of days and a new time of day, and
+ * every later slot gets the same. Moving week three from Tuesday 10:00 to
+ * Wednesday 14:00 puts every later meeting on Wednesday at 14:00, across a
+ * clock change too, which a fixed number of milliseconds would not.
+ *
+ * Each meeting is placed from its slot in the rule, not from wherever it was
+ * moved to on its own: the rest of the series becomes a new rule, and the
+ * meetings must fall where that rule says.
+ */
+export function shiftSeriesStarts(
+  slots: string[],
+  movedSlotIso: string,
+  nextStartIso: string,
+  timezone: string,
+): string[] {
+  const from = zonedDateTime(new Date(movedSlotIso), timezone);
+  const to = zonedDateTime(new Date(nextStartIso), timezone);
+  const days = daysBetween(from.date, to.date);
+  return slots.map((slot) => {
+    const local = zonedDateTime(new Date(slot), timezone);
+    return localToIso(addCalendarDays(local.date, days), to.time, timezone);
+  });
 }
