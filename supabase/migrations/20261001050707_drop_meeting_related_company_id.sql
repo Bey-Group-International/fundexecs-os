@@ -1,0 +1,81 @@
+-- Drop live_meetings.related_company_id.
+--
+-- Step two of two. #1232 removed every code reference and is DEPLOYED --
+-- production deploy dpl_4eeFnZNmfHwvdtKKWEwDXUMvFxJZ (commit 89058203) reached
+-- READY before this migration was written. That ordering is the whole reason
+-- this is a separate change, and it is not stylistic.
+--
+-- Two SELECT lists used to name this column explicitly
+-- (app/api/meetings/upcoming/route.ts and app/(app)/meetings/page.tsx). A
+-- dropped column in a select list is an ERROR, not a blank field. Measured
+-- against production in a rolled-back transaction, running the meetings page's
+-- own select list either side of the drop:
+--
+--   BEFORE drop, the page's select list   OK (1 row)
+--   AFTER drop, the page's select list    FAILS 42703 column "related_company_id" does not exist
+--   AFTER drop, a select without it       OK
+--
+-- db-migrate.yml and the Vercel deploy both fire on push to main, and DB
+-- Migrate is an order of magnitude faster (about 20 seconds against several
+-- minutes, on each of the last five merges). So shipping both halves together
+-- would have applied this drop while the previous deploy was still selecting
+-- the column.
+
+-- ---------------------------------------------------------------------------
+-- Why the column goes rather than gets constrained
+-- ---------------------------------------------------------------------------
+--
+-- It has been a bare `uuid` pointing at nothing since 20260705143000, declared
+-- alongside related_contact_id and related_fund_id. Those two now carry
+-- composite foreign keys to their referents (20261001001500, 20261001033517),
+-- and deal_id was given the same treatment in 20261001042344.
+--
+-- This one could not join them: there is no companies table in this database
+-- and there never has been. No table in the public schema has "compan" in its
+-- name, and no migration in this directory creates one. The near misses were
+-- each considered and rejected, because a wrong foreign-key target is worse
+-- than none -- it starts refusing legitimate writes later:
+--
+--   entities           Build-module legal entities: jurisdiction,
+--                      formation_date, parent_entity_id. A holding structure,
+--                      not the company a meeting is about. 0 rows.
+--   sourcing_entities  the sourcing radar's own records.
+--   organizations      the tenant itself, which organization_id already
+--                      references.
+--
+-- That left two honest options -- point it at a table once one exists, or drop
+-- it. Dropping it is the one chosen. If a companies concept is built later it
+-- should arrive as a real table with a real reference, not by reviving a column
+-- that spent fifteen months meaning nothing.
+--
+-- live_meetings still carries an unused (related_record_type, related_record_id)
+-- pair, which is the shape a polymorphic "related record" would take if that is
+-- ever wanted. Nothing here touches it.
+
+-- ---------------------------------------------------------------------------
+-- Why this is safe
+-- ---------------------------------------------------------------------------
+--
+-- Verified against production immediately before writing this file, not once at
+-- the start of the investigation:
+--
+--   rows in live_meetings                     62
+--   rows with related_company_id set           0   <- no data is lost
+--   constraints referencing the column         0
+--   indexes referencing the column             0
+--   views referencing the column               0
+--   materialised views referencing the column  0
+--   RLS policies referencing the column        0
+--   functions referencing the column           0
+--   column defaults                            0
+--
+-- Nothing cascades, because nothing depends on it. No `cascade` is used here
+-- deliberately: if some dependency appears between now and when this runs, this
+-- should FAIL and be looked at rather than quietly dropping whatever else was
+-- attached.
+--
+-- `if exists` makes a re-run a no-op, matching the rest of this directory --
+-- migrations here get hand-applied out of band, so a second run has to be
+-- harmless.
+alter table public.live_meetings
+  drop column if exists related_company_id;
