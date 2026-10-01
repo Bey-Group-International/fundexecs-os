@@ -5,6 +5,7 @@ import { DILIGENCE_PRESETS } from "@/lib/brains/diligence";
 import type { DiligenceResponse } from "@/lib/brains/types";
 import { createClient } from "@/lib/supabase/client";
 import { uploadDocumentFile } from "@/components/documents/DocumentUploader";
+import type { UploadAllowance } from "@/lib/document-files";
 import { askDiligence, readLibraryDocument } from "../actions";
 
 const TEXT_EXTS = /\.(txt|md|markdown|csv)$/i;
@@ -17,7 +18,13 @@ const BINARY_ACCEPT = ".pdf,.docx,.xlsx,.pptx";
 // Text files are read in the browser. PDF and Office files can't be, so they
 // are saved privately to the Documents library (where Earn's extractor reads
 // them server-side) and the extracted text comes back here.
-export function DiligenceConsole({ library = [] }: { library?: { id: string; name: string }[] }) {
+export function DiligenceConsole({
+  library = [],
+  allowance,
+}: {
+  library?: { id: string; name: string }[];
+  allowance?: UploadAllowance;
+}) {
   const supabase = useMemo(() => createClient(), []);
   const [loading, setLoading] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -51,6 +58,7 @@ export function DiligenceConsole({ library = [] }: { library?: { id: string; nam
     const up = await uploadDocumentFile(supabase, {
       file,
       section: "other",
+      allowance,
       onProgress: (f) => setLoading(`Uploading ${file.name}… ${Math.round(f * 100)}%`),
     });
     if (!up.ok) {

@@ -16,7 +16,12 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { DATA_ROOM_SECTIONS } from "@/lib/data-room";
-import { MAX_UPLOAD_BYTES, formatBytes, mimeTypeForName } from "@/lib/document-files";
+import {
+  MAX_UPLOAD_BYTES,
+  formatBytes,
+  mimeTypeForName,
+  type UploadAllowance,
+} from "@/lib/document-files";
 import {
   MAX_ZIP_BYTES,
   MAX_ZIP_ENTRIES,
@@ -49,13 +54,25 @@ export function ZipImport({
   file,
   defaultSection,
   onClose,
+  allowance: allowanceProp,
 }: {
   file: File;
   defaultSection: string;
   onClose: () => void;
+  /** The org's plan allowance: over-plan entries are listed as skipped, with why. */
+  allowance?: UploadAllowance;
 }) {
   const router = useRouter();
   const supabase = useMemo(() => createClient(), []);
+  // Keyed on the values, not the object: a parent re-render hands over a fresh
+  // object, and the read effect below must not re-read the archive and throw
+  // away the operator's filing decisions because of it.
+  const maxBytes = allowanceProp?.maxBytes;
+  const planLimited = allowanceProp?.planLimited;
+  const allowance = useMemo<UploadAllowance | undefined>(
+    () => (maxBytes === undefined ? undefined : { maxBytes, planLimited: Boolean(planLimited) }),
+    [maxBytes, planLimited],
+  );
 
   const [phase, setPhase] = useState<Phase>("reading");
   const [error, setError] = useState("");
@@ -85,7 +102,7 @@ export function ZipImport({
         const entries = readZipEntries(view);
         viewRef.current = view;
         entriesRef.current = new Map(entries.map((e) => [e.name, e]));
-        const next = planZipImport(entries, { defaultSection });
+        const next = planZipImport(entries, { defaultSection, allowance });
         setPlan(next);
         setSections(Object.fromEntries(next.items.map((i) => [i.path, i.section])));
         setPhase("review");
@@ -98,7 +115,7 @@ export function ZipImport({
     return () => {
       cancelled = true;
     };
-  }, [file, defaultSection]);
+  }, [file, defaultSection, allowance]);
 
   const included = useMemo(
     () => (plan?.items ?? []).filter((i) => !excluded.has(i.path)),
@@ -131,6 +148,7 @@ export function ZipImport({
           const result = await uploadDocumentFile(supabase, {
             file: entryFile,
             section: sections[item.path] ?? item.section,
+            allowance,
           });
           if (!result.ok) failed.push(`${item.name} — ${result.error}`);
         } catch (err) {
@@ -142,7 +160,7 @@ export function ZipImport({
 
     setPhase("done");
     if (failed.length < included.length) router.refresh();
-  }, [included, sections, supabase, router]);
+  }, [included, sections, supabase, router, allowance]);
 
   const grouped = useMemo(() => {
     const by = new Map<string, ZipPlanItem[]>();

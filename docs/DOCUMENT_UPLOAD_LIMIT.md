@@ -26,3 +26,14 @@ Do step 3 last. Raising the app cap before the global limit brings back the fail
 ## Why not a migration
 
 The bucket limit is a row in `storage.buckets`, so a migration sets it. The global limit is project configuration behind the Management API, which migrations cannot reach — hence the script.
+
+## Per-plan limit (FundExecs plans)
+
+On top of the platform limits above, large files are a paid feature:
+
+| FundExecs plan | Per-file limit |
+| --- | --- |
+| Free | 10 MB (`FREE_TIER_UPLOAD_BYTES`) |
+| Starter, Pro, Scale | the platform ceiling (`MAX_UPLOAD_BYTES`: 50 MB today, 500 MB after the upgrade above) |
+
+"Paid" is `lib/feature-access`'s `unlocked`, the same rule that gates Run and Execute, so orgs that predate the paywall and platform admins also get the ceiling. The server enforces it twice: when the upload ticket is minted, against the size the browser claims, and at finalize, against the size Storage actually holds, deleting an over-plan object. The drop zone states the free limit and offers **Upgrade**, linking to `/wallet`.

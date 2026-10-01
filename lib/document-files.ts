@@ -28,7 +28,7 @@ export const DOCUMENT_BUCKET = "documents";
  * that promises more than Storage accepts fails at the last step; one that
  * states the real number refuses the file before anything is sent.
  */
-export const FREE_PLAN_UPLOAD_MB = 50;
+export const SUPABASE_FREE_UPLOAD_MB = 50;
 export const BUCKET_UPLOAD_MB = 500;
 
 export const MAX_UPLOAD_BYTES = resolveMaxUploadBytes(process.env.NEXT_PUBLIC_DOCUMENT_MAX_UPLOAD_MB);
@@ -36,8 +36,39 @@ export const MAX_UPLOAD_BYTES = resolveMaxUploadBytes(process.env.NEXT_PUBLIC_DO
 /** Parse the env override, clamped to the bucket; anything unusable is the Free-plan limit. */
 export function resolveMaxUploadBytes(raw: string | undefined): number {
   const mb = Number(raw);
-  const value = Number.isFinite(mb) && mb > 0 ? Math.min(mb, BUCKET_UPLOAD_MB) : FREE_PLAN_UPLOAD_MB;
+  const value = Number.isFinite(mb) && mb > 0 ? Math.min(mb, BUCKET_UPLOAD_MB) : SUPABASE_FREE_UPLOAD_MB;
   return Math.floor(value * 1024 * 1024);
+}
+
+/**
+ * What one org may upload, by its FundExecs plan.
+ *
+ * Large files are a paid feature: an org on the Free plan may upload files up
+ * to FREE_TIER_UPLOAD_BYTES; a paid, grandfathered, or admin org gets the
+ * platform ceiling (MAX_UPLOAD_BYTES). "Paid" is the same decision that unlocks
+ * Run, Execute and the other gated surfaces (lib/feature-access), so the two can
+ * never disagree about who has paid.
+ *
+ * Plain data, so the server can resolve it once and hand it to the drop zone.
+ */
+export interface UploadAllowance {
+  maxBytes: number;
+  /** True when a paid plan would raise this org's limit. */
+  planLimited: boolean;
+}
+
+export const FREE_TIER_UPLOAD_BYTES = 10 * 1024 * 1024;
+
+export function uploadAllowance(paid: boolean): UploadAllowance {
+  if (paid || FREE_TIER_UPLOAD_BYTES >= MAX_UPLOAD_BYTES) {
+    return { maxBytes: MAX_UPLOAD_BYTES, planLimited: false };
+  }
+  return { maxBytes: FREE_TIER_UPLOAD_BYTES, planLimited: true };
+}
+
+/** The refusal for a file a paid plan would accept. */
+export function paidPlanRequiredMessage(size: number): string {
+  return `Files over ${formatBytes(FREE_TIER_UPLOAD_BYTES)} need a paid plan. This one is ${formatBytes(size)} — upgrade to upload files up to ${formatBytes(MAX_UPLOAD_BYTES)}.`;
 }
 
 export interface DocumentFileType {
@@ -187,7 +218,8 @@ export function documentKindLabel(
 
 export type UploadCheck =
   | { ok: true; ext: string; label: string }
-  | { ok: false; reason: string };
+  /** `upgrade` marks a refusal a paid plan would lift. */
+  | { ok: false; reason: string; upgrade?: boolean };
 
 /**
  * Gate a file before anything is minted for it. Extension is authoritative:
@@ -195,11 +227,15 @@ export type UploadCheck =
  * application/octet-stream on plenty of machines), so a reported type that
  * disagrees with a supported extension is not grounds for rejection.
  */
-export function checkUploadCandidate(file: {
-  name: string;
-  size: number;
-  type?: string;
-}): UploadCheck {
+export function checkUploadCandidate(
+  file: {
+    name: string;
+    size: number;
+    type?: string;
+  },
+  /** The uploading org's allowance; omitted means the platform ceiling. */
+  allowance: UploadAllowance = { maxBytes: MAX_UPLOAD_BYTES, planLimited: false },
+): UploadCheck {
   const name = file.name.trim();
   if (!name) return { ok: false, reason: "That file has no name." };
   const ext = fileExtension(name);
@@ -211,6 +247,14 @@ export function checkUploadCandidate(file: {
       ok: false,
       reason: `That file is ${formatBytes(file.size)}. The limit is ${formatBytes(MAX_UPLOAD_BYTES)}.`,
     };
+  }
+  if (file.size > allowance.maxBytes) {
+    return allowance.planLimited
+      ? { ok: false, reason: paidPlanRequiredMessage(file.size), upgrade: true }
+      : {
+          ok: false,
+          reason: `That file is ${formatBytes(file.size)}. The limit is ${formatBytes(allowance.maxBytes)}.`,
+        };
   }
   return { ok: true, ext, label: spec.label };
 }
@@ -286,10 +330,10 @@ export function documentNameFromFile(fileName: string): string {
  */
 export type UploadTicket =
   | { ok: true; documentId: string; path: string; contentType: string }
-  | { ok: false; error: string };
+  | { ok: false; error: string; upgrade?: boolean };
 
 /** Result of finalizing or abandoning an upload. */
-export type UploadOutcome = { ok: true } | { ok: false; error: string };
+export type UploadOutcome = { ok: true } | { ok: false; error: string; upgrade?: boolean };
 
 /**
  * Filename to hand a browser when it saves an uploaded document. Objects are

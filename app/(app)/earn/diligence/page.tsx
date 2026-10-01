@@ -3,6 +3,7 @@ import Link from "next/link";
 import { getSessionContext } from "@/lib/auth";
 import { createServerClient } from "@/lib/supabase/server";
 import { isExtractable } from "@/lib/document-files";
+import { uploadAllowanceFor } from "@/lib/document-upload-allowance.server";
 import { DiligenceConsole } from "./DiligenceConsole";
 
 export const dynamic = "force-dynamic";
@@ -45,7 +46,7 @@ export default async function DiligencePage() {
         </p>
       </header>
 
-      <DiligenceConsole library={library} />
+      <DiligenceConsole library={library} allowance={await uploadAllowanceFor(ctx)} />
     </div>
   );
 }

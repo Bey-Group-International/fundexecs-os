@@ -29,7 +29,7 @@ import {
 } from "./LibraryControls";
 import { DeleteDocumentButton } from "@/components/build/DeleteDocumentButton";
 import { GenerateAiButton } from "@/components/build/GenerateAiButton";
-import { formatBytes } from "@/lib/document-files";
+import { formatBytes, type UploadAllowance } from "@/lib/document-files";
 
 type SortKey = "section" | "name" | "updated" | "size";
 
@@ -42,9 +42,12 @@ export function LibraryWorkspace({
   sections,
   rooms,
   canWrite = true,
+  allowance,
 }: {
   sections: LibrarySection[];
   rooms: LibraryRoom[];
+  /** What this org's plan lets it upload (lib/document-files uploadAllowance). */
+  allowance?: UploadAllowance;
   /** False for a view-only member: every control that would be refused by RLS
    *  is hidden rather than offered and then failed. */
   canWrite?: boolean;
@@ -322,7 +325,7 @@ export function LibraryWorkspace({
 
         {canWrite ? (
           <div className="mb-3">
-            <DocumentUploader section={targetSection} sectionLabel={targetLabel} />
+            <DocumentUploader section={targetSection} sectionLabel={targetLabel} allowance={allowance} />
           </div>
         ) : null}
 
@@ -452,6 +455,7 @@ export function LibraryWorkspace({
                             documentId={d.id}
                             section={d.section}
                             hasFile={d.uploaded}
+                            allowance={allowance}
                           />
                         ) : null}
                         {d.uploaded && canWrite ? (

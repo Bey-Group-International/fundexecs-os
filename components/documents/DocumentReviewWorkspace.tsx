@@ -19,7 +19,7 @@ import {
   runDocumentReview,
 } from "./review-actions";
 import { revokeShare } from "@/components/build/materials-actions";
-import type { PreviewKind } from "@/lib/document-files";
+import type { PreviewKind, UploadAllowance } from "@/lib/document-files";
 import type { ShareSuggestion } from "@/lib/document-review";
 import type { DocumentReview, DocumentStatus } from "@/lib/supabase/database.types";
 
@@ -46,6 +46,7 @@ export function DocumentReviewWorkspace({
   shareDefaults,
   links,
   canWrite,
+  allowance,
 }: {
   doc: { id: string; name: string; section: string; status: DocumentStatus; previewKind: PreviewKind };
   sections: { key: string; label: string }[];
@@ -53,6 +54,7 @@ export function DocumentReviewWorkspace({
   shareDefaults: ShareSuggestion;
   links: DocLink[];
   canWrite: boolean;
+  allowance?: UploadAllowance;
 }) {
   const router = useRouter();
   const [review, setReview] = useState<DocumentReview | null>(initialReview);
@@ -112,7 +114,7 @@ export function DocumentReviewWorkspace({
           >
             Download
           </a>
-          {canWrite ? <ReplaceFileButton documentId={doc.id} section={doc.section} hasFile /> : null}
+          {canWrite ? <ReplaceFileButton documentId={doc.id} section={doc.section} hasFile allowance={allowance} /> : null}
           <span className="ml-auto font-mono text-[11px] text-fg-muted">
             Shown as uploaded
           </span>

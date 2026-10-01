@@ -6,6 +6,7 @@ import {
   planZipImport,
   sectionFromPath,
 } from "./document-zip";
+import { uploadAllowance } from "./document-files";
 
 function entry(name: string, uncompressedSize = 1024) {
   return { name, uncompressedSize, isDirectory: name.endsWith("/") };
@@ -191,5 +192,17 @@ describe("describePlan", () => {
   it("says plainly when there is nothing to file", () => {
     const plan = planZipImport([entry("bin/tool.exe")], { defaultSection: "other" });
     expect(describePlan(plan)).toBe("Nothing in this archive can be filed.");
+  });
+});
+
+describe("planZipImport on the Free plan", () => {
+  it("skips entries over the plan limit and says a paid plan would take them", () => {
+    const plan = planZipImport(
+      [entry("Legal/LPA.pdf", 2 * 1024 * 1024), entry("Legal/PPM.pdf", 20 * 1024 * 1024)],
+      { defaultSection: "other", allowance: uploadAllowance(false) },
+    );
+    expect(plan.items.map((i) => i.name)).toEqual(["LPA"]);
+    expect(plan.skipped[0].path).toBe("Legal/PPM.pdf");
+    expect(plan.skipped[0].reason).toContain("need a paid plan");
   });
 });
