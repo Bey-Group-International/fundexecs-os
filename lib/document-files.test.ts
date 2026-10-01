@@ -11,6 +11,7 @@ import {
   isDocumentObjectPath,
   isExternalLink,
   isUploadedFile,
+  resolveMaxUploadBytes,
 } from "./document-files";
 
 const ORG = "11111111-1111-1111-1111-111111111111";
@@ -113,7 +114,7 @@ describe("checkUploadCandidate", () => {
   it("rejects a file over the bucket ceiling and says both numbers", () => {
     const result = checkUploadCandidate({ name: "huge.pdf", size: MAX_UPLOAD_BYTES + 1 });
     expect(result.ok).toBe(false);
-    if (!result.ok) expect(result.reason).toContain("500 MB");
+    if (!result.ok) expect(result.reason).toContain("50 MB");
   });
 
   it("accepts a file exactly at the ceiling", () => {
@@ -152,7 +153,7 @@ describe("formatBytes", () => {
     expect(formatBytes(512)).toBe("512 B");
     expect(formatBytes(2048)).toBe("2 KB");
     expect(formatBytes(1024 * 1024 * 1.5)).toBe("1.5 MB");
-    expect(formatBytes(MAX_UPLOAD_BYTES)).toBe("500 MB");
+    expect(formatBytes(MAX_UPLOAD_BYTES)).toBe("50 MB");
   });
 
   it("renders an unknown size as a dash rather than 0", () => {
@@ -206,5 +207,25 @@ describe("downloadFileName", () => {
 
   it("falls back to a usable name when there is nothing left", () => {
     expect(downloadFileName("   ", `${ORG}/${DOC}/abc.pdf`)).toBe("document.pdf");
+  });
+});
+
+describe("resolveMaxUploadBytes", () => {
+  const MB = 1024 * 1024;
+
+  it("defaults to the Supabase Free-plan limit when unset or unusable", () => {
+    expect(resolveMaxUploadBytes(undefined)).toBe(50 * MB);
+    expect(resolveMaxUploadBytes("")).toBe(50 * MB);
+    expect(resolveMaxUploadBytes("lots")).toBe(50 * MB);
+    expect(resolveMaxUploadBytes("-5")).toBe(50 * MB);
+  });
+
+  it("raises to the configured value after an upgrade", () => {
+    expect(resolveMaxUploadBytes("500")).toBe(500 * MB);
+    expect(resolveMaxUploadBytes("200")).toBe(200 * MB);
+  });
+
+  it("never exceeds the bucket's own 500 MB ceiling", () => {
+    expect(resolveMaxUploadBytes("2000")).toBe(500 * MB);
   });
 });
