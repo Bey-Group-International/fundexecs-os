@@ -14,7 +14,7 @@
 // else. Finding one document meant opening sections until it appeared, and
 // there was no way to see a file's type, size, or age at all — none of which
 // the product had, because until now a document could not BE a file.
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useSyncExternalStore, useTransition } from "react";
 import Link from "next/link";
 import { addDocument, newDocument } from "./document-actions";
 import { removeDocumentFile } from "./upload-actions";
@@ -32,6 +32,28 @@ import { GenerateAiButton } from "@/components/build/GenerateAiButton";
 import { formatBytes, type UploadAllowance } from "@/lib/document-files";
 
 type SortKey = "section" | "name" | "updated" | "size";
+
+// The table needs ~56rem beside the rail; below Tailwind's 2xl breakpoint the
+// pane is narrower than that. Only one layout is rendered (not both with one
+// hidden) so every control exists once in the page.
+const WIDE_QUERY = "(min-width: 1536px)";
+
+function subscribeWide(onChange: () => void): () => void {
+  if (typeof window === "undefined" || !window.matchMedia) return () => {};
+  const mq = window.matchMedia(WIDE_QUERY);
+  mq.addEventListener("change", onChange);
+  return () => mq.removeEventListener("change", onChange);
+}
+
+function useWideLayout(): boolean {
+  return useSyncExternalStore(
+    subscribeWide,
+    () => (typeof window !== "undefined" && window.matchMedia ? window.matchMedia(WIDE_QUERY).matches : false),
+    // The server cannot know the width; cards render everywhere, so they are
+    // the safe first paint.
+    () => false,
+  );
+}
 
 /** A document nobody can read: no file, no link, no written content. */
 function isEmpty(doc: LibraryDoc): boolean {
@@ -120,6 +142,77 @@ export function LibraryWorkspace({
   const targetSection = current?.key ?? "other";
   const targetLabel = current?.label ?? "Other Materials";
   const sharedCount = allDocs.filter((d) => d.roomIds.length > 0).length;
+  const wide = useWideLayout();
+
+  // Row controls, shared by the table (wide screens) and the cards (everything
+  // else), so the two layouts can never offer different actions.
+  const renderStatus = (d: LibraryDoc) =>
+    canWrite ? (
+      <StatusCycler doc={d} />
+    ) : (
+      <span className="font-mono text-[11px] uppercase tracking-wider text-fg-muted">{d.status}</span>
+    );
+
+  const renderSharing = (d: LibraryDoc) =>
+    canWrite ? (
+      <PublishControl doc={d} rooms={rooms} />
+    ) : (
+      <span className="font-mono text-[11px] text-fg-muted">
+        {d.roomIds.length > 0 ? `In ${d.roomIds.length} room${d.roomIds.length > 1 ? "s" : ""}` : "Private"}
+      </span>
+    );
+
+  const renderActions = (d: LibraryDoc, align: "start" | "end") => (
+    <div className={`flex flex-wrap items-center gap-1.5 ${align === "end" ? "justify-end" : ""}`}>
+      {d.storageKey ? (
+        <a
+          href={`/api/documents/${d.id}/file`}
+          target="_blank"
+          rel="noopener noreferrer"
+          title={d.uploaded ? "Open the file" : "Open the linked document"}
+          className="shrink-0 rounded-lg border border-line px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider text-fg-muted transition hover:border-gold-500/40 hover:text-gold-300"
+        >
+          Open
+        </a>
+      ) : null}
+      {d.uploaded ? (
+        <Link
+          href={`/document/${d.id}/review`}
+          title="See the file as-is with Earn's review beside it"
+          className="shrink-0 rounded-lg border border-gold-500/40 px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider text-gold-300 transition hover:bg-gold-500/10"
+        >
+          Review
+        </Link>
+      ) : null}
+      {canWrite ? (
+        <ReplaceFileButton
+          documentId={d.id}
+          section={d.section}
+          hasFile={d.uploaded}
+          allowance={allowance}
+        />
+      ) : null}
+      {d.uploaded && canWrite ? (
+        <form
+          action={(fd) =>
+            startTransition(async () => {
+              await removeDocumentFile(fd);
+            })
+          }
+        >
+          <input type="hidden" name="id" value={d.id} />
+          <button
+            type="submit"
+            title="Detach the file — the document, its name and anything written stay"
+            className="shrink-0 rounded-lg border border-line px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider text-fg-muted transition hover:border-red-500/40 hover:text-red-400"
+          >
+            Detach
+          </button>
+        </form>
+      ) : null}
+      {canWrite ? <DeleteDocumentButton id={d.id} name={d.name} /> : null}
+          </div>
+  );
 
   return (
     <div className="grid gap-6 lg:grid-cols-[15rem_minmax(0,1fr)]">
@@ -166,7 +259,26 @@ export function LibraryWorkspace({
             ) : null}
           </div>
 
-          <nav className="flex max-h-[24rem] min-h-0 flex-col gap-0.5 overflow-y-auto overscroll-contain p-2 lg:max-h-none lg:flex-1">
+          {/* On narrow screens the sixteen-section list stacked above the
+              documents and had to be scrolled past to reach any of them; a
+              picker takes one line. */}
+          <div className="px-3 pb-3 lg:hidden">
+            <select
+              value={section ?? ""}
+              onChange={(e) => setSection(e.target.value || null)}
+              aria-label="Section"
+              className="w-full rounded-lg border border-line bg-surface-0 px-3 py-2 text-sm text-fg-primary focus:border-gold-500/60 focus:outline-none"
+            >
+              <option value="">All documents ({allDocs.length})</option>
+              {sections.map((s) => (
+                <option key={s.key} value={s.key}>
+                  {s.label} ({s.docs.length})
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <nav className="hidden min-h-0 flex-col gap-0.5 overflow-y-auto overscroll-contain p-2 lg:flex lg:flex-1">
             <button
               type="button"
               onClick={() => setSection(null)}
@@ -354,6 +466,49 @@ export function LibraryWorkspace({
             ) : null}
           </div>
         ) : (
+          <>
+          {/* Below 2xl the pane is narrower than the table, which used to push
+              every row's actions off-screen behind a horizontal scrollbar at
+              the bottom of the list. Cards wrap instead, so each document's
+              controls are always in view as you scroll down. */}
+          {!wide ? (
+          <ul className="flex flex-col gap-2">
+            {rows.map((d) => (
+              <li key={d.id} className="rounded-xl border border-line bg-surface-0 px-3 py-2.5">
+                <div className="flex min-w-0 items-center gap-2">
+                  <span
+                    title={d.uploaded ? "Uploaded file" : d.storageKey ? "External link" : "Written here"}
+                    className="shrink-0 font-mono text-[11px] text-fg-muted"
+                  >
+                    {d.uploaded ? "▤" : d.storageKey ? "↗" : "≡"}
+                  </span>
+                  <Link
+                    href={d.uploaded ? `/document/${d.id}/review` : `/document/${d.id}`}
+                    className="min-w-0 flex-1 truncate text-sm text-fg-secondary transition hover:text-gold-300"
+                  >
+                    {d.name}
+                  </Link>
+                  <QualityBadges doc={d} />
+                </div>
+                <p className="mt-0.5 truncate pl-5 font-mono text-[11px] text-fg-muted">
+                  {[
+                    section === null ? (sectionLabel.get(d.section) ?? "Other Materials") : null,
+                    d.kind,
+                    d.sizeBytes != null ? formatBytes(d.sizeBytes) : null,
+                    d.updatedLabel,
+                  ]
+                    .filter(Boolean)
+                    .join(" · ")}
+                </p>
+                <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-2 pl-5">
+                  {renderStatus(d)}
+                  {renderSharing(d)}
+                  <div className="ml-auto">{renderActions(d, "end")}</div>
+                </div>
+              </li>
+            ))}
+          </ul>
+          ) : (
           <div className="overflow-x-auto rounded-xl border border-line bg-surface-0">
             <table className="w-full min-w-[56rem] border-collapse text-sm">
               <thead>
@@ -368,14 +523,14 @@ export function LibraryWorkspace({
                   <th scope="col" className="px-3 py-2 font-normal">Status</th>
                   <th scope="col" className="px-3 py-2 font-normal">Sharing</th>
                   <SortHeader label="Updated" value="updated" sort={sort} onSort={setSort} />
-                  <th scope="col" className="px-3 py-2 font-normal">
+                  <th scope="col" className="sticky right-0 bg-surface-0 px-3 py-2 font-normal">
                     <span className="sr-only">Actions</span>
                   </th>
                 </tr>
               </thead>
               <tbody>
                 {rows.map((d) => (
-                  <tr key={d.id} className="border-b border-line/50 last:border-0 hover:bg-surface-1/60">
+                  <tr key={d.id} className="group border-b border-line/50 last:border-0 hover:bg-surface-1/60">
                     <td className="px-3 py-2">
                       <div className="flex min-w-0 items-center gap-2">
                         <span
@@ -410,80 +565,24 @@ export function LibraryWorkspace({
                       <QualityBadges doc={d} />
                     </td>
                     <td className="px-3 py-2">
-                      {canWrite ? (
-                        <StatusCycler doc={d} />
-                      ) : (
-                        <span className="font-mono text-[11px] uppercase tracking-wider text-fg-muted">
-                          {d.status}
-                        </span>
-                      )}
+                      {renderStatus(d)}
                     </td>
                     <td className="px-3 py-2">
-                      {canWrite ? (
-                        <PublishControl doc={d} rooms={rooms} />
-                      ) : (
-                        <span className="font-mono text-[11px] text-fg-muted">
-                          {d.roomIds.length > 0 ? `In ${d.roomIds.length} room${d.roomIds.length > 1 ? "s" : ""}` : "Private"}
-                        </span>
-                      )}
+                      {renderSharing(d)}
                     </td>
                     <td className="px-3 py-2 font-mono text-[11px] text-fg-muted">{d.updatedLabel}</td>
-                    <td className="px-3 py-2">
-                      <div className="flex items-center justify-end gap-1.5">
-                        {d.storageKey ? (
-                          <a
-                            href={`/api/documents/${d.id}/file`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            title={d.uploaded ? "Open the file" : "Open the linked document"}
-                            className="shrink-0 rounded-lg border border-line px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider text-fg-muted transition hover:border-gold-500/40 hover:text-gold-300"
-                          >
-                            Open
-                          </a>
-                        ) : null}
-                        {d.uploaded ? (
-                          <Link
-                            href={`/document/${d.id}/review`}
-                            title="See the file as-is with Earn's review beside it"
-                            className="shrink-0 rounded-lg border border-gold-500/40 px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider text-gold-300 transition hover:bg-gold-500/10"
-                          >
-                            Review
-                          </Link>
-                        ) : null}
-                        {canWrite ? (
-                          <ReplaceFileButton
-                            documentId={d.id}
-                            section={d.section}
-                            hasFile={d.uploaded}
-                            allowance={allowance}
-                          />
-                        ) : null}
-                        {d.uploaded && canWrite ? (
-                          <form
-                            action={(fd) =>
-                              startTransition(async () => {
-                                await removeDocumentFile(fd);
-                              })
-                            }
-                          >
-                            <input type="hidden" name="id" value={d.id} />
-                            <button
-                              type="submit"
-                              title="Detach the file — the document, its name and anything written stay"
-                              className="shrink-0 rounded-lg border border-line px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider text-fg-muted transition hover:border-red-500/40 hover:text-red-400"
-                            >
-                              Detach
-                            </button>
-                          </form>
-                        ) : null}
-                        {canWrite ? <DeleteDocumentButton id={d.id} name={d.name} /> : null}
-                      </div>
+                    {/* Pinned to the right edge: however the table scrolls, every
+                        row's actions stay on screen. */}
+                    <td className="sticky right-0 bg-surface-0 px-3 py-2 shadow-[-8px_0_8px_-8px_rgba(0,0,0,0.35)] group-hover:bg-surface-1">
+                      {renderActions(d, "end")}
                     </td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
+          )}
+          </>
         )}
 
         {current && current.docs.length === 0 && current.viaBuild ? (
