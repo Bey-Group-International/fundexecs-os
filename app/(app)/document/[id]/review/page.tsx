@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { getSessionContext } from "@/lib/auth";
 import { canWriteOrg } from "@/lib/rbac";
+import { uploadAllowanceFor } from "@/lib/document-upload-allowance.server";
 import { createServerClient } from "@/lib/supabase/server";
 import { DATA_ROOM_SECTIONS } from "@/lib/data-room";
 import { documentKindLabel, formatBytes, isUploadedFile, previewKindFor } from "@/lib/document-files";
@@ -38,7 +39,7 @@ export default async function DocumentReviewPage(props: { params: Promise<{ id: 
   if (!doc) notFound();
   if (!isUploadedFile(doc.storage_key)) redirect(`/document/${doc.id}`);
 
-  const [reviewRes, sharesRes] = await Promise.all([
+  const [reviewRes, sharesRes, allowance] = await Promise.all([
     supabase
       .from("document_reviews")
       .select("*")
@@ -52,6 +53,7 @@ export default async function DocumentReviewPage(props: { params: Promise<{ id: 
       .eq("document_id", doc.id)
       .is("revoked_at", null)
       .order("created_at", { ascending: false }),
+    uploadAllowanceFor(ctx),
   ]);
   const cached = reviewRes.data as DocumentReview | null;
   // A review of a previous version is not a review of this one.
@@ -100,6 +102,7 @@ export default async function DocumentReviewPage(props: { params: Promise<{ id: 
         shareDefaults={suggestShareSettings({ name: doc.name, section })}
         links={links}
         canWrite={canWriteOrg(ctx.role)}
+        allowance={allowance}
       />
     </div>
   );

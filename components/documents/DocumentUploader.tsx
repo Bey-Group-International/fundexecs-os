@@ -27,6 +27,7 @@ import {
   MAX_UPLOAD_BYTES,
   checkUploadCandidate,
   formatBytes,
+  type UploadAllowance,
 } from "@/lib/document-files";
 import { ZIP_EXTENSION, isZipFile } from "@/lib/document-zip";
 import { abandonUpload, createUploadTicket, finalizeUpload } from "./upload-actions";
@@ -104,14 +105,18 @@ export async function uploadDocumentFile(
     section: string;
     documentId?: string;
     onProgress?: (fraction: number) => void;
+    /** The org's plan allowance; the server enforces it regardless. */
+    allowance?: UploadAllowance;
   },
-): Promise<{ ok: true; documentId: string } | { ok: false; error: string }> {
-  const { file, section, documentId, onProgress } = input;
+): Promise<
+  { ok: true; documentId: string } | { ok: false; error: string; upgrade?: boolean }
+> {
+  const { file, section, documentId, onProgress, allowance } = input;
 
-  // Check before minting anything, so an unsupported file costs no round trip
-  // and the operator hears the same sentence the server would have said.
-  const local = checkUploadCandidate({ name: file.name, size: file.size, type: file.type });
-  if (!local.ok) return { ok: false, error: local.reason };
+  // Check before minting anything, so an unsupported or over-plan file costs no
+  // round trip and the operator hears the same sentence the server would say.
+  const local = checkUploadCandidate({ name: file.name, size: file.size, type: file.type }, allowance);
+  if (!local.ok) return { ok: false, error: local.reason, upgrade: local.upgrade };
 
   const ticket = await createUploadTicket({
     section,
@@ -120,7 +125,7 @@ export async function uploadDocumentFile(
     mimeType: file.type,
     documentId,
   });
-  if (!ticket.ok) return { ok: false, error: ticket.error };
+  if (!ticket.ok) return { ok: false, error: ticket.error, upgrade: ticket.upgrade };
 
   try {
     await sendResumable(supabase, {
@@ -139,7 +144,7 @@ export async function uploadDocumentFile(
   const done = await finalizeUpload({ documentId: ticket.documentId, path: ticket.path });
   if (!done.ok) {
     await abandonUpload({ documentId: ticket.documentId, path: ticket.path });
-    return { ok: false, error: done.error };
+    return { ok: false, error: done.error, upgrade: done.upgrade };
   }
   return { ok: true, documentId: ticket.documentId };
 }
@@ -153,15 +158,20 @@ interface QueueItem {
   progress: number;
   documentId?: string;
   error?: string;
+  /** Refused because of the plan — offer the upgrade, not a retry. */
+  upgrade?: boolean;
 }
 
 export function DocumentUploader({
   section,
   sectionLabel,
+  allowance = { maxBytes: MAX_UPLOAD_BYTES, planLimited: false },
 }: {
   /** Section (doc_type) uploaded files are filed under. */
   section: string;
   sectionLabel: string;
+  /** What this org's plan allows (resolved on the server). */
+  allowance?: UploadAllowance;
 }) {
   const router = useRouter();
   const supabase = useMemo(() => createClient(), []);
@@ -211,6 +221,7 @@ export function DocumentUploader({
           const result = await uploadDocumentFile(supabase, {
             file: files[i],
             section,
+            allowance,
             onProgress: (f) => {
               const pct = Math.floor(f * 100);
               if (pct !== shown) {
@@ -224,7 +235,7 @@ export function DocumentUploader({
             key,
             result.ok
               ? { state: "done", progress: 1, documentId: result.documentId }
-              : { state: "failed", error: result.error },
+              : { state: "failed", error: result.error, upgrade: result.upgrade },
           );
         }
       };
@@ -234,7 +245,7 @@ export function DocumentUploader({
       busy.current = false;
       if (landed) router.refresh();
     },
-    [router, section, supabase],
+    [router, section, supabase, allowance],
   );
 
   const onDrop = useCallback(
@@ -272,8 +283,21 @@ export function DocumentUploader({
         </span>
         <span className="text-xs text-fg-muted">
           Filed under {sectionLabel} · PDF, Word, Excel, PowerPoint, text, image, or video · up to{" "}
-          {formatBytes(MAX_UPLOAD_BYTES)} each
+          {formatBytes(allowance.maxBytes)} each
         </span>
+        {allowance.planLimited ? (
+          <span className="text-xs text-fg-muted">
+            Free plan · files up to {formatBytes(allowance.maxBytes)}.{" "}
+            <Link
+              href="/wallet"
+              onClick={(e) => e.stopPropagation()}
+              className="text-gold-300 underline hover:text-gold-200"
+            >
+              Upgrade
+            </Link>{" "}
+            to upload up to {formatBytes(MAX_UPLOAD_BYTES)}.
+          </span>
+        ) : null}
         <span className="text-xs text-fg-muted">
           Drop a .zip to import a whole pack — its folders become sections.
         </span>
@@ -347,6 +371,7 @@ export function DocumentUploader({
           key={`${archives[0].name}-${archives[0].size}-${archives[0].lastModified}`}
           file={archives[0]}
           defaultSection={section}
+          allowance={allowance}
           onClose={() => setArchives((prev) => prev.slice(1))}
         />
       ) : null}
@@ -356,6 +381,14 @@ export function DocumentUploader({
           {failed.map((q) => (
             <p key={q.key} className="text-xs text-red-300">
               <span className="text-fg-secondary">{q.name}</span> — {q.error}
+              {q.upgrade ? (
+                <>
+                  {" "}
+                  <Link href="/wallet" className="font-medium text-gold-300 underline hover:text-gold-200">
+                    Upgrade →
+                  </Link>
+                </>
+              ) : null}
             </p>
           ))}
           <button
@@ -376,10 +409,12 @@ export function ReplaceFileButton({
   documentId,
   section,
   hasFile,
+  allowance,
 }: {
   documentId: string;
   section: string;
   hasFile: boolean;
+  allowance?: UploadAllowance;
 }) {
   const router = useRouter();
   const supabase = useMemo(() => createClient(), []);
@@ -387,6 +422,7 @@ export function ReplaceFileButton({
   const [state, setState] = useState<"idle" | "busy" | "error">("idle");
   const [error, setError] = useState("");
   const [pct, setPct] = useState(0);
+  const [upgrade, setUpgrade] = useState(false);
 
   return (
     <>
@@ -421,18 +457,29 @@ export function ReplaceFileButton({
             file,
             section,
             documentId,
+            allowance,
             onProgress: (f) => setPct(Math.round(f * 100)),
           });
           setPct(0);
           if (result.ok) {
             setState("idle");
+            setUpgrade(false);
             router.refresh();
           } else {
             setError(result.error);
+            setUpgrade(Boolean(result.upgrade));
             setState("error");
           }
         }}
       />
+      {state === "error" && upgrade ? (
+        <Link
+          href="/wallet"
+          className="shrink-0 rounded-lg border border-gold-500/40 px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider text-gold-300 transition hover:bg-gold-500/10"
+        >
+          Upgrade
+        </Link>
+      ) : null}
     </>
   );
 }

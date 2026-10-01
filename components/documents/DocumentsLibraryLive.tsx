@@ -6,6 +6,7 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { getSessionContext } from "@/lib/auth";
 import { canWriteOrg } from "@/lib/rbac";
+import { uploadAllowanceFor } from "@/lib/document-upload-allowance.server";
 import { createServerClient } from "@/lib/supabase/server";
 import { DATA_ROOM_SECTIONS } from "@/lib/data-room";
 import { computeBuildReadiness } from "@/lib/build-readiness";
@@ -60,9 +61,10 @@ export async function DocumentsLibraryLive() {
   ]);
 
   const documents = (docsRes.data ?? []) as Document[];
-  const [rooms, publishedBy] = await Promise.all([
+  const [rooms, publishedBy, allowance] = await Promise.all([
     listRooms(orgId),
     publishedRoomsByDocument(orgId),
+    uploadAllowanceFor(ctx),
   ]);
 
   const members = (membersRes.data ?? []) as OrganizationMember[];
@@ -169,6 +171,7 @@ export async function DocumentsLibraryLive() {
         sections={sections}
         rooms={rooms.map((r) => ({ id: r.id, name: r.name }))}
         canWrite={canWriteOrg(ctx.role)}
+        allowance={allowance}
       />
 
       {/* The knowledge-workspace view of the same library — recency and shape

@@ -23,6 +23,7 @@ import {
   documentNameFromFile,
   fileExtension,
   formatBytes,
+  type UploadAllowance,
 } from "@/lib/document-files";
 
 /** Ceiling on the archive itself. It is read in memory and never stored. */
@@ -166,7 +167,7 @@ function isNoise(path: string): boolean {
  */
 export function planZipImport(
   entries: Array<{ name: string; uncompressedSize: number; isDirectory: boolean }>,
-  opts: { defaultSection: string },
+  opts: { defaultSection: string; allowance?: UploadAllowance },
 ): ZipPlan {
   const items: ZipPlanItem[] = [];
   const skipped: ZipSkipped[] = [];
@@ -184,7 +185,7 @@ export function planZipImport(
     }
 
     const base = entry.name.split("/").pop() ?? entry.name;
-    const check = checkUploadCandidate({ name: base, size: entry.uncompressedSize || 1 });
+    const check = checkUploadCandidate({ name: base, size: entry.uncompressedSize || 1 }, opts.allowance);
     if (!check.ok) {
       skipped.push({ path: entry.name, reason: check.reason });
       continue;

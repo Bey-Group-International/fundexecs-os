@@ -12,6 +12,7 @@ import {
   isExternalLink,
   isUploadedFile,
   resolveMaxUploadBytes,
+  uploadAllowance,
 } from "./document-files";
 
 const ORG = "11111111-1111-1111-1111-111111111111";
@@ -227,5 +228,36 @@ describe("resolveMaxUploadBytes", () => {
 
   it("never exceeds the bucket's own 500 MB ceiling", () => {
     expect(resolveMaxUploadBytes("2000")).toBe(500 * MB);
+  });
+});
+
+describe("plan upload allowance", () => {
+  const MB = 1024 * 1024;
+
+  it("gives a free org 10 MB and flags that a paid plan raises it", () => {
+    expect(uploadAllowance(false)).toEqual({ maxBytes: 10 * MB, planLimited: true });
+  });
+
+  it("gives a paid org the platform ceiling", () => {
+    expect(uploadAllowance(true)).toEqual({ maxBytes: MAX_UPLOAD_BYTES, planLimited: false });
+  });
+
+  it("refuses an over-plan file with an upgrade, not a size error", () => {
+    const check = checkUploadCandidate({ name: "PPM.pdf", size: 20 * MB }, uploadAllowance(false));
+    expect(check.ok).toBe(false);
+    if (!check.ok) {
+      expect(check.upgrade).toBe(true);
+      expect(check.reason).toContain("need a paid plan");
+    }
+  });
+
+  it("lets the same file through on a paid plan", () => {
+    expect(checkUploadCandidate({ name: "PPM.pdf", size: 20 * MB }, uploadAllowance(true)).ok).toBe(true);
+  });
+
+  it("does not offer an upgrade for a file over the platform ceiling", () => {
+    const check = checkUploadCandidate({ name: "huge.pdf", size: MAX_UPLOAD_BYTES + 1 }, uploadAllowance(false));
+    expect(check.ok).toBe(false);
+    if (!check.ok) expect(check.upgrade).toBeUndefined();
   });
 });

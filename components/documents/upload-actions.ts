@@ -32,6 +32,7 @@ import {
   isDocumentObjectPath,
   isUploadedFile,
   mimeTypeForName,
+  paidPlanRequiredMessage,
   type UploadOutcome,
   type UploadTicket,
 } from "@/lib/document-files";
@@ -40,6 +41,7 @@ import {
   statDocumentObject,
 } from "@/lib/document-storage.server";
 import { extractAndStoreDocumentText } from "@/lib/document-text.server";
+import { uploadAllowanceFor } from "@/lib/document-upload-allowance.server";
 import type { Document } from "@/lib/supabase/database.types";
 
 const SECTION_KEYS = new Set(DATA_ROOM_SECTIONS.map((s) => s.key));
@@ -83,12 +85,18 @@ export async function createUploadTicket(input: {
   }
   if (!hasSupabaseServiceEnv()) return { ok: false, error: "File storage is not configured." };
 
-  const check = checkUploadCandidate({
-    name: input.fileName,
-    size: input.size,
-    type: input.mimeType,
-  });
-  if (!check.ok) return { ok: false, error: check.reason };
+  // Large files are a paid feature. The client checks too, but only this
+  // check, and finalize's re-check of the stored size, are enforcement.
+  const allowance = await uploadAllowanceFor(ctx);
+  const check = checkUploadCandidate(
+    {
+      name: input.fileName,
+      size: input.size,
+      type: input.mimeType,
+    },
+    allowance,
+  );
+  if (!check.ok) return { ok: false, error: check.reason, upgrade: check.upgrade };
 
   const supabase = await createServerClient();
   const sectionKey = SECTION_KEYS.has(input.section) ? input.section : "other";
@@ -167,6 +175,15 @@ export async function finalizeUpload(input: {
           ? "That file arrived empty."
           : `That file is ${formatBytes(object.size)}. The limit is ${formatBytes(MAX_UPLOAD_BYTES)}.`,
     };
+  }
+  // The ticket was minted against the size the browser CLAIMED. Re-check the
+  // size Storage actually holds, so a free org cannot claim 1 MB and send 40.
+  const allowance = await uploadAllowanceFor(ctx);
+  if (object.size > allowance.maxBytes) {
+    await removeDocumentObjects([input.path]);
+    return allowance.planLimited
+      ? { ok: false, error: paidPlanRequiredMessage(object.size), upgrade: true }
+      : { ok: false, error: `That file is ${formatBytes(object.size)}. The limit is ${formatBytes(allowance.maxBytes)}.` };
   }
 
   // Replacing a file is a new version of the same document, exactly as saving
