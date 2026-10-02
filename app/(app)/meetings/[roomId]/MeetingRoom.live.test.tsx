@@ -479,7 +479,15 @@ describe("who the room thinks is talking", () => {
   });
 });
 
-describe("the copilot sidebar the room feeds", () => {
+describe("the side panel the room feeds", () => {
+  // It used to open with the call: a column of empty chat beside the faces,
+  // and on a phone a sheet over the whole stage.
+  it("starts closed, with the call on the whole stage", async () => {
+    await enterCall();
+    expect(screen.queryByRole("button", { name: "Close panel" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Chat" })).toHaveAttribute("aria-pressed", "false");
+  });
+
   it("lists everyone in the call on the People tab", async () => {
     await enterCall();
     await peerArrives("peer-1", "Brett");

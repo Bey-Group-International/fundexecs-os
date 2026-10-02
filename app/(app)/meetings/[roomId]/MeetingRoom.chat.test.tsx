@@ -158,3 +158,28 @@ describe("message text", () => {
     expect(box).toHaveValue("");
   });
 });
+
+// ── The panel follows the control bar ───────────────────────────────────────
+
+describe("a panel the room steers", () => {
+  it("shows the tab the room asks for, named for it", () => {
+    const { onChatVisibility } = setup({ tab: "people", onTabChange: jest.fn() });
+    expect(screen.getByRole("heading", { name: "People" })).toBeInTheDocument();
+    expect(screen.getByText(/In this call/i)).toBeInTheDocument();
+    // Off the chat, so arriving messages count as unread.
+    expect(onChatVisibility).toHaveBeenLastCalledWith(false);
+  });
+
+  it("reports a tab chosen inside the panel back to the room", async () => {
+    const onTabChange = jest.fn();
+    const { user } = setup({ tab: "chat", onTabChange });
+    await user.click(screen.getByRole("button", { name: /People/ }));
+    expect(onTabChange).toHaveBeenCalledWith("people");
+  });
+
+  it("is closed by a button that says so, not by collapsing a copilot", () => {
+    setup();
+    expect(screen.getByRole("button", { name: "Close panel" })).toBeInTheDocument();
+    expect(screen.queryByText(/copilot/i)).not.toBeInTheDocument();
+  });
+});
