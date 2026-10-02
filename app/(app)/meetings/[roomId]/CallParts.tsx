@@ -12,7 +12,8 @@ import { REACTIONS, reactionLabel, type ActiveReaction } from "@/lib/meetings/re
 import { ChatText } from "./ChatText";
 import { speakerColorIndex } from "@/lib/meetings/speaker-attribution";
 import { CHAT_MAX_LENGTH, chatClock, groupChat, type ChatMessage, type ChatTurn } from "@/lib/meetings/chat";
-import { MeetingShareLink } from "@/app/(app)/meetings/MeetingShareLink";
+import { MeetingShareLink, copyText } from "@/app/(app)/meetings/MeetingShareLink";
+import { meetingInviteUrl } from "@/lib/meetings/share";
 import { recordingNotice, type RecordingState } from "@/lib/meetings/recording-policy";
 import { formatElapsed, type ElapsedState } from "@/lib/meetings/elapsed";
 import { MeetingClock, RecordingClock } from "./MeetingClock";
@@ -322,7 +323,7 @@ function DeviceChevron({ kind, activeId, onSelect }: {
     <>
       <button ref={anchorRef} aria-label={`Choose ${label.toLowerCase()}`} aria-haspopup="menu" aria-expanded={open}
         onClick={() => { if (open) { setOpen(false); return; } void refresh(); setOpen(true); }}
-        className="flex items-center justify-center w-4 h-4 text-[var(--fg-muted)] hover:text-[var(--fg-primary)] transition-colors">
+        className="flex items-center justify-center w-5 h-10 text-[var(--fg-muted)] hover:text-[var(--fg-primary)] transition-colors">
         <svg width="8" height="8" viewBox="0 0 8 8" fill="none">
           <path d="M1 2.5L4 5.5L7 2.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
         </svg>
@@ -345,28 +346,6 @@ function DeviceChevron({ kind, activeId, onSelect }: {
         })}
       </FloatingMenu>
     </>
-  );
-}
-
-// ─── CtrlBtn ──────────────────────────────────────────────────────────────────
-
-function CtrlBtn({ active, onClick, title, activeIcon, inactiveIcon, busy = false }: {
-  active: boolean; onClick: () => void; title: string; activeIcon: React.ReactNode; inactiveIcon: React.ReactNode;
-  /** A device being opened. Opening one takes a moment, and longer when the
-   *  first camera tried is held by something else — without this the press
-   *  looks like it did nothing and gets pressed again. */
-  busy?: boolean;
-}) {
-  return (
-    <button onClick={onClick} title={busy ? "Starting…" : title} disabled={busy} aria-busy={busy}
-      className={`w-10 h-10 rounded-full border flex items-center justify-center transition-colors ${
-        busy ? "animate-pulse cursor-wait" : ""
-      } ${
-        active ? "border-[var(--line)] bg-[var(--surface-2)] text-[var(--fg-primary)] hover:bg-[var(--surface-3)]"
-               : "border-status-danger/40 bg-status-danger/10 text-[var(--status-danger)]"
-      }`}>
-      {active ? activeIcon : inactiveIcon}
-    </button>
   );
 }
 
@@ -408,7 +387,7 @@ export function HostExitControl({
 
   return (
     <div className="flex items-center">
-      {/* The label is the button's only text and it is display:none below `sm`,
+      {/* The label is the button's only text and it is display:none below `lg`,
           which takes it out of the accessibility tree — and PhoneOffIcon is a
           bare <svg> with no text alternative, so on a phone this announced as
           an unnamed button. aria-label matches the visible text exactly, so the
@@ -421,15 +400,15 @@ export function HostExitControl({
           this is the same rule applied to the path that ends the call. */}
       <button onClick={() => { setOpen(false); onEndForAll(); }} disabled={leaving} aria-busy={leaving}
         aria-label={exitLabel(leaving ? "ending" : "live", true)}
-        className="flex items-center gap-1.5 sm:gap-2 rounded-l-full rounded-r-none bg-[var(--status-danger)] hover:bg-red-600 disabled:opacity-60 disabled:cursor-wait text-white text-sm font-medium pl-3 sm:pl-5 pr-2 sm:pr-3 py-2 transition-colors">
-        <PhoneOffIcon /> <span className="hidden sm:inline">{exitLabel(leaving ? "ending" : "live", true)}</span>
+        className="flex items-center gap-1.5 sm:gap-2 whitespace-nowrap rounded-l-full rounded-r-none bg-[var(--status-danger)] hover:bg-red-600 disabled:opacity-60 disabled:cursor-wait text-white text-sm font-medium pl-2.5 sm:pl-4 lg:pl-5 pr-1.5 sm:pr-2 lg:pr-3 py-2 transition-colors">
+        <PhoneOffIcon /> <span className="hidden lg:inline">{exitLabel(leaving ? "ending" : "live", true)}</span>
       </button>
       {/* A hairline, so the two halves read as two actions rather than one wide
           button that happens to have an arrow on it. */}
       <span aria-hidden="true" className="w-px self-stretch bg-white/25" />
       <button ref={chevronRef} onClick={() => setOpen((v: boolean) => !v)} disabled={leaving}
         aria-label="Other ways to leave" aria-haspopup="menu" aria-expanded={open}
-        className="flex items-center justify-center rounded-r-full rounded-l-none bg-[var(--status-danger)] hover:bg-red-600 disabled:opacity-60 disabled:cursor-wait text-white pl-1.5 pr-2.5 sm:pr-3 py-2 self-stretch transition-colors">
+        className="flex items-center justify-center rounded-r-full rounded-l-none bg-[var(--status-danger)] hover:bg-red-600 disabled:opacity-60 disabled:cursor-wait text-white pl-1.5 pr-2 sm:pr-3 py-2 self-stretch transition-colors">
         <svg width="10" height="10" viewBox="0 0 8 8" fill="none">
           <path d="M1 2.5L4 5.5L7 2.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
         </svg>
@@ -456,8 +435,8 @@ export function HostExitControl({
 export const ControlBar = React.memo(ControlBarImpl);
 
 function ControlBarImpl({
-  micOn, camOn, micTitle, camTitle, shareOn, shareStarting, copilotOpen, isHost, handRaised, handsUp, handsUpNote, layout, layoutForced, chatUnread, waitingCount, elapsed, roomCode, bwMode,
-  onToggleMic, onToggleCam, onToggleScreen, onToggleCopilot, onLeave, onEndForAll,
+  micOn, camOn, micTitle, camTitle, shareOn, shareStarting, panel, canShareDocs = false, participantCount = 1, isHost, handRaised, handsUp, handsUpNote, layout, layoutForced, chatUnread, waitingCount, elapsed, roomCode, bwMode,
+  onToggleMic, onToggleCam, onToggleScreen, onOpenPanel, onLeave, onEndForAll,
   onSwitchMic, onSwitchCam, onSwitchSpeaker, onRaiseHand, onReaction, onMuteAll, onToggleLayout, onFlipCamera,
   activeMicId, activeCamId, camStarting,
   leaving, onOpenBackgrounds, backgroundActive, backgroundBtnRef,
@@ -476,7 +455,22 @@ function ControlBarImpl({
   backgroundBtnRef: React.RefObject<HTMLButtonElement | null>;
   /** The call is already being torn down — the exit controls must not re-fire. */
   leaving: boolean;
-  micOn: boolean; camOn: boolean; shareOn: boolean; shareStarting: boolean; copilotOpen: boolean; isHost: boolean;
+  micOn: boolean; camOn: boolean; shareOn: boolean; shareStarting: boolean; isHost: boolean;
+  /**
+   * Which side-panel tab is open, or null when the panel is closed.
+   *
+   * The panel had one button, "✨ Copilot", which opened it on whichever tab
+   * it was last left on, and whose single badge showed the waiting count in
+   * preference to unread chat — so a host with someone at the door could not
+   * see that anyone had written. Chat, People and Documents now each have a
+   * button and a badge of their own, and pressing the one already open closes
+   * the panel.
+   */
+  panel: PanelTab | null;
+  /** Offer the Documents button. A guest has no firm to share from. */
+  canShareDocs?: boolean;
+  /** Everyone in the call, you included — the People button says how many. */
+  participantCount?: number;
   /** What the mic/camera buttons say. Omitted falls back to the plain wording. */
   micTitle?: string; camTitle?: string;
   handRaised: boolean; layout: "grid" | "speaker"; chatUnread: number; waitingCount: number;
@@ -497,7 +491,9 @@ function ControlBarImpl({
   /** A live screen share is holding speaker view open over the chosen grid. */
   layoutForced: boolean;
   onToggleMic: () => void; onToggleCam: () => void; onToggleScreen: () => void;
-  onToggleCopilot: () => void; onLeave: () => void; onEndForAll: () => void;
+  /** Open the panel on a tab, or close it when that tab is the one showing. */
+  onOpenPanel: (tab: PanelTab) => void;
+  onLeave: () => void; onEndForAll: () => void;
   onSwitchMic: (id: string) => void; onSwitchCam: (id: string) => void; onSwitchSpeaker: (id: string) => void;
   /** The devices the call is actually running on, so the pickers can say so. */
   activeMicId: string; activeCamId: string;
@@ -507,138 +503,196 @@ function ControlBarImpl({
 }) {
   const [reactionOpen, setReactionOpen] = useState(false);
   const reactionBtnRef = useRef<HTMLButtonElement>(null);
+  const [moreOpen, setMoreOpen] = useState(false);
+  const moreBtnRef = useRef<HTMLButtonElement>(null);
+  const [linkCopied, setLinkCopied] = useState<boolean | null>(null);
+  const bgOwnRef = useRef<HTMLButtonElement>(null);
+
+  // The background picker is the room's, anchored to the ref it hands in. On a
+  // phone the Background button is display:none and the picker is opened from
+  // More instead — and anchored to a hidden button it would open in the top
+  // corner of the screen. So the ref points at whichever button was pressed.
+  const openBackgroundsFrom = (from: React.RefObject<HTMLButtonElement | null>) => {
+    backgroundBtnRef.current = from.current;
+    onOpenBackgrounds();
+  };
+
+  // Every item in the More menu closes it as it acts: the menu portals to the
+  // body, above the "ending" overlay, and must not be left hanging there.
+  const fromMore = (act: () => void) => () => { setMoreOpen(false); act(); };
+
+  const copyLink = async () => {
+    const ok = await copyText(meetingInviteUrl(window.location.origin, roomCode));
+    setLinkCopied(ok);
+    setTimeout(() => setLinkCopied(null), 2000);
+  };
+
+  const recording = recordingState === "recording";
+  const recordLabel = recording ? "Stop recording"
+    : recordingState === "starting" ? "Starting…"
+    : recordingState === "stopping" ? "Saving…"
+    : "Record";
+  // The full wording, which the buttons are named by; their visible word is a
+  // shortened form of it, and "Retry" when there is no device to unmute.
+  const micAction = micTitle ?? (micOn ? "Mute" : "Unmute");
+  const camAction = camTitle ?? (camOn ? "Camera off" : "Camera on");
+  const handLabel = handRaised ? "Lower hand" : "Raise hand";
+  const layoutLabel = layout === "grid" ? "Speaker view" : "Grid view";
 
   return (
-    <div className="flex items-center justify-between px-3 sm:px-6 py-3 border-t border-[var(--line)] bg-[var(--surface-1)] shrink-0 gap-2">
-      {/* Timer — hidden on very small screens to save space */}
-      <MeetingClock elapsed={elapsed} className="hidden sm:block text-xs font-mono text-[var(--fg-muted)] tabular-nums w-16 shrink-0" />
-
-      <div className="flex items-center gap-1.5 sm:gap-2 flex-1 justify-center">
-        {/* Core controls — always visible */}
-        <div className="flex items-center gap-0.5">
-          {/* The caption is decided by `participation.ts` and passed in, not
-              derived from `micOn` here. "Unmute" is a promise, and a member with
-              no microphone was being given it. */}
-          <CtrlBtn active={micOn} onClick={onToggleMic} title={micTitle ?? (micOn ? "Mute" : "Unmute")} activeIcon={<MicIcon />} inactiveIcon={<MicOffIcon />} />
-          <span className="hidden sm:block"><DeviceChevron kind="audioinput" activeId={activeMicId} onSelect={onSwitchMic} /></span>
-        </div>
-        <div className="flex items-center gap-0.5">
-          <CtrlBtn active={camOn} onClick={onToggleCam} busy={camStarting} title={camTitle ?? (camOn ? "Camera off" : "Camera on")} activeIcon={<CamIcon />} inactiveIcon={<CamOffIcon />} />
-          <span className="hidden sm:block"><DeviceChevron kind="videoinput" activeId={activeCamId} onSelect={onSwitchCam} /></span>
-        </div>
-
-        {/* Backgrounds — next to the camera controls, because that is what it
-            changes. On phones too: segmentation there costs battery, but the
-            auto-downgrade already pulls the effect when frames fall behind, and
-            a phone is exactly where someone is most likely to want their room
-            hidden. */}
-        <span>
-          <button
-            ref={backgroundBtnRef}
-            onClick={onOpenBackgrounds}
-            title="Background effects"
-            aria-label="Background effects"
-            className={`w-10 h-10 rounded-full border flex items-center justify-center transition-colors ${
-              backgroundActive
-                ? "border-gold-400/60 bg-gold-400/10 text-[var(--gold-400)]"
-                : "border-[var(--line)] bg-[var(--surface-2)] text-[var(--fg-muted)] hover:text-[var(--fg-primary)] hover:bg-[var(--surface-3)]"
-            }`}
+    <div className="flex items-center justify-between gap-1.5 sm:gap-2 px-1.5 sm:px-4 py-2 border-t border-[var(--line)] bg-[var(--surface-1)] shrink-0">
+      {/* Left: the clock, and the two things everybody must be able to see —
+          that the call is recorded, and that their link is struggling. The
+          recording badge is never hidden on a small screen: several US states
+          require every party to a conversation to know it is being recorded,
+          and a badge that collapses on a phone is one the guest on a phone
+          never saw. */}
+      <div className="flex items-center gap-1 sm:gap-2 shrink-0 2xl:w-56">
+        <MeetingClock elapsed={elapsed} className="hidden sm:block text-xs font-mono text-[var(--fg-muted)] tabular-nums" />
+        {recordingState !== "idle" && (
+          <span
+            role="img"
+            aria-label={recordingNotice(recordingState, recordingBy) ?? "Recording"}
+            title={recordingNotice(recordingState, recordingBy) ?? undefined}
+            className="flex items-center gap-1.5 rounded-full border border-[var(--status-danger)] bg-red-500/10 px-2 py-1 text-xs font-medium text-[var(--status-danger)]"
           >
-            <BackgroundIcon />
-          </button>
-        </span>
-
-        {/* Camera flip — mobile only */}
-        <button onClick={onFlipCamera} title="Flip camera"
-          className="sm:hidden w-10 h-10 rounded-full border border-[var(--line)] bg-[var(--surface-2)] text-[var(--fg-muted)] hover:text-[var(--fg-primary)] hover:bg-[var(--surface-3)] flex items-center justify-center text-base transition-colors">
-          🔄
-        </button>
-
-        {/* Screen share — hidden on mobile (not practical) */}
-        <span className="hidden sm:block">
-          <CtrlBtn active={shareOn} onClick={onToggleScreen} busy={shareStarting} title={shareOn ? "Stop sharing" : "Share screen"} activeIcon={<ScreenShareIcon />} inactiveIcon={<ScreenShareIcon />} />
-        </span>
-
-        {/* Raise hand — and the badge that says somebody else has. */}
-        <button onClick={onRaiseHand}
-          title={handsUpNote || (handRaised ? "Lower hand" : "Raise hand")}
-          aria-label={handsUpNote ? `${handRaised ? "Lower hand" : "Raise hand"}. ${handsUpNote}.` : (handRaised ? "Lower hand" : "Raise hand")}
-          className={`relative w-10 h-10 rounded-full border flex items-center justify-center text-base transition-colors ${
-            handRaised ? "border-gold-400/60 bg-gold-400/10 text-[var(--gold-400)]"
-                       : "border-[var(--line)] bg-[var(--surface-2)] text-[var(--fg-primary)] hover:bg-[var(--surface-3)]"
-          }`}>
-          ✋
-          {handsUp > 0 && (
-            <span className="absolute -top-1 -right-1 min-w-4 h-4 px-1 rounded-full bg-[var(--gold-400)] text-white text-[11px] font-bold flex items-center justify-center">
-              {handsUp}
+            <span className="w-2 h-2 rounded-full bg-[var(--status-danger)] animate-pulse" />
+            <span className="hidden lg:inline">
+              {recordingState === "recording" ? "Recording" : recordingState === "stopping" ? "Saving" : "Starting"}
             </span>
-          )}
-        </button>
-
-        {/* Reactions */}
-        <button ref={reactionBtnRef} onClick={() => setReactionOpen((v: boolean) => !v)} title="Send reaction"
-          className="w-10 h-10 rounded-full border border-[var(--line)] bg-[var(--surface-2)] hover:bg-[var(--surface-3)] flex items-center justify-center text-base transition-colors">
-          😊
-        </button>
-        <FloatingMenu open={reactionOpen} anchorRef={reactionBtnRef} onClose={() => setReactionOpen(false)} minWidth={0}>
-          <div className="flex gap-1">
-            {REACTIONS.map((emoji) => (
-              <button key={emoji} onClick={() => { onReaction(emoji); setReactionOpen(false); }}
-                className="w-8 h-8 flex items-center justify-center text-xl rounded-lg hover:bg-[var(--surface-3)] transition-colors">
-                {emoji}
-              </button>
-            ))}
-          </div>
-        </FloatingMenu>
-
-        {/* Layout toggle — hidden on mobile */}
-        <span className="hidden sm:block">
-          <button onClick={onToggleLayout}
-            title={layoutForced
-              ? "Someone is sharing their screen — grid view resumes when they stop"
-              : layout === "grid" ? "Speaker view" : "Grid view"}
-            className="w-10 h-10 rounded-full border border-[var(--line)] bg-[var(--surface-2)] text-[var(--fg-muted)] hover:text-[var(--fg-primary)] hover:bg-[var(--surface-3)] flex items-center justify-center transition-colors">
-            {layout === "grid" ? <SpeakerViewIcon /> : <GridViewIcon />}
-          </button>
-        </span>
-
-        {/* Record — host only. Deliberately NOT hidden on mobile like the two
-            controls either side: a host running the meeting from a phone is
-            exactly the host most likely to want a recording of it. */}
-        {isHost && (
-          <button
-            onClick={onToggleRecording}
-            disabled={recordingState === "starting" || recordingState === "stopping"}
-            aria-pressed={recordingState === "recording"}
-            title={recordingState === "recording" ? "Stop recording" : "Record this meeting"}
-            className={`flex items-center gap-1.5 rounded-full border px-3 h-10 text-xs font-medium transition-colors disabled:opacity-60 disabled:cursor-wait ${
-              recordingState === "recording"
-                ? "border-[var(--status-danger)] bg-red-500/10 text-[var(--status-danger)]"
-                : "border-[var(--line)] bg-[var(--surface-2)] text-[var(--fg-muted)] hover:text-[var(--fg-primary)]"
-            }`}
-          >
-            <span className={`w-2.5 h-2.5 rounded-full ${
-              recordingState === "recording" ? "bg-[var(--status-danger)] animate-pulse" : "bg-current"
-            }`} />
-            <span className="hidden sm:inline">
-              {recordingState === "recording"
-                ? <>Stop · {recordingStartedAt !== null ? <RecordingClock startedAt={recordingStartedAt} /> : formatElapsed(0)}</>
-                : recordingState === "starting" ? "Starting…"
-                : recordingState === "stopping" ? "Saving…"
-                : "Record"}
-            </span>
-          </button>
-        )}
-
-        {/* Mute all — host only, hidden on mobile */}
-        {isHost && (
-          <span className="hidden sm:block">
-            <button onClick={onMuteAll} title="Mute all participants"
-              className="flex items-center gap-1.5 rounded-full border border-[var(--line)] bg-[var(--surface-2)] text-[var(--fg-muted)] hover:text-[var(--fg-primary)] px-3 h-10 text-xs font-medium transition-colors">
-              Mute all
-            </button>
           </span>
         )}
+        {linkNotice(bwMode) && (
+          <span title={linkNotice(bwMode)!} className="text-xs text-[var(--status-warning)] flex items-center gap-1 border border-status-warning/30 rounded-full px-2 py-1">
+            📶 <span className="hidden lg:inline">{bwMode === "audio-only" ? "Video paused" : "Reduced quality"}</span>
+          </span>
+        )}
+      </div>
+
+      {/* Centre: the call itself, in groups — your devices, how you take part,
+          the host's tools, and the way out. Labelled on a wide screen; below it the
+          icons carry aria-labels, and what does not fit a phone moves into
+          More rather than off the screen. */}
+      <div className="flex items-center gap-1 sm:gap-1.5 flex-1 justify-center min-w-0">
+        <BarGroup>
+          <div className="flex items-center">
+            {/* The caption is decided by `participation.ts` and passed in, not
+                derived from `micOn` here. "Unmute" is a promise, and a member
+                with no microphone was being given it. */}
+            <BarBtn tone={micOn ? "default" : "off"} onClick={onToggleMic}
+              label={micAction.startsWith("No ") ? "Retry" : micOn ? "Mute" : "Unmute"} title={micAction} ariaLabel={micAction}
+              icon={micOn ? <MicIcon /> : <MicOffIcon />} />
+            <span className="hidden sm:block"><DeviceChevron kind="audioinput" activeId={activeMicId} onSelect={onSwitchMic} /></span>
+          </div>
+          <div className="flex items-center">
+            <BarBtn tone={camOn ? "default" : "off"} onClick={onToggleCam} busy={camStarting}
+              label={camAction.startsWith("No ") ? "Retry" : camOn ? "Stop video" : "Start video"} title={camAction} ariaLabel={camAction}
+              icon={camOn ? <CamIcon /> : <CamOffIcon />} />
+            <span className="hidden sm:block"><DeviceChevron kind="videoinput" activeId={activeCamId} onSelect={onSwitchCam} /></span>
+          </div>
+          {/* Backgrounds — next to the camera, because that is what it changes.
+              Below `md` it is in More, where the anchor for its picker is the
+              More button. */}
+          <BarBtn btnRef={bgOwnRef} className="hidden md:flex" tone={backgroundActive ? "on" : "default"}
+            onClick={() => openBackgroundsFrom(bgOwnRef)} label="Background" title="Background effects" icon={<BackgroundIcon />} />
+          {/* Screen share — not offered on a phone, which cannot. */}
+          <BarBtn className="hidden sm:flex" tone={shareOn ? "on" : "default"} onClick={onToggleScreen} busy={shareStarting}
+            label={shareOn ? "Stop share" : "Share"} title={shareOn ? "Stop sharing" : "Share screen"} pressed={shareOn}
+            icon={<ScreenShareIcon />} />
+        </BarGroup>
+
+        <BarGroup>
+          {/* Raise hand — and the badge that says somebody else has. In More on a
+              phone, where the badge moves onto the More button. */}
+          <BarBtn className="hidden sm:flex" tone={handRaised ? "on" : "default"} onClick={onRaiseHand} pressed={handRaised}
+            label={handRaised ? "Lower" : "Raise"} title={handsUpNote || handLabel}
+            ariaLabel={handsUpNote ? `${handLabel}. ${handsUpNote}.` : handLabel}
+            icon={<span className="text-base leading-none">✋</span>} badge={handsUp > 0 ? handsUp : null} />
+          <BarBtn btnRef={reactionBtnRef} className="hidden md:flex" onClick={() => setReactionOpen((v: boolean) => !v)}
+            label="React" title="Send reaction" haspopup expanded={reactionOpen}
+            icon={<span className="text-base leading-none">😊</span>} />
+          <FloatingMenu open={reactionOpen} anchorRef={reactionBtnRef} onClose={() => setReactionOpen(false)} minWidth={0}>
+            <ReactionRow onReaction={(emoji) => { onReaction(emoji); setReactionOpen(false); }} />
+          </FloatingMenu>
+          <BarBtn className="hidden lg:flex" onClick={onToggleLayout} label={layout === "grid" ? "Speaker" : "Grid"}
+            ariaLabel={layoutLabel}
+            title={layoutForced ? "Someone is sharing their screen — grid view resumes when they stop" : layoutLabel}
+            icon={layout === "grid" ? <SpeakerViewIcon /> : <GridViewIcon />} />
+        </BarGroup>
+
+        {/* Record — host only. On a phone too: a host running the meeting from
+            a phone is exactly the host most likely to want a recording. */}
+        {isHost && (
+          <BarGroup className="hidden sm:flex">
+            <BarBtn tone={recording ? "recording" : "default"} onClick={onToggleRecording}
+              disabled={recordingState === "starting" || recordingState === "stopping"} pressed={recording}
+              label={recording && recordingStartedAt !== null ? <RecordingClock startedAt={recordingStartedAt} /> : recordLabel}
+              ariaLabel={recording ? "Stop recording" : recordLabel === "Record" ? "Record this meeting" : recordLabel}
+              title={recording ? "Stop recording" : "Record this meeting"}
+              icon={<span className={`w-3 h-3 rounded-full ${recording ? "bg-[var(--status-danger)] animate-pulse" : "bg-current"}`} />} />
+          </BarGroup>
+        )}
+
+        {/* Chat, People and Documents. A button each, so each has its own
+            badge: unread chat no longer hides behind people at the door. */}
+        <BarGroup>
+          <BarBtn tone={panel === "chat" ? "on" : "default"} onClick={() => onOpenPanel("chat")} pressed={panel === "chat"}
+            label="Chat" ariaLabel={chatUnread > 0 && panel !== "chat" ? `Chat, ${chatUnread} unread` : "Chat"}
+            title={chatUnread > 0 && panel !== "chat" ? `${chatUnread} unread` : "Chat"}
+            icon={<ChatIcon />} badge={chatUnread > 0 && panel !== "chat" ? chatUnread : null} />
+          <BarBtn tone={panel === "people" ? "on" : "default"} onClick={() => onOpenPanel("people")} pressed={panel === "people"}
+            label="People"
+            ariaLabel={waitingCount > 0 ? `People, ${waitingCount} waiting to join` : `People, ${participantCount} in the call`}
+            title={waitingCount > 0 ? `${waitingCount} waiting to join` : `${participantCount} in the call`}
+            icon={<PeopleIcon />}
+            // Someone at the door is the badge; otherwise the headcount, quietly.
+            badge={waitingCount > 0 ? waitingCount : null} badgeTone="success"
+            hint={waitingCount > 0 ? null : participantCount} />
+          {canShareDocs && (
+            <BarBtn className="hidden md:flex" tone={panel === "docs" ? "on" : "default"} onClick={() => onOpenPanel("docs")}
+              pressed={panel === "docs"} label="Docs" ariaLabel="Documents" title="Share from the data room" icon={<DocsIcon />} />
+          )}
+        </BarGroup>
+
+        <BarGroup>
+          {/* More: everything that does not earn a place on the bar at this
+              width. Its items are sized by breakpoint so the same control is
+              never offered twice on one screen. */}
+          <BarBtn btnRef={moreBtnRef} onClick={() => setMoreOpen((v: boolean) => !v)} label="More" ariaLabel="More options"
+            title="More options" haspopup expanded={moreOpen} icon={<MoreIcon />}
+            badge={handsUp > 0 ? handsUp : null} badgeClassName="sm:hidden" />
+          <FloatingMenu open={moreOpen} anchorRef={moreBtnRef} onClose={() => setMoreOpen(false)} minWidth={220}>
+            <div className="md:hidden px-1 pt-1 pb-1.5 border-b border-[var(--line)] mb-1">
+              <ReactionRow onReaction={(emoji) => { onReaction(emoji); setMoreOpen(false); }} />
+            </div>
+            <MenuItem className="sm:hidden" onClick={fromMore(onRaiseHand)}>
+              ✋ {handLabel}{handsUpNote ? <span className="ml-auto text-xs text-[var(--fg-muted)]">{handsUpNote}</span> : null}
+            </MenuItem>
+            <MenuItem className="md:hidden" onClick={fromMore(() => openBackgroundsFrom(moreBtnRef))}>
+              <BackgroundIcon /> Background effects{backgroundActive ? " · on" : ""}
+            </MenuItem>
+            <MenuItem className="sm:hidden" onClick={fromMore(onFlipCamera)}>🔄 Flip camera</MenuItem>
+            {canShareDocs && (
+              <MenuItem className="md:hidden" onClick={fromMore(() => onOpenPanel("docs"))}><DocsIcon /> Documents</MenuItem>
+            )}
+            <MenuItem className="lg:hidden" onClick={fromMore(onToggleLayout)}>
+              {layout === "grid" ? <SpeakerViewIcon /> : <GridViewIcon />} {layoutLabel}
+            </MenuItem>
+            {isHost && (
+              <MenuItem className="sm:hidden" onClick={fromMore(onToggleRecording)}
+                disabled={recordingState === "starting" || recordingState === "stopping"}>
+                <span className={`w-2.5 h-2.5 rounded-full ${recording ? "bg-[var(--status-danger)]" : "bg-current"}`} />
+                {recording ? "Stop recording" : recordLabel === "Record" ? "Record this meeting" : recordLabel}
+              </MenuItem>
+            )}
+            {isHost && <MenuItem onClick={fromMore(onMuteAll)}><MicOffIcon /> Mute everyone</MenuItem>}
+            {/* Not through fromMore: the menu stays open long enough to say
+                whether the copy worked. */}
+            <MenuItem onClick={() => void copyLink()}>
+              <LinkIcon /> {linkCopied === true ? "Link copied" : linkCopied === false ? "Couldn't copy — try again" : "Copy invite link"}
+            </MenuItem>
+          </FloatingMenu>
+        </BarGroup>
 
         {/* Leave / End — always visible. Disabled once pressed: ending posts a
             transcript to a model, and a second press would post a second report.
@@ -647,63 +701,137 @@ function ControlBarImpl({
             the muscle memory of every host who has used this room still does what
             it always did; leaving without ending is the deliberate one, behind
             the chevron. */}
-        {isHost ? (
-          <HostExitControl leaving={leaving} waitingCount={waitingCount} onLeave={onLeave} onEndForAll={onEndForAll} />
-        ) : (
-          <button onClick={onLeave} disabled={leaving} aria-busy={leaving}
-            aria-label={exitLabel(leaving ? "ending" : "live", false)}
-            className="flex items-center gap-1.5 sm:gap-2 rounded-full bg-[var(--status-danger)] hover:bg-red-600 disabled:opacity-60 disabled:cursor-wait text-white text-sm font-medium px-3 sm:px-5 py-2 transition-colors">
-            <PhoneOffIcon /> <span className="hidden sm:inline">{exitLabel(leaving ? "ending" : "live", false)}</span>
-          </button>
-        )}
+        <div className="pl-0.5 sm:pl-2">
+          {isHost ? (
+            <HostExitControl leaving={leaving} waitingCount={waitingCount} onLeave={onLeave} onEndForAll={onEndForAll} />
+          ) : (
+            <button onClick={onLeave} disabled={leaving} aria-busy={leaving}
+              aria-label={exitLabel(leaving ? "ending" : "live", false)}
+              className="flex items-center gap-1.5 sm:gap-2 whitespace-nowrap rounded-full bg-[var(--status-danger)] hover:bg-red-600 disabled:opacity-60 disabled:cursor-wait text-white text-sm font-medium px-3.5 lg:px-5 h-11 sm:h-10 transition-colors">
+              <PhoneOffIcon /> <span className="hidden lg:inline">{exitLabel(leaving ? "ending" : "live", false)}</span>
+            </button>
+          )}
+        </div>
       </div>
 
-      {/* Right side: BW indicator + copy link + copilot toggle */}
-      <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
-        {/* Seen by EVERY participant, not just the host, and never hidden on a
-            small screen. Several US states require every party to a
-            conversation to know it is being recorded; a badge that collapses on
-            a phone is a badge the guest on a phone never saw. */}
-        {recordingState !== "idle" && (
-          <span
-            title={recordingNotice(recordingState, recordingBy) ?? undefined}
-            className="flex items-center gap-1.5 rounded-full border border-[var(--status-danger)] bg-red-500/10 px-2 py-1 text-xs font-medium text-[var(--status-danger)]"
-          >
-            <span className="w-2 h-2 rounded-full bg-[var(--status-danger)] animate-pulse" />
-            <span className="hidden sm:inline">
-              {recordingState === "recording" ? "Recording" : recordingState === "stopping" ? "Saving" : "Starting"}
-            </span>
-          </span>
-        )}
+      {/* Right: the link to bring someone else in, where there is room for it.
+          The empty column balances the left one, so the controls sit in the
+          middle of the screen rather than the middle of what is left. */}
+      <div className="hidden 2xl:flex items-center justify-end shrink-0 2xl:w-56">
+        <MeetingShareLink roomCode={roomCode} compact />
+      </div>
+    </div>
+  );
+}
 
-        {linkNotice(bwMode) && (
-          <span title={linkNotice(bwMode)!} className="text-xs text-[var(--status-warning)] flex items-center gap-1 border border-status-warning/30 rounded-full px-2 py-1">
-            📶 <span className="hidden sm:inline">{bwMode === "audio-only" ? "Video paused" : "Reduced quality"}</span>
-          </span>
-        )}
-        <span className="hidden sm:flex"><MeetingShareLink roomCode={roomCode} compact /></span>
-        <button onClick={onToggleCopilot}
-          className={`relative flex items-center gap-1.5 rounded-full border px-2.5 sm:px-3 py-1.5 text-xs font-medium transition-colors ${
-            copilotOpen ? "border-[var(--gold-400)] bg-gold-400/10 text-[var(--gold-400)]"
-                        : "border-[var(--line)] text-[var(--fg-muted)] hover:text-[var(--fg-secondary)]"
-          }`}>
-          ✨ <span className="hidden sm:inline">Copilot</span>
-          {/* Someone waiting outranks unread chat: one is a person held at the
-              door, the other is a message that will keep. */}
-          {waitingCount > 0 ? (
-            <span
-              title={`${waitingCount} waiting to join`}
-              className="absolute -top-1 -right-1 min-w-4 h-4 px-1 rounded-full bg-[var(--status-success)] text-white text-[11px] font-bold flex items-center justify-center"
-            >
-              {waitingCount}
-            </span>
-          ) : chatUnread > 0 && !copilotOpen ? (
-            <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-[var(--gold-400)] text-white text-[11px] font-bold flex items-center justify-center">
-              {chatUnread}
-            </span>
-          ) : null}
+/** A run of related controls, set apart from the next run by a hairline. */
+function BarGroup({ children, className = "flex" }: { children: React.ReactNode; className?: string }) {
+  return (
+    <div className={`${className} items-center gap-1 sm:gap-1.5 xl:pl-1.5 xl:border-l xl:border-[var(--line)] xl:first:border-l-0 xl:first:pl-0`}>
+      {children}
+    </div>
+  );
+}
+
+const BAR_TONE = {
+  default: "border-[var(--line)] bg-[var(--surface-2)] text-[var(--fg-primary)] hover:bg-[var(--surface-3)]",
+  off: "border-status-danger/40 bg-status-danger/10 text-[var(--status-danger)]",
+  on: "border-gold-400/60 bg-gold-400/10 text-[var(--gold-400)]",
+  recording: "border-[var(--status-danger)] bg-red-500/10 text-[var(--status-danger)]",
+} as const;
+
+/**
+ * One control on the bar: an icon, and a word under it from `xl` up — below
+ * that the row of labelled controls is wider than the screen.
+ *
+ * 44px tall on a phone — the height a thumb can find without looking, and
+ * 42px wide, which is what lets a host's whole bar fit a 360px screen — and
+ * 40px where there is a pointer. The words are what the old bar lacked: a row
+ * of eleven unlabelled circles, two of them emoji, asked a first-time guest to
+ * hover over each one to find the chat.
+ */
+function BarBtn({
+  icon, label, onClick, title, ariaLabel, tone = "default", badge = null, badgeTone = "gold", badgeClassName = "", hint = null,
+  pressed, busy = false, disabled = false, btnRef, className = "flex", haspopup = false, expanded,
+}: {
+  icon: React.ReactNode;
+  label: React.ReactNode;
+  onClick: () => void;
+  title: string;
+  /** Defaults to the label, which is only a string for most controls. */
+  ariaLabel?: string;
+  tone?: keyof typeof BAR_TONE;
+  badge?: number | null;
+  badgeTone?: "gold" | "success";
+  badgeClassName?: string;
+  /** A quiet number beside the label, such as a headcount. Not a badge. */
+  hint?: number | null;
+  pressed?: boolean;
+  /** A device being opened. Opening one takes a moment, and longer when the
+   *  first camera tried is held by something else — without this the press
+   *  looks like it did nothing and gets pressed again. */
+  busy?: boolean;
+  disabled?: boolean;
+  btnRef?: React.Ref<HTMLButtonElement>;
+  className?: string;
+  haspopup?: boolean;
+  expanded?: boolean;
+}) {
+  return (
+    <button
+      ref={btnRef}
+      type="button"
+      onClick={onClick}
+      title={busy ? "Starting…" : title}
+      aria-label={ariaLabel ?? (typeof label === "string" ? label : title)}
+      aria-pressed={pressed}
+      aria-busy={busy || undefined}
+      aria-haspopup={haspopup ? "menu" : undefined}
+      aria-expanded={haspopup ? expanded : undefined}
+      disabled={busy || disabled}
+      className={`${className} relative shrink-0 flex-col items-center justify-center gap-0.5 rounded-xl border w-[42px] h-11 sm:w-10 sm:h-10 xl:w-auto xl:min-w-[3.25rem] xl:h-12 xl:px-1.5 transition-colors disabled:opacity-60 ${
+        busy ? "animate-pulse cursor-wait" : disabled ? "cursor-wait" : ""
+      } ${BAR_TONE[tone]}`}
+    >
+      <span aria-hidden="true" className="flex items-center justify-center h-4">{icon}</span>
+      <span aria-hidden="true" className="hidden xl:flex items-center gap-1 text-[10px] font-medium leading-none whitespace-nowrap tabular-nums">
+        {label}
+        {hint !== null && <span className="text-[var(--fg-muted)]">{hint}</span>}
+      </span>
+      {badge !== null && (
+        <span
+          aria-hidden="true"
+          className={`${badgeClassName} absolute -top-1 -right-1 min-w-4 h-4 px-1 rounded-full text-white text-[11px] font-bold flex items-center justify-center ${
+            badgeTone === "success" ? "bg-[var(--status-success)]" : "bg-[var(--gold-400)]"
+          }`}
+        >
+          {badge}
+        </span>
+      )}
+    </button>
+  );
+}
+
+function MenuItem({ children, onClick, className = "", disabled = false }: {
+  children: React.ReactNode; onClick: () => void; className?: string; disabled?: boolean;
+}) {
+  return (
+    <button role="menuitem" type="button" onClick={onClick} disabled={disabled}
+      className={`${className} w-full flex items-center gap-2.5 text-left px-2.5 min-h-11 sm:min-h-9 rounded-lg text-sm text-[var(--fg-primary)] hover:bg-[var(--surface-3)] disabled:opacity-60 disabled:cursor-wait transition-colors`}>
+      {children}
+    </button>
+  );
+}
+
+function ReactionRow({ onReaction }: { onReaction: (emoji: string) => void }) {
+  return (
+    <div className="flex gap-1">
+      {REACTIONS.map((emoji) => (
+        <button key={emoji} type="button" onClick={() => onReaction(emoji)} aria-label={`Send ${emoji}`}
+          className="w-10 h-10 sm:w-8 sm:h-8 flex items-center justify-center text-xl rounded-lg hover:bg-[var(--surface-3)] transition-colors">
+          {emoji}
         </button>
-      </div>
+      ))}
     </div>
   );
 }
@@ -839,6 +967,11 @@ const PersonRow = memo(function PersonRow({
   );
 });
 
+/** The side panel's tabs. Each has its own button on the control bar. */
+export type PanelTab = "chat" | "people" | "docs";
+
+const PANEL_TITLE: Record<PanelTab, string> = { chat: "Chat", people: "People", docs: "Documents" };
+
 // Exported for the tests, exactly as HostExitControl is: reaching this panel
 // through MeetingRoom means entering a room, which opens a camera, an ICE
 // negotiation and a Realtime channel, and a test that mocked all of that would
@@ -849,7 +982,16 @@ export function CopilotSidebar({
   meetingId = null, canShareDocs = false,
   removedPeople, onAllowBack,
   speaking = NOBODY, onCollapse,
+  tab: tabProp, onTabChange,
 }: {
+  /**
+   * Which tab is showing, when the room decides. The control bar has its own
+   * Chat, People and Docs buttons, so the room has to be able to open this
+   * panel on any one of them; left out, the panel keeps its own tab, which is
+   * how its tests render it.
+   */
+  tab?: PanelTab;
+  onTabChange?: (tab: PanelTab) => void;
   srStatus: "idle" | "active" | "error" | "unsupported";
   participants: { id: string; displayName: string; micOn: boolean; isLocal: boolean }[];
   /** Ids of everyone whose voice is in the room right now. */
@@ -895,7 +1037,9 @@ export function CopilotSidebar({
    */
   canShareDocs?: boolean;
 }) {
-  const [tab, setTab] = useState<"chat" | "people" | "docs">("chat");
+  const [ownTab, setOwnTab] = useState<PanelTab>("chat");
+  const tab = tabProp ?? ownTab;
+  const setTab = (t: PanelTab) => { setOwnTab(t); onTabChange?.(t); };
   const [chatInput, setChatInput] = useState("");
   const chatBottomRef = useRef<HTMLDivElement>(null);
   const [emailInput, setEmailInput] = useState("");
@@ -957,9 +1101,10 @@ export function CopilotSidebar({
     <div className="flex flex-col h-full border-l border-[var(--line)] bg-[var(--surface-1)]">
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--line)] shrink-0">
-        <div className="flex items-center gap-2">
-          <span className="text-sm font-medium text-[var(--fg-primary)]">✨ Copilot</span>
-        </div>
+        {/* Named for what is showing. It was "✨ Copilot", which described
+            none of the three tabs — and "Copilot" in a meeting reads as the AI
+            listening in, which is a different thing (the Live lamp beside it). */}
+        <h2 className="text-sm font-medium text-[var(--fg-primary)]">{PANEL_TITLE[tab]}</h2>
         <div className="flex items-center gap-1.5">
           {srStatus === "active" && (
             <span className="flex items-center gap-1 text-xs text-[var(--status-success)]">
@@ -970,8 +1115,8 @@ export function CopilotSidebar({
           {srStatus === "unsupported" && <span className="text-xs text-[var(--fg-muted)]">No STT</span>}
           <button
             onClick={onCollapse}
-            title="Collapse copilot"
-            aria-label="Collapse copilot"
+            title="Close panel"
+            aria-label="Close panel"
             className="ml-0.5 w-7 h-7 rounded-lg text-[var(--fg-muted)] hover:text-[var(--fg-primary)] hover:bg-[var(--surface-2)] flex items-center justify-center transition-colors"
           >
             <CollapseIcon />
@@ -1316,6 +1461,52 @@ function GridViewIcon() {
       <rect x="13" y="2" width="9" height="9" rx="1" />
       <rect x="2" y="13" width="9" height="9" rx="1" />
       <rect x="13" y="13" width="9" height="9" rx="1" />
+    </svg>
+  );
+}
+function ChatIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+    </svg>
+  );
+}
+
+function PeopleIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+      <circle cx="9" cy="7" r="4" />
+      <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+      <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+    </svg>
+  );
+}
+
+function DocsIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+      <polyline points="14 2 14 8 20 8" />
+    </svg>
+  );
+}
+
+function MoreIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+      <circle cx="5" cy="12" r="1.8" />
+      <circle cx="12" cy="12" r="1.8" />
+      <circle cx="19" cy="12" r="1.8" />
+    </svg>
+  );
+}
+
+function LinkIcon() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
+      <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
     </svg>
   );
 }

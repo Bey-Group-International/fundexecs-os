@@ -59,6 +59,10 @@ import {
   type ChatTurn,
 } from "@/lib/meetings/chat";
 import { CopilotErrorBoundary } from "./CopilotErrorBoundary";
+import type { PanelTab } from "./CallParts";
+import { NoticeStack, type StageNotice } from "./NoticeStack";
+import { useIdleControls, useRoomViewport } from "./useIdleControls";
+import { gridColumns, pageTiles } from "@/lib/meetings/room-layout";
 import {
   BACKGROUND_PREF_KEY,
   NO_BACKGROUND,
@@ -446,6 +450,14 @@ interface VoiceTap {
 
 
 // ─── Main component ───────────────────────────────────────────────────────────
+
+/** Spelled out so Tailwind can see each class. See gridColumns. */
+const GRID_COLS: Record<number, string> = {
+  1: "grid-cols-1",
+  2: "grid-cols-2",
+  3: "grid-cols-3",
+  4: "grid-cols-4",
+};
 
 export function MeetingRoom({ roomCode }: { roomCode: string }) {
   // Start fetching the call screen as soon as the room mounts: the member is
@@ -901,8 +913,14 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
   const maskReportsRef = useRef(0);
 
   // UI
-  const [copilotOpen, setCopilotOpen] = useState(true);
-  const [copilotMounted, setCopilotMounted] = useState(true);
+  // The side panel starts closed. It used to open with the call, which put a
+  // 320px column of empty chat beside the faces for everyone, and on a phone a
+  // sheet over the whole stage that had to be dismissed before you could see
+  // who you had joined. The control bar's Chat, People and Documents buttons
+  // open it on the tab they name.
+  const [copilotOpen, setCopilotOpen] = useState(false);
+  const [copilotMounted, setCopilotMounted] = useState(false);
+  const [panelTab, setPanelTab] = useState<PanelTab>("chat");
   const copilotUnmountRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   /**
    * How long the meeting has been live, as spans rather than a running count.
@@ -5255,6 +5273,51 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     requestAnimationFrame(() => requestAnimationFrame(() => setCopilotOpen(true)));
   }, []);
 
+  /**
+   * The bar's Chat / People / Documents buttons: open the panel on that tab, or
+   * close it when that tab is already the one showing — the same press twice
+   * is a toggle, as the single Copilot button was.
+   */
+  const openPanel = useCallback((tab: PanelTab) => {
+    if (copilotOpen && panelTab === tab) {
+      collapseCopilot();
+      return;
+    }
+    setPanelTab(tab);
+    if (!copilotOpen) expandCopilot();
+  }, [copilotOpen, panelTab, collapseCopilot, expandCopilot]);
+
+  const viewport = useRoomViewport();
+
+  // Someone at the door opens the People tab for the host — the admit buttons
+  // are there, and the host should not have to go looking for them. Only from
+  // closed, and only on a wide screen: switching a panel that is open on the
+  // chat would take a half-typed message out from under the host, and on a
+  // phone the panel covers the stage, where the waiting bar above the controls
+  // already holds Admit and Deny.
+  const lastWaitingForPanelRef = useRef(0);
+  useEffect(() => {
+    const count = isHost ? livePeers.length : 0;
+    const previous = lastWaitingForPanelRef.current;
+    lastWaitingForPanelRef.current = count;
+    if (previous === 0 && count > 0 && !copilotOpen && viewport === "desktop") {
+      setPanelTab("people");
+      expandCopilot();
+    }
+  }, [isHost, livePeers.length, copilotOpen, viewport, expandCopilot]);
+
+  // The controls step aside when the mouse rests. See useIdleControls.
+  const controlBarRef = useRef<HTMLDivElement>(null);
+  const controls = useIdleControls({
+    live: ready && callPhase === "live",
+    waitingCount: isHost ? livePeers.length : 0,
+    barRef: controlBarRef,
+  });
+
+  // Which page of a large call's grid is showing. Clamped where it is used,
+  // so a call that shrinks under it lands on its last page rather than a blank.
+  const [gridPage, setGridPage] = useState(0);
+
   const abandonReport = useCallback(() => {
     endingRef.current = true;
     callPhaseRef.current = nextPhase(callPhaseRef.current, "abandon");
@@ -5281,7 +5344,7 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     onToggleMic: toggleMic,
     onToggleCam: toggleCam,
     onToggleScreen: () => void toggleScreen(),
-    onToggleCopilot: () => (copilotOpen ? collapseCopilot() : expandCopilot()),
+    onOpenPanel: openPanel,
     onLeave: () => void leaveMeeting(),
     onEndForAll: () => void endForAll(),
     onOpenBackgrounds: () => setBgPickerOpen((v) => !v),
@@ -5397,8 +5460,11 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
   }
   const { VideoTile, PeerAudio, CopilotSidebar, ControlBar, ReactionTicker } = callParts;
 
-  const totalCount = 1 + allPeers.length;
-  const gridClass = totalCount === 1 ? "grid-cols-1" : totalCount === 2 ? "grid-cols-2" : totalCount <= 4 ? "grid-cols-2" : "grid-cols-3";
+  // The grid, a page at a time. Your own tile is on every page; see pageTiles.
+  const gridPaged = pageTiles<Peer | "local">("local", allPeers, gridPage, viewport);
+  const gridCols = gridColumns(gridPaged.tiles.length, viewport);
+  const gridRows = Math.ceil(gridPaged.tiles.length / gridCols);
+  const gridClass = GRID_COLS[gridCols] ?? "grid-cols-4";
 
   // The others' hands, oldest first — the order a chair would take them in.
   const handsUpPeople = raisedBy(raisedHands, participantList, LOCAL_SPEAKER_ID);
@@ -5425,6 +5491,126 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     ? allPeers.map((p) => ({ id: p.id, displayName: p.displayName, stream: p.stream, isLocal: false }))
     : [{ id: "local", displayName: localName, stream: localStream, isLocal: true }, ...allPeers.filter((p) => p.id !== speakerTileId).map((p) => ({ id: p.id, displayName: p.displayName, stream: p.stream, isLocal: false }))];
 
+  // The notices over the stage, most urgent first. See NoticeStack: one shows
+  // at a time, apart from the two pinned ones, so a stage that opens with
+  // three things to say keeps its height.
+  const stageNotices: StageNotice[] = [];
+  // Not being seen or heard, which is not the same as being muted.
+  // Derived from the devices and so NOT dismissible: while it is true
+  // it stays, because the alternative is what shipped — a guest who
+  // believed they were live and a room that had been told so.
+  if (participation) stageNotices.push({ id: "participation", pinned: true, priority: 100, node: (
+      <div className="flex items-start gap-3 px-4 py-3 bg-red-500/10 border-b border-red-500/40 shrink-0">
+        <span className="text-red-500 mt-0.5 shrink-0">⚠</span>
+        <p className="flex-1 text-sm text-red-600 dark:text-red-400">{participation.text}</p>
+        <button
+          onClick={() => {
+            // Both, when both are gone: one press should fix what one
+            // address-bar decision just allowed.
+            //
+            // Logged, not swallowed. `startCamera` is try/finally with no
+            // catch, so a rejection out of it escapes a bare `void` as an
+            // unhandled rejection -- but an EMPTY catch is worse, because
+            // the banner stays up either way and the console was the only
+            // place a broken retry showed at all.
+            const failed = (what: string) => (err: unknown) =>
+              console.warn(`[meeting] ${what} retry failed`, err);
+            if (participation.reason !== "no-camera") {
+              void reacquireMicRef.current().catch(failed("microphone"));
+            }
+            if (participation.reason !== "no-microphone") {
+              void startCameraRef.current().catch(failed("camera"));
+            }
+          }}
+          className="shrink-0 rounded-full border border-red-500/50 px-3 py-1 text-xs font-semibold text-red-600 dark:text-red-400 hover:bg-red-500/10 transition-colors">
+          Retry
+        </button>
+      </div>
+  ) });
+  // Media permission warning. Stood down while the banner above is up:
+  // they would otherwise say much the same thing twice, and only one of
+  // them can be acted on.
+  if (mediaError && !participation) stageNotices.push({ id: "media-error", priority: 70, node: (
+      <div className="flex items-start gap-3 px-4 py-3 bg-amber-500/10 border-b border-amber-500/30 shrink-0">
+        <span className="text-amber-500 mt-0.5 shrink-0">⚠</span>
+        <p className="flex-1 text-sm text-amber-600 dark:text-amber-400">{mediaError}</p>
+        <button onClick={() => setMediaError(null)} className="shrink-0 text-amber-500 hover:text-amber-600 text-xs font-medium underline">Dismiss</button>
+      </div>
+  ) });
+  // Echo. Its own banner, not `mediaError`: see `echoNotice`.
+  if (echoNotice) stageNotices.push({ id: "echo", priority: 60, node: (
+      <div className="flex items-start gap-3 px-4 py-3 bg-amber-500/10 border-b border-amber-500/30 shrink-0">
+        <span className="text-amber-500 mt-0.5 shrink-0">🔊</span>
+        <p className="flex-1 text-sm text-amber-600 dark:text-amber-400">{echoNotice}</p>
+        <button onClick={() => setEchoNotice(null)} className="shrink-0 text-amber-500 hover:text-amber-600 text-xs font-medium underline">Dismiss</button>
+      </div>
+  ) });
+  // Guest upsell banner
+  if (isGuest) stageNotices.push({ id: "guest", priority: 10, node: (
+      <div className="flex items-center gap-3 px-4 py-2 bg-gold-400/10 border-b border-gold-400/20 shrink-0">
+        <span className="text-[var(--gold-400)] text-xs shrink-0">✦</span>
+        <p className="flex-1 text-xs text-[var(--fg-secondary)]">You&apos;re joining as a guest. Request access for AI transcription, notes, and action items.</p>
+        <a href="/request-access" className="shrink-0 text-xs font-semibold text-[var(--gold-400)] hover:text-[var(--gold-500)] whitespace-nowrap transition-colors">Request access →</a>
+      </div>
+  ) });
+  // The notice, distinct from the badge in the control bar. Everyone in
+  // the room sees this, in the same words, the moment a recording
+  // starts — a recorded conversation that only the recorder knew about
+  // is the thing several US states actually prohibit. It withdraws
+  // itself; the badge is what carries the fact for the rest of the
+  // call.
+  if (recordingNoticeOpen && recordingBanner) stageNotices.push({ id: "recording", pinned: true, priority: 95, node: (
+      <div
+        role="status"
+        className="flex items-center gap-3 px-4 py-2.5 bg-red-500/10 border-b border-[var(--status-danger)]/30 shrink-0"
+      >
+        <span className="w-2.5 h-2.5 rounded-full bg-[var(--status-danger)] animate-pulse shrink-0" />
+        <p className="flex-1 text-xs font-medium text-[var(--fg-primary)]">
+          {recordingNotice("recording", recordingBanner.by)}
+        </p>
+        <button
+          onClick={() => setRecordingNoticeOpen(false)}
+          className="shrink-0 text-xs text-[var(--fg-muted)] hover:text-[var(--fg-primary)] transition-colors"
+        >
+          Dismiss
+        </button>
+      </div>
+  ) });
+  // A removal that could not be written down. The person IS out of the
+  // call — the broadcast and the teardown both ran — but they may be
+  // able to come back, and a host who watched the tile vanish would
+  // otherwise have no way to know that.
+  if (removalNotice) stageNotices.push({ id: "removal", priority: 80, node: (
+      <div role="alert" className="flex items-center gap-3 px-4 py-2 bg-[var(--status-warning)]/10 border-b border-status-warning/30 shrink-0">
+        <p className="flex-1 text-xs text-[var(--fg-secondary)]">{removalNotice}</p>
+        <button
+          onClick={() => setRemovalNotice(null)}
+          className="shrink-0 text-xs text-[var(--fg-muted)] hover:text-[var(--fg-primary)] transition-colors"
+        >
+          Dismiss
+        </button>
+      </div>
+  ) });
+  if (recorder.error) stageNotices.push({ id: "recorder-error", priority: 90, node: (
+      <div role="alert" className="flex items-center gap-3 px-4 py-2 bg-red-500/10 border-b border-[var(--status-danger)]/30 shrink-0">
+        <p className="flex-1 text-xs text-[var(--fg-secondary)]">{recorder.error}</p>
+      </div>
+  ) });
+  // A recording that worked but lost parts. Not an alert — the file
+  // plays — and dismissible, because it describes something finished
+  // rather than something to act on.
+  if (recorder.notice) stageNotices.push({ id: "recorder-notice", priority: 30, node: (
+      <div role="status" className="flex items-center gap-3 px-4 py-2 bg-[var(--surface-2)] border-b border-[var(--line)] shrink-0">
+        <p className="flex-1 text-xs text-[var(--fg-secondary)]">{recorder.notice}</p>
+        <button
+          onClick={recorder.dismissNotice}
+          className="text-xs font-medium text-[var(--fg-muted)] hover:text-[var(--fg-primary)] transition-colors"
+        >
+          Dismiss
+        </button>
+      </div>
+  ) });
+
   return (
     <BodyPortal>
     {/* The tiles and the sidebar's rows read who is talking from here rather
@@ -5440,132 +5626,44 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
             the mobile copilot sheet already made once. */}
         <div className="relative flex-1 flex flex-col overflow-hidden bg-[var(--surface-0)] min-w-0">
           <ReactionTicker entries={liveReactions} />
-          {/* Not being seen or heard, which is not the same as being muted.
-              Derived from the devices and so NOT dismissible: while it is true
-              it stays, because the alternative is what shipped — a guest who
-              believed they were live and a room that had been told so. */}
-          {participation && (
-            <div className="flex items-start gap-3 px-4 py-3 bg-red-500/10 border-b border-red-500/40 shrink-0">
-              <span className="text-red-500 mt-0.5 shrink-0">⚠</span>
-              <p className="flex-1 text-sm text-red-600 dark:text-red-400">{participation.text}</p>
-              <button
-                onClick={() => {
-                  // Both, when both are gone: one press should fix what one
-                  // address-bar decision just allowed.
-                  //
-                  // Logged, not swallowed. `startCamera` is try/finally with no
-                  // catch, so a rejection out of it escapes a bare `void` as an
-                  // unhandled rejection -- but an EMPTY catch is worse, because
-                  // the banner stays up either way and the console was the only
-                  // place a broken retry showed at all.
-                  const failed = (what: string) => (err: unknown) =>
-                    console.warn(`[meeting] ${what} retry failed`, err);
-                  if (participation.reason !== "no-camera") {
-                    void reacquireMicRef.current().catch(failed("microphone"));
-                  }
-                  if (participation.reason !== "no-microphone") {
-                    void startCameraRef.current().catch(failed("camera"));
-                  }
-                }}
-                className="shrink-0 rounded-full border border-red-500/50 px-3 py-1 text-xs font-semibold text-red-600 dark:text-red-400 hover:bg-red-500/10 transition-colors">
-                Retry
-              </button>
-            </div>
-          )}
-          {/* Media permission warning. Stood down while the banner above is up:
-              they would otherwise say much the same thing twice, and only one of
-              them can be acted on. */}
-          {mediaError && !participation && (
-            <div className="flex items-start gap-3 px-4 py-3 bg-amber-500/10 border-b border-amber-500/30 shrink-0">
-              <span className="text-amber-500 mt-0.5 shrink-0">⚠</span>
-              <p className="flex-1 text-sm text-amber-600 dark:text-amber-400">{mediaError}</p>
-              <button onClick={() => setMediaError(null)} className="shrink-0 text-amber-500 hover:text-amber-600 text-xs font-medium underline">Dismiss</button>
-            </div>
-          )}
-          {/* Echo. Its own banner, not `mediaError`: see `echoNotice`. */}
-          {echoNotice && (
-            <div className="flex items-start gap-3 px-4 py-3 bg-amber-500/10 border-b border-amber-500/30 shrink-0">
-              <span className="text-amber-500 mt-0.5 shrink-0">🔊</span>
-              <p className="flex-1 text-sm text-amber-600 dark:text-amber-400">{echoNotice}</p>
-              <button onClick={() => setEchoNotice(null)} className="shrink-0 text-amber-500 hover:text-amber-600 text-xs font-medium underline">Dismiss</button>
-            </div>
-          )}
-          {/* Guest upsell banner */}
-          {isGuest && (
-            <div className="flex items-center gap-3 px-4 py-2 bg-gold-400/10 border-b border-gold-400/20 shrink-0">
-              <span className="text-[var(--gold-400)] text-xs shrink-0">✦</span>
-              <p className="flex-1 text-xs text-[var(--fg-secondary)]">You&apos;re joining as a guest. Request access for AI transcription, notes, and action items.</p>
-              <a href="/request-access" className="shrink-0 text-xs font-semibold text-[var(--gold-400)] hover:text-[var(--gold-500)] whitespace-nowrap transition-colors">Request access →</a>
-            </div>
-          )}
-          {/* The notice, distinct from the badge in the control bar. Everyone in
-              the room sees this, in the same words, the moment a recording
-              starts — a recorded conversation that only the recorder knew about
-              is the thing several US states actually prohibit. It withdraws
-              itself; the badge is what carries the fact for the rest of the
-              call. */}
-          {recordingNoticeOpen && recordingBanner && (
-            <div
-              role="status"
-              className="flex items-center gap-3 px-4 py-2.5 bg-red-500/10 border-b border-[var(--status-danger)]/30 shrink-0"
-            >
-              <span className="w-2.5 h-2.5 rounded-full bg-[var(--status-danger)] animate-pulse shrink-0" />
-              <p className="flex-1 text-xs font-medium text-[var(--fg-primary)]">
-                {recordingNotice("recording", recordingBanner.by)}
-              </p>
-              <button
-                onClick={() => setRecordingNoticeOpen(false)}
-                className="shrink-0 text-xs text-[var(--fg-muted)] hover:text-[var(--fg-primary)] transition-colors"
-              >
-                Dismiss
-              </button>
-            </div>
-          )}
-          {/* A removal that could not be written down. The person IS out of the
-              call — the broadcast and the teardown both ran — but they may be
-              able to come back, and a host who watched the tile vanish would
-              otherwise have no way to know that. */}
-          {removalNotice && (
-            <div role="alert" className="flex items-center gap-3 px-4 py-2 bg-[var(--status-warning)]/10 border-b border-status-warning/30 shrink-0">
-              <p className="flex-1 text-xs text-[var(--fg-secondary)]">{removalNotice}</p>
-              <button
-                onClick={() => setRemovalNotice(null)}
-                className="shrink-0 text-xs text-[var(--fg-muted)] hover:text-[var(--fg-primary)] transition-colors"
-              >
-                Dismiss
-              </button>
-            </div>
-          )}
-          {recorder.error && (
-            <div role="alert" className="flex items-center gap-3 px-4 py-2 bg-red-500/10 border-b border-[var(--status-danger)]/30 shrink-0">
-              <p className="flex-1 text-xs text-[var(--fg-secondary)]">{recorder.error}</p>
-            </div>
-          )}
-          {/* A recording that worked but lost parts. Not an alert — the file
-              plays — and dismissible, because it describes something finished
-              rather than something to act on. */}
-          {recorder.notice && (
-            <div role="status" className="flex items-center gap-3 px-4 py-2 bg-[var(--surface-2)] border-b border-[var(--line)] shrink-0">
-              <p className="flex-1 text-xs text-[var(--fg-secondary)]">{recorder.notice}</p>
-              <button
-                onClick={recorder.dismissNotice}
-                className="text-xs font-medium text-[var(--fg-muted)] hover:text-[var(--fg-primary)] transition-colors"
-              >
-                Dismiss
-              </button>
-            </div>
-          )}
+          <NoticeStack notices={stageNotices} />
           {/* Everyone's voice, once each, independent of layout. The tiles
               below are muted pictures; see PeerAudio. */}
           {allPeers.map((peer: Peer) => (
             <PeerAudio key={peer.id} stream={peer.stream} audioTrack={audioTrackOf(peer.stream)} />
           ))}
           {stageLayout === "grid" ? (
-            <div className={`flex-1 grid ${gridClass} gap-3 p-4 content-center`}>
-              <VideoTile stream={localStream} videoTrack={videoTrackOf(localStream)} label={localName} isLocal showingScreenShare={shareOn} handRaised={handRaised} reaction={getReaction("local")} micOn={micOn} watchId={LOCAL_SPEAKER_ID} camOn={camOn} videoPaused={bwMode === "audio-only"} />
-              {allPeers.map((peer: Peer) => (
-                <VideoTile key={peer.id} stream={peer.stream} videoTrack={videoTrackOf(peer.stream)} label={peer.displayName} handRaised={raisedHands.has(peer.id)} reaction={getReaction(peer.id)} micOn={peerMicOn.get(peer.id) ?? true} watchId={peer.id} camOn={videoOf(peer.id).camOn} videoPaused={videoOf(peer.id).paused} status={statusOf(peer.id)} />
-              ))}
+            // Sized as a container so the grid can be letterboxed to fit: the
+            // tiles keep 16:9, and the grid is never wider than the rows can be
+            // tall, so a page of sixteen fits the stage instead of scrolling it.
+            <div className="relative flex-1 min-h-0 p-4 flex items-center justify-center" style={{ containerType: "size" }}>
+              <div
+                className={`grid ${gridClass} gap-3 w-full`}
+                style={{ maxWidth: `calc((100cqh - ${gridRows - 1} * 0.75rem) / ${gridRows} * 16 / 9 * ${gridCols} + ${gridCols - 1} * 0.75rem)` }}
+              >
+                {gridPaged.tiles.map((tile) => tile === "local" ? (
+                  <VideoTile key="local" stream={localStream} videoTrack={videoTrackOf(localStream)} label={localName} isLocal showingScreenShare={shareOn} handRaised={handRaised} reaction={getReaction("local")} micOn={micOn} watchId={LOCAL_SPEAKER_ID} camOn={camOn} videoPaused={bwMode === "audio-only"} />
+                ) : (
+                  <VideoTile key={tile.id} stream={tile.stream} videoTrack={videoTrackOf(tile.stream)} label={tile.displayName} handRaised={raisedHands.has(tile.id)} reaction={getReaction(tile.id)} micOn={peerMicOn.get(tile.id) ?? true} watchId={tile.id} camOn={videoOf(tile.id).camOn} videoPaused={videoOf(tile.id).paused} status={statusOf(tile.id)} />
+                ))}
+              </div>
+              {gridPaged.pages > 1 && (
+                <nav aria-label="Grid pages" className="absolute bottom-2 left-1/2 -translate-x-1/2 flex items-center gap-1 rounded-full border border-[var(--line)] bg-[var(--surface-1)]/90 backdrop-blur px-1 py-1 shadow-lg">
+                  <button type="button" onClick={() => setGridPage(gridPaged.page - 1)} disabled={gridPaged.page === 0}
+                    aria-label="Previous page of people"
+                    className="w-9 h-9 sm:w-8 sm:h-8 rounded-full flex items-center justify-center text-[var(--fg-primary)] hover:bg-[var(--surface-3)] disabled:opacity-40 transition-colors">
+                    ‹
+                  </button>
+                  <span className="px-1 text-xs tabular-nums text-[var(--fg-secondary)]" aria-live="polite">
+                    {gridPaged.page + 1} / {gridPaged.pages}
+                  </span>
+                  <button type="button" onClick={() => setGridPage(gridPaged.page + 1)} disabled={gridPaged.page >= gridPaged.pages - 1}
+                    aria-label="Next page of people"
+                    className="w-9 h-9 sm:w-8 sm:h-8 rounded-full flex items-center justify-center text-[var(--fg-primary)] hover:bg-[var(--surface-3)] disabled:opacity-40 transition-colors">
+                    ›
+                  </button>
+                </nav>
+              )}
             </div>
           ) : (
             <div className="flex-1 flex flex-col gap-2 p-4 overflow-hidden min-h-0">
@@ -5602,7 +5700,8 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
             Collapsing narrows the column to zero on desktop, so the video grows
             into the space as the panel goes rather than snapping wider after it;
             on mobile the sheet slides off to the right. Either way it leaves
-            nothing behind — the control-bar Copilot button brings it back. */}
+            nothing behind — the control bar's Chat, People and Documents
+            buttons bring it back on their own tab. */}
         {copilotMounted && (
           <div
             aria-hidden={!copilotOpen}
@@ -5632,6 +5731,7 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
               removedPeople={removedPeople} onAllowBack={(s) => void allowBack(s)}
               onChatVisibility={handleChatVisibility}
               onCollapse={collapseCopilot}
+              tab={panelTab} onTabChange={setPanelTab}
               meetingId={meetingId}
               // Signed in, not a guest. A guest has no firm behind them to
               // share from; whether a signed-in viewer is a MEMBER of the
@@ -5655,10 +5755,21 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
       )}
 
       {/* Above the mobile copilot sheet: mute, leave and end must never be
-          covered by a panel. */}
-      <div className="relative z-40 shrink-0">
+          covered by a panel.
+
+          Collapsed by grid row rather than faded in place, so the stage grows
+          into the space as the bar goes instead of leaving a dark band. The
+          row is 0fr while hidden; the bar inside keeps its height and is
+          clipped. `inert` while hidden so Tab cannot land on a control nobody
+          can see — though any key brings the bar back first. */}
+      <div
+        className="relative z-40 shrink-0 grid transition-[grid-template-rows] duration-300 ease-out motion-reduce:transition-none"
+        style={{ gridTemplateRows: controls.visible ? "1fr" : "0fr" }}
+      >
+      <div ref={controlBarRef} className="min-h-0 overflow-hidden" inert={!controls.visible}>
       <ControlBar
-        micOn={micOn} camOn={camOn} shareOn={shareOn} shareStarting={shareStarting} copilotOpen={copilotOpen}
+        micOn={micOn} camOn={camOn} shareOn={shareOn} shareStarting={shareStarting}
+        panel={copilotOpen ? panelTab : null} canShareDocs={!isGuest} participantCount={participantList.length}
         micTitle={micButtonTitle(micStanding)} camTitle={camButtonTitle(camStanding)}
         isHost={isHost} handRaised={handRaised} layout={layout} chatUnread={chatUnread}
         handsUp={handsUpPeople.length} handsUpNote={handsUpNote}
@@ -5673,6 +5784,7 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
         activeMicId={selectedMicId} activeCamId={selectedCamId} camStarting={camStarting}
         {...controlBarHandlers}
       />
+      </div>
       </div>
 
       {/* Background picker, anchored to its control */}
