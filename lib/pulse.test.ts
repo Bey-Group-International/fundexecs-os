@@ -183,8 +183,8 @@ describe("notice copy", () => {
 
   it("escapes HTML in the email", () => {
     const html = digestEmailHtml([f("<script>", 70)], 1, "https://app.example.com/pulse");
-    expect(html).not.toMatch(/<script>/);
-    expect(html).toMatch(/&lt;script&gt;/);
+    expect(html.toLowerCase()).not.toContain("<script");
+    expect(html).toContain("&lt;script&gt;");
     expect(html).toMatch(/href="https:\/\/app.example.com\/pulse"/);
   });
 });
