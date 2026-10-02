@@ -169,7 +169,7 @@ export function MarkdownRenderer({ content, className }: { content: string; clas
 
         if (tok.kind === "codeblock") {
           return (
-            <pre key={idx} className="overflow-x-auto rounded-xl border border-line bg-surface-0 p-4 font-mono text-xs text-fg-secondary">
+            <pre key={idx} className="overflow-x-auto overflow-y-hidden rounded-xl border border-line bg-surface-0 p-4 font-mono text-xs text-fg-secondary">
               <code>{tok.text}</code>
             </pre>
           );

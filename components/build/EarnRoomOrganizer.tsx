@@ -71,7 +71,7 @@ export function EarnRoomOrganizer({
 
       {open && remaining.length > 0 ? (
         <>
-          <ul className="mt-3 flex max-h-80 flex-col gap-1.5 overflow-y-auto overscroll-contain">
+          <ul className="mt-3 flex max-h-80 flex-col gap-1.5 overflow-y-auto">
             {remaining.map((item) => (
               <li
                 key={`${item.kind}:${item.docId}`}

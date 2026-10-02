@@ -128,7 +128,7 @@ export function DocumentReviewWorkspace({
       </section>
 
       {/* ------------------------------------------------------------- Earn */}
-      <aside className="flex min-w-0 flex-col gap-4 lg:sticky lg:top-[calc(var(--app-header-h)+1.5rem)] lg:max-h-[calc(100dvh-var(--app-header-h)-3rem)] lg:self-start lg:overflow-y-auto lg:overscroll-contain">
+      <aside className="flex min-w-0 flex-col gap-4 lg:sticky lg:top-[calc(var(--app-header-h)+1.5rem)] lg:max-h-[calc(100dvh-var(--app-header-h)-3rem)] lg:self-start lg:overflow-y-auto">
         {/* Review */}
         <div className="rounded-2xl border border-line bg-surface-1 p-4">
           <div className="flex items-center justify-between gap-2">

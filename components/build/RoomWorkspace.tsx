@@ -181,7 +181,7 @@ export function RoomWorkspace({
           </div>
 
           {/* Index */}
-          <nav className="flex max-h-[24rem] min-h-0 flex-col gap-0.5 overflow-y-auto overscroll-contain p-2 lg:max-h-none lg:flex-1">
+          <nav className="flex max-h-[24rem] min-h-0 flex-col gap-0.5 overflow-y-auto p-2 lg:max-h-none lg:flex-1">
             <button
               type="button"
               onClick={() => {

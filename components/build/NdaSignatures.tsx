@@ -85,7 +85,7 @@ export async function NdaSignatures({ roomId }: { roomId?: string } = {}) {
         </p>
       </div>
 
-      <div className="overflow-x-auto">
+      <div className="overflow-x-auto overflow-y-hidden">
         <table className="w-full text-left text-sm">
           <thead>
             <tr className="border-b border-line text-xs text-fg-muted">
