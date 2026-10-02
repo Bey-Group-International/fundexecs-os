@@ -15,8 +15,14 @@ import { anthropicClient, LONG_RUN_TIMEOUT_MS } from "@/lib/anthropic-client";
 import { spendCredits } from "@/lib/credits";
 import { earnWebSearchEnabled, webSearchCount, webSearchTool, WEB_SEARCH_CREDIT_COST } from "@/lib/earn-web-search";
 import { EntityDedupe } from "@/lib/source-identity";
+import { sendEmail } from "@/lib/email";
+import { SITE_URL } from "@/lib/site";
 import type { Database, InvestmentThesis, PulseItem } from "@/lib/supabase/database.types";
 import {
+  alertCopy,
+  digestCopy,
+  digestEmailHtml,
+  planNotices,
   hasSearchableMandate,
   normalizeFindings,
   parseJsonArray,
@@ -178,7 +184,7 @@ export async function runPulseForOrg(
 
     const findings = normalizeFindings(parseJsonArray(textOf(message)) ?? [], names);
     const runId = crypto.randomUUID();
-    let inserted = 0;
+    let inserted: PulseItem[] = [];
     if (findings.length) {
       const { data, error } = await client
         .from("pulse_items")
@@ -186,11 +192,16 @@ export async function runPulseForOrg(
           findings.map((f) => ({ ...f, organization_id: orgId, run_id: runId })),
           { onConflict: "organization_id,dedupe_key", ignoreDuplicates: true },
         )
-        .select("id");
+        .select("*");
       if (error) console.error("[pulse] insert failed", orgId, error.message);
-      inserted = data?.length ?? 0;
+      inserted = (data ?? []) as PulseItem[];
     }
-    return await recordRun(client, orgId, { ...base, id: runId, status: "ok", detail: null, items: inserted, searches });
+    // The daily sweep tells the team what it found; a manual Refresh doesn't,
+    // because whoever pressed it is already looking at the page.
+    if (opts.trigger === "sweep" && inserted.length) {
+      await deliverPulseNotices(client, orgId, inserted).catch((e) => console.error("[pulse] notices failed", orgId, e));
+    }
+    return await recordRun(client, orgId, { ...base, id: runId, status: "ok", detail: null, items: inserted.length, searches });
   } catch (e) {
     console.error("[pulse] run failed", orgId, e);
     return await recordRun(client, orgId, { ...base, status: "failed", detail: "Pulse couldn't complete this run.", items: 0, searches: 0 });
@@ -315,4 +326,67 @@ export async function addPulseItemToPipeline(
     .eq("organization_id", orgId);
 
   return { ok: true, recordType, recordId, existed };
+}
+
+async function postInboxThread(
+  client: Client,
+  orgId: string,
+  copy: { subject: string; preview: string; body: string },
+  priority: number,
+): Promise<void> {
+  const { data, error } = await client
+    .from("inbox_threads")
+    .insert({
+      organization_id: orgId,
+      channel: "pulse",
+      category: "messaging",
+      subject: copy.subject,
+      preview: copy.preview,
+      intent: "Market Pulse",
+      ai_summary: copy.preview,
+      priority,
+      status: "open",
+      unread: true,
+      last_message_at: new Date().toISOString(),
+    })
+    .select("id")
+    .single();
+  if (error || !data) return;
+  await client.from("inbox_messages").insert({
+    organization_id: orgId,
+    thread_id: (data as { id: string }).id,
+    direction: "inbound",
+    author: "Market Pulse",
+    body: copy.body,
+  });
+}
+
+/**
+ * After a sweep: an Inbox alert for each high-fit find, one digest of the best
+ * of the rest, and — where the org has a mailbox connected — the digest by
+ * email to each member. Best-effort throughout.
+ */
+async function deliverPulseNotices(client: Client, orgId: string, inserted: PulseItem[]): Promise<void> {
+  const { alerts, digest } = planNotices(inserted);
+  for (const a of alerts) await postInboxThread(client, orgId, alertCopy(a), 90);
+
+  const copy = digestCopy(digest, inserted.length);
+  if (!copy) return;
+  await postInboxThread(client, orgId, copy, 60);
+
+  const { data: members } = await client
+    .from("organization_members")
+    .select("principal_id")
+    .eq("organization_id", orgId)
+    .limit(50);
+  const ids = ((members ?? []) as { principal_id: string }[]).map((m) => m.principal_id);
+  if (!ids.length) return;
+  const { data: people } = await client.from("principals").select("email, full_name").in("id", ids);
+  const html = digestEmailHtml([...alerts, ...digest].slice(0, 5), inserted.length, `${SITE_URL}/pulse`);
+  for (const p of (people ?? []) as { email: string | null; full_name: string | null }[]) {
+    if (!p.email) continue;
+    // Without a connected mailbox sendEmail returns ok:false and sends nothing.
+    const r = await sendEmail({ to: { name: p.full_name ?? p.email, email: p.email }, subject: copy.subject, htmlBody: html, orgId });
+    if (!r.ok) break;
+  }
 }

@@ -37,6 +37,9 @@ export const INBOX_CHANNELS: Record<InboxChannel, ChannelMeta> = {
   // The recurring Act-now Radar digest — the ranked sourcing brief delivered
   // in-app (lib/radar-digest, lib/radar-send).
   radar_digest: { channel: "radar_digest", label: "Radar digest", category: "messaging", icon: "◎" },
+  // Market Pulse: the daily digest of mandate-matched findings and high-fit
+  // alerts (lib/pulse.server.ts).
+  pulse: { channel: "pulse", label: "Market Pulse", category: "messaging", icon: "◐" },
   // Accounting: Xero invoices, bills, and overdue/awaiting-approval alerts.
   xero: { channel: "xero", label: "Xero", category: "finance", icon: "▤" },
   // Payments: Jax transactions, statements, and payment-status alerts.

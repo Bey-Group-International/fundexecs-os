@@ -311,6 +311,8 @@ interface AppSidebarProps {
   sessions: SessionItem[];
   groups: GroupItem[];
   inboxUnread?: number;
+  /** Market Pulse findings not yet added or dismissed. */
+  pulseNew?: number;
   /** True only for internal platform admins — reveals the hidden Admin link. */
   isPlatformAdmin?: boolean;
   /**
@@ -350,6 +352,7 @@ function SidebarPanel({
   pinSessionAction,
   unreadSessionAction,
   inboxUnread = 0,
+  pulseNew = 0,
   isPlatformAdmin = false,
   pendingAccessRequests = 0,
 }: AppSidebarProps) {
@@ -471,9 +474,17 @@ function SidebarPanel({
           </Link>
           <Link
             href="/pulse"
-            className={navHrefActive(pathname, "/pulse") ? `${activeLinkClass} flex items-center gap-2` : linkClass}
+            className={`${navHrefActive(pathname, "/pulse") ? `${activeLinkClass} flex items-center justify-between gap-2` : `${linkClass} justify-between`}`}
           >
-            Pulse
+            <span className="flex items-center gap-2">Pulse</span>
+            {pulseNew > 0 ? (
+              <span
+                className="rounded-full bg-surface-2 px-1.5 py-0.5 font-mono text-[11px] font-semibold leading-none text-gold-300"
+                aria-label={`${pulseNew} new Pulse findings`}
+              >
+                {pulseNew > 99 ? "99+" : pulseNew}
+              </span>
+            ) : null}
           </Link>
         </div>
 
