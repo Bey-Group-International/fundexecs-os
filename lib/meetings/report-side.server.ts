@@ -12,6 +12,7 @@
 import type { createServerClient } from "@/lib/supabase/server";
 import { logId } from "@/lib/log-safe";
 import { loadPresentPeople } from "@/lib/meetings/recipients.server";
+import type { PresentPerson } from "@/lib/meetings/recipients";
 import { loadHost } from "@/lib/meetings/report-roles.server";
 import {
   followUpState,
@@ -51,7 +52,22 @@ async function soft<T>(label: string, meetingId: string, run: () => Promise<T>, 
 
 export async function loadReportSide(
   supabase: Client,
-  input: { meetingId: string; hostId: string | null; invited: unknown; hasFollowUp: boolean },
+  input: {
+    meetingId: string;
+    hostId: string | null;
+    invited: unknown;
+    hasFollowUp: boolean;
+    /**
+     * Guests the transcript proves were in the room, from the cue rows the page
+     * has already loaded.
+     *
+     * Passed in rather than read here because the rows are already in hand and
+     * a long meeting's transcript is not worth a second paged query. Optional so
+     * a caller that has no transcript -- or a test -- gets the attendance table
+     * on its own, which is the behaviour this had before.
+     */
+    spoke?: readonly PresentPerson[];
+  },
 ): Promise<ReportSideData> {
   const { meetingId } = input;
 
@@ -117,11 +133,17 @@ export async function loadReportSide(
     };
   });
 
+  // One room, from both sources. The order is not load-bearing and is not
+  // claimed to be: `reportParticipants` reads these into sets, and a spoken
+  // guest carries no address, so nothing it adds can outrank an attendance
+  // row's directory identity whichever way round they go.
+  const inTheRoom = input.spoke?.length ? [...present, ...input.spoke] : present;
+
   return {
     participants: reportParticipants({
       host: host ? { name: host.full_name, email: host.email } : null,
       invited: input.invited,
-      present,
+      present: inTheRoom,
     }),
     hostName: host?.full_name ?? null,
     followUp: followUpState({
