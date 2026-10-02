@@ -4,6 +4,7 @@ import { getSessionContext } from "@/lib/auth";
 import { createServerClient } from "@/lib/supabase/server";
 import { DATA_ROOM_SECTIONS } from "@/lib/data-room";
 import { DocumentBuilder } from "@/components/build/DocumentBuilder";
+import { AskEarnButton } from "@/components/AskEarnButton";
 import type { Document } from "@/lib/supabase/database.types";
 
 export const dynamic = "force-dynamic";
@@ -40,16 +41,19 @@ export default async function DocumentBuilderPage(props: { params: Promise<{ id:
           >
             ← Documents
           </Link>
-          {!doc.storage_key && doc.content && (
-            <a
-              href={`/api/documents/${doc.id}/pdf`}
-              target="_blank"
-              rel="noreferrer"
-              className="font-mono text-[11px] uppercase tracking-wider text-fg-muted hover:text-gold-300 transition"
-            >
-              ↓ PDF
-            </a>
-          )}
+          <div className="flex items-center gap-3">
+            {!doc.storage_key && doc.content && (
+              <a
+                href={`/api/documents/${doc.id}/pdf`}
+                target="_blank"
+                rel="noreferrer"
+                className="font-mono text-[11px] uppercase tracking-wider text-fg-muted hover:text-gold-300 transition"
+              >
+                ↓ PDF
+              </a>
+            )}
+            <AskEarnButton type="document" id={doc.id} name={doc.name} />
+          </div>
         </div>
         <h1 className="mt-2 font-display text-2xl font-semibold tracking-tight text-fg-primary">{doc.name}</h1>
         <p className="mt-0.5 text-sm text-fg-secondary">

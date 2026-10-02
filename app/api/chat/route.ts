@@ -12,6 +12,16 @@ import { StreamingContactRedactor, redactContacts } from "@/lib/contact-sanitize
 import { loadMeetingPrepContext, loadMeetingFollowupContext } from "@/lib/meetings/meeting-context";
 import { getActiveMandateRow, mandateContextBlock } from "@/lib/mandates";
 import { documentContextBlock } from "@/lib/earn-documents-context.server";
+import { explainInstructions, parseExplainRecordRef } from "@/lib/earn-explain";
+import { loadExplainRecordContext } from "@/lib/earn-record-context.server";
+import {
+  earnWebSearchEnabled,
+  extractWebSources,
+  formatSourcesBlock,
+  webSearchCount,
+  WEB_SEARCH_CREDIT_COST,
+} from "@/lib/earn-web-search";
+import { spendCredits } from "@/lib/credits";
 import { formatOperatorIdentity, loadOperatorIdentity, sanitizeTimeZone } from "@/lib/copilot/identity";
 
 // Conversational replies stream token-by-token; give Claude room beyond the
@@ -45,7 +55,7 @@ export async function POST(request: Request) {
     });
   }
 
-  const { body, model: requestedModel, prior, session_id, meeting_context, start_session, pathname, timezone } =
+  const { body, model: requestedModel, prior, session_id, meeting_context, start_session, pathname, timezone, record_context } =
     await request.json().catch(() => ({ body: "" }));
   if (!body || typeof body !== "string") {
     return new Response(JSON.stringify({ error: "Missing 'body'" }), {
@@ -95,11 +105,15 @@ export async function POST(request: Request) {
       ? (meeting_context as { id: string; mode: "prep" | "followup" })
       : null;
 
+  // An "Explain this" request: like meeting prep, the client sends only a
+  // one-liner and a { type, id } reference; the record is loaded server-side.
+  const recordRef = parseExplainRecordRef(record_context);
+
   // --- Model routing: route simple queries to a faster/cheaper model ---
   const wordCount = body.trim().split(/\s+/).length;
   // A meeting prep/follow-up briefing is substantive work — keep it off the fast
   // path even though the visible one-liner is short.
-  const isSimple = !meetingCtx && wordCount < 15 && !body.match(/draft|memo|analysis|report|summarize|compare/i);
+  const isSimple = !meetingCtx && !recordRef && wordCount < 15 && !body.match(/draft|memo|analysis|report|summarize|compare/i);
   // The composer sends its picker key ("earn", "claude", …), not an Anthropic
   // model id — only a real claude-* id may pass straight through to the API.
   const requestedModelId =
@@ -107,6 +121,10 @@ export async function POST(request: Request) {
   const model = isSimple
     ? "claude-haiku-4-5-20251001"
     : (requestedModelId ?? process.env.CLAUDE_MODEL ?? "claude-sonnet-4-6");
+
+  // Live web search: only on Explain requests, and only when the deployment
+  // opts in (EARN_WEB_SEARCH). The model decides per turn whether to search.
+  const webSearch = Boolean(recordRef) && earnWebSearchEnabled();
 
   // --- Web search detection ---
   const needsWebSearch =
@@ -224,7 +242,7 @@ export async function POST(request: Request) {
       }
     }
 
-    if (needsWebSearch) {
+    if (needsWebSearch && !webSearch) {
       liveContext += "\n[Web search recommended for this query — live data not fetched]\n";
     }
 
@@ -267,6 +285,22 @@ export async function POST(request: Request) {
       if (block) liveContext = liveContext ? `${liveContext}\n\n${block}` : block;
     } catch {
       // Non-fatal — Earn still answers the one-liner without the enriched context.
+    }
+  }
+
+  // --- Explain-this record context (server-side injection) ---
+  // Org-scoped and best-effort; a record the caller can't see loads as null and
+  // the reply proceeds without it.
+  if (recordRef) {
+    try {
+      const supabase = await createServerClient();
+      const record = await loadExplainRecordContext(supabase, orgId, recordRef);
+      if (record) {
+        const block = `${explainInstructions(recordRef.type, { webSearch })}\n\n${record.block}`;
+        liveContext = liveContext ? `${liveContext}\n\n${block}` : block;
+      }
+    } catch {
+      // Non-fatal — Earn still answers the one-liner without the record.
     }
   }
 
@@ -392,6 +426,7 @@ export async function POST(request: Request) {
     priorArtifacts,
     identity: identityBlock || undefined,
     model,
+    webSearch,
   });
 
   // No API key — stream the deterministic fallback as a single chunk (still
@@ -423,11 +458,27 @@ export async function POST(request: Request) {
             controller.enqueue(encoder.encode(safe));
           }
         });
-        await stream.finalMessage();
+        const finalMessage = await stream.finalMessage();
         const tail = redactor.flush();
         if (tail) {
           reply += tail;
           controller.enqueue(encoder.encode(tail));
+        }
+        if (webSearch) {
+          const sources = formatSourcesBlock(extractWebSources(finalMessage));
+          if (sources) {
+            reply += sources;
+            controller.enqueue(encoder.encode(sources));
+          }
+          // Searches bill per use, so they're metered after the fact on top of
+          // the flat pre-flight chat cost (the count is only known once the
+          // model finishes). Best-effort: the reply has already been served.
+          const searches = webSearchCount(finalMessage);
+          if (searches > 0) {
+            void spendCredits(orgId, searches * WEB_SEARCH_CREDIT_COST, "chat_web_search").catch((err) => {
+              console.error("[chat] web search credit debit failed:", err);
+            });
+          }
         }
         // Verified contacts: if the reply named a real company/person, look up
         // real, Apollo-sourced phone/email and stream a contact block into the
