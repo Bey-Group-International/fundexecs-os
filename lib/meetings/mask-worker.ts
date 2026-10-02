@@ -39,8 +39,7 @@ import {
 } from "@/lib/meetings/mask-compositor";
 import { readPipelineSupport } from "@/lib/meetings/mask-pipeline";
 import { MaskFrameLoop, type IncomingFrame } from "@/lib/meetings/mask-worker-core";
-import type { MainToWorker, WorkerToMain } from "@/lib/meetings/mask-worker-protocol";
-import type { BackgroundEffect } from "@/lib/meetings/backgrounds";
+import { isMainToWorker, type MainToWorker, type WorkerToMain } from "@/lib/meetings/mask-worker-protocol";
 
 const WASM_PATH = "/mediapipe";
 const MODEL_PATH = "/mediapipe/selfie_segmenter.tflite";
@@ -321,14 +320,22 @@ async function start(
 }
 
 scope.onmessage = (event: MessageEvent) => {
-  const message = event.data as MainToWorker;
+  // Validated rather than cast. See `isMainToWorker` for why an ORIGIN check --
+  // which is what CodeQL's `js/missing-origin-check` asks for -- is not the
+  // control available here: a dedicated worker has one owner, and `event.origin`
+  // on a `Worker.postMessage` is the empty string, so comparing it would reject
+  // every real message. Validating the shape is what applies, and it is what was
+  // actually missing: this handler hands streams to a pipeline and tears the
+  // session down, and did so on an unchecked cast.
+  if (!isMainToWorker(event.data)) return;
+  const message: MainToWorker = event.data;
   switch (message.kind) {
     case "start-streams":
     case "start-track":
       void start(message);
       return;
     case "effect":
-      session?.compositor.setEffect(message.effect as BackgroundEffect, message.image);
+      session?.compositor.setEffect(message.effect, message.image);
       return;
     case "pause":
       if (session) session.paused = message.paused;

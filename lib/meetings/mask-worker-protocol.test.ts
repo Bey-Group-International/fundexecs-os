@@ -9,6 +9,7 @@ import {
   STATS_INTERVAL_FRAMES,
   accumulateTiming,
   createTimingAccumulator,
+  isMainToWorker,
   shouldReportStats,
   timingReport,
 } from "./mask-worker-protocol";
@@ -99,5 +100,77 @@ describe("when to report", () => {
     expect(shouldReportStats(24, 0)).toBe(true);
     expect(shouldReportStats(24, -3)).toBe(true);
     expect(shouldReportStats(12, 1.5)).toBe(false);
+  });
+});
+
+/**
+ * The worker validates what arrives rather than casting it.
+ *
+ * CodeQL flagged the handler for `js/missing-origin-check`. Origin verification
+ * is not the control available inside a dedicated worker -- it has one owner,
+ * and `MessageEvent.origin` for a `Worker.postMessage` is the empty string, so
+ * the literal remedy would reject every real message. What WAS missing is this:
+ * the handler hands streams to a pipeline and tears the session down, and did
+ * so on an unchecked cast of `event.data`.
+ */
+describe("validating what arrives", () => {
+  const effect = { kind: "blur", strength: "light" };
+  const stream = {} as unknown;
+
+  it("accepts the five messages the worker speaks", () => {
+    expect(isMainToWorker({ kind: "start-streams", readable: stream, writable: stream, width: 640, height: 480, effect })).toBe(true);
+    expect(isMainToWorker({ kind: "start-track", track: stream, width: 640, height: 480, effect })).toBe(true);
+    expect(isMainToWorker({ kind: "effect", effect, image: null })).toBe(true);
+    expect(isMainToWorker({ kind: "pause", paused: true })).toBe(true);
+    expect(isMainToWorker({ kind: "stop" })).toBe(true);
+  });
+
+  it("rejects anything that is not a message at all", () => {
+    expect(isMainToWorker(null)).toBe(false);
+    expect(isMainToWorker(undefined)).toBe(false);
+    expect(isMainToWorker("stop")).toBe(false);
+    expect(isMainToWorker(42)).toBe(false);
+    expect(isMainToWorker([])).toBe(false);
+    expect(isMainToWorker({})).toBe(false);
+  });
+
+  it("rejects a kind it does not know", () => {
+    expect(isMainToWorker({ kind: "start" })).toBe(false);
+    expect(isMainToWorker({ kind: "teardown" })).toBe(false);
+    expect(isMainToWorker({ kind: 7 })).toBe(false);
+  });
+
+  /** A start without its streams would build a pipeline around nothing. */
+  it("rejects a start missing the half it cannot work without", () => {
+    expect(isMainToWorker({ kind: "start-streams", writable: stream, width: 640, height: 480, effect })).toBe(false);
+    expect(isMainToWorker({ kind: "start-streams", readable: stream, width: 640, height: 480, effect })).toBe(false);
+    expect(isMainToWorker({ kind: "start-track", width: 640, height: 480, effect })).toBe(false);
+  });
+
+  /** A zero or negative size reaches `OffscreenCanvas` as a throw. */
+  it("rejects a start with no usable size", () => {
+    const base = { kind: "start-track", track: stream, effect };
+    expect(isMainToWorker({ ...base, width: 0, height: 480 })).toBe(false);
+    expect(isMainToWorker({ ...base, width: 640, height: -1 })).toBe(false);
+    expect(isMainToWorker({ ...base, width: Number.NaN, height: 480 })).toBe(false);
+    expect(isMainToWorker({ ...base, width: "640", height: 480 })).toBe(false);
+  });
+
+  it("rejects an effect that is not one", () => {
+    expect(isMainToWorker({ kind: "effect", effect: null, image: null })).toBe(false);
+    expect(isMainToWorker({ kind: "effect", effect: {}, image: null })).toBe(false);
+    expect(isMainToWorker({ kind: "effect", effect: "blur", image: null })).toBe(false);
+  });
+
+  /** Null is the ordinary case: it means "keep whatever you have". */
+  it("accepts an effect with no image and rejects a nonsense one", () => {
+    expect(isMainToWorker({ kind: "effect", effect, image: null })).toBe(true);
+    expect(isMainToWorker({ kind: "effect", effect, image: "a-picture" })).toBe(false);
+  });
+
+  it("rejects a pause that does not say which way", () => {
+    expect(isMainToWorker({ kind: "pause" })).toBe(false);
+    expect(isMainToWorker({ kind: "pause", paused: "yes" })).toBe(false);
+    expect(isMainToWorker({ kind: "pause", paused: 1 })).toBe(false);
   });
 });

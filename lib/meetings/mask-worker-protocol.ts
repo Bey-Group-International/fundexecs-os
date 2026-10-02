@@ -167,3 +167,60 @@ export function shouldReportStats(frames: number, interval = STATS_INTERVAL_FRAM
   const step = Number.isInteger(interval) && interval > 0 ? interval : STATS_INTERVAL_FRAMES;
   return frames % step === 0;
 }
+
+/**
+ * Whether an arriving message is one this worker recognises.
+ *
+ * Here rather than inline in the entry for two reasons. It is the only part of
+ * receiving a message that can be tested, and it is the answer to a CodeQL
+ * finding that is worth writing down rather than waving away.
+ *
+ * The finding is `js/missing-origin-check`: a `postMessage` handler with no
+ * origin verification. On a WINDOW that is a real vulnerability -- any page that
+ * can get a handle on yours may post to it. Inside a DEDICATED worker it is not
+ * the available control, and the literal remedy breaks the worker: a dedicated
+ * worker has exactly one owner, nothing else can obtain a reference to post to
+ * it, and `MessageEvent.origin` for a `Worker.postMessage` is the EMPTY STRING.
+ * Comparing it against the page's origin would reject every legitimate message.
+ * (The window listener in `OfficeFrame.tsx` does check its origin, correctly --
+ * that one needs it.)
+ *
+ * What was genuinely missing is this: the entry cast `event.data` to the union
+ * and acted on it -- handing streams to a pipeline, replacing the background,
+ * tearing the session down -- without ever checking it was one of those things.
+ * Validating the shape is the control that applies here, so anything
+ * unrecognised is dropped rather than half-executed.
+ */
+export function isMainToWorker(value: unknown): value is MainToWorker {
+  if (typeof value !== "object" || value === null) return false;
+  const m = value as Record<string, unknown>;
+  const size = (n: unknown) => typeof n === "number" && Number.isFinite(n) && n > 0;
+  const effect = (e: unknown) =>
+    typeof e === "object" && e !== null && typeof (e as { kind?: unknown }).kind === "string";
+
+  switch (m.kind) {
+    case "start-streams":
+      // The streams themselves can only be checked for presence: a transferred
+      // `ReadableStream` is a host object, and `instanceof` across a worker
+      // boundary is not something to rely on.
+      return (
+        typeof m.readable === "object" && m.readable !== null &&
+        typeof m.writable === "object" && m.writable !== null &&
+        size(m.width) && size(m.height) && effect(m.effect)
+      );
+    case "start-track":
+      return (
+        typeof m.track === "object" && m.track !== null &&
+        size(m.width) && size(m.height) && effect(m.effect)
+      );
+    case "effect":
+      // A null image is the ordinary case -- it means "keep whatever you have".
+      return effect(m.effect) && (m.image === null || typeof m.image === "object");
+    case "pause":
+      return typeof m.paused === "boolean";
+    case "stop":
+      return true;
+    default:
+      return false;
+  }
+}
