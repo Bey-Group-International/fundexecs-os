@@ -6,9 +6,15 @@
  * an empty content pane and no nav item highlighted before correcting itself.
  * These tests pin the resolved-during-render behaviour that replaced it.
  */
-const trackDwell = jest.fn();
+const trackReading = jest.fn(async () => undefined);
+const recordRoomOpen = jest.fn(async () => undefined);
+jest.mock("./viewer-actions", () => ({
+  trackReading: (...args: unknown[]) => trackReading(...(args as [])),
+  recordRoomOpen: (...args: unknown[]) => recordRoomOpen(...(args as [])),
+  recordNdaSignature: jest.fn(),
+  passEmailGate: jest.fn(),
+}));
 jest.mock("@/components/build/materials-actions", () => ({
-  trackDwell: (...args: unknown[]) => trackDwell(...args),
   verifySharePassword: jest.fn(),
 }));
 jest.mock("next/navigation", () => ({ useRouter: () => ({ refresh: jest.fn() }) }));
@@ -53,7 +59,7 @@ function section(key: string, label: string, docName: string): ViewerSection {
   };
 }
 
-function view(docSections: ViewerSection[]) {
+function view(docSections: ViewerSection[], preview = true) {
   return (
     <DataRoomViewer
       token="preview"
@@ -66,7 +72,7 @@ function view(docSections: ViewerSection[]) {
       docSections={docSections}
       gateConfig={{ requireEmail: false, requireNda: false, ndaText: null, passwordProtected: false }}
       contentReady
-      preview
+      preview={preview}
     />
   );
 }
@@ -109,8 +115,46 @@ it("keeps the selection when some other section is removed", () => {
   expect(screen.getByText(/Body text unique to financials/)).toBeInTheDocument();
 });
 
-it("never records dwell time from a preview", () => {
+it("never records anything from a preview", () => {
   render(view([FINANCIALS, LEGAL]));
   selectSection("Financials");
-  expect(trackDwell).not.toHaveBeenCalled();
+  expect(trackReading).not.toHaveBeenCalled();
+  expect(recordRoomOpen).not.toHaveBeenCalled();
+});
+
+describe("a live reader", () => {
+  beforeEach(() => {
+    trackReading.mockClear();
+    recordRoomOpen.mockClear();
+    jest.useFakeTimers();
+  });
+  afterEach(() => jest.useRealTimers());
+
+  it("reports the open once and the time read, credited before leaving a section", () => {
+    const { rerender } = render(view([FINANCIALS, LEGAL], false));
+    rerender(view([FINANCIALS, LEGAL], false));
+    expect(recordRoomOpen).toHaveBeenCalledTimes(1);
+
+    // Twelve seconds of an active reader, then a move to another section.
+    for (let i = 0; i < 4; i++) {
+      fireEvent.scroll(window);
+      jest.advanceTimersByTime(3_000);
+    }
+    selectSection("Financials");
+    expect(trackReading).toHaveBeenCalledTimes(1);
+    const [token, , entries] = trackReading.mock.calls[0] as unknown as [string, string, { documentId: string | null; seconds: number }[]];
+    expect(token).toBe("preview");
+    // jsdom has no layout, so nothing is "in view": the time lands on the overview.
+    expect(entries).toEqual([{ documentId: null, seconds: 12 }]);
+  });
+
+  it("stops counting a reader who has walked away", () => {
+    render(view([FINANCIALS, LEGAL], false));
+    jest.advanceTimersByTime(10 * 60_000);
+    selectSection("Financials");
+    const sent = trackReading.mock.calls.flatMap((c) => (c as unknown as [string, string, { seconds: number }[]])[2]);
+    const total = sent.reduce((n, e) => n + e.seconds, 0);
+    // Only the first two minutes (before going idle) can count.
+    expect(total).toBeLessThanOrEqual(120);
+  });
 });

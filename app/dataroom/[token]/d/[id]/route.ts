@@ -86,6 +86,7 @@ export async function GET(req: Request, props: { params: Promise<{ token: string
         room_id: roomId,
         document_id: doc.id,
         kind: "document",
+        action: wantsDownload ? "download" : "open",
         viewer_email: viewerEmail,
       } as never)
       .then(() => undefined, () => undefined);

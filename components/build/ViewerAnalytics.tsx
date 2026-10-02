@@ -1,268 +1,207 @@
 import { getSessionContext } from "@/lib/auth";
 import { createServerClient } from "@/lib/supabase/server";
-import type { DataRoomShare, DataRoomView, Document } from "@/lib/supabase/database.types";
+import { formatSeconds, type InvestorActivity, type Signal } from "@/lib/data-room-engagement";
+import { loadRoomEngagement } from "@/lib/data-room-engagement.server";
+import type { DataRoomEngagementRead } from "@/lib/supabase/database.types";
+import { AskEarnButton } from "./AskEarnButton";
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
+// Who read what in one room: a line per investor (named first, then by time
+// read), their documents and day-by-day timeline on expand, Earn's read of
+// their interest, and the room's most-read documents.
 
-function fmtDuration(seconds: number | null): string {
-  if (!seconds || seconds <= 0) return "—";
-  if (seconds < 60) return `${seconds}s`;
-  const m = Math.floor(seconds / 60);
-  const s = seconds % 60;
-  return s > 0 ? `${m}m ${s}s` : `${m}m`;
+const SHOWN = 50;
+
+const SIGNAL: Record<Signal, { label: string; cls: string }> = {
+  hot: { label: "Hot", cls: "border-emerald-500/40 bg-emerald-500/10 text-emerald-300" },
+  warm: { label: "Warm", cls: "border-gold-500/40 bg-gold-500/10 text-gold-300" },
+  cold: { label: "Cold", cls: "border-line bg-surface-0 text-fg-muted" },
+};
+
+function day(iso: string): string {
+  return new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
 
-function fmtDate(iso: string): string {
-  return new Date(iso).toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+function ago(iso: string, now: number): string {
+  const mins = Math.round((now - new Date(iso).getTime()) / 60_000);
+  if (mins < 60) return `${Math.max(mins, 1)} min ago`;
+  const hours = Math.round(mins / 60);
+  if (hours < 24) return `${hours} h ago`;
+  const days = Math.round(hours / 24);
+  return days < 30 ? `${days} d ago` : day(iso);
 }
 
-function statusLabel(share: DataRoomShare): { text: string; cls: string } {
-  if (share.revoked_at) return { text: "Revoked", cls: "text-fg-muted" };
-  if (share.expires_at && new Date(share.expires_at).getTime() < Date.now())
-    return { text: "Expired", cls: "text-fg-muted" };
-  return { text: "Active", cls: "text-emerald-400" };
+function SignalPill({ signal }: { signal: Signal }) {
+  const s = SIGNAL[signal];
+  return (
+    <span className={`shrink-0 rounded-full border px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider ${s.cls}`}>
+      {s.label}
+    </span>
+  );
 }
 
-// ---------------------------------------------------------------------------
-// Types for aggregated analytics
-// ---------------------------------------------------------------------------
+function Investor({ a, read, now }: { a: InvestorActivity; read: DataRoomEngagementRead | undefined; now: number }) {
+  const docsRead = a.documents.filter((d) => d.seconds > 0).length;
+  // Newer activity than Earn has seen: its read may no longer hold.
+  const stale = read?.activity_through ? a.lastSeen > read.activity_through : false;
+  return (
+    <details className="group rounded-xl border border-line bg-surface-1">
+      <summary className="flex cursor-pointer list-none flex-wrap items-center gap-x-3 gap-y-1 px-4 py-3 [&::-webkit-details-marker]:hidden">
+        <SignalPill signal={read?.signal ?? a.signal} />
+        <span className="min-w-0 truncate text-sm font-medium text-fg-primary">{a.label}</span>
+        <span className="font-mono text-[11px] text-fg-muted">
+          {formatSeconds(a.seconds)} · {docsRead} doc{docsRead === 1 ? "" : "s"}
+          {a.downloads ? ` · ${a.downloads} download${a.downloads === 1 ? "" : "s"}` : ""}
+        </span>
+        <span className="ml-auto font-mono text-[11px] text-fg-muted">{ago(a.lastSeen, now)}</span>
+        <span aria-hidden className="font-mono text-[11px] text-fg-muted transition group-open:rotate-90">
+          ›
+        </span>
+        {read ? (
+          // <summary> takes phrasing content only, so a block <span>, not a <p>.
+          <span className="block basis-full text-xs leading-relaxed text-fg-secondary">
+            {read.summary} <span className="text-gold-300">Next: {read.follow_up}</span>
+            {stale ? <span className="ml-1 text-fg-muted">(new activity since Earn&apos;s read)</span> : null}
+          </span>
+        ) : null}
+      </summary>
 
-interface ViewerRow {
-  viewerEmail: string | null;
-  sessionId: string | null;
-  docName: string | null;
-  totalSeconds: number;
-  viewCount: number;
-  lastSeen: string;
+      <div className="grid gap-4 border-t border-line/60 px-4 py-4 md:grid-cols-2">
+        <div>
+          <p className="mb-2 font-mono text-[10px] uppercase tracking-wider text-fg-muted">Documents</p>
+          {a.documents.length === 0 ? (
+            <p className="text-xs text-fg-muted">Opened the room; no document yet.</p>
+          ) : (
+            <ul className="space-y-1.5">
+              {a.documents.map((d) => (
+                <li key={d.documentId} className="flex items-baseline gap-2 text-xs">
+                  <span className="min-w-0 flex-1 truncate text-fg-secondary">{d.name}</span>
+                  <span className="shrink-0 font-mono text-[11px] text-fg-muted">
+                    {d.seconds ? formatSeconds(d.seconds) : "—"}
+                    {d.downloads ? " · ↓" : ""}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+          <p className="mt-3 font-mono text-[10px] text-fg-muted">
+            First seen {day(a.firstSeen)} · {a.visitDays} day{a.visitDays === 1 ? "" : "s"} active · via{" "}
+            {a.links.join(", ")}
+          </p>
+        </div>
+        <div>
+          <p className="mb-2 font-mono text-[10px] uppercase tracking-wider text-fg-muted">Timeline</p>
+          <ol className="space-y-1.5">
+            {a.timeline.slice(0, 20).map((t) => (
+              <li key={`${t.day}|${t.documentId ?? ""}`} className="flex items-baseline gap-2 text-xs">
+                <span className="w-12 shrink-0 font-mono text-[11px] text-fg-muted">{day(t.lastAt)}</span>
+                <span className="min-w-0 flex-1 truncate text-fg-secondary">{t.name}</span>
+                <span className="shrink-0 font-mono text-[11px] text-fg-muted">
+                  {[
+                    t.seconds ? `read ${formatSeconds(t.seconds)}` : null,
+                    t.opens ? "opened" : null,
+                    t.downloads ? "downloaded" : null,
+                  ]
+                    .filter(Boolean)
+                    .join(" · ")}
+                </span>
+              </li>
+            ))}
+          </ol>
+        </div>
+      </div>
+    </details>
+  );
 }
 
-interface ShareAnalytics {
-  share: DataRoomShare;
-  uniqueViewers: number;
-  totalViews: number;
-  totalSeconds: number;
-  rows: ViewerRow[];
-}
-
-// ---------------------------------------------------------------------------
-// ViewerAnalytics — server component
-// ---------------------------------------------------------------------------
-
-/** Engagement for one room's links. Scoped by `roomId` so a firm running
- * several rooms reads each one's traffic separately rather than a single
- * org-wide blur. */
+/** Engagement for one room's links. */
 export async function ViewerAnalytics({ roomId }: { roomId?: string } = {}) {
   const ctx = await getSessionContext();
-  if (!ctx?.orgId) return null;
-
+  if (!ctx?.orgId || !roomId) return null;
   const supabase = await createServerClient();
-
-  const sharesQuery = supabase
-    .from("data_room_shares")
-    .select("*")
-    .eq("organization_id", ctx.orgId);
-  const viewsQuery = supabase
-    .from("data_room_views")
-    .select("*")
-    .eq("organization_id", ctx.orgId);
-
-  const [sharesRes, viewsRes, docsRes] = await Promise.all([
-    (roomId ? sharesQuery.eq("room_id", roomId) : sharesQuery).order("created_at", {
-      ascending: false,
-    }),
-    // Views are filtered through their share below, so an older row written
-    // before rooms existed (room_id null) still shows against its link.
-    viewsQuery.order("created_at", { ascending: false }),
-    supabase
-      .from("documents")
-      .select("id, name")
-      .eq("organization_id", ctx.orgId),
-  ]);
-
-  const shares = (sharesRes.data ?? []) as DataRoomShare[];
-  const views = (viewsRes.data ?? []) as DataRoomView[];
-  const docs = (docsRes.data ?? []) as Pick<Document, "id" | "name">[];
-
-  const docNameById = new Map(docs.map((d) => [d.id, d.name]));
-
-  // Group views by share_id
-  const viewsByShare = new Map<string, DataRoomView[]>();
-  for (const v of views) {
-    const key = v.share_id ?? "__unlinked__";
-    const bucket = viewsByShare.get(key);
-    if (bucket) bucket.push(v);
-    else viewsByShare.set(key, [v]);
-  }
-
-  const analytics: ShareAnalytics[] = shares.map((share) => {
-    const shareViews = viewsByShare.get(share.id) ?? [];
-
-    // Group by session_id (or viewer_email as fallback) + document
-    // to produce per-viewer per-doc rows.
-    type AggKey = string;
-    const agg = new Map<
-      AggKey,
-      { viewerEmail: string | null; sessionId: string | null; docId: string | null; totalSeconds: number; viewCount: number; lastSeen: string }
-    >();
-
-    for (const v of shareViews) {
-      const key = `${v.session_id ?? v.viewer_email ?? "anon"}||${v.document_id ?? ""}`;
-      const existing = agg.get(key);
-      if (existing) {
-        existing.totalSeconds += v.duration_seconds ?? 0;
-        existing.viewCount += 1;
-        if (v.created_at > existing.lastSeen) existing.lastSeen = v.created_at;
-      } else {
-        agg.set(key, {
-          viewerEmail: v.viewer_email,
-          sessionId: v.session_id,
-          docId: v.document_id,
-          totalSeconds: v.duration_seconds ?? 0,
-          viewCount: 1,
-          lastSeen: v.created_at,
-        });
-      }
-    }
-
-    const rows: ViewerRow[] = Array.from(agg.values()).map((r) => ({
-      viewerEmail: r.viewerEmail,
-      sessionId: r.sessionId,
-      docName: r.docId ? (docNameById.get(r.docId) ?? null) : null,
-      totalSeconds: r.totalSeconds,
-      viewCount: r.viewCount,
-      lastSeen: r.lastSeen,
-    }));
-
-    // Sort by last seen desc
-    rows.sort((a, b) => (a.lastSeen > b.lastSeen ? -1 : 1));
-
-    const uniqueViewers = new Set(
-      shareViews.map((v) => v.session_id ?? v.viewer_email ?? v.id),
-    ).size;
-
-    return {
-      share,
-      uniqueViewers,
-      totalViews: shareViews.length,
-      totalSeconds: shareViews.reduce((acc, v) => acc + (v.duration_seconds ?? 0), 0),
-      rows,
-    };
-  });
-
-  const hasAnyData = analytics.some((a) => a.totalViews > 0);
+  const { engagement, reads } = await loadRoomEngagement(supabase, ctx.orgId, roomId);
+  const { investors, topDocuments, totals } = engagement;
+  const now = Date.now();
+  const maxDocSeconds = Math.max(1, ...topDocuments.map((d) => d.seconds));
+  const readCount = investors.filter((a) => reads.has(a.key)).length;
 
   return (
     <div className="mt-8">
-      <div className="mb-5">
-        <h3 className="font-display text-lg font-semibold tracking-tight text-fg-primary">
-          Viewer Analytics
-        </h3>
-        <p className="mt-0.5 text-sm text-fg-secondary">
-          Engagement data collected from shared data room links.
-        </p>
-      </div>
-
-      {!hasAnyData ? (
-        <div className="rounded-xl border border-dashed border-line bg-surface-1 px-6 py-10 text-center">
-          <p className="text-sm text-fg-muted">No viewer activity yet.</p>
-          <p className="mt-1 text-xs text-fg-muted">
-            Data appears here once someone opens a shared link.
+      <div className="mb-4 flex flex-wrap items-end gap-3">
+        <div className="min-w-0 flex-1">
+          <h3 className="font-display text-lg font-semibold tracking-tight text-fg-primary">Investor activity</h3>
+          <p className="mt-0.5 text-sm text-fg-secondary">
+            Who opened this room, what they read and for how long. Time counts only while a document is on screen and the
+            reader is active.
           </p>
         </div>
-      ) : (
-        <div className="flex flex-col gap-8">
-          {analytics.map((a) => {
-            const st = statusLabel(a.share);
-            if (a.totalViews === 0) return null;
-            return (
-              <div key={a.share.id} className="overflow-hidden rounded-xl border border-line bg-surface-1">
-                {/* Share header */}
-                <div className="flex flex-wrap items-center gap-3 border-b border-line/60 bg-surface-0 px-5 py-3">
-                  <div className="flex items-center gap-1.5">
-                    <span
-                      className={`h-1.5 w-1.5 rounded-full ${st.text === "Active" ? "bg-emerald-400" : "bg-fg-muted/30"}`}
-                    />
-                    <span className={`font-mono text-[11px] uppercase tracking-wider ${st.cls}`}>
-                      {st.text}
-                    </span>
-                  </div>
-                  <span className="text-sm font-medium text-fg-primary">
-                    {a.share.label || "Untitled link"}
-                  </span>
-                  {a.share.expires_at ? (
-                    <span className="font-mono text-[11px] text-fg-muted">
-                      exp {new Date(a.share.expires_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
-                    </span>
-                  ) : null}
-                  <div className="ml-auto flex items-center gap-4 font-mono text-[11px] text-fg-muted">
-                    <span>{a.uniqueViewers} viewer{a.uniqueViewers !== 1 ? "s" : ""}</span>
-                    <span>{a.totalViews} event{a.totalViews !== 1 ? "s" : ""}</span>
-                    <span>{fmtDuration(a.totalSeconds)} total</span>
-                  </div>
-                </div>
+        {investors.length > 0 ? <AskEarnButton roomId={roomId} hasReads={readCount > 0} /> : null}
+      </div>
 
-                {/* Rows table */}
-                <div className="overflow-x-auto overflow-y-hidden">
-                  <table className="w-full min-w-[600px] text-sm">
-                    <thead>
-                      <tr className="border-b border-line/50">
-                        <th className="px-5 py-2.5 text-left font-mono text-[11px] uppercase tracking-wider text-fg-muted">
-                          Viewer
-                        </th>
-                        <th className="px-4 py-2.5 text-left font-mono text-[11px] uppercase tracking-wider text-fg-muted">
-                          Document / Section
-                        </th>
-                        <th className="px-4 py-2.5 text-right font-mono text-[11px] uppercase tracking-wider text-fg-muted">
-                          Time spent
-                        </th>
-                        <th className="px-4 py-2.5 text-right font-mono text-[11px] uppercase tracking-wider text-fg-muted">
-                          Views
-                        </th>
-                        <th className="px-5 py-2.5 text-right font-mono text-[11px] uppercase tracking-wider text-fg-muted">
-                          Last seen
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-line/30">
-                      {a.rows.map((row, i) => (
-                        <tr key={i} className="hover:bg-surface-0/50">
-                          <td className="px-5 py-2.5">
-                            {row.viewerEmail ? (
-                              <span className="text-fg-primary">{row.viewerEmail}</span>
-                            ) : (
-                              <span className="font-mono text-[11px] text-fg-muted">
-                                {row.sessionId ? `anon·${row.sessionId.slice(0, 8)}` : "anonymous"}
-                              </span>
-                            )}
-                          </td>
-                          <td className="px-4 py-2.5 text-fg-secondary">
-                            {row.docName ?? <span className="text-fg-muted">—</span>}
-                          </td>
-                          <td className="px-4 py-2.5 text-right font-mono text-[11px] text-fg-secondary">
-                            {fmtDuration(row.totalSeconds)}
-                          </td>
-                          <td className="px-4 py-2.5 text-right font-mono text-[11px] text-fg-muted">
-                            {row.viewCount}
-                          </td>
-                          <td className="px-5 py-2.5 text-right font-mono text-[11px] text-fg-muted">
-                            {fmtDate(row.lastSeen)}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+      {investors.length === 0 && totals.opens === 0 ? (
+        <div className="rounded-xl border border-dashed border-line bg-surface-1 px-6 py-10 text-center">
+          <p className="text-sm text-fg-muted">No investor activity yet.</p>
+          <p className="mt-1 text-xs text-fg-muted">It appears here once someone opens a link to this room.</p>
+        </div>
+      ) : (
+        <div className="space-y-6">
+          <dl className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            {[
+              ["Readers", String(totals.readers)],
+              ["Reading time", formatSeconds(totals.seconds)],
+              ["Room opens", String(totals.opens)],
+              ["Downloads", String(totals.downloads)],
+            ].map(([k, v]) => (
+              <div key={k} className="rounded-xl border border-line bg-surface-1 px-4 py-3">
+                <dt className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">{k}</dt>
+                <dd className="mt-1 font-display text-xl font-semibold text-fg-primary">{v}</dd>
               </div>
-            );
-          })}
+            ))}
+          </dl>
+
+          {topDocuments.length > 0 ? (
+            <section>
+              <p className="mb-2 font-mono text-[11px] uppercase tracking-wider text-fg-muted">Most-read documents</p>
+              <ul className="space-y-2 rounded-xl border border-line bg-surface-1 p-4">
+                {topDocuments.slice(0, 8).map((d) => (
+                  <li key={d.documentId} className="text-xs">
+                    <div className="flex items-baseline gap-2">
+                      <span className="min-w-0 flex-1 truncate text-fg-secondary">{d.name}</span>
+                      <span className="shrink-0 font-mono text-[11px] text-fg-muted">
+                        {formatSeconds(d.seconds)} · {d.readers} reader{d.readers === 1 ? "" : "s"}
+                        {d.downloads ? ` · ${d.downloads} ↓` : ""}
+                      </span>
+                    </div>
+                    <div className="mt-1 h-1 overflow-hidden rounded-full bg-surface-0">
+                      <div
+                        className="h-full rounded-full bg-gold-500/60"
+                        style={{ width: `${(d.seconds / maxDocSeconds) * 100}%` }}
+                      />
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          ) : null}
+
+          {investors.length > 0 ? (
+            <section>
+              <p className="mb-2 font-mono text-[11px] uppercase tracking-wider text-fg-muted">
+                Investors · {investors.length}
+              </p>
+              <div className="space-y-2">
+                {investors.slice(0, SHOWN).map((a) => (
+                  <Investor key={a.key} a={a} read={reads.get(a.key)} now={now} />
+                ))}
+              </div>
+              {investors.length > SHOWN ? (
+                <p className="mt-2 font-mono text-[11px] text-fg-muted">
+                  And {investors.length - SHOWN} more. Export the audit log for everyone.
+                </p>
+              ) : null}
+            </section>
+          ) : (
+            <p className="text-xs text-fg-muted">The room was opened, but no reader has passed a gate or read anything yet.</p>
+          )}
         </div>
       )}
     </div>

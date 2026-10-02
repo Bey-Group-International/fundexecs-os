@@ -49,7 +49,7 @@ export default async function PublicDataRoom(props: {
   // gate completion. Fire-and-forget.
   await supabase
     .from("data_room_views")
-    .insert({ organization_id: orgId, share_id: share.id, room_id: roomId, kind: "room" })
+    .insert({ organization_id: orgId, share_id: share.id, room_id: roomId, kind: "room", action: "open" } as never)
     .then(() => undefined, () => undefined);
 
   const gateConfig: GateConfig = {
