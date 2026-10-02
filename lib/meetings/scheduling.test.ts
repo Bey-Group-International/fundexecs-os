@@ -731,3 +731,82 @@ describe("booking prefill", () => {
     expect(parseBookingPrefill(Object.fromEntries(query))).toEqual(prefill);
   });
 });
+
+describe("generateSlots across DST transitions", () => {
+  // The engine resolves a zone's offset once per day and does plain arithmetic
+  // from there, falling back to per-time resolution on a transition day. It must
+  // land on exactly the instants per-time resolution gives, in every zone.
+  const cases: Array<[string, string, string]> = [
+    ["America/New_York", "2026-03-06", "2026-03-10"],
+    ["America/New_York", "2026-10-30", "2026-11-03"],
+    ["Europe/London", "2026-03-27", "2026-03-31"],
+    ["Australia/Lord_Howe", "2026-04-03", "2026-04-07"],
+    ["America/Santiago", "2026-04-03", "2026-04-07"],
+    ["America/Santiago", "2026-09-04", "2026-09-08"],
+    ["Pacific/Chatham", "2026-04-03", "2026-04-07"],
+    ["Asia/Kolkata", "2026-03-06", "2026-03-08"],
+  ];
+
+  it.each(cases)("matches per-time resolution in %s from %s", (timezone, fromDate, toDate) => {
+    const { localToIso } = jest.requireActual("@/lib/meetings/schedule") as typeof import("@/lib/meetings/schedule");
+    const slots = generateSlots({
+      timezone,
+      availability: [0, 1, 2, 3, 4, 5, 6].map((day) => ({ day, start: "00:00", end: "23:59" })),
+      durationMinutes: 15,
+      slotIntervalMinutes: 15,
+      bufferMinutes: 0,
+      minNoticeMinutes: 0,
+      busy: [],
+      fromDate,
+      toDate,
+      now: new Date("2000-01-01T00:00:00Z"),
+    });
+
+    const expected = new Set<string>();
+    for (let day = new Date(`${fromDate}T00:00:00Z`); day <= new Date(`${toDate}T00:00:00Z`); day = new Date(day.getTime() + 86_400_000)) {
+      const date = day.toISOString().slice(0, 10);
+      for (let minute = 0; minute + 15 <= 23 * 60 + 59; minute += 15) {
+        const time = `${String(Math.floor(minute / 60)).padStart(2, "0")}:${String(minute % 60).padStart(2, "0")}`;
+        expected.add(new Date(localToIso(date, time, timezone)).toISOString());
+      }
+    }
+    expect(new Set(slots.map((s) => s.start))).toEqual(expected);
+  });
+});
+
+describe("generateSlots busy lookup", () => {
+  // Every candidate is checked against the busy list by binary search. It must
+  // agree with checking each interval in turn, including a long interval that
+  // started well before shorter ones and still covers later candidates.
+  it("blocks exactly what a scan of every busy interval blocks", () => {
+    const base = Date.UTC(2026, 9, 5);
+    const at = (h: number, m = 0) => new Date(base + (h * 60 + m) * 60_000).toISOString();
+    const busy = [
+      { start: at(8), end: at(13) }, // long, covers several later short ones
+      { start: at(9), end: at(9, 30) },
+      { start: at(14, 10), end: at(14, 20) },
+      { start: at(16), end: at(16, 45) },
+      { start: at(16, 30), end: at(17) },
+    ];
+    const input = {
+      timezone: "UTC",
+      availability: [{ day: 1, start: "06:00", end: "20:00" }],
+      durationMinutes: 30,
+      slotIntervalMinutes: 15,
+      bufferMinutes: 5,
+      minNoticeMinutes: 0,
+      fromDate: "2026-10-05",
+      toDate: "2026-10-05",
+      now: new Date("2026-10-01T00:00:00Z"),
+    };
+    const free = generateSlots({ ...input, busy: [] });
+    const scanned = free.filter((s) => {
+      const from = new Date(s.start).getTime() - 5 * 60_000;
+      const to = new Date(s.end).getTime() + 5 * 60_000;
+      return !busy.some((b) => from < new Date(b.end).getTime() && to > new Date(b.start).getTime());
+    });
+    expect(generateSlots({ ...input, busy })).toEqual(scanned);
+    expect(scanned.some((s) => s.start === at(12, 30))).toBe(false);
+    expect(scanned.some((s) => s.start === at(13, 15))).toBe(true);
+  });
+});

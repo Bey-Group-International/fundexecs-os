@@ -73,6 +73,9 @@ export function BookingFlow({
   const [error, setError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [booked, setBooked] = useState<BookedState | null>(null);
+  /** When the picked time was just taken: the open time nearest to it, offered in one tap. */
+  const [suggestion, setSuggestion] = useState<string | null>(null);
+  const formRef = useRef<HTMLFormElement>(null);
 
   // Resolve the viewer's zone after mount: on the server there is no such thing,
   // and rendering UTC first keeps hydration stable.
@@ -120,7 +123,14 @@ export function BookingFlow({
   const selectSlot = useCallback((start: string) => {
     setSelected(start);
     setError(null);
+    setSuggestion(null);
   }, []);
+
+  // On a phone the details form opens below a long grid of times; bring it
+  // into view rather than leaving the invitee to discover it.
+  useEffect(() => {
+    if (selected) formRef.current?.scrollIntoView?.({ behavior: "smooth", block: "nearest" });
+  }, [selected]);
 
   markFreshRef.current = useRefreshWhenStale(() => void loadSlots({ quiet: true }), {
     enabled: !booked && !submitting,
@@ -153,6 +163,7 @@ export function BookingFlow({
       });
       const data = (await res.json()) as {
         error?: string;
+        slots?: SlotWindow[];
         fieldErrors?: Record<string, string>;
         status?: "pending" | "confirmed";
         joinUrl?: string | null;
@@ -163,10 +174,19 @@ export function BookingFlow({
       if (!res.ok) {
         setFieldErrors(data.fieldErrors ?? {});
         // 409 means the slot went while this page was open — refresh the grid so
-        // the next pick is from live availability.
+        // the next pick is from live availability. The refusal usually carries
+        // the open times itself, which saves a second round trip and a spinner;
+        // the nearest of them is offered so what they typed is not wasted.
         if (res.status === 409) {
+          const lost = selected;
           setSelected(null);
-          await loadSlots();
+          if (Array.isArray(data.slots)) {
+            setSlots(data.slots);
+            markFreshRef.current();
+            setSuggestion(nearestSlot(data.slots, lost));
+          } else {
+            await loadSlots();
+          }
         }
         throw new Error(data.error ?? "Could not book this time.");
       }
@@ -252,7 +272,7 @@ export function BookingFlow({
       />
 
       {selected ? (
-        <form onSubmit={submit} className="flex flex-col gap-4 rounded-xl border border-[var(--line)] bg-[var(--surface-1)] p-5">
+        <form ref={formRef} onSubmit={submit} className="flex flex-col gap-4 rounded-xl border border-[var(--line)] bg-[var(--surface-1)] p-5">
           <p className="text-sm font-medium text-[var(--fg-primary)]">{formatSlotFull(selected, timezone)}</p>
 
           <Field label="Your name" error={fieldErrors.name}>
@@ -334,9 +354,21 @@ export function BookingFlow({
       ) : null}
 
       {error && !selected ? (
-        <p className="rounded-lg border border-[var(--status-danger)]/20 bg-[var(--status-danger)]/10 px-3 py-2 text-xs text-[var(--status-danger)]">
-          {error}
-        </p>
+        <div
+          role="alert"
+          className="flex flex-wrap items-center gap-3 rounded-lg border border-[var(--status-danger)]/20 bg-[var(--status-danger)]/10 px-3 py-2 text-xs text-[var(--status-danger)]"
+        >
+          <span>{error}</span>
+          {suggestion ? (
+            <button
+              type="button"
+              onClick={() => selectSlot(suggestion)}
+              className="rounded-md bg-[var(--gold-400)] px-2.5 py-1 font-semibold text-white transition-colors hover:bg-[var(--gold-500)]"
+            >
+              Take {formatSlotFull(suggestion, timezone)} instead
+            </button>
+          ) : null}
+        </div>
       ) : null}
 
       <Link href={`/book/${slug}`} className="w-fit text-xs text-[var(--fg-muted)] hover:text-[var(--fg-secondary)]">
@@ -344,6 +376,19 @@ export function BookingFlow({
       </Link>
     </div>
   );
+}
+
+/** The open start closest to `target`, to offer when `target` was just taken. */
+function nearestSlot(slots: SlotWindow[], target: string | null): string | null {
+  if (!target || slots.length === 0) return null;
+  const at = new Date(target).getTime();
+  let best: SlotWindow | null = null;
+  for (const slot of slots) {
+    if (!best || Math.abs(new Date(slot.start).getTime() - at) < Math.abs(new Date(best.start).getTime() - at)) {
+      best = slot;
+    }
+  }
+  return best?.start ?? null;
 }
 
 function Field({ label, error, children }: { label: string; error?: string; children: React.ReactNode }) {

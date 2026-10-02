@@ -308,6 +308,23 @@ export function generateSlots(input: GenerateSlotsInput): SlotWindow[] {
     .map((b) => ({ start: new Date(b.start).getTime(), end: new Date(b.end).getTime() }))
     .filter((b) => Number.isFinite(b.start) && Number.isFinite(b.end) && b.end > b.start)
     .sort((a, b) => a.start - b.start);
+  // The latest end among busy[0..i]. With busy sorted by start, a candidate is
+  // blocked exactly when some interval starting before it ends has not ended by
+  // the time it starts — one binary search and one lookup, instead of scanning
+  // every busy interval for every candidate (the host's month of commitments,
+  // times every start their hours allow).
+  const latestEnd: number[] = [];
+  for (let i = 0; i < busy.length; i++) latestEnd.push(Math.max(busy[i].end, i > 0 ? latestEnd[i - 1] : -Infinity));
+  const overlapsBusy = (from: number, to: number): boolean => {
+    let lo = 0;
+    let hi = busy.length;
+    while (lo < hi) {
+      const mid = (lo + hi) >>> 1;
+      if (busy[mid].start < to) lo = mid + 1;
+      else hi = mid;
+    }
+    return lo > 0 && latestEnd[lo - 1] > from;
+  };
 
   // Live bookings per host-local date, only when a daily limit is in force.
   const limit = input.maxBookingsPerDay && input.maxBookingsPerDay > 0 ? Math.trunc(input.maxBookingsPerDay) : null;
@@ -333,21 +350,21 @@ export function generateSlots(input: GenerateSlotsInput): SlotWindow[] {
     const rules = byDay.get(weekdayOfDate(date));
     if (!rules) continue;
     if (limit !== null && (bookedPerDay.get(date) ?? 0) >= limit) continue;
+    const instantOf = dayInstantResolver(date, input.timezone);
 
     for (const rule of rules) {
       const windowStart = minutesOfDay(rule.start);
       const windowEnd = minutesOfDay(rule.end);
       // Only offer starts that leave room for the whole meeting inside the window.
       for (let minute = windowStart; minute + duration <= windowEnd; minute += interval) {
-        const startMs = new Date(localToIso(date, timeOfMinutes(minute), input.timezone)).getTime();
+        const startMs = instantOf(minute);
         if (!Number.isFinite(startMs)) continue;
         const endMs = startMs + durationMs;
         if (startMs < earliest) continue;
         // A DST jump can map two wall-clock times onto the same instant.
         if (seen.has(startMs)) continue;
 
-        const blocked = busy.some((b) => startMs - bufferMs < b.end && endMs + bufferMs > b.start);
-        if (blocked) continue;
+        if (overlapsBusy(startMs - bufferMs, endMs + bufferMs)) continue;
 
         seen.add(startMs);
         slots.push({ start: new Date(startMs).toISOString(), end: new Date(endMs).toISOString() });
@@ -357,6 +374,31 @@ export function generateSlots(input: GenerateSlotsInput): SlotWindow[] {
 
   return slots.sort((a, b) => a.start.localeCompare(b.start));
 }
+
+/**
+ * Wall-clock minute of `date` in `timezone` → epoch ms, for one host-local day.
+ *
+ * Resolving a zone offset costs two Intl lookups, and the slot engine used to
+ * pay that for every candidate start — a month of a long working day is
+ * thousands of them, and they were nearly all of a slot lookup's time. A day's
+ * offset only changes on a DST transition, so it is resolved at both ends of the
+ * day: when they agree (every day but two a year) each minute is plain
+ * arithmetic; when they differ, every minute takes the exact per-time path.
+ */
+function dayInstantResolver(date: string, timezone: string): (minute: number) => number {
+  const exact = (minute: number) => new Date(localToIso(date, timeOfMinutes(minute), timezone)).getTime();
+  const [y, mo, d] = date.split("-").map(Number);
+  const midnightUtc = Date.UTC(y, mo - 1, d);
+  const first = exact(0);
+  const last = exact(MINUTES_PER_DAY - 1);
+  if (!Number.isFinite(first) || !Number.isFinite(last)) return exact;
+  const offsetAtStart = midnightUtc - first;
+  const offsetAtEnd = midnightUtc + (MINUTES_PER_DAY - 1) * 60_000 - last;
+  if (offsetAtStart !== offsetAtEnd) return exact;
+  return (minute) => midnightUtc + minute * 60_000 - offsetAtStart;
+}
+
+const MINUTES_PER_DAY = 24 * 60;
 
 /**
  * Whether a specific instant is one of the offered slots. The booking routes

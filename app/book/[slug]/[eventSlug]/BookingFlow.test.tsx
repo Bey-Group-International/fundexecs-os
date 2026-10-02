@@ -207,3 +207,29 @@ describe("BookingFlow prefill", () => {
     expect(screen.getByLabelText(/email/i)).toHaveValue("ada@example.com");
   });
 });
+
+describe("a time taken while the page was open", () => {
+  const LATER = { start: "2026-10-05T14:30:00.000Z", end: "2026-10-05T15:00:00.000Z" };
+  const NEXT_DAY = { start: "2026-10-06T09:00:00.000Z", end: "2026-10-06T09:30:00.000Z" };
+
+  it("redraws from the times the refusal carried and offers the nearest, keeping what was typed", async () => {
+    fetchMock.mockImplementation(async (url: string) =>
+      url.endsWith("/book")
+        ? { ok: false, status: 409, json: async () => ({ error: "That time was just taken.", slots: [LATER, NEXT_DAY] }) }
+        : { ok: true, json: async () => ({ slots: [SLOT] }) },
+    );
+    render(<BookingFlow slug="ana" hostName="Ana" eventType={EVENT} initialSlots={[SLOT, NEXT_DAY]} />);
+    fireEvent.click(await screen.findByRole("button", { name: /\d{1,2}:\d{2}/ }));
+    fireEvent.change(screen.getByLabelText(/your name/i), { target: { value: "Ada" } });
+    fireEvent.change(screen.getByLabelText(/your email/i), { target: { value: "ada@example.com" } });
+    fireEvent.click(screen.getByRole("button", { name: /confirm booking/i }));
+
+    const take = await screen.findByRole("button", { name: /instead/i });
+    // No second request for slots: the refusal brought them.
+    expect(fetchMock.mock.calls.filter(([u]) => String(u).endsWith("/slots"))).toHaveLength(0);
+
+    fireEvent.click(take);
+    expect((screen.getByLabelText(/your name/i) as HTMLInputElement).value).toBe("Ada");
+    expect(screen.getByRole("button", { pressed: true }).textContent).toMatch(/:30/);
+  });
+});

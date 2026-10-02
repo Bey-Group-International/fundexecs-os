@@ -17,9 +17,12 @@ import {
 import {
   SlotUnavailableError,
   createBooking,
+  openSlots,
   resolvePublicPage,
   serializeBooking,
+  type SchedulingClient,
 } from "@/lib/meetings/scheduling-service";
+import type { SchedulingEventType, SchedulingPage } from "@/lib/supabase/database.types";
 import { sendBookingConfirmation } from "@/lib/meetings/booking-confirmation.server";
 
 export const runtime = "nodejs";
@@ -43,6 +46,8 @@ export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ slug: string; eventSlug: string }> },
 ) {
+  // Kept outside the try so a lost slot can be answered with the times still open.
+  let bookingTarget: { client: SchedulingClient; page: SchedulingPage; eventType: SchedulingEventType } | null = null;
   try {
     if (!hasSupabaseServiceEnv()) {
       return NextResponse.json({ error: "Scheduling is not configured on this deployment." }, { status: 503 });
@@ -76,6 +81,7 @@ export async function POST(
 
     const eventType = resolved.eventTypes.find((t) => t.slug === eventSlug);
     if (!eventType) return NextResponse.json({ error: "Not found" }, { status: 404 });
+    bookingTarget = { client: service, page: resolved.page, eventType };
 
     const { booking, roomCode } = await createBooking(service, {
       page: resolved.page,
@@ -112,7 +118,17 @@ export async function POST(
     });
   } catch (err) {
     if (err instanceof SlotUnavailableError) {
-      return NextResponse.json({ error: err.message }, { status: 409 });
+      // The times still open, so the page can redraw and offer the nearest one
+      // without a second request. Best effort: without them the page refetches.
+      let slots: Awaited<ReturnType<typeof openSlots>>["slots"] | undefined;
+      if (bookingTarget) {
+        try {
+          slots = (await openSlots(bookingTarget.client, bookingTarget.page, bookingTarget.eventType)).slots;
+        } catch (slotErr) {
+          console.error("[/api/scheduling/[slug]/[eventSlug]/book] fresh slots after 409", slotErr);
+        }
+      }
+      return NextResponse.json({ error: err.message, ...(slots ? { slots } : {}) }, { status: 409 });
     }
     console.error("[/api/scheduling/[slug]/[eventSlug]/book] POST", err);
     return NextResponse.json({ error: "Failed to book this time" }, { status: 500 });
