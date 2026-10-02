@@ -480,6 +480,28 @@ describe("a pending booking request", () => {
     expect(screen.getAllByText(/Request: Ada · Intro call/).length).toBeGreaterThan(0);
   });
 
+  it("says why, and redraws, when the request was already closed elsewhere", async () => {
+    let listReads = 0;
+    global.fetch = (async (url: string, init?: RequestInit) => {
+      if (init?.method === "PATCH") {
+        return { ok: false, status: 409, json: async () => ({ error: "This booking was already declined.", overridable: false }) };
+      }
+      if (String(url).startsWith("/api/meetings/scheduling/bookings?")) {
+        listReads += 1;
+        return { ok: true, status: 200, json: async () => ({ requests: listReads === 1 ? [REQUEST] : [] }) };
+      }
+      return { ok: true, status: 200, json: async () => ({ blocks: [], calendars: [], events: [] }) };
+    }) as unknown as typeof fetch;
+    await show([]);
+    fireEvent.click(screen.getAllByText(/Request: Ada · Intro call/)[0]);
+    fireEvent.click(await screen.findByRole("button", { name: /approve or decline/i }));
+    fireEvent.click(screen.getByRole("button", { name: /^approve$/i }));
+    await act(async () => { await Promise.resolve(); await Promise.resolve(); await Promise.resolve(); });
+
+    expect(screen.getByRole("alert").textContent).toMatch(/already declined/i);
+    expect(listReads).toBe(2);
+  });
+
   it("is drawn on the host's calendar, among their meetings", async () => {
     await show([]);
     expect(screen.getAllByText(/Request: Ada · Intro call/).length).toBeGreaterThan(0);

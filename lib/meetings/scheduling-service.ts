@@ -610,19 +610,36 @@ export async function hostConflicts(
   startIso: string,
   endIso: string,
   opts: { excludeBookingId?: string | null; excludeMeetingId?: string | null } = {},
-): Promise<BusyInterval[]> {
+): Promise<{ clashes: BusyInterval[]; heldByBooking: boolean }> {
   const start = new Date(startIso).getTime();
   const end = new Date(endIso).getTime();
-  const busy = await busyIntervals(client, {
-    hostUserId: page.user_id,
-    organizationId: page.organization_id,
-    fromIso: startIso,
-    toIso: endIso,
-    excludeBookingId: opts.excludeBookingId,
-    excludeMeetingId: opts.excludeMeetingId,
-    timezone: page.timezone,
-  });
-  return busy.filter((b) => new Date(b.start).getTime() < end && new Date(b.end).getTime() > start);
+  // Another live booking on the time is asked apart from the rest: it is the
+  // one clash the host cannot overrule (the database forbids two live bookings
+  // overlapping), so offering "anyway" for it would offer a move that can only
+  // fail. Asked alongside the busy read, not after it.
+  let heldQuery = table(client, "scheduling_bookings")
+    .select("id")
+    .eq("host_user_id", page.user_id)
+    .in("status", ["pending", "confirmed"])
+    .lt("starts_at", endIso)
+    .gt("ends_at", startIso);
+  if (opts.excludeBookingId) heldQuery = heldQuery.neq("id", opts.excludeBookingId);
+  const [busy, held] = await Promise.all([
+    busyIntervals(client, {
+      hostUserId: page.user_id,
+      organizationId: page.organization_id,
+      fromIso: startIso,
+      toIso: endIso,
+      excludeBookingId: opts.excludeBookingId,
+      excludeMeetingId: opts.excludeMeetingId,
+      timezone: page.timezone,
+    }),
+    heldQuery.limit(1),
+  ]);
+  return {
+    clashes: busy.filter((b) => new Date(b.start).getTime() < end && new Date(b.end).getTime() > start),
+    heldByBooking: ((held.data ?? []) as unknown[]).length > 0,
+  };
 }
 
 /** The warning a host sees before booking over their own calendar. */
@@ -881,9 +898,10 @@ export async function approveBooking(
   if (ctx.booking.status !== "pending") throw new Error("Only a pending request can be approved.");
 
   if (!opts.allowConflict) {
-    const clashes = await hostConflicts(client, ctx.page, ctx.booking.starts_at, ctx.booking.ends_at, {
+    const { clashes, heldByBooking } = await hostConflicts(client, ctx.page, ctx.booking.starts_at, ctx.booking.ends_at, {
       excludeBookingId: ctx.booking.id,
     });
+    if (heldByBooking) throw new SlotUnavailableError(HOST_BOOKING_OVERLAP_MESSAGE);
     if (clashes.length > 0) {
       throw new SlotUnavailableError(hostConflictMessage("approve"), { overridable: true });
     }
