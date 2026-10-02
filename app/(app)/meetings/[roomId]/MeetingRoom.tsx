@@ -111,7 +111,8 @@ import {
   nextPhase,
   type CallPhase,
 } from "@/lib/meetings/call-phase";
-import { PARTICIPANT_CONFLICT_TARGET, attendanceRecord } from "@/lib/meetings/attendance";
+import { attendanceRecord, guestAttendanceUrl, participantConflictTarget } from "@/lib/meetings/attendance";
+import type { MeetingSubject } from "@/lib/meetings/subject";
 import {
   DISCONNECT_GRACE_MS,
   canSetLocalOffer,
@@ -453,6 +454,37 @@ interface VoiceTap {
 
 // ─── Main component ───────────────────────────────────────────────────────────
 
+/**
+ * Tell the server a guest arrived or left.
+ *
+ * A guest cannot touch `live_meeting_participants` from the browser at all: the
+ * table's only policy is `user_id = auth.uid()`, which for them compares NULL
+ * to NULL and is therefore never true. So both of their writes go through the
+ * route, and both go through here, because an arrival and a departure differing
+ * in how they address the same row is how one of them stops working quietly.
+ *
+ * `keepalive` for the departure, which is also sent from `pagehide` where a
+ * plain fetch is cancelled along with the page. Still best-effort either way,
+ * which is what `PRESENCE_STALE_MS` exists to cover.
+ */
+async function postGuestAttendance(
+  meetingId: string,
+  guestKey: string,
+  body: { displayName: string } | { left: true },
+): Promise<string | null> {
+  try {
+    const res = await fetch(guestAttendanceUrl(meetingId, guestKey), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+      keepalive: "left" in body,
+    });
+    return res.ok ? null : `attendance route answered ${res.status}`;
+  } catch (err) {
+    return err instanceof Error ? err.message : String(err);
+  }
+}
+
 export function MeetingRoom({ roomCode }: { roomCode: string }) {
   // Start fetching the call screen as soon as the room mounts: the member is
   // about to spend a few seconds in the green room checking their camera, and
@@ -487,7 +519,14 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
   // The attendance row this member owns for this meeting, set once the join
   // upsert lands and cleared when they leave. Null for a guest with no account,
   // and null if the upsert failed — in both cases there is no row to close.
-  const attendeeRef = useRef<{ meetingId: string; userId: string } | null>(null);
+  /**
+   * The attendance row this tab wrote, so its departure can find it again.
+   *
+   * A SUBJECT rather than a user id, because for a guest there is no user id --
+   * only the key their browser holds. Both kinds now write a row; before this,
+   * a guest wrote none at all.
+   */
+  const attendeeRef = useRef<{ meetingId: string; subject: MeetingSubject } | null>(null);
 
   /**
    * Close the attendance row: mark when they left.
@@ -506,11 +545,26 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     // Cleared first: leave, then end-for-all, then pagehide can all fire for one
     // departure, and three writes for one leaving is two too many.
     attendeeRef.current = null;
+    const { meetingId, subject } = attendee;
+
+    // A guest's row is not reachable from the browser at all -- the table's
+    // policy is `user_id = auth.uid()`, which for them compares NULL to NULL --
+    // so their departure goes through the route that wrote the row. `keepalive`
+    // because this is also called from `pagehide`, where a plain fetch is
+    // cancelled with the page; it is the same reason the transcript flush uses
+    // it, and it is still best-effort, which is what PRESENCE_STALE_MS covers.
+    if (subject.kind === "guest") {
+      void postGuestAttendance(meetingId, subject.guestKey, { left: true }).then((failure) => {
+        if (failure) console.warn("[meeting] guest departure not recorded", failure);
+      });
+      return;
+    }
+
     void supabase
       .from("live_meeting_participants")
       .update({ left_at: new Date().toISOString() })
-      .eq("meeting_id", attendee.meetingId)
-      .eq("user_id", attendee.userId)
+      .eq("meeting_id", meetingId)
+      .eq("user_id", subject.userId)
       .is("left_at", null)
       .then(({ error }) => {
         if (error) console.warn("[meeting] departure not recorded", error.message);
@@ -2171,23 +2225,48 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
         .eq("id", mId)
         .is("started_at", null);
       const { data: { user } } = await supabase.auth.getUser();
-      if (user) {
-        attendeeRef.current = { meetingId: mId, userId: user.id };
-        // Awaited, and the error read. This upsert spent its whole life as a
+      const joiningKey = guestKeyRef.current;
+      // One of two identities, and until now only the first was ever recorded.
+      // `if (user)` with no else meant an invite-link guest wrote no attendance
+      // row at all -- so they were missing from the head-count and from the
+      // report's attendance, and locked out of the report themselves, because
+      // `live_meeting_reports` is readable by "host OR participant" and they
+      // were neither.
+      const subject: MeetingSubject | null = user
+        ? { kind: "member", userId: user.id }
+        : joiningKey
+          ? { kind: "guest", guestKey: joiningKey }
+          : null;
+
+      if (subject) {
+        attendeeRef.current = { meetingId: mId, subject };
+        // Awaited, and the error read. This write spent its whole life as a
         // fire-and-forget `void` naming a conflict target no unique index
         // matched, so Postgres refused every one of them with 42P10 and nobody
         // heard: no attendance was ever recorded, and reports — readable by
         // "host OR participant" — became host-only in practice.
-        const { error } = await supabase
-          .from("live_meeting_participants")
-          .upsert(attendanceRecord(mId, user.id, name), { onConflict: PARTICIPANT_CONFLICT_TARGET });
-        if (error) {
+        //
+        // The two kinds take different doors, and the asymmetry is deliberate.
+        // The table's policy — `user_id = auth.uid()` — expresses the member
+        // rule exactly, so a member writes their own row from here. It cannot
+        // express the guest rule at all: a guest has no session, so the policy
+        // compares NULL to NULL and denies them. Their write goes through a
+        // route that checks the host admitted them first. See
+        // `app/api/meetings/[id]/attendance/route.ts`.
+        const failure = subject.kind === "member"
+          ? (await supabase
+              .from("live_meeting_participants")
+              .upsert(attendanceRecord(mId, subject, name), {
+                onConflict: participantConflictTarget(subject),
+              })).error?.message ?? null
+          : await postGuestAttendance(mId, subject.guestKey, { displayName: name });
+        if (failure) {
           attendeeRef.current = null;
           // Not fatal to the call: being in the room matters more than being
           // recorded in it. But it must be visible, because the consequence
           // (no report for this member afterwards) shows up much later and
           // nowhere near the cause.
-          console.error("[meeting] attendance not recorded", error.message);
+          console.error("[meeting] attendance not recorded", failure);
         }
       }
     }
