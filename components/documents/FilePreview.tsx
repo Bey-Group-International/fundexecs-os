@@ -108,9 +108,13 @@ export function FilePreview({
 function PdfFrame({ className, title, src }: { className: string; title: string; src: string }) {
   const [active, setActive] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+  const frameRef = useRef<HTMLIFrameElement>(null);
 
   useEffect(() => {
     if (!active) return;
+    // Activation removes the button that had focus; put focus where the reader
+    // asked to go, or a keyboard user is dropped back to the top of the page.
+    frameRef.current?.focus();
     // Touch has no mouseleave: a tap outside hands the wheel back.
     const onPointerDown = (e: PointerEvent) => {
       if (!ref.current?.contains(e.target as Node)) setActive(false);
@@ -121,7 +125,15 @@ function PdfFrame({ className, title, src }: { className: string; title: string;
 
   return (
     <div ref={ref} className={`group ${className}`} onMouseLeave={() => setActive(false)}>
-      <iframe title={title} src={src} className="block h-[min(80dvh,56rem)] w-full bg-white" />
+      <iframe
+        ref={frameRef}
+        title={title}
+        src={src}
+        // Out of the tab order until activated, so Tab reaches the shield
+        // first rather than slipping into the PDF behind it.
+        tabIndex={active ? 0 : -1}
+        className="block h-[min(80dvh,56rem)] w-full bg-white"
+      />
       {active ? null : (
         <button
           type="button"
