@@ -455,8 +455,8 @@ function SidebarPanel({
           >
             Network
           </Link>
-          {/* Marketplace · Meetings — top-level rail destinations, grouped just
-              below Network. */}
+          {/* Marketplace · Meetings · Pulse — top-level rail destinations,
+              grouped just below Network. */}
           <Link
             href="/marketplace"
             className={navHrefActive(pathname, "/marketplace") ? `${activeLinkClass} flex items-center gap-2` : linkClass}
@@ -468,6 +468,12 @@ function SidebarPanel({
             className={navHrefActive(pathname, "/meetings") ? `${activeLinkClass} flex items-center gap-2` : linkClass}
           >
             Meetings
+          </Link>
+          <Link
+            href="/pulse"
+            className={navHrefActive(pathname, "/pulse") ? `${activeLinkClass} flex items-center gap-2` : linkClass}
+          >
+            Pulse
           </Link>
         </div>
 

@@ -6,14 +6,14 @@
 // lib/earn-record-context.server.ts), so record detail never round-trips
 // through the browser — the same no-leak design as meeting prep.
 
-export type ExplainRecordType = "deal" | "investor" | "contact" | "document";
+export type ExplainRecordType = "deal" | "investor" | "contact" | "document" | "pulse";
 
 export interface ExplainRecordRef {
   type: ExplainRecordType;
   id: string;
 }
 
-const RECORD_TYPES: readonly ExplainRecordType[] = ["deal", "investor", "contact", "document"];
+const RECORD_TYPES: readonly ExplainRecordType[] = ["deal", "investor", "contact", "document", "pulse"];
 const UUIDISH = /^[0-9a-f-]{8,64}$/i;
 
 /** Narrow an untrusted request value to a record reference, or null. */
@@ -30,6 +30,7 @@ const NOUN: Record<ExplainRecordType, string> = {
   investor: "investor",
   contact: "contact",
   document: "document",
+  pulse: "Market Pulse finding",
 };
 
 /** The visible one-liner the operator sees as their message in the dock. */
@@ -49,6 +50,8 @@ export function explainInstructions(type: ExplainRecordType, opts: { webSearch: 
       "Summarize who this person is and how they matter to the firm (role, company, relationship strength, recent touches), and suggest the most useful next interaction.",
     document:
       "Summarize the document in a few lines, pull out the key numbers and terms, and check its material claims — flag anything aggressive, inconsistent, or unsupported.",
+    pulse:
+      "Verify the finding against its source and anything newer, explain what is actually happening and who the players are, judge how well it fits the mandate, and say whether it is worth adding to the pipeline.",
   };
   return (
     `## Explain this ${NOUN[type]}\n` +

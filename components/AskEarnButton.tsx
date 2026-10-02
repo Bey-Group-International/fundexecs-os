@@ -9,11 +9,14 @@ export function AskEarnButton({
   type,
   id,
   name,
+  variant = "primary",
   className = "",
 }: {
   type: ExplainRecordType;
   id: string;
   name: string;
+  /** "secondary" for a row of actions where another button leads. */
+  variant?: "primary" | "secondary";
   className?: string;
 }) {
   function open() {
@@ -29,7 +32,11 @@ export function AskEarnButton({
       type="button"
       onClick={open}
       title="Summary, Earn's take, and the claims worth checking"
-      className={`rounded-md border border-gold-500/40 bg-gold-500/10 px-3 py-1.5 text-xs font-medium text-gold-300 transition hover:bg-gold-500/20 ${className}`}
+      className={`rounded-md border px-3 py-1.5 text-xs font-medium transition ${
+        variant === "primary"
+          ? "border-gold-500/40 bg-gold-500/10 text-gold-300 hover:bg-gold-500/20"
+          : "border-line text-fg-secondary hover:bg-surface-2 hover:text-fg-primary"
+      } ${className}`}
     >
       Ask Earn
     </button>
