@@ -917,6 +917,18 @@ export type DataRoomShare = {
   // digest_sent_at ends the window last reported.
   daily_digest: boolean;
   digest_sent_at: string | null;
+  // Who the link admits by gate email (migration 20261002170000). Either one
+  // set means require_email is true.
+  allowed_email_domains: string[] | null;
+  max_readers: number | null;
+};
+
+// One row per (link, gate email) admitted; what max_readers counts.
+export type DataRoomLinkReader = {
+  share_id: string;
+  email: string;
+  organization_id: string;
+  first_at: string;
 };
 
 // One row per (link, reader) whose first open the creator has been told about
@@ -3225,6 +3237,7 @@ export type Database = {
       data_room_shares: TableShape<DataRoomShare>;
       data_room_views: TableShape<DataRoomView>;
       data_room_open_alerts: TableShape<DataRoomOpenAlert>;
+      data_room_link_readers: TableShape<DataRoomLinkReader>;
       data_room_engagement_reads: TableShape<DataRoomEngagementRead>;
       investor_portal_shares: TableShape<InvestorPortalShare>;
       investor_portal_views: TableShape<InvestorPortalView>;

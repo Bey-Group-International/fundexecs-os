@@ -71,7 +71,12 @@ export default async function PublicDataRoom(props: {
   // (name/logo/accent — not confidential) plus the gate UI.
   const pass = await readGatePass(share.id);
   const passed = gateSatisfied(
-    { require_email: gateConfig.requireEmail, require_nda: gateConfig.requireNda, password_hash: share.password_hash },
+    {
+      require_email: gateConfig.requireEmail,
+      require_nda: gateConfig.requireNda,
+      password_hash: share.password_hash,
+      allowed_email_domains: share.allowed_email_domains ?? null,
+    },
     pass,
   );
 
