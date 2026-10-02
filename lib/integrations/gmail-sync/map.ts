@@ -135,19 +135,31 @@ function findPart(part: GmailMessagePart | undefined, mimeType: string): GmailMe
   return null;
 }
 
-/** HTML down to readable text. Good enough for a preview and a report; not a renderer. */
+const ENTITIES: Record<string, string> = {
+  "&nbsp;": " ",
+  "&amp;": "&",
+  "&lt;": "<",
+  "&gt;": ">",
+  "&quot;": '"',
+  "&#39;": "'",
+};
+
+/**
+ * HTML down to readable text. Good enough for a preview and a report; not a
+ * renderer, and never rendered as HTML — every surface that shows it escapes.
+ *
+ * Tags are stripped until none are left, because one pass over "<scr<b>ipt>"
+ * leaves "<script>" behind. Entities are decoded in ONE pass, so "&amp;lt;"
+ * becomes the text "&lt;" rather than being unescaped twice into "<".
+ */
 export function htmlToText(html: string): string {
-  return html
-    .replace(/<(script|style|head)[\s\S]*?<\/\1>/gi, "")
-    .replace(/<br\s*\/?>/gi, "\n")
-    .replace(/<\/(p|div|li|tr|h[1-6])>/gi, "\n")
-    .replace(/<[^>]+>/g, "")
-    .replace(/&nbsp;/gi, " ")
-    .replace(/&amp;/gi, "&")
-    .replace(/&lt;/gi, "<")
-    .replace(/&gt;/gi, ">")
-    .replace(/&quot;/gi, '"')
-    .replace(/&#39;/gi, "'")
+  let text = html.replace(/<br\s*\/?>/gi, "\n").replace(/<\/(p|div|li|tr|h[1-6])>/gi, "\n");
+  for (let previous = ""; previous !== text; ) {
+    previous = text;
+    text = text.replace(/<(script|style|head)\b[\s\S]*?<\/\1\s*>/gi, "").replace(/<[^<>]*>/g, "");
+  }
+  return text
+    .replace(/&(?:nbsp|amp|lt|gt|quot|#39);/gi, (entity) => ENTITIES[entity.toLowerCase()] ?? entity)
     .replace(/[ \t]+\n/g, "\n")
     .replace(/\n{3,}/g, "\n\n")
     .trim();

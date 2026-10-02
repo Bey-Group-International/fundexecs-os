@@ -143,4 +143,12 @@ describe("helpers", () => {
   it("drops script and style from HTML", () => {
     expect(htmlToText("<style>p{}</style><p>a &amp; b</p>")).toBe("a & b");
   });
+
+  it("strips nested tags until none are left", () => {
+    expect(htmlToText("<scr<b>ipt>x")).toBe("x");
+  });
+
+  it("decodes entities once, never twice", () => {
+    expect(htmlToText("&amp;lt;b&amp;gt;")).toBe("&lt;b&gt;");
+  });
 });
