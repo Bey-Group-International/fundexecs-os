@@ -89,6 +89,13 @@ import { RecordingComposer, type ComposerHandlers, type RoomSnapshot } from "@/l
 import type { MaskDriver } from "@/lib/meetings/mask-driver";
 import { getBackground } from "@/lib/meetings/background-store";
 import {
+  camButtonTitle,
+  micButtonTitle,
+  participationNotice,
+  standingOf,
+  toggleCanDeliver,
+} from "@/lib/meetings/participation";
+import {
   canExit,
   isAwaitingReport,
   isCallRunning,
@@ -810,6 +817,45 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
 
   // Media error (permission denial, no devices, etc.)
   const [mediaError, setMediaError] = useState<string | null>(null);
+  /**
+   * Whether this member is actually being seen and heard.
+   *
+   * Derived, never stored, which is the point: a notice about a device that is
+   * still missing cannot be dismissed into the background, and one about a
+   * device that has come back disappears without anything having to remember to
+   * clear it. `participation.ts` owns what each combination means.
+   */
+  const micStanding = useMemo(
+    () => standingOf({
+      present: (localStream?.getAudioTracks().length ?? 0) > 0,
+      enabled: micOn,
+      failure: micToRecover,
+    }),
+    [localStream, micOn, micToRecover],
+  );
+  const camStanding = useMemo(
+    () => standingOf({
+      present: (localStream?.getVideoTracks().length ?? 0) > 0,
+      enabled: camOn,
+      failure: cameraToRecover,
+    }),
+    [localStream, camOn, cameraToRecover],
+  );
+  const participation = useMemo(
+    () => participationNotice(micStanding, camStanding),
+    [micStanding, camStanding],
+  );
+  /**
+   * The microphone's standing, for the toggle.
+   *
+   * A ref mirror because `toggleMic` is created once and reads refs — the same
+   * pattern as `micOnRef` and `shareOnRef` beside it. Through the ref the
+   * toggle asks `toggleCanDeliver` rather than re-deriving "is there a track",
+   * so there is one tested answer to that question instead of two that can
+   * drift.
+   */
+  const micStandingRef = useRef(micStanding);
+  useEffect(() => { micStandingRef.current = micStanding; }, [micStanding]);
 
   // ── Camera backgrounds ────────────────────────────────────────────────────
   const [bgEffect, setBgEffect] = useState<BackgroundEffect>(NO_BACKGROUND);
@@ -3612,6 +3658,21 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     // to stay pure (React calls it twice in StrictMode), and the broadcast and
     // ref write below are both side effects.
     const next = !micOnRef.current;
+
+    // Nothing to enable. The camera's toggle has always known to open a device
+    // in this case; the microphone's never did, and the consequences were worse
+    // than silence. It flipped the control to "on", cleared the watcher that was
+    // trying to get the device back, and broadcast `micOn: true` -- so a guest
+    // who denied the permission prompt pressed "Unmute", was shown as live, was
+    // reported to the host as live, and sat in a meeting that was waiting for
+    // them. Every signal in the product agreed with the wrong answer.
+    //
+    // So the press means what it can deliver: go and ask for the device.
+    if (next && !toggleCanDeliver(micStandingRef.current)) {
+      void reacquireMicRef.current().catch(() => { /* reported by the banner */ });
+      return;
+    }
+
     micOnRef.current = next;
     // Their decision now, not the join's. Whatever the room was going back for
     // on their behalf stops here — a device that reappears must not undo a
@@ -5243,8 +5304,34 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
             the mobile copilot sheet already made once. */}
         <div className="relative flex-1 flex flex-col overflow-hidden bg-[var(--surface-0)] min-w-0">
           <ReactionTicker entries={liveReactions} />
-          {/* Media permission warning */}
-          {mediaError && (
+          {/* Not being seen or heard, which is not the same as being muted.
+              Derived from the devices and so NOT dismissible: while it is true
+              it stays, because the alternative is what shipped — a guest who
+              believed they were live and a room that had been told so. */}
+          {participation && (
+            <div className="flex items-start gap-3 px-4 py-3 bg-red-500/10 border-b border-red-500/40 shrink-0">
+              <span className="text-red-500 mt-0.5 shrink-0">⚠</span>
+              <p className="flex-1 text-sm text-red-600 dark:text-red-400">{participation.text}</p>
+              <button
+                onClick={() => {
+                  // Both, when both are gone: one press should fix what one
+                  // address-bar decision just allowed.
+                  if (participation.reason !== "no-camera") {
+                    void reacquireMicRef.current().catch(() => { /* the banner stays */ });
+                  }
+                  if (participation.reason !== "no-microphone") {
+                    void startCameraRef.current();
+                  }
+                }}
+                className="shrink-0 rounded-full border border-red-500/50 px-3 py-1 text-xs font-semibold text-red-600 dark:text-red-400 hover:bg-red-500/10 transition-colors">
+                Retry
+              </button>
+            </div>
+          )}
+          {/* Media permission warning. Stood down while the banner above is up:
+              they would otherwise say much the same thing twice, and only one of
+              them can be acted on. */}
+          {mediaError && !participation && (
             <div className="flex items-start gap-3 px-4 py-3 bg-amber-500/10 border-b border-amber-500/30 shrink-0">
               <span className="text-amber-500 mt-0.5 shrink-0">⚠</span>
               <p className="flex-1 text-sm text-amber-600 dark:text-amber-400">{mediaError}</p>
@@ -5423,6 +5510,7 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
       <div className="relative z-40 shrink-0">
       <ControlBar
         micOn={micOn} camOn={camOn} shareOn={shareOn} shareStarting={shareStarting} copilotOpen={copilotOpen}
+        micTitle={micButtonTitle(micStanding)} camTitle={camButtonTitle(camStanding)}
         isHost={isHost} handRaised={handRaised} layout={layout} chatUnread={chatUnread}
         handsUp={handsUpPeople.length} handsUpNote={handsUpNote}
         waitingCount={isHost ? livePeers.length : 0} elapsed={elapsedRef}

@@ -388,7 +388,7 @@ export function HostExitControl({
 export const ControlBar = React.memo(ControlBarImpl);
 
 function ControlBarImpl({
-  micOn, camOn, shareOn, shareStarting, copilotOpen, isHost, handRaised, handsUp, handsUpNote, layout, layoutForced, chatUnread, waitingCount, elapsed, roomCode, bwMode,
+  micOn, camOn, micTitle, camTitle, shareOn, shareStarting, copilotOpen, isHost, handRaised, handsUp, handsUpNote, layout, layoutForced, chatUnread, waitingCount, elapsed, roomCode, bwMode,
   onToggleMic, onToggleCam, onToggleScreen, onToggleCopilot, onLeave, onEndForAll,
   onSwitchMic, onSwitchCam, onSwitchSpeaker, onRaiseHand, onReaction, onMuteAll, onToggleLayout, onFlipCamera,
   activeMicId, activeCamId, camStarting,
@@ -409,6 +409,8 @@ function ControlBarImpl({
   /** The call is already being torn down — the exit controls must not re-fire. */
   leaving: boolean;
   micOn: boolean; camOn: boolean; shareOn: boolean; shareStarting: boolean; copilotOpen: boolean; isHost: boolean;
+  /** What the mic/camera buttons say. Omitted falls back to the plain wording. */
+  micTitle?: string; camTitle?: string;
   handRaised: boolean; layout: "grid" | "speaker"; chatUnread: number; waitingCount: number;
   /**
    * Live-span bookkeeping for the meeting clock, passed as a ref so this bar's
@@ -446,11 +448,14 @@ function ControlBarImpl({
       <div className="flex items-center gap-1.5 sm:gap-2 flex-1 justify-center">
         {/* Core controls — always visible */}
         <div className="flex items-center gap-0.5">
-          <CtrlBtn active={micOn} onClick={onToggleMic} title={micOn ? "Mute" : "Unmute"} activeIcon={<MicIcon />} inactiveIcon={<MicOffIcon />} />
+          {/* The caption is decided by `participation.ts` and passed in, not
+              derived from `micOn` here. "Unmute" is a promise, and a member with
+              no microphone was being given it. */}
+          <CtrlBtn active={micOn} onClick={onToggleMic} title={micTitle ?? (micOn ? "Mute" : "Unmute")} activeIcon={<MicIcon />} inactiveIcon={<MicOffIcon />} />
           <span className="hidden sm:block"><DeviceChevron kind="audioinput" activeId={activeMicId} onSelect={onSwitchMic} /></span>
         </div>
         <div className="flex items-center gap-0.5">
-          <CtrlBtn active={camOn} onClick={onToggleCam} busy={camStarting} title={camOn ? "Camera off" : "Camera on"} activeIcon={<CamIcon />} inactiveIcon={<CamOffIcon />} />
+          <CtrlBtn active={camOn} onClick={onToggleCam} busy={camStarting} title={camTitle ?? (camOn ? "Camera off" : "Camera on")} activeIcon={<CamIcon />} inactiveIcon={<CamOffIcon />} />
           <span className="hidden sm:block"><DeviceChevron kind="videoinput" activeId={activeCamId} onSelect={onSwitchCam} /></span>
         </div>
 
