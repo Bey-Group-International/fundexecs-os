@@ -59,6 +59,8 @@ export async function NdaSignatures({ roomId }: { roomId?: string } = {}) {
       signer_email,
       signed_at,
       ip_hint,
+      nda_sha256,
+      copy_sent_at,
       data_room_shares ( label, token )
     `
     )
@@ -93,6 +95,7 @@ export async function NdaSignatures({ roomId }: { roomId?: string } = {}) {
               <th className="px-5 py-3 font-medium">Signer Name</th>
               <th className="px-5 py-3 font-medium">Email</th>
               <th className="px-5 py-3 font-medium">Signed At</th>
+              <th className="px-5 py-3 font-medium">Signed copy</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-line">
@@ -118,6 +121,18 @@ export async function NdaSignatures({ roomId }: { roomId?: string } = {}) {
                   </td>
                   <td className="whitespace-nowrap px-5 py-3 text-fg-muted">
                     {fmtDate(sig.signed_at)}
+                  </td>
+                  <td className="whitespace-nowrap px-5 py-3 text-xs">
+                    <a
+                      href={`/api/dataroom/nda/${sig.id}`}
+                      className="text-gold-300 hover:underline"
+                      title={sig.nda_sha256 ? `Text fingerprint (SHA-256): ${sig.nda_sha256}` : "Signed before signatures kept their text"}
+                    >
+                      Download PDF
+                    </a>
+                    <span className="ml-2 font-mono text-[10px] text-fg-muted">
+                      {sig.nda_sha256 ? (sig.copy_sent_at ? "emailed to signer" : "text recorded") : "text not recorded"}
+                    </span>
                   </td>
                 </tr>
               );

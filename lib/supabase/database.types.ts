@@ -860,6 +860,10 @@ export type NdaSignature = {
   signer_email: string | null;
   signed_at: string;
   ip_hint: string | null;
+  nda_text: string | null;
+  nda_sha256: string | null;
+  agreed: boolean;
+  copy_sent_at: string | null;
 };
 
 // A named, curated sharing surface (supabase/migrations 20260911120000). The

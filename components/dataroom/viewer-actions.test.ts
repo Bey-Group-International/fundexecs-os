@@ -49,7 +49,15 @@ jest.mock("@/lib/data-room-gate", () => ({
 const recordFirstOpen = jest.fn(async () => true);
 jest.mock("@/lib/data-room-alerts.server", () => ({ recordFirstOpen: (...a: unknown[]) => recordFirstOpen(...(a as [])) }));
 
-import { passEmailGate, recordRoomOpen, trackReading } from "./viewer-actions";
+const signNda = jest.fn(async (_c: unknown, _i: Record<string, unknown>) => ({ ok: true, signatureId: "sig-1", orgId: "org-1" }));
+const sendNdaCopy = jest.fn(async () => true);
+jest.mock("@/lib/nda-signing.server", () => ({
+  signNda: (c: unknown, i: Record<string, unknown>) => signNda(c, i),
+  sendNdaCopy: () => sendNdaCopy(),
+}));
+jest.mock("next/server", () => ({ after: (fn: () => unknown) => fn() }));
+
+import { passEmailGate, recordNdaSignature, recordRoomOpen, trackReading } from "./viewer-actions";
 
 const base = {
   id: "share-1",
@@ -168,5 +176,28 @@ describe("passEmailGate", () => {
   it("rejects something that isn't an email", async () => {
     shareRow = gated;
     expect(await passEmailGate("tok", "nope")).toEqual({ ok: false, error: "Enter a valid email address." });
+  });
+});
+
+describe("recordNdaSignature", () => {
+  it("signs with the gate's email, not one the form claims, and sends the copy", async () => {
+    pass = { shareId: "share-1", email: "jane@lp.com", pwd: false, nda: false, iat: Date.now() };
+    const fd = new FormData();
+    fd.set("share_id", "share-1");
+    fd.set("signer_name", "Jane Smith");
+    fd.set("agree", "1");
+    fd.set("signer_email", "someone-else@x.com");
+    fd.set("signed_at", "2001-01-01T00:00:00Z");
+    expect(await recordNdaSignature(fd)).toEqual({ ok: true });
+    expect(signNda.mock.calls[0][1]).toEqual({ shareId: "share-1", signerName: "Jane Smith", agreed: true, gateEmail: "jane@lp.com", ipHint: null });
+    expect(sendNdaCopy).toHaveBeenCalled();
+  });
+
+  it("passes the reason back when signing is refused", async () => {
+    signNda.mockResolvedValueOnce({ ok: false, error: "Enter your email first, then sign." } as never);
+    const fd = new FormData();
+    fd.set("share_id", "share-1");
+    fd.set("signer_name", "Jane");
+    expect(await recordNdaSignature(fd)).toEqual({ ok: false, error: "Enter your email first, then sign." });
   });
 });

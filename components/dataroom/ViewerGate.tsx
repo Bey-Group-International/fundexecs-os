@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { verifySharePassword } from "@/components/build/materials-actions";
 import { passEmailGate, recordNdaSignature } from "@/components/dataroom/viewer-actions";
+import { ndaTextFor } from "@/lib/nda";
 
 export interface GateConfig {
   requireEmail: boolean;
@@ -113,12 +114,12 @@ function NdaGate({
   accent: string;
 }) {
   const [signerName, setSignerName] = useState("");
+  const [agreed, setAgreed] = useState(false);
+  const [error, setError] = useState("");
   const [pending, startTransition] = useTransition();
 
-  const defaultNda = `By proceeding, you agree to keep all information in this data room strictly confidential. You shall not disclose, reproduce, or distribute any materials herein to any third party without prior written consent from the issuing organization. This obligation survives the termination of any relationship with the organization.`;
-
   const trimmedName = signerName.trim();
-  const canSubmit = trimmedName.length > 0 && !pending;
+  const canSubmit = trimmedName.length > 0 && agreed && !pending;
 
   // Build the legal-timestamp string shown beneath the signature preview.
   const now = new Date();
@@ -140,12 +141,15 @@ function NdaGate({
     if (!canSubmit) return;
     startTransition(async () => {
       const fd = new FormData();
+      // Name and consent only: the server sets the time and takes the email
+      // from the email gate this reader already passed.
       fd.set("share_id", shareId);
       fd.set("signer_name", trimmedName);
-      fd.set("signer_email", signerEmail ?? "");
-      fd.set("signed_at", new Date().toISOString());
+      fd.set("agree", agreed ? "1" : "0");
+      setError("");
       const result = await recordNdaSignature(fd);
       if (result.ok) onNext();
+      else setError(result.error);
     });
   }
 
@@ -167,7 +171,7 @@ function NdaGate({
 
         {/* NDA text scroll box */}
         <div className="mt-4 max-h-48 overflow-y-auto rounded-lg border border-line bg-surface-1 p-4 text-xs leading-relaxed text-fg-secondary">
-          {ndaText ?? defaultNda}
+          {ndaTextFor(ndaText)}
         </div>
 
         {/* Signer name input */}
@@ -205,6 +209,17 @@ function NdaGate({
             </div>
           ) : null}
 
+          <label className="flex cursor-pointer items-start gap-2.5">
+            <input
+              type="checkbox"
+              checked={agreed}
+              onChange={(e) => setAgreed(e.target.checked)}
+              className="mt-0.5 h-4 w-4 shrink-0"
+              style={{ accentColor: accent }}
+            />
+            <span className="text-sm text-fg-secondary">I have read and agree to this NDA.</span>
+          </label>
+
           {/* Legal timestamp */}
           <p className="text-xs text-fg-muted">
             By clicking <span className="font-medium text-fg-secondary">Sign &amp; Continue</span>,{" "}
@@ -227,6 +242,15 @@ function NdaGate({
           >
             {pending ? "Recording signature…" : "Sign & Continue →"}
           </button>
+          {error ? (
+            <p role="alert" className="text-xs text-red-400">
+              {error}
+            </p>
+          ) : (
+            <p className="text-xs text-fg-muted">
+              {signerEmail ? `A signed copy goes to ${signerEmail}.` : "You'll get a signed copy by email."}
+            </p>
+          )}
         </div>
       </div>
     </>
