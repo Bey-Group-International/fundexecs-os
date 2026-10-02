@@ -10,6 +10,7 @@
  * browsers this container cannot run.
  */
 import {
+  driverAwaitingWorker,
   driverNeedsWorker,
   driverOnWorker,
   driverStep,
@@ -94,10 +95,25 @@ describe("driverStep: begin", () => {
   it("waits for the worker when this scope cannot answer alone", () => {
     const { state, actions } = run([begin(standardMain, 1_000)]);
     expect(state.phase).toEqual({ phase: "probing", sinceMs: 1_000 });
-    // No hand-over: there is nothing to hand over to yet, and no reason either,
-    // because `worker-not-probed` is a question rather than an answer.
-    expect(actions).toEqual([{ kind: "start-main" }]);
+    // The worker is built, but no track goes near it: there is nothing to hand
+    // over to until it answers. And no reason is recorded either, because
+    // `worker-not-probed` is a question rather than an answer.
+    expect(actions).toEqual([{ kind: "start-main" }, { kind: "probe-worker" }]);
     expect(state.fellBack).toBe(false);
+  });
+
+  it("builds the worker on exactly the browsers that cannot answer alone", () => {
+    // The defect this action exists for. A shell that inferred "build it" from
+    // the phase would be one `if` away from never building it on the browsers
+    // that implement only the standard -- which never report `support`, never
+    // leave `probing`, and fall back every time.
+    const probing = run([begin(standardMain, 1_000)]).actions;
+    expect(probing).toContainEqual({ kind: "probe-worker" });
+    // Chrome does not need it: `hand-over` builds the worker on its way past.
+    expect(run([begin(chrome, 1_000)]).actions).not.toContainEqual({ kind: "probe-worker" });
+    expect(
+      run([begin(without(chrome, { worker: false }), 1_000)]).actions,
+    ).not.toContainEqual({ kind: "probe-worker" });
   });
 
   it("settles on the main thread immediately when there are no workers at all", () => {
@@ -512,5 +528,26 @@ describe("driverNeedsWorker", () => {
       expect(actions).toContainEqual(expect.objectContaining({ kind: "stop-worker" }));
       expect(driverNeedsWorker(state)).toBe(false);
     }
+  });
+});
+
+describe("driverAwaitingWorker", () => {
+  it("is true for both waiting phases and nothing else", () => {
+    expect(driverAwaitingWorker(initialDriverState())).toBe(false);
+    expect(driverAwaitingWorker(run([begin(standardMain, 1_000)]).state)).toBe(true);
+    expect(driverAwaitingWorker(run([begin(chrome, 1_000)]).state)).toBe(true);
+    // The distinction from `driverNeedsWorker`: the worker is still needed here,
+    // but nothing is waiting on a clock any more.
+    const adopted = run([begin(chrome, 1_000), { kind: "worker-frame" }]).state;
+    expect(driverNeedsWorker(adopted)).toBe(true);
+    expect(driverAwaitingWorker(adopted)).toBe(false);
+  });
+
+  it("goes false the moment the main thread wins", () => {
+    const fallen = run([
+      begin(chrome, 1_000),
+      { kind: "tick", nowMs: 1_000 + FIRST_FRAME_DEADLINE_MS },
+    ]).state;
+    expect(driverAwaitingWorker(fallen)).toBe(false);
   });
 });

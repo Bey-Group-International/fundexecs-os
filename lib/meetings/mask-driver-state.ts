@@ -142,6 +142,16 @@ export type DriverAction =
    */
   | { kind: "start-main" }
   /**
+   * Construct the worker and wait for it to say what it can do. No track goes
+   * anywhere near it yet.
+   *
+   * Separate from `hand-over` because on a browser that implements only the
+   * standard there is nothing to hand over until the worker has answered, and a
+   * shell that inferred "build it" from the phase alone would be one `if` away
+   * from never building it on exactly the browsers this feature exists for.
+   */
+  | { kind: "probe-worker" }
+  /**
    * Build this protocol's halves and hand the worker a CLONE of the camera.
    * A clone because the main pipeline is still reading the original, and
    * `MediaStreamTrackProcessor` is a consuming sink.
@@ -213,7 +223,10 @@ export function driverStep(
       // reachable before the worker has ever reported, so a restart never lands
       // back here once a snapshot has been remembered.
       if (route.reason === "worker-not-probed") {
-        return go({ phase: "probing", sinceMs: event.nowMs }, actions);
+        return go({ phase: "probing", sinceMs: event.nowMs }, [
+          ...actions,
+          { kind: "probe-worker" },
+        ]);
       }
       return stay(route.reason, [...actions, { kind: "stop-worker", reason: route.reason }]);
     }
@@ -289,6 +302,20 @@ export function driverStep(
 /** Whether the room is currently being fed by the worker. */
 export function driverOnWorker(state: DriverState): boolean {
   return state.phase.phase === "worker";
+}
+
+/**
+ * Whether anything is still waiting on a clock.
+ *
+ * Deliberately a different question from `driverNeedsWorker`. Both waiting
+ * phases are on the first-frame deadline, and `worker` is not: a driver that
+ * polled for as long as it needed the worker would run a timer four times a
+ * second for the whole call, doing nothing, on the thread this work exists to
+ * free.
+ */
+export function driverAwaitingWorker(state: DriverState): boolean {
+  const p = state.phase.phase;
+  return p === "probing" || p === "trying";
 }
 
 /**
