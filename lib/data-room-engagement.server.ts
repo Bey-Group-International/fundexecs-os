@@ -180,3 +180,104 @@ export async function loadRoomEngagement(
     reads: new Map(((reads ?? []) as DataRoomEngagementRead[]).map((r) => [r.viewer_key, r])),
   };
 }
+
+// ---------------------------------------------------------------------------
+// Refreshing Earn's read
+// ---------------------------------------------------------------------------
+
+/**
+ * Read one room's investors and store the result. Shared by the "Ask Earn"
+ * button (the caller's client, so RLS scopes it) and the daily sweep (the
+ * service role, scoped by the org id it passes).
+ */
+export async function refreshRoomReads(
+  supabase: SupabaseClient<Database>,
+  orgId: string,
+  room: { id: string; name: string },
+  now = new Date(),
+): Promise<{ ok: boolean; count: number }> {
+  const { engagement } = await loadRoomEngagement(supabase, orgId, room.id);
+  if (engagement.investors.length === 0) return { ok: true, count: 0 };
+  const reads = await readEngagement(engagement.investors, { roomName: room.name, today: now.toISOString().slice(0, 10) });
+  const lastSeen = new Map(engagement.investors.map((a) => [a.key, a.lastSeen]));
+  const { error } = await supabase.from("data_room_engagement_reads").upsert(
+    reads.map((r) => ({
+      room_id: room.id,
+      viewer_key: r.key,
+      organization_id: orgId,
+      summary: r.summary,
+      signal: r.signal,
+      follow_up: r.follow_up,
+      source: r.source,
+      activity_through: lastSeen.get(r.key) ?? null,
+      read_at: now.toISOString(),
+    })) as never,
+    { onConflict: "room_id,viewer_key" },
+  );
+  return { ok: !error, count: error ? 0 : reads.length };
+}
+
+/** Bounds the model spend of one daily sweep; the busiest rooms go first. */
+export const MAX_ROOMS_PER_SWEEP = 25;
+const SWEEP_CONCURRENCY = 4;
+/** Leaves the digests that follow most of the cron's 300s. */
+const SWEEP_BUDGET_MS = 150_000;
+
+/**
+ * The daily sweep: refresh Earn's read for every open room with investor
+ * activity in the last day. Runs before the digests so they can name the
+ * hottest investors from a fresh read.
+ */
+export async function refreshActiveRoomReads(
+  supabase: SupabaseClient<Database>,
+  now = new Date(),
+  budgetMs = SWEEP_BUDGET_MS,
+): Promise<{ rooms: number; reads: number }> {
+  const since = new Date(now.getTime() - 86_400_000).toISOString();
+  const { data: recent } = await supabase
+    .from("data_room_views")
+    .select("room_id, organization_id")
+    .gt("created_at", since)
+    .not("room_id", "is", null)
+    .limit(20_000);
+  const activity = new Map<string, { orgId: string; n: number }>();
+  for (const v of (recent ?? []) as { room_id: string; organization_id: string }[]) {
+    const a = activity.get(v.room_id) ?? { orgId: v.organization_id, n: 0 };
+    a.n += 1;
+    activity.set(v.room_id, a);
+  }
+  const busiest = [...activity.entries()].sort((a, b) => b[1].n - a[1].n).slice(0, MAX_ROOMS_PER_SWEEP);
+  if (busiest.length === 0) return { rooms: 0, reads: 0 };
+
+  const { data: rooms } = await supabase
+    .from("data_rooms")
+    .select("id, name, organization_id, archived_at")
+    .in(
+      "id",
+      busiest.map(([id]) => id),
+    );
+  const open = ((rooms ?? []) as { id: string; name: string; organization_id: string; archived_at: string | null }[])
+    .filter((r) => !r.archived_at)
+    // Keep the busiest-first order the cap was chosen by.
+    .sort((a, b) => (activity.get(b.id)?.n ?? 0) - (activity.get(a.id)?.n ?? 0));
+
+  // A few rooms at a time, and no new room once the budget is spent, so the
+  // sweep finishes inside the cron's time limit; the rest wait for tomorrow
+  // (or the button).
+  const deadline = Date.now() + budgetMs;
+  let done = 0;
+  let reads = 0;
+  let next = 0;
+  const worker = async () => {
+    while (next < open.length && Date.now() < deadline) {
+      const r = open[next++];
+      const res = await refreshRoomReads(supabase, r.organization_id, r, now).catch(() => ({ ok: false, count: 0 }));
+      if (res.ok) {
+        done += 1;
+        reads += res.count;
+      }
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(SWEEP_CONCURRENCY, open.length) }, worker));
+  return { rooms: done, reads };
+}
