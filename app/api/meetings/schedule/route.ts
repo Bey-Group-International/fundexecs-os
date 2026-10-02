@@ -14,7 +14,7 @@ import { canWriteCalendar } from "@/lib/calendar/google-write.server";
 import { loadBlockConflicts } from "@/lib/meetings/blocks.server";
 import { loadSeriesExternalConflicts } from "@/lib/meetings/conflicts.server";
 import { describeRepeat, occurrenceDates, parseRepeat, seriesRrule } from "@/lib/meetings/recurrence";
-import { BUSY_ELSEWHERE_MESSAGE, conflictGate, conflictMessage } from "@/lib/meetings/schedule";
+import { conflictGate, conflictMessage } from "@/lib/meetings/schedule";
 import { SITE_URL } from "@/lib/site";
 import {
   validateMeetingDraft,
@@ -192,8 +192,8 @@ export async function POST(req: NextRequest) {
       // The block read spans the whole series; keep the blocks that actually
       // fall on one of its meetings.
       const blockedBy = blockedAcrossSpan.filter((b) => overlapsAnyWindow(b.startsAt, b.endsAt, windows));
-      // Time taken in a connected calendar cannot be saved over, "Save anyway"
-      // or not; the rest of the clash can.
+      // Every clash — another meeting, blocked time, a connected calendar —
+      // warns, and "Save anyway" gets past all of them: it is the host's own time.
       const gate = conflictGate(
         { meetings: conflicts.length, blocks: blockedBy.length, external: busyElsewhere.length },
         body.allowConflict === true,
@@ -201,11 +201,8 @@ export async function POST(req: NextRequest) {
       if (gate !== "ok") {
         return NextResponse.json(
           {
-            error:
-              gate === "blocked"
-                ? BUSY_ELSEWHERE_MESSAGE
-                : conflictMessage(conflicts.length, blockedBy.length, busyElsewhere.length),
-            overridable: gate === "overridable",
+            error: conflictMessage(conflicts.length, blockedBy.length, busyElsewhere.length),
+            overridable: true,
             conflicts,
             blockedBy,
             busyElsewhere,

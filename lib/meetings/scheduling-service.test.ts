@@ -33,8 +33,12 @@ const WINDOW = {
 };
 
 /** Answers each table from a queue, so the three reads can differ. */
-function fakeClient(byTable: Record<string, unknown[]>) {
+function fakeClient(byTable: Record<string, unknown[]>, rpcCalls: Array<[string, unknown]> = []) {
   return {
+    async rpc(fn: string, args: unknown) {
+      rpcCalls.push([fn, args]);
+      return { data: byTable[`rpc:${fn}`] ?? [], error: null };
+    },
     from(table: string) {
       const b: Record<string, unknown> = new Proxy(
         {
@@ -131,6 +135,45 @@ describe("busyIntervals", () => {
       WINDOW,
     );
     expect(busy).toContainEqual({ start: "2026-09-02T09:00:00.000Z", end: "2026-09-02T09:30:00.000Z" });
+  });
+
+  // A colleague's meeting with the host on the invite is time the host has
+  // given away; the booking link must not offer it.
+  it("blocks meetings the host is invited to, within their organisation", async () => {
+    const calls: Array<[string, unknown]> = [];
+    const busy = await busyIntervals(
+      fakeClient(
+        { "rpc:scheduling_attended_busy": [{ scheduled_at: "2026-09-02T13:00:00.000Z", duration_minutes: 45 }] },
+        calls,
+      ) as never,
+      { ...WINDOW, organizationId: "org-1" },
+    );
+    expect(busy).toContainEqual({ start: "2026-09-02T13:00:00.000Z", end: "2026-09-02T13:45:00.000Z" });
+    expect(calls[0]).toEqual([
+      "scheduling_attended_busy",
+      expect.objectContaining({ p_host: "host-1", p_org: "org-1", p_to: WINDOW.toIso }),
+    ]);
+  });
+
+  it("keeps the rest of the busy time when the invited-meetings lookup fails", async () => {
+    const client = fakeClient({ live_meetings: [{ scheduled_at: "2026-09-02T09:00:00.000Z", duration_minutes: 30 }] });
+    client.rpc = async () => {
+      throw new Error("function does not exist");
+    };
+    const spy = jest.spyOn(console, "error").mockImplementation(() => undefined);
+    const busy = await busyIntervals(client as never, { ...WINDOW, organizationId: "org-1" });
+    expect(busy).toContainEqual({ start: "2026-09-02T09:00:00.000Z", end: "2026-09-02T09:30:00.000Z" });
+    spy.mockRestore();
+  });
+
+  it("does not let a moving booking's own room block its new time", async () => {
+    const busy = await busyIntervals(
+      fakeClient({
+        live_meetings: [{ id: "m1", scheduled_at: "2026-09-02T09:00:00.000Z", duration_minutes: 30 }],
+      }) as never,
+      { ...WINDOW, excludeMeetingId: "m1" },
+    );
+    expect(busy).toEqual([]);
   });
 
   it("does not let the booking being rescheduled block its own new time", async () => {

@@ -633,9 +633,12 @@ describe("the calendar overlay's labels", () => {
 });
 
 describe("conflictGate", () => {
-  it("never lets a save land on a connected calendar's busy time", () => {
-    expect(conflictGate({ meetings: 0, blocks: 0, external: 1 }, false)).toBe("blocked");
-    expect(conflictGate({ meetings: 0, blocks: 0, external: 1 }, true)).toBe("blocked");
+  // The host overrides their own calendar freely — a connected calendar's busy
+  // time warns like everything else, and Save anyway clears it.
+  it("warns about a connected calendar's busy time, and lets Save anyway through", () => {
+    expect(conflictGate({ meetings: 0, blocks: 0, external: 1 }, false)).toBe("overridable");
+    expect(conflictGate({ meetings: 0, blocks: 0, external: 1 }, true)).toBe("ok");
+    expect(conflictGate({ meetings: 1, blocks: 1, external: 1 }, true)).toBe("ok");
   });
 
   it("warns about other clashes, and lets Save anyway through", () => {

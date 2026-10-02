@@ -238,6 +238,11 @@ describe("POST /api/scheduling/[slug]/[eventSlug]/book", () => {
 
     expect(res.status).toBe(409);
     expect(writes.scheduling_bookings).toBeUndefined();
+    // The times still open come back with the refusal, without the lost one.
+    const body = await res.json();
+    expect(Array.isArray(body.slots)).toBe(true);
+    expect(body.slots.length).toBeGreaterThan(0);
+    expect(body.slots.some((s: { start: string }) => s.start === start)).toBe(false);
   });
 
   it("refuses a time held by a pending request from someone else", async () => {

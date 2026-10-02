@@ -24,7 +24,6 @@ import {
 } from "@/lib/meetings/meeting-updates";
 import { ruleFromRrule, seriesRrule, shiftSeriesStarts, truncateRule } from "@/lib/meetings/recurrence";
 import {
-  BUSY_ELSEWHERE_MESSAGE,
   conflictGate,
   conflictMessage,
   findConflicts,
@@ -190,8 +189,8 @@ export async function PATCH(request: NextRequest, { params }: { params: Params }
         subjectHostId: (prior.host_id as string | null) ?? null,
         subjectEmails: guestEmails(subjectAttendees),
       });
-      // Time taken in a connected calendar cannot be saved over, "Save anyway"
-      // or not; the rest of the clash can.
+      // Every clash — another meeting, blocked time, a connected calendar —
+      // warns, and "Save anyway" gets past all of them: it is the host's own time.
       const gate = conflictGate(
         { meetings: conflicts.length, blocks: blockedBy.length, external: busyElsewhere.length },
         body.allowConflict === true,
@@ -199,11 +198,8 @@ export async function PATCH(request: NextRequest, { params }: { params: Params }
       if (gate !== "ok") {
         return NextResponse.json(
           {
-            error:
-              gate === "blocked"
-                ? BUSY_ELSEWHERE_MESSAGE
-                : conflictMessage(conflicts.length, blockedBy.length, busyElsewhere.length),
-            overridable: gate === "overridable",
+            error: conflictMessage(conflicts.length, blockedBy.length, busyElsewhere.length),
+            overridable: true,
             conflicts,
             blockedBy,
             busyElsewhere,
@@ -830,69 +826,57 @@ async function editSeriesFrom(
     : tail.map(slotOf);
   const starts = startMoved ? slots : tail.map((r) => r.scheduled_at ?? slotOf(r));
 
-  // This meeting was checked on the way in; the rest are checked here. Busy
-  // time in a connected calendar cannot be saved over, so one clash refuses
-  // the whole change rather than leaving the series half moved.
-  if (opts.timingChanged) {
-    const busyElsewhere = await loadSeriesExternalConflicts(supabase, {
-      userId: actor.userId,
-      starts: starts.filter((_, i) => tail[i].id !== opts.meetingId),
-      durationMinutes: opts.nextDuration ?? 60,
-      timezone: opts.timezone,
-    });
-    if (busyElsewhere.length > 0) {
-      return NextResponse.json(
-        { error: BUSY_ELSEWHERE_MESSAGE, overridable: false, conflicts: [], blockedBy: [], busyElsewhere },
-        { status: 409 },
+  // This meeting was checked on the way in; the rest are checked here, as for
+  // a new series: other meetings, time blocked by hand and busy time in a
+  // connected calendar, across every later meeting, all warn with "Save anyway"
+  // and none refuses. The series' own meetings are moving with this edit, so
+  // they are left out.
+  if (opts.timingChanged && !opts.allowConflict) {
+    const others = starts.filter((_, i) => tail[i].id !== opts.meetingId);
+    const windows = others.map((startIso) => ({
+      startIso,
+      endIso: new Date(new Date(startIso).getTime() + (opts.nextDuration ?? 60) * 60_000).toISOString(),
+    }));
+    if (windows.length > 0) {
+      const spanStart = new Date(new Date(windows[0].startIso).getTime() - 8 * 3600_000).toISOString();
+      const spanEnd = windows[windows.length - 1].endIso;
+      const moving = new Set(tail.map((r) => r.id));
+      const [{ data: candidates }, blocks, busyElsewhere] = await Promise.all([
+        supabase
+          .from("live_meetings")
+          .select("id, title, scheduled_at, duration_minutes, host_id, attendees")
+          .eq("organization_id", actor.orgId)
+          .is("deleted_at", null)
+          .eq("is_draft", false)
+          .neq("status", "ended")
+          .gte("scheduled_at", spanStart)
+          .lt("scheduled_at", spanEnd)
+          .limit(1000),
+        loadBlockConflicts(supabase, actor.userId, windows[0].startIso, spanEnd),
+        loadSeriesExternalConflicts(supabase, {
+          userId: actor.userId,
+          starts: others,
+          durationMinutes: opts.nextDuration ?? 60,
+          timezone: opts.timezone,
+        }),
+      ]);
+      const conflicts = findConflictsAcross(
+        ((candidates ?? []) as ConflictCandidate[]).filter((c) => !moving.has(c.id)),
+        windows,
+        { subjectHostId: opts.hostId, subjectEmails: opts.nextEmails },
       );
-    }
-
-    // Other meetings and time blocked by hand, across every later meeting, as
-    // for a new series: a warning with "Save anyway", never a refusal. The
-    // series' own meetings are moving with this edit, so they are left out.
-    if (!opts.allowConflict) {
-      const windows = starts
-        .map((startIso, i) => ({ startIso, id: tail[i].id }))
-        .filter((w) => w.id !== opts.meetingId)
-        .map(({ startIso }) => ({
-          startIso,
-          endIso: new Date(new Date(startIso).getTime() + (opts.nextDuration ?? 60) * 60_000).toISOString(),
-        }));
-      if (windows.length > 0) {
-        const spanStart = new Date(new Date(windows[0].startIso).getTime() - 8 * 3600_000).toISOString();
-        const spanEnd = windows[windows.length - 1].endIso;
-        const moving = new Set(tail.map((r) => r.id));
-        const [{ data: candidates }, blocks] = await Promise.all([
-          supabase
-            .from("live_meetings")
-            .select("id, title, scheduled_at, duration_minutes, host_id, attendees")
-            .eq("organization_id", actor.orgId)
-            .is("deleted_at", null)
-            .eq("is_draft", false)
-            .neq("status", "ended")
-            .gte("scheduled_at", spanStart)
-            .lt("scheduled_at", spanEnd)
-            .limit(1000),
-          loadBlockConflicts(supabase, actor.userId, windows[0].startIso, spanEnd),
-        ]);
-        const conflicts = findConflictsAcross(
-          ((candidates ?? []) as ConflictCandidate[]).filter((c) => !moving.has(c.id)),
-          windows,
-          { subjectHostId: opts.hostId, subjectEmails: opts.nextEmails },
+      const blockedBy = blocks.filter((b) => overlapsAnyWindow(b.startsAt, b.endsAt, windows));
+      if (conflicts.length > 0 || blockedBy.length > 0 || busyElsewhere.length > 0) {
+        return NextResponse.json(
+          {
+            error: conflictMessage(conflicts.length, blockedBy.length, busyElsewhere.length),
+            overridable: true,
+            conflicts,
+            blockedBy,
+            busyElsewhere,
+          },
+          { status: 409 },
         );
-        const blockedBy = blocks.filter((b) => overlapsAnyWindow(b.startsAt, b.endsAt, windows));
-        if (conflicts.length > 0 || blockedBy.length > 0) {
-          return NextResponse.json(
-            {
-              error: conflictMessage(conflicts.length, blockedBy.length, 0),
-              overridable: true,
-              conflicts,
-              blockedBy,
-              busyElsewhere: [],
-            },
-            { status: 409 },
-          );
-        }
       }
     }
   }

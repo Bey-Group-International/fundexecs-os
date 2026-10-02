@@ -229,7 +229,21 @@ describe("/api/meetings/[id]", () => {
     expect(updateMeetingMock).toHaveBeenCalled();
   });
 
-  it("will not move a meeting onto time a connected calendar has taken, even when asked to", async () => {
+  it("warns before moving a meeting onto time a connected calendar has taken", async () => {
+    loadExternalConflictsMock.mockResolvedValueOnce([
+      { start: "2026-07-10T10:15:00.000Z", end: "2026-07-10T10:45:00.000Z" },
+    ]);
+    from.mockReturnValue(makeBuilder({ maybeSingle: { data: PRIOR_ROW }, limit: { data: [] } }));
+
+    const res = await PATCH(req({ scheduledAt: "2026-07-10T10:15:00.000Z", durationMinutes: 30 }), params);
+
+    expect(res.status).toBe(409);
+    expect(await res.json()).toMatchObject({ overridable: true });
+    expect(updateMeetingMock).not.toHaveBeenCalled();
+  });
+
+  it("moves it there anyway when the host says so", async () => {
+    updateMeetingMock.mockResolvedValue({ ok: true, calendarSequence: 8 });
     loadExternalConflictsMock.mockResolvedValueOnce([
       { start: "2026-07-10T10:15:00.000Z", end: "2026-07-10T10:45:00.000Z" },
     ]);
@@ -237,9 +251,8 @@ describe("/api/meetings/[id]", () => {
 
     const res = await PATCH(req({ scheduledAt: "2026-07-10T10:15:00.000Z", durationMinutes: 30, allowConflict: true }), params);
 
-    expect(res.status).toBe(409);
-    expect(await res.json()).toMatchObject({ overridable: false });
-    expect(updateMeetingMock).not.toHaveBeenCalled();
+    expect(res.status).toBe(200);
+    expect(updateMeetingMock).toHaveBeenCalled();
   });
 
   it("does not flag a reschedule that overlaps an unrelated meeting", async () => {
@@ -842,13 +855,13 @@ describe("/api/meetings/[id]", () => {
       );
     });
 
-    it("refuses the whole change when a later meeting would land on busy time", async () => {
+    it("warns when a later meeting would land on busy time in a connected calendar", async () => {
       loadSeriesExternalConflictsMock.mockResolvedValueOnce([
         { start: "2026-10-27T16:00:00.000Z", end: "2026-10-27T17:00:00.000Z" },
       ]);
       const res = await PATCH(req({ scope: "following", scheduledAt: ELEVEN }), params);
       expect(res.status).toBe(409);
-      expect(await res.json()).toMatchObject({ overridable: false });
+      expect(await res.json()).toMatchObject({ overridable: true });
       expect(updateMeetingMock).not.toHaveBeenCalled();
     });
 

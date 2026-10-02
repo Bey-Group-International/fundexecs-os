@@ -111,3 +111,39 @@ it("says there are more than five upcoming bookings, and can show them", async (
   fireEvent.click(screen.getByRole("button", { name: /show all 7/i }));
   expect(screen.getByText(/Person 6/)).toBeTruthy();
 });
+
+it("asks before approving over the host's own calendar, then approves anyway", async () => {
+  let calls = 0;
+  fetchMock.mockImplementation(async (_url: string, init?: RequestInit) => {
+    if (init?.method === "PATCH") {
+      calls += 1;
+      return calls === 1
+        ? { ok: false, status: 409, json: async () => ({ error: "That time now overlaps something on your calendar.", overridable: true }) }
+        : { ok: true, status: 200, json: async () => ({ booking: {} }) };
+    }
+    return { ok: true, json: async () => snapshot([booking({ status: "pending", meetingId: null })]) };
+  });
+  render(<SchedulingLinkCard />);
+  fireEvent.click(await screen.findByRole("button", { name: /1 waiting on you/i }));
+  fireEvent.click(screen.getByRole("button", { name: /^approve$/i }));
+
+  fireEvent.click(await screen.findByRole("button", { name: /approve anyway/i }));
+  await waitFor(() => expect(patches()).toHaveLength(2));
+  expect(JSON.parse((patches()[1][1] as RequestInit).body as string)).toEqual({ action: "approve", allowConflict: true });
+});
+
+it("moves a booking to any time the host picks", async () => {
+  serve([booking()]);
+  render(<SchedulingLinkCard />);
+  fireEvent.click(await screen.findByRole("button", { name: /1 booked through your link/i }));
+  fireEvent.click(screen.getByRole("button", { name: /reschedule/i }));
+
+  fireEvent.change(screen.getByLabelText(/new time for ada/i), { target: { value: "2099-10-06T06:15" } });
+  fireEvent.click(screen.getByRole("button", { name: /move booking/i }));
+
+  await waitFor(() => expect(patches()).toHaveLength(1));
+  expect(JSON.parse((patches()[0][1] as RequestInit).body as string)).toEqual({
+    action: "reschedule",
+    startIso: new Date("2099-10-06T06:15").toISOString(),
+  });
+});

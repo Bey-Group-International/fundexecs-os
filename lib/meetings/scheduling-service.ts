@@ -277,9 +277,20 @@ async function hostCommitments(
   client: SchedulingClient,
   opts: {
     hostUserId: string;
+    /**
+     * The host's organisation. Meetings they are invited to (not hosting) are
+     * looked up within it; without it only meetings they host are read.
+     */
+    organizationId?: string | null;
     fromIso: string;
     toIso: string;
     excludeBookingId?: string | null;
+    /**
+     * The meeting room of the booking being moved. A confirmed booking holds its
+     * slot twice — the booking row and the room it created — so excluding only
+     * the row left the room blocking any new time that overlapped the old one.
+     */
+    excludeMeetingId?: string | null;
     /**
      * The host's zone — the one their booking page publishes hours in. Needed
      * because an all-day event in a connected calendar is stored at UTC
@@ -323,9 +334,9 @@ async function hostCommitments(
     ),
   ]);
 
-  const [meetings, bookings, blocks] = await Promise.all([
+  const [meetings, bookings, blocks, attended] = await Promise.all([
     table(client, "live_meetings")
-      .select("scheduled_at, duration_minutes")
+      .select("id, scheduled_at, duration_minutes")
       .eq("host_id", opts.hostUserId)
       .is("deleted_at", null)
       .eq("is_draft", false)
@@ -351,6 +362,8 @@ async function hostCommitments(
       .lt("starts_at", opts.toIso)
       .order("starts_at", { ascending: true })
       .limit(BUSY_ROW_CAP),
+    // Meetings someone else hosts with this host on the invite. Same lookback.
+    attendedMeetings(client, opts.hostUserId, opts.organizationId ?? null, lookback, opts.toIso),
   ]);
 
   // Truncation here would silently stop blocking real commitments, so it is
@@ -373,8 +386,13 @@ async function hostCommitments(
   const out: BusyInterval[] = [];
   const bookingStarts: string[] = [];
 
-  for (const row of (meetings.data ?? []) as Array<{ scheduled_at: string | null; duration_minutes: number | null }>) {
+  const meetingRows: Array<{ id?: string; scheduled_at: string | null; duration_minutes: number | null }> = [
+    ...((meetings.data ?? []) as Array<{ id: string; scheduled_at: string | null; duration_minutes: number | null }>),
+    ...attended,
+  ];
+  for (const row of meetingRows) {
     if (!row.scheduled_at) continue;
+    if (opts.excludeMeetingId && row.id === opts.excludeMeetingId) continue;
     const start = new Date(row.scheduled_at);
     if (isNaN(start.getTime())) continue;
     out.push({
@@ -402,6 +420,36 @@ async function hostCommitments(
   return { busy: out, bookingStarts };
 }
 
+/**
+ * Meetings in the host's organisation that list them as an attendee but are
+ * hosted by someone else. Matched in the database (by the host's principal
+ * email) so it costs no extra round trip. Like the external calendars, a failure
+ * here resolves empty rather than taking the booking page down — and logs,
+ * because the cost of a miss is a double-booking.
+ */
+async function attendedMeetings(
+  client: SchedulingClient,
+  hostUserId: string,
+  organizationId: string | null,
+  fromIso: string,
+  toIso: string,
+): Promise<Array<{ scheduled_at: string | null; duration_minutes: number | null }>> {
+  if (!organizationId) return [];
+  try {
+    const { data, error } = await (client as ReturnType<typeof createServiceClient>).rpc("scheduling_attended_busy", {
+      p_host: hostUserId,
+      p_org: organizationId,
+      p_from: fromIso,
+      p_to: toIso,
+    });
+    if (error) throw new Error(error.message);
+    return (data ?? []) as Array<{ scheduled_at: string | null; duration_minutes: number | null }>;
+  } catch (err) {
+    console.error("[scheduling] attended-meetings lookup failed; invited meetings are not blocking slots", err);
+    return [];
+  }
+}
+
 export interface OpenSlotsResult {
   slots: SlotWindow[];
   fromDate: string;
@@ -417,7 +465,13 @@ export async function openSlots(
   client: SchedulingClient,
   page: SchedulingPage,
   eventType: SchedulingEventType,
-  opts: { now?: Date; fromDate?: string | null; toDate?: string | null; excludeBookingId?: string | null } = {},
+  opts: {
+    now?: Date;
+    fromDate?: string | null;
+    toDate?: string | null;
+    excludeBookingId?: string | null;
+    excludeMeetingId?: string | null;
+  } = {},
 ): Promise<OpenSlotsResult> {
   const now = opts.now ?? new Date();
   const availability = parseAvailability(page.availability);
@@ -439,9 +493,11 @@ export async function openSlots(
   // range edge blocking its slots for hosts well east or west of UTC.
   const { busy, bookingStarts } = await hostCommitments(client, {
     hostUserId: page.user_id,
+    organizationId: page.organization_id,
     fromIso: new Date(new Date(`${fromDate}T00:00:00.000Z`).getTime() - 48 * 3600_000).toISOString(),
     toIso: new Date(new Date(`${toDate}T00:00:00.000Z`).getTime() + 48 * 3600_000).toISOString(),
     excludeBookingId: opts.excludeBookingId,
+    excludeMeetingId: opts.excludeMeetingId,
     timezone: page.timezone,
   });
 
@@ -473,7 +529,7 @@ async function assertSlotOpen(
   page: SchedulingPage,
   eventType: SchedulingEventType,
   startIso: string,
-  opts: { now?: Date; excludeBookingId?: string | null } = {},
+  opts: { now?: Date; excludeBookingId?: string | null; excludeMeetingId?: string | null } = {},
 ): Promise<void> {
   const now = opts.now ?? new Date();
   const availability = parseAvailability(page.availability);
@@ -496,9 +552,11 @@ async function assertSlotOpen(
   // across a DST change) can begin or end more than 24 hours away from it.
   const { busy, bookingStarts } = await hostCommitments(client, {
     hostUserId: page.user_id,
+    organizationId: page.organization_id,
     fromIso: new Date(start.getTime() - 48 * 3600_000).toISOString(),
     toIso: new Date(start.getTime() + 48 * 3600_000).toISOString(),
     excludeBookingId: opts.excludeBookingId,
+    excludeMeetingId: opts.excludeMeetingId,
     timezone: page.timezone,
   });
 
@@ -517,12 +575,61 @@ async function assertSlotOpen(
   if (!open) throw new SlotUnavailableError("That time is no longer available. Please pick another.");
 }
 
-/** Raised when a requested time isn't (or is no longer) bookable — maps to 409. */
+/**
+ * Raised when a requested time isn't (or is no longer) bookable — maps to 409.
+ *
+ * `overridable` is only ever true on the host's own paths: the clash is with
+ * their own calendar, and the host may knowingly book over it ("Approve anyway",
+ * "Move anyway"). An invitee never gets that choice, and neither does anyone
+ * when another booking holds the time — the database forbids that outright.
+ */
 export class SlotUnavailableError extends Error {
-  constructor(message: string) {
+  readonly overridable: boolean;
+  constructor(message: string, opts: { overridable?: boolean } = {}) {
     super(message);
     this.name = "SlotUnavailableError";
+    this.overridable = opts.overridable === true;
   }
+}
+
+/** Said to a host when another live booking holds the time they picked. */
+export const HOST_BOOKING_OVERLAP_MESSAGE =
+  "Another booking through your link already holds that time. Move or cancel it first.";
+
+/**
+ * What on the host's own calendar overlaps [startIso, endIso): their meetings
+ * (hosted or invited to), blocks, connected calendars and other bookings.
+ *
+ * Deliberately NOT their published working hours, notice period, buffer or
+ * booking window. Those are rules for invitees; the host schedules any time
+ * they like, and is only told about real clashes.
+ */
+export async function hostConflicts(
+  client: SchedulingClient,
+  page: SchedulingPage,
+  startIso: string,
+  endIso: string,
+  opts: { excludeBookingId?: string | null; excludeMeetingId?: string | null } = {},
+): Promise<BusyInterval[]> {
+  const start = new Date(startIso).getTime();
+  const end = new Date(endIso).getTime();
+  const busy = await busyIntervals(client, {
+    hostUserId: page.user_id,
+    organizationId: page.organization_id,
+    fromIso: startIso,
+    toIso: endIso,
+    excludeBookingId: opts.excludeBookingId,
+    excludeMeetingId: opts.excludeMeetingId,
+    timezone: page.timezone,
+  });
+  return busy.filter((b) => new Date(b.start).getTime() < end && new Date(b.end).getTime() > start);
+}
+
+/** The warning a host sees before booking over their own calendar. */
+export function hostConflictMessage(verb: "approve" | "move"): string {
+  return verb === "approve"
+    ? "That time now overlaps something on your calendar."
+    : "That time overlaps something on your calendar.";
 }
 
 /**
@@ -756,12 +863,31 @@ async function withBookingRelations(
   return { booking, page, eventType, roomCode };
 }
 
-/** Approve a pending request: create the room and confirm the booking. */
-export async function approveBooking(client: SchedulingClient, ctx: BookingContext): Promise<BookingContext> {
+/**
+ * Approve a pending request: create the room and confirm the booking.
+ *
+ * The host may have booked over the slot while the request sat in the queue.
+ * That is a warning, not a refusal: with `allowConflict` the host approves
+ * anyway, the same "Save anyway" they get when scheduling over their own
+ * calendar. Their published hours are not re-checked — the request was inside
+ * them when it was made, and the host is the one deciding now. Only another
+ * live booking on the same time stops it, at the database.
+ */
+export async function approveBooking(
+  client: SchedulingClient,
+  ctx: BookingContext,
+  opts: { allowConflict?: boolean } = {},
+): Promise<BookingContext> {
   if (ctx.booking.status !== "pending") throw new Error("Only a pending request can be approved.");
 
-  // The host may have booked over the slot while the request sat in the queue.
-  await assertSlotOpen(client, ctx.page, ctx.eventType, ctx.booking.starts_at, { excludeBookingId: ctx.booking.id });
+  if (!opts.allowConflict) {
+    const clashes = await hostConflicts(client, ctx.page, ctx.booking.starts_at, ctx.booking.ends_at, {
+      excludeBookingId: ctx.booking.id,
+    });
+    if (clashes.length > 0) {
+      throw new SlotUnavailableError(hostConflictMessage("approve"), { overridable: true });
+    }
+  }
 
   const meeting = await createMeetingForBooking(client, {
     page: ctx.page,
@@ -782,6 +908,7 @@ export async function approveBooking(client: SchedulingClient, ctx: BookingConte
     });
   } catch (err) {
     await table(client, "live_meetings").delete().eq("id", meeting.id);
+    if (err instanceof SlotUnavailableError) throw new SlotUnavailableError(HOST_BOOKING_OVERLAP_MESSAGE);
     throw err;
   }
 
@@ -854,6 +981,7 @@ export async function rescheduleBooking(
     await assertSlotOpen(client, ctx.page, ctx.eventType, startIso, {
       now: opts.now,
       excludeBookingId: ctx.booking.id,
+      excludeMeetingId: ctx.booking.meeting_id,
     });
   }
 
