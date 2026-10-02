@@ -423,3 +423,50 @@ describe("a stale copy of Google", () => {
     expect(syncs(calls)).toBe(0);
   });
 });
+
+describe("a pending booking request", () => {
+  const REQUEST = {
+    id: "bk-1",
+    eventTitle: "Intro call",
+    inviteeName: "Ada",
+    inviteeEmail: "ada@example.com",
+    inviteeNotes: null,
+    startsAt: new Date(2026, 8, 18, 15, 0).toISOString(),
+    endsAt: new Date(2026, 8, 18, 15, 30).toISOString(),
+    createdAt: new Date(2026, 8, 10).toISOString(),
+  };
+  let patches: Array<{ url: string; body: Record<string, unknown> }> = [];
+
+  beforeEach(() => {
+    patches = [];
+    global.fetch = (async (url: string, init?: RequestInit) => {
+      if (init?.method === "PATCH") {
+        patches.push({ url: String(url), body: JSON.parse(String(init.body)) });
+        return { ok: true, status: 200, json: async () => ({}) };
+      }
+      if (String(url).startsWith("/api/meetings/scheduling/bookings?")) {
+        return { ok: true, status: 200, json: async () => ({ requests: [REQUEST] }) };
+      }
+      return { ok: true, status: 200, json: async () => ({ blocks: [], calendars: [], events: [] }) };
+    }) as unknown as typeof fetch;
+  });
+
+  it("is drawn on the host's calendar, among their meetings", async () => {
+    await show([]);
+    expect(screen.getAllByText(/Request: Ada · Intro call/).length).toBeGreaterThan(0);
+  });
+
+  it("opens as a request to approve or decline, not as a meeting to edit", async () => {
+    await show([]);
+    // In month view the chip opens its day, and the day's entry for it offers
+    // the decision rather than the meeting actions (join, edit).
+    fireEvent.click(screen.getAllByText(/Request: Ada · Intro call/)[0]);
+    fireEvent.click(await screen.findByRole("button", { name: /approve or decline/i }));
+
+    const dialog = screen.getByRole("dialog", { name: /booking request/i });
+    expect(dialog.textContent).toMatch(/waiting on you/i);
+    fireEvent.click(screen.getByRole("button", { name: /^approve$/i }));
+    await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+    expect(patches[0]).toEqual({ url: "/api/meetings/scheduling/bookings/bk-1", body: { action: "approve" } });
+  });
+});

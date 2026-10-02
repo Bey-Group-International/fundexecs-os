@@ -165,13 +165,22 @@ export function durationOf(preview: DragPreview): number {
  * Whether this meeting may be dragged at all.
  *
  * An unscheduled meeting has nowhere to be dragged from, and one that has ended
- * or been locked is a record of what happened rather than a plan — moving it
- * would rewrite history.
+ * or whose time has already run out is a record of what happened rather than a
+ * plan — moving it would rewrite history.
+ *
+ * Not `locked_at`. That stamp means "saved, not a draft", and every scheduled
+ * meeting carries it from the moment it is saved; refusing it made dragging
+ * impossible for every real meeting on the calendar.
  */
-export function canDragMeeting(m: Pick<CalendarMeeting, "scheduled_at" | "status" | "locked_at">): boolean {
+export function canDragMeeting(
+  m: Pick<CalendarMeeting, "scheduled_at" | "status" | "duration_minutes">,
+  now: number = Date.now(),
+): boolean {
   if (!m.scheduled_at) return false;
   if (m.status === "ended") return false;
-  if (m.locked_at) return false;
+  const start = new Date(m.scheduled_at).getTime();
+  if (!Number.isFinite(start)) return false;
+  if (start + (m.duration_minutes ?? 60) * 60_000 <= now) return false;
   return true;
 }
 
