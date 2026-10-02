@@ -26,40 +26,23 @@
 //
 // Pure: no network, no database, no clock beyond what is passed in.
 
-/** A member, by account; or a guest, by the key their browser holds. */
-export type RemovalSubject =
-  | { kind: "member"; userId: string }
-  | { kind: "guest"; guestKey: string };
+// The member-or-guest split these rules turn on now lives in `subject.ts`:
+// attendance needs the identical thing, for the identical reason, and two
+// copies of "which kind of person is this" drifting apart is how a guest ends
+// up removable but never recorded as present. Re-exported rather than
+// re-imported at every call site, so nothing that already depended on this
+// module had to move.
+import {
+  subjectFor,
+  subjectKey,
+  subjectColumns,
+  subjectOfRow as subjectOfSubjectRow,
+  type MeetingSubject,
+} from "@/lib/meetings/subject";
 
-/**
- * The subject for a caller, preferring the account.
- *
- * A signed-in teammate always carries both — every entrant knocks, so they have
- * a guest key too — and the account is the one worth recording: it is the one
- * they cannot throw away, and the one the knock route's membership check reads.
- * Returns null when there is neither, which is not a person this can act on.
- */
-export function subjectFor(
-  userId: string | null | undefined,
-  guestKey: string | null | undefined,
-): RemovalSubject | null {
-  const id = (userId ?? "").trim();
-  if (id) return { kind: "member", userId: id };
-  const key = (guestKey ?? "").trim();
-  return key ? { kind: "guest", guestKey: key } : null;
-}
-
-/**
- * A subject as one comparable string.
- *
- * Prefixed by kind, so the two spaces cannot collide however a guest key was
- * generated. That matters more than it looks: guest keys are `crypto.randomUUID()`
- * today, which is exactly the shape of an account id.
- */
-export function subjectKey(subject: RemovalSubject): string {
-  return subject.kind === "member" ? `member:${subject.userId}` : `guest:${subject.guestKey}`;
-}
-
+export { subjectFor, subjectKey, subjectColumns };
+/** What a removal names. The shared shape, under this module's older name. */
+export type RemovalSubject = MeetingSubject;
 
 /** A stored removal, in the two columns the table keeps it in. */
 export interface RemovalRow {
@@ -67,10 +50,9 @@ export interface RemovalRow {
   guest_key?: string | null;
 }
 
-/** The subject a stored row names, or null for a row that names neither. */
+/** The subject a stored removal names, or null for a row that names neither. */
 export function subjectOfRow(row: RemovalRow | null | undefined): RemovalSubject | null {
-  if (!row) return null;
-  return subjectFor(row.user_id, row.guest_key);
+  return subjectOfSubjectRow(row);
 }
 
 /**
@@ -92,10 +74,3 @@ export function isRemoved(
 }
 
 
-
-/** The columns to write for a subject, so the two callers cannot disagree. */
-export function subjectColumns(subject: RemovalSubject): { user_id: string | null; guest_key: string | null } {
-  return subject.kind === "member"
-    ? { user_id: subject.userId, guest_key: null }
-    : { user_id: null, guest_key: subject.guestKey };
-}

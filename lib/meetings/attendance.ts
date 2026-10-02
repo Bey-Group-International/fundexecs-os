@@ -9,44 +9,85 @@
 // rules — one row per person per meeting, when a row still means "in the room",
 // who may read a report — can be tested without a database.
 
+import { subjectColumns, subjectKey, subjectOfRow, type MeetingSubject } from "@/lib/meetings/subject";
+
 /**
- * The conflict target for the join upsert.
+ * The conflict target for the join upsert, for the kind of person joining.
  *
- * This has to name a real unique constraint: Postgres rejects the whole
- * statement with 42P10 ("no unique or exclusion constraint matching the ON
- * CONFLICT specification") when it does not, and a fire-and-forget upsert makes
- * that failure invisible. The constraint is created in
- * 20260908120000_live_meeting_participants_identity.sql; the two must be
- * changed together.
+ * This has to name a real unique index: Postgres rejects the whole statement
+ * with 42P10 ("no unique or exclusion constraint matching the ON CONFLICT
+ * specification") when it does not, and that is not a theoretical failure --
+ * the join upsert spent its whole life naming a target no index matched, so
+ * every attendance write in production was refused and the table stayed empty.
+ *
+ * There are two indexes because there are two kinds of identity and NULLs are
+ * distinct in a unique index. `(meeting_id, user_id)` cannot constrain a guest
+ * row, whose `user_id` is NULL -- every rejoin would insert another row, inflate
+ * the head-count, and give the report two of the same person. So guests get
+ * their own partial index on `(meeting_id, guest_key)`.
+ *
+ * Both are created by migrations and the pairs must be changed together:
+ *   members -> 20260908120000_live_meeting_participants_identity.sql
+ *   guests  -> 20261002200000_live_meeting_participants_guest_key.sql
  */
-export const PARTICIPANT_CONFLICT_TARGET = "meeting_id,user_id";
+export function participantConflictTarget(subject: MeetingSubject): string {
+  return subject.kind === "member" ? "meeting_id,user_id" : "meeting_id,guest_key";
+}
+
+/**
+ * Where a guest's attendance is written, since they cannot write it themselves.
+ *
+ * Here rather than built at each call site because there are two -- arrival and
+ * departure -- and they must agree on both the path and the query parameter.
+ * The key goes in the QUERY STRING, not a body, because that is where
+ * `authorizeMeetingCaller` reads it: the route checks the admission for the key
+ * it is handed, so a key sent anywhere else would be authorised as one person
+ * and recorded as another.
+ */
+export function guestAttendanceUrl(meetingId: string, guestKey: string): string {
+  return `/api/meetings/${encodeURIComponent(meetingId)}/attendance?guestKey=${encodeURIComponent(guestKey)}`;
+}
 
 export interface ParticipantRow {
   meeting_id: string;
   display_name: string;
   joined_at?: string | null;
   left_at?: string | null;
+  user_id?: string | null;
+  guest_key?: string | null;
 }
 
 export interface AttendanceRecord {
   meeting_id: string;
-  user_id: string;
+  /** The account, or null for a guest who has none. */
+  user_id: string | null;
+  /** The key the guest's browser holds, or null for a member. */
+  guest_key: string | null;
   display_name: string;
   joined_at: string;
   left_at: null;
 }
 
-/** The row a member writes when they enter the room. */
+/**
+ * The row somebody writes when they enter the room.
+ *
+ * Takes a SUBJECT rather than a user id, because for most of a call's
+ * participants there is no user id. This used to require one, and the `if
+ * (user)` in the room's join path meant an invite-link guest wrote no row at
+ * all -- so they were absent from the head-count, absent from the report, and
+ * locked out of the report themselves, because `live_meeting_reports` is
+ * readable by "the host OR a participant" and they were neither.
+ */
 export function attendanceRecord(
   meetingId: string,
-  userId: string,
+  subject: MeetingSubject,
   displayName: string,
   now: Date = new Date(),
 ): AttendanceRecord {
   const name = displayName.trim();
   return {
     meeting_id: meetingId,
-    user_id: userId,
+    ...subjectColumns(subject),
     // A blank name would render as an empty chip in the participant strip and
     // an empty line in the report's attendance list.
     display_name: name || "Guest",
@@ -83,19 +124,43 @@ export interface RoomPresence {
   names: string[];
 }
 
-/** Live head-count and names per meeting, from raw participant rows. */
+/**
+ * Live head-count and names per meeting, from raw participant rows.
+ *
+ * One person counts once. The unique indexes make a duplicate row impossible
+ * going forward, but they are per-identity and this is the number the host
+ * reads off the meetings list -- so it is counted here too rather than resting
+ * on the schema, which is what covers rows written before the guest index
+ * existed.
+ *
+ * A row that names NEITHER an account nor a guest key still counts, once. It
+ * cannot be de-duplicated, because nothing distinguishes it from the next row
+ * like it -- but the alternative is dropping it, and that hides somebody who
+ * was in the room from the count of who is in the room. Understating a
+ * head-count is the worse error of the two, and the migration's
+ * `live_meeting_participants_has_identity` check means the shape cannot be
+ * written from here on.
+ */
 export function presenceByMeeting(
   rows: ParticipantRow[],
   now: number = Date.now(),
   maxNames = 8,
 ): Record<string, RoomPresence> {
   const map: Record<string, RoomPresence> = {};
-  for (const row of rows) {
-    if (!isPresent(row, now)) continue;
+  const seen = new Set<string>();
+  rows.forEach((row, index) => {
+    if (!isPresent(row, now)) return;
+    const subject = subjectOfRow(row);
+    // An unidentifiable row gets a key of its own rather than being skipped, so
+    // it is counted but can never collapse into -- or swallow -- another.
+    const identity = subject ? subjectKey(subject) : `row:${index}`;
+    const key = `${row.meeting_id}:${identity}`;
+    if (seen.has(key)) return;
+    seen.add(key);
     const entry = map[row.meeting_id] ?? (map[row.meeting_id] = { count: 0, names: [] });
     entry.count += 1;
     if (entry.names.length < maxNames) entry.names.push(row.display_name);
-  }
+  });
   return map;
 }
 

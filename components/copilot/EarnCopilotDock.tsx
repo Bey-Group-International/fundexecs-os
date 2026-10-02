@@ -32,6 +32,7 @@ import { EarnOrb } from "@/components/copilot/EarnOrb";
 import { Markdown } from "@/components/Markdown";
 import { classifyIntent } from "@/lib/intent";
 import type { ExplainRecordRef } from "@/lib/earn-explain";
+import { StatusStreamParser } from "@/lib/earn-stream-status";
 import {
   CONVERSATIONS_KEY,
   LEGACY_THREAD_KEY,
@@ -81,7 +82,8 @@ const EMPTY_THREAD: Turn[] = [];
 type MeetingChatContext = { id: string; mode: "prep" | "followup" };
 // "Explain this" from a record page: only the { type, id } reference travels;
 // the server loads the record itself (lib/earn-record-context.server.ts).
-type RecordChatContext = { record: ExplainRecordRef };
+// `refresh` asks for a new answer instead of the org's saved one.
+type RecordChatContext = { record: ExplainRecordRef; refresh?: boolean };
 type ChatContext = MeetingChatContext | RecordChatContext;
 
 // One turn in the in-dock conversation: the operator's message, or Earn's
@@ -102,10 +104,25 @@ type Turn =
       // Set when the operator pressed Stop mid-answer. The partial text is kept
       // and labelled, so a short reply never reads as a complete one.
       stopped?: boolean;
+      // Live progress note while Earn works ("Searching the web…").
+      status?: string;
+      // A saved Explain answer reused from the org's 24h cache, and what to
+      // re-ask to refresh it.
+      cachedAt?: string;
+      refresh?: { prompt: string; record: ExplainRecordRef };
     };
 
 /** A stable id for a conversation turn. */
 let turnSeq = 0;
+// "3h ago" for a saved Explain answer.
+function savedAgo(iso: string): string {
+  const mins = Math.max(0, Math.round((Date.now() - Date.parse(iso)) / 60000));
+  if (!Number.isFinite(mins)) return "earlier";
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins}m ago`;
+  return `${Math.round(mins / 60)}h ago`;
+}
+
 function newTurnId(): string {
   turnSeq += 1;
   return `t${Date.now().toString(36)}-${turnSeq}`;
@@ -157,6 +174,9 @@ export function EarnCopilotDock({ name }: { name: string }) {
   // True while a conversational answer is streaming in (separate from `pending`,
   // which covers the server-action plan path).
   const [chatting, setChatting] = useState(false);
+  // The record each conversation was opened on ("Ask Earn" on a record page),
+  // kept attached for its follow-ups. Keyed like the conversations themselves.
+  const [recordFor, setRecordFor] = useState<Record<string, ExplainRecordRef>>({});
   // The turn currently open for editing, plus its working copy. Any entry —
   // yours or Earn's — can be rewritten in place.
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -343,8 +363,17 @@ export function EarnCopilotDock({ name }: { name: string }) {
   // Conversational (ungated) answer: stream tokens from /api/chat straight into
   // the dock — the same seamless chat the workspace composer gets, on every
   // page. Verified Apollo contacts arrive appended in the same stream.
-  async function askChat(t: string, chatContext?: ChatContext, priorOverride?: { role: string; content: string }[]) {
+  async function askChat(t: string, explicitContext?: ChatContext, priorOverride?: { role: string; content: string }[]) {
     const prior = priorOverride ?? buildPrior();
+    // A conversation opened on a record keeps it attached, so follow-ups get
+    // fresh record data rather than relying on the transcript alone.
+    if (explicitContext && "record" in explicitContext) {
+      const record = explicitContext.record;
+      setRecordFor((prev) => ({ ...prev, [conversationKey]: record }));
+    }
+    const attached = recordFor[conversationKey];
+    const chatContext: ChatContext | undefined =
+      explicitContext ?? (attached ? { record: attached } : undefined);
     setThread((prev) => [
       ...prev,
       { id: newTurnId(), role: "user", text: t },
@@ -365,6 +394,12 @@ export function EarnCopilotDock({ name }: { name: string }) {
           prior,
           meeting_context: chatContext && "mode" in chatContext ? chatContext : undefined,
           record_context: chatContext && "record" in chatContext ? chatContext.record : undefined,
+          record_refresh: chatContext && "record" in chatContext && chatContext.refresh === true,
+          // A follow-up in a conversation opened on a record, rather than a
+          // fresh "Ask Earn" click.
+          record_followup: !explicitContext && Boolean(attached),
+          // Progress notes ("Searching the web…") arrive framed in-band.
+          stream_status: true,
           // A conversation with no session yet asks the server to open one on
           // this first reply, so it lands in /sessions instead of living only
           // in this tab. `pathname` names it after the place it happened.
@@ -381,15 +416,35 @@ export function EarnCopilotDock({ name }: { name: string }) {
       // Adopt the session the server opened for this conversation, if any.
       const opened = res.headers.get("X-Earn-Session");
       if (opened && !sessionId) setSessionId(opened);
+      const cachedAt = res.headers.get("X-Earn-Cached");
+      const refresh =
+        explicitContext && "record" in explicitContext ? { prompt: t, record: explicitContext.record } : undefined;
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
+      const parser = new StatusStreamParser();
       for (;;) {
         const { done, value } = await reader.read();
         if (done) break;
-        acc += decoder.decode(value, { stream: true });
-        setThread((prev) => patchLastEarn(prev, { answer: acc, streaming: true }));
+        const { text, status } = parser.push(decoder.decode(value, { stream: true }));
+        acc += text;
+        setThread((prev) =>
+          patchLastEarn(prev, {
+            answer: acc,
+            streaming: true,
+            // A note shows until the answer it describes starts arriving.
+            ...(status ? { status } : text ? { status: undefined } : {}),
+          }),
+        );
       }
-      setThread((prev) => patchLastEarn(prev, { answer: acc || "…", streaming: false }));
+      setThread((prev) =>
+        patchLastEarn(prev, {
+          answer: acc || "…",
+          streaming: false,
+          status: undefined,
+          ...(cachedAt ? { cachedAt } : {}),
+          ...(refresh ? { refresh } : {}),
+        }),
+      );
     } catch (err) {
       // Stop is not a failure: keep whatever Earn had already written and mark
       // the answer as stopped rather than replacing it with an error.
@@ -478,6 +533,11 @@ export function EarnCopilotDock({ name }: { name: string }) {
    */
   function newConversation() {
     stopAnswer();
+    setRecordFor((prev) => {
+      const next = { ...prev };
+      delete next[conversationKey];
+      return next;
+    });
     setStore((prev) => removeConversation(prev, conversationKey));
     setError(null);
     setEditingId(null);
@@ -1131,7 +1191,28 @@ export function EarnCopilotDock({ name }: { name: string }) {
                               {turn.streaming ? (
                                 <span className="ml-0.5 inline-block h-3 w-1.5 animate-glow bg-neural-400 align-middle" aria-hidden />
                               ) : null}
+                              {turn.streaming && turn.status ? (
+                                <p className="mt-1 font-mono text-[11px] text-fg-muted" role="status">
+                                  {turn.status}
+                                </p>
+                              ) : null}
                             </div>
+                            {turn.cachedAt && turn.refresh ? (
+                              <p className="mt-1 flex items-center gap-1.5 text-[11px] text-fg-muted">
+                                <span>Saved answer · {savedAgo(turn.cachedAt)}</span>
+                                <button
+                                  type="button"
+                                  disabled={chatting}
+                                  onClick={() => {
+                                    const r = turn.refresh!;
+                                    void askChat(r.prompt, { record: r.record, refresh: true });
+                                  }}
+                                  className="font-medium text-gold-300 hover:underline disabled:opacity-50"
+                                >
+                                  Refresh
+                                </button>
+                              </p>
+                            ) : null}
                             {turn.stopped ? (
                               <p className="mt-1 text-[11px] font-medium text-fg-muted">
                                 You stopped this answer — it may be incomplete.

@@ -1,25 +1,39 @@
 jest.mock("server-only", () => ({}), { virtual: true });
-jest.mock("next/headers", () => ({ headers: async () => new Headers(), cookies: async () => ({ get: () => undefined }) }));
+jest.mock("next/headers", () => ({ headers: async () => new Headers(), cookies: async () => ({ get: () => undefined, set: () => undefined }) }));
 
 let shareRow: Record<string, unknown> | null = null;
 let publishedIds: string[] = [];
 const inserted: Record<string, unknown>[] = [];
+let readers: { share_id: string; email: string }[] = [];
 jest.mock("@/lib/supabase/server", () => ({
   hasSupabaseServiceEnv: () => true,
   createServiceClient: () => ({
     from: (table: string) => {
       let ids: string[] = [];
+      let head = false;
+      const eqs: Record<string, unknown> = {};
       const q: Record<string, unknown> = {
-        select: () => q,
-        eq: () => q,
+        select: (_c?: string, o?: { head?: boolean }) => ((head = Boolean(o?.head)), q),
+        eq: (c: string, v: unknown) => ((eqs[c] = v), q),
         in: (_c: string, v: string[]) => ((ids = v), q),
-        maybeSingle: async () => ({ data: shareRow }),
+        maybeSingle: async () => ({
+          data:
+            table === "data_room_link_readers"
+              ? (readers.find((r) => r.share_id === eqs.share_id && r.email === eqs.email) ?? null)
+              : shareRow,
+        }),
+        upsert: (row: { share_id: string; email: string }) => {
+          if (!readers.some((r) => r.share_id === row.share_id && r.email === row.email)) readers.push(row);
+          return Promise.resolve({ data: null });
+        },
         insert: (rows: Record<string, unknown>[]) => {
           inserted.push(...rows);
           return Promise.resolve({ data: null });
         },
         then: (resolve: (v: unknown) => unknown) =>
-          Promise.resolve({
+          head
+            ? Promise.resolve({ count: readers.filter((r) => r.share_id === eqs.share_id).length }).then(resolve)
+            : Promise.resolve({
             data: table === "data_room_documents" ? ids.filter((i) => publishedIds.includes(i)).map((document_id) => ({ document_id })) : [],
           }).then(resolve),
       };
@@ -35,7 +49,7 @@ jest.mock("@/lib/data-room-gate", () => ({
 const recordFirstOpen = jest.fn(async () => true);
 jest.mock("@/lib/data-room-alerts.server", () => ({ recordFirstOpen: (...a: unknown[]) => recordFirstOpen(...(a as [])) }));
 
-import { recordRoomOpen, trackReading } from "./viewer-actions";
+import { passEmailGate, recordRoomOpen, trackReading } from "./viewer-actions";
 
 const base = {
   id: "share-1",
@@ -55,6 +69,7 @@ beforeEach(() => {
   recordFirstOpen.mockClear();
   inserted.length = 0;
   publishedIds = [];
+  readers = [];
   shareRow = { ...base };
   pass = null;
 });
@@ -119,5 +134,39 @@ describe("trackReading", () => {
     shareRow = { ...base, require_nda: true };
     await trackReading("tok", "abcdef12-3456", [{ documentId: PPM, seconds: 40 }]);
     expect(inserted).toEqual([]);
+  });
+});
+
+describe("passEmailGate", () => {
+  const gated = { ...base, require_email: true, allowed_email_domains: null, max_readers: null };
+
+  it("admits an email and records the reader", async () => {
+    shareRow = gated;
+    expect(await passEmailGate("tok", "LP@x.com")).toEqual({ ok: true });
+    expect(readers).toEqual([expect.objectContaining({ share_id: "share-1", email: "lp@x.com" })]);
+  });
+
+  it("refuses an address outside the link's domains, and says which are allowed", async () => {
+    shareRow = { ...gated, allowed_email_domains: ["calpers.ca.gov"] };
+    expect(await passEmailGate("tok", "lp@gmail.com")).toEqual({
+      ok: false,
+      error: "This link is for @calpers.ca.gov addresses. Ask the sender for access with another address.",
+    });
+    expect(await passEmailGate("tok", "lp@calpers.ca.gov")).toEqual({ ok: true });
+  });
+
+  it("refuses a new reader once the link is full but lets admitted readers back in", async () => {
+    shareRow = { ...gated, max_readers: 1 };
+    expect(await passEmailGate("tok", "a@x.com")).toEqual({ ok: true });
+    expect(await passEmailGate("tok", "b@x.com")).toEqual({
+      ok: false,
+      error: "This link has reached its reader limit. Ask the sender for a new link.",
+    });
+    expect(await passEmailGate("tok", "A@x.com")).toEqual({ ok: true });
+  });
+
+  it("rejects something that isn't an email", async () => {
+    shareRow = gated;
+    expect(await passEmailGate("tok", "nope")).toEqual({ ok: false, error: "Enter a valid email address." });
   });
 });

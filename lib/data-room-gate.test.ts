@@ -26,6 +26,13 @@ function pass(overrides: Partial<GatePassPayload> = {}): GatePassPayload {
 }
 
 describe("gateSatisfied", () => {
+  it("re-checks a domain limit on every request, so one added later shuts out a pass already given", () => {
+    const share = { require_email: true, require_nda: false, password_hash: null, allowed_email_domains: ["calpers.ca.gov"] };
+    expect(gateSatisfied(share, pass({ email: "lp@calpers.ca.gov" }))).toBe(true);
+    expect(gateSatisfied(share, pass({ email: "lp@gmail.com" }))).toBe(false);
+    expect(gateSatisfied(share, pass({ email: null }))).toBe(false);
+  });
+
   it("passes a share with no requirements even with no pass at all", () => {
     expect(
       gateSatisfied({ require_email: false, require_nda: false, password_hash: null }, null),

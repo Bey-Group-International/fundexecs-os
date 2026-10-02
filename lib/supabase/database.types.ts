@@ -917,6 +917,18 @@ export type DataRoomShare = {
   // digest_sent_at ends the window last reported.
   daily_digest: boolean;
   digest_sent_at: string | null;
+  // Who the link admits by gate email (migration 20261002170000). Either one
+  // set means require_email is true.
+  allowed_email_domains: string[] | null;
+  max_readers: number | null;
+};
+
+// One row per (link, gate email) admitted; what max_readers counts.
+export type DataRoomLinkReader = {
+  share_id: string;
+  email: string;
+  organization_id: string;
+  first_at: string;
 };
 
 // One row per (link, reader) whose first open the creator has been told about
@@ -2551,6 +2563,18 @@ export type PulseRun = {
   created_at: string;
 };
 
+// Earn "Explain this" cache (supabase/migrations/20261002200016_earn_explanations.sql). Service-role only.
+export type EarnExplanation = {
+  id: string;
+  organization_id: string;
+  record_type: string;
+  record_id: string;
+  content: string;
+  model: string | null;
+  created_by: string | null;
+  created_at: string;
+};
+
 type TableShape<Row> = {
   Row: Row;
   Insert: Partial<Row>;
@@ -2908,6 +2932,16 @@ export type LiveMeetingParticipant = {
   id: string;
   meeting_id: string;
   user_id: string | null;
+  /**
+   * The key an invite-link guest's browser holds; null for a signed-in member.
+   *
+   * `user_id` was always nullable for guests, but nothing could write a guest
+   * row: the table's RLS is `user_id = auth.uid()`, which for a guest compares
+   * NULL to NULL and is therefore never true. So the column existed for a case
+   * the schema could not actually hold. This is the identity that lets a guest
+   * row be written through a route, and found again on a rejoin.
+   */
+  guest_key: string | null;
   display_name: string;
   joined_at: string;
   left_at: string | null;
@@ -3231,6 +3265,7 @@ export type Database = {
       data_room_shares: TableShape<DataRoomShare>;
       data_room_views: TableShape<DataRoomView>;
       data_room_open_alerts: TableShape<DataRoomOpenAlert>;
+      data_room_link_readers: TableShape<DataRoomLinkReader>;
       data_room_engagement_reads: TableShape<DataRoomEngagementRead>;
       investor_portal_shares: TableShape<InvestorPortalShare>;
       investor_portal_views: TableShape<InvestorPortalView>;
@@ -3270,6 +3305,7 @@ export type Database = {
       radar_feedback: TableShape<RadarFeedback>;
       pulse_items: TableShape<PulseItem>;
       pulse_runs: TableShape<PulseRun>;
+      earn_explanations: TableShape<EarnExplanation>;
       radar_digest_prefs: TableShape<RadarDigestPref>;
       radar_digest_log: TableShape<RadarDigestLogEntry>;
       funnel_snapshots: TableShape<FunnelSnapshotRow>;
