@@ -224,6 +224,19 @@ describe("sendBookingEmails — SEQUENCE", () => {
   });
 });
 
+describe("sendBookingEmails — the host moves a request they have not approved", () => {
+  it("tells the invitee a different time is on offer, with no calendar invite", async () => {
+    expect(inviteMethodFor("request_moved_by_host")).toBeNull();
+    await sendBookingEmails("request_moved_by_host", ctx({ previousStartIso: "2026-09-09T15:00:00.000Z" }));
+    // The invitee only: the host made the change and holds no entry for a request.
+    expect(recipients()).toEqual(["ada@example.com"]);
+    expect(invites()).toHaveLength(0);
+    const sent = sendEmailMock.mock.calls[0] as unknown[];
+    expect(JSON.stringify(sent)).toMatch(/different time/i);
+    expect(JSON.stringify(sent)).not.toMatch(/your meeting moved/i);
+  });
+});
+
 describe("sendBookingEmails — host-initiated changes reach the host", () => {
   it("moves the host's own calendar entry when the host reschedules", async () => {
     // The host was an ATTENDEE on the original REQUEST, so their calendar holds

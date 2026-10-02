@@ -346,7 +346,15 @@ export function ActiveRoster({
     params.delete("offset");
     params.delete("limit");
     if (selectedIds.length > 0) params.set("ids", selectedIds.join(","));
-    window.location.href = `/api/network/export?${params}`;
+    // A file download from an API route, not navigation to a page — so a
+    // throwaway link rather than router.push (which would try to render it)
+    // or assigning window.location (which the Next lint rule flags).
+    const link = document.createElement("a");
+    link.href = `/api/network/export?${params}`;
+    link.download = "";
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
   }, [filters, sort, query, selectedIds]);
 
   const TEMP_CHIPS: { key: TempFilter; label: string; count: number }[] = [

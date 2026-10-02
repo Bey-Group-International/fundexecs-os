@@ -391,9 +391,11 @@ describe("PATCH /api/meetings/scheduling/bookings/[id]", () => {
       const res = await PATCH(request({ action: "reschedule", startIso: offHours() }), { params });
 
       expect(res.status).toBe(200);
+      // Told a different time is on offer, not that a meeting moved; and no
+      // calendar save link for something the host has not accepted.
       expect(sendBookingEmails).toHaveBeenCalledWith(
-        "rescheduled_by_host",
-        expect.objectContaining({ bookingId: null, manageToken: null }),
+        "request_moved_by_host",
+        expect.objectContaining({ manageToken: null }),
       );
     });
 

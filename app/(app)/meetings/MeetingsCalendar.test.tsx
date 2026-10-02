@@ -42,6 +42,8 @@ jest.mock("next/navigation", () => ({
  * the fixture is supplied through the read the product actually makes.
  */
 let dbRows: unknown[] = [];
+/** Every realtime subscription the calendar opens, so a test can fire one. */
+const mockChannelHandlers: Array<{ cfg: { table?: string; filter?: string }; cb: () => void }> = [];
 
 jest.mock("@/lib/supabase/client", () => {
   const table = (name: string) => {
@@ -63,7 +65,10 @@ jest.mock("@/lib/supabase/client", () => {
       // return the channel itself rather than a one-shot object.
       channel: () => {
         const ch: Record<string, unknown> = {};
-        ch.on = () => ch;
+        ch.on = (_event: string, cfg: { table?: string; filter?: string }, cb: () => void) => {
+          mockChannelHandlers.push({ cfg, cb });
+          return ch;
+        };
         ch.subscribe = () => ch;
         ch.unsubscribe = () => ch;
         return ch;
@@ -449,6 +454,30 @@ describe("a pending booking request", () => {
       }
       return { ok: true, status: 200, json: async () => ({ blocks: [], calendars: [], events: [] }) };
     }) as unknown as typeof fetch;
+  });
+
+  it("appears while the calendar is open, from the host's own booking changes only", async () => {
+    let requestsServed: unknown[] = [];
+    global.fetch = (async (url: string) => {
+      if (String(url).startsWith("/api/meetings/scheduling/bookings?")) {
+        return { ok: true, status: 200, json: async () => ({ requests: requestsServed }) };
+      }
+      return { ok: true, status: 200, json: async () => ({ blocks: [], calendars: [], events: [] }) };
+    }) as unknown as typeof fetch;
+    mockChannelHandlers.length = 0;
+    await show([]);
+    expect(screen.queryAllByText(/Request: Ada/)).toHaveLength(0);
+
+    const bookings = mockChannelHandlers.find((h) => h.cfg.table === "scheduling_bookings");
+    expect(bookings?.cfg.filter).toBe("host_user_id=eq.u1");
+
+    requestsServed = [REQUEST];
+    await act(async () => {
+      bookings!.cb();
+      jest.advanceTimersByTime(400);
+      await Promise.resolve(); await Promise.resolve(); await Promise.resolve();
+    });
+    expect(screen.getAllByText(/Request: Ada · Intro call/).length).toBeGreaterThan(0);
   });
 
   it("is drawn on the host's calendar, among their meetings", async () => {
