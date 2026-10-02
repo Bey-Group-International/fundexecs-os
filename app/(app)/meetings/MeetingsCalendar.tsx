@@ -815,7 +815,11 @@ export function MeetingsCalendar({
           // phone calendar does; see swipeStep for what counts as one.
           onTouchStart={(e) => {
             const t = e.touches[0];
-            swipeFrom.current = t ? { x: t.clientX, y: t.clientY } : null;
+            // Not a swipe when it starts on a meeting that can be dragged: that
+            // touch is moving the meeting, and turning the week under it as
+            // well would drop it out of sight.
+            const onDraggable = (e.target as HTMLElement).closest?.("[data-draggable]");
+            swipeFrom.current = t && !onDraggable ? { x: t.clientX, y: t.clientY } : null;
           }}
           onTouchEnd={(e) => {
             const from = swipeFrom.current;
@@ -2536,6 +2540,7 @@ function TimeGridView({ days, meetings, blocks, externalEvents, busyEvents, laye
                 return (
                   <Fragment key={m.id}>
                   <button
+                    data-draggable={draggable ? "" : undefined}
                     onPointerDown={(e) => { if (draggable) beginDrag(e, m, "move", dayIndex); }}
                     onClick={(e) => {
                       e.stopPropagation();

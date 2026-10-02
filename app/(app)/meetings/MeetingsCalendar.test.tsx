@@ -672,3 +672,30 @@ describe("on a phone", () => {
     expect(screen.getByRole("button", { name: "Month" })).toHaveAttribute("aria-pressed", "true");
   });
 });
+
+describe("swiping", () => {
+  const surface = () => document.querySelector<HTMLElement>(".rounded-2xl.border.p-2")!;
+  const weekTitle = () => document.querySelector("h2 + * , h2")!.closest("div")!.parentElement!.textContent;
+
+  function swipe(target: Element, dx: number) {
+    fireEvent.touchStart(target, { touches: [{ clientX: 300, clientY: 200 }] });
+    fireEvent.touchEnd(target, { changedTouches: [{ clientX: 300 + dx, clientY: 205 }] });
+  }
+
+  it("moves a week on a sideways swipe across the grid", async () => {
+    await inWeek([]);
+    const before = weekTitle();
+    swipe(dayColumns()[2], -150);
+    expect(weekTitle()).not.toBe(before);
+  });
+
+  it("does not move the week when the touch is dragging a meeting", async () => {
+    await inWeek([meeting({ id: "d", title: "Draggable", scheduled_at: new Date(2026, 8, 17, 14, 0).toISOString() })]);
+    const block = document.querySelector("[data-draggable]")!;
+    expect(block).not.toBeNull();
+    const before = weekTitle();
+    swipe(block, -150);
+    expect(weekTitle()).toBe(before);
+    expect(surface()).not.toBeNull();
+  });
+});
