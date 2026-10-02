@@ -3,6 +3,7 @@ import { getSessionContext } from "@/lib/auth";
 import { getInvestorWarRoom } from "@/lib/source-war-room";
 import { InvestorWarRoom } from "@/components/source/InvestorWarRoom";
 import { MobileContactActionBar } from "@/components/mobile/MobileContactActionBar";
+import { AskEarnButton } from "@/components/AskEarnButton";
 
 export const dynamic = "force-dynamic";
 
@@ -20,6 +21,9 @@ export default async function InvestorPage(props: { params: Promise<{ id: string
 
   return (
     <>
+      <div className="mb-3 flex justify-end">
+        <AskEarnButton type="investor" id={params.id} name={data.investor.name} />
+      </div>
       <InvestorWarRoom data={data} />
       {/* Thumb-reachable LP actions on mobile; the spacer keeps the last of the
           war room clear of the fixed bar. Desktop is unaffected. */}

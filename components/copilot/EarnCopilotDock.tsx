@@ -31,6 +31,7 @@ import { TeamTasksFeed } from "@/components/copilot/TeamTasksFeed";
 import { EarnOrb } from "@/components/copilot/EarnOrb";
 import { Markdown } from "@/components/Markdown";
 import { classifyIntent } from "@/lib/intent";
+import type { ExplainRecordRef } from "@/lib/earn-explain";
 import {
   CONVERSATIONS_KEY,
   LEGACY_THREAD_KEY,
@@ -78,6 +79,10 @@ const EMPTY_THREAD: Turn[] = [];
 // Only the id + mode travel from the browser; the sensitive prep/follow-up
 // context is gathered and injected on the server (see /api/chat).
 type MeetingChatContext = { id: string; mode: "prep" | "followup" };
+// "Explain this" from a record page: only the { type, id } reference travels;
+// the server loads the record itself (lib/earn-record-context.server.ts).
+type RecordChatContext = { record: ExplainRecordRef };
+type ChatContext = MeetingChatContext | RecordChatContext;
 
 // One turn in the in-dock conversation: the operator's message, or Earn's
 // routed plan in reply. Every turn carries a stable `id` so it can be edited or
@@ -338,7 +343,7 @@ export function EarnCopilotDock({ name }: { name: string }) {
   // Conversational (ungated) answer: stream tokens from /api/chat straight into
   // the dock — the same seamless chat the workspace composer gets, on every
   // page. Verified Apollo contacts arrive appended in the same stream.
-  async function askChat(t: string, meetingContext?: MeetingChatContext, priorOverride?: { role: string; content: string }[]) {
+  async function askChat(t: string, chatContext?: ChatContext, priorOverride?: { role: string; content: string }[]) {
     const prior = priorOverride ?? buildPrior();
     setThread((prev) => [
       ...prev,
@@ -358,7 +363,8 @@ export function EarnCopilotDock({ name }: { name: string }) {
           body: t,
           session_id: sessionId ?? undefined,
           prior,
-          meeting_context: meetingContext,
+          meeting_context: chatContext && "mode" in chatContext ? chatContext : undefined,
+          record_context: chatContext && "record" in chatContext ? chatContext.record : undefined,
           // A conversation with no session yet asks the server to open one on
           // this first reply, so it lands in /sessions instead of living only
           // in this tab. `pathname` names it after the place it happened.
@@ -411,16 +417,17 @@ export function EarnCopilotDock({ name }: { name: string }) {
   // conversational answer (ungated); work requests are planned into a gated
   // workflow. The intent classifier decides, so the same box does both.
   //
-  // A meetingContext (from the meetings "Prepare"/"Follow up" buttons) always
-  // streams as chat: the visible message is a clean one-liner and the rich,
+  // A chatContext (the meetings "Prepare"/"Follow up" buttons, or "Ask Earn"
+  // on a record page) always streams as chat: the visible message is a clean
+  // one-liner and the rich,
   // sensitive context is injected server-side, never sent from the browser.
-  function ask(text: string, meetingContext?: MeetingChatContext) {
+  function ask(text: string, chatContext?: ChatContext) {
     const t = text.trim();
     if (!t || pending || chatting) return;
     setError(null);
     setLastAsk(t);
-    if (meetingContext || classifyIntent(t) === "chat") {
-      void askChat(t, meetingContext);
+    if (chatContext || classifyIntent(t) === "chat") {
+      void askChat(t, chatContext);
       return;
     }
     setThread((prev) => [...prev, { id: newTurnId(), role: "user", text: t }]);
@@ -579,7 +586,7 @@ export function EarnCopilotDock({ name }: { name: string }) {
       }
     }
     function onExecContext(e: Event) {
-      const detail = (e as CustomEvent<{ execName?: string; prompt?: string; autoSend?: boolean; chatContext?: MeetingChatContext }>).detail;
+      const detail = (e as CustomEvent<{ execName?: string; prompt?: string; autoSend?: boolean; chatContext?: ChatContext }>).detail;
       setOpen(true);
       // Some senders open Earn with no pre-filled prompt (dispatching an empty
       // detail). Never store a non-string body — `body.trim()` in render would

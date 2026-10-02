@@ -6,6 +6,7 @@ import { createServerClient } from "@/lib/supabase/server";
 import { loadContactRecord, loadPrincipalNames } from "@/lib/network-contact";
 import { recordNetworkAudit } from "@/lib/network-audit";
 import { ContactRecordView } from "@/components/source/ContactRecordView";
+import { AskEarnButton } from "@/components/AskEarnButton";
 
 export const dynamic = "force-dynamic";
 
@@ -79,6 +80,7 @@ export default async function ContactPage({ params }: Props) {
         </Link>
         <span aria-hidden>/</span>
         <span className="text-fg-secondary">{view.contact.fullName}</span>
+        <AskEarnButton type="contact" id={id} name={view.contact.fullName} className="ml-auto" />
       </nav>
 
       <ContactRecordView

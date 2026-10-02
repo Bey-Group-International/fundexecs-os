@@ -4,6 +4,7 @@ import { getDealWarRoom } from "@/lib/run-war-room";
 import { DealWarRoom } from "@/components/run/DealWarRoom";
 import { ShareDealBar } from "@/components/run/ShareDealBar";
 import { MobileDealActionBar } from "@/components/mobile/MobileDealActionBar";
+import { AskEarnButton } from "@/components/AskEarnButton";
 
 export const dynamic = "force-dynamic";
 
@@ -20,6 +21,9 @@ export default async function DealPage(props: { params: Promise<{ id: string }> 
 
   return (
     <>
+      <div className="mb-3 flex justify-end">
+        <AskEarnButton type="deal" id={params.id} name={data.conviction.deal.name} />
+      </div>
       <ShareDealBar dealId={params.id} />
       <DealWarRoom data={data} />
       {/* Thumb-reachable deal actions on mobile; the spacer keeps the last of
