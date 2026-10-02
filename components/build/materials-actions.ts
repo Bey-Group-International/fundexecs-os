@@ -8,7 +8,6 @@
 import { revalidatePath } from "next/cache";
 import { createServerClient } from "@/lib/supabase/server";
 import { getSessionContext } from "@/lib/auth";
-import { escapeHtml } from "@/lib/email";
 import { insertShare } from "@/lib/data-room-shares.server";
 
 const ROOM = "/build/data_room";
@@ -72,6 +71,7 @@ export async function createShare(formData: FormData): Promise<void> {
     password: String(formData.get("password") ?? "").trim() || null,
     recipientEmail: String(formData.get("recipient_email") ?? "").trim() || null,
     notifyOnOpen: formData.get("notify_on_open") === "1",
+    dailyDigest: formData.get("daily_digest") === "1",
     allowedSections,
     // Unchecked boxes are absent from FormData, so "allow download" is sent as
     // an explicit "0" when turned off; anything else keeps the old default.
@@ -125,7 +125,7 @@ export async function trackDwell(formData: FormData): Promise<void> {
   // Validate the share exists and is still valid before recording.
   const { data: share } = await supabase
     .from("data_room_shares")
-    .select("organization_id, room_id, revoked_at, expires_at, label, notify_on_open, created_by")
+    .select("organization_id, room_id, revoked_at, expires_at")
     .eq("id", shareId)
     .maybeSingle();
   if (!share || share.revoked_at) return;
@@ -136,9 +136,6 @@ export async function trackDwell(formData: FormData): Promise<void> {
     room_id: string | null;
     revoked_at: string | null;
     expires_at: string | null;
-    label: string | null;
-    notify_on_open: boolean;
-    created_by: string | null;
   };
 
   await supabase
@@ -155,61 +152,32 @@ export async function trackDwell(formData: FormData): Promise<void> {
     } as never)
     .then(() => undefined, () => undefined);
 
-  // GP notification: email the share creator when notify_on_open is set.
-  if (shareData.notify_on_open && shareData.created_by) {
-    void notifyGpOnOpen({
-      supabase,
-      creatorId: shareData.created_by,
-      orgId: shareData.organization_id,
-      shareLabel: shareData.label,
-      viewerEmail,
-    }).catch(() => undefined);
-  }
+  // No "opened" email from here: dwell fires on every section change. The
+  // viewer reports the open itself (recordRoomOpen), once per reader per link.
 }
 
-async function notifyGpOnOpen(args: {
-  supabase: ReturnType<typeof import("@/lib/supabase/server").createServiceClient>;
-  creatorId: string;
-  orgId: string;
-  shareLabel: string | null;
-  viewerEmail: string | null;
-}): Promise<void> {
-  const { sendEmail: send } = await import("@/lib/email");
-  // Fetch creator email from auth.users via the profiles table or org members.
-  // Fall back to organization members — use created_by as principal_id.
-  const { data: principal } = await args.supabase.auth.admin
-    .getUserById(args.creatorId)
-    .catch(() => ({ data: null }));
-  const gpEmail = (principal as { user?: { email?: string } } | null)?.user?.email;
-  if (!gpEmail) return;
-
-  const { data: orgRow } = await args.supabase
-    .from("organizations")
-    .select("name")
-    .eq("id", args.orgId)
-    .maybeSingle();
-  const orgName = escapeHtml((orgRow as { name: string } | null)?.name ?? "your fund");
-  const label = escapeHtml(args.shareLabel ?? "your data room link");
-  const safeViewer = args.viewerEmail ? escapeHtml(args.viewerEmail) : null;
-  const viewer = safeViewer ? ` by ${safeViewer}` : "";
-  const subject = `Your data room link was opened${viewer}`;
-  const html = `<!DOCTYPE html>
-<html>
-<head><meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" /></head>
-<body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0a0a0a; margin: 0; padding: 40px 20px;">
-  <div style="max-width: 560px; margin: 0 auto; background: #111111; border: 1px solid #222222; border-radius: 12px; overflow: hidden;">
-    <div style="padding: 6px 24px; background: #F59E0B;">
-      <span style="font-size: 11px; font-weight: 700; letter-spacing: 0.1em; color: #0a0a0a; text-transform: uppercase;">FundExecs OS</span>
-    </div>
-    <div style="padding: 32px 24px;">
-      <h1 style="margin: 0 0 8px; font-size: 22px; color: #F5F5F5; font-weight: 700;">Someone opened your link</h1>
-      <p style="margin: 0; font-size: 15px; color: #AAAAAA;">Your share link <strong style="color: #F5F5F5;">${label}</strong> for <strong style="color: #F5F5F5;">${orgName}</strong> was just opened${viewer}.</p>
-      ${safeViewer ? `<p style="margin: 16px 0 0; font-size: 13px; color: #888888;">Viewer email: ${safeViewer}</p>` : ""}
-    </div>
-  </div>
-</body>
-</html>`;
-  await send({ orgId: args.orgId, to: { name: "", email: gpEmail }, subject, htmlBody: html });
+/**
+ * Turn a live link's alerts on or off: the first-open email per reader and the
+ * daily activity digest. Alerts are about the operator's inbox, not about what
+ * the reader sees, so they can change on a link already in someone's hands.
+ */
+export async function updateShareAlerts(
+  id: string,
+  alerts: { notifyOnOpen?: boolean; dailyDigest?: boolean },
+): Promise<void> {
+  const ctx = await getSessionContext();
+  if (!ctx?.orgId || typeof id !== "string" || !id) return;
+  const patch: { notify_on_open?: boolean; daily_digest?: boolean } = {};
+  if (typeof alerts?.notifyOnOpen === "boolean") patch.notify_on_open = alerts.notifyOnOpen;
+  if (typeof alerts?.dailyDigest === "boolean") patch.daily_digest = alerts.dailyDigest;
+  if (Object.keys(patch).length === 0) return;
+  const supabase = await createServerClient();
+  await supabase
+    .from("data_room_shares")
+    .update(patch as never)
+    .eq("id", id)
+    .eq("organization_id", ctx.orgId);
+  revalidatePath(ROOM);
 }
 
 export async function revokeShare(formData: FormData): Promise<void> {

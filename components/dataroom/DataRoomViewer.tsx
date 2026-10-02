@@ -6,9 +6,13 @@ import { MarkdownRenderer } from "./MarkdownRenderer";
 import { ViewerGate } from "./ViewerGate";
 import type { GateConfig } from "./ViewerGate";
 import { trackDwell } from "@/components/build/materials-actions";
+import { recordRoomOpen } from "./viewer-actions";
 import { FilePreview } from "@/components/documents/FilePreview";
 import type { PreviewKind } from "@/lib/document-files";
 import { forwardWheel } from "@/lib/wheel-forward";
+
+/** Per-browser reader id, so a first-open alert fires once per reader. */
+const VISITOR_KEY = "fx-dataroom-visitor";
 
 export type { GateConfig };
 
@@ -267,6 +271,25 @@ export function DataRoomViewer({
     },
     [effectiveSelected, fireDwell, preview],
   );
+
+  // Tell the server this reader is looking at the room, once per page view.
+  // It alerts the link's creator on this reader's first open only. The id is
+  // per browser (not per tab or load) so an ungated link alerts once per
+  // reader; storage can be blocked, and then each load counts as new.
+  const openRecorded = useRef(false);
+  useEffect(() => {
+    if (!contentReady || preview || openRecorded.current) return;
+    openRecorded.current = true;
+    let visitorId = sessionId;
+    try {
+      const stored = window.localStorage.getItem(VISITOR_KEY);
+      if (stored) visitorId = stored;
+      else window.localStorage.setItem(VISITOR_KEY, visitorId);
+    } catch {
+      // Private mode or blocked storage: fall back to this page view's id.
+    }
+    void recordRoomOpen(token, visitorId).catch(() => undefined);
+  }, [contentReady, preview, token, sessionId]);
 
   // Fire dwell on page unload.
   useEffect(() => {

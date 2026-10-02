@@ -29,6 +29,8 @@ export interface ShareInput {
   password: string | null;
   recipientEmail: string | null;
   notifyOnOpen: boolean;
+  /** Daily activity digest to the creator. */
+  dailyDigest?: boolean;
   allowedSections: string[] | null;
   allowDownload: boolean;
   watermark: boolean;
@@ -69,6 +71,7 @@ export async function insertShare(
       password_hash,
       recipient_email: input.recipientEmail,
       notify_on_open: input.notifyOnOpen,
+      daily_digest: input.dailyDigest ?? false,
       // A document link is already scoped to one document; a section allowlist
       // on top of it could only ever hide that document.
       allowed_sections: input.documentId ? null : input.allowedSections,
