@@ -11,6 +11,8 @@ import { ExportMenu } from "./ExportMenu";
 import { ChatPanel } from "./ChatPanel";
 import { ReportMedia } from "./ReportMedia";
 import { ReportWaiting } from "./ReportWaiting";
+import { ReportTabs } from "./ReportTabs";
+import { reportTabs } from "@/lib/meetings/report-tabs";
 import { LocalTime } from "./LocalTime";
 import { loadReportPage } from "@/lib/meetings/report-page.server";
 import { loadReportSide } from "@/lib/meetings/report-side.server";
@@ -136,6 +138,17 @@ export default async function MeetingReportPage({
   const hasBody =
     Boolean(content.summary) || content.keyPoints.length > 0 || content.decisions.length > 0;
 
+  // The report a tab at a time; see ReportTabs. A tab only for what this
+  // meeting has: no Chat tab for the meetings where nobody typed.
+  const tabs = reportTabs({
+    hasFollowUp: Boolean(content.followUp),
+    followUpBadge: FOLLOW_UP_BADGE[side.followUp.kind] ?? null,
+    hasRecording: data.recordings.length > 0,
+    hasTranscript: Boolean(content.transcript?.trim()) || data.cueRows.length > 0,
+    chatCount: data.chat.length,
+    actionItemCount: actionItems.length,
+  });
+
   return (
     <div className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-4 py-6 sm:py-8">
       {/* Header */}
@@ -172,8 +185,9 @@ export default async function MeetingReportPage({
           </div>
         </div>
 
-        {/* The meeting at a glance. */}
-        <dl className="grid grid-cols-2 gap-2 sm:grid-cols-5">
+        {/* The meeting at a glance. Three across on a phone, so the five facts
+            take two short rows rather than pushing the tabs a screen down. */}
+        <dl className="grid grid-cols-3 gap-2 sm:grid-cols-5">
           <Stat label="Length" value={lengthLabel ?? "—"} />
           <Stat label="People" value={side.participants.length ? String(side.participants.length) : "—"} />
           <Stat label="Decisions" value={String(content.decisions.length)} />
@@ -181,215 +195,233 @@ export default async function MeetingReportPage({
             label="Action items"
             value={actionItems.length ? `${doneCount}/${actionItems.length} done` : "0"}
           />
-          <div className="col-span-2 flex flex-col gap-1 rounded-lg border border-[var(--line)] bg-[var(--surface-1)] px-3 py-2 sm:col-span-1">
+          <div className="flex min-w-0 flex-col gap-1 rounded-lg border border-[var(--line)] bg-[var(--surface-1)] px-2.5 py-2 sm:px-3">
             <dt className="text-[11px] uppercase tracking-wide text-[var(--fg-muted)]">Sentiment</dt>
             <dd>{content.sentiment ? <SentimentBadge value={content.sentiment} /> : <span className="text-sm text-[var(--fg-muted)]">—</span>}</dd>
           </div>
         </dl>
       </header>
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_320px] lg:items-start">
-        {/* The report */}
-        <main className="flex min-w-0 flex-col gap-5">
-          {data.state === "unsummarised" && (
-            <div className="rounded-xl border border-[var(--line)] bg-[var(--surface-2)] px-4 py-3">
-              <p className="text-xs font-medium text-[var(--fg-primary)]">No summary was written</p>
-              <p className="mt-0.5 text-xs text-[var(--fg-muted)]">
-                {/* Keyed on whether there are words, NOT on the kind of session.
-                    The route writes an empty summary down two paths: a call with
-                    nothing transcribed, and a model call that failed on a real
-                    transcript. Saying "nothing was transcribed" above a full
-                    transcript would be the page contradicting itself — and would
-                    withhold the regenerate advice that actually fixes the row. */}
-                {content.transcript?.trim()
-                  ? "The analysis could not be completed, so there is no summary. Everything that was captured is below, and regenerating the report from the meeting log will try again."
-                  : oneWay
-                    ? "Nothing was transcribed on this call, so there was nothing to summarise. The recording is below."
-                    : "Nothing was transcribed in this meeting, so there was nothing to summarise."}
-              </p>
-            </div>
-          )}
+      <ReportTabs
+        tabs={tabs}
+        panels={{
+          overview: (
+            <div className="flex flex-col gap-5">
+              {data.state === "unsummarised" && (
+                <div className="rounded-xl border border-[var(--line)] bg-[var(--surface-2)] px-4 py-3">
+                  <p className="text-xs font-medium text-[var(--fg-primary)]">No summary was written</p>
+                  <p className="mt-0.5 text-xs text-[var(--fg-muted)]">
+                    {/* Keyed on whether there are words, NOT on the kind of session.
+                        The route writes an empty summary down two paths: a call with
+                        nothing transcribed, and a model call that failed on a real
+                        transcript. Saying "nothing was transcribed" above a full
+                        transcript would be the page contradicting itself — and would
+                        withhold the regenerate advice that actually fixes the row. */}
+                    {content.transcript?.trim()
+                      ? "The analysis could not be completed, so there is no summary. Everything that was captured is below, and regenerating the report from the meeting log will try again."
+                      : oneWay
+                        ? "Nothing was transcribed on this call, so there was nothing to summarise. The recording is below."
+                        : "Nothing was transcribed in this meeting, so there was nothing to summarise."}
+                  </p>
+                </div>
+              )}
 
-          {data.consent && (
-            // Stored precisely so that somebody can answer "should this have been
-            // recorded?" months later. The archive shows that consent exists; this
-            // is the page where the answer is actually needed.
-            <details className="rounded-xl border border-[var(--line)] bg-[var(--surface-1)] px-4 py-3">
-              <summary className="cursor-pointer text-xs font-medium text-[var(--fg-secondary)]">
-                {/* The hour matters most here and is the easiest to get wrong. */}
-                Consent recorded{" "}
-                <LocalTime
-                  iso={data.consent.at}
-                  options={{
-                    month: "short", day: "numeric", year: "numeric",
-                    hour: "numeric", minute: "2-digit",
-                  }}
+              {data.consent && (
+                // Stored precisely so that somebody can answer "should this have been
+                // recorded?" months later. The archive shows that consent exists; this
+                // is the page where the answer is actually needed.
+                <details className="rounded-xl border border-[var(--line)] bg-[var(--surface-1)] px-4 py-3">
+                  <summary className="cursor-pointer text-xs font-medium text-[var(--fg-secondary)]">
+                    {/* The hour matters most here and is the easiest to get wrong. */}
+                    Consent recorded{" "}
+                    <LocalTime
+                      iso={data.consent.at}
+                      options={{
+                        month: "short", day: "numeric", year: "numeric",
+                        hour: "numeric", minute: "2-digit",
+                      }}
+                    />
+                  </summary>
+                  <p className="mt-2 text-xs italic text-[var(--fg-primary)]">&ldquo;{data.consent.disclosure}&rdquo;</p>
+                  <p className="mt-1.5 text-xs text-[var(--fg-muted)]">
+                    The person recording confirmed they had consent from everyone on the call.
+                    {data.consent.sources.length > 0 && ` Captured: ${data.consent.sources.join(" and ")}.`}
+                  </p>
+                </details>
+              )}
+
+              {content.truncated && (
+                <div className="rounded-xl border border-[var(--status-warning,#f59e0b)]/40 bg-[var(--status-warning,#f59e0b)]/10 px-4 py-3">
+                  <p className="text-xs font-medium text-[var(--fg-primary)]">This report was cut short</p>
+                  <p className="mt-0.5 text-xs text-[var(--fg-muted)]">
+                    The analysis ran out of room before it finished, so the later sections — usually the
+                    follow-up draft — may be incomplete. Regenerating it will try again.
+                  </p>
+                </div>
+              )}
+
+              {/* Summary */}
+              {content.summary && (
+                <Section title="Summary">
+                  <p className="text-[15px] leading-relaxed text-[var(--fg-primary)]">{content.summary}</p>
+                </Section>
+              )}
+
+              {/* Action items — straight after the summary, because they are what the
+                  meeting left people to do. Ticked off here, as the tasks they became. */}
+              {actionItems.length > 0 ? (
+                <ActionItemsList
+                  meetingId={meeting.id}
+                  items={actionItems}
+                  viewerId={data.viewerId}
+                  isHost={data.isHost}
                 />
-              </summary>
-              <p className="mt-2 text-xs italic text-[var(--fg-primary)]">&ldquo;{data.consent.disclosure}&rdquo;</p>
-              <p className="mt-1.5 text-xs text-[var(--fg-muted)]">
-                The person recording confirmed they had consent from everyone on the call.
-                {data.consent.sources.length > 0 && ` Captured: ${data.consent.sources.join(" and ")}.`}
-              </p>
-            </details>
-          )}
+              ) : hasBody ? (
+                <Section title="Action items">
+                  <EmptyNote>No action items were captured in this meeting.</EmptyNote>
+                </Section>
+              ) : null}
 
-          {content.truncated && (
-            <div className="rounded-xl border border-[var(--status-warning,#f59e0b)]/40 bg-[var(--status-warning,#f59e0b)]/10 px-4 py-3">
-              <p className="text-xs font-medium text-[var(--fg-primary)]">This report was cut short</p>
-              <p className="mt-0.5 text-xs text-[var(--fg-muted)]">
-                The analysis ran out of room before it finished, so the later sections — usually the
-                follow-up draft — may be incomplete. Regenerating it will try again.
-              </p>
+              {/* Decisions + key points. Decisions first: they are what the meeting
+                  settled, and the follow-up commits people to them. */}
+              {hasBody && (content.decisions.length > 0 || content.keyPoints.length > 0) && (
+                <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+                  <Section title="Decisions" count={content.decisions.length}>
+                    {content.decisions.length > 0 ? (
+                      <ul className="flex flex-col gap-2">
+                        {content.decisions.map((d, i) => (
+                          <li key={i} className="flex items-start gap-2 text-sm text-[var(--fg-primary)]">
+                            <span className="mt-0.5 text-[var(--status-success)]" aria-hidden="true">✓</span>
+                            {d}
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <EmptyNote>No decisions were recorded.</EmptyNote>
+                    )}
+                  </Section>
+                  <Section title="Key points" count={content.keyPoints.length}>
+                    {content.keyPoints.length > 0 ? (
+                      <ul className="flex flex-col gap-2">
+                        {content.keyPoints.map((pt, i) => (
+                          <li key={i} className="flex items-start gap-2 text-sm text-[var(--fg-primary)]">
+                            <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--gold-400)]" aria-hidden="true" />
+                            {pt}
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <EmptyNote>No key points were recorded.</EmptyNote>
+                    )}
+                  </Section>
+                </div>
+              )}
+
+              {/* Next meeting suggestion */}
+              {content.nextMeeting && (
+                <div className="flex items-start gap-3 rounded-xl border border-gold-400/20 bg-gold-400/5 px-4 py-3">
+                  <span className="shrink-0 text-base text-[var(--gold-400)]" aria-hidden="true">📅</span>
+                  <div>
+                    <p className="text-[11px] font-medium uppercase tracking-wide text-[var(--fg-muted)]">Next meeting</p>
+                    <p className="mt-0.5 text-sm text-[var(--fg-primary)]">{content.nextMeeting}</p>
+                  </div>
+                </div>
+              )}
             </div>
-          )}
+          ),
+          "follow-up": (
+            <>
+              {/* Follow-up draft — editable, and sendable by the host. Keyed on the
+                  draft so a corrected or restored report replaces what the panel holds
+                  rather than leaving the old words in its local state. */}
+              {content.followUp && (
+                <FollowUpPanel
+                  key={content.followUp}
+                  meetingId={meeting.id}
+                  draft={content.followUp}
+                  canSend={data.isHost}
+                  recipients={recipients}
+                  unreachable={unreachable}
+                  hostName={side.hostName}
+                  status={side.followUp}
+                />
+              )}
+            </>
+          ),
+          media: (
+            <>
+              {/* The recording and the transcript, which are the one pair that has to
+                  share state: a line seeks the player, and the playhead moves the
+                  highlight back. */}
+              <ReportMedia
+                meetingId={meeting.id}
+                recordings={data.recordings}
+                cueRows={data.cueRows}
+                transcript={content.transcript}
+              />
+            </>
+          ),
+          chat: (
+            <>
+              {/* What was typed, next to what was said. Renders nothing when nobody
+                  used the chat, which is most meetings. */}
+              <ChatPanel messages={data.chat} />
+            </>
+          ),
+        }}
+        aside={
+          <>
+            <ParticipantsCard participants={side.participants} />
 
-          {/* Summary */}
-          {content.summary && (
-            <Section title="Summary">
-              <p className="text-[15px] leading-relaxed text-[var(--fg-primary)]">{content.summary}</p>
-            </Section>
-          )}
-
-          {/* Action items — straight after the summary, because they are what the
-              meeting left people to do. Ticked off here, as the tasks they became. */}
-          {actionItems.length > 0 ? (
-            <ActionItemsList
-              meetingId={meeting.id}
-              items={actionItems}
-              viewerId={data.viewerId}
-              isHost={data.isHost}
-            />
-          ) : hasBody ? (
-            <Section title="Action items">
-              <EmptyNote>No action items were captured in this meeting.</EmptyNote>
-            </Section>
-          ) : null}
-
-          {/* Decisions + key points. Decisions first: they are what the meeting
-              settled, and the follow-up commits people to them. */}
-          {hasBody && (content.decisions.length > 0 || content.keyPoints.length > 0) && (
-            <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
-              <Section title="Decisions" count={content.decisions.length}>
-                {content.decisions.length > 0 ? (
-                  <ul className="flex flex-col gap-2">
-                    {content.decisions.map((d, i) => (
-                      <li key={i} className="flex items-start gap-2 text-sm text-[var(--fg-primary)]">
-                        <span className="mt-0.5 text-[var(--status-success)]" aria-hidden="true">✓</span>
-                        {d}
-                      </li>
-                    ))}
-                  </ul>
-                ) : (
-                  <EmptyNote>No decisions were recorded.</EmptyNote>
-                )}
-              </Section>
-              <Section title="Key points" count={content.keyPoints.length}>
-                {content.keyPoints.length > 0 ? (
-                  <ul className="flex flex-col gap-2">
-                    {content.keyPoints.map((pt, i) => (
-                      <li key={i} className="flex items-start gap-2 text-sm text-[var(--fg-primary)]">
-                        <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--gold-400)]" aria-hidden="true" />
-                        {pt}
-                      </li>
-                    ))}
-                  </ul>
-                ) : (
-                  <EmptyNote>No key points were recorded.</EmptyNote>
-                )}
-              </Section>
-            </div>
-          )}
-
-          {/* Next meeting suggestion */}
-          {content.nextMeeting && (
-            <div className="flex items-start gap-3 rounded-xl border border-gold-400/20 bg-gold-400/5 px-4 py-3">
-              <span className="shrink-0 text-base text-[var(--gold-400)]" aria-hidden="true">📅</span>
-              <div>
-                <p className="text-[11px] font-medium uppercase tracking-wide text-[var(--fg-muted)]">Next meeting</p>
-                <p className="mt-0.5 text-sm text-[var(--fg-primary)]">{content.nextMeeting}</p>
+            {content.followUp && (
+              // Wide screens only: on a phone this card would sit in the Details
+              // tab, one tab away from the Follow-up tab that already says it.
+              <div className="hidden flex-col gap-2 rounded-xl border border-[var(--line)] bg-[var(--surface-1)] p-4 lg:flex">
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-xs font-medium uppercase tracking-wide text-[var(--fg-secondary)]">Follow-up</p>
+                  <FollowUpStatusChip state={side.followUp} />
+                </div>
+                <p className="text-xs text-[var(--fg-muted)]">
+                  {recipients.length
+                    ? `To ${recipients.length} ${recipients.length === 1 ? "person" : "people"}, each greeted by name.`
+                    : "Nobody on this meeting has an email address yet."}
+                </p>
+                <a href="#follow-up" className="text-xs font-semibold text-[var(--gold-400)] hover:underline">
+                  {data.isHost ? "Review and send →" : "Read the follow-up →"}
+                </a>
               </div>
-            </div>
-          )}
+            )}
 
-          {/* Follow-up draft — editable, and sendable by the host. Keyed on the
-              draft so a corrected or restored report replaces what the panel holds
-              rather than leaving the old words in its local state. */}
-          {content.followUp && (
-            <FollowUpPanel
-              key={content.followUp}
-              meetingId={meeting.id}
-              draft={content.followUp}
-              canSend={data.isHost}
-              recipients={recipients}
-              unreachable={unreachable}
-              hostName={side.hostName}
-              status={side.followUp}
-            />
-          )}
+            {/* Correct-and-regenerate for the host; the version history for anyone
+                who may read the report. */}
+            <ReportRevisions meetingId={meeting.id} isHost={data.isHost} />
 
-          {/* The recording and the transcript, which are the one pair that has to
-              share state: a line seeks the player, and the playhead moves the
-              highlight back. */}
-          <ReportMedia
-            meetingId={meeting.id}
-            recordings={data.recordings}
-            cueRows={data.cueRows}
-            transcript={content.transcript}
-          />
-
-          {/* What was typed, next to what was said. Renders nothing when nobody
-              used the chat, which is most meetings. */}
-          <ChatPanel messages={data.chat} />
-        </main>
-
-        {/* Who, where the follow-up stands, and the report's versions. Sticky on
-            a wide screen so it stays beside whatever part of the report is being
-            read; below the report on a narrow one. */}
-        <aside className="flex flex-col gap-5 lg:sticky lg:top-6 lg:max-h-[calc(100vh-3rem)] lg:overflow-y-auto">
-          <ParticipantsCard participants={side.participants} />
-
-          {content.followUp && (
-            // Wide screens only: on a phone the panel itself is right above,
-            // carrying the same chip.
-            <div className="hidden flex-col gap-2 rounded-xl border border-[var(--line)] bg-[var(--surface-1)] p-4 lg:flex">
-              <div className="flex items-center justify-between gap-2">
-                <p className="text-xs font-medium uppercase tracking-wide text-[var(--fg-secondary)]">Follow-up</p>
-                <FollowUpStatusChip state={side.followUp} />
-              </div>
-              <p className="text-xs text-[var(--fg-muted)]">
-                {recipients.length
-                  ? `To ${recipients.length} ${recipients.length === 1 ? "person" : "people"}, each greeted by name.`
-                  : "Nobody on this meeting has an email address yet."}
-              </p>
-              <a href="#follow-up" className="text-xs font-semibold text-[var(--gold-400)] hover:underline">
-                {data.isHost ? "Review and send →" : "Read the follow-up →"}
-              </a>
-            </div>
-          )}
-
-          {/* Correct-and-regenerate for the host; the version history for anyone
-              who may read the report. */}
-          <ReportRevisions meetingId={meeting.id} isHost={data.isHost} />
-
-          {/* What the inbox holds on the people who were here.
-              Suspended on purpose: its reads are keyed off the attendance rows, so
-              awaiting it in loadReportPage would have put another round trip in
-              front of the summary. The fallback is nothing rather than a skeleton,
-              because on most meetings the answer is nothing. */}
-          <Suspense fallback={null}>
-            <AttendeeHistoryPanel
-              meetingId={meeting.id}
-              organizationId={data.organizationId}
-              invited={data.invited}
-              viewerEmail={data.viewerEmail}
-            />
-          </Suspense>
-        </aside>
-      </div>
+            {/* What the inbox holds on the people who were here.
+                Suspended on purpose: its reads are keyed off the attendance rows, so
+                awaiting it in loadReportPage would have put another round trip in
+                front of the summary. The fallback is nothing rather than a skeleton,
+                because on most meetings the answer is nothing. */}
+            <Suspense fallback={null}>
+              <AttendeeHistoryPanel
+                meetingId={meeting.id}
+                organizationId={data.organizationId}
+                invited={data.invited}
+                viewerEmail={data.viewerEmail}
+              />
+            </Suspense>
+          </>
+        }
+      />
     </div>
   );
 }
+
+/** Where the follow-up stands, in a word, for its tab. */
+const FOLLOW_UP_BADGE: Partial<Record<string, string>> = {
+  sent: "Sent",
+  drafted: "Draft",
+  not_sent: "Not sent",
+};
 
 const ROLE_LABEL: Record<ReportParticipant["role"], string> = {
   host: "Host",
@@ -447,8 +479,8 @@ function initials(name: string): string {
 
 function Stat({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex flex-col gap-1 rounded-lg border border-[var(--line)] bg-[var(--surface-1)] px-3 py-2">
-      <dt className="text-[11px] uppercase tracking-wide text-[var(--fg-muted)]">{label}</dt>
+    <div className="flex min-w-0 flex-col gap-1 rounded-lg border border-[var(--line)] bg-[var(--surface-1)] px-2.5 py-2 sm:px-3">
+      <dt className="truncate text-[10px] uppercase tracking-wide text-[var(--fg-muted)] sm:text-[11px]">{label}</dt>
       <dd className="text-sm font-medium text-[var(--fg-primary)]">{value}</dd>
     </div>
   );
@@ -540,7 +572,7 @@ function GeneratingState() {
         </svg>
         <p className="text-sm text-[var(--fg-muted)]">Generating your report…</p>
       </div>
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-5" aria-hidden="true">
+      <div className="grid grid-cols-3 gap-2 sm:grid-cols-5" aria-hidden="true">
         {Array.from({ length: 5 }, (_, i) => (
           <div key={i} className="h-14 animate-pulse rounded-lg bg-[var(--surface-1)]" />
         ))}
