@@ -975,6 +975,22 @@ export type DataRoomView = {
   duration_seconds: number | null;
   session_id: string | null;
   room_id: string | null;
+  // What the row records (migration 20261002160000). Null on older rows: a
+  // duration then means reading, none means an open.
+  action: "open" | "download" | "read" | null;
+};
+
+// Earn's read of one investor's activity in one room (migration 20261002160000).
+export type DataRoomEngagementRead = {
+  room_id: string;
+  viewer_key: string;
+  organization_id: string;
+  summary: string;
+  signal: "hot" | "warm" | "cold";
+  follow_up: string;
+  source: "earn" | "rules";
+  activity_through: string | null;
+  read_at: string;
 };
 
 export type InvestorPortalShare = {
@@ -3162,6 +3178,7 @@ export type Database = {
       data_room_shares: TableShape<DataRoomShare>;
       data_room_views: TableShape<DataRoomView>;
       data_room_open_alerts: TableShape<DataRoomOpenAlert>;
+      data_room_engagement_reads: TableShape<DataRoomEngagementRead>;
       investor_portal_shares: TableShape<InvestorPortalShare>;
       investor_portal_views: TableShape<InvestorPortalView>;
       valuation_marks: TableShape<ValuationMark>;

@@ -1,8 +1,9 @@
 "use server";
 
 // Sharing, not authoring. This file governs who can see a data room: link
-// creation with its gates, password verification, dwell tracking, and
-// revocation. Documents themselves are created and edited in the library
+// creation with its gates, password verification, alerts, and revocation.
+// Reading time is recorded by the viewer (components/dataroom/viewer-actions.ts).
+// Documents themselves are created and edited in the library
 // (components/documents/document-actions.ts) and reach a room only through the
 // explicit publish manifest (components/build/room-actions.ts).
 import { revalidatePath } from "next/cache";
@@ -103,57 +104,6 @@ export async function verifySharePassword(token: string, password: string): Prom
   const { grantGate } = await import("@/lib/data-room-gate");
   await grantGate(data.id as string, { pwd: true });
   return true;
-}
-
-/**
- * Record section dwell time from the public data-room viewer.
- * Uses the service role because the data_room_views table has no anon insert policy.
- */
-export async function trackDwell(formData: FormData): Promise<void> {
-  const shareId = String(formData.get("share_id") ?? "").trim();
-  const documentId = String(formData.get("document_id") ?? "").trim() || null;
-  const durationSeconds = parseInt(String(formData.get("duration_seconds") ?? "0"), 10);
-  const viewerEmail = String(formData.get("viewer_email") ?? "").trim() || null;
-  const sessionId = String(formData.get("session_id") ?? "").trim() || null;
-
-  if (!shareId || !Number.isFinite(durationSeconds) || durationSeconds <= 0) return;
-
-  const { createServiceClient, hasSupabaseServiceEnv } = await import("@/lib/supabase/server");
-  if (!hasSupabaseServiceEnv()) return;
-  const supabase = createServiceClient();
-
-  // Validate the share exists and is still valid before recording.
-  const { data: share } = await supabase
-    .from("data_room_shares")
-    .select("organization_id, room_id, revoked_at, expires_at")
-    .eq("id", shareId)
-    .maybeSingle();
-  if (!share || share.revoked_at) return;
-  if (share.expires_at && new Date(share.expires_at).getTime() < Date.now()) return;
-
-  const shareData = share as {
-    organization_id: string;
-    room_id: string | null;
-    revoked_at: string | null;
-    expires_at: string | null;
-  };
-
-  await supabase
-    .from("data_room_views")
-    .insert({
-      organization_id: shareData.organization_id,
-      share_id: shareId,
-      room_id: shareData.room_id,
-      document_id: documentId,
-      kind: documentId ? "document" : "room",
-      viewer_email: viewerEmail,
-      duration_seconds: durationSeconds,
-      session_id: sessionId,
-    } as never)
-    .then(() => undefined, () => undefined);
-
-  // No "opened" email from here: dwell fires on every section change. The
-  // viewer reports the open itself (recordRoomOpen), once per reader per link.
 }
 
 /**

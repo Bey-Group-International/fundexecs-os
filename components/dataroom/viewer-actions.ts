@@ -150,3 +150,85 @@ export async function recordRoomOpen(token: string, visitorId: string): Promise<
   const { recordFirstOpen } = await import("@/lib/data-room-alerts.server");
   await recordFirstOpen(supabase, share, key, viewerEmail).catch(() => undefined);
 }
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+/** The viewer drains its clock every 30s; anything far beyond that is not reading. */
+const MAX_SECONDS_PER_ENTRY = 600;
+const MAX_ENTRIES = 50;
+
+/**
+ * Record reading time per document from the public viewer. Same checks as
+ * recordRoomOpen: the link is live and the reader passed every gate. The
+ * reader's email comes from their gate pass, never from the browser, and a
+ * document id counts only if it is published in this link's room.
+ */
+export async function trackReading(
+  token: string,
+  visitorId: string,
+  entries: { documentId: string | null; seconds: number }[],
+): Promise<void> {
+  if (typeof token !== "string" || !token || !Array.isArray(entries) || entries.length === 0) return;
+  const { hasSupabaseServiceEnv } = await import("@/lib/supabase/server");
+  if (!hasSupabaseServiceEnv()) return;
+  const supabase = createServiceClient();
+  const { data } = await supabase
+    .from("data_room_shares")
+    .select("id, organization_id, room_id, revoked_at, expires_at, require_email, require_nda, password_hash")
+    .eq("token", token)
+    .maybeSingle();
+  const share = data as {
+    id: string;
+    organization_id: string;
+    room_id: string | null;
+    revoked_at: string | null;
+    expires_at: string | null;
+    require_email: boolean;
+    require_nda: boolean;
+    password_hash: string | null;
+  } | null;
+  if (!share || share.revoked_at || !share.room_id) return;
+  if (share.expires_at && new Date(share.expires_at).getTime() < Date.now()) return;
+
+  const { readGatePass, gateSatisfied } = await import("@/lib/data-room-gate");
+  const pass = await readGatePass(share.id);
+  if (!gateSatisfied(share, pass)) return;
+
+  const clean = entries
+    .slice(0, MAX_ENTRIES)
+    .filter(
+      (e) =>
+        e &&
+        Number.isInteger(e.seconds) &&
+        e.seconds > 0 &&
+        (e.documentId === null || (typeof e.documentId === "string" && UUID.test(e.documentId))),
+    )
+    .map((e) => ({ documentId: e.documentId, seconds: Math.min(e.seconds, MAX_SECONDS_PER_ENTRY) }));
+  const ids = [...new Set(clean.map((e) => e.documentId).filter((d): d is string => d !== null))];
+  let published = new Set<string>();
+  if (ids.length) {
+    const { data: rows } = await supabase
+      .from("data_room_documents")
+      .select("document_id")
+      .eq("room_id", share.room_id)
+      .in("document_id", ids);
+    published = new Set(((rows ?? []) as { document_id: string }[]).map((r) => r.document_id));
+  }
+  const rows = clean
+    .filter((e) => e.documentId === null || published.has(e.documentId))
+    .map((e) => ({
+      organization_id: share.organization_id,
+      share_id: share.id,
+      room_id: share.room_id,
+      document_id: e.documentId,
+      kind: e.documentId ? "document" : "room",
+      action: "read",
+      viewer_email: pass?.email ?? null,
+      duration_seconds: e.seconds,
+      session_id: /^[A-Za-z0-9-]{8,64}$/.test(visitorId ?? "") ? visitorId : null,
+    }));
+  if (rows.length === 0) return;
+  await supabase
+    .from("data_room_views")
+    .insert(rows as never)
+    .then(() => undefined, () => undefined);
+}

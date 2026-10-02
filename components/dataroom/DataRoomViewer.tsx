@@ -5,8 +5,8 @@ import { useRouter } from "next/navigation";
 import { MarkdownRenderer } from "./MarkdownRenderer";
 import { ViewerGate } from "./ViewerGate";
 import type { GateConfig } from "./ViewerGate";
-import { trackDwell } from "@/components/build/materials-actions";
-import { recordRoomOpen } from "./viewer-actions";
+import { recordRoomOpen, trackReading } from "./viewer-actions";
+import { ReadingClock } from "@/lib/data-room-engagement";
 import { FilePreview } from "@/components/documents/FilePreview";
 import type { PreviewKind } from "@/lib/document-files";
 import { forwardWheel } from "@/lib/wheel-forward";
@@ -221,90 +221,107 @@ export function DataRoomViewer({
     nav.length === 0 || nav.some((n) => n.key === selected) ? selected : nav[0].key;
 
   // ---------------------------------------------------------------------------
-  // Dwell tracking
+  // Reading time, per document
   // ---------------------------------------------------------------------------
 
-  const dwellStart = useRef<number>(Date.now());
-  const dwellSection = useRef<string>(effectiveSelected);
-  // Map section key → first document id in that section (for analytics).
-  const sectionDocId = useMemo(() => {
-    const m = new Map<string, string | null>();
-    for (const s of docSections) {
-      m.set(s.key, s.docs[0]?.id ?? null);
+  // The reader's per-browser id, so an ungated link counts one reader across
+  // visits. Storage can be blocked; then this page view's id stands in.
+  const visitorId = useMemo(() => {
+    if (typeof window === "undefined") return sessionId;
+    try {
+      const stored = window.localStorage.getItem(VISITOR_KEY);
+      if (stored) return stored;
+      window.localStorage.setItem(VISITOR_KEY, sessionId);
+    } catch {
+      // Private mode or blocked storage.
     }
-    return m;
-  }, [docSections]);
+    return sessionId;
+  }, [sessionId]);
 
-  const fireDwell = useCallback(
-    (sectionKey: string, startMs: number) => {
-      // A preview is the GP looking at their own room. Recording it would
-      // corrupt the engagement analytics they use to read LP interest.
-      if (preview) return;
-      const duration = Math.round((Date.now() - startMs) / 1000);
-      if (duration < 3) return; // Skip accidental hovers
+  // Time is credited to the document taking up most of the reading pane, only
+  // while the tab is visible and the reader has touched the page in the last
+  // two minutes (or has focus inside an embedded PDF). Sent every 30 seconds,
+  // on section change and on leaving. A preview is the GP looking at their own
+  // room and is never recorded.
+  const flushReading = useRef<() => void>(() => undefined);
+  useEffect(() => {
+    if (!contentReady || preview) return;
+    const clock = new ReadingClock(Date.now());
+    const pane = mainRef.current;
 
-      const docId = sectionDocId.get(sectionKey) ?? null;
-      const fd = new FormData();
-      fd.set("share_id", shareId);
-      if (docId) fd.set("document_id", docId);
-      fd.set("duration_seconds", String(duration));
-      fd.set("session_id", sessionId);
-      if (viewerEmail) fd.set("viewer_email", viewerEmail);
+    const inView = (): string | null => {
+      if (!pane) return null;
+      const box = pane.getBoundingClientRect();
+      let best: string | null = null;
+      let bestPx = 0;
+      pane.querySelectorAll<HTMLElement>("[data-doc-id]").forEach((el) => {
+        const r = el.getBoundingClientRect();
+        const px = Math.min(r.bottom, box.bottom, window.innerHeight) - Math.max(r.top, box.top, 0);
+        if (px > bestPx) {
+          bestPx = px;
+          best = el.dataset.docId ?? null;
+        }
+      });
+      return best;
+    };
+    const tick = () => {
+      const now = Date.now();
+      // Scrolling a PDF happens inside its frame, where this page hears nothing.
+      if (document.activeElement instanceof HTMLIFrameElement && pane?.contains(document.activeElement)) clock.input(now);
+      clock.tick(now, inView(), document.visibilityState === "visible");
+    };
+    const flush = () => {
+      tick();
+      const entries = clock.drain();
+      if (entries.length) void trackReading(token, visitorId, entries).catch(() => undefined);
+    };
+    flushReading.current = flush;
 
-      void trackDwell(fd);
-    },
-    [shareId, sessionId, viewerEmail, sectionDocId, preview],
-  );
+    const onInput = () => clock.input(Date.now());
+    const onVisibility = () => (document.visibilityState === "hidden" ? flush() : tick());
+    const events = ["scroll", "wheel", "keydown", "pointerdown", "pointermove", "touchstart"] as const;
+    events.forEach((e) => window.addEventListener(e, onInput, { passive: true, capture: true }));
+    document.addEventListener("visibilitychange", onVisibility);
+    window.addEventListener("pagehide", flush);
+    tick();
+    let n = 0;
+    const timer = window.setInterval(() => {
+      tick();
+      if (++n % 6 === 0) flush();
+    }, 5_000);
 
-  // Fire dwell on section change.
+    return () => {
+      window.clearInterval(timer);
+      events.forEach((e) => window.removeEventListener(e, onInput, { capture: true }));
+      document.removeEventListener("visibilitychange", onVisibility);
+      window.removeEventListener("pagehide", flush);
+      flush();
+      flushReading.current = () => undefined;
+    };
+  }, [contentReady, preview, token, visitorId]);
+
   const handleSelect = useCallback(
     (key: string) => {
       if (key === effectiveSelected) return;
-      fireDwell(dwellSection.current, dwellStart.current);
-      dwellSection.current = key;
-      dwellStart.current = Date.now();
+      // Credit the section being left before its documents leave the page.
+      flushReading.current();
       setSelected(key);
       setSidebarOpen(false);
       // A new section starts at its top, not wherever the last one was scrolled.
       if (mainRef.current) mainRef.current.scrollTop = 0;
       if (!preview && document.scrollingElement) document.scrollingElement.scrollTop = 0;
     },
-    [effectiveSelected, fireDwell, preview],
+    [effectiveSelected, preview],
   );
 
   // Tell the server this reader is looking at the room, once per page view.
-  // It alerts the link's creator on this reader's first open only. The id is
-  // per browser (not per tab or load) so an ungated link alerts once per
-  // reader; storage can be blocked, and then each load counts as new.
+  // It alerts the link's creator on this reader's first open only.
   const openRecorded = useRef(false);
   useEffect(() => {
     if (!contentReady || preview || openRecorded.current) return;
     openRecorded.current = true;
-    let visitorId = sessionId;
-    try {
-      const stored = window.localStorage.getItem(VISITOR_KEY);
-      if (stored) visitorId = stored;
-      else window.localStorage.setItem(VISITOR_KEY, visitorId);
-    } catch {
-      // Private mode or blocked storage: fall back to this page view's id.
-    }
     void recordRoomOpen(token, visitorId).catch(() => undefined);
-  }, [contentReady, preview, token, sessionId]);
-
-  // Fire dwell on page unload.
-  useEffect(() => {
-    if (!contentReady) return;
-    const handleUnload = () => fireDwell(dwellSection.current, dwellStart.current);
-    window.addEventListener("pagehide", handleUnload);
-    return () => window.removeEventListener("pagehide", handleUnload);
-  }, [contentReady, fireDwell]);
-
-  // Reset dwell timer once real content is showing.
-  useEffect(() => {
-    if (contentReady) {
-      dwellStart.current = Date.now();
-    }
-  }, [contentReady]);
+  }, [contentReady, preview, token, visitorId]);
 
   // ---------------------------------------------------------------------------
   // Gate overlay — shown until the server has verified every configured gate
@@ -691,7 +708,11 @@ function DocCard({
   const btn = "rounded-lg border px-3 py-1.5 font-mono text-[11px] uppercase tracking-wider transition hover:bg-surface-0";
 
   return (
-    <div className="overflow-hidden rounded-xl border border-line bg-surface-1" style={{ boxShadow: "0 1px 4px rgba(0,0,0,0.1)" }}>
+    <div
+      data-doc-id={doc.id}
+      className="overflow-hidden rounded-xl border border-line bg-surface-1"
+      style={{ boxShadow: "0 1px 4px rgba(0,0,0,0.1)" }}
+    >
       {/* Doc header */}
       <div className="flex flex-wrap items-center gap-3 px-5 py-3">
         <span className="font-mono text-[11px] text-fg-muted">{href ? (doc.uploaded ? "▤" : "↗") : "≡"}</span>
