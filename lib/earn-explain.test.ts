@@ -1,12 +1,18 @@
-import { explainInstructions, explainPrompt, parseExplainRecordRef } from "@/lib/earn-explain";
+import { explainFollowupInstructions, explainInstructions, explainPrompt, parseExplainRecordRef } from "@/lib/earn-explain";
 
 const ID = "3f2b1c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d";
 
 describe("parseExplainRecordRef", () => {
   it("accepts the four record types with an id", () => {
-    for (const type of ["deal", "investor", "contact", "document", "pulse"] as const) {
+    for (const type of ["deal", "investor", "contact", "document", "pulse", "asset"] as const) {
       expect(parseExplainRecordRef({ type, id: ID })).toEqual({ type, id: ID });
     }
+  });
+
+  it("addresses meetings by room code", () => {
+    expect(parseExplainRecordRef({ type: "meeting", id: "3zp-khv-98" })).toEqual({ type: "meeting", id: "3zp-khv-98" });
+    expect(parseExplainRecordRef({ type: "meeting", id: "../etc" })).toBeNull();
+    expect(parseExplainRecordRef({ type: "deal", id: "3zp-khv-98" })).toBeNull();
   });
 
   it("rejects unknown types, bad ids, and junk", () => {
@@ -37,5 +43,15 @@ describe("explainInstructions", () => {
   it("mentions the web_search tool only when search is on", () => {
     expect(explainInstructions("deal", { webSearch: true })).toMatch(/web_search tool/);
     expect(explainInstructions("deal", { webSearch: false })).toMatch(/Live web search is off/);
+  });
+});
+
+describe("explainFollowupInstructions", () => {
+  it("keeps the record attached without the full Explain structure", () => {
+    const block = explainFollowupInstructions("deal", { webSearch: true });
+    expect(block).toMatch(/opened on the deal below/);
+    expect(block).not.toMatch(/Claims to check/);
+    expect(block).toMatch(/web_search tool/);
+    expect(explainFollowupInstructions("deal", { webSearch: false })).not.toMatch(/web_search/);
   });
 });

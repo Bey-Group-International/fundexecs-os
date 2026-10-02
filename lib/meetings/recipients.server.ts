@@ -17,6 +17,7 @@
 
 import { logId } from "@/lib/log-safe";
 import type { createServerClient } from "@/lib/supabase/server";
+import { subjectKey, subjectOfRow } from "@/lib/meetings/subject";
 import type { PresentPerson } from "@/lib/meetings/recipients";
 
 type SupabaseClient = Awaited<ReturnType<typeof createServerClient>>;
@@ -45,7 +46,7 @@ export async function loadPresentPeople(
   try {
     const { data, error } = await supabase
       .from("live_meeting_participants")
-      .select("user_id, display_name, joined_at")
+      .select("user_id, guest_key, display_name, joined_at")
       .eq("meeting_id", meetingId)
       // Oldest first, so the order people appear in is the order they arrived —
       // which puts the host at the top of a participant list, where a reader
@@ -58,7 +59,11 @@ export async function loadPresentPeople(
       return [];
     }
 
-    const rows = (data ?? []) as Array<{ user_id: string | null; display_name: string | null }>;
+    const rows = (data ?? []) as Array<{
+      user_id: string | null;
+      guest_key: string | null;
+      display_name: string | null;
+    }>;
     if (rows.length > PRESENT_LIMIT) {
       // Said rather than swallowed: the alternative is an email that reaches
       // two hundred of the people in a meeting and reports itself complete.
@@ -68,10 +73,15 @@ export async function loadPresentPeople(
       });
     }
 
-    // One entry per person. The unique index on (meeting_id, user_id) makes the
-    // member case redundant — but Postgres treats NULLs as distinct, so guest
-    // rows are not constrained by it, and a rejoin under a new guest key would
-    // otherwise be reported as a second person nobody could reach.
+    // One entry per person, by the identity the row actually carries.
+    //
+    // This used to fall back to `guest:<display name>`, which was the best
+    // available when nothing wrote a guest row: two different guests who both
+    // typed "Dana" collapsed into one, and one guest who changed their name
+    // between joins became two. Guest rows now carry the key their browser
+    // holds — the same one the knock route authorises them by — so the two
+    // kinds are told apart the way `subjectKey` tells them apart everywhere
+    // else, including the case of a guest key shaped like an account id.
     const seen = new Set<string>();
     const people: PresentPerson[] = [];
     /** Where to write each member's address once the directory is read. */
@@ -79,7 +89,11 @@ export async function loadPresentPeople(
 
     for (const row of rows.slice(0, PRESENT_LIMIT)) {
       const name = (row.display_name ?? "").trim();
-      const key = row.user_id ?? `guest:${name.toLowerCase()}`;
+      const subject = subjectOfRow(row);
+      // A row naming nobody is kept rather than dropped — it is still somebody
+      // who was in the room — but it gets a key of its own so it can neither
+      // collapse into another person nor swallow one.
+      const key = subject ? subjectKey(subject) : `unidentified:${people.length}`;
       if (seen.has(key)) continue;
       seen.add(key);
       // The address is filled in below. A guest has no user id and therefore no

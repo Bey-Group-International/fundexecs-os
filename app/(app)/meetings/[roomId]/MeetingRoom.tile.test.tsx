@@ -23,7 +23,7 @@
 import { useState } from "react";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { VideoTile, videoTrackOf } from "./CallParts";
+import { PeerAudio, VideoTile, videoTrackOf } from "./CallParts";
 import { createSpeakingStore, SpeakingProvider } from "./room-shared";
 
 beforeAll(() => {
@@ -292,5 +292,24 @@ describe("mirroring the self-view", () => {
   it("does not mirror anybody else, sharing or not", () => {
     renderTile({ isLocal: false, showingScreenShare: true });
     expect(mirrored(video() as HTMLElement)).toBe(false);
+  });
+});
+
+describe("PeerAudio", () => {
+  const audioTrack = { id: "a1", kind: "audio" } as unknown as MediaStreamTrack;
+  const stream = { getAudioTracks: () => [audioTrack], getVideoTracks: () => [] } as unknown as MediaStream;
+  const audio = () => document.querySelector("audio") as HTMLAudioElement;
+
+  it("plays a peer, and mutes them on this device when they are in the same room", () => {
+    const { rerender } = render(<PeerAudio stream={stream} audioTrack={audioTrack} />);
+    expect(audio().muted).toBe(false);
+
+    rerender(<PeerAudio stream={stream} audioTrack={audioTrack} silenced />);
+    expect(audio().muted).toBe(true);
+    // Still attached, so un-muting is instant rather than a reconnect.
+    expect(audio().srcObject).toBe(stream);
+
+    rerender(<PeerAudio stream={stream} audioTrack={audioTrack} silenced={false} />);
+    expect(audio().muted).toBe(false);
   });
 });

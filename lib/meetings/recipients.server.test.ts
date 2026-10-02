@@ -45,8 +45,10 @@ function fakeClient(tables: {
   return { client: { from } as never, seen };
 }
 
-const rows = (...list: Array<{ user_id: string | null; display_name: string | null }>) => ({
-  data: list,
+const rows = (
+  ...list: Array<{ user_id: string | null; guest_key?: string | null; display_name: string | null }>
+) => ({
+  data: list.map((row) => ({ guest_key: null, ...row })),
   error: null,
 });
 
@@ -108,11 +110,13 @@ describe("loadPresentPeople", () => {
 
   it("counts one person once however many rows they left", async () => {
     // Postgres treats NULLs as distinct, so the unique index on
-    // (meeting_id, user_id) does not constrain guest rows at all.
+    // (meeting_id, user_id) does not constrain guest rows at all — which is why
+    // guests have a partial index of their own on (meeting_id, guest_key), and
+    // why this is deduped by the key rather than by the name.
     const { client } = fakeClient({
       participants: rows(
-        { user_id: null, display_name: "Dana" },
-        { user_id: null, display_name: "dana" },
+        { user_id: null, guest_key: "g-1", display_name: "Dana" },
+        { user_id: null, guest_key: "g-1", display_name: "dana" },
         { user_id: "u1", display_name: "Sarah" },
         { user_id: "u1", display_name: "Sarah" },
       ),
@@ -122,6 +126,58 @@ describe("loadPresentPeople", () => {
       { name: "Dana", email: null },
       { name: "Sarah", email: "s@fund.test" },
     ]);
+  });
+
+  /**
+   * The case the old name-based de-duplication got wrong, and could only get
+   * wrong: two different guests who both typed the same name were collapsed
+   * into one, so a meeting of four reported three people and the host was never
+   * told the fourth was there.
+   */
+  it("keeps two different guests who chose the same name", async () => {
+    const { client } = fakeClient({
+      participants: rows(
+        { user_id: null, guest_key: "g-1", display_name: "Dana" },
+        { user_id: null, guest_key: "g-2", display_name: "Dana" },
+      ),
+      principals: { data: [], error: null },
+    });
+    expect(await loadPresentPeople(client, "m1")).toEqual([
+      { name: "Dana", email: null },
+      { name: "Dana", email: null },
+    ]);
+  });
+
+  /** A guest key shaped like an account id must not match an account. */
+  it("does not mistake a guest for the member whose id their key resembles", async () => {
+    const { client } = fakeClient({
+      participants: rows(
+        { user_id: "same-id", display_name: "Sarah" },
+        { user_id: null, guest_key: "same-id", display_name: "Dana" },
+      ),
+      principals: { data: [{ id: "same-id", email: "s@fund.test", full_name: "Sarah" }], error: null },
+    });
+    expect(await loadPresentPeople(client, "m1")).toEqual([
+      { name: "Sarah", email: "s@fund.test" },
+      { name: "Dana", email: null },
+    ]);
+  });
+
+  /**
+   * A row naming neither is kept, not dropped. The migration's
+   * `live_meeting_participants_has_identity` check stops the shape being
+   * written from here on, but a row that predates it still represents somebody
+   * who was in the room, and hiding them is the worse error.
+   */
+  it("keeps a row that names nobody rather than hiding them", async () => {
+    const { client } = fakeClient({
+      participants: rows(
+        { user_id: null, display_name: "?" },
+        { user_id: null, display_name: "?" },
+      ),
+      principals: { data: [], error: null },
+    });
+    expect(await loadPresentPeople(client, "m1")).toHaveLength(2);
   });
 
   it("stops at the ceiling rather than reading a runaway table", async () => {

@@ -24,6 +24,7 @@ import {
 } from "@/lib/meetings/report-page";
 import { REPORT_WAIT_LIMIT_MS } from "@/lib/meetings/attendance";
 import { callClock, isOneWay } from "@/lib/meetings/one-way";
+import { AskEarnButton } from "@/components/AskEarnButton";
 
 export const metadata: Metadata = {
   title: "Meeting report — FundExecs OS",
@@ -166,6 +167,7 @@ export default async function MeetingReportPage({
                 Review follow-up
               </a>
             )}
+            <AskEarnButton type="meeting" id={roomId} name={meeting.title ?? "this meeting"} />
             <ExportMenu roomId={roomId} />
           </div>
         </div>
