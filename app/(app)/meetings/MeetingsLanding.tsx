@@ -11,7 +11,6 @@ import { MeetingsWorkspace } from "./MeetingsWorkspace";
 import type { PendingFollowUp } from "@/lib/meetings/workspace";
 import { SchedulingLinkCard } from "./SchedulingLinkCard";
 import { CALENDAR_VIEW_PARAM, calendarViewUrl, parseCalendarView, type CalendarView } from "./calendar-view";
-import type { PastMeeting } from "./PastMeetingsList";
 import type { LoggedMeeting } from "@/lib/meetings/meeting-log";
 import type { CalendarMeeting } from "@/lib/meetings/calendar";
 
@@ -46,7 +45,6 @@ const CalendarManager = nextDynamic(
 export function MeetingsLanding({
   initialMeetings,
   initialUpcoming,
-  initialPast,
   initialLogs,
   initialPendingFollowUps = [],
   userId,
@@ -54,7 +52,6 @@ export function MeetingsLanding({
 }: {
   initialMeetings: CalendarMeeting[];
   initialUpcoming: UpcomingMeeting[];
-  initialPast: PastMeeting[];
   initialLogs: LoggedMeeting[];
   /** Past meetings whose follow-up was drafted and never sent. */
   initialPendingFollowUps?: PendingFollowUp[];
@@ -242,8 +239,6 @@ export function MeetingsLanding({
                 <div className={pane === "calendar" ? "w-full" : "hidden"}>
                   <MeetingsCalendar
                     initialMeetings={initialMeetings}
-                    initialUpcoming={initialUpcoming}
-                    initialPast={initialPast}
                     userId={userId}
                     orgId={orgId}
                     openScheduler={schedulerRequested}
