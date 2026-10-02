@@ -26,7 +26,7 @@ import {
 import {
   DEFAULT_EARN_PERSONA,
   EARN_PERSONA_STORAGE_KEY,
-  SPICY_PERSONA,
+  CANDOR_PERSONA,
   parseEarnPersona,
   type EarnPersonaKey,
 } from "@/lib/earn-persona";
@@ -183,7 +183,7 @@ export default function Copilot({
     if (typeof window === "undefined") return DEFAULT_EARN_MODE;
     return (localStorage.getItem("earn:mode") as EarnModeKey) ?? DEFAULT_EARN_MODE;
   });
-  // Spicy mode: Earn's Grok-style voice (blunt, witty, live fact-checks).
+  // Candor mode: Earn's frank, verdict-first voice with live fact-checks.
   // Opt-in per operator and remembered across reloads.
   const [persona, setPersona] = useState<EarnPersonaKey>(() => {
     if (typeof window === "undefined") return DEFAULT_EARN_PERSONA;
@@ -1338,11 +1338,11 @@ export default function Copilot({
       run: () => setMode(m.key),
     })),
     {
-      id: "persona-spicy",
+      id: "persona-candor",
       group: "Mode",
-      label: persona === "spicy" ? "Turn off Spicy mode" : "Turn on Spicy mode",
-      hint: SPICY_PERSONA.hint,
-      run: () => setPersona((p) => (p === "spicy" ? "standard" : "spicy")),
+      label: persona === "candor" ? "Turn off Candor mode" : "Turn on Candor mode",
+      hint: CANDOR_PERSONA.hint,
+      run: () => setPersona((p) => (p === "candor" ? "standard" : "candor")),
     },
     ...SLASH_COMMANDS.map((c) => ({
       id: `slash-${c.command}`,
@@ -1805,20 +1805,19 @@ export default function Copilot({
 
                 {/* Right: model + mode pickers */}
                 <div className="flex items-center gap-1">
-                  {/* Spicy mode toggle */}
+                  {/* Candor mode toggle */}
                   <button
                     type="button"
-                    onClick={() => setPersona((p) => (p === "spicy" ? "standard" : "spicy"))}
-                    aria-pressed={persona === "spicy"}
+                    onClick={() => setPersona((p) => (p === "candor" ? "standard" : "candor"))}
+                    aria-pressed={persona === "candor"}
                     className={`inline-flex h-7 items-center gap-1 rounded-md border px-2 font-mono text-[11px] uppercase tracking-wider transition ${
-                      persona === "spicy"
+                      persona === "candor"
                         ? "border-gold-500/60 bg-gold-500/10 text-gold-300"
                         : "border-line/50 bg-surface-2/60 text-fg-muted hover:border-gold-500/40 hover:text-fg-primary"
                     }`}
-                    title={`${SPICY_PERSONA.label} mode — ${SPICY_PERSONA.hint}`}
+                    title={`${CANDOR_PERSONA.label} mode — ${CANDOR_PERSONA.hint}`}
                   >
-                    <span aria-hidden>🌶</span>
-                    {SPICY_PERSONA.label}
+                    {CANDOR_PERSONA.label}
                   </button>
 
                   {/* Model picker */}
