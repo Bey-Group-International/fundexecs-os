@@ -37,6 +37,7 @@ function fakeDb(tables: Record<string, Row[]>, users: Record<string, string>) {
         return api;
       },
       limit: () => api,
+      order: () => api,
       maybeSingle: () => Promise.resolve({ data: rows[0] ?? null }),
       upsert: (p: Row) => {
         op = "upsert";
@@ -168,6 +169,27 @@ describe("sendDataRoomDigests", () => {
     expect(sendEmail).toHaveBeenCalledTimes(1);
     expect(sendEmail.mock.calls[0][0].htmlBody).toContain("PPM v3");
     expect(db.updates).toEqual([{ table: "data_room_shares", patch: { digest_sent_at: now.toISOString() }, ids: ["a", "b"] }]);
+  });
+
+  it("names Earn's hot investors active in the creator's rooms today", async () => {
+    const db = fakeDb(
+      {
+        data_room_shares: [digestShare("a")],
+        data_room_views: [view("a")],
+        data_rooms: [{ id: "room-1", name: "Fund II" }],
+        data_room_engagement_reads: [
+          { organization_id: "org-1", room_id: "room-1", viewer_key: "email:lp@x.com", signal: "hot", summary: "Deep in the PPM.", follow_up: "Offer a terms call.", activity_through: "2026-10-02T09:00:00Z" },
+          { organization_id: "org-1", room_id: "room-1", viewer_key: "email:old@x.com", signal: "hot", summary: "Old news.", follow_up: "x", activity_through: "2026-09-01T09:00:00Z" },
+          { organization_id: "org-1", room_id: "room-1", viewer_key: "email:meh@x.com", signal: "warm", summary: "Skimmed.", follow_up: "x", activity_through: "2026-10-02T09:00:00Z" },
+        ],
+      },
+      { "gp-1": "gp@fund.com" },
+    );
+    await sendDataRoomDigests(db.client, now);
+    const html = sendEmail.mock.calls[0][0].htmlBody as string;
+    expect(html).toContain("Deep in the PPM.");
+    expect(html).not.toContain("Old news.");
+    expect(html).not.toContain("Skimmed.");
   });
 
   it("reports nothing already reported", async () => {

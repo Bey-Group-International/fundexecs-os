@@ -137,9 +137,44 @@ export function firstOpenEmail(args: {
   return { subject, html };
 }
 
+export interface HotInvestor {
+  /** `email:…` or `visitor:…`, as Earn's reads store it. */
+  viewerKey: string;
+  roomName: string | null;
+  summary: string;
+  followUp: string;
+}
+
+/** How a reader is named in an email: their address, or that they gave none. */
+export function readerName(viewerKey: string): string {
+  return viewerKey.startsWith("email:") ? viewerKey.slice("email:".length) : "A reader who gave no email";
+}
+
+function hottestSection(hot: HotInvestor[]): string {
+  if (hot.length === 0) return "";
+  const items = hot
+    .slice(0, 5)
+    .map(
+      (h) => `<li style="margin-top: 10px;">
+          <span style="color: #F5F5F5; font-weight: 600;">${escapeHtml(readerName(h.viewerKey))}</span>${
+            h.roomName ? ` <span style="color: #888888;">· ${escapeHtml(h.roomName)}</span>` : ""
+          }<br />
+          <span style="color: #AAAAAA;">${escapeHtml(h.summary)}</span><br />
+          <span style="color: #F59E0B;">Next: ${escapeHtml(h.followUp)}</span>
+        </li>`,
+    )
+    .join("");
+  return `<div style="margin-top: 20px; padding: 14px 16px; border: 1px solid #3a2f12; border-radius: 10px; background: #17130a;">
+        <p style="margin: 0; font-size: 12px; font-weight: 700; letter-spacing: 0.08em; color: #F59E0B; text-transform: uppercase;">Hottest investors · Earn</p>
+        <ul style="margin: 0; padding-left: 18px; font-size: 13px;">${items}</ul>
+      </div>`;
+}
+
 export function digestEmail(args: {
   links: { label: string | null; roomName: string | null; digest: LinkDigest; documentNames: Map<string, string> }[];
   activityUrl: string;
+  /** Earn's hottest investors across these rooms, most recent first. */
+  hottest?: HotInvestor[];
 }): { subject: string; html: string } {
   const totalReaders = args.links.reduce((n, l) => n + l.digest.readers, 0);
   const subject = `Data room activity: ${totalReaders} reader${totalReaders === 1 ? "" : "s"} in the last day`;
@@ -170,6 +205,7 @@ export function digestEmail(args: {
   const html = shell(
     `<h1 style="margin: 0 0 8px; font-size: 22px; color: #F5F5F5; font-weight: 700;">Yesterday in your data rooms</h1>
       <p style="margin: 0; font-size: 15px; color: #AAAAAA;">Activity on links with the daily digest turned on.</p>
+      ${hottestSection(args.hottest ?? [])}
       ${sections}
       ${button(args.activityUrl, "Open activity")}`,
     "You get this because “Daily activity digest” is on for these links. Turn it off on the link to stop.",

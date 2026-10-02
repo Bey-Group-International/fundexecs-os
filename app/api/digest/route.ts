@@ -3,10 +3,12 @@ import { createServiceClient } from "@/lib/supabase/server";
 import { sendRadarDigests } from "@/lib/radar-send";
 import { recordCronRun } from "@/lib/cron-health";
 import { sendDataRoomDigests, type DigestSummary } from "@/lib/data-room-alerts.server";
+import { refreshActiveRoomReads } from "@/lib/data-room-engagement.server";
 
 // The Act-now Radar digest sweep: build + compose + push the ranked sourcing
 // brief to every org with enabled, due delivery prefs (in-app, Slack, email).
-export const maxDuration = 120;
+// 300: Earn re-reads active data rooms before the data-room digests.
+export const maxDuration = 300;
 export const dynamic = "force-dynamic";
 
 /**
@@ -43,9 +45,15 @@ export async function GET(request: Request) {
 
   // Data-room activity digests ride the same daily schedule. Isolated: a
   // failure here must not cost the Radar digests above their run record.
-  let dataRoom: DigestSummary | { error: string };
+  let dataRoom: (DigestSummary & { earn: { rooms: number; reads: number } | { error: string } }) | { error: string };
   try {
-    dataRoom = await sendDataRoomDigests(supabase);
+    // Earn re-reads every room with activity today first, so the digests
+    // below can name the hottest investors from a fresh read. Its own
+    // failure must not stop the digests going out.
+    const earn = await refreshActiveRoomReads(supabase).catch((err: unknown) => ({
+      error: err instanceof Error ? err.message : "failed",
+    }));
+    dataRoom = { ...(await sendDataRoomDigests(supabase)), earn };
   } catch (err) {
     dataRoom = { error: err instanceof Error ? err.message : "failed" };
   }

@@ -20,16 +20,9 @@ jest.mock("@/lib/supabase/server", () => ({
     },
   }),
 }));
-const investors = [
-  { key: "email:a@x.com", lastSeen: "2026-10-02T09:00:00Z" },
-  { key: "visitor:b1", lastSeen: "2026-10-01T09:00:00Z" },
-];
+const refreshRoomReads = jest.fn(async () => ({ ok: true, count: 2 }));
 jest.mock("@/lib/data-room-engagement.server", () => ({
-  loadRoomEngagement: async () => ({ engagement: { investors }, reads: new Map() }),
-  readEngagement: async () => [
-    { key: "email:a@x.com", signal: "hot", summary: "s", follow_up: "f", source: "earn" },
-    { key: "visitor:b1", signal: "cold", summary: "s2", follow_up: "f2", source: "rules" },
-  ],
+  refreshRoomReads: (...a: unknown[]) => refreshRoomReads(...(a as [])),
 }));
 
 import { refreshEngagementReads } from "./engagement-actions";
@@ -38,20 +31,23 @@ beforeEach(() => {
   ctx = { orgId: "org-1", role: "admin" };
   room = { id: "room-1", name: "Fund II" };
   upserts.length = 0;
+  refreshRoomReads.mockClear();
 });
 
-it("stores Earn's read for each investor, stamped with the activity it covered", async () => {
+it("asks Earn to read the room, as the signed-in member", async () => {
   expect(await refreshEngagementReads("room-1")).toEqual({ ok: true, count: 2 });
-  expect(upserts[0]).toEqual([
-    expect.objectContaining({ room_id: "room-1", viewer_key: "email:a@x.com", organization_id: "org-1", signal: "hot", source: "earn", activity_through: "2026-10-02T09:00:00Z" }),
-    expect.objectContaining({ viewer_key: "visitor:b1", signal: "cold", activity_through: "2026-10-01T09:00:00Z" }),
-  ]);
+  expect(refreshRoomReads).toHaveBeenCalledWith(expect.anything(), "org-1", { id: "room-1", name: "Fund II" });
+});
+
+it("reports a failed save", async () => {
+  refreshRoomReads.mockResolvedValueOnce({ ok: false, count: 0 });
+  expect(await refreshEngagementReads("room-1")).toEqual({ ok: false, error: "Couldn't save Earn's read. Try again." });
 });
 
 it("refuses a view-only member", async () => {
   ctx = { orgId: "org-1", role: "viewer" };
   expect((await refreshEngagementReads("room-1")).ok).toBe(false);
-  expect(upserts).toEqual([]);
+  expect(refreshRoomReads).not.toHaveBeenCalled();
 });
 
 it("refuses a room outside the workspace", async () => {

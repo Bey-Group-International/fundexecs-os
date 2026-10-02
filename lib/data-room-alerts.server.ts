@@ -152,7 +152,26 @@ export async function sendDataRoomDigests(supabase: Service, now = new Date()): 
     const documentNames = new Map(((docs ?? []) as { id: string; name: string }[]).map((d) => [d.id, d.name]));
     const roomNames = new Map(((rooms ?? []) as { id: string; name: string }[]).map((r) => [r.id, r.name]));
 
+    // Earn's freshest reads (the sweep refreshes them just before this) for
+    // the investors active in these rooms today, hot ones only.
+    const floor = new Date(now.getTime() - DAY_MS).toISOString();
+    const { data: hotRows } = roomIds.length
+      ? await supabase
+          .from("data_room_engagement_reads")
+          .select("room_id, viewer_key, summary, follow_up, activity_through")
+          .eq("organization_id", orgId)
+          .in("room_id", roomIds)
+          .eq("signal", "hot")
+          .gt("activity_through", floor)
+          .order("activity_through", { ascending: false })
+          .limit(5)
+      : { data: [] };
+    const hottest = ((hotRows ?? []) as { room_id: string; viewer_key: string; summary: string; follow_up: string }[]).map(
+      (h) => ({ viewerKey: h.viewer_key, roomName: roomNames.get(h.room_id) ?? null, summary: h.summary, followUp: h.follow_up }),
+    );
+
     const { subject, html } = digestEmail({
+      hottest,
       links: items.map(({ share, digest }) => ({
         label: share.label,
         roomName: share.room_id ? (roomNames.get(share.room_id) ?? null) : null,

@@ -92,3 +92,29 @@ describe("emails", () => {
     expect(html).toContain("a@x.com");
   });
 });
+
+describe("hottest investors in the digest", () => {
+  it("leads with Earn's hottest investors, escaped, naming unnamed readers plainly", () => {
+    const digest = summarizeViews([row({ kind: "room" })])!;
+    const { html } = digestEmail({
+      links: [{ label: "Fund II LPs", roomName: null, digest, documentNames: new Map() }],
+      activityUrl: "https://app.example.com/build/data_room",
+      hottest: [
+        { viewerKey: "email:lp@x.com", roomName: "Fund II", summary: "Read the <PPM> twice.", followUp: "Offer a terms call." },
+        { viewerKey: "visitor:abc12345", roomName: null, summary: "Long read of the deck.", followUp: "Ask the sender who it is." },
+      ],
+    });
+    expect(html).toContain("Hottest investors · Earn");
+    expect(html).toContain("lp@x.com");
+    expect(html).toContain("Read the &lt;PPM&gt; twice.");
+    expect(html).toContain("Next: Offer a terms call.");
+    expect(html).toContain("A reader who gave no email");
+    expect(html.indexOf("Hottest investors")).toBeLessThan(html.indexOf("Fund II LPs"));
+  });
+
+  it("leaves the section out when nobody is hot", () => {
+    const digest = summarizeViews([row({ kind: "room" })])!;
+    const { html } = digestEmail({ links: [{ label: "L", roomName: null, digest, documentNames: new Map() }], activityUrl: "https://a.b" });
+    expect(html).not.toContain("Hottest investors");
+  });
+});
