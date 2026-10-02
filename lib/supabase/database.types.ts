@@ -2536,6 +2536,18 @@ export type PulseRun = {
   created_at: string;
 };
 
+// Earn "Explain this" cache (supabase/migrations/20261002200016_earn_explanations.sql). Service-role only.
+export type EarnExplanation = {
+  id: string;
+  organization_id: string;
+  record_type: string;
+  record_id: string;
+  content: string;
+  model: string | null;
+  created_by: string | null;
+  created_at: string;
+};
+
 type TableShape<Row> = {
   Row: Row;
   Insert: Partial<Row>;
@@ -3254,6 +3266,7 @@ export type Database = {
       radar_feedback: TableShape<RadarFeedback>;
       pulse_items: TableShape<PulseItem>;
       pulse_runs: TableShape<PulseRun>;
+      earn_explanations: TableShape<EarnExplanation>;
       radar_digest_prefs: TableShape<RadarDigestPref>;
       radar_digest_log: TableShape<RadarDigestLogEntry>;
       funnel_snapshots: TableShape<FunnelSnapshotRow>;
