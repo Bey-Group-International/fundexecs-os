@@ -21,6 +21,8 @@ import {
 import { MeetingGreenRoom, type GreenRoomChoice } from "./MeetingGreenRoom";
 import {
   constraintsFor,
+  facingConstraints,
+  settledFacing,
   displayConstraints,
   levelFromSamples,
   needsSinkChange,
@@ -4714,16 +4716,51 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
 
   const muteAll = useCallback(() => { sendSignal({ type: "mute_all", from: myIdRef.current }); }, [sendSignal]);
 
+  /**
+   * Swap between the front and rear cameras.
+   *
+   * Three things here were wrong, and all three only bite on a phone -- which
+   * is the only place this button appears.
+   *
+   * It asked for `{ facingMode }` and nothing else, while `switchCam` fifty
+   * lines up carried capture bounds and a comment explaining why. On a phone
+   * that omission is the worst available, because the rear camera is the
+   * highest-resolution sensor on the device: the flip opened a 4K 60fps capture
+   * on a mesh call, and nothing downstream undoes it -- `videoSendCap` sets
+   * `scaleResolutionDownBy: 1` at any healthy bitrate, so the encoder is told
+   * to keep every pixel. The bounds now live in `cameraBounds` so the two
+   * callers cannot drift apart again.
+   *
+   * It leaked the stream on the early return, where both of its siblings stop
+   * it. That leaves a second live capture of the same sensor and the hardware
+   * light on -- and two captures of one sensor is also how a camera starts
+   * hunting its own exposure.
+   *
+   * And it recorded the side it ASKED for. `facingConstraints` asks rather than
+   * demands, because an exact match throws on a one-camera machine, so a flip
+   * can legitimately come back with the same camera -- and the button then
+   * claimed the rear camera while showing a face.
+   */
   const flipCamera = useCallback(async () => {
     const next = facingMode === "user" ? "environment" : "user";
     try {
-      const s = await navigator.mediaDevices.getUserMedia({ video: { facingMode: next }, audio: false });
+      const s = await navigator.mediaDevices.getUserMedia({
+        video: facingConstraints(next),
+        audio: false,
+      });
       const t = s.getVideoTracks()[0];
-      if (!t || !localStreamRef.current) return;
+      if (!t || !localStreamRef.current) { s.getTracks().forEach((x) => x.stop()); return; }
       await adoptCameraTrack(t);
       setSelectedCamId(t.getSettings().deviceId || "");
-      setFacingMode(next);
-    } catch (e) { console.warn("[flipCamera]", e); }
+      setFacingMode(settledFacing(t.getSettings().facingMode, next));
+      setMediaError(null);
+    } catch (e) {
+      console.warn("[flipCamera]", e);
+      // Said rather than swallowed, as `switchCam` says it: a flip that fails
+      // silently reads as a dead button, and the member cannot tell that the
+      // camera they still have is the one they are still sending.
+      setMediaError("That camera could not be opened. Your previous one is still live.");
+    }
   }, [facingMode, adoptCameraTrack]);
 
   /**
