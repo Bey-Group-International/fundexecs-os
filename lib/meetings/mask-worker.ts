@@ -236,6 +236,21 @@ function describe(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
 }
 
+/**
+ * End the current SESSION, leaving the worker's own long-lived things alone.
+ *
+ * The asymmetry with `stop` is load-bearing and neither function said so, which
+ * cost two readers of this file an hour between them. `teardown` ends a session
+ * -- a camera, its streams, its compositor -- and deliberately does NOT touch
+ * `segmenter`, `segmenterLoading` or `timestampFloor`, because a replacement
+ * session is about to adopt all three. `stop` ends the worker and must clear
+ * them.
+ *
+ * Which is exactly what makes the promise-identity check in `start` correct: a
+ * replacement session shares the cached load, so a stale callback finding
+ * `segmenterLoading === loading` must leave that segmenter open for it. Only a
+ * `stop`, which clears the cache, makes a resolved load nobody's.
+ */
 function teardown(): void {
   const active = session;
   session = null;
@@ -360,6 +375,8 @@ scope.onmessage = (event: MessageEvent) => {
       if (session) session.paused = message.paused;
       return;
     case "stop":
+      // Ends the WORKER, so unlike `teardown` it clears what outlives a
+      // session. See `teardown` for why that difference matters.
       teardown();
       try { segmenter?.close(); } catch { /* already closed */ }
       segmenter = null;
