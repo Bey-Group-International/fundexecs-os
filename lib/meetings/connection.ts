@@ -167,6 +167,86 @@ export function canSetLocalOffer(signalingState: RTCSignalingState): boolean {
   return signalingState === "stable" || signalingState === "have-local-offer";
 }
 
+// ─── Saying hello ────────────────────────────────────────────────────────────
+
+/**
+ * Why this client should announce itself, or null when it should stay quiet.
+ *
+ * `join` is the ONLY message in this protocol that makes anybody build a peer
+ * connection to us. Nothing else in the room ever creates one from nothing: an
+ * offer is a reply to a join, an answer is a reply to an offer, and an ICE
+ * candidate belongs to a connection that already exists. So a join that does
+ * not arrive is not a message lost — it is a participant who is in the meeting,
+ * with their camera and microphone open and the room drawn around them, whom
+ * nobody else can see or hear. It cannot heal, and the only cure is a reload
+ * that nothing tells them to perform.
+ *
+ * It is sent over a broadcast socket, fire and forget, at the worst moment a
+ * call has: immediately after a WebSocket handshake, on whatever network the
+ * participant is on. An invite-link guest pays that twice over — they are the
+ * population always on somebody else's network, and theirs is the hello sent
+ * last, after a wait in the waiting room.
+ *
+ * Three reasons, and the middle one is the one that was missing:
+ *
+ *   `first`   — the opening hello of the call.
+ *   `alone`   — we hold no live peer connection. Either nobody is here, in
+ *               which case this costs one small message that nobody receives,
+ *               or somebody IS here and has not heard us, which is exactly the
+ *               state above. The two are indistinguishable from inside this
+ *               client, and only one of them is a failure, so it re-announces.
+ *   `stalled` — we hold connections and at least one is not up, so a rebuild
+ *               has something to rebuild.
+ *
+ * What this replaced tested only the third, and so could never fire in the
+ * first: `some()` over an empty collection is false, and the participant with
+ * no peers is precisely the participant whose hello went missing. A socket
+ * reconnect — the one event that would naturally have put it right — looked at
+ * an empty map, concluded there was nothing to repair, and said nothing.
+ *
+ * A `closed` connection is not counted as held. It carries no media and we are
+ * the ones who closed it, so a map of nothing but closed entries is `alone` by
+ * any meaning the room cares about.
+ */
+export type AnnounceReason = "first" | "alone" | "stalled";
+
+export function announceReason(input: {
+  /** True for the first successful subscribe of this call, false on a resubscribe. */
+  first: boolean;
+  /** `connectionState` of every peer connection this client currently holds. */
+  peerStates: readonly RTCPeerConnectionState[];
+}): AnnounceReason | null {
+  if (input.first) return "first";
+  const held = input.peerStates.filter((state) => state !== "closed");
+  if (held.length === 0) return "alone";
+  return held.some((state) => state !== "connected") ? "stalled" : null;
+}
+
+/**
+ * How long to wait before saying hello again when nobody has answered.
+ *
+ * The thing being waited for is cheap and fast: a peer ENTRY appears the moment
+ * the far end's offer lands, which is one broadcast round trip and nothing to
+ * do with ICE, media or a relay. So the first step only has to outlast a slow
+ * WebSocket hop, not a connection — long enough that an answer in flight is not
+ * mistaken for silence, short enough that a lost hello is repaired before
+ * anybody has finished saying "I can't see you".
+ *
+ * Then it stretches, and settles into a slow heartbeat rather than stopping.
+ * Stopping is what the old code did, and an unanswered hello does not become
+ * less wrong with time: the host whose socket was down for two minutes still
+ * needs to be told that somebody is in their meeting.
+ */
+export const REANNOUNCE_STEPS_MS = [3_000, 6_000, 12_000] as const;
+
+/** The resting cadence once the opening steps are spent. */
+export const REANNOUNCE_CADENCE_MS = 30_000;
+
+export function reannounceDelayMs(priorAttempts: number): number {
+  const spent = Number.isFinite(priorAttempts) ? Math.max(0, Math.floor(priorAttempts)) : 0;
+  return spent < REANNOUNCE_STEPS_MS.length ? REANNOUNCE_STEPS_MS[spent] : REANNOUNCE_CADENCE_MS;
+}
+
 // ─── Send caps ───────────────────────────────────────────────────────────────
 
 export interface SendCap {

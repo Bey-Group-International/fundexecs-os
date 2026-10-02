@@ -109,6 +109,7 @@ const supabaseStub = {
 jest.mock("@/lib/supabase/client", () => ({ createClient: () => supabaseStub }));
 
 import { MeetingRoom } from "./MeetingRoom";
+import { REANNOUNCE_CADENCE_MS, REANNOUNCE_STEPS_MS } from "@/lib/meetings/connection";
 
 const ROOM = "abc-defg-hi";
 
@@ -648,5 +649,64 @@ describe("a member who simply muted themselves", () => {
     expect(screen.queryByText(/Nobody can hear you/)).not.toBeInTheDocument();
     // The ordinary caption, on a control that can deliver what it says.
     expect(document.querySelector('button[title="Unmute"]')).not.toBeNull();
+  });
+});
+
+/**
+ * The failure this covers is the one a host reports as "I admitted them and I
+ * can't see or hear them".
+ *
+ * `join` is the only message in the room's protocol that makes anybody build a
+ * peer connection to the sender — an offer answers a join, an answer answers an
+ * offer, an ICE candidate belongs to a connection that already exists. It went
+ * out once, fire and forget, over a socket milliseconds old, and its delivery
+ * result was thrown away. When it did not arrive the member was in the meeting
+ * with their devices open and their own room drawn correctly, and invisible to
+ * everybody, for the rest of the call.
+ *
+ * This harness is a guest (`guest=1&name=Ada` above), which is the participant
+ * who hit it: theirs is the last hello sent, and the one sent from somebody
+ * else's network straight out of the waiting room.
+ */
+describe("a hello that nobody answered", () => {
+  const joinsSent = () =>
+    sent.filter((m) => (m as { payload?: { type?: string } }).payload?.type === "join").length;
+
+  it("says it again rather than leaving the member invisible for the whole call", async () => {
+    await enterCall();
+    const opening = joinsSent();
+    expect(opening).toBeGreaterThan(0);
+
+    // Nobody offered back, so this client holds no peer connection at all. From
+    // inside the room that is indistinguishable from an empty meeting, and only
+    // one of the two is a failure — so it speaks up again.
+    await flush(REANNOUNCE_STEPS_MS[0] + 500, 8);
+    expect(joinsSent()).toBeGreaterThan(opening);
+  });
+
+  it("keeps saying it for as long as the silence lasts", async () => {
+    await enterCall();
+    const opening = joinsSent();
+
+    const everyStep = REANNOUNCE_STEPS_MS.reduce((a, b) => a + b, 0);
+    await flush(everyStep + REANNOUNCE_CADENCE_MS + 2_000, 70);
+
+    // Asserted as a floor, not a count: pinning the exact number would pin the
+    // schedule. What matters is that it did not give up after one attempt,
+    // which is what the old code did — and what left the only cure a reload
+    // nothing asked for.
+    expect(joinsSent()).toBeGreaterThanOrEqual(opening + REANNOUNCE_STEPS_MS.length);
+  });
+
+  it("stops the moment somebody answers", async () => {
+    await enterCall();
+    await peerArrives("peer-1", "Brett");
+    const settled = joinsSent();
+
+    await flush(REANNOUNCE_CADENCE_MS * 2, 40);
+    // A `join` tears down every peer connection in the room and rebuilds it, so
+    // repeating it at somebody already here would be the cure causing the
+    // disease. Silence once answered is as load-bearing as speech before.
+    expect(joinsSent()).toBe(settled);
   });
 });
