@@ -94,15 +94,28 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       emailKind = "confirmed";
     } else if (action === "reschedule") {
       const startIso = newStart!.toISOString();
-      if (startIso === ctx.booking.starts_at) {
+      // Instants, not strings: the stored time comes back as "+00:00", the
+      // request's as "Z", and as strings the two never matched — so a move to
+      // the same time rewrote the booking and emailed everyone a "move".
+      if (newStart!.getTime() === new Date(ctx.booking.starts_at).getTime()) {
         return NextResponse.json({ error: "That's the time it's already at." }, { status: 422 });
       }
-      const endIso = new Date(newStart!.getTime() + ctx.eventType.duration_minutes * 60_000).toISOString();
+      // The booking's own length, not the meeting type's: a host who stretched
+      // the meeting keeps it stretched when they move it.
+      const durationMinutes = Math.max(
+        1,
+        Math.round((new Date(ctx.booking.ends_at).getTime() - new Date(ctx.booking.starts_at).getTime()) / 60_000),
+      );
+      const endIso = new Date(newStart!.getTime() + durationMinutes * 60_000).toISOString();
       if (!allowConflict) {
-        const clashes = await hostConflicts(service, ctx.page, startIso, endIso, {
+        const { clashes, heldByBooking } = await hostConflicts(service, ctx.page, startIso, endIso, {
           excludeBookingId: ctx.booking.id,
           excludeMeetingId: ctx.booking.meeting_id,
         });
+        // Not offered as "Move anyway": the database would refuse it.
+        if (heldByBooking) {
+          return NextResponse.json({ error: HOST_BOOKING_OVERLAP_MESSAGE, overridable: false }, { status: 409 });
+        }
         if (clashes.length > 0) {
           return NextResponse.json(
             { error: hostConflictMessage("move"), overridable: true, busy: clashes },
@@ -111,7 +124,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
         }
       }
       try {
-        next = await rescheduleBooking(service, ctx, startIso, { enforceAvailability: false });
+        next = await rescheduleBooking(service, ctx, startIso, { enforceAvailability: false, durationMinutes });
       } catch (err) {
         if (err instanceof SlotUnavailableError) throw new SlotUnavailableError(HOST_BOOKING_OVERLAP_MESSAGE);
         throw err;
@@ -150,7 +163,9 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       startIso: next.booking.starts_at,
       endIso: next.booking.ends_at,
       ...(action === "reschedule" ? { previousStartIso } : {}),
-      durationMinutes: next.eventType.duration_minutes,
+      durationMinutes: Math.round(
+        (new Date(next.booking.ends_at).getTime() - new Date(next.booking.starts_at).getTime()) / 60_000,
+      ),
       notes: next.booking.invitee_notes,
       joinUrl: next.roomCode ? buildMeetingInviteUrl(SITE_URL, next.roomCode) : null,
       // A declined or cancelled invitee gets the booking page back, not a

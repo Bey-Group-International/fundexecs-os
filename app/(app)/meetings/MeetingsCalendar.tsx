@@ -834,6 +834,7 @@ export function MeetingsCalendar({
             void refreshRequests();
             void refresh();
           }}
+          onStale={() => void refreshRequests()}
         />
       ) : detail ? (
         <EventDetail
@@ -2721,10 +2722,13 @@ function RequestDetail({
   request,
   onClose,
   onDecided,
+  onStale,
 }: {
   request: CalendarMeeting;
   onClose: () => void;
   onDecided: () => void;
+  /** The request changed elsewhere (declined in another tab, cancelled by the invitee). */
+  onStale: () => void;
 }) {
   const [busy, setBusy] = useState<"approve" | "decline" | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -2754,10 +2758,14 @@ function RequestDetail({
       let res = await send(false);
       if (res.status === 409) {
         const body = (await res.json().catch(() => ({}))) as { error?: string; overridable?: boolean };
-        if (body.overridable !== true || !window.confirm(`${body.error ?? "That time overlaps something."}\n\nApprove anyway?`)) {
-          if (body.overridable !== true) setError(body.error ?? "That didn't work.");
+        if (body.overridable !== true) {
+          // Not a clash to overrule: the request is no longer what this dialog
+          // shows. Say why, and redraw the calendar from what is true now.
+          setError(body.error ?? "That didn't work.");
+          onStale();
           return;
         }
+        if (!window.confirm(`${body.error ?? "That time overlaps something."}\n\nApprove anyway?`)) return;
         res = await send(true);
       }
       if (!res.ok) {

@@ -43,10 +43,14 @@ function makeClient(tables: Record<string, Row[]>) {
         recordDelete();
         return builder;
       },
-      neq: () => builder,
+      neq: (col: string, val: unknown) => {
+        rows = rows.filter((r) => r[col] !== val);
+        return builder;
+      },
       in: () => builder,
       is: () => builder,
       gte: () => builder,
+      gt: () => builder,
       lt: () => builder,
       order: () => builder,
       limit: () => builder,
@@ -320,6 +324,19 @@ describe("PATCH /api/meetings/scheduling/bookings/[id]", () => {
     return base;
   }
 
+  it("does not offer 'Approve anyway' when another booking holds the time", async () => {
+    const base = tables();
+    base.scheduling_bookings.push({ ...base.scheduling_bookings[0], id: "b-2", status: "confirmed" });
+    const { client, updates } = makeClient(base);
+    serviceClient.mockReturnValue(client);
+
+    const res = await PATCH(request({ action: "approve" }), { params });
+
+    expect(res.status).toBe(409);
+    expect(await res.json()).toMatchObject({ overridable: false, error: expect.stringMatching(/another booking/i) });
+    expect(updates.scheduling_bookings).toBeUndefined();
+  });
+
   it("warns before approving a request whose slot the host has since filled", async () => {
     const { client, updates } = makeClient(filledSlot());
     serviceClient.mockReturnValue(client);
@@ -415,6 +432,55 @@ describe("PATCH /api/meetings/scheduling/bookings/[id]", () => {
       serviceClient.mockReturnValue(second.client);
       const moved = await PATCH(request({ action: "reschedule", startIso, allowConflict: true }), { params });
       expect(moved.status).toBe(200);
+    });
+
+    it("does not offer 'Move anyway' over another booking, which could only fail", async () => {
+      const base = tables({ status: "confirmed", meeting_id: "m-1" });
+      base.scheduling_bookings.push({ ...base.scheduling_bookings[0], id: "b-2", meeting_id: "m-2" });
+      const { client, updates } = makeClient(base);
+      serviceClient.mockReturnValue(client);
+
+      const res = await PATCH(request({ action: "reschedule", startIso: offHours() }), { params });
+
+      expect(res.status).toBe(409);
+      expect(await res.json()).toMatchObject({ overridable: false, error: expect.stringMatching(/another booking/i) });
+      expect(updates.scheduling_bookings).toBeUndefined();
+    });
+
+    it("does nothing, and emails no one, for a move to the time it is already at", async () => {
+      const startsAt = nextSlotIso();
+      // As stored and read back: "+00:00", where the request carries "Z".
+      const stored = startsAt.replace(".000Z", "+00:00");
+      const { client, updates } = makeClient(tables({ status: "confirmed", meeting_id: "m-1", starts_at: stored }));
+      serviceClient.mockReturnValue(client);
+
+      const res = await PATCH(request({ action: "reschedule", startIso: startsAt }), { params });
+
+      expect(res.status).toBe(422);
+      expect(updates.scheduling_bookings).toBeUndefined();
+      expect(sendBookingEmails).not.toHaveBeenCalled();
+    });
+
+    it("keeps a booking the host stretched at its stretched length", async () => {
+      const startsAt = nextSlotIso();
+      const base = tables({
+        status: "confirmed",
+        meeting_id: "m-1",
+        starts_at: startsAt,
+        ends_at: new Date(new Date(startsAt).getTime() + 60 * 60_000).toISOString(),
+      });
+      const { client, updates } = makeClient(base);
+      serviceClient.mockReturnValue(client);
+      const startIso = offHours();
+
+      const res = await PATCH(request({ action: "reschedule", startIso }), { params });
+
+      expect(res.status).toBe(200);
+      expect(updates.scheduling_bookings[0]).toMatchObject({
+        starts_at: startIso,
+        ends_at: new Date(new Date(startIso).getTime() + 60 * 60_000).toISOString(),
+      });
+      expect(sendBookingEmails).toHaveBeenCalledWith("rescheduled_by_host", expect.objectContaining({ durationMinutes: 60 }));
     });
 
     it("is not blocked by the booking's own room at its old time", async () => {
