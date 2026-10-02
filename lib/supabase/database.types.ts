@@ -1420,7 +1420,7 @@ export type IngestLog = {
 };
 
 // Per-org Gmail read cursor for the hourly mailbox sweep (migration
-// 20261002170000, lib/integrations/gmail-sync). Service-role writes only.
+// 20261002202408, lib/integrations/gmail-sync). Service-role writes only.
 export type GmailMailboxSync = {
   organization_id: string;
   mailbox_email: string | null;
