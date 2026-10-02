@@ -17,6 +17,7 @@
 //               authenticate it).
 // Nothing here trusts a client-supplied "I already did this" claim.
 import { createHmac, timingSafeEqual } from "crypto";
+import { emailDomainAllowed } from "@/lib/data-room-link-rules";
 
 const COOKIE_PREFIX = "fx_dr_gate_";
 // Long enough that a returning LP isn't re-gated on every visit; short enough
@@ -35,6 +36,8 @@ export interface GateRequirements {
   require_email: boolean;
   require_nda: boolean;
   password_hash: string | null;
+  /** When set, the gate email must be at one of these domains. */
+  allowed_email_domains?: string[] | null;
 }
 
 function gateSecret(): string {
@@ -121,6 +124,10 @@ export async function grantGate(
  * given pass. A null pass satisfies only a share with no requirements. */
 export function gateSatisfied(share: GateRequirements, pass: GatePassPayload | null): boolean {
   if (share.require_email && !pass?.email) return false;
+  // Re-checked on every request, not only when the email was given: a domain
+  // limit added to a live link applies to readers already holding a pass.
+  if (share.allowed_email_domains?.length && !(pass?.email && emailDomainAllowed(pass.email, share.allowed_email_domains)))
+    return false;
   if (share.require_nda && !pass?.nda) return false;
   if (share.password_hash && !pass?.pwd) return false;
   return true;

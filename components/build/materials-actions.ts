@@ -10,6 +10,7 @@ import { revalidatePath } from "next/cache";
 import { createServerClient } from "@/lib/supabase/server";
 import { getSessionContext } from "@/lib/auth";
 import { insertShare } from "@/lib/data-room-shares.server";
+import { parseDomains } from "@/lib/data-room-link-rules";
 
 const ROOM = "/build/data_room";
 
@@ -73,6 +74,8 @@ export async function createShare(formData: FormData): Promise<void> {
     recipientEmail: String(formData.get("recipient_email") ?? "").trim() || null,
     notifyOnOpen: formData.get("notify_on_open") === "1",
     dailyDigest: formData.get("daily_digest") === "1",
+    allowedEmailDomains: parseDomains(String(formData.get("allowed_domains") ?? "")).domains,
+    maxReaders: parsePositiveInt(formData.get("max_readers")),
     allowedSections,
     // Unchecked boxes are absent from FormData, so "allow download" is sent as
     // an explicit "0" when turned off; anything else keeps the old default.
@@ -128,6 +131,67 @@ export async function updateShareAlerts(
     .eq("id", id)
     .eq("organization_id", ctx.orgId);
   revalidatePath(ROOM);
+}
+
+function parsePositiveInt(v: FormDataEntryValue | null | undefined): number | null {
+  const n = Number(String(v ?? "").trim());
+  return Number.isInteger(n) && n > 0 && n <= 100_000 ? n : null;
+}
+
+export interface ShareAccessChange {
+  /** Days from now; null for no expiry; omitted to leave the expiry as it is. */
+  expiresInDays?: number | null;
+  /** What the operator typed; empty clears the limit; omitted leaves it. */
+  allowedDomains?: string;
+  /** null clears the cap; omitted leaves it. */
+  maxReaders?: number | null;
+}
+
+/**
+ * Change who a live link admits and until when, without minting a new link
+ * (the recipient keeps the URL they already have). Setting a domain list or a
+ * reader cap turns the email gate on, because both work on the gate email.
+ */
+export async function updateShareAccess(
+  id: string,
+  change: ShareAccessChange,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const ctx = await getSessionContext();
+  if (!ctx?.orgId) return { ok: false, error: "Sign in again to change this link." };
+  if (typeof id !== "string" || !id || !change || typeof change !== "object") return { ok: false, error: "Nothing to change." };
+
+  const patch: Record<string, unknown> = {};
+  if (change.expiresInDays === null) patch.expires_at = null;
+  else if (change.expiresInDays !== undefined) {
+    const days = Number(change.expiresInDays);
+    if (!Number.isInteger(days) || days < 1 || days > 3650) return { ok: false, error: "Choose an expiry between 1 and 3650 days." };
+    patch.expires_at = new Date(Date.now() + days * 86_400_000).toISOString();
+  }
+  if (change.allowedDomains !== undefined) {
+    const { domains, invalid } = parseDomains(String(change.allowedDomains));
+    if (invalid.length) return { ok: false, error: `Not a domain: ${invalid.slice(0, 3).join(", ")}` };
+    patch.allowed_email_domains = domains.length ? domains : null;
+  }
+  if (change.maxReaders !== undefined) {
+    const n = change.maxReaders === null ? null : parsePositiveInt(String(change.maxReaders));
+    if (change.maxReaders !== null && n === null) return { ok: false, error: "The reader limit must be a whole number above zero." };
+    patch.max_readers = n;
+  }
+  if (Object.keys(patch).length === 0) return { ok: true };
+  if (patch.allowed_email_domains || patch.max_readers) patch.require_email = true;
+
+  const supabase = await createServerClient();
+  const { data, error } = await supabase
+    .from("data_room_shares")
+    .update(patch as never)
+    .eq("id", id)
+    .eq("organization_id", ctx.orgId)
+    .is("revoked_at", null)
+    .select("id");
+  if (error) return { ok: false, error: "Couldn't save. Try again." };
+  if (!data || data.length === 0) return { ok: false, error: "That link is revoked or no longer exists." };
+  revalidatePath(ROOM);
+  return { ok: true };
 }
 
 export async function revokeShare(formData: FormData): Promise<void> {

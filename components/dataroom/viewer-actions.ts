@@ -81,20 +81,71 @@ export async function recordNdaSignature(formData: FormData): Promise<{ ok: bool
  * one (data capture, not authentication — there's no secret to check), then
  * grants the "email" gate for this share via a signed server-side pass.
  */
-export async function passEmailGate(token: string, email: string): Promise<{ ok: boolean }> {
+export async function passEmailGate(
+  token: string,
+  email: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const generic = { ok: false as const, error: "Something went wrong. Please try again." };
   const trimmed = email.trim();
-  if (!trimmed || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) return { ok: false };
+  if (!trimmed || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) {
+    return { ok: false, error: "Enter a valid email address." };
+  }
 
   const supabase = createServiceClient();
   const { data: share } = await supabase
     .from("data_room_shares")
-    .select("id, revoked_at, expires_at")
+    .select("id, organization_id, revoked_at, expires_at, allowed_email_domains, max_readers")
     .eq("token", token)
     .maybeSingle();
-  if (!share) return { ok: false };
-  const shareRow = share as { id: string; revoked_at: string | null; expires_at: string | null };
-  if (shareRow.revoked_at) return { ok: false };
-  if (shareRow.expires_at && new Date(shareRow.expires_at).getTime() < Date.now()) return { ok: false };
+  if (!share) return generic;
+  const shareRow = share as {
+    id: string;
+    organization_id: string;
+    revoked_at: string | null;
+    expires_at: string | null;
+    allowed_email_domains: string[] | null;
+    max_readers: number | null;
+  };
+  if (shareRow.revoked_at) return generic;
+  if (shareRow.expires_at && new Date(shareRow.expires_at).getTime() < Date.now()) return generic;
+
+  const { emailDomainAllowed, describeDomains } = await import("@/lib/data-room-link-rules");
+  if (!emailDomainAllowed(trimmed, shareRow.allowed_email_domains)) {
+    return {
+      ok: false,
+      error: `This link is for ${describeDomains(shareRow.allowed_email_domains ?? [])} addresses. Ask the sender for access with another address.`,
+    };
+  }
+
+  // The reader cap counts distinct emails. Someone already admitted always
+  // gets back in; only a new reader is refused once the link is full.
+  if (shareRow.max_readers) {
+    const key = trimmed.toLowerCase();
+    const { data: known } = await supabase
+      .from("data_room_link_readers")
+      .select("email")
+      .eq("share_id", shareRow.id)
+      .eq("email", key)
+      .maybeSingle();
+    if (!known) {
+      const { count } = await supabase
+        .from("data_room_link_readers")
+        .select("email", { count: "exact", head: true })
+        .eq("share_id", shareRow.id);
+      if ((count ?? 0) >= shareRow.max_readers) {
+        return { ok: false, error: "This link has reached its reader limit. Ask the sender for a new link." };
+      }
+    }
+  }
+  // Recorded for every email-gated link, capped or not, so a cap added later
+  // counts the readers who already came in.
+  await supabase
+    .from("data_room_link_readers")
+    .upsert(
+      { share_id: shareRow.id, email: trimmed.toLowerCase(), organization_id: shareRow.organization_id } as never,
+      { onConflict: "share_id,email", ignoreDuplicates: true },
+    )
+    .then(() => undefined, () => undefined);
 
   const { grantGate } = await import("@/lib/data-room-gate");
   await grantGate(shareRow.id, { email: trimmed });
@@ -119,7 +170,7 @@ export async function recordRoomOpen(token: string, visitorId: string): Promise<
   const { data } = await supabase
     .from("data_room_shares")
     .select(
-      "id, organization_id, room_id, label, notify_on_open, created_by, revoked_at, expires_at, require_email, require_nda, password_hash",
+      "id, organization_id, room_id, label, notify_on_open, created_by, revoked_at, expires_at, require_email, require_nda, password_hash, allowed_email_domains",
     )
     .eq("token", token)
     .maybeSingle();
@@ -135,6 +186,7 @@ export async function recordRoomOpen(token: string, visitorId: string): Promise<
     require_email: boolean;
     require_nda: boolean;
     password_hash: string | null;
+    allowed_email_domains: string[] | null;
   } | null;
   if (!share || share.revoked_at || !share.room_id) return;
   if (share.expires_at && new Date(share.expires_at).getTime() < Date.now()) return;
@@ -173,7 +225,7 @@ export async function trackReading(
   const supabase = createServiceClient();
   const { data } = await supabase
     .from("data_room_shares")
-    .select("id, organization_id, room_id, revoked_at, expires_at, require_email, require_nda, password_hash")
+    .select("id, organization_id, room_id, revoked_at, expires_at, require_email, require_nda, password_hash, allowed_email_domains")
     .eq("token", token)
     .maybeSingle();
   const share = data as {
@@ -185,6 +237,7 @@ export async function trackReading(
     require_email: boolean;
     require_nda: boolean;
     password_hash: string | null;
+    allowed_email_domains: string[] | null;
   } | null;
   if (!share || share.revoked_at || !share.room_id) return;
   if (share.expires_at && new Date(share.expires_at).getTime() < Date.now()) return;
