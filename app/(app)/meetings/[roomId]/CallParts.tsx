@@ -236,16 +236,25 @@ export const VideoTile = React.memo(VideoTileImpl);
  * replaced track arrives inside the same MediaStream object, and without it the
  * memo would not see the change and `play()` would not be re-tried.
  */
-function PeerAudioImpl({ stream, audioTrack }: {
+function PeerAudioImpl({ stream, audioTrack, silenced = false }: {
   stream: MediaStream | null;
   audioTrack: MediaStreamTrack | null;
+  /**
+   * Not played on this device. Set when the peer is in the same room and their
+   * audio was carrying this member's own voice back (see voice-return.ts). The
+   * element stays mounted and attached, so un-silencing is instant.
+   */
+  silenced?: boolean;
 }) {
   const ref = useRef<HTMLAudioElement>(null);
 
   useEffect(() => {
+    if (ref.current) ref.current.muted = silenced;
+  }, [silenced]);
+
+  useEffect(() => {
     const el = ref.current;
     if (!el) return;
-    el.muted = false;
     const source = audioTrack ? stream : null;
     if (el.srcObject !== source) el.srcObject = source;
     if (!source) return;
