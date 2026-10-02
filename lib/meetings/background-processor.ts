@@ -2,10 +2,19 @@
 // Turning a camera track into a camera track with something else behind you.
 //
 // The shape of it: the raw camera feeds a hidden <video>, a segmenter marks
-// which pixels are the person, and a <canvas> composites them over a blurred
-// copy of the room, a painted template, or an uploaded image. The canvas is
-// captured as a MediaStreamTrack, and that is what the peers and the local tile
-// receive instead of the camera.
+// which pixels are the person, and a canvas composites them over a blurred copy
+// of the room, a painted template, or an uploaded image. The canvas is captured
+// as a MediaStreamTrack, and that is what the peers and the local tile receive
+// instead of the camera.
+//
+// What is left here is the main thread's half of that: the <video>, the
+// segmenter's lifetime, the animation-frame loop and its pacing, the output
+// track, and noticing when the camera underneath stops. The per-frame chain
+// itself -- sample, quiet, grow, blend, sharpen, feather, composite -- is in
+// `mask-compositor.ts`, which knows nothing about which thread it is on, because
+// the same chain has to run in a worker and nothing in a worker can call
+// `document.createElement`. One implementation, so a mask fix cannot land on one
+// thread and not the other.
 //
 // Two decisions shape the rest of this file.
 //
@@ -14,54 +23,34 @@
 // sender bound to that track, so changing effects would mean a replaceTrack on
 // every connection in the call — renegotiation traffic and a visible hitch,
 // every time somebody tries a different background. Instead the effect is a
-// field this loop reads, and switching from blur to a template changes nothing
-// the network can see.
+// field the compositor reads, and switching from blur to a template changes
+// nothing the network can see.
 //
 // The segmenter is loaded on first use, not on mount. Its runtime is about
 // 12MB. Nobody who never opens the background picker should pay for it, and
 // nobody should pay for it while they are still deciding whether to join.
 //
-// The rules this consults — blur radii, template definitions, when an effect
-// costs more than it is worth — are in backgrounds.ts, where they can be tested
-// without a GPU.
+// The rules the chain consults — blur radii, template definitions, when an
+// effect costs more than it is worth — are in backgrounds.ts, where they can be
+// tested without a GPU.
 
 import {
   FRAME_BUDGET_MS,
   NO_BACKGROUND,
-  blendCoverageByAgreement,
-  quietCoverageGaps,
-  createMaskAgreement,
-  type MaskAgreement,
-  blurRadiusPx,
-  dilateCoverage,
-  maskGapSpanPx,
-  maskDilatePx,
-  maskFeatherPx,
-  maskGrid,
   needsSegmentation,
-  dilateCeiling,
-  sharpenEdge,
   OUTPUT_FPS,
   shouldDrawFrame,
-  sampleCoverageFromCategory,
-  sampleCoverageFromConfidence,
-  templateById,
   type BackgroundEffect,
-  type BackgroundTemplate,
-  type DilateRadii,
-  type MaskGrid,
 } from "@/lib/meetings/backgrounds";
+import {
+  MaskCompositor,
+  documentSurfaceFactory,
+  type CompositorFrame,
+  type MaskSample,
+} from "@/lib/meetings/mask-compositor";
 
 const WASM_PATH = "/mediapipe";
 const MODEL_PATH = "/mediapipe/selfie_segmenter.tflite";
-
-/**
- * How much smaller than the frame the blurred background is painted.
- *
- * Half, not less: at a 640px camera the light blur is only 5px, and a smaller
- * canvas leaves too little blur to hide its own upscaling.
- */
-const BACKDROP_SCALE = 2;
 
 /** A mask MediaPipe hands back, which must be closed once read. */
 interface CategoryMask { width?: number; height?: number; getAsUint8Array: () => Uint8Array; close: () => void }
@@ -70,7 +59,7 @@ interface SegmentResult { categoryMask?: CategoryMask; confidenceMasks?: Confide
 
 type Segmenter = {
   segmentForVideo: (
-    frame: HTMLVideoElement | HTMLCanvasElement,
+    frame: CanvasImageSource,
     timestampMs: number,
     callback: (result: SegmentResult) => void,
   ) => void;
@@ -145,6 +134,40 @@ function loadSegmenter(): Promise<Segmenter | null> {
   return segmenterPromise;
 }
 
+/**
+ * Turn what MediaPipe handed back into the plain arrays the chain takes.
+ *
+ * Confidence first. The category mask is the model's verdict — a yes or no at
+ * some threshold it chose — and on a cap, a headwrap or a helmet that verdict is
+ * usually "no". The confidence behind it is not zero, and reading it is what
+ * keeps the top of someone's head attached to them.
+ *
+ * `getAsFloat32Array` is the expensive line in the whole pipeline: a ~520KB
+ * GPU-to-CPU copy, 24 times a second. It is called here, at the boundary, rather
+ * than inside the chain, so that it can be timed as itself.
+ */
+export function readMaskSample(result: SegmentResult): MaskSample | null {
+  const confidence = result.confidenceMasks?.[0];
+  if (confidence) {
+    return {
+      kind: "confidence",
+      data: confidence.getAsFloat32Array(),
+      width: confidence.width ?? 0,
+      height: confidence.height ?? 0,
+    };
+  }
+  const category = result.categoryMask;
+  if (category) {
+    return {
+      kind: "category",
+      data: category.getAsUint8Array(),
+      width: category.width ?? 0,
+      height: category.height ?? 0,
+    };
+  }
+  return null;
+}
+
 export interface ProcessorCallbacks {
   /** Sustained slow frames, so the caller can decide to suspend. */
   onSlowFrames: (consecutive: number) => void;
@@ -154,57 +177,12 @@ export interface ProcessorCallbacks {
 
 export class BackgroundProcessor {
   private readonly video: HTMLVideoElement;
-  private readonly canvas: HTMLCanvasElement;
-  private readonly ctx: CanvasRenderingContext2D;
-  /** Scratch buffers, reused every frame: allocating two canvases per frame at
-   *  24fps is the difference between a warm laptop and a loud one. */
-  private readonly scratch: HTMLCanvasElement;
-  private readonly scratchCtx: CanvasRenderingContext2D;
-  /** The mask, as a greyscale image the compositor can blur and mask with.
-   *  Carried at grid resolution and upscaled by the compositor — see maskGrid. */
-  private mask: HTMLCanvasElement;
-  private maskCtx: CanvasRenderingContext2D;
-  private maskImage: ImageData | null = null;
-  /** The frame the segmenter reads, drawn at grid size. The model works at
-   *  256px whatever it is given, and a frame-sized input only meant a
-   *  frame-sized mask to read back off the GPU — 3.7MB of floats at 720p, 24
-   *  times a second — to average down to the grid anyway. */
-  private readonly segInput: HTMLCanvasElement;
-  private readonly segInputCtx: CanvasRenderingContext2D;
-  /** The mask softened at grid size, so the full-size upscale needs no filter. */
-  private readonly feathered: HTMLCanvasElement;
-  private readonly featheredCtx: CanvasRenderingContext2D;
-  /** The blurred room, painted at half the frame's size and scaled up. A blur
-   *  throws away exactly the detail the smaller canvas cannot hold. */
-  private readonly backdrop: HTMLCanvasElement;
-  private readonly backdropCtx: CanvasRenderingContext2D;
-  /** A painted template never changes, so it is painted once per size. */
-  private templateCache: { key: string; canvas: HTMLCanvasElement } | null = null;
-  private destroyed = false;
-  /** Coverage carried between frames, so edges settle instead of shimmering. */
-  private maskHistory: Uint8ClampedArray | null = null;
-  /**
-   * Which pixels the model keeps contradicting itself about, which is what sets
-   * each pixel's blend rate. Reset alongside maskHistory everywhere, because a
-   * stale reversal record would damp the first frames of a resumed effect.
-   */
-  private maskAgreement: MaskAgreement | null = null;
-  /** This frame's coverage, before it is blended into the history. */
-  private maskTarget: Uint8ClampedArray | null = null;
-  private grid: MaskGrid = maskGrid(640, 480);
-  private dilateRadii: DilateRadii = { up: 1, down: 0, side: 1 };
-  /** How wide an enclosed gap may be and still be quieted, in grid pixels. */
-  private gapSpanReach = 1;
-  /** What growth may claim, rebuilt from each frame's own coverage. */
-  private dilateLimit: Uint8ClampedArray | null = null;
-  /** The smoothed mask with its ramp tightened — never the history itself. */
-  private maskEdge: Uint8ClampedArray | null = null;
+  private readonly compositor: MaskCompositor;
   private readonly outputTrack: MediaStreamTrack;
   private readonly stream: MediaStream;
 
+  private destroyed = false;
   private effect: BackgroundEffect = NO_BACKGROUND;
-  private customImage: HTMLImageElement | null = null;
-  private customUrl: string | null = null;
   private segmenter: Segmenter | null = null;
   private running = false;
   private raf = 0;
@@ -216,36 +194,18 @@ export class BackgroundProcessor {
   private sourceEnded = false;
   /** Detaches the `ended` listener on that camera. */
   private releaseSource: (() => void) | null = null;
+  /** The decode in flight, so a later choice cannot be overtaken by an earlier
+   *  one that was slower to decode. */
+  private customToken = 0;
 
   private constructor(
     video: HTMLVideoElement,
-    canvas: HTMLCanvasElement,
-    ctx: CanvasRenderingContext2D,
-    scratch: HTMLCanvasElement,
-    scratchCtx: CanvasRenderingContext2D,
-    mask: HTMLCanvasElement,
-    maskCtx: CanvasRenderingContext2D,
+    compositor: MaskCompositor,
     stream: MediaStream,
     private readonly callbacks: ProcessorCallbacks,
-    extra: {
-      segInput: HTMLCanvasElement; segInputCtx: CanvasRenderingContext2D;
-      feathered: HTMLCanvasElement; featheredCtx: CanvasRenderingContext2D;
-      backdrop: HTMLCanvasElement; backdropCtx: CanvasRenderingContext2D;
-    },
   ) {
-    this.segInput = extra.segInput;
-    this.segInputCtx = extra.segInputCtx;
-    this.feathered = extra.feathered;
-    this.featheredCtx = extra.featheredCtx;
-    this.backdrop = extra.backdrop;
-    this.backdropCtx = extra.backdropCtx;
     this.video = video;
-    this.canvas = canvas;
-    this.ctx = ctx;
-    this.scratch = scratch;
-    this.scratchCtx = scratchCtx;
-    this.mask = mask;
-    this.maskCtx = maskCtx;
+    this.compositor = compositor;
     this.stream = stream;
     this.outputTrack = stream.getVideoTracks()[0];
   }
@@ -255,36 +215,17 @@ export class BackgroundProcessor {
     const width = settings.width ?? 1280;
     const height = settings.height ?? 720;
 
-    const canvas = document.createElement("canvas");
-    canvas.width = width;
-    canvas.height = height;
-    const ctx = canvas.getContext("2d", { alpha: false });
-    if (!ctx || typeof canvas.captureStream !== "function") return null;
+    const compositor = MaskCompositor.create(documentSurfaceFactory(), width, height);
+    if (!compositor) return null;
 
-    const scratch = document.createElement("canvas");
-    scratch.width = width;
-    scratch.height = height;
-    const scratchCtx = scratch.getContext("2d", { alpha: true });
-    if (!scratchCtx) return null;
-
-    // Grid-sized, not frame-sized: the compositor upscales it, and every
-    // per-pixel step below then costs a fraction of what it used to.
-    const grid = maskGrid(width, height);
-    const mask = document.createElement("canvas");
-    mask.width = grid.width;
-    mask.height = grid.height;
-    // Not `willReadFrequently`: nothing reads this back. The flag would keep it
-    // on the CPU and cost an upload every time the compositor drew it.
-    const maskCtx = mask.getContext("2d", { alpha: true });
-    if (!maskCtx) return null;
-
-    const segInput = document.createElement("canvas");
-    const segInputCtx = segInput.getContext("2d", { alpha: false });
-    const feathered = document.createElement("canvas");
-    const featheredCtx = feathered.getContext("2d", { alpha: true });
-    const backdrop = document.createElement("canvas");
-    const backdropCtx = backdrop.getContext("2d", { alpha: false });
-    if (!segInputCtx || !featheredCtx || !backdropCtx) return null;
+    // The output surface is what gets captured as the track peers receive, so
+    // this route needs the real `HTMLCanvasElement` behaviour rather than just a
+    // thing that can be drawn on. Asked of the object rather than asserted about
+    // it: `documentSurfaceFactory` makes canvases, but a browser without
+    // `captureStream` would otherwise fail later, with a processor that composites
+    // perfectly into a track nobody has.
+    const surface = compositor.surface as HTMLCanvasElement;
+    if (typeof surface.captureStream !== "function") { compositor.destroy(); return null; }
 
     const video = document.createElement("video");
     video.playsInline = true;
@@ -295,17 +236,15 @@ export class BackgroundProcessor {
     } catch {
       // Autoplay of a muted, srcObject-backed element is permitted everywhere
       // this app runs; if it is refused there is nothing to composite.
+      compositor.destroy();
       return null;
     }
 
-    const stream = canvas.captureStream(OUTPUT_FPS);
-    if (stream.getVideoTracks().length === 0) return null;
+    const stream = surface.captureStream(OUTPUT_FPS);
+    if (stream.getVideoTracks().length === 0) { compositor.destroy(); return null; }
 
-    const processor = new BackgroundProcessor(video, canvas, ctx, scratch, scratchCtx, mask, maskCtx, stream, callbacks, {
-      segInput, segInputCtx, feathered, featheredCtx, backdrop, backdropCtx,
-    });
+    const processor = new BackgroundProcessor(video, compositor, stream, callbacks);
     holdSegmenter();
-    processor.resizeMask(width, height);
     processor.watchSource(source);
     return processor;
   }
@@ -346,33 +285,31 @@ export class BackgroundProcessor {
    */
   setEffect(effect: BackgroundEffect, image?: Blob | null): void {
     this.effect = effect;
-    if (effect.kind !== "custom") {
-      this.releaseCustomImage();
-    } else if (image) {
-      void this.loadCustomImage(image);
-    }
+    this.compositor.setEffect(effect, null);
+    if (effect.kind === "custom" && image) void this.loadCustomImage(image);
     if (needsSegmentation(effect)) this.start();
     else this.stop();
   }
 
+  /**
+   * Decode an uploaded background.
+   *
+   * `createImageBitmap` rather than an `<img>`: it is the one decode path that
+   * exists in a worker too, so the compositor takes the same kind of object on
+   * either thread.
+   */
   private async loadCustomImage(blob: Blob): Promise<void> {
-    const url = URL.createObjectURL(blob);
-    const img = new Image();
-    img.src = url;
+    const token = ++this.customToken;
     try {
-      await img.decode();
-      this.releaseCustomImage();
-      this.customImage = img;
-      this.customUrl = url;
+      const bitmap = await createImageBitmap(blob);
+      // A second choice made while this one was decoding has already won; this
+      // bitmap would otherwise overwrite it with the older picture.
+      if (this.destroyed || token !== this.customToken) { bitmap.close(); return; }
+      this.compositor.setEffect(this.effect, bitmap);
     } catch {
-      URL.revokeObjectURL(url);
+      // Undecodable artwork. The compositor falls through to the camera, which
+      // is better than a blank rectangle where a person was.
     }
-  }
-
-  private releaseCustomImage(): void {
-    if (this.customUrl) URL.revokeObjectURL(this.customUrl);
-    this.customUrl = null;
-    this.customImage = null;
   }
 
   private start(): void {
@@ -405,11 +342,8 @@ export class BackgroundProcessor {
     // measured from before it paused.
     this.lastDrawnAt = null;
     // Dropped so a resumed effect starts from the live mask rather than blending
-    // out of wherever the person was standing when it paused. The reversal record
-    // goes with it: kept, it would damp the first frames back on the strength of
-    // a flicker from before the pause.
-    this.maskHistory = null;
-    this.maskAgreement = null;
+    // out of wherever the person was standing when it paused.
+    this.compositor.reset();
     if (this.raf) cancelAnimationFrame(this.raf);
     this.raf = 0;
     this.slowFrames = 0;
@@ -453,268 +387,36 @@ export class BackgroundProcessor {
   };
 
   private drawFrame(now: number): void {
-    const { video, canvas, ctx } = this;
+    const { video, compositor } = this;
     if (video.readyState < 2) return;
 
-    // The camera can change shape underneath us — a device switch, or a phone
-    // being rotated. Following it keeps the composite from stretching.
-    if (video.videoWidth && video.videoHeight &&
-        (canvas.width !== video.videoWidth || canvas.height !== video.videoHeight)) {
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
-      this.scratch.width = video.videoWidth;
-      this.scratch.height = video.videoHeight;
-      this.resizeMask(video.videoWidth, video.videoHeight);
-    }
+    const frame: CompositorFrame = {
+      source: video,
+      width: video.videoWidth,
+      height: video.videoHeight,
+    };
 
     // Still waiting on the segmenter. Show the real camera rather than nothing —
     // the effect takes over the moment it can, and an unprocessed frame is a far
     // better thing to be sending than a black one.
-    if (!this.segmenter) {
-      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-      return;
-    }
+    if (!this.segmenter) { compositor.passThrough(frame); return; }
 
     // MediaPipe rejects a timestamp that does not advance, which happens when
     // two animation frames land inside the same millisecond.
     const timestamp = now <= this.lastTimestamp ? this.lastTimestamp + 1 : now;
     this.lastTimestamp = timestamp;
 
-    const { segInput, segInputCtx, grid } = this;
-    segInputCtx.drawImage(video, 0, 0, grid.width, grid.height);
-    this.segmenter.segmentForVideo(segInput, timestamp, (result) => {
+    const input = compositor.prepareSegmentInput(frame);
+    this.segmenter.segmentForVideo(input, timestamp, (result) => {
       try {
-        this.composite(result, canvas.width, canvas.height);
+        const sample = readMaskSample(result);
+        if (sample) compositor.compose(frame, sample);
       } finally {
         // Every mask MediaPipe hands out owns GPU memory until it is closed.
         try { result.categoryMask?.close(); } catch { /* already closed */ }
         result.confidenceMasks?.forEach((m) => { try { m.close(); } catch { /* already closed */ } });
       }
     });
-  }
-
-  /**
-   * Paint the background, then the person on top of it.
-   *
-   * The order matters and the alternative is tempting: it looks natural to draw
-   * the camera frame and erase the background out of it. But that leaves a hard
-   * edge wherever the mask is uncertain — around hair, most visibly. Painting
-   * the background first and compositing the person over it keeps the seam
-   * inside the person's silhouette, where it reads as softness rather than a
-   * cut-out.
-   *
-   * The mask is treated as an image rather than as a loop over pixels. That is
-   * what lets the compositor blur it — a hard mask cuts hair off in a staircase
-   * of whole pixels, and a feathered one lets the edge fall off the way an
-   * out-of-focus background does. It is also faster than reading back and
-   * rewriting every pixel of a 720p frame.
-   */
-  private composite(result: SegmentResult, width: number, height: number): void {
-    const { ctx, video, scratch, scratchCtx, maskCtx, grid } = this;
-
-    const target = this.maskTarget;
-    if (!target) return;
-
-    // Confidence first. The category mask is the model's verdict — a yes or no
-    // at some threshold it chose — and on a cap, a headwrap or a helmet that
-    // verdict is usually "no". The confidence behind it is not zero, and reading
-    // it is what keeps the top of someone's head attached to them.
-    const confidence = result.confidenceMasks?.[0];
-    let graded = false;
-    // Masks come back at the size of what was segmented — the grid-sized input
-    // — but their own dimensions are the ones to trust.
-    if (confidence) {
-      sampleCoverageFromConfidence(
-        target, confidence.getAsFloat32Array(),
-        confidence.width ?? grid.width, confidence.height ?? grid.height, grid,
-      );
-      graded = true;
-    } else if (result.categoryMask) {
-      const category = result.categoryMask;
-      sampleCoverageFromCategory(
-        target, category.getAsUint8Array(),
-        category.width ?? grid.width, category.height ?? grid.height, grid,
-      );
-    } else {
-      return;
-    }
-
-    // Quiet the room between two people sitting close, BEFORE the ceiling below
-    // is built from this buffer.
-    //
-    // The mask is an alpha channel and the composite is `destination-in`, so it
-    // keeps the camera frame WHERE THE MASK COVERS. Coverage wandering in the low
-    // tens across the gap between two colleagues is therefore a faint,
-    // shimmering, sharp strip of their real room reaching the outgoing track
-    // while they have a background effect switched on. Holding that tail at zero
-    // stops the wander and shows the effect there instead.
-    //
-    // Before the ceiling, because the ceiling is built from this buffer and
-    // records which cells growth may later fill. Quieting first means those cells
-    // are closed to growth as well, so nothing puts the strip back.
-    //
-    // Runs on the category path too. That mask is a bare yes/no with no
-    // uncertainty band, so there is usually nothing under the ceiling for this to
-    // find -- but a build that returns graded values through that path should not
-    // quietly start leaking.
-    quietCoverageGaps(target, grid.width, grid.height, this.gapSpanReach);
-
-    // Grow it, upward mostly, and only into pixels the model was unsure about.
-    //
-    // Two separate things stop this becoming the halo it used to be. The radii
-    // are directional, because a head covering sits ABOVE a head and growth
-    // sideways or downward only hangs room off somebody's arms and desk. And the
-    // ceiling forbids growth from inventing coverage where the model was
-    // confident there is none — so the fabric of a headwrap fills in and the
-    // wall behind a shoulder does not.
-    //
-    // The ceiling is only meaningful on the graded path. A category mask is 0 or
-    // 255 with no uncertainty band, so constraining growth there would grow
-    // nothing and hand back the missing headwear this exists to keep.
-    let limit: Uint8ClampedArray | null = null;
-    if (graded) {
-      if (!this.dilateLimit || this.dilateLimit.length !== target.length) {
-        this.dilateLimit = new Uint8ClampedArray(target.length);
-      }
-      limit = dilateCeiling(this.dilateLimit, target);
-    }
-    dilateCoverage(target, grid.width, grid.height, this.dilateRadii, limit);
-
-    ctx.save();
-    ctx.filter = "none";
-    this.paintBackground(ctx, width, height);
-    ctx.restore();
-
-    // Carry coverage between frames. Segmentation flickers along the edge, and
-    // an unsmoothed mask makes that flicker crawl visibly around the head.
-    if (!this.maskHistory || this.maskHistory.length !== target.length) {
-      // Seeded from the first mask rather than from zero, so the person does not
-      // fade in over the opening frames.
-      this.maskHistory = new Uint8ClampedArray(target);
-      this.maskAgreement = createMaskAgreement(target.length);
-    } else {
-      if (!this.maskAgreement || this.maskAgreement.previousTarget.length !== target.length) {
-        this.maskAgreement = createMaskAgreement(target.length);
-      }
-      blendCoverageByAgreement(this.maskHistory, target, this.maskAgreement);
-    }
-
-    if (!this.maskImage || this.maskImage.width !== grid.width || this.maskImage.height !== grid.height) {
-      this.maskImage = maskCtx.createImageData(grid.width, grid.height);
-    }
-    // Tighten the ramp on the way out, into a separate buffer. The blend's
-    // history must keep its graded values: sharpening it would compound frame on
-    // frame until the mask was binary, and the smoothing above would be running
-    // with nothing left to smooth.
-    if (!this.maskEdge || this.maskEdge.length !== this.maskHistory.length) {
-      this.maskEdge = new Uint8ClampedArray(this.maskHistory.length);
-    }
-    const edge = sharpenEdge(this.maskEdge, this.maskHistory);
-
-    const maskPixels = this.maskImage.data;
-    for (let i = 0, p = 3; i < edge.length; i++, p += 4) maskPixels[p] = edge[i];
-    maskCtx.putImageData(this.maskImage, 0, 0);
-
-    // Softened at grid size, where the blur touches a fraction of the pixels it
-    // would at full frame, by the same distance measured in frame pixels.
-    const { feathered, featheredCtx } = this;
-    featheredCtx.save();
-    featheredCtx.clearRect(0, 0, grid.width, grid.height);
-    featheredCtx.filter = `blur(${maskFeatherPx(width) / grid.scale}px)`;
-    featheredCtx.drawImage(this.mask, 0, 0);
-    featheredCtx.restore();
-
-    // The camera frame, kept only where the mask covers. The mask is softened
-    // and then scaled up from the grid; between them the edge arrives softened
-    // twice, which is what stops a widened silhouette reading as a cut-out with
-    // a wider outline.
-    scratchCtx.save();
-    scratchCtx.globalCompositeOperation = "source-over";
-    scratchCtx.clearRect(0, 0, width, height);
-    scratchCtx.drawImage(video, 0, 0, width, height);
-    scratchCtx.globalCompositeOperation = "destination-in";
-    scratchCtx.drawImage(feathered, 0, 0, width, height);
-    scratchCtx.restore();
-
-    ctx.drawImage(scratch, 0, 0, width, height);
-  }
-
-  /**
-   * Re-fit the mask grid to a new frame size.
-   *
-   * The camera can change shape underneath us — a device switch, or a phone
-   * being rotated — and every buffer here is sized to the grid that came from
-   * the old one.
-   */
-  private resizeMask(frameWidth: number, frameHeight: number): void {
-    this.grid = maskGrid(frameWidth, frameHeight);
-    this.dilateRadii = maskDilatePx(frameWidth, this.grid);
-    this.gapSpanReach = maskGapSpanPx(frameWidth, this.grid);
-    this.mask.width = this.grid.width;
-    this.mask.height = this.grid.height;
-    this.segInput.width = this.grid.width;
-    this.segInput.height = this.grid.height;
-    this.feathered.width = this.grid.width;
-    this.feathered.height = this.grid.height;
-    this.backdrop.width = Math.max(1, Math.round(frameWidth / BACKDROP_SCALE));
-    this.backdrop.height = Math.max(1, Math.round(frameHeight / BACKDROP_SCALE));
-    this.templateCache = null;
-    this.maskTarget = new Uint8ClampedArray(this.grid.width * this.grid.height);
-    this.maskImage = null;
-    this.maskHistory = null;
-    this.maskAgreement = null;
-    this.dilateLimit = null;
-    this.maskEdge = null;
-  }
-
-  private paintBackground(ctx: CanvasRenderingContext2D, width: number, height: number): void {
-    const effect = this.effect;
-
-    if (effect.kind === "blur") {
-      // The room itself, out of focus — which is why this is drawn from the
-      // camera rather than from a colour. Blurred small and scaled up: the same
-      // radius in frame pixels, on a quarter of the pixels.
-      const { backdrop, backdropCtx } = this;
-      const bw = backdrop.width;
-      const bh = backdrop.height;
-      const radius = blurRadiusPx(effect.strength, width) * (bw / width);
-      backdropCtx.save();
-      backdropCtx.filter = `blur(${radius}px)`;
-      // Slightly overdrawn: a blur samples past the edge of its source and
-      // would otherwise leave a pale border around the whole frame.
-      const bleed = radius * 2;
-      backdropCtx.drawImage(this.video, -bleed, -bleed, bw + bleed * 2, bh + bleed * 2);
-      backdropCtx.restore();
-      ctx.drawImage(backdrop, 0, 0, width, height);
-      return;
-    }
-
-    if (effect.kind === "template") {
-      const template = templateById(effect.id);
-      if (template) { ctx.drawImage(this.templateCanvas(template, width, height), 0, 0); return; }
-    }
-
-    if (effect.kind === "custom" && this.customImage) {
-      drawCover(ctx, this.customImage, width, height);
-      return;
-    }
-
-    // An effect whose artwork has not arrived yet, or has gone. The camera is
-    // the honest thing to show — never a blank rectangle where a person was.
-    ctx.drawImage(this.video, 0, 0, width, height);
-  }
-
-  /** The template, painted once for this frame size and reused every frame. */
-  private templateCanvas(template: BackgroundTemplate, width: number, height: number): HTMLCanvasElement {
-    const key = `${template.id}:${width}x${height}`;
-    if (this.templateCache?.key === key) return this.templateCache.canvas;
-    const canvas = this.templateCache?.canvas ?? document.createElement("canvas");
-    canvas.width = width;
-    canvas.height = height;
-    const ctx = canvas.getContext("2d", { alpha: false });
-    if (ctx) paintTemplate(ctx, template, width, height);
-    this.templateCache = { key, canvas };
-    return canvas;
   }
 
   /**
@@ -733,77 +435,12 @@ export class BackgroundProcessor {
   destroy(): void {
     this.stop();
     if (!this.destroyed) { this.destroyed = true; releaseSegmenter(); }
-    this.templateCache = null;
+    this.compositor.destroy();
     this.releaseSource?.();
     this.releaseSource = null;
-    this.releaseCustomImage();
     try { this.outputTrack.stop(); } catch { /* already stopped */ }
     this.stream.getTracks().forEach((t) => { try { t.stop(); } catch { /* already stopped */ } });
     try { this.video.pause(); } catch { /* already paused */ }
     this.video.srcObject = null;
   }
-}
-
-// ── Painting ─────────────────────────────────────────────────────────────────
-
-/** Draw an image to fill the frame without distorting it — CSS `object-fit: cover`. */
-function drawCover(ctx: CanvasRenderingContext2D, image: HTMLImageElement, width: number, height: number): void {
-  const scale = Math.max(width / image.naturalWidth, height / image.naturalHeight);
-  const w = image.naturalWidth * scale;
-  const h = image.naturalHeight * scale;
-  ctx.drawImage(image, (width - w) / 2, (height - h) / 2, w, h);
-}
-
-/**
- * Render a native template from its spec.
- *
- * Painted rather than loaded from an image file: the specs come from the same
- * tokens as the rest of the product, they are sharp at any camera resolution,
- * and they add no binary assets to a repository that already has 12MB of
- * WebAssembly to move around.
- */
-export function paintTemplate(
-  ctx: CanvasRenderingContext2D,
-  template: BackgroundTemplate,
-  width: number,
-  height: number,
-): void {
-  const gradient = ctx.createLinearGradient(
-    template.from[0] * width, template.from[1] * height,
-    template.to[0] * width, template.to[1] * height,
-  );
-  for (const stop of template.stops) gradient.addColorStop(stop.at, stop.color);
-  ctx.fillStyle = gradient;
-  ctx.fillRect(0, 0, width, height);
-
-  ctx.save();
-  if (template.overlay === "grid") {
-    // A data-terminal rule grid, at the edge of visible. Anything stronger
-    // competes with the face for attention, which is the one thing a meeting
-    // background must not do.
-    ctx.strokeStyle = "rgba(148, 180, 240, 0.10)";
-    ctx.lineWidth = Math.max(1, width / 1280);
-    const step = Math.round(width / 18);
-    ctx.beginPath();
-    for (let x = step; x < width; x += step) { ctx.moveTo(x, 0); ctx.lineTo(x, height); }
-    for (let y = step; y < height; y += step) { ctx.moveTo(0, y); ctx.lineTo(width, y); }
-    ctx.stroke();
-  } else if (template.overlay === "glow") {
-    const glow = ctx.createRadialGradient(
-      width * 0.78, height * 0.22, 0,
-      width * 0.78, height * 0.22, Math.max(width, height) * 0.55,
-    );
-    glow.addColorStop(0, "rgba(37, 99, 235, 0.35)");
-    glow.addColorStop(1, "rgba(37, 99, 235, 0)");
-    ctx.fillStyle = glow;
-    ctx.fillRect(0, 0, width, height);
-  } else if (template.overlay === "horizon") {
-    const band = ctx.createLinearGradient(0, height * 0.55, 0, height * 0.72);
-    band.addColorStop(0, "rgba(245, 158, 11, 0)");
-    band.addColorStop(0.5, "rgba(245, 158, 11, 0.22)");
-    band.addColorStop(1, "rgba(245, 158, 11, 0)");
-    ctx.fillStyle = band;
-    ctx.fillRect(0, height * 0.55, width, height * 0.17);
-  }
-  ctx.restore();
 }

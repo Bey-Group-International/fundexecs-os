@@ -9,7 +9,7 @@ import {
   type BackgroundEffect,
   type BackgroundTemplate,
 } from "@/lib/meetings/backgrounds";
-import { paintTemplate } from "@/lib/meetings/background-processor";
+import { paintTemplate } from "@/lib/meetings/mask-compositor";
 import {
   addBackground,
   deleteBackground,

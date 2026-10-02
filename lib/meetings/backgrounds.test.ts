@@ -1,5 +1,3 @@
-import { readFileSync } from "fs";
-import { join } from "path";
 
 import {
   BACKGROUND_PREF_KEY,
@@ -331,95 +329,21 @@ describe("blendCoverageByAgreement", () => {
   });
 });
 
-/**
- * That the processor actually routes its per-frame mask through the blend above.
+/*
+ * The two describes that used to sit here read `background-processor.ts` as text
+ * to check that the chain called `blendCoverageByAgreement`, and quieted gaps
+ * before building the growth ceiling. They said so themselves: "This catches the
+ * revert; it does not prove the call runs." They could not do better, because the
+ * chain lived on a class that built its own canvases and reached MediaPipe
+ * through a dynamic import jsdom cannot resolve.
  *
- * The tests above establish what the rule DOES. They say nothing about whether
- * anything calls it — reverting the processor to the uniform blend passed all of
- * them, which happened three times in this area before the habit stuck.
- *
- * Read from source, and weaker than the rest of this file because of it: the
- * processor reaches for MediaPipe through a dynamic import that jsdom cannot
- * resolve, so the segmenter path never executes here and there is no behaviour to
- * assert. A real check needs a segmenter fake, which is a larger piece of work
- * than the change it would guard. This catches the revert; it does not prove the
- * call runs.
- *
- * Matched with its arguments rather than by name, so a sentence mentioning the
- * function cannot satisfy it.
+ * The chain now lives in `mask-compositor.ts`, which takes its surfaces from a
+ * factory and its mask as a plain array. So those properties are asserted
+ * against the real chain running, in `mask-compositor.test.ts` -- including the
+ * one that matters most and a regex could never reach: that no step raises
+ * coverage inside an enclosed gap, which would put a strip of the member's real
+ * room back into the outgoing frame.
  */
-describe("the processor uses the agreement blend", () => {
-  const processorSource = readFileSync(join(__dirname, "background-processor.ts"), "utf8");
-
-  it("blends its running mask history through it", () => {
-    expect(processorSource).toMatch(
-      /blendCoverageByAgreement\(\s*this\.maskHistory,\s*target,\s*this\.maskAgreement/,
-    );
-  });
-
-  it("imports it rather than the uniform primitive", () => {
-    expect(processorSource).toMatch(/^\s*blendCoverageByAgreement,\s*$/m);
-    expect(processorSource).not.toMatch(/blendCoverage\(\s*this\.maskHistory/);
-  });
-
-  /**
-   * The reversal memory must be dropped everywhere the history is. Kept across a
-   * pause or a resize it would damp the first frames back on the strength of a
-   * flicker from before — and a buffer of the wrong length would silently blend
-   * only its first pixels.
-   */
-  it("drops the reversal memory wherever it drops the history", () => {
-    const drops = processorSource.match(/this\.maskHistory = null;/g) ?? [];
-    const agreementDrops = processorSource.match(/this\.maskAgreement = null;/g) ?? [];
-    expect(drops.length).toBeGreaterThan(0);
-    expect(agreementDrops.length).toBe(drops.length);
-  });
-
-  it("reallocates it when the mask size changes", () => {
-    expect(processorSource).toMatch(/createMaskAgreement\(target\.length\)/);
-  });
-});
-
-describe("the processor quiets gaps before it builds the growth ceiling", () => {
-  const processorSource = readFileSync(join(__dirname, "background-processor.ts"), "utf8");
-
-  /**
-   * The ordering is pinned here rather than left to a comment. `dilateCeiling`
-   * is built from the coverage buffer and records which cells growth may later
-   * fill. Quieting first closes those cells to growth as well, so nothing puts
-   * the strip of room back; quieting afterwards would let growth refill it.
-   */
-  it("calls quietCoverageGaps before dilateCeiling", () => {
-    const quiet = processorSource.indexOf("quietCoverageGaps(target");
-    const ceiling = processorSource.indexOf("dilateCeiling(this.dilateLimit");
-    expect(quiet).toBeGreaterThan(-1);
-    expect(ceiling).toBeGreaterThan(-1);
-    expect(quiet).toBeLessThan(ceiling);
-  });
-
-  it("quiets on the category path too, so no build can start leaking", () => {
-    const quiet = processorSource.indexOf("quietCoverageGaps(target");
-    const gradedBranch = processorSource.indexOf("if (graded) {");
-    expect(quiet).toBeLessThan(gradedBranch);
-  });
-
-  it("keeps the reach in step with the grid it is measured in", () => {
-    expect(processorSource).toMatch(/this\.gapSpanReach = maskGapSpanPx\(frameWidth, this\.grid\)/);
-    const radii = processorSource.match(/this\.dilateRadii = maskDilatePx\(/g) ?? [];
-    const reach = processorSource.match(/this\.gapSpanReach = maskGapSpanPx\(/g) ?? [];
-    expect(reach.length).toBe(radii.length);
-  });
-
-  /**
-   * The property the whole change turns on: nothing in the processor may raise
-   * coverage inside a gap, because `destination-in` keeps the camera frame where
-   * the mask covers, so raising it there reveals the room rather than hiding it.
-   */
-  it("no longer contains the rule that raised coverage in a gap", () => {
-    expect(processorSource).not.toMatch(/bridgeCoverageGaps/);
-    expect(processorSource).not.toMatch(/maskBridgePx/);
-  });
-});
 
 describe("blendCoverage", () => {
   const person = (n: number) => new Uint8ClampedArray(n).fill(255);
