@@ -67,6 +67,7 @@ export default async function AppLayout({
     buildStatuses,
     approvalsCount,
     { data: orgRow },
+    { count: pulseNew },
   ] = await Promise.all([
       supabase.from("principals").select("full_name").eq("id", ctx.userId).maybeSingle(),
       // One cached read serves the top-bar balance, the sidebar plan name,
@@ -122,6 +123,12 @@ export default async function AppLayout({
         .select("setup_hidden")
         .eq("id", ctx.orgId)
         .maybeSingle(),
+      // Market Pulse findings nobody has triaged yet — the rail badge.
+      supabase
+        .from("pulse_items")
+        .select("id", { count: "exact", head: true })
+        .eq("organization_id", ctx.orgId)
+        .eq("status", "new"),
     ]);
 
   const matchRow = matchAlertRow as
@@ -205,6 +212,7 @@ export default async function AppLayout({
         sessions={sessions}
         groups={groups}
         inboxUnread={(messagesUnread ?? 0) + (approvalsCount ?? 0)}
+        pulseNew={pulseNew ?? 0}
         isPlatformAdmin={isPlatformAdmin}
         pendingAccessRequests={pendingAccessRequests}
         signOutAction={signOut}

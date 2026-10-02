@@ -1,4 +1,12 @@
 import {
+  alertCopy,
+  digestCopy,
+  digestEmailHtml,
+  planNotices,
+  splitByFit,
+  PULSE_ALERT_THRESHOLD,
+  PULSE_DIGEST_SIZE,
+  PULSE_SHOW_THRESHOLD,
   hasSearchableMandate,
   mandateBrief,
   normalizeFindings,
@@ -134,5 +142,49 @@ describe("normalizeFindings", () => {
     expect(f.fit_score).toBe(100);
     const many = Array.from({ length: 20 }, (_, i) => finding({ entity_name: `Firm ${String.fromCharCode(65 + i)} Holdings` }));
     expect(normalizeFindings(many, [])).toHaveLength(PULSE_MAX_ITEMS_PER_RUN);
+  });
+});
+
+const f = (entity_name: string, fit_score: number | null, kind: "deal" | "investment" | "investor" = "deal") => ({
+  kind,
+  entity_name,
+  headline: `${entity_name} news`,
+  take: "Worth a look.",
+  fit_score,
+  source_url: "https://example.com/x",
+});
+
+describe("splitByFit", () => {
+  it("tucks findings below the threshold under Show more; unscored stay visible", () => {
+    const { shown, more } = splitByFit([f("A", PULSE_SHOW_THRESHOLD), f("B", PULSE_SHOW_THRESHOLD - 1), f("C", null)]);
+    expect(shown.map((x) => x.entity_name)).toEqual(["A", "C"]);
+    expect(more.map((x) => x.entity_name)).toEqual(["B"]);
+  });
+});
+
+describe("planNotices", () => {
+  it("alerts high fits and digests the best of the rest", () => {
+    const items = [f("Low", 40), f("Top", 95), f("Mid", 70), f("High", PULSE_ALERT_THRESHOLD), f("Ok", 65)];
+    const { alerts, digest } = planNotices(items);
+    expect(alerts.map((x) => x.entity_name)).toEqual(["Top", "High"]);
+    expect(digest.map((x) => x.entity_name)).toEqual(["Mid", "Ok", "Low"]);
+    expect(digest).toHaveLength(PULSE_DIGEST_SIZE);
+  });
+});
+
+describe("notice copy", () => {
+  it("writes an alert and a digest", () => {
+    expect(alertCopy(f("Acme", 91)).subject).toBe("High-fit Pulse find: Acme");
+    const d = digestCopy([f("A", 70), f("B", 65)], 5)!;
+    expect(d.subject).toBe("Market Pulse: 5 new findings today");
+    expect(d.body).toMatch(/\+3 more in Market Pulse/);
+    expect(digestCopy([], 0)).toBeNull();
+  });
+
+  it("escapes HTML in the email", () => {
+    const html = digestEmailHtml([f("<script>", 70)], 1, "https://app.example.com/pulse");
+    expect(html.toLowerCase()).not.toContain("<script");
+    expect(html).toContain("&lt;script&gt;");
+    expect(html).toMatch(/href="https:\/\/app.example.com\/pulse"/);
   });
 });

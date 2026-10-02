@@ -97,6 +97,7 @@ export type InboxChannel =
   | "ecosystem"
   | "deal_share"
   | "radar_digest"
+  | "pulse"
   | "xero"
   | "jax";
 export type InboxCategory = "messaging" | "booking" | "video" | "signing" | "finance";

@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import Link from "next/link";
 import { AskEarnButton } from "@/components/AskEarnButton";
 import type { PulseItem, PulseItemKind, PulseRun } from "@/lib/supabase/database.types";
+import { PULSE_SHOW_THRESHOLD, splitByFit } from "@/lib/pulse";
 import { addPulseItem, dismissPulseItem, refreshPulse } from "./actions";
 
 const KIND_LABEL: Record<PulseItemKind, string> = {
@@ -129,7 +130,10 @@ export default function PulseClient({
   const [notice, setNotice] = useState<string | null>(null);
   const [refreshing, startRefresh] = useTransition();
 
-  const shown = filter === "all" ? items : items.filter((i) => i.kind === filter);
+  const [showMore, setShowMore] = useState(false);
+  const filtered = filter === "all" ? items : items.filter((i) => i.kind === filter);
+  // Strong fits first; weaker ones (below the threshold) wait behind "Show more".
+  const { shown, more } = splitByFit(filtered);
   const counts = {
     all: items.length,
     deal: items.filter((i) => i.kind === "deal").length,
@@ -214,9 +218,33 @@ export default function PulseClient({
         </div>
       ) : (
         <p className="fx-card p-6 text-sm text-fg-secondary">
-          {items.length ? "Nothing in this filter." : "No open findings. New ones arrive with the next daily scan, or hit Refresh."}
+          {more.length
+            ? `No strong fits right now — ${more.length} weaker ${more.length === 1 ? "finding" : "findings"} below.`
+            : items.length
+              ? "Nothing in this filter."
+              : "No open findings. New ones arrive with the next daily scan, or hit Refresh."}
         </p>
       )}
+
+      {more.length ? (
+        <div className="mt-4">
+          <button
+            type="button"
+            onClick={() => setShowMore((v) => !v)}
+            aria-expanded={showMore}
+            className="font-mono text-[11px] uppercase tracking-wider text-fg-muted transition hover:text-fg-primary"
+          >
+            {showMore ? "Hide" : "Show"} {more.length} weaker {more.length === 1 ? "fit" : "fits"} (below {PULSE_SHOW_THRESHOLD})
+          </button>
+          {showMore ? (
+            <div className="mt-3 flex flex-col gap-3 opacity-90">
+              {more.map((item) => (
+                <PulseCard key={item.id} item={item} onDone={setNotice} />
+              ))}
+            </div>
+          ) : null}
+        </div>
+      ) : null}
 
       {added.length ? (
         <section className="mt-8">
