@@ -10,9 +10,11 @@ import {
   accumulateTiming,
   createTimingAccumulator,
   isMainToWorker,
+  shouldReportSlowFrames,
   shouldReportStats,
   timingReport,
 } from "./mask-worker-protocol";
+import { SLOW_FRAME_RUN } from "./backgrounds";
 
 describe("folding a frame's timing in", () => {
   it("sums each part and tracks the worst frame", () => {
@@ -100,6 +102,53 @@ describe("when to report", () => {
     expect(shouldReportStats(24, 0)).toBe(true);
     expect(shouldReportStats(24, -3)).toBe(true);
     expect(shouldReportStats(12, 1.5)).toBe(false);
+  });
+});
+
+/**
+ * The room acts on a RUN of slow frames and on nothing else, so the worker only
+ * has two counts worth a message: the one that reaches the run, and the zero
+ * that ends it.
+ *
+ * The alternative is a `postMessage` per frame for as long as a slow machine
+ * stays slow, onto the thread the worker exists to free -- which would make the
+ * reporting itself part of the problem it reports.
+ */
+describe("when to report slow frames", () => {
+  it("reports the count that reaches the run", () => {
+    expect(shouldReportSlowFrames(false, SLOW_FRAME_RUN)).toBe(true);
+  });
+
+  it("says nothing below the run the room acts on", () => {
+    expect(shouldReportSlowFrames(false, 1)).toBe(false);
+    expect(shouldReportSlowFrames(false, SLOW_FRAME_RUN - 1)).toBe(false);
+  });
+
+  it("does not repeat itself while the run continues", () => {
+    expect(shouldReportSlowFrames(true, SLOW_FRAME_RUN)).toBe(false);
+    expect(shouldReportSlowFrames(true, SLOW_FRAME_RUN + 100)).toBe(false);
+  });
+
+  it("reports the zero that ends a reported run", () => {
+    expect(shouldReportSlowFrames(true, 0)).toBe(true);
+  });
+
+  /** A zero nobody was waiting for is every good frame of a healthy call. */
+  it("says nothing about a zero when no run was reported", () => {
+    expect(shouldReportSlowFrames(false, 0)).toBe(false);
+  });
+
+  /** A run that merely got shorter has not ended, and the room has no use for
+   *  a count below its threshold. */
+  it("does not treat a shortened run as an end", () => {
+    expect(shouldReportSlowFrames(true, 1)).toBe(false);
+    expect(shouldReportSlowFrames(true, SLOW_FRAME_RUN - 1)).toBe(false);
+  });
+
+  it("refuses a count that is not one", () => {
+    expect(shouldReportSlowFrames(true, Number.NaN)).toBe(false);
+    expect(shouldReportSlowFrames(true, -1)).toBe(false);
+    expect(shouldReportSlowFrames(false, Number.POSITIVE_INFINITY)).toBe(false);
   });
 });
 

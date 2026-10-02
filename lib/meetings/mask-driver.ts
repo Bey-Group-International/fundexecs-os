@@ -65,7 +65,15 @@ export interface MaskDriverCallbacks {
    * to be called twice within a few seconds of joining.
    */
   onTrack: (track: MediaStreamTrack) => void;
-  /** Sustained slow frames on the MAIN pipeline, where the room's budget is. */
+  /**
+   * Sustained slow frames from whichever pipeline the room is watching.
+   *
+   * Reported by exactly one of them at a time, by mirror-image checks: the main
+   * processor's are forwarded only while the room is NOT on the worker, and the
+   * worker's only while it is. Which matters because this is what the room
+   * suspends the effect on, and two sources would have each pipeline's good
+   * frames cancelling the other's bad ones.
+   */
   onSlowFrames: (consecutive: number) => void;
   /** Nothing could be built at all; there is no masking on this browser. */
   onUnavailable: () => void;
@@ -300,8 +308,15 @@ export class MaskDriver {
       const mod = await import("@/lib/meetings/background-processor");
       built = await mod.BackgroundProcessor.create(this.source, {
         // Once the worker is carrying the frames, a slow main-thread frame is
-        // not the room's problem any more -- and the processor reporting it is
-        // about to be destroyed anyway.
+        // not the room's problem any more.
+        //
+        // Stated plainly because a mutation survives here: `adoptWorker` sets
+        // `liveIsWorker` and destroys this processor in consecutive statements,
+        // so there is no window for it to report in and no test can occupy one.
+        // The check stays as the mirror of the worker's, because the invariant
+        // the pair expresses -- exactly one pipeline ever speaks into
+        // `onSlowFrames` -- is what a reader needs and what a later change
+        // could break. It is insurance, not a guard a test can pin.
         onSlowFrames: (n) => { if (!this.liveIsWorker) this.callbacks.onSlowFrames(n); },
         onUnavailable: () => this.callbacks.onUnavailable(),
       });
@@ -467,6 +482,13 @@ export class MaskDriver {
         break;
       case "stats":
         this.callbacks.onStats?.(message.stats);
+        break;
+      case "slow":
+        // Only while the room is really watching the worker's output. Before
+        // adoption the main processor is the one feeding the wire and the one
+        // reporting, and a worker still warming up would otherwise suspend an
+        // effect the member can see working.
+        if (this.liveIsWorker) this.callbacks.onSlowFrames(message.consecutive);
         break;
       case "failed":
         void this.dispatch({ kind: "worker-failed", reason: message.reason });

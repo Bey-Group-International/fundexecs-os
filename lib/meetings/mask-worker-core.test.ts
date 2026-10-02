@@ -16,7 +16,19 @@ import {
   type IncomingFrame,
 } from "./mask-worker-core";
 import type { MaskSample, Surface2D } from "./mask-compositor";
+import { FRAME_BUDGET_MS, OUTPUT_FPS, SLOW_FRAME_RUN, frameIntervalMs } from "./backgrounds";
 import type { TimingReport } from "./mask-worker-protocol";
+
+/**
+ * One camera frame's worth of clock, rounded up.
+ *
+ * The loop paces, so a test that feeds several frames has to move the clock
+ * between them or the second one lands inside the first one's interval and is
+ * correctly skipped. Rounded up rather than down because the pacing rule allows
+ * a frame a quarter of an interval early, and a test should not be sitting on
+ * that tolerance.
+ */
+const FRAME_MS = Math.ceil(frameIntervalMs(OUTPUT_FPS));
 
 /** A camera frame that counts its own closes. */
 function incoming(over: Partial<IncomingFrame> = {}) {
@@ -44,6 +56,15 @@ interface Harness {
   errors: string[];
   stats: TimingReport[];
   announced: number[];
+  slow: number[];
+  /**
+   * Hand the loop a frame from a camera delivering at the paced rate.
+   *
+   * `now()` moves a millisecond per reading, which is nowhere near a frame, so
+   * the gap between frames is put here explicitly rather than left implicit in
+   * how many times the loop happens to read the clock.
+   */
+  feed: (over?: Partial<IncomingFrame>) => boolean;
   /** Flip to make the next readback return nothing. */
   control: {
     callbackRuns: boolean;
@@ -53,6 +74,8 @@ interface Harness {
     readThrows: boolean;
     makeThrows: boolean;
     clock: number;
+    /** Milliseconds the clock moves per reading, so a frame can be made slow. */
+    tick: number;
     /** Resolve delivery by hand, to model a `write` that settles later. */
     deliverAsync: boolean;
     settleDeliver: ((accepted: boolean) => void) | null;
@@ -65,6 +88,7 @@ function harness(over: Partial<FrameLoopDeps<"mask", Out>> = {}): Harness {
   const errors: string[] = [];
   const stats: TimingReport[] = [];
   const announced: number[] = [];
+  const slow: number[] = [];
   const control: Harness["control"] = {
     callbackRuns: true,
     sample: { kind: "confidence", data: new Float32Array(4), width: 2, height: 2 },
@@ -73,6 +97,7 @@ function harness(over: Partial<FrameLoopDeps<"mask", Out>> = {}): Harness {
     readThrows: false,
     makeThrows: false,
     clock: 0,
+    tick: 1,
     deliverAsync: false,
     settleDeliver: null,
   };
@@ -115,15 +140,22 @@ function harness(over: Partial<FrameLoopDeps<"mask", Out>> = {}): Harness {
     },
     closeFrame: (f) => { calls.push("closeFrame"); f.closes += 1; },
     // Advances a fixed amount per reading, so the timings below are exact
-    // rather than wall-clock flakes.
-    now: () => { control.clock += 1; return control.clock; },
+    // rather than wall-clock flakes. Raise `tick` to make a frame over budget.
+    now: () => { control.clock += control.tick; return control.clock; },
     onDelivered: (i) => { announced.push(i); },
     onStats: (r) => { stats.push(r); },
+    onSlowFrames: (n) => { slow.push(n); },
     onError: (r) => { errors.push(r); },
     ...over,
   };
 
-  return { deps, loop: new MaskFrameLoop(deps), calls, built, errors, stats, announced, control };
+  const loop = new MaskFrameLoop(deps);
+  const feed = (frameOver: Partial<IncomingFrame> = {}) => {
+    control.clock += FRAME_MS;
+    return loop.handle(incoming(frameOver).frame);
+  };
+
+  return { deps, loop, feed, calls, built, errors, stats, announced, slow, control };
 }
 
 describe("the incoming frame is always closed", () => {
@@ -293,7 +325,7 @@ describe("a frame the segmenter did not mask", () => {
   it("says so, once, rather than every frame", () => {
     const h = harness();
     h.control.callbackRuns = false;
-    for (let i = 0; i < 10; i++) h.loop.handle(incoming({ timestamp: 1_000 + i }).frame);
+    for (let i = 0; i < 10; i++) h.feed({ timestamp: 1_000 + i });
     expect(h.errors.filter((e) => e.startsWith("no-mask"))).toHaveLength(1);
   });
 });
@@ -314,11 +346,11 @@ describe("the segmenter arriving late", () => {
 
   it("starts masking from the frame after it lands", () => {
     const h = harness({ segmenter: null });
-    h.loop.handle(incoming({ timestamp: 1 }).frame);
+    h.feed({ timestamp: 1 });
     h.loop.setSegmenter({
       segmentForVideo: (_i, ts, cb) => { h.calls.push(`segment:${ts}`); cb("mask"); },
     });
-    h.loop.handle(incoming({ timestamp: 2 }).frame);
+    h.feed({ timestamp: 2 });
 
     expect(h.calls).toContain("segment:2");
     expect(h.calls).toContain("compose");
@@ -327,10 +359,10 @@ describe("the segmenter arriving late", () => {
 
   it("goes back to passing through if it is taken away", () => {
     const h = harness();
-    h.loop.handle(incoming({ timestamp: 1 }).frame);
+    h.feed({ timestamp: 1 });
     h.loop.setSegmenter(null);
     const before = h.calls.length;
-    h.loop.handle(incoming({ timestamp: 2 }).frame);
+    h.feed({ timestamp: 2 });
     expect(h.calls.slice(before)).toEqual(["passThrough", "makeFrame", "deliver"]);
   });
 });
@@ -338,8 +370,8 @@ describe("the segmenter arriving late", () => {
 describe("the segmenter's timestamp", () => {
   it("is the frame's own when it advances", () => {
     const h = harness();
-    h.loop.handle(incoming({ timestamp: 5_000 }).frame);
-    h.loop.handle(incoming({ timestamp: 6_000 }).frame);
+    h.feed({ timestamp: 5_000 });
+    h.feed({ timestamp: 6_000 });
     expect(h.calls.filter((c) => c.startsWith("segment:"))).toEqual(["segment:5000", "segment:6000"]);
   });
 
@@ -348,9 +380,9 @@ describe("the segmenter's timestamp", () => {
    *  track. */
   it("is nudged forward when two frames share one", () => {
     const h = harness();
-    h.loop.handle(incoming({ timestamp: 5_000 }).frame);
-    h.loop.handle(incoming({ timestamp: 5_000 }).frame);
-    h.loop.handle(incoming({ timestamp: 4_000 }).frame);
+    h.feed({ timestamp: 5_000 });
+    h.feed({ timestamp: 5_000 });
+    h.feed({ timestamp: 4_000 });
     expect(h.calls.filter((c) => c.startsWith("segment:")))
       .toEqual(["segment:5000", "segment:5001", "segment:5002"]);
   });
@@ -365,11 +397,11 @@ describe("the segmenter's timestamp", () => {
 describe("what the deadline reads", () => {
   it("counts only frames that reached the sink", () => {
     const h = harness();
-    h.loop.handle(incoming({ timestamp: 1 }).frame);
+    h.feed({ timestamp: 1 });
     expect(h.loop.framesDelivered).toBe(1);
 
     h.control.deliverAccepts = false;
-    h.loop.handle(incoming({ timestamp: 2 }).frame);
+    h.feed({ timestamp: 2 });
     expect(h.loop.framesDelivered).toBe(1);
   });
 
@@ -379,22 +411,178 @@ describe("what the deadline reads", () => {
   it("stays at zero while nothing is accepted", () => {
     const h = harness();
     h.control.deliverAccepts = false;
-    for (let i = 0; i < 5; i++) h.loop.handle(incoming({ timestamp: i }).frame);
+    for (let i = 0; i < 5; i++) h.feed({ timestamp: i });
     expect(h.loop.framesDelivered).toBe(0);
+  });
+});
+
+/**
+ * `MediaStreamTrackProcessor` delivers at the CAMERA's rate -- 30fps commonly,
+ * 60 on plenty of laptops -- not at the rate the output is captured at. Nothing
+ * in this loop was throttling it, and that is not merely wasted work.
+ *
+ * The temporal blend in `backgrounds.ts` is a PER-FRAME filter whose constants
+ * were measured at OUTPUT_FPS, so running it two and a half times too fast
+ * shrinks its time constant by the same factor and most of the flicker
+ * suppression goes with it -- a shimmering edge. And a machine asked for 2.5x
+ * the work it was budgeted for stops keeping up, which arrives as judder on
+ * movement. The main thread's loop has always paced through this same rule;
+ * moving the work into the worker is what dropped it.
+ */
+describe("pacing to the output rate", () => {
+  it("always draws the first frame", () => {
+    const h = harness();
+    // Not after an interval: the canvas is captured the instant an effect is
+    // chosen, so waiting even one frame would put a black frame on the wire.
+    expect(h.loop.handle(incoming().frame)).toBe(true);
+    expect(h.calls).toContain("makeFrame");
+  });
+
+  it("skips a frame that arrives inside the interval it already drew", () => {
+    const h = harness();
+    h.loop.handle(incoming().frame);
+    const before = h.calls.length;
+
+    h.control.clock += 5;
+    expect(h.loop.handle(incoming().frame)).toBe(false);
+    expect(h.calls.slice(before)).toEqual([]);
+  });
+
+  /** The property the whole file is arranged around still holds on the new
+   *  path: a frame nobody drew is a frame nobody closed, and four of those end
+   *  the call. */
+  it("still closes a frame it skipped", () => {
+    const h = harness();
+    h.loop.handle(incoming().frame);
+    h.control.clock += 5;
+    const { frame, state } = incoming();
+    h.loop.handle(frame);
+    expect(state.closes).toBe(1);
+  });
+
+  it("draws again once an interval has passed", () => {
+    const h = harness();
+    h.loop.handle(incoming().frame);
+    h.control.clock += FRAME_MS;
+    expect(h.loop.handle(incoming().frame)).toBe(true);
+    expect(h.calls.filter((c) => c === "makeFrame")).toHaveLength(2);
+  });
+
+  /**
+   * A camera at twice the output rate should cost half its frames, not all of
+   * them and not none. This is the number the fix exists for.
+   */
+  it("keeps one frame in two from a camera running at twice the rate", () => {
+    const h = harness();
+    const half = Math.ceil(FRAME_MS / 2);
+    for (let i = 0; i < 20; i++) {
+      h.control.clock += half;
+      h.loop.handle(incoming({ timestamp: i }).frame);
+    }
+    expect(h.loop.framesDelivered).toBe(10);
+  });
+
+  /** Measured from the frame it DREW. Pacing from the last frame it merely saw
+   *  would skip forever behind a fast camera. */
+  it("paces from the frame it drew, not the ones it skipped", () => {
+    const h = harness();
+    h.loop.handle(incoming().frame);
+    for (let i = 0; i < 4; i++) {
+      h.control.clock += 8;
+      h.loop.handle(incoming().frame);
+    }
+    expect(h.loop.framesDelivered).toBe(2);
+  });
+
+  /** Skipping is only ever an optimisation, so a clock that went backwards must
+   *  not be able to freeze the picture. `shouldDrawFrame` owns this; the test is
+   *  here because this is the caller that would show it. */
+  it("draws rather than stalls when the clock goes backwards", () => {
+    const h = harness();
+    h.loop.handle(incoming().frame);
+    h.control.clock -= 10_000;
+    expect(h.loop.handle(incoming().frame)).toBe(true);
+  });
+});
+
+/**
+ * The main thread's processor has always reported a run of over-budget frames,
+ * and the room suspends the effect on a long one. The worker did not -- so once
+ * the room moved onto the worker NOTHING was watching whether the machine could
+ * keep up, on the path the member spends the whole call on.
+ */
+describe("the slow frames it reports", () => {
+  /** Readings per frame on the masked path, so a test can price one. */
+  const READINGS = 5;
+  const overBudget = Math.ceil((FRAME_BUDGET_MS + 1) / READINGS);
+
+  it("says nothing while frames are inside the budget", () => {
+    const h = harness();
+    for (let i = 0; i < 5; i++) h.feed({ timestamp: i });
+    expect(h.slow).toEqual([]);
+  });
+
+  it("counts a run of over-budget frames", () => {
+    const h = harness();
+    h.control.tick = overBudget;
+    for (let i = 0; i < 3; i++) h.feed({ timestamp: i });
+    expect(h.slow).toEqual([1, 2, 3]);
+  });
+
+  it("goes back to zero when a frame comes in under budget, once", () => {
+    const h = harness();
+    h.control.tick = overBudget;
+    h.feed({ timestamp: 1 });
+    h.control.tick = 1;
+    h.feed({ timestamp: 2 });
+    h.feed({ timestamp: 3 });
+    // The zero is reported once, not on every good frame after it: the room
+    // reads this to decide whether to suspend the effect, and a stream of
+    // zeroes is a message per frame saying nothing changed.
+    expect(h.slow).toEqual([1, 0]);
+  });
+
+  /** The threshold the room acts on lives in `backgrounds.ts`; this only has to
+   *  reach it, which a run of over-budget frames must. */
+  it("reaches the run the room suspends on", () => {
+    const h = harness();
+    h.control.tick = overBudget;
+    for (let i = 0; i < SLOW_FRAME_RUN; i++) h.feed({ timestamp: i });
+    expect(h.slow[h.slow.length - 1]).toBe(SLOW_FRAME_RUN);
+  });
+
+  /** A frame the sink refused never cost the machine the rest of the chain, and
+   *  counting it would convict the hardware of a closed stream. */
+  /** The budget is a ceiling a frame may touch. 45ms is already longer than one
+   *  animation frame at any refresh rate in use, so convicting a machine that
+   *  lands exactly on it would suspend effects that are keeping up. */
+  it("does not count a frame that lands exactly on the budget", () => {
+    const h = harness();
+    h.control.tick = FRAME_BUDGET_MS / READINGS;
+    for (let i = 0; i < 3; i++) h.feed({ timestamp: i });
+    expect(h.slow).toEqual([]);
+  });
+
+  it("does not count a frame the sink refused", () => {
+    const h = harness();
+    h.control.tick = overBudget;
+    h.control.deliverAccepts = false;
+    for (let i = 0; i < 3; i++) h.feed({ timestamp: i });
+    expect(h.slow).toEqual([]);
   });
 });
 
 describe("the timing it reports", () => {
   it("reports once per interval, not per frame", () => {
     const h = harness();
-    for (let i = 0; i < 24; i++) h.loop.handle(incoming({ timestamp: i }).frame);
+    for (let i = 0; i < 24; i++) h.feed({ timestamp: i });
     expect(h.stats).toHaveLength(1);
     expect(h.stats[0].frames).toBe(24);
   });
 
   it("splits the readback from the rest of the chain", () => {
     const h = harness();
-    for (let i = 0; i < 24; i++) h.loop.handle(incoming({ timestamp: i }).frame);
+    for (let i = 0; i < 24; i++) h.feed({ timestamp: i });
     // The fake clock ticks 1ms per reading, so each measured span is exactly 1.
     expect(h.stats[0].readbackMsPerFrame).toBe(1);
     expect(h.stats[0].chainMsPerFrame).toBe(1);
@@ -408,7 +596,7 @@ describe("the timing it reports", () => {
    */
   it("starts a fresh window after each report", () => {
     const h = harness();
-    for (let i = 0; i < 48; i++) h.loop.handle(incoming({ timestamp: i }).frame);
+    for (let i = 0; i < 48; i++) h.feed({ timestamp: i });
     expect(h.stats).toHaveLength(2);
     expect(h.stats[1].frames).toBe(24);
   });
@@ -416,7 +604,7 @@ describe("the timing it reports", () => {
   it("counts a frame nobody accepted in no window at all", () => {
     const h = harness();
     h.control.deliverAccepts = false;
-    for (let i = 0; i < 48; i++) h.loop.handle(incoming({ timestamp: i }).frame);
+    for (let i = 0; i < 48; i++) h.feed({ timestamp: i });
     expect(h.stats).toHaveLength(0);
   });
 });
@@ -425,7 +613,7 @@ describe("what it reports as broken", () => {
   it("names the cause once per cause", () => {
     const h = harness();
     h.control.makeThrows = true;
-    for (let i = 0; i < 5; i++) h.loop.handle(incoming({ timestamp: i }).frame);
+    for (let i = 0; i < 5; i++) h.feed({ timestamp: i });
     expect(h.errors).toHaveLength(1);
     expect(h.errors[0]).toContain("no frame slots");
   });
@@ -505,7 +693,7 @@ describe("delivery that settles later", () => {
     const h = harness();
     h.control.deliverAsync = true;
     for (let i = 0; i < 48; i++) {
-      h.loop.handle(incoming({ timestamp: i }).frame);
+      h.feed({ timestamp: i });
       h.control.settleDeliver!(false);
       await flush();
     }
@@ -516,7 +704,7 @@ describe("delivery that settles later", () => {
     const h = harness();
     h.control.deliverAsync = true;
     for (let i = 0; i < 3; i++) {
-      h.loop.handle(incoming({ timestamp: i }).frame);
+      h.feed({ timestamp: i });
       h.control.settleDeliver!(true);
       await flush();
     }
