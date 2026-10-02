@@ -3,15 +3,16 @@ import {
   extractWebSources,
   formatSourcesBlock,
   parseEarnPersona,
-  spicyPersonaBlock,
+  candorPersonaBlock,
   webSearchCount,
   webSearchTool,
   WEB_SEARCH_MAX_USES,
 } from "@/lib/earn-persona";
 
 describe("parseEarnPersona", () => {
-  it("accepts only 'spicy'; everything else is standard", () => {
-    expect(parseEarnPersona("spicy")).toBe("spicy");
+  it("accepts 'candor' (and the legacy 'spicy'); everything else is standard", () => {
+    expect(parseEarnPersona("candor")).toBe("candor");
+    expect(parseEarnPersona("spicy")).toBe("candor");
     expect(parseEarnPersona("standard")).toBe("standard");
     expect(parseEarnPersona("unhinged")).toBe("standard");
     expect(parseEarnPersona(null)).toBe("standard");
@@ -19,17 +20,17 @@ describe("parseEarnPersona", () => {
   });
 });
 
-describe("spicyPersonaBlock", () => {
+describe("candorPersonaBlock", () => {
   it("keeps the voice clean and grounded", () => {
-    const block = spicyPersonaBlock({ webSearch: false });
+    const block = candorPersonaBlock({ webSearch: false });
     expect(block).toMatch(/no profanity/i);
     expect(block).toMatch(/never at people/i);
     expect(block).toMatch(/no invented figures/i);
   });
 
   it("mentions the web_search tool only when search is on", () => {
-    expect(spicyPersonaBlock({ webSearch: true })).toMatch(/web_search tool/);
-    const off = spicyPersonaBlock({ webSearch: false });
+    expect(candorPersonaBlock({ webSearch: true })).toMatch(/web_search tool/);
+    const off = candorPersonaBlock({ webSearch: false });
     expect(off).not.toMatch(/web_search tool/);
     expect(off).toMatch(/live search is off/);
   });

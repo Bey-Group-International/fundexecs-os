@@ -102,7 +102,7 @@ type Turn =
 
 /** A stable id for a conversation turn. */
 let turnSeq = 0;
-// The operator's Spicy-mode choice, set from the workspace composer's toggle.
+// The operator's Candor-mode choice, set from the workspace composer's toggle.
 function storedPersona(): EarnPersonaKey {
   try {
     return parseEarnPersona(localStorage.getItem(EARN_PERSONA_STORAGE_KEY));
@@ -378,7 +378,7 @@ export function EarnCopilotDock({ name }: { name: string }) {
           // day off for anyone west of Greenwich in the evening — exactly the
           // person most likely to ask what's on their plate today.
           timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-          // Spicy mode follows the operator from the workspace composer.
+          // Candor mode follows the operator from the workspace composer.
           persona: storedPersona(),
         }),
         signal: controller.signal,

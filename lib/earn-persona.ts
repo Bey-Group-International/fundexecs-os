@@ -1,4 +1,4 @@
-// Earn's "Spicy" persona — a Grok-style voice for the conversational path.
+// Earn's "Candor" persona — a frank, verdict-first voice for the conversational path.
 // Blunt verdicts, dry wit, and live web lookups to fact-check what the
 // operator is looking at. Clean by design: this is a finance platform whose
 // answers get screenshotted into IC decks and LP threads, so the edge comes
@@ -10,21 +10,22 @@
 // looser leash.
 import type Anthropic from "@anthropic-ai/sdk";
 
-export type EarnPersonaKey = "standard" | "spicy";
+export type EarnPersonaKey = "standard" | "candor";
 
 export const DEFAULT_EARN_PERSONA: EarnPersonaKey = "standard";
 
 export const EARN_PERSONA_STORAGE_KEY = "earn:persona";
 
-export const SPICY_PERSONA = {
-  key: "spicy" as const,
-  label: "Spicy",
-  hint: "Blunt verdicts, dry wit, live fact-checks",
+export const CANDOR_PERSONA = {
+  key: "candor" as const,
+  label: "Candor",
+  hint: "Frank verdicts, fact-checked against live sources",
 };
 
-/** Narrow an untrusted request/storage value to a persona key. */
+/** Narrow an untrusted request/storage value to a persona key. The mode
+ *  shipped as "spicy" first, so that stored preference still means Candor. */
 export function parseEarnPersona(value: unknown): EarnPersonaKey {
-  return value === "spicy" ? "spicy" : "standard";
+  return value === "candor" || value === "spicy" ? "candor" : "standard";
 }
 
 /**
@@ -32,10 +33,10 @@ export function parseEarnPersona(value: unknown): EarnPersonaKey {
  * after the base prompt so it overrides tone, not grounding: every rule about
  * never fabricating figures or contact details still applies.
  */
-export function spicyPersonaBlock(opts: { webSearch: boolean }): string {
+export function candorPersonaBlock(opts: { webSearch: boolean }): string {
   return (
-    `## Voice: Spicy mode (operator opted in)\n` +
-    `The operator switched on Spicy mode. Answer like the sharpest, most candid partner in the room — the one who says what everyone else is thinking.\n` +
+    `## Voice: Candor mode (operator opted in)\n` +
+    `The operator switched on Candor mode. Answer like the sharpest, most candid partner in the room — the one who says what everyone else is thinking.\n` +
     `- Open with a one-line verdict. Take a position ("Pass.", "This is a real deal.", "Smoke and mirrors.") before any nuance.\n` +
     `- Be blunt about weak numbers, hand-wavy decks, and stale comps. Name the specific problem; don't hedge it into mush.\n` +
     `- Dry wit and light sarcasm are welcome — aimed at ideas, assumptions, and spreadsheets, never at people.\n` +

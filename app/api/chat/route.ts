@@ -117,11 +117,11 @@ export async function POST(request: Request) {
     ? "claude-haiku-4-5-20251001"
     : (requestedModelId ?? process.env.CLAUDE_MODEL ?? "claude-sonnet-4-6");
 
-  // --- Spicy persona (Grok-style voice) + live web search ---
-  // Live search rides with Spicy mode and only when the deployment opts in
+  // --- Candor persona (frank, verdict-first voice) + live web search ---
+  // Live search rides with Candor mode and only when the deployment opts in
   // (EARN_WEB_SEARCH); the model decides per turn whether to search.
   const persona = parseEarnPersona(rawPersona);
-  const webSearch = persona === "spicy" && earnWebSearchEnabled();
+  const webSearch = persona === "candor" && earnWebSearchEnabled();
 
   // --- Web search detection ---
   const needsWebSearch =
