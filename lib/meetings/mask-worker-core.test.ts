@@ -7,7 +7,14 @@
 // it is not one a browser reports -- so it is the property these tests are built
 // around, including on the paths where something has already gone wrong.
 
-import { MaskFrameLoop, type FrameLoopDeps, type IncomingFrame } from "./mask-worker-core";
+import {
+  MaskFrameLoop,
+  createTimestampFloor,
+  monotonicSegmenter,
+  type FrameLoopDeps,
+  type FrameSegmenter,
+  type IncomingFrame,
+} from "./mask-worker-core";
 import type { MaskSample, Surface2D } from "./mask-compositor";
 import type { TimingReport } from "./mask-worker-protocol";
 
@@ -36,6 +43,7 @@ interface Harness {
   built: Out[];
   errors: string[];
   stats: TimingReport[];
+  announced: number[];
   /** Flip to make the next readback return nothing. */
   control: {
     callbackRuns: boolean;
@@ -45,6 +53,9 @@ interface Harness {
     readThrows: boolean;
     makeThrows: boolean;
     clock: number;
+    /** Resolve delivery by hand, to model a `write` that settles later. */
+    deliverAsync: boolean;
+    settleDeliver: ((accepted: boolean) => void) | null;
   };
 }
 
@@ -53,6 +64,7 @@ function harness(over: Partial<FrameLoopDeps<"mask", Out>> = {}): Harness {
   const built: Out[] = [];
   const errors: string[] = [];
   const stats: TimingReport[] = [];
+  const announced: number[] = [];
   const control: Harness["control"] = {
     callbackRuns: true,
     sample: { kind: "confidence", data: new Float32Array(4), width: 2, height: 2 },
@@ -61,6 +73,8 @@ function harness(over: Partial<FrameLoopDeps<"mask", Out>> = {}): Harness {
     readThrows: false,
     makeThrows: false,
     clock: 0,
+    deliverAsync: false,
+    settleDeliver: null,
   };
   const surface = { width: 640, height: 480 } as unknown as Surface2D;
   let nextId = 0;
@@ -94,17 +108,22 @@ function harness(over: Partial<FrameLoopDeps<"mask", Out>> = {}): Harness {
       built.push(out);
       return out;
     },
-    deliver: () => { calls.push("deliver"); return control.deliverAccepts; },
+    deliver: () => {
+      calls.push("deliver");
+      if (!control.deliverAsync) return control.deliverAccepts;
+      return new Promise<boolean>((resolve) => { control.settleDeliver = resolve; });
+    },
     closeFrame: (f) => { calls.push("closeFrame"); f.closes += 1; },
     // Advances a fixed amount per reading, so the timings below are exact
     // rather than wall-clock flakes.
     now: () => { control.clock += 1; return control.clock; },
+    onDelivered: (i) => { announced.push(i); },
     onStats: (r) => { stats.push(r); },
     onError: (r) => { errors.push(r); },
     ...over,
   };
 
-  return { deps, loop: new MaskFrameLoop(deps), calls, built, errors, stats, control };
+  return { deps, loop: new MaskFrameLoop(deps), calls, built, errors, stats, announced, control };
 }
 
 describe("the incoming frame is always closed", () => {
@@ -430,5 +449,145 @@ describe("what it reports as broken", () => {
     expect(() => h.loop.handle(frame)).not.toThrow();
     expect(state.closes).toBe(1);
     expect(h.built[0].closes).toBe(1);
+  });
+});
+
+/**
+ * A real sink is a `WritableStream` whose `write` settles later, so the frame is
+ * only delivered when it does.
+ *
+ * Counting it before then is not cosmetic: a write that rejects did not consume
+ * its chunk, and the count is what clears the main thread's first-frame
+ * deadline. Counting optimistically would clear the deadline on a frame that
+ * never arrived -- in exactly the case the deadline exists to catch, a sink that
+ * was already gone.
+ */
+describe("delivery that settles later", () => {
+  const flush = () => new Promise((r) => setTimeout(r, 0));
+
+  it("counts nothing until the write fulfills", async () => {
+    const h = harness();
+    h.control.deliverAsync = true;
+    h.loop.handle(incoming({ timestamp: 1 }).frame);
+
+    expect(h.loop.framesDelivered).toBe(0);
+    expect(h.announced).toEqual([]);
+
+    h.control.settleDeliver!(true);
+    await flush();
+
+    expect(h.loop.framesDelivered).toBe(1);
+    expect(h.announced).toEqual([1]);
+  });
+
+  it("closes the frame and counts nothing when the write rejects", async () => {
+    const h = harness();
+    h.control.deliverAsync = true;
+    h.loop.handle(incoming({ timestamp: 1 }).frame);
+    h.control.settleDeliver!(false);
+    await flush();
+
+    expect(h.loop.framesDelivered).toBe(0);
+    expect(h.announced).toEqual([]);
+    expect(h.built[0].closes).toBe(1);
+  });
+
+  it("closes the frame when the write throws rather than resolving", async () => {
+    const h = harness({ deliver: () => Promise.reject(new Error("stream closed")) });
+    h.loop.handle(incoming({ timestamp: 1 }).frame);
+    await flush();
+
+    expect(h.loop.framesDelivered).toBe(0);
+    expect(h.built[0].closes).toBe(1);
+  });
+
+  it("does not fold a rejected frame's timing into the averages", async () => {
+    const h = harness();
+    h.control.deliverAsync = true;
+    for (let i = 0; i < 48; i++) {
+      h.loop.handle(incoming({ timestamp: i }).frame);
+      h.control.settleDeliver!(false);
+      await flush();
+    }
+    expect(h.stats).toHaveLength(0);
+  });
+
+  it("still announces only the first accepted frame", async () => {
+    const h = harness();
+    h.control.deliverAsync = true;
+    for (let i = 0; i < 3; i++) {
+      h.loop.handle(incoming({ timestamp: i }).frame);
+      h.control.settleDeliver!(true);
+      await flush();
+    }
+    expect(h.announced).toEqual([1, 2, 3]);
+  });
+
+  it("still works for a sink that answers synchronously", () => {
+    const h = harness();
+    expect(h.loop.handle(incoming({ timestamp: 1 }).frame)).toBe(true);
+    expect(h.loop.framesDelivered).toBe(1);
+    expect(h.announced).toEqual([1]);
+  });
+});
+
+/**
+ * MediaPipe in VIDEO mode rejects a timestamp that does not advance past the
+ * last one THAT INSTANCE saw, and the instance is cached per worker while a loop
+ * is built per session.
+ *
+ * So a device switch mid-call resets the loop's floor but not the segmenter's,
+ * and a new camera whose timestamps start lower gets every frame rejected. The
+ * main thread's fallback is a one-way latch, so that transient clash would cost
+ * the member the worker for the rest of the call with nothing wrong with their
+ * browser.
+ */
+describe("the segmenter's floor across sessions", () => {
+  function recording() {
+    const seen: number[] = [];
+    const inner: FrameSegmenter<"mask"> = {
+      segmentForVideo: (_i, ts, cb) => { seen.push(ts); cb("mask"); },
+    };
+    return { inner, seen };
+  }
+
+  it("passes an advancing timestamp straight through", () => {
+    const { inner, seen } = recording();
+    const guarded = monotonicSegmenter(inner, createTimestampFloor());
+    guarded.segmentForVideo({} as never, 1_000, () => {});
+    guarded.segmentForVideo({} as never, 2_000, () => {});
+    expect(seen).toEqual([1_000, 2_000]);
+  });
+
+  it("nudges a timestamp that went backwards", () => {
+    const { inner, seen } = recording();
+    const guarded = monotonicSegmenter(inner, createTimestampFloor());
+    guarded.segmentForVideo({} as never, 5_000, () => {});
+    guarded.segmentForVideo({} as never, 1_000, () => {});
+    guarded.segmentForVideo({} as never, 1_000, () => {});
+    expect(seen).toEqual([5_000, 5_001, 5_002]);
+  });
+
+  /** The case the floor exists for: a new camera starting lower than the old. */
+  it("holds across the loops that share one segmenter", () => {
+    const { inner, seen } = recording();
+    const floor = createTimestampFloor();
+
+    const first = new MaskFrameLoop(harness({ segmenter: monotonicSegmenter(inner, floor) }).deps);
+    first.handle(incoming({ timestamp: 900_000 }).frame);
+
+    // A device switch: a brand new loop, whose own floor is back at -1.
+    const second = new MaskFrameLoop(harness({ segmenter: monotonicSegmenter(inner, floor) }).deps);
+    second.handle(incoming({ timestamp: 1_000 }).frame);
+
+    expect(seen).toEqual([900_000, 900_001]);
+  });
+
+  it("survives a frame with no timestamp", () => {
+    const { inner, seen } = recording();
+    const guarded = monotonicSegmenter(inner, createTimestampFloor());
+    guarded.segmentForVideo({} as never, Number.NaN, () => {});
+    guarded.segmentForVideo({} as never, Number.NaN, () => {});
+    expect(seen).toEqual([0, 1]);
   });
 });

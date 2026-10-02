@@ -84,11 +84,22 @@ export interface FrameLoopDeps<TResult, TOut> {
   closeMask: (result: TResult) => void;
   /** Build the outgoing frame from the compositor's surface. */
   makeFrame: (surface: Surface2D, init: OutgoingFrameInit) => TOut;
-  /** Send it. Returns false if the sink is gone, so the frame can be closed. */
-  deliver: (frame: TOut) => boolean;
+  /**
+   * Send it. False, or a promise of false, means the sink did not take it.
+   *
+   * Allowed to be async because the real sink is a `WritableStream` whose
+   * `write` settles later, and the frame is only really delivered when it
+   * does. A rejected write means the stream was already closed or errored, so
+   * the chunk was NOT consumed -- counting it before then would clear the main
+   * thread's first-frame deadline on a frame that never arrived, in exactly the
+   * case the deadline exists to catch.
+   */
+  deliver: (frame: TOut) => boolean | Promise<boolean>;
   /** Release an outgoing frame the sink refused. */
   closeFrame: (frame: TOut) => void;
   now: () => number;
+  /** A frame the sink really accepted, with the running count. */
+  onDelivered?: (index: number) => void;
   onStats: (report: TimingReport) => void;
   /** Reported once per cause, not per frame: a broken loop at 24fps would
    *  otherwise post a thousand messages a minute. */
@@ -240,31 +251,45 @@ export class MaskFrameLoop<TResult, TOut> {
       return false;
     }
 
-    let accepted = false;
+    // Settled rather than returned, because a real `write` finishes later and
+    // the frame is only delivered when it does.
+    const settle = (accepted: boolean): void => {
+      // A sink that refused it never took ownership, so this side still has to
+      // close it -- the case that silently exhausts the pool when a call ends
+      // while frames are in flight.
+      if (!accepted) {
+        try { d.closeFrame(out); } catch { /* already closed */ }
+        return;
+      }
+      this.delivered += 1;
+      const timing: FrameTiming = { readbackMs, chainMs, totalMs: d.now() - started };
+      accumulateTiming(this.timing, timing);
+      if (shouldReportStats(this.timing.frames)) {
+        d.onStats(timingReport(this.timing));
+        // Reset so each report describes its own second rather than the whole
+        // call: a machine that got into trouble five minutes in would otherwise
+        // be averaged back out by every good frame before it.
+        this.timing = createTimingAccumulator();
+      }
+      d.onDelivered?.(this.delivered);
+    };
+
+    let accepted: boolean | Promise<boolean>;
     try {
       accepted = d.deliver(out);
     } catch (err) {
       this.report(`deliver-failed: ${describe(err)}`);
-      accepted = false;
-    }
-    // A sink that refused it never took ownership, so this side still has to
-    // close it -- the case that silently exhausts the pool when a call ends
-    // while frames are in flight.
-    if (!accepted) {
-      try { d.closeFrame(out); } catch { /* already closed */ }
+      settle(false);
       return false;
     }
 
-    this.delivered += 1;
-    const timing: FrameTiming = { readbackMs, chainMs, totalMs: d.now() - started };
-    accumulateTiming(this.timing, timing);
-    if (shouldReportStats(this.timing.frames)) {
-      d.onStats(timingReport(this.timing));
-      // Reset so each report describes its own second rather than the whole
-      // call: a machine that got into trouble five minutes in would otherwise
-      // be averaged back out by every good frame before it.
-      this.timing = createTimingAccumulator();
+    if (typeof accepted === "boolean") {
+      settle(accepted);
+      return accepted;
     }
+    // Deliberately not awaited: awaiting would pace the camera to the slowest
+    // consumer and queue frames behind it, each holding a pool slot.
+    void accepted.then(settle, () => settle(false));
     return true;
   }
 
@@ -281,6 +306,51 @@ export class MaskFrameLoop<TResult, TOut> {
     this.reported.add(key);
     this.deps.onError(reason);
   }
+}
+
+/**
+ * One segmenter's timestamp floor, which outlives any one session.
+ *
+ * MediaPipe in VIDEO mode rejects a timestamp that is not greater than the last
+ * one THAT INSTANCE saw, and the instance is cached per worker while a
+ * `MaskFrameLoop` is built per session. So a loop's own floor resets on a device
+ * switch while the segmenter's does not, and a new camera whose timestamps start
+ * lower than the old one's gets every frame rejected -- until they climb past
+ * the old floor, which they may never do.
+ *
+ * That is worse than it sounds, because the main thread's fallback is a one-way
+ * latch: a transient clash on a device switch would cost the member the worker
+ * for the rest of the call, with nothing wrong with their browser.
+ */
+export interface TimestampFloor {
+  last: number;
+}
+
+export function createTimestampFloor(): TimestampFloor {
+  return { last: -1 };
+}
+
+/**
+ * Wrap a segmenter so its timestamps only ever advance.
+ *
+ * Belt and braces with `MaskFrameLoop`'s own nudge, and deliberately: the loop
+ * guarantees monotonicity WITHIN a session, for two camera frames carrying the
+ * same timestamp, and knows nothing about the sessions before it. This
+ * guarantees it ACROSS the sessions that share one segmenter. Neither covers the
+ * other's case.
+ */
+export function monotonicSegmenter<TResult>(
+  inner: FrameSegmenter<TResult>,
+  floor: TimestampFloor,
+): FrameSegmenter<TResult> {
+  return {
+    segmentForVideo(input, timestampMs, callback) {
+      const base = Number.isFinite(timestampMs) ? timestampMs : floor.last + 1;
+      const next = base > floor.last ? base : floor.last + 1;
+      floor.last = next;
+      inner.segmentForVideo(input, next, callback);
+    },
+  };
 }
 
 function describe(err: unknown): string {

@@ -38,7 +38,12 @@ import {
   type Surface2D,
 } from "@/lib/meetings/mask-compositor";
 import { readPipelineSupport } from "@/lib/meetings/mask-pipeline";
-import { MaskFrameLoop, type IncomingFrame } from "@/lib/meetings/mask-worker-core";
+import {
+  MaskFrameLoop,
+  createTimestampFloor,
+  monotonicSegmenter,
+  type IncomingFrame,
+} from "@/lib/meetings/mask-worker-core";
 import { isMainToWorker, type MainToWorker, type WorkerToMain } from "@/lib/meetings/mask-worker-protocol";
 
 const WASM_PATH = "/mediapipe";
@@ -127,6 +132,8 @@ interface Session {
 let session: Session | null = null;
 let segmenter: Segmenter | null = null;
 let segmenterLoading: Promise<Segmenter | null> | null = null;
+/** Travels with the cached segmenter, not with a session's loop. */
+let timestampFloor = createTimestampFloor();
 
 /**
  * Load the segmenter, once per worker.
@@ -185,15 +192,10 @@ async function pump(active: Session): Promise<void> {
       try { frame.close(); } catch { /* already closed */ }
       continue;
     }
-    const delivered = active.loop.handle(frame as unknown as IncomingFrame);
-    // Only the FIRST one. All the main thread needs is for its first-frame
-    // deadline to stop applying, and a message per frame would be 24
-    // postMessages a second onto the thread this whole exercise exists to free
-    // -- paying part of the cost back for a number already carried by `stats`.
-    if (delivered && !active.announced) {
-      active.announced = true;
-      post({ kind: "frame", index: active.loop.framesDelivered });
-    }
+    // The announcement is the loop's `onDelivered`, not this return value: a
+    // real `write` settles later, and a frame counted before it does would clear
+    // the main thread's deadline on a frame that never arrived.
+    active.loop.handle(frame as unknown as IncomingFrame);
   }
 }
 
@@ -209,27 +211,22 @@ function buildLoop(active: Omit<Session, "loop">): MaskFrameLoop<SegmentResult, 
         timestamp: init.timestamp,
         ...(init.duration === undefined ? {} : { duration: init.duration }),
       }),
-    deliver: (frame) => {
-      // `write` is async and deliberately not awaited: awaiting it would pace
-      // the camera to the slowest consumer and queue frames behind it, each one
-      // holding a pool slot.
-      //
-      // Which means the rejection has to be handled here rather than by the
-      // loop, and it has to close the frame. A write that rejects did NOT
-      // consume its chunk -- the stream was already closed or errored -- so the
-      // frame is still this side's, and by then the loop has been told it was
-      // accepted and will not close it. That is the quiet pool exhaustion at the
-      // end of every call, where the sink goes away while frames are in flight
-      // and nobody is looking at the output any more.
-      void active.writer.write(frame).catch(() => {
-        try { frame.close(); } catch { /* the stream did take it after all */ }
-      });
-      // True because the frame left this side. A sink that has gone away is
-      // reported by the next `read` coming back done, not by this.
-      return true;
-    },
+    // The promise IS the answer, rather than an optimistic `true`: a write that
+    // rejects did not consume its chunk -- the stream was already closed or
+    // errored -- so the frame is still this side's and the loop closes it. The
+    // loop does not await this, so the camera is never paced to the sink.
+    deliver: (frame) => active.writer.write(frame).then(() => true, () => false),
     closeFrame: (frame) => { try { frame.close(); } catch { /* already closed */ } },
     now: () => performance.now(),
+    // Only the FIRST one. All the main thread needs is for its first-frame
+    // deadline to stop applying, and a message per frame would be 24
+    // postMessages a second onto the thread this whole exercise exists to free
+    // -- paying part of the cost back for a number `stats` already carries.
+    onDelivered: (index) => {
+      if (active.announced) return;
+      active.announced = true;
+      post({ kind: "frame", index });
+    },
     onStats: (stats) => post({ kind: "stats", stats }),
     onError: (reason) => post({ kind: "failed", reason }),
   });
@@ -312,10 +309,27 @@ async function start(
 
   // Frames first, segmenter second. The order is the point: see `loadSegmenter`.
   void pump(active);
-  void loadSegmenter().then((loaded) => {
-    if (!loaded || session !== active) return;
-    segmenter = loaded;
-    active.loop.setSegmenter(loaded);
+
+  // The promise is captured so a load that resolves after its own session ended
+  // can tell whether anyone still wants it. `stop` clears `segmenterLoading`
+  // while a load may still be in flight, and a later `start` then begins a
+  // second one -- so the first resolves with a 12MB WASM heap and a WebGL
+  // context that nothing references and nothing would have closed.
+  const loading = loadSegmenter();
+  void loading.then((loaded) => {
+    if (!loaded) return;
+    if (session === active) {
+      // The floor travels with the segmenter rather than the loop, because the
+      // segmenter outlives the loop. See `monotonicSegmenter`.
+      const guarded = monotonicSegmenter(loaded, timestampFloor);
+      segmenter = loaded;
+      active.loop.setSegmenter(guarded);
+      return;
+    }
+    // Somebody else's now, or nobody's. Only close it in the second case.
+    if (segmenterLoading !== loading) {
+      try { loaded.close(); } catch { /* already closed */ }
+    }
   });
 }
 
@@ -335,7 +349,12 @@ scope.onmessage = (event: MessageEvent) => {
       void start(message);
       return;
     case "effect":
-      session?.compositor.setEffect(message.effect, message.image);
+      // The bitmap was TRANSFERRED, so the main thread has no reference left to
+      // close it with. If there is no session to take ownership, this is the
+      // only place it can be released -- and it is the exact case #1248's
+      // ownership rule was written for, one layer further out.
+      if (session) session.compositor.setEffect(message.effect, message.image);
+      else if (message.image) { try { message.image.close(); } catch { /* already closed */ } }
       return;
     case "pause":
       if (session) session.paused = message.paused;
@@ -345,6 +364,9 @@ scope.onmessage = (event: MessageEvent) => {
       try { segmenter?.close(); } catch { /* already closed */ }
       segmenter = null;
       segmenterLoading = null;
+      // Reset only where the segmenter is really gone: a floor kept past the
+      // instance it belonged to would reject the next one's first frames.
+      timestampFloor = createTimestampFloor();
       return;
   }
 };
