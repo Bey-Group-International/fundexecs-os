@@ -234,12 +234,15 @@ export async function refreshActiveRoomReads(
   budgetMs = SWEEP_BUDGET_MS,
 ): Promise<{ rooms: number; reads: number }> {
   const since = new Date(now.getTime() - 86_400_000).toISOString();
-  const { data: recent } = await supabase
+  const { data: recent, error: recentError } = await supabase
     .from("data_room_views")
     .select("room_id, organization_id")
     .gt("created_at", since)
     .not("room_id", "is", null)
     .limit(20_000);
+  // A failed read must not look like a quiet day: throw, so the cron reports
+  // it (dataRoom.earn.error) instead of "0 rooms refreshed".
+  if (recentError) throw new Error(`recent data room views: ${recentError.message}`);
   const activity = new Map<string, { orgId: string; n: number }>();
   for (const v of (recent ?? []) as { room_id: string; organization_id: string }[]) {
     const a = activity.get(v.room_id) ?? { orgId: v.organization_id, n: 0 };
@@ -249,13 +252,14 @@ export async function refreshActiveRoomReads(
   const busiest = [...activity.entries()].sort((a, b) => b[1].n - a[1].n).slice(0, MAX_ROOMS_PER_SWEEP);
   if (busiest.length === 0) return { rooms: 0, reads: 0 };
 
-  const { data: rooms } = await supabase
+  const { data: rooms, error: roomsError } = await supabase
     .from("data_rooms")
     .select("id, name, organization_id, archived_at")
     .in(
       "id",
       busiest.map(([id]) => id),
     );
+  if (roomsError) throw new Error(`data rooms: ${roomsError.message}`);
   const open = ((rooms ?? []) as { id: string; name: string; organization_id: string; archived_at: string | null }[])
     .filter((r) => !r.archived_at)
     // Keep the busiest-first order the cap was chosen by.

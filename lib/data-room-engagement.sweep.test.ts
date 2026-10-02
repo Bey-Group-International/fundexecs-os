@@ -6,7 +6,7 @@ import { refreshActiveRoomReads, refreshRoomReads, MAX_ROOMS_PER_SWEEP } from ".
 type Row = Record<string, unknown>;
 
 /** Enough of the Supabase client for the sweep: filters, ordering, limits and upserts. */
-function fakeDb(tables: Record<string, Row[]>) {
+function fakeDb(tables: Record<string, Row[]>, failing: string[] = []) {
   const upserts: Row[] = [];
   const builder = (table: string) => {
     let rows = [...(tables[table] ?? [])];
@@ -25,6 +25,7 @@ function fakeDb(tables: Record<string, Row[]>) {
           upserts.push(...upsert);
           return Promise.resolve({ error: null }).then(resolve);
         }
+        if (failing.includes(table)) return Promise.resolve({ data: null, error: { message: "boom" } }).then(resolve);
         return Promise.resolve({ data: rows }).then(resolve);
       },
     };
@@ -118,4 +119,14 @@ it("writes nothing for a room nobody has read", async () => {
   const db = fakeDb({ ...base, data_room_views: [] });
   expect(await refreshRoomReads(db.client, "org-1", { id: "room-1", name: "Fund II" }, now)).toEqual({ ok: true, count: 0 });
   expect(db.upserts).toEqual([]);
+});
+
+it("reports a failed activity read instead of passing it off as a quiet day", async () => {
+  const db = fakeDb({ ...base, data_room_views: [view({})] }, ["data_room_views"]);
+  await expect(refreshActiveRoomReads(db.client, now)).rejects.toThrow("recent data room views: boom");
+});
+
+it("reports a failed room lookup", async () => {
+  const db = fakeDb({ ...base, data_room_views: [view({})], data_rooms: [] }, ["data_rooms"]);
+  await expect(refreshActiveRoomReads(db.client, now)).rejects.toThrow("data rooms: boom");
 });
