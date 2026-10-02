@@ -1407,6 +1407,21 @@ export type IngestLog = {
   created_at: string;
 };
 
+// Per-org Gmail read cursor for the hourly mailbox sweep (migration
+// 20261002170000, lib/integrations/gmail-sync). Service-role writes only.
+export type GmailMailboxSync = {
+  organization_id: string;
+  mailbox_email: string | null;
+  history_id: string | null;
+  status: "pending" | "ok" | "needs_reconnect" | "error";
+  last_synced_at: string | null;
+  last_error: string | null;
+  consecutive_failures: number;
+  messages_ingested: number;
+  created_at: string;
+  updated_at: string;
+};
+
 export type AuditLog = {
   id: string;
   organization_id: string | null;
@@ -3187,6 +3202,7 @@ export type Database = {
       mandates: TableShape<MandateRow>;
       dispatch_log: TableShape<DispatchLog>;
       ingest_log: TableShape<IngestLog>;
+      gmail_mailbox_sync: TableShape<GmailMailboxSync>;
       audit_log: TableShape<AuditLog>;
       source_feedback: TableShape<SourceFeedback>;
       sourcing_entities: TableShape<SourcingEntity>;

@@ -38,6 +38,7 @@ type EmailState =
 export const ExportMenu = memo(function ExportMenu({ roomId }: { roomId: string }) {
   const [open, setOpen] = useState(false);
   const [withTranscript, setWithTranscript] = useState(false);
+  const [withCorrespondence, setWithCorrespondence] = useState(false);
   const [email, setEmail] = useState<EmailState>({ status: "idle" });
   const wrapRef = useRef<HTMLDivElement>(null);
 
@@ -61,7 +62,8 @@ export const ExportMenu = memo(function ExportMenu({ roomId }: { roomId: string 
 
   const href = (format: string) =>
     `/api/meetings/rooms/${encodeURIComponent(roomId)}/report/export?format=${format}` +
-    (withTranscript ? "&transcript=1" : "");
+    (withTranscript ? "&transcript=1" : "") +
+    (withCorrespondence ? "&correspondence=1" : "");
 
   async function sendToAttendees() {
     setEmail({ status: "sending" });
@@ -144,6 +146,23 @@ export const ExportMenu = memo(function ExportMenu({ roomId }: { roomId: string 
               Include full transcript
               <span className="block text-[11px] text-[var(--fg-muted)]">
                 Everything that was said, word for word.
+              </span>
+            </span>
+          </label>
+
+          {/* Downloads only: the email below goes to the attendees, and this is
+              the organisation's own correspondence with them. */}
+          <label className="flex items-start gap-2 rounded-lg px-2 py-2 text-sm text-[var(--fg-secondary)] hover:bg-[var(--surface-2)] cursor-pointer transition-colors">
+            <input
+              type="checkbox"
+              checked={withCorrespondence}
+              onChange={(e) => setWithCorrespondence(e.target.checked)}
+              className="mt-0.5 accent-[var(--gold-400)]"
+            />
+            <span>
+              Include inbox correspondence
+              <span className="block text-[11px] text-[var(--fg-muted)]">
+                Each attendee&apos;s recent conversations. Downloads only, never emailed.
               </span>
             </span>
           </label>

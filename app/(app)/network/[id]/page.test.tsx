@@ -44,6 +44,9 @@ jest.mock("@/components/source/ContactRecordView", () => ({
   ),
 }));
 
+// The realtime subscription needs a browser Supabase client; not this test's concern.
+jest.mock("@/components/source/ContactLive", () => ({ ContactLive: () => null }));
+
 import ContactPage from "./page";
 
 const VIEW = {

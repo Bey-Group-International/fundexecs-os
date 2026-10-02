@@ -17,8 +17,14 @@ import {
   reportExportFilename,
 } from "@/lib/meetings/report-export";
 import { loadReportForExport } from "@/lib/meetings/report-export.server";
+import { loadAttendeeInboxHistory } from "@/lib/meetings/report-inbox.server";
 
-// GET /api/meetings/rooms/[roomCode]/report/export?format=pdf|docx|md|html|rtf&transcript=1
+// GET /api/meetings/rooms/[roomCode]/report/export?format=pdf|docx|md|html|rtf&transcript=1&correspondence=1
+//
+// `correspondence=1` appends what the inbox holds on each attendee — the panel
+// beside the report, as part of the file. Download only: the email route never
+// carries it, because it is the organisation's correspondence and the email
+// goes to the attendees themselves.
 //
 // The meeting report as a downloadable document. Reuses the artifact
 // exporters: the report is rendered to markdown, and those already turn
@@ -43,6 +49,7 @@ export async function GET(
     return NextResponse.json({ error: "Unsupported format" }, { status: 400 });
   }
   const includeTranscript = query.get("transcript") === "1";
+  const includeCorrespondence = query.get("correspondence") === "1";
 
   const supabase = await createServerClient();
   // Told up front, so a summary-only export never reads the transcript it is
@@ -74,8 +81,20 @@ export async function GET(
 
   // RTF, DOCX and PDF draw the title they are handed; HTML and markdown do
   // not. Emitting the heading for the first three would print the name twice.
-  const markdown = buildReportMarkdown(loaded, {
+  // Read through the same session client, so RLS on inbox_threads decides it:
+  // a guest attendee exporting gets an empty section, not the org's mail.
+  const correspondence = includeCorrespondence
+    ? await loadAttendeeInboxHistory(supabase, {
+        meetingId: loaded.meetingId,
+        organizationId: loaded.organizationId,
+        invited: loaded.attendees,
+        viewerEmail: ctx.email || null,
+      })
+    : null;
+
+  const markdown = buildReportMarkdown({ ...loaded, correspondence }, {
     includeTranscript,
+    includeCorrespondence,
     titleHeading: !rendererDrawsTitle(format),
   });
   const title = loaded.title ?? undefined;

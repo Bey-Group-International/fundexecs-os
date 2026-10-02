@@ -1,6 +1,7 @@
 import {
   UNTITLED_MEETING,
   buildReportMarkdown,
+  correspondenceSection,
   hasExportableReport,
   hasReportSummary,
   meetingDurationMinutes,
@@ -451,5 +452,56 @@ describe("the consent block", () => {
     // half-written row would claim something the record does not say.
     expect(buildReportMarkdown({ ...base, consent: { sources: ["microphone"] } }))
       .not.toContain("## Consent");
+  });
+});
+
+describe("attendee correspondence", () => {
+  const correspondence = {
+    attendees: [
+      {
+        name: "Ana Lopez",
+        email: "ana@acme.com",
+        threads: [
+          {
+            id: "t1",
+            channel: "gmail",
+            subject: "Series B terms",
+            status: "open",
+            unread: true,
+            summary: "Ready to sign.",
+            lastMessageAt: "2026-09-30T10:00:00.000Z",
+          },
+        ],
+        total: 3,
+        lastContactAt: "2026-09-30T10:00:00.000Z",
+        unread: 1,
+      },
+    ],
+    untouched: [{ name: "Bo Chen", email: "bo@x.io" }],
+    capped: false,
+  };
+
+  it("is left out unless the reader asked for it", () => {
+    expect(buildReportMarkdown({ ...base, correspondence })).not.toContain("Correspondence With Attendees");
+  });
+
+  it("lists each attendee's threads and who the inbox has never heard from", () => {
+    const md = buildReportMarkdown({ ...base, correspondence }, { includeCorrespondence: true });
+    expect(md).toContain("## Correspondence With Attendees");
+    expect(md).toContain("**Ana Lopez** (ana@acme.com)");
+    expect(md).toContain("- Series B terms (");
+    expect(md).toContain("— Ready to sign.");
+    expect(md).toContain("- *2 more in the inbox*");
+    expect(md).toContain("**No correspondence yet:** Bo Chen (bo@x.io)");
+    expect(md).toContain("inbox history alongside");
+  });
+
+  it("withholds the never-heard-from line when the read was capped", () => {
+    expect(correspondenceSection({ ...correspondence, capped: true })).not.toContain("No correspondence yet");
+  });
+
+  it("says nothing at all when there is nothing", () => {
+    expect(correspondenceSection({ attendees: [], untouched: [], capped: false })).toBe("");
+    expect(correspondenceSection(null)).toBe("");
   });
 });
