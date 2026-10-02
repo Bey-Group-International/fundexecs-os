@@ -32,10 +32,20 @@ describe("followUpBody", () => {
 });
 
 describe("followUpHtml", () => {
-  it("keeps the line breaks the draft's lists are made of", () => {
-    expect(followUpHtml("1. Wire the funds\n2. Send the deck")).toContain(
-      "1. Wire the funds<br />2. Send the deck",
-    );
+  it("renders the draft's numbered lines as a list", () => {
+    const html = followUpHtml("1. Wire the funds\n2. Send the deck");
+    expect(html).toMatch(/<ol[^>]*><li[^>]*>Wire the funds<\/li><li[^>]*>Send the deck<\/li><\/ol>/);
+  });
+
+  it("keeps the line breaks of a sign-off", () => {
+    expect(followUpHtml("Best,\nAlex")).toContain("Best,<br />Alex");
+  });
+
+  it("renders bold and italics only after escaping", () => {
+    const html = followUpHtml("**Due Friday** and _please_ confirm <b>x</b>");
+    expect(html).toContain("<strong>Due Friday</strong>");
+    expect(html).toContain("<em>please</em>");
+    expect(html).toContain("&lt;b&gt;x&lt;/b&gt;");
   });
 
   it("starts a new paragraph on a blank line", () => {

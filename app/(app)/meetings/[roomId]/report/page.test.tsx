@@ -122,12 +122,25 @@ jest.mock("./AttendeeHistory", () => ({
     />
   ),
 }));
+// The sidebar's people, follow-up status and tasks come from a loader of their
+// own, tested on its own. Faked here so "the reads" below still measures the
+// report's own pass, and so a test can hand the page a sidebar to render.
+const side = {
+  participants: [] as Array<Record<string, unknown>>,
+  hostName: null as string | null,
+  followUp: { kind: "not_sent" } as Record<string, unknown>,
+  tasks: [] as Array<Record<string, unknown>>,
+};
+jest.mock("@/lib/meetings/report-side.server", () => ({
+  loadReportSide: async () => side,
+}));
 jest.mock("./ReportRevisions", () => ({
   ReportRevisions: ({ isHost }: { isHost: boolean }) => (
     <div data-testid="report-revisions" data-host={String(isHost)} />
   ),
 }));
 jest.mock("./FollowUpPanel", () => ({
+  FollowUpStatusChip: () => null,
   FollowUpPanel: ({ canSend }: { canSend: boolean }) => (
     <div data-testid="follow-up" data-can-send={String(canSend)} />
   ),
@@ -481,5 +494,49 @@ describe("the inbox history beside the report", () => {
     db.report = { ...ready };
     await renderPage();
     expect(screen.getByTestId("attendee-history")).toHaveAttribute("data-org", "null");
+  });
+});
+
+describe("the sidebar and the meeting at a glance", () => {
+  afterEach(() => {
+    side.participants = [];
+    side.tasks = [];
+  });
+
+  it("says who the meeting was between, and in what role", async () => {
+    db.report = { summary: "Done.", key_points: [], action_items: [], analysis: {}, full_transcript: "x" };
+    side.participants = [
+      { name: "Alex Rivera", email: "host@fundexecs.com", role: "host", attended: true, receivesFollowUp: false },
+      { name: "Ana Diaz", email: "ana@acme.com", role: "invitee", attended: false, receivesFollowUp: true },
+    ];
+    await renderPage();
+
+    expect(screen.getByText("Alex Rivera")).toBeInTheDocument();
+    expect(screen.getByText("Host")).toBeInTheDocument();
+    expect(screen.getByText(/Invitee · didn’t join/)).toBeInTheDocument();
+  });
+
+  it("shows the action items as the tasks they became", async () => {
+    db.report = {
+      summary: "Done.",
+      key_points: [],
+      action_items: ["Ana: Send the deck", "Book a call"],
+      analysis: { decisions: ["Proceed"] },
+      full_transcript: "x",
+    };
+    side.tasks = [
+      { id: "t1", title: "Send the deck", status: "completed", dueAt: null, assignedTo: "u1", assigneeName: "Ana Diaz", actionItem: "Ana: Send the deck" },
+    ];
+    await renderPage();
+
+    expect(screen.getByLabelText("Send the deck")).toBeChecked();
+    expect(screen.getByText("1/2 done")).toBeInTheDocument();
+  });
+
+  it("says when a meeting captured no action items, rather than leaving a gap", async () => {
+    db.report = { summary: "Done.", key_points: ["A"], action_items: [], analysis: {}, full_transcript: "x" };
+    await renderPage();
+    expect(screen.getByText(/No action items were captured/)).toBeInTheDocument();
+    expect(screen.getByText(/No decisions were recorded/)).toBeInTheDocument();
   });
 });

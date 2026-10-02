@@ -110,11 +110,11 @@ export function ReportRevisions({ meetingId, isHost }: { meetingId: string; isHo
 
   return (
     <section className="rounded-xl border border-[var(--line)] bg-[var(--surface-1)] p-4 flex flex-col gap-3">
-      <div className="flex flex-wrap items-center justify-between gap-3">
+      <div className="flex flex-col gap-2">
         <p className="text-xs font-medium text-[var(--fg-secondary)] uppercase tracking-wide">
           Report versions
         </p>
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
           {isHost && !correcting && (
             <button
               onClick={() => setCorrecting(true)}
