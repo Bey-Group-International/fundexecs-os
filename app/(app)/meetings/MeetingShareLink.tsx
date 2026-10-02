@@ -34,7 +34,7 @@ function legacyCopy(text: string): boolean {
   }
 }
 
-async function copyText(text: string): Promise<boolean> {
+export async function copyText(text: string): Promise<boolean> {
   if (navigator.clipboard?.writeText) {
     try {
       await navigator.clipboard.writeText(text);

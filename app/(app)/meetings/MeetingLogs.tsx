@@ -55,8 +55,21 @@ interface SearchResult {
 /** Long enough that a typed word is one request, short enough to feel live. */
 const DEBOUNCE_MS = 250;
 
-export function MeetingLogs({ meetings: initialMeetings }: { meetings: LoggedMeeting[] }) {
-  const [query, setQuery] = useState("");
+export function MeetingLogs({
+  meetings: initialMeetings,
+  query: controlledQuery,
+}: {
+  meetings: LoggedMeeting[];
+  /**
+   * The search, when the page owns the box. The meetings workspace has one
+   * search across every tab; given a query, this list searches with it and
+   * draws no box of its own.
+   */
+  query?: string;
+}) {
+  const [ownQuery, setQuery] = useState("");
+  const controlled = controlledQuery !== undefined;
+  const query = controlled ? controlledQuery : ownQuery;
   const [openId, setOpenId] = useState<string | null>(null);
   // Held locally so a regenerated report replaces its row in place. The
   // alternative is router.refresh(), which re-runs the page's whole server
@@ -268,6 +281,7 @@ export function MeetingLogs({ meetings: initialMeetings }: { meetings: LoggedMee
   return (
     <div className="flex flex-col gap-4">
       <div className="flex items-center gap-3">
+        {controlled ? <div className="flex-1" /> : (
         <div className="relative flex-1">
           <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-fg-muted">
             <SearchIcon />
@@ -281,6 +295,7 @@ export function MeetingLogs({ meetings: initialMeetings }: { meetings: LoggedMee
             className="w-full rounded-lg border border-line bg-surface-1 py-2 pl-9 pr-3 text-sm text-fg-primary transition-colors placeholder:text-fg-muted focus:border-gold-400 focus:outline-none focus:ring-2 focus:ring-gold-400/30"
           />
         </div>
+        )}
         <span role="status" aria-live="polite" className="shrink-0 text-xs tabular-nums text-fg-muted">
           {searchPending ? "Searching…" : summary}
         </span>
