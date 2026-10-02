@@ -28,4 +28,13 @@ describe("FilePreview PDF", () => {
     });
     expect(screen.getByRole("button", { name: "Scroll inside PPM.pdf" })).toBeTruthy();
   });
+
+  it("keeps the inactive PDF out of the tab order and focuses it on activation", () => {
+    const { container } = renderPdf();
+    const frame = container.querySelector("iframe") as HTMLIFrameElement;
+    expect(frame.tabIndex).toBe(-1);
+    fireEvent.click(screen.getByRole("button", { name: "Scroll inside PPM.pdf" }));
+    expect(frame.tabIndex).toBe(0);
+    expect(document.activeElement).toBe(frame);
+  });
 });
