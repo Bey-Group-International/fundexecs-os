@@ -285,6 +285,11 @@ export class BackgroundProcessor {
    */
   setEffect(effect: BackgroundEffect, image?: Blob | null): void {
     this.effect = effect;
+    // Every new choice supersedes a decode still in flight, not just a later
+    // custom one. Bumping the token only inside `loadCustomImage` left the
+    // custom-then-blur case live: the stale decode passed its own check and
+    // handed the compositor a bitmap for an effect that cannot use it.
+    this.customToken += 1;
     this.compositor.setEffect(effect, null);
     if (effect.kind === "custom" && image) void this.loadCustomImage(image);
     if (needsSegmentation(effect)) this.start();
@@ -299,12 +304,17 @@ export class BackgroundProcessor {
    * either thread.
    */
   private async loadCustomImage(blob: Blob): Promise<void> {
-    const token = ++this.customToken;
+    const token = this.customToken;
     try {
       const bitmap = await createImageBitmap(blob);
       // A second choice made while this one was decoding has already won; this
-      // bitmap would otherwise overwrite it with the older picture.
-      if (this.destroyed || token !== this.customToken) { bitmap.close(); return; }
+      // bitmap would otherwise overwrite it with the older picture. The
+      // compositor would close a bitmap it cannot use anyway -- this only keeps
+      // a stale one from travelling that far.
+      if (this.destroyed || token !== this.customToken) {
+        try { bitmap.close(); } catch { /* already closed */ }
+        return;
+      }
       this.compositor.setEffect(this.effect, bitmap);
     } catch {
       // Undecodable artwork. The compositor falls through to the camera, which

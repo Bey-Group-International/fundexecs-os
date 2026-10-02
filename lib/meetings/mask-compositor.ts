@@ -243,13 +243,23 @@ export class MaskCompositor {
    *
    * The image is an `ImageBitmap` rather than an `HTMLImageElement` because a
    * worker has no `Image` and no `decode()`. `createImageBitmap` exists on both
-   * threads, so the caller decodes and hands the result over; ownership comes
-   * with it, and the previous one is closed here.
+   * threads, so the caller decodes and hands the result over.
+   *
+   * Ownership comes with it UNCONDITIONALLY, including when the effect cannot
+   * use it. A decode is slow enough that the choice behind it can be stale by
+   * the time it lands -- somebody uploads a picture and switches to blur while
+   * it is still decoding -- and a bitmap handed in and quietly dropped on the
+   * floor keeps its decoded pixels until the collector happens to notice. So
+   * anything this cannot keep, it closes. Saying "I own what you give me" only
+   * on the branch that keeps it is a contract nobody can call correctly, and the
+   * worker will be handing bitmaps across `postMessage` where the sender has no
+   * reference left to close.
    */
   setEffect(effect: BackgroundEffect, image?: ImageBitmap | null): void {
     this.effect = effect;
     if (effect.kind !== "custom") {
       this.releaseCustomImage();
+      if (image) closeBitmap(image);
       return;
     }
     if (image) {
@@ -553,12 +563,23 @@ export class MaskCompositor {
   }
 
   private releaseCustomImage(): void {
-    try { this.customImage?.close(); } catch { /* already closed */ }
+    if (this.customImage) closeBitmap(this.customImage);
     this.customImage = null;
   }
 }
 
 // ── Painting ─────────────────────────────────────────────────────────────────
+
+/**
+ * Hand a bitmap's decoded pixels back, without caring whether it is already gone.
+ *
+ * `close()` on a closed bitmap is harmless in the browsers, but a transferred or
+ * detached one can throw, and a throw here would abandon the rest of an effect
+ * change half-applied.
+ */
+function closeBitmap(image: ImageBitmap): void {
+  try { image.close(); } catch { /* already closed, or detached by a transfer */ }
+}
 
 /** Draw an image to fill the frame without distorting it -- CSS `object-fit: cover`. */
 function drawCover(ctx: Context2D, image: ImageBitmap, width: number, height: number): void {

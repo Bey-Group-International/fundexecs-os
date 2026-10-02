@@ -450,6 +450,88 @@ describe("the mask carried between frames", () => {
   });
 });
 
+/**
+ * A decode is slow enough that the choice behind it can be stale by the time it
+ * lands: somebody uploads a picture and switches to blur while it is still
+ * decoding. Whatever arrives then is a bitmap holding decoded pixels that
+ * nothing will ever draw, and the sender -- a worker postMessage, in the route
+ * being built -- has no reference left to close it with. So the contract is
+ * unconditional: hand this a bitmap and it owns it, including when it cannot use
+ * it.
+ */
+describe("the bitmaps handed to it", () => {
+  const bitmap = () => {
+    const close = jest.fn();
+    return { image: { width: 8, height: 8, close } as unknown as ImageBitmap, close };
+  };
+
+  it("closes one it cannot use", () => {
+    const rec = recorder();
+    const c = MaskCompositor.create(rec.factory, 64, 48)!;
+    const late = bitmap();
+    c.setEffect({ kind: "blur", strength: "heavy" }, late.image);
+    expect(late.close).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps one it can", () => {
+    const rec = recorder();
+    const c = MaskCompositor.create(rec.factory, 64, 48)!;
+    const kept = bitmap();
+    c.setEffect({ kind: "custom", id: "u1" }, kept.image);
+    expect(kept.close).not.toHaveBeenCalled();
+
+    // And draws it, rather than falling through to the camera.
+    c.compose(frame(64, 48), confidenceAt(64, 48, () => SOLID));
+    const background = rec.calls.find((call) => call.surface === "output" && call.op === "drawImage");
+    expect(background?.args[0]).not.toBe("camera");
+  });
+
+  it("closes the one it was keeping when the effect moves off custom", () => {
+    const rec = recorder();
+    const c = MaskCompositor.create(rec.factory, 64, 48)!;
+    const kept = bitmap();
+    c.setEffect({ kind: "custom", id: "u1" }, kept.image);
+    c.setEffect({ kind: "blur", strength: "heavy" });
+    expect(kept.close).toHaveBeenCalledTimes(1);
+  });
+
+  it("closes the one it was keeping when a replacement arrives", () => {
+    const rec = recorder();
+    const c = MaskCompositor.create(rec.factory, 64, 48)!;
+    const first = bitmap();
+    const second = bitmap();
+    c.setEffect({ kind: "custom", id: "u1" }, first.image);
+    c.setEffect({ kind: "custom", id: "u2" }, second.image);
+    expect(first.close).toHaveBeenCalledTimes(1);
+    expect(second.close).not.toHaveBeenCalled();
+  });
+
+  it("closes it on destroy", () => {
+    const rec = recorder();
+    const c = MaskCompositor.create(rec.factory, 64, 48)!;
+    const kept = bitmap();
+    c.setEffect({ kind: "custom", id: "u1" }, kept.image);
+    c.destroy();
+    expect(kept.close).toHaveBeenCalledTimes(1);
+  });
+
+  /**
+   * A bitmap transferred over `postMessage` is detached at the sender, and
+   * `close()` on a detached one can throw. A throw here would abandon the rest
+   * of an effect change half-applied.
+   */
+  it("survives a bitmap that throws on close", () => {
+    const rec = recorder();
+    const c = MaskCompositor.create(rec.factory, 64, 48)!;
+    const detached = { width: 8, height: 8, close: () => { throw new Error("detached"); } } as unknown as ImageBitmap;
+    expect(() => c.setEffect({ kind: "blur", strength: "heavy" }, detached)).not.toThrow();
+
+    c.setEffect({ kind: "custom", id: "u1" }, detached);
+    expect(() => c.setEffect({ kind: "blur", strength: "heavy" })).not.toThrow();
+    expect(() => c.destroy()).not.toThrow();
+  });
+});
+
 describe("what is painted behind the person", () => {
   it("blurs the room on a smaller surface and scales it up", () => {
     const rec = recorder();
