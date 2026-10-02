@@ -38,6 +38,12 @@ import {
   type EchoWatch,
 } from "@/lib/meetings/echo";
 import {
+  createReturnWatch,
+  observeVoiceReturn,
+  voiceReturnNotice,
+  type ReturnWatch,
+} from "@/lib/meetings/voice-return";
+import {
   LOCAL_SPEAKER_ID,
   SPEAKING_LEVEL,
   VoiceActivityLog,
@@ -1002,6 +1008,16 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
   const [echoNotice, setEchoNotice] = useState<string | null>(null);
   /** The detector's memory. Allocated once; `observeEcho` never grows it. */
   const echoWatchRef = useRef<EchoWatch>(createEchoWatch());
+  /**
+   * Peers whose audio is muted on THIS device because it was carrying the
+   * member's own voice back — another device in the same room. See
+   * voice-return.ts. Muting playback here is the whole fix: the member can hear
+   * that person in the room, and nobody else's audio is touched.
+   */
+  const [sameRoomPeers, setSameRoomPeers] = useState<ReadonlySet<string>>(() => new Set());
+  /** Peers the member un-muted by hand. Never muted automatically again. */
+  const keepAudibleRef = useRef<Set<string>>(new Set());
+  const returnWatchRef = useRef<ReturnWatch>(createReturnWatch());
   // Read synchronously by `enterRoom`, which runs in the same tick as the click
   // that produced the choice — a state update would not be visible to it yet.
   const joinChoiceRef = useRef<GreenRoomChoice | null>(null);
@@ -2967,7 +2983,9 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     if (!ready || !selectedSpeakerId) return;
     void applySpeakerSink(selectedSpeakerId);
     // callParts: the tiles that carry the audio mount when it arrives.
-  }, [ready, selectedSpeakerId, peers, applySpeakerSink, callParts]);
+    // sameRoomPeers: an element that was muted skipped routing, and needs it
+    // the moment it plays again.
+  }, [ready, selectedSpeakerId, peers, applySpeakerSink, callParts, sameRoomPeers]);
 
   // ── How long the meeting has been live ────────────────────────────────────
 
@@ -3176,10 +3194,17 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
       let loudestId: string | null = null;
       let localLevel = 0;
       let remoteLevel = 0;
+      // Unsmoothed levels for the voice-return check: smoothing is a slow fall
+      // by design, and that blurs exactly the syllable shape it matches on.
+      let localRaw = 0;
+      const remoteRaw = new Map<string, number>();
 
       for (const tap of taps.values()) {
         tap.analyser.getFloatTimeDomainData(tap.buffer);
-        tap.smoothed = smoothLevel(tap.smoothed, levelFromSamples(tap.buffer));
+        const raw = levelFromSamples(tap.buffer);
+        tap.smoothed = smoothLevel(tap.smoothed, raw);
+        if (tap.id === LOCAL_SPEAKER_ID) localRaw = micOnRef.current ? raw : 0;
+        else remoteRaw.set(tap.id, raw);
 
         // A muted mic is silent anyway, but recording its level as zero keeps a
         // stray sample from a half-applied mute out of the attribution history.
@@ -3211,6 +3236,20 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
       // and setting state on every one of the eight samples a second would
       // re-render the room for a string that has not changed.
       if (verdict.started) setEchoNotice(ECHO_DETECTED_NOTICE);
+
+      // A peer carrying this member's own voice back — two devices in one room.
+      // Their playback is muted here, automatically; it comes back by itself
+      // when the evidence goes, and never again for someone un-muted by hand.
+      const returned = observeVoiceReturn(returnWatchRef.current, { local: localRaw, remotes: remoteRaw });
+      const add = returned.started.filter((id) => !keepAudibleRef.current.has(id));
+      if (add.length || returned.cleared.length) {
+        setSameRoomPeers((prev) => {
+          const next = new Set(prev);
+          add.forEach((id) => next.add(id));
+          returned.cleared.forEach((id) => next.delete(id));
+          return next;
+        });
+      }
 
       if (loudestId && loudest >= SPEAKING_LEVEL) {
         if (loudestId === shownSpeaker) {
@@ -5396,6 +5435,7 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     );
   }
   const { VideoTile, PeerAudio, CopilotSidebar, ControlBar, ReactionTicker } = callParts;
+  const sameRoomNames = allPeers.filter((p) => sameRoomPeers.has(p.id)).map((p) => p.displayName);
 
   const totalCount = 1 + allPeers.length;
   const gridClass = totalCount === 1 ? "grid-cols-1" : totalCount === 2 ? "grid-cols-2" : totalCount <= 4 ? "grid-cols-2" : "grid-cols-3";
@@ -5490,6 +5530,23 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
               <button onClick={() => setEchoNotice(null)} className="shrink-0 text-amber-500 hover:text-amber-600 text-xs font-medium underline">Dismiss</button>
             </div>
           )}
+          {/* Same room. Not a warning: the echo has already been dealt with,
+              and this says how, and how to take it back. */}
+          {sameRoomNames.length > 0 && (
+            <div role="status" className="flex items-start gap-3 px-4 py-3 bg-[var(--surface-2)] border-b border-[var(--line)] shrink-0">
+              <span className="mt-0.5 shrink-0">🔇</span>
+              <p className="flex-1 text-sm text-[var(--fg-secondary)]">{voiceReturnNotice(sameRoomNames)}</p>
+              <button
+                onClick={() => {
+                  sameRoomPeers.forEach((id) => keepAudibleRef.current.add(id));
+                  setSameRoomPeers(new Set());
+                }}
+                className="shrink-0 text-xs font-medium text-[var(--fg-muted)] hover:text-[var(--fg-primary)] underline transition-colors"
+              >
+                Unmute
+              </button>
+            </div>
+          )}
           {/* Guest upsell banner */}
           {isGuest && (
             <div className="flex items-center gap-3 px-4 py-2 bg-gold-400/10 border-b border-gold-400/20 shrink-0">
@@ -5558,7 +5615,7 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
           {/* Everyone's voice, once each, independent of layout. The tiles
               below are muted pictures; see PeerAudio. */}
           {allPeers.map((peer: Peer) => (
-            <PeerAudio key={peer.id} stream={peer.stream} audioTrack={audioTrackOf(peer.stream)} />
+            <PeerAudio key={peer.id} stream={peer.stream} audioTrack={audioTrackOf(peer.stream)} silenced={sameRoomPeers.has(peer.id)} />
           ))}
           {stageLayout === "grid" ? (
             <div className={`flex-1 grid ${gridClass} gap-3 p-4 content-center`}>
