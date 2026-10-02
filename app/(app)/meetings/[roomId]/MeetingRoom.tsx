@@ -4237,6 +4237,9 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
       });
       const t = opened.getAudioTracks()[0];
       if (!t || !localStreamRef.current) return;
+      // A microphone left open after the call is the same fault as a camera,
+      // minus the indicator light that would have told them. See `flipCamera`.
+      if (tornDownRef.current) return;
       t.enabled = micOnRef.current;
       t.contentHint = contentHintFor("microphone");
       audioSenderRef.current.forEach((sender) => { void sender.replaceTrack(t).catch(() => { /* peer closed */ }); });
@@ -4277,6 +4280,9 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
       });
       const t = opened.getVideoTracks()[0];
       if (!t || !localStreamRef.current) return;
+      // See `flipCamera`: a non-null local stream is not evidence the room is
+      // still here, and an adopted camera in a dead room is one nothing stops.
+      if (tornDownRef.current) return;
       await adoptCameraTrack(t);
       adopted = true;
       setSelectedCamId(t.getSettings().deviceId || deviceId);
@@ -4775,6 +4781,14 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
       });
       const t = opened.getVideoTracks()[0];
       if (!t || !localStreamRef.current) return;
+      // The same hazard `startCamera` guards one await earlier, and the reason
+      // it cannot lean on the check above: teardown stops the tracks in
+      // `localStreamRef.current` but never nulls the ref, so a non-null stream
+      // is NOT evidence the room is still there. A capture that resolves after
+      // someone leaves -- a permission prompt they answered on the way out, a
+      // slow camera -- would otherwise be adopted into a dead room and left
+      // running, with the hardware light on, after the call they left.
+      if (tornDownRef.current) return;
       await adoptCameraTrack(t);
       adopted = true;
       setSelectedCamId(t.getSettings().deviceId || "");
