@@ -33,6 +33,14 @@ import {
 import type { BackgroundProcessor } from "@/lib/meetings/background-processor";
 import { getBackground } from "@/lib/meetings/background-store";
 import { admissionStatusCopy, canPressJoin, type AdmissionUiState } from "@/lib/meetings/admission-ui";
+import {
+  browserFamily,
+  deviceSummary,
+  leadProblem,
+  problemGuide,
+  waitedLabel,
+  type BrowserFamily,
+} from "@/lib/meetings/green-room";
 import nextDynamic from "next/dynamic";
 
 // Loaded when someone picks a background, not with the room: the picker and
@@ -359,6 +367,18 @@ export function MeetingGreenRoom({
   // camera found" with a working camera plugged in, and at "No microphone
   // found" with a working microphone. Flipping state re-runs them both.
   const [primed, setPrimed] = useState(false);
+  // Bumped by "Try again". Both device effects depend on it, so a press re-runs
+  // whichever of them has no track — after the person has changed the site's
+  // permission or closed the app holding the device — without a reload, which
+  // would throw away the name they typed and their place in the waiting room.
+  const [retryKey, setRetryKey] = useState(0);
+  // The device pickers, folded into one line unless something needs them.
+  // Null until the person opens or closes them: until then a problem opens them.
+  const [devicesOpenChoice, setDevicesOpenChoice] = useState<boolean | null>(null);
+  // Which browser's permission steps to give. Read after mount: the server
+  // has no user agent to render with, and guessing would hydrate-mismatch.
+  const [browser, setBrowser] = useState<BrowserFamily>("other");
+  useEffect(() => { setBrowser(browserFamily(navigator.userAgent)); }, []);
   const micPeakRef = useRef(0);
   // Set the moment someone picks a background here, so the restoration below
   // knows it has been overtaken. Reading a custom image out of IndexedDB is an
@@ -636,7 +656,7 @@ export function MeetingGreenRoom({
       }
     })();
     return () => { cancelled = true; };
-  }, [primed, camId, cameraEnabled, cameraDenied, adoptVideo, refreshDevices, handleOpenFailure]);
+  }, [primed, camId, cameraEnabled, cameraDenied, adoptVideo, refreshDevices, handleOpenFailure, retryKey]);
 
   // The microphone, and only the microphone.
   useEffect(() => {
@@ -662,7 +682,7 @@ export function MeetingGreenRoom({
       }
     })();
     return () => { cancelled = true; };
-  }, [primed, micId, micDenied, adoptAudio, refreshDevices, handleOpenFailure]);
+  }, [primed, micId, micDenied, adoptAudio, refreshDevices, handleOpenFailure, retryKey]);
 
   // The stream the room takes over. Rebuilt only when a track actually changes,
   // so the room is not handed a new object every render.
@@ -810,115 +830,178 @@ export function MeetingGreenRoom({
     : listenOnly ? "Join to listen"
     : isHost ? "Start meeting" : "Join meeting";
 
+  // The one problem big enough to cover the preview, and the rest, which stay
+  // beside the Join button where they always were.
+  const lead = leadProblem(problems);
+  const guide = lead ? problemGuide(lead, browser) : null;
+  const otherProblems = lead ? problems.filter((p) => p !== lead) : problems;
+
+  // Clear what the browser last said and ask again. Denied first: both device
+  // effects stand down while a device is marked denied, and a person who has
+  // just allowed it in the address bar is the reason to ask.
+  const retryDevices = () => {
+    setCameraDenied(false);
+    setMicDenied(false);
+    setCameraBusy(false);
+    setMicBusy(false);
+    setRetryKey((k) => k + 1);
+  };
+
+  // A picker problem — the echo risk, a dead or busy microphone, a busy camera —
+  // is fixed in the pickers, so it opens them, unless the person has already
+  // chosen whether they are open.
+  const devicesNeedAttention = Boolean(echoWarning) ||
+    problems.some((p) => p.kind === "mic_silent" || p.kind === "mic_busy" || p.kind === "camera_busy");
+  const devicesOpen = devicesOpenChoice ?? devicesNeedAttention;
+  const summary = deviceSummary(devices, { cameraId: camId, micId, cameraEnabled });
+
   return (
-    <div className="flex flex-col items-center justify-center min-h-[70vh] gap-5 px-4">
-      <div className="w-full max-w-sm flex flex-col gap-3">
-        {/* Preview */}
-        <div className="relative rounded-2xl overflow-hidden bg-black aspect-video border border-[var(--line)] shadow-sm">
-          {videoTrack && cameraEnabled ? (
-            <BackgroundPreview
-              track={videoTrack}
-              effect={bgEffect}
-              image={bgImage}
-              onUnavailable={onBackgroundUnavailable}
-            />
-          ) : (
-            <div className="flex flex-col items-center justify-center h-full gap-1.5">
-              <span className="text-[var(--fg-muted)]"><CamGlyph off /></span>
-              <span className="text-xs text-[var(--fg-muted)]">
-                {cameraDenied ? "Camera blocked" : cameraEnabled ? "No camera" : "Camera off"}
-              </span>
-            </div>
-          )}
+    // Two columns from `md`: the preview large on the left, everything to decide
+    // on the right. The old screen was one 384px column, so the preview — the
+    // thing people actually check — was the size of a playing card on a laptop.
+    <div className="mx-auto flex min-h-[70vh] w-full max-w-5xl items-center px-4 py-6 md:px-6">
+      <div className="grid w-full gap-5 md:grid-cols-[minmax(0,1.55fr)_minmax(0,1fr)] md:items-center md:gap-8">
+        <div className="flex flex-col gap-3">
+          {/* Preview */}
+          <div className="relative overflow-hidden rounded-2xl border border-[var(--line)] bg-black shadow-sm aspect-video">
+            {videoTrack && cameraEnabled ? (
+              <BackgroundPreview
+                track={videoTrack}
+                effect={bgEffect}
+                image={bgImage}
+                onUnavailable={onBackgroundUnavailable}
+              />
+            ) : (
+              <div className="flex h-full flex-col items-center justify-center gap-1.5">
+                <span className="text-white/60"><CamGlyph off /></span>
+                <span className="text-xs text-white/60">
+                  {cameraDenied ? "Camera blocked" : cameraEnabled ? "No camera" : "Camera off"}
+                </span>
+              </div>
+            )}
 
-          {/* Mic + camera toggles, over the preview the way a call has them */}
-          <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => setMicEnabled((v) => !v)}
-              disabled={micDenied || mics.length === 0}
-              title={micEnabled ? "Join muted" : "Join unmuted"}
-              aria-pressed={micEnabled}
-              className={`w-10 h-10 rounded-full flex items-center justify-center transition-colors disabled:opacity-40 ${
-                micEnabled ? "bg-white/15 text-white hover:bg-white/25" : "bg-[var(--status-danger)] text-white"
-              }`}
-            >
-              <MicGlyph off={!micEnabled} />
-            </button>
-            <button
-              type="button"
-              onClick={() => setCameraEnabled((v) => !v)}
-              disabled={cameraDenied || cameras.length === 0}
-              title={cameraEnabled ? "Join with camera off" : "Join with camera on"}
-              aria-pressed={cameraEnabled}
-              className={`w-10 h-10 rounded-full flex items-center justify-center transition-colors disabled:opacity-40 ${
-                cameraEnabled ? "bg-white/15 text-white hover:bg-white/25" : "bg-[var(--status-danger)] text-white"
-              }`}
-            >
-              <CamGlyph off={!cameraEnabled} />
-            </button>
-            {/* Backgrounds, beside the camera toggle they belong to. Disabled
-                with the camera: there is nothing to put a background behind. */}
-            <button
-              type="button"
-              onClick={() => setBgOpen((v) => !v)}
-              disabled={!cameraEnabled || cameraDenied || bgUnavailable}
-              title="Background effects"
-              aria-label="Background effects"
-              aria-expanded={bgOpen}
-              className={`w-10 h-10 rounded-full flex items-center justify-center transition-colors disabled:opacity-40 ${
-                bgEffect.kind !== "none" ? "bg-[var(--gold-400)] text-white" : "bg-white/15 text-white hover:bg-white/25"
-              }`}
-            >
-              <BackgroundGlyph />
-            </button>
-          </div>
+            {/* A device that cannot be used at all, said where people are
+                looking — over the picture that is not there — with the steps for
+                this browser and a way to ask again without reloading. */}
+            {guide && (
+              <div
+                role="alert"
+                className="absolute inset-0 flex items-center justify-center bg-black/75 p-4 backdrop-blur-sm"
+              >
+                <div className="w-full max-w-sm text-white">
+                  <p className="text-sm font-semibold sm:text-base">{guide.title}</p>
+                  {guide.steps.length > 0 && (
+                    <ol className="mt-2 flex list-decimal flex-col gap-1 pl-5 text-xs leading-snug text-white/80 sm:text-sm">
+                      {guide.steps.map((step) => <li key={step}>{step}</li>)}
+                    </ol>
+                  )}
+                  <button
+                    type="button"
+                    onClick={retryDevices}
+                    className="mt-3 min-h-11 rounded-lg bg-white px-4 text-sm font-semibold text-[#0d0d10] transition-opacity hover:opacity-90 sm:min-h-9"
+                  >
+                    {guide.actionLabel}
+                  </button>
+                </div>
+              </div>
+            )}
 
-          {/* Live level, so "is my mic working" is answered before the call */}
-          <div className="absolute top-3 left-3 flex items-center gap-2 rounded-full bg-black/50 backdrop-blur-sm px-2.5 py-1.5">
-            <span className="text-white/80"><MicGlyph off={!micEnabled} /></span>
-            <MicMeter level={level} active={micEnabled && !micDenied} />
-          </div>
-        </div>
-
-        {bgOpen && (
-          <div className="rounded-2xl border border-[var(--line)] bg-[var(--surface-1)] p-3">
-            <div className="mb-2 flex items-center justify-between">
-              <p className="text-xs font-medium text-[var(--fg-secondary)]">Background</p>
+            {/* Mic + camera toggles, over the preview the way a call has them.
+                44px on a phone, the size a thumb finds without looking. */}
+            <div className="absolute bottom-3 left-1/2 flex -translate-x-1/2 items-center gap-2">
               <button
                 type="button"
-                onClick={() => setBgOpen(false)}
-                className="text-xs text-[var(--fg-muted)] transition-colors hover:text-[var(--fg-primary)]"
+                onClick={() => setMicEnabled((v) => !v)}
+                disabled={micDenied || mics.length === 0}
+                title={micEnabled ? "Join muted" : "Join unmuted"}
+                aria-label={micEnabled ? "Join muted" : "Join unmuted"}
+                aria-pressed={micEnabled}
+                className={`flex h-11 w-11 items-center justify-center rounded-full transition-colors disabled:opacity-40 sm:h-10 sm:w-10 ${
+                  micEnabled ? "bg-white/15 text-white hover:bg-white/25" : "bg-[var(--status-danger)] text-white"
+                }`}
               >
-                Done
+                <MicGlyph off={!micEnabled} />
+              </button>
+              <button
+                type="button"
+                onClick={() => setCameraEnabled((v) => !v)}
+                disabled={cameraDenied || cameras.length === 0}
+                title={cameraEnabled ? "Join with camera off" : "Join with camera on"}
+                aria-label={cameraEnabled ? "Join with camera off" : "Join with camera on"}
+                aria-pressed={cameraEnabled}
+                className={`flex h-11 w-11 items-center justify-center rounded-full transition-colors disabled:opacity-40 sm:h-10 sm:w-10 ${
+                  cameraEnabled ? "bg-white/15 text-white hover:bg-white/25" : "bg-[var(--status-danger)] text-white"
+                }`}
+              >
+                <CamGlyph off={!cameraEnabled} />
+              </button>
+              {/* Backgrounds, beside the camera toggle they belong to. Disabled
+                  with the camera: there is nothing to put a background behind. */}
+              <button
+                type="button"
+                onClick={() => setBgOpen((v) => !v)}
+                disabled={!cameraEnabled || cameraDenied || bgUnavailable}
+                title="Background effects"
+                aria-label="Background effects"
+                aria-expanded={bgOpen}
+                className={`flex h-11 w-11 items-center justify-center rounded-full transition-colors disabled:opacity-40 sm:h-10 sm:w-10 ${
+                  bgEffect.kind !== "none" ? "bg-[var(--gold-400)] text-white" : "bg-white/15 text-white hover:bg-white/25"
+                }`}
+              >
+                <BackgroundGlyph />
               </button>
             </div>
-            <BackgroundPicker
-              effect={bgEffect}
-              unavailable={bgUnavailable}
-              onChange={chooseBackground}
-            />
+
+            {/* Live level, so "is my mic working" is answered before the call */}
+            <div className="absolute left-3 top-3 flex items-center gap-2 rounded-full bg-black/50 px-2.5 py-1.5 backdrop-blur-sm">
+              <span className="text-white/80"><MicGlyph off={!micEnabled} /></span>
+              <MicMeter level={level} active={micEnabled && !micDenied} />
+            </div>
           </div>
-        )}
+
+          {bgOpen && (
+            <div className="rounded-2xl border border-[var(--line)] bg-[var(--surface-1)] p-3">
+              <div className="mb-2 flex items-center justify-between">
+                <p className="text-xs font-medium text-[var(--fg-secondary)]">Background</p>
+                <button
+                  type="button"
+                  onClick={() => setBgOpen(false)}
+                  className="min-h-9 px-1 text-xs text-[var(--fg-muted)] transition-colors hover:text-[var(--fg-primary)]"
+                >
+                  Done
+                </button>
+              </div>
+              <BackgroundPicker
+                effect={bgEffect}
+                unavailable={bgUnavailable}
+                onChange={chooseBackground}
+              />
+            </div>
+          )}
+        </div>
 
         {/* Join card */}
-        <div className="rounded-2xl border border-[var(--line)] bg-[var(--surface-1)] overflow-hidden">
-          <div className="px-5 pt-5 pb-4 flex flex-col gap-4">
-            <p className="text-base font-semibold text-[var(--fg-primary)]">
-              {isHost ? "Ready to start?" : "Ready to join?"}
-            </p>
+        <div className="rounded-2xl border border-[var(--line)] bg-[var(--surface-1)]">
+          <div className="flex flex-col gap-4 px-5 pb-4 pt-5">
+            <h2 className="font-display text-lg font-semibold text-[var(--fg-primary)]">
+              {waitCopy && admission !== "failed" && admission !== "gave-up" ? "Almost in" : isHost ? "Ready to start?" : "Ready to join?"}
+            </h2>
 
-            <input
-              type="text"
-              value={displayName}
-              onChange={(e) => onDisplayNameChange(e.target.value)}
-              placeholder="Your name"
-              className="rounded-lg border border-[var(--line)] bg-[var(--surface-0)] px-3 py-2.5 text-sm text-[var(--fg-primary)] placeholder:text-[var(--fg-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--gold-400)]"
-            />
+            <label className="flex flex-col gap-1.5">
+              <span className="text-xs text-[var(--fg-muted)]">Your name</span>
+              <input
+                type="text"
+                value={displayName}
+                onChange={(e) => onDisplayNameChange(e.target.value)}
+                placeholder="Your name"
+                autoComplete="name"
+                className="rounded-lg border border-[var(--line)] bg-[var(--surface-0)] px-3 py-2.5 text-base text-[var(--fg-primary)] placeholder:text-[var(--fg-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--gold-400)] sm:text-sm"
+              />
+            </label>
 
-            {problems.length > 0 && (
+            {otherProblems.length > 0 && (
               <ul className="flex flex-col gap-1.5">
-                {problems.map((p) => (
+                {otherProblems.map((p) => (
                   <li
                     key={p.kind}
                     className="flex items-start gap-2 rounded-lg bg-[var(--surface-2)] px-2.5 py-2 text-xs text-[var(--fg-secondary)]"
@@ -930,111 +1013,193 @@ export function MeetingGreenRoom({
               </ul>
             )}
 
-            <div className="flex flex-col gap-2">
-              <p className="text-xs text-[var(--fg-muted)]">Devices</p>
+            {/* Devices, folded to one line. Most people never change them, and
+                three dropdowns above the Join button made the screen look like a
+                settings page. A problem the pickers can fix opens them. */}
+            <div className="rounded-lg border border-[var(--line)]">
+              <button
+                type="button"
+                onClick={() => setDevicesOpenChoice(!devicesOpen)}
+                aria-expanded={devicesOpen}
+                aria-controls="green-room-devices"
+                className="flex min-h-11 w-full items-center gap-2 px-3 py-2 text-left sm:min-h-9"
+              >
+                <span className="shrink-0 text-xs font-medium text-[var(--fg-secondary)]">Devices</span>
+                <span className="min-w-0 flex-1 truncate text-xs text-[var(--fg-muted)]">{summary}</span>
+                <svg
+                  aria-hidden="true"
+                  width="10" height="10" viewBox="0 0 8 8" fill="none"
+                  className={`shrink-0 text-[var(--fg-muted)] transition-transform ${devicesOpen ? "rotate-180" : ""}`}
+                >
+                  <path d="M1 2.5L4 5.5L7 2.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                </svg>
+              </button>
 
-              {cameras.length > 0 && (
-                <label className="flex items-center gap-2">
-                  <span className="text-[var(--fg-muted)] shrink-0"><CamGlyph /></span>
-                  <span className="sr-only">Camera</span>
-                  <select
-                    value={camId}
-                    onChange={(e) => choose("videoinput", e.target.value)}
-                    className="flex-1 min-w-0 rounded-lg border border-[var(--line)] bg-[var(--surface-0)] px-2.5 py-1.5 text-xs text-[var(--fg-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--gold-400)] truncate"
-                  >
-                    {cameras.map((d) => <option key={d.deviceId} value={d.deviceId}>{d.label}</option>)}
-                  </select>
-                </label>
-              )}
+              {/* Kept mounted while folded: the choices are live state, and the
+                  pickers are what an assistive-technology user finds by label. */}
+              <div
+                id="green-room-devices"
+                hidden={!devicesOpen}
+                // The class as well as the attribute: `flex` outranks the
+                // browser's own [hidden] rule, and left alone drew an empty box.
+                className={`${devicesOpen ? "flex" : "hidden"} flex-col gap-2 border-t border-[var(--line)] px-3 py-3`}
+              >
+                {cameras.length > 0 && (
+                  <label className="flex items-center gap-2">
+                    <span className="shrink-0 text-[var(--fg-muted)]"><CamGlyph /></span>
+                    <span className="sr-only">Camera</span>
+                    <select
+                      value={camId}
+                      onChange={(e) => choose("videoinput", e.target.value)}
+                      className="min-h-11 min-w-0 flex-1 truncate rounded-lg border border-[var(--line)] bg-[var(--surface-0)] px-2.5 py-1.5 text-sm text-[var(--fg-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--gold-400)] sm:min-h-0 sm:text-xs"
+                    >
+                      {cameras.map((d) => <option key={d.deviceId} value={d.deviceId}>{d.label}</option>)}
+                    </select>
+                  </label>
+                )}
 
-              {mics.length > 0 && (
-                <label className="flex items-center gap-2">
-                  <span className="text-[var(--fg-muted)] shrink-0"><MicGlyph /></span>
-                  <span className="sr-only">Microphone</span>
-                  <select
-                    value={micId}
-                    onChange={(e) => choose("audioinput", e.target.value)}
-                    className="flex-1 min-w-0 rounded-lg border border-[var(--line)] bg-[var(--surface-0)] px-2.5 py-1.5 text-xs text-[var(--fg-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--gold-400)] truncate"
-                  >
-                    {mics.map((d) => <option key={d.deviceId} value={d.deviceId}>{d.label}</option>)}
-                  </select>
-                </label>
-              )}
+                {mics.length > 0 && (
+                  <label className="flex items-center gap-2">
+                    <span className="shrink-0 text-[var(--fg-muted)]"><MicGlyph /></span>
+                    <span className="sr-only">Microphone</span>
+                    <select
+                      value={micId}
+                      onChange={(e) => choose("audioinput", e.target.value)}
+                      className="min-h-11 min-w-0 flex-1 truncate rounded-lg border border-[var(--line)] bg-[var(--surface-0)] px-2.5 py-1.5 text-sm text-[var(--fg-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--gold-400)] sm:min-h-0 sm:text-xs"
+                    >
+                      {mics.map((d) => <option key={d.deviceId} value={d.deviceId}>{d.label}</option>)}
+                    </select>
+                  </label>
+                )}
 
-              {speakers.length > 0 && (
-                <label className="flex items-center gap-2">
-                  <span className="text-[var(--fg-muted)] shrink-0"><SpeakerGlyph /></span>
-                  <span className="sr-only">Speaker</span>
-                  <select
-                    value={speakerId}
-                    onChange={(e) => choose("audiooutput", e.target.value)}
-                    className="flex-1 min-w-0 rounded-lg border border-[var(--line)] bg-[var(--surface-0)] px-2.5 py-1.5 text-xs text-[var(--fg-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--gold-400)] truncate"
-                  >
-                    {speakers.map((d) => <option key={d.deviceId} value={d.deviceId}>{d.label}</option>)}
-                  </select>
-                </label>
-              )}
+                {speakers.length > 0 && (
+                  <label className="flex items-center gap-2">
+                    <span className="shrink-0 text-[var(--fg-muted)]"><SpeakerGlyph /></span>
+                    <span className="sr-only">Speaker</span>
+                    <select
+                      value={speakerId}
+                      onChange={(e) => choose("audiooutput", e.target.value)}
+                      className="min-h-11 min-w-0 flex-1 truncate rounded-lg border border-[var(--line)] bg-[var(--surface-0)] px-2.5 py-1.5 text-sm text-[var(--fg-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--gold-400)] sm:min-h-0 sm:text-xs"
+                    >
+                      {speakers.map((d) => <option key={d.deviceId} value={d.deviceId}>{d.label}</option>)}
+                    </select>
+                  </label>
+                )}
 
-              {/* Echo, before anybody can hear it.
-                  This is the better of the two places to say it: here nothing
-                  is live, so the member can change the device without a room
-                  full of people listening to themselves while they work it out.
-                  The room says the same thing on a mid-call switch, because
-                  that path exists too. */}
-              {echoWarning && (
-                <p className="flex items-start gap-1.5 text-[11px] leading-snug text-amber-600 dark:text-amber-400">
-                  <span className="shrink-0">🔊</span>
-                  <span>{echoWarning}</span>
-                </p>
-              )}
+                {/* Echo, before anybody can hear it.
+                    This is the better of the two places to say it: here nothing
+                    is live, so the member can change the device without a room
+                    full of people listening to themselves while they work it out.
+                    The room says the same thing on a mid-call switch, because
+                    that path exists too. */}
+                {echoWarning && (
+                  <p className="flex items-start gap-1.5 text-[11px] leading-snug text-amber-600 dark:text-amber-400">
+                    <span className="shrink-0">🔊</span>
+                    <span>{echoWarning}</span>
+                  </p>
+                )}
+              </div>
             </div>
           </div>
 
-          {/* The meeting's own link, ready to hand to whoever is missing */}
-          <div className="px-5 py-3 border-t border-[var(--line)] bg-[var(--surface-0)]">
-            <MeetingShareLink roomCode={roomCode} title={meetingTitle} scheduledAt={scheduledAt} />
-          </div>
-
           {/* The button's slot becomes the wait. Nothing above it moves, so the
-              preview does not re-render and every control stays usable. */}
-          <div className="px-5 pb-5 pt-3">
+              preview does not re-render and every control stays usable.
+
+              Pinned to the bottom of a phone screen: below the preview and the
+              card, Join was a scroll away on the screen whose only job is to
+              get somebody into the call. */}
+          <div className="sticky bottom-0 z-10 border-t border-[var(--line)] bg-[var(--surface-1)] px-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] pt-3 md:static">
             {waitCopy ? (
-              <div
-                role="status"
-                aria-live="polite"
-                className="flex flex-col items-center gap-2 rounded-lg border border-[var(--line)] bg-[var(--surface-2)] px-4 py-3 text-center"
-              >
-                <div className="flex items-center gap-2">
-                  <span
-                    aria-hidden
-                    className={`w-2 h-2 rounded-full ${admission === "timed-out" ? "bg-[var(--status-warning)]" : "bg-[var(--gold-400)] animate-pulse"}`}
-                  />
-                  <span className="text-sm font-semibold text-[var(--fg-primary)]">{waitCopy.title}</span>
-                </div>
-                <p className="text-xs text-[var(--fg-muted)]">{waitCopy.detail}</p>
-                {waitCopy.cancelLabel && onCancelAdmission && (
-                  <button
-                    type="button"
-                    onClick={onCancelAdmission}
-                    className="text-xs text-[var(--fg-muted)] underline underline-offset-2 hover:text-[var(--status-danger)] transition-colors"
-                  >
-                    {waitCopy.cancelLabel}
-                  </button>
-                )}
-              </div>
+              <WaitStatus
+                admission={admission}
+                title={waitCopy.title}
+                detail={waitCopy.detail}
+                cancelLabel={waitCopy.cancelLabel}
+                onCancel={onCancelAdmission}
+              />
             ) : (
               <button
                 type="button"
                 onClick={join}
                 disabled={joining}
-                className="w-full rounded-lg bg-[var(--gold-400)] hover:bg-[var(--gold-500)] disabled:opacity-50 text-white text-sm font-semibold py-2.5 transition-colors"
+                className="min-h-11 w-full rounded-lg bg-[var(--gold-400)] py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[var(--gold-500)] disabled:opacity-50"
               >
                 {joinLabel}
               </button>
             )}
           </div>
+
+          {/* The meeting's own link, ready to hand to whoever is missing */}
+          <div className="rounded-b-2xl border-t border-[var(--line)] bg-[var(--surface-0)] px-5 py-3">
+            <MeetingShareLink roomCode={roomCode} title={meetingTitle} scheduledAt={scheduledAt} />
+          </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+/** The states that are a wait in progress, and so get a running clock. */
+const TIMED_WAITS: ReadonlySet<AdmissionUiState> = new Set(["waiting", "busy", "timed-out"]);
+
+/**
+ * The Join button's slot, while someone waits to be let in.
+ *
+ * Says how long it has been. A wait with no clock reads as a page that has
+ * stopped working, and two minutes without one is when people reload — which
+ * puts them at the back of the queue. Its own component so the second hand
+ * re-renders this line, not the preview above it.
+ */
+function WaitStatus({
+  admission, title, detail, cancelLabel, onCancel,
+}: {
+  admission: AdmissionUiState;
+  title: string;
+  detail: string;
+  cancelLabel: string | null;
+  onCancel?: () => void;
+}) {
+  const timed = TIMED_WAITS.has(admission);
+  const [since, setSince] = useState<number | null>(null);
+  const [now, setNow] = useState(() => Date.now());
+
+  useEffect(() => {
+    if (!timed) { setSince(null); return; }
+    setSince((s) => s ?? Date.now());
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, [timed]);
+
+  return (
+    <div
+      role="status"
+      aria-live="polite"
+      className="flex flex-col items-center gap-2 rounded-lg border border-[var(--line)] bg-[var(--surface-2)] px-4 py-3 text-center"
+    >
+      <div className="flex items-center gap-2">
+        <span
+          aria-hidden
+          className={`h-2 w-2 rounded-full ${admission === "timed-out" ? "bg-[var(--status-warning)]" : "bg-[var(--gold-400)] animate-pulse"}`}
+        />
+        <span className="text-sm font-semibold text-[var(--fg-primary)]">{title}</span>
+      </div>
+      <p className="text-xs text-[var(--fg-muted)]">{detail}</p>
+      {/* Not inside the live region's text: a screen reader announcing the
+          seconds would read every one of them. */}
+      {timed && since !== null && (
+        <p aria-hidden="true" className="font-mono text-[11px] tabular-nums text-[var(--fg-muted)]">
+          Waiting {waitedLabel(now - since)}
+        </p>
+      )}
+      {cancelLabel && onCancel && (
+        <button
+          type="button"
+          onClick={onCancel}
+          className="min-h-9 px-2 text-xs text-[var(--fg-muted)] underline underline-offset-2 transition-colors hover:text-[var(--status-danger)]"
+        >
+          {cancelLabel}
+        </button>
+      )}
     </div>
   );
 }
