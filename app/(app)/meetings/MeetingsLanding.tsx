@@ -6,11 +6,12 @@ import nextDynamic from "next/dynamic";
 import { usePathname, useSearchParams } from "next/navigation";
 import { useBodyScrollLock, useFocusTrap } from "@/hooks/useFocusTrap";
 import { MeetingLobby } from "./MeetingLobby";
-import { UpcomingMeetingsList, type UpcomingMeeting } from "./UpcomingMeetingsList";
+import type { UpcomingMeeting } from "./UpcomingMeetingsList";
+import { MeetingsWorkspace } from "./MeetingsWorkspace";
+import type { PendingFollowUp } from "@/lib/meetings/workspace";
 import { SchedulingLinkCard } from "./SchedulingLinkCard";
 import { CALENDAR_VIEW_PARAM, calendarViewUrl, parseCalendarView, type CalendarView } from "./calendar-view";
 import type { PastMeeting } from "./PastMeetingsList";
-import { MeetingLogs } from "./MeetingLogs";
 import type { LoggedMeeting } from "@/lib/meetings/meeting-log";
 import type { CalendarMeeting } from "@/lib/meetings/calendar";
 
@@ -47,6 +48,7 @@ export function MeetingsLanding({
   initialUpcoming,
   initialPast,
   initialLogs,
+  initialPendingFollowUps = [],
   userId,
   orgId,
 }: {
@@ -54,6 +56,8 @@ export function MeetingsLanding({
   initialUpcoming: UpcomingMeeting[];
   initialPast: PastMeeting[];
   initialLogs: LoggedMeeting[];
+  /** Past meetings whose follow-up was drafted and never sent. */
+  initialPendingFollowUps?: PendingFollowUp[];
   userId: string;
   orgId: string;
 }) {
@@ -73,11 +77,6 @@ export function MeetingsLanding({
   const overlayRef = useRef<HTMLDivElement>(null);
   useFocusTrap(overlayRef, calendarOpen && mounted);
   useBodyScrollLock(calendarOpen && mounted);
-
-  // Upcoming is what you act on; Logs is what you look up. Local state rather
-  // than a URL param: the calendar owns ?view=, and a second address for a
-  // switch between two lists on the same page would make Back mean two things.
-  const [tab, setTab] = useState<"upcoming" | "logs">("upcoming");
 
   // Whether *this* session pushed the overlay onto the history stack. Closing
   // then means stepping back, which leaves the stack clean; a member who
@@ -187,25 +186,13 @@ export function MeetingsLanding({
           a single row — it no longer competes with the meetings themselves. */}
       <SchedulingLinkCard />
 
-      <div>
-        <div role="tablist" aria-label="Meetings" className="mb-3 flex items-center gap-1 border-b border-line">
-          <TabButton id="upcoming" active={tab === "upcoming"} onSelect={setTab}>
-            Upcoming
-          </TabButton>
-          <TabButton id="logs" active={tab === "logs"} onSelect={setTab} count={initialLogs.length}>
-            Logs
-          </TabButton>
-        </div>
-
-        {/* Both panes stay mounted: Logs holds a search box and an open row,
-            and switching to Upcoming and back should not throw either away. */}
-        <div id="panel-upcoming" role="tabpanel" aria-labelledby="tab-upcoming" hidden={tab !== "upcoming"}>
-          <UpcomingMeetingsList initialMeetings={initialUpcoming} />
-        </div>
-        <div id="panel-logs" role="tabpanel" aria-labelledby="tab-logs" hidden={tab !== "logs"}>
-          <MeetingLogs meetings={initialLogs} />
-        </div>
-      </div>
+      {/* What needs you, today, what is coming, and what happened — with one
+          search across them. See MeetingsWorkspace. */}
+      <MeetingsWorkspace
+        initialUpcoming={initialUpcoming}
+        initialLogs={initialLogs}
+        initialPendingFollowUps={initialPendingFollowUps}
+      />
 
       {calendarOpen && mounted
         ? createPortal(
@@ -274,39 +261,6 @@ export function MeetingsLanding({
           )
         : null}
     </div>
-  );
-}
-
-function TabButton({
-  id, active, onSelect, count, children,
-}: {
-  id: "upcoming" | "logs";
-  active: boolean;
-  onSelect: (id: "upcoming" | "logs") => void;
-  count?: number;
-  children: React.ReactNode;
-}) {
-  return (
-    <button
-      type="button"
-      role="tab"
-      id={`tab-${id}`}
-      aria-selected={active}
-      aria-controls={`panel-${id}`}
-      onClick={() => onSelect(id)}
-      className={`fx-focus -mb-px flex items-center gap-1.5 rounded-t-md border-b-2 px-3 py-2 font-mono text-[11px] font-semibold uppercase tracking-[0.12em] transition-colors ${
-        active
-          ? "border-gold-400 text-fg-primary"
-          : "border-transparent text-fg-muted hover:text-fg-secondary"
-      }`}
-    >
-      {children}
-      {typeof count === "number" && count > 0 && (
-        <span className="rounded bg-surface-3 px-1.5 py-0.5 text-[10px] font-medium tabular-nums tracking-normal text-fg-secondary">
-          {count}
-        </span>
-      )}
-    </button>
   );
 }
 

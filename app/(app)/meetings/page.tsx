@@ -2,6 +2,7 @@ import { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { createServerClient } from "@/lib/supabase/server";
 import { getSessionContext } from "@/lib/auth";
+import type { PendingFollowUp } from "@/lib/meetings/workspace";
 import { MeetingsLanding } from "./MeetingsLanding";
 import type { CalendarMeeting } from "@/lib/meetings/calendar";
 import type { UpcomingMeeting } from "./UpcomingMeetingsList";
@@ -221,6 +222,50 @@ async function getMeetings(
   return { all, upcoming };
 }
 
+/** How far back a follow-up that was drafted and never sent still asks for attention. */
+const PENDING_FOLLOW_UP_DAYS = 30;
+
+/**
+ * Meetings this host ran whose follow-up was drafted and never sent.
+ *
+ * The "Needs action" tab's third kind of item. The upcoming list cannot see
+ * these — it stops at meetings that have ended — and the log does not carry the
+ * follow-up's state. A small read of its own, bounded by age and count, that
+ * fails to an empty list rather than costing the page.
+ */
+async function loadPendingFollowUps(
+  client: Awaited<ReturnType<typeof createServerClient>>,
+  orgId: string,
+  userId: string,
+  now: number,
+): Promise<PendingFollowUp[]> {
+  try {
+    const since = new Date(now - PENDING_FOLLOW_UP_DAYS * 86_400_000).toISOString();
+    const { data } = await client
+      .from("live_meetings")
+      .select("id, room_code, title, ended_at, created_at")
+      .eq("organization_id", orgId)
+      .eq("host_id", userId)
+      .eq("kind", MEETING_KIND)
+      .eq("status", "ended")
+      .eq("followup_status", "draft")
+      .is("deleted_at", null)
+      .gte("ended_at", since)
+      .order("ended_at", { ascending: false })
+      .limit(25);
+    return ((data ?? []) as Array<{ id: string; room_code: string; title: string | null; ended_at: string | null; created_at: string }>).map(
+      (row) => ({
+        id: row.id,
+        room_code: row.room_code,
+        title: (row.title ?? "").trim() || "Untitled meeting",
+        occurred_at: row.ended_at ?? row.created_at,
+      }),
+    );
+  } catch {
+    return [];
+  }
+}
+
 export default async function MeetingsPage(props: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
@@ -253,10 +298,11 @@ export default async function MeetingsPage(props: {
   // front of the page for nothing.
   const client = await createServerClient();
   const now = Date.now();
-  const [{ all: meetings, upcoming }, canSendEmail, logRows] = await Promise.all([
+  const [{ all: meetings, upcoming }, canSendEmail, logRows, pendingFollowUps] = await Promise.all([
     getMeetings(ctx.orgId, userId, now, { withHistory: calendarRequested }),
     mailboxConfigured(client, userId, ctx.orgId),
     loadMeetingLog(client, ctx.orgId, userId),
+    loadPendingFollowUps(client, ctx.orgId, userId, now),
   ]);
   // Past is the complement of Upcoming, asked directly rather than derived by
   // subtraction. `!upcoming.some(...)` inside a filter both scanned the upcoming
@@ -306,6 +352,7 @@ export default async function MeetingsPage(props: {
         initialUpcoming={upcoming as unknown as UpcomingMeeting[]}
         initialPast={past as unknown as PastMeeting[]}
         initialLogs={logs}
+        initialPendingFollowUps={pendingFollowUps}
         userId={userId}
         orgId={ctx.orgId}
       />
