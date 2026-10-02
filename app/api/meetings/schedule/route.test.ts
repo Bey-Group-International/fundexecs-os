@@ -354,22 +354,23 @@ describe("reporting what the invite send achieved", () => {
 describe("POST /api/meetings/schedule over a connected calendar's busy time", () => {
   const BUSY = [{ start: "2026-09-10T14:00:00.000Z", end: "2026-09-10T14:30:00.000Z" }];
 
-  it("refuses the save, and does not offer Save anyway", async () => {
+  it("warns, and offers Save anyway", async () => {
     loadExternalConflictsMock.mockResolvedValue(BUSY);
     const res = await POST(req(VALID));
 
     expect(res.status).toBe(409);
     const body = await res.json();
-    expect(body).toMatchObject({ overridable: false, busyElsewhere: BUSY });
-    expect(body.error).toMatch(/busy on your connected calendar/i);
+    expect(body).toMatchObject({ overridable: true, busyElsewhere: BUSY });
+    expect(body.error).toMatch(/connected calendar/i);
     expect(saveScheduledMeetingMock).not.toHaveBeenCalled();
   });
 
-  it("refuses it even when asked to save anyway", async () => {
+  // The host schedules their own time freely.
+  it("saves over it when asked to save anyway", async () => {
     loadExternalConflictsMock.mockResolvedValue(BUSY);
     const res = await POST(req({ ...VALID, allowConflict: true }));
-    expect(res.status).toBe(409);
-    expect(saveScheduledMeetingMock).not.toHaveBeenCalled();
+    expect(res.status).toBe(200);
+    expect(saveScheduledMeetingMock).toHaveBeenCalled();
   });
 
   it("still lets time blocked by hand be saved over when asked", async () => {

@@ -493,8 +493,15 @@ export function MeetingsCalendar({
 
       if (res.status === 409) {
         // The API refuses a clashing reschedule unless told otherwise. Ask,
-        // rather than either silently double-booking or silently refusing.
-        const body = (await res.json().catch(() => ({}))) as { error?: string };
+        // rather than either silently double-booking or silently refusing —
+        // but only when asking can change the answer: another booking on the
+        // host's link holding the time is not something "anyway" clears.
+        const body = (await res.json().catch(() => ({}))) as { error?: string; overridable?: boolean };
+        if (body.overridable !== true) {
+          applyLocal(before);
+          setMoveError(`${body.error ?? "That time is no longer available."} It has been put back.`);
+          return;
+        }
         const proceed = window.confirm(`${body.error ?? "That time conflicts with something else."}\n\nMove it anyway?`);
         if (!proceed) {
           applyLocal(before);
@@ -505,7 +512,8 @@ export function MeetingsCalendar({
 
       if (!res.ok) {
         applyLocal(before);
-        setMoveError("Could not move that meeting. It has been put back.");
+        const body = (await res.json().catch(() => ({}))) as { error?: string };
+        setMoveError(`${body.error ?? "Could not move that meeting."} It has been put back.`);
         return;
       }
       setMoveError(null);

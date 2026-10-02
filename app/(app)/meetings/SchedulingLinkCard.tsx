@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { BOOKING_REASON_MAX, detectTimezone, formatSlotFull } from "@/lib/meetings/scheduling";
 import type { HostBooking, HostEventType, HostSchedulingPage, SchedulingSnapshot } from "./scheduling-types";
@@ -42,6 +42,17 @@ export function SchedulingLinkCard() {
    */
   const [confirming, setConfirming] = useState<{ id: string; action: "decline" | "cancel" } | null>(null);
   const [reason, setReason] = useState("");
+  /**
+   * A move in progress: the booking and the new time, as a local
+   * `datetime-local` value. The host is not held to their own published hours,
+   * so any time can be picked here.
+   */
+  const [moving, setMoving] = useState<{ id: string; value: string } | null>(null);
+  /**
+   * An approve or move the server warned about: the time overlaps something on
+   * the host's own calendar. Waiting on "anyway" or "back".
+   */
+  const [overriding, setOverriding] = useState<{ id: string; message: string; body: BookingAction } | null>(null);
   const [showAllConfirmed, setShowAllConfirmed] = useState(false);
   const [viewerTimezone, setViewerTimezone] = useState("UTC");
 
@@ -96,25 +107,128 @@ export function SchedulingLinkCard() {
     }
   }
 
-  async function decide(booking: HostBooking, action: "approve" | "decline" | "cancel") {
+  async function act(booking: HostBooking, body: BookingAction) {
     setBusyId(booking.id);
     setError(null);
     try {
       const res = await fetch(`/api/meetings/scheduling/bookings/${booking.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(action === "approve" ? { action } : { action, reason: reason.trim() || undefined }),
+        body: JSON.stringify(body),
       });
-      const data = (await res.json()) as { error?: string };
+      const data = (await res.json().catch(() => ({}))) as { error?: string; overridable?: boolean };
+      // A clash with the host's own calendar is theirs to overrule. Ask once,
+      // in place, rather than refusing or silently booking over it.
+      if (res.status === 409 && data.overridable === true && !body.allowConflict) {
+        setOverriding({ id: booking.id, message: data.error ?? "That time overlaps something on your calendar.", body });
+        return;
+      }
       if (!res.ok) throw new Error(data.error ?? "That didn't work.");
       setConfirming(null);
+      setMoving(null);
+      setOverriding(null);
       setReason("");
       await load();
     } catch (err) {
+      setOverriding(null);
       setError(err instanceof Error ? err.message : "That didn't work.");
     } finally {
       setBusyId(null);
     }
+  }
+
+  function decide(booking: HostBooking, action: "approve" | "decline" | "cancel") {
+    return act(booking, action === "approve" ? { action } : { action, reason: reason.trim() || undefined });
+  }
+
+  function startMove(booking: HostBooking) {
+    setConfirming(null);
+    setOverriding(null);
+    setMoving({ id: booking.id, value: toLocalInput(booking.startsAt) });
+  }
+
+  function submitMove(booking: HostBooking) {
+    if (!moving?.value) return;
+    const start = new Date(moving.value);
+    if (isNaN(start.getTime())) {
+      setError("Pick a valid date and time.");
+      return;
+    }
+    void act(booking, { action: "reschedule", startIso: start.toISOString() });
+  }
+
+  /** The controls under a booking, whichever step the host is on. */
+  function bookingControls(booking: HostBooking, primary: ReactNode) {
+    const working = busyId === booking.id;
+    if (overriding?.id === booking.id) {
+      const verb = overriding.body.action === "approve" ? "Approve anyway" : "Move anyway";
+      return (
+        <div className="flex w-full flex-col gap-2 sm:w-auto sm:min-w-[18rem]">
+          <span role="alert" className="text-xs text-[var(--status-warning)]">
+            {overriding.message} Invitees still can&rsquo;t book that time.
+          </span>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              disabled={working}
+              onClick={() => void act(booking, { ...overriding.body, allowConflict: true })}
+              className="fx-btn rounded-lg bg-gold-400 px-3 py-1.5 text-xs font-semibold text-white hover:bg-gold-500 disabled:opacity-50"
+            >
+              {working ? "Working…" : verb}
+            </button>
+            <button
+              type="button"
+              disabled={working}
+              onClick={() => setOverriding(null)}
+              className="rounded-lg border border-line px-3 py-1.5 text-xs font-medium text-fg-muted hover:text-fg-primary"
+            >
+              Back
+            </button>
+          </div>
+        </div>
+      );
+    }
+    if (moving?.id === booking.id) {
+      return (
+        <form
+          className="flex w-full flex-col gap-2 sm:w-auto sm:min-w-[18rem]"
+          onSubmit={(e) => {
+            e.preventDefault();
+            submitMove(booking);
+          }}
+        >
+          <label className="text-xs text-fg-secondary" htmlFor={`move-${booking.id}`}>
+            New time for {booking.inviteeName} — any time works; they&apos;ll be emailed.
+          </label>
+          <input
+            id={`move-${booking.id}`}
+            type="datetime-local"
+            value={moving.value}
+            onChange={(e) => setMoving({ id: booking.id, value: e.target.value })}
+            required
+            className="w-full rounded-lg border border-line bg-surface-0 px-2.5 py-1.5 text-xs text-fg-primary focus:outline-none focus:ring-2 focus:ring-[var(--gold-400)]"
+          />
+          <div className="flex gap-2">
+            <button
+              type="submit"
+              disabled={working || !moving.value}
+              className="fx-btn rounded-lg bg-gold-400 px-3 py-1.5 text-xs font-semibold text-white hover:bg-gold-500 disabled:opacity-50"
+            >
+              {working ? "Moving…" : "Move booking"}
+            </button>
+            <button
+              type="button"
+              disabled={working}
+              onClick={() => setMoving(null)}
+              className="rounded-lg border border-line px-3 py-1.5 text-xs font-medium text-fg-muted hover:text-fg-primary"
+            >
+              Back
+            </button>
+          </div>
+        </form>
+      );
+    }
+    return primary;
   }
 
   function applyPage(page: HostSchedulingPage) {
@@ -248,24 +362,35 @@ export function SchedulingLinkCard() {
                     onBack={() => { setConfirming(null); setReason(""); }}
                   />
                 ) : (
-                  <div className="flex gap-2">
-                    <button
-                      type="button"
-                      disabled={busyId === booking.id}
-                      onClick={() => void decide(booking, "approve")}
-                      className="fx-btn rounded-lg bg-gold-400 px-3 py-1.5 text-xs font-semibold text-white hover:bg-gold-500"
-                    >
-                      Approve
-                    </button>
-                    <button
-                      type="button"
-                      disabled={busyId === booking.id}
-                      onClick={() => { setConfirming({ id: booking.id, action: "decline" }); setReason(""); }}
-                      className="fx-btn rounded-lg border border-line bg-surface-1 px-3 py-1.5 text-xs font-medium text-fg-secondary hover:border-status-danger/40 hover:text-[var(--status-danger)]"
-                    >
-                      Decline
-                    </button>
-                  </div>
+                  bookingControls(
+                    booking,
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        disabled={busyId === booking.id}
+                        onClick={() => void decide(booking, "approve")}
+                        className="fx-btn rounded-lg bg-gold-400 px-3 py-1.5 text-xs font-semibold text-white hover:bg-gold-500"
+                      >
+                        Approve
+                      </button>
+                      <button
+                        type="button"
+                        disabled={busyId === booking.id}
+                        onClick={() => startMove(booking)}
+                        className="fx-btn rounded-lg border border-line bg-surface-1 px-3 py-1.5 text-xs font-medium text-fg-secondary hover:text-fg-primary"
+                      >
+                        Reschedule
+                      </button>
+                      <button
+                        type="button"
+                        disabled={busyId === booking.id}
+                        onClick={() => { setMoving(null); setOverriding(null); setConfirming({ id: booking.id, action: "decline" }); setReason(""); }}
+                        className="fx-btn rounded-lg border border-line bg-surface-1 px-3 py-1.5 text-xs font-medium text-fg-secondary hover:border-status-danger/40 hover:text-[var(--status-danger)]"
+                      >
+                        Decline
+                      </button>
+                    </div>,
+                  )
                 )}
               </li>
             ))}
@@ -299,14 +424,27 @@ export function SchedulingLinkCard() {
                     onBack={() => { setConfirming(null); setReason(""); }}
                   />
                 ) : (
-                  <button
-                    type="button"
-                    disabled={busyId === booking.id}
-                    onClick={() => { setConfirming({ id: booking.id, action: "cancel" }); setReason(""); }}
-                    className="rounded-lg border border-line px-3 py-1.5 text-xs font-medium text-fg-muted transition-colors hover:text-[var(--status-danger)] disabled:opacity-50"
-                  >
-                    Cancel
-                  </button>
+                  bookingControls(
+                    booking,
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        disabled={busyId === booking.id}
+                        onClick={() => startMove(booking)}
+                        className="rounded-lg border border-line px-3 py-1.5 text-xs font-medium text-fg-muted transition-colors hover:text-fg-primary disabled:opacity-50"
+                      >
+                        Reschedule
+                      </button>
+                      <button
+                        type="button"
+                        disabled={busyId === booking.id}
+                        onClick={() => { setMoving(null); setOverriding(null); setConfirming({ id: booking.id, action: "cancel" }); setReason(""); }}
+                        className="rounded-lg border border-line px-3 py-1.5 text-xs font-medium text-fg-muted transition-colors hover:text-[var(--status-danger)] disabled:opacity-50"
+                      >
+                        Cancel
+                      </button>
+                    </div>,
+                  )
                 )}
               </li>
             ))}
@@ -357,6 +495,20 @@ export function SchedulingLinkCard() {
 
     </div>
   );
+}
+
+/** What the host can ask of one booking. */
+type BookingAction =
+  | { action: "approve"; allowConflict?: boolean }
+  | { action: "decline" | "cancel"; reason?: string; allowConflict?: boolean }
+  | { action: "reschedule"; startIso: string; allowConflict?: boolean };
+
+/** An instant as a `datetime-local` value in this browser's zone. */
+function toLocalInput(iso: string): string {
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return "";
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
 function LinkIcon() {

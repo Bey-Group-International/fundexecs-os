@@ -1,5 +1,11 @@
 // Host decisions on a booking made through their scheduling link: approve a
-// pending request, decline it, or cancel one that was already confirmed.
+// pending request, decline it, cancel one that was already confirmed, or move
+// either to another time.
+//
+// The host is never held to the rules their link publishes for invitees —
+// working hours, notice, buffer, booking window. A clash with their own
+// calendar is a warning (409 with `overridable: true`) that `allowConflict`
+// clears. Only another live booking on the same time is a hard stop.
 //
 // Bookings are written by anonymous invitees, so the table grants clients no
 // write policy at all — every mutation runs service-role behind an explicit
@@ -12,18 +18,23 @@ import { SITE_URL } from "@/lib/site";
 import { buildMeetingInviteUrl } from "@/lib/meetings/service";
 import { buildBookingManageUrl, buildBookingPageUrl, normalizeBookingReason } from "@/lib/meetings/scheduling";
 import {
+  HOST_BOOKING_OVERLAP_MESSAGE,
   SlotUnavailableError,
   approveBooking,
   cancelBooking,
   declineBooking,
+  hostConflictMessage,
+  hostConflicts,
   loadBookingById,
+  rescheduleBooking,
   serializeBooking,
 } from "@/lib/meetings/scheduling-service";
 import { sendBookingEmails } from "@/lib/meetings/scheduling-email";
 
 export const runtime = "nodejs";
 
-type Action = "approve" | "decline" | "cancel";
+type Action = "approve" | "decline" | "cancel" | "reschedule";
+const ACTIONS: readonly Action[] = ["approve", "decline", "cancel", "reschedule"];
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -34,10 +45,20 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     }
 
     const { id } = await params;
-    const body = (await req.json().catch(() => ({}))) as { action?: Action; reason?: unknown };
+    const body = (await req.json().catch(() => ({}))) as {
+      action?: Action;
+      reason?: unknown;
+      startIso?: unknown;
+      allowConflict?: unknown;
+    };
     const action = body.action;
-    if (action !== "approve" && action !== "decline" && action !== "cancel") {
+    if (!action || !ACTIONS.includes(action)) {
       return NextResponse.json({ error: "Unknown action." }, { status: 400 });
+    }
+    const allowConflict = body.allowConflict === true;
+    const newStart = typeof body.startIso === "string" ? new Date(body.startIso) : null;
+    if (action === "reschedule" && (!newStart || isNaN(newStart.getTime()))) {
+      return NextResponse.json({ error: "Pick a new time." }, { status: 422 });
     }
 
     const service = createServiceClient();
@@ -66,9 +87,38 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     let next = ctx;
     let emailKind: Parameters<typeof sendBookingEmails>[0];
 
+    const previousStartIso = ctx.booking.starts_at;
+
     if (action === "approve") {
-      next = await approveBooking(service, ctx);
+      next = await approveBooking(service, ctx, { allowConflict });
       emailKind = "confirmed";
+    } else if (action === "reschedule") {
+      const startIso = newStart!.toISOString();
+      if (startIso === ctx.booking.starts_at) {
+        return NextResponse.json({ error: "That's the time it's already at." }, { status: 422 });
+      }
+      const endIso = new Date(newStart!.getTime() + ctx.eventType.duration_minutes * 60_000).toISOString();
+      if (!allowConflict) {
+        const clashes = await hostConflicts(service, ctx.page, startIso, endIso, {
+          excludeBookingId: ctx.booking.id,
+          excludeMeetingId: ctx.booking.meeting_id,
+        });
+        if (clashes.length > 0) {
+          return NextResponse.json(
+            { error: hostConflictMessage("move"), overridable: true, busy: clashes },
+            { status: 409 },
+          );
+        }
+      }
+      try {
+        next = await rescheduleBooking(service, ctx, startIso, { enforceAvailability: false });
+      } catch (err) {
+        if (err instanceof SlotUnavailableError) throw new SlotUnavailableError(HOST_BOOKING_OVERLAP_MESSAGE);
+        throw err;
+      }
+      // A pending request has said nothing to the invitee's calendar yet, but
+      // they still need to know the time they asked for is not the one on offer.
+      emailKind = "rescheduled_by_host";
     } else if (action === "decline") {
       next = await declineBooking(service, ctx, reason);
       emailKind = "declined";
@@ -76,6 +126,10 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       next = await cancelBooking(service, ctx, "host", reason);
       emailKind = "cancelled_by_host";
     }
+
+    // Only a confirmed booking is a calendar entry worth saving or updating.
+    const holdsCalendarEntry =
+      action === "approve" || (action === "reschedule" && next.booking.status === "confirmed");
 
     // Notifying is best-effort: the decision is already recorded, and a failed
     // send must not leave the host unsure whether it went through.
@@ -94,13 +148,14 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       hostTimezone: next.page.timezone,
       startIso: next.booking.starts_at,
       endIso: next.booking.ends_at,
+      ...(action === "reschedule" ? { previousStartIso } : {}),
       durationMinutes: next.eventType.duration_minutes,
       notes: next.booking.invitee_notes,
       joinUrl: next.roomCode ? buildMeetingInviteUrl(SITE_URL, next.roomCode) : null,
       // A declined or cancelled invitee gets the booking page back, not a
       // manage link for a booking that no longer exists.
       manageUrl:
-        action === "approve"
+        action === "approve" || action === "reschedule"
           ? buildBookingManageUrl(SITE_URL, next.booking.manage_token)
           : buildBookingPageUrl(SITE_URL, next.page.slug, undefined, {
               name: next.booking.invitee_name,
@@ -108,9 +163,11 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
             }),
       // Same reasoning: only an approval leaves a booking worth saving, and the
       // endpoint refuses anything that is not confirmed regardless.
-      manageToken: action === "approve" ? next.booking.manage_token : null,
+      manageToken: holdsCalendarEntry ? next.booking.manage_token : null,
       reason,
-      bookingId: next.booking.id,
+      // No booking id, no .ics: a pending request moved by the host is still
+      // only a request, and must not land in anyone's calendar as a meeting.
+      bookingId: action === "reschedule" && !holdsCalendarEntry ? null : next.booking.id,
       bookingCreatedAt: next.booking.created_at,
       bookingUpdatedAt: next.booking.updated_at,
       bookingSequence: next.booking.calendar_sequence,
@@ -123,7 +180,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     });
   } catch (err) {
     if (err instanceof SlotUnavailableError) {
-      return NextResponse.json({ error: err.message }, { status: 409 });
+      return NextResponse.json({ error: err.message, overridable: err.overridable }, { status: 409 });
     }
     console.error("[/api/meetings/scheduling/bookings/[id]] PATCH", err);
     return NextResponse.json(

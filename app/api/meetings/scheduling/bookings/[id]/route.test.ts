@@ -75,7 +75,10 @@ function makeClient(tables: Record<string, Row[]>) {
     return builder;
   };
 
-  return { client: { from }, updates, inserts };
+  // Meetings the host is invited to, matched in the database.
+  const rpc = async () => ({ data: tables.attended ?? [], error: null });
+
+  return { client: { from, rpc }, updates, inserts };
 }
 
 const ALL_WEEK = [0, 1, 2, 3, 4, 5, 6].map((day) => ({ day, start: "00:00", end: "23:45" }));
@@ -300,7 +303,7 @@ describe("PATCH /api/meetings/scheduling/bookings/[id]", () => {
     expect(deletes.live_meetings).toContain(inserts.live_meetings[0].id);
   });
 
-  it("refuses to approve a request whose slot the host has since filled", async () => {
+  function filledSlot() {
     const startsAt = nextSlotIso();
     const base = tables({ starts_at: startsAt });
     base.live_meetings = [
@@ -314,12 +317,117 @@ describe("PATCH /api/meetings/scheduling/bookings/[id]", () => {
         deleted_at: null,
       },
     ];
-    const { client, updates } = makeClient(base);
+    return base;
+  }
+
+  it("warns before approving a request whose slot the host has since filled", async () => {
+    const { client, updates } = makeClient(filledSlot());
     serviceClient.mockReturnValue(client);
 
     const res = await PATCH(request({ action: "approve" }), { params });
 
     expect(res.status).toBe(409);
+    expect(await res.json()).toMatchObject({ overridable: true });
     expect(updates.scheduling_bookings).toBeUndefined();
+  });
+
+  it("approves it anyway when the host says so", async () => {
+    const { client, updates } = makeClient(filledSlot());
+    serviceClient.mockReturnValue(client);
+
+    const res = await PATCH(request({ action: "approve", allowConflict: true }), { params });
+
+    expect(res.status).toBe(200);
+    expect(updates.scheduling_bookings[0]).toMatchObject({ status: "confirmed" });
+    expect(sendBookingEmails).toHaveBeenCalledWith("confirmed", expect.anything());
+  });
+
+  it("does not hold an approval to hours the host has since narrowed", async () => {
+    const base = tables();
+    base.scheduling_pages[0].availability = [];
+    const { client } = makeClient(base);
+    serviceClient.mockReturnValue(client);
+
+    const res = await PATCH(request({ action: "approve" }), { params });
+    expect(res.status).toBe(200);
+  });
+
+  describe("reschedule", () => {
+    // 03:00 UTC: outside any sensible working hours, and well inside notice.
+    const offHours = () => {
+      const d = new Date(Date.now() + 3 * 86_400_000);
+      d.setUTCHours(3, 0, 0, 0);
+      return d.toISOString();
+    };
+
+    it("needs a valid new time", async () => {
+      const res = await PATCH(request({ action: "reschedule", startIso: "soon" }), { params });
+      expect(res.status).toBe(422);
+      expect(serviceClient).not.toHaveBeenCalled();
+    });
+
+    it("moves a confirmed booking and its room to any time the host picks, outside their hours", async () => {
+      const base = tables({ status: "confirmed", meeting_id: "m-1" });
+      base.scheduling_pages[0].availability = [{ day: 1, start: "09:00", end: "10:00" }];
+      const { client, updates } = makeClient(base);
+      serviceClient.mockReturnValue(client);
+      const startIso = offHours();
+
+      const res = await PATCH(request({ action: "reschedule", startIso }), { params });
+
+      expect(res.status).toBe(200);
+      expect(updates.scheduling_bookings[0]).toMatchObject({ starts_at: startIso });
+      expect(updates.live_meetings[0]).toMatchObject({ scheduled_at: startIso });
+      expect(sendBookingEmails).toHaveBeenCalledWith(
+        "rescheduled_by_host",
+        expect.objectContaining({ startIso, bookingId: "b-1", manageToken: "tok" }),
+      );
+    });
+
+    it("moves a pending request without putting it in anyone's calendar", async () => {
+      const { client } = makeClient(tables());
+      serviceClient.mockReturnValue(client);
+
+      const res = await PATCH(request({ action: "reschedule", startIso: offHours() }), { params });
+
+      expect(res.status).toBe(200);
+      expect(sendBookingEmails).toHaveBeenCalledWith(
+        "rescheduled_by_host",
+        expect.objectContaining({ bookingId: null, manageToken: null }),
+      );
+    });
+
+    it("warns when the new time clashes with the host's calendar, then moves on Save anyway", async () => {
+      const startIso = offHours();
+      const base = tables({ status: "confirmed", meeting_id: "m-1" });
+      base.attended = [{ scheduled_at: startIso, duration_minutes: 60 }];
+
+      const first = makeClient(base);
+      serviceClient.mockReturnValue(first.client);
+      const warned = await PATCH(request({ action: "reschedule", startIso }), { params });
+      expect(warned.status).toBe(409);
+      expect(await warned.json()).toMatchObject({ overridable: true });
+      expect(first.updates.scheduling_bookings).toBeUndefined();
+
+      const second = makeClient(base);
+      serviceClient.mockReturnValue(second.client);
+      const moved = await PATCH(request({ action: "reschedule", startIso, allowConflict: true }), { params });
+      expect(moved.status).toBe(200);
+    });
+
+    it("is not blocked by the booking's own room at its old time", async () => {
+      const startsAt = nextSlotIso();
+      const base = tables({ status: "confirmed", meeting_id: "m-1", starts_at: startsAt });
+      base.live_meetings = [
+        { id: "m-1", host_id: "host-1", scheduled_at: startsAt, duration_minutes: 15, is_draft: false, status: "waiting", deleted_at: null },
+      ];
+      const { client } = makeClient(base);
+      serviceClient.mockReturnValue(client);
+
+      // Five minutes later: overlaps where the room sits now.
+      const startIso = new Date(new Date(startsAt).getTime() + 5 * 60_000).toISOString();
+      const res = await PATCH(request({ action: "reschedule", startIso }), { params });
+      expect(res.status).toBe(200);
+    });
   });
 });

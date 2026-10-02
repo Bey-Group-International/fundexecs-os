@@ -49,7 +49,12 @@ export async function loadManageView(
   const changeable = ctx.booking.status === "confirmed" || ctx.booking.status === "pending";
   // Only fetch alternatives when there's something to move.
   const slots = changeable
-    ? (await openSlots(client, ctx.page, ctx.eventType, { excludeBookingId: ctx.booking.id })).slots
+    ? (
+        await openSlots(client, ctx.page, ctx.eventType, {
+          excludeBookingId: ctx.booking.id,
+          excludeMeetingId: ctx.booking.meeting_id,
+        })
+      ).slots
     : [];
 
   const { meetingType: _meetingType, isActive: _isActive, sortOrder: _sortOrder, ...publicEventType } =

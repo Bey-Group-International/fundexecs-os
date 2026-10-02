@@ -1,6 +1,7 @@
 /**
  * The scheduler checks a picked time against connected calendars as it is
- * picked, and will not schedule over time one of them has taken.
+ * picked, warns about time one of them has taken, and lets the host schedule
+ * over it only once they say so.
  */
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MeetingEditScreen } from "./MeetingEditScreen";
@@ -35,15 +36,17 @@ function open() {
   );
 }
 
-it("refuses to schedule over busy time, and offers no Save anyway", async () => {
+it("warns about busy time, and schedules over it only once Save anyway is ticked", async () => {
   busy = [{ start: new Date(2026, 9, 5, 10, 0).toISOString(), end: new Date(2026, 9, 5, 10, 30).toISOString() }];
   open();
 
   expect(await screen.findByText(/busy on your connected calendar/i)).toBeInTheDocument();
   expect(screen.getByRole("button", { name: "Schedule" })).toBeDisabled();
-  expect(screen.queryByLabelText(/save anyway/i)).toBeNull();
   // A draft can still be kept while another time is found.
   expect(screen.getByRole("button", { name: "Save draft" })).toBeEnabled();
+
+  fireEvent.click(screen.getByLabelText(/save anyway/i));
+  expect(screen.getByRole("button", { name: "Schedule" })).toBeEnabled();
 });
 
 it("asks from the time on screen to half a day past it", async () => {

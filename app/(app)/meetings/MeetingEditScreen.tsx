@@ -507,9 +507,9 @@ export function MeetingEditScreen({
         setConflicts(json.conflicts ?? []);
         setBlockedBy(json.blockedBy ?? []);
         setBusyElsewhere(json.busyElsewhere ?? []);
-        // A 409 with neither list is the scheduling link's own guard — the slot
-        // was taken by another booking — and "Save anyway" cannot clear it, so
-        // show what the server said rather than the conflict wording.
+        // A 409 with no lists is the scheduling link's own guard — another
+        // booking holds the slot — and "Save anyway" cannot clear it, so show
+        // what the server said rather than the conflict wording.
         setError(json.error ?? "That time is no longer available.");
         return;
       }
@@ -688,10 +688,15 @@ export function MeetingEditScreen({
                 <button
                   type="button"
                   onClick={() => void submit(false)}
-                  // Not over time a connected calendar has taken; a draft can
-                  // still be kept while another time is found.
-                  disabled={busy !== null || busyOnCalendar}
-                  title={busyOnCalendar ? "That time is busy on your connected calendar" : undefined}
+                  // Over time a connected calendar has taken only once the host
+                  // has ticked "Save anyway" under the warning — their call, made
+                  // knowingly. A draft can always be kept.
+                  disabled={busy !== null || (busyOnCalendar && !allowConflict)}
+                  title={
+                    busyOnCalendar && !allowConflict
+                      ? "That time is busy on your connected calendar — tick Save anyway to schedule over it"
+                      : undefined
+                  }
                   className="rounded-full bg-[var(--gold-400)] px-6 py-2 text-sm font-semibold text-white hover:bg-[var(--gold-500)] disabled:opacity-50"
                 >
                   {busy === "save" ? "Saving…" : mode === "edit" ? "Save" : "Schedule"}
@@ -1034,7 +1039,7 @@ export function MeetingEditScreen({
             <div className="mt-4 rounded-lg border border-[var(--status-warning,#f59e0b)]/40 bg-[var(--status-warning,#f59e0b)]/10 px-3 py-3 sm:ml-11">
               <p className="text-xs font-medium text-[var(--fg-primary)]">
                 {busyOnCalendar
-                  ? "Busy on your connected calendar — pick another time"
+                  ? "Busy on your connected calendar"
                   : conflicts.length > 0
                     ? "Scheduling conflict"
                     : "Inside blocked time"}
@@ -1065,13 +1070,12 @@ export function MeetingEditScreen({
                   Use next free time: {formatSuggestion(nextFree, timezone)}
                 </button>
               ) : null}
-              {/* Only a clash that may be overridden offers to be. */}
-              {busyOnCalendar ? null : (
-                <label className="mt-2 flex items-center gap-2 text-xs text-[var(--fg-secondary)]">
-                  <input type="checkbox" checked={allowConflict} onChange={(e) => setAllowConflict(e.target.checked)} />
-                  Save anyway
-                </label>
-              )}
+              {/* It is the host's own time: every clash can be saved over.
+                  Invitees on their booking link still never see it offered. */}
+              <label className="mt-2 flex items-center gap-2 text-xs text-[var(--fg-secondary)]">
+                <input type="checkbox" checked={allowConflict} onChange={(e) => setAllowConflict(e.target.checked)} />
+                Save anyway
+              </label>
             </div>
           ) : null}
 
