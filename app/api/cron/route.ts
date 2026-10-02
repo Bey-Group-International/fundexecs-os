@@ -4,6 +4,7 @@ import { runAutomation } from "@/lib/engine";
 import { featureAccessForOrg } from "@/lib/feature-access.server";
 import { nextRun } from "@/lib/cron";
 import { findDueOrgsForScan, scanOrgRadarSignals } from "@/lib/radar-scan";
+import { findDuePulseOrgs, runPulseForOrg } from "@/lib/pulse.server";
 import { runSlaEscalations } from "@/lib/sla-cron";
 import { runWebhookDeliveries, type DeliveryStats } from "@/lib/webhooks-outbound";
 import { runProactiveSweepAllOrgs } from "@/lib/proactive/orchestrate";
@@ -212,6 +213,22 @@ export async function GET(request: Request) {
     }
   } catch (e) {
     console.error("radar_scan_outer failed", e);
+  }
+
+  // Market Pulse — the daily, mandate-matched web scan (lib/pulse.server.ts).
+  // Each org is swept at most once per 24h (a skipped run counts, so an org out
+  // of credits isn't retried hourly), one org per pass so its long-run model
+  // call fits the envelope. Self-contained and best-effort like the radar block.
+  const pulse: { swept: number; items: number; searches: number } = { swept: 0, items: 0, searches: 0 };
+  try {
+    for (const orgId of await findDuePulseOrgs(supabase, now)) {
+      const r = await runPulseForOrg(supabase, orgId, { trigger: "sweep", now });
+      pulse.swept += 1;
+      pulse.items += r.items;
+      pulse.searches += r.searches;
+    }
+  } catch (e) {
+    console.error("pulse_sweep failed", e);
   }
 
   // Best-effort SLA auto-escalation: raise tracked team tasks for workflows
@@ -446,5 +463,5 @@ export async function GET(request: Request) {
     // best-effort: never let health tracking break the cron response
   }
 
-  return NextResponse.json({ swept: due.length, results, radar, escalated, webhooks, proactive, reminders, bookingConfirmations, bookingRequestReminders, bookingRequestsExpired, calendarRepair, subscriptions, settledInvoices, nativeCollections, networkAutomations });
+  return NextResponse.json({ swept: due.length, results, radar, pulse, escalated, webhooks, proactive, reminders, bookingConfirmations, bookingRequestReminders, bookingRequestsExpired, calendarRepair, subscriptions, settledInvoices, nativeCollections, networkAutomations });
 }

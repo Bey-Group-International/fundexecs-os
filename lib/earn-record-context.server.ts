@@ -13,7 +13,7 @@ import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { getDocumentText } from "@/lib/document-text.server";
 import { loadContactRecord } from "@/lib/network-contact";
-import type { Commitment, Database, Deal, DiligenceItem, Document, Investor } from "@/lib/supabase/database.types";
+import type { Commitment, Database, Deal, DiligenceItem, Document, Investor, PulseItem } from "@/lib/supabase/database.types";
 import type { ExplainRecordRef } from "@/lib/earn-explain";
 
 const DOC_EXCERPT_CHARS = 12_000;
@@ -202,6 +202,29 @@ async function documentContext(
   return { name: doc.name, block };
 }
 
+async function pulseContext(
+  supabase: SupabaseClient<Database>,
+  orgId: string,
+  id: string,
+): Promise<ExplainRecordContext | null> {
+  const { data } = await supabase.from("pulse_items").select("*").eq("id", id).eq("organization_id", orgId).maybeSingle();
+  const item = data as PulseItem | null;
+  if (!item) return null;
+  const block =
+    `<pulse_finding name="${item.entity_name.replace(/"/g, "'")}" kind="${item.kind}">\n` +
+    fields([
+      ["Headline", item.headline],
+      ["Earn's first take", item.take],
+      ["Why it fits", item.why_it_fits],
+      ["Fit score", item.fit_score !== null ? `${item.fit_score}/100` : null],
+      ["Source", item.source_title ? `${item.source_title} — ${item.source_url}` : item.source_url],
+      ["Found", item.created_at.slice(0, 10)],
+      ["Status", item.status],
+    ]) +
+    `\n</pulse_finding>`;
+  return { name: item.entity_name, block };
+}
+
 /** Load and compose the record an Explain conversation is about, or null. */
 export async function loadExplainRecordContext(
   supabase: SupabaseClient<Database>,
@@ -217,5 +240,7 @@ export async function loadExplainRecordContext(
       return contactContext(supabase, orgId, ref.id);
     case "document":
       return documentContext(supabase, orgId, ref.id);
+    case "pulse":
+      return pulseContext(supabase, orgId, ref.id);
   }
 }

@@ -4,7 +4,7 @@ const ID = "3f2b1c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d";
 
 describe("parseExplainRecordRef", () => {
   it("accepts the four record types with an id", () => {
-    for (const type of ["deal", "investor", "contact", "document"] as const) {
+    for (const type of ["deal", "investor", "contact", "document", "pulse"] as const) {
       expect(parseExplainRecordRef({ type, id: ID })).toEqual({ type, id: ID });
     }
   });

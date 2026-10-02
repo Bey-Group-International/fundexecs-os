@@ -26,10 +26,10 @@ export function earnWebSearchEnabled(): boolean {
  * router's fast path) only accepts the original tool version; newer models
  * get the current one.
  */
-export function webSearchTool(model: string): Anthropic.Messages.ToolUnion {
+export function webSearchTool(model: string, maxUses = WEB_SEARCH_MAX_USES): Anthropic.Messages.ToolUnion {
   return /haiku-4-5/.test(model)
-    ? { type: "web_search_20250305", name: "web_search", max_uses: WEB_SEARCH_MAX_USES }
-    : { type: "web_search_20260209", name: "web_search", max_uses: WEB_SEARCH_MAX_USES };
+    ? { type: "web_search_20250305", name: "web_search", max_uses: maxUses }
+    : { type: "web_search_20260209", name: "web_search", max_uses: maxUses };
 }
 
 export interface WebSource {

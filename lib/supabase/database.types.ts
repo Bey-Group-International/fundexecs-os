@@ -2483,6 +2483,43 @@ export type FinPaymentAllocation = {
 };
 
 // Insert/Update use Partial for ergonomics until full generated types land.
+// Market Pulse (supabase/migrations/20261002150239_market_pulse.sql).
+export type PulseItemKind = "deal" | "investment" | "investor";
+export type PulseItemStatus = "new" | "added" | "dismissed";
+
+export type PulseItem = {
+  id: string;
+  organization_id: string;
+  kind: PulseItemKind;
+  entity_name: string;
+  headline: string;
+  take: string | null;
+  why_it_fits: string | null;
+  source_url: string | null;
+  source_title: string | null;
+  fit_score: number | null;
+  dedupe_key: string;
+  status: PulseItemStatus;
+  added_record_type: "deal" | "investor" | null;
+  added_record_id: string | null;
+  acted_by: string | null;
+  acted_at: string | null;
+  run_id: string | null;
+  created_at: string;
+};
+
+export type PulseRun = {
+  id: string;
+  organization_id: string;
+  trigger: "sweep" | "manual";
+  status: "ok" | "skipped" | "failed";
+  detail: string | null;
+  searches: number;
+  items_found: number;
+  started_by: string | null;
+  created_at: string;
+};
+
 type TableShape<Row> = {
   Row: Row;
   Insert: Partial<Row>;
@@ -3198,6 +3235,8 @@ export type Database = {
       outreach_steps: TableShape<OutreachStep>;
       outreach_enrollments: TableShape<OutreachEnrollment>;
       radar_feedback: TableShape<RadarFeedback>;
+      pulse_items: TableShape<PulseItem>;
+      pulse_runs: TableShape<PulseRun>;
       radar_digest_prefs: TableShape<RadarDigestPref>;
       radar_digest_log: TableShape<RadarDigestLogEntry>;
       funnel_snapshots: TableShape<FunnelSnapshotRow>;
