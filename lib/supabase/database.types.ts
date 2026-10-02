@@ -2893,6 +2893,16 @@ export type LiveMeetingParticipant = {
   id: string;
   meeting_id: string;
   user_id: string | null;
+  /**
+   * The key an invite-link guest's browser holds; null for a signed-in member.
+   *
+   * `user_id` was always nullable for guests, but nothing could write a guest
+   * row: the table's RLS is `user_id = auth.uid()`, which for a guest compares
+   * NULL to NULL and is therefore never true. So the column existed for a case
+   * the schema could not actually hold. This is the identity that lets a guest
+   * row be written through a route, and found again on a rejoin.
+   */
+  guest_key: string | null;
   display_name: string;
   joined_at: string;
   left_at: string | null;
