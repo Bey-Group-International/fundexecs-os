@@ -31,7 +31,6 @@
 
 import {
   driverAwaitingWorker,
-  driverNeedsWorker,
   driverStep,
   initialDriverState,
   type DriverAction,
@@ -40,6 +39,7 @@ import {
   type DriverState,
 } from "@/lib/meetings/mask-driver-state";
 import { readPipelineSupport } from "@/lib/meetings/mask-pipeline";
+import { spawnMaskWorker } from "@/lib/meetings/mask-worker-spawn";
 import type { PipelineProtocol } from "@/lib/meetings/mask-pipeline";
 import type { MainToWorker, TimingReport, WorkerToMain } from "@/lib/meetings/mask-worker-protocol";
 import type { BackgroundEffect } from "@/lib/meetings/backgrounds";
@@ -131,8 +131,14 @@ export class MaskDriver {
     effect: BackgroundEffect,
     callbacks: MaskDriverCallbacks,
     image: Blob | null = null,
+    paused = false,
   ): Promise<MaskDriver | null> {
     const driver = new MaskDriver(source, effect, image, callbacks);
+    // Set before anything is built, not corrected afterwards. A member who
+    // joins with their camera off would otherwise composite and hand over a
+    // track for a wire that is about to discard every frame, and start a clock
+    // against a worker nobody is going to ask for a frame.
+    driver.paused = paused;
     await driver.dispatch({ kind: "begin", main: scopeSupport(), nowMs: now() });
     // The main build is started, not awaited, by `apply` -- so it has to be
     // waited for here. Without this the driver would report failure on every
@@ -169,12 +175,19 @@ export class MaskDriver {
     if (effect.kind === "custom" && image) void this.sendBitmap(image, this.imageToken);
   }
 
-  /** Stop compositing while the camera is off, and resume when it comes back. */
+  /**
+   * Stop compositing while the camera is off, and resume when it comes back.
+   *
+   * The deadline is told, not just the two pipelines. A paused worker is
+   * supposed to emit nothing, so a clock left running across a pause convicts
+   * it of silence it was ordered into -- and the latch makes that permanent.
+   */
   setPaused(paused: boolean): void {
-    if (this.destroyed) return;
+    if (this.destroyed || paused === this.paused) return;
     this.paused = paused;
     this.processor?.setPaused(paused);
     this.post({ kind: "pause", paused });
+    void this.dispatch({ kind: "paused", paused, nowMs: now() });
   }
 
   /**
@@ -414,11 +427,10 @@ export class MaskDriver {
     if (this.worker) return this.worker;
     if (this.destroyed) return null;
     try {
-      // No `{ type: "module" }`: webpack compiles that option away and emits a
-      // CLASSIC worker that loads its further chunks with `importScripts`, so
-      // claiming a module worker here would describe something that does not
-      // exist at runtime. Static imports inside the worker are fine either way.
-      const worker = new Worker(new URL("./mask-worker.ts", import.meta.url));
+      // Through `mask-worker-spawn` rather than inline, because the expression
+      // that constructs it is one webpack matches syntactically and Jest cannot
+      // parse at all. That file says why; this one must not care.
+      const worker = spawnMaskWorker();
       worker.onmessage = (event: MessageEvent) => this.onWorkerMessage(event.data);
       worker.onerror = (event) => {
         void this.dispatch({ kind: "worker-failed", reason: event.message || "worker error" });
@@ -463,7 +475,10 @@ export class MaskDriver {
   }
 
   private post(message: MainToWorker, transfer: Transferable[] = []): void {
-    if (!this.worker || !driverNeedsWorker(this.state)) return;
+    // `this.worker` alone, deliberately. Every reducer path to `main` emits
+    // `stop-worker`, and carrying that out nulls this -- so a second check on
+    // the phase would be a condition no test could tell apart from its absence.
+    if (!this.worker) return;
     try {
       this.worker.postMessage(message, transfer);
     } catch (err) {
@@ -486,7 +501,7 @@ export class MaskDriver {
       console.warn("[mask-driver] background image could not be decoded", err);
       return;
     }
-    if (this.destroyed || token !== this.imageToken || !this.worker || !driverNeedsWorker(this.state)) {
+    if (this.destroyed || token !== this.imageToken || !this.worker) {
       // Nobody is going to take ownership of it, so it is closed here. A leaked
       // ImageBitmap is a frame buffer held for the rest of the call.
       try { bitmap.close(); } catch { /* already closed */ }
@@ -540,8 +555,12 @@ export class MaskDriver {
   private syncTicker(): void {
     // On the clock, not merely needing the worker: once a frame has arrived the
     // deadline no longer applies, and polling on for the rest of the call would
-    // be main-thread work spent to no end.
-    if (driverAwaitingWorker(this.state) && !this.destroyed) this.startTicker();
+    // be main-thread work spent to no end. Paused is the other way the clock
+    // stops -- there is nothing to composite, so silence proves nothing. The
+    // `paused` event re-bases `sinceMs` on resume, so the time spent off is not
+    // charged to the worker when the ticker starts again.
+    const waiting = driverAwaitingWorker(this.state) && !this.destroyed && !this.paused;
+    if (waiting) this.startTicker();
     else this.stopTicker();
   }
 

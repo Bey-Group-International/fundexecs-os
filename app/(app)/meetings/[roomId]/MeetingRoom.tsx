@@ -86,7 +86,7 @@ import {
 } from "@/lib/meetings/elapsed";
 import { useRecording } from "@/lib/meetings/use-recording";
 import { RecordingComposer, type ComposerHandlers, type RoomSnapshot } from "@/lib/meetings/recording-composer";
-import type { BackgroundProcessor } from "@/lib/meetings/background-processor";
+import type { MaskDriver } from "@/lib/meetings/mask-driver";
 import { getBackground } from "@/lib/meetings/background-store";
 import {
   canExit,
@@ -814,7 +814,7 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
   // ── Camera backgrounds ────────────────────────────────────────────────────
   const [bgEffect, setBgEffect] = useState<BackgroundEffect>(NO_BACKGROUND);
   const bgEffectRef = useRef<BackgroundEffect>(NO_BACKGROUND);
-  const processorRef = useRef<BackgroundProcessor | null>(null);
+  const maskRef = useRef<MaskDriver | null>(null);
   const [bgPickerOpen, setBgPickerOpen] = useState(false);
   const [bgUnavailable, setBgUnavailable] = useState(false);
   const [bgNotice, setBgNotice] = useState<string | null>(null);
@@ -823,8 +823,19 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
   // as the numbers wobbled would be worse than either state.
   const bgSuspendedRef = useRef(false);
   // Guards the async build below: two quick picks would otherwise each start a
-  // processor, and the loser would keep a camera tap and a render loop alive.
-  const processorBuildingRef = useRef(false);
+  // driver, and the loser would keep a camera tap and a render loop alive.
+  const maskBuildingRef = useRef(false);
+  /**
+   * How many timing reports the worker has sent, to thin them out in the log.
+   *
+   * The number this whole change was started for -- the ~520KB GPU-to-CPU mask
+   * readback, 24 times a second -- cannot be obtained from CI or from a
+   * container without a GPU, because MediaPipe falls back to software rendering
+   * and measures something else entirely. It needs one real call on real
+   * hardware, and logging is what makes it readable there without shipping a
+   * debug panel nobody asked for.
+   */
+  const maskReportsRef = useRef(0);
 
   // UI
   const [copilotOpen, setCopilotOpen] = useState(true);
@@ -1092,7 +1103,7 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
   // A screen share is the same case wearing a different hat: the composited
   // canvas goes neither to the peers nor to the local tile while the screen
   // holds the video sender, so segmenting for it is a warm fan and nothing else.
-  useEffect(() => { processorRef.current?.setPaused(!camOn || shareOn); }, [camOn, shareOn]);
+  useEffect(() => { maskRef.current?.setPaused(!camOn || shareOn); }, [camOn, shareOn]);
 
   // A call already dropping video to protect audio should not be spending the
   // remaining budget on scenery. The CPU half of this rule is applied from
@@ -1122,7 +1133,7 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     const pendingIce = pendingIceRef.current;
     const recoveryTimers = recoveryTimerRef.current;
     const copilotUnmount = copilotUnmountRef;
-    const processor = processorRef;
+    const mask = maskRef;
     const rawCamera = rawCameraTrackRef;
     return () => {
       try { peerConnections.forEach((pc) => pc.close()); } catch { /* ignore */ }
@@ -1137,7 +1148,7 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
       localStreamRef.current?.getTracks().forEach((t) => { try { t.stop(); } catch { /* ignore */ } });
       previewStreamRef.current?.getTracks().forEach((t) => { try { t.stop(); } catch { /* ignore */ } });
       if (copilotUnmount.current) clearTimeout(copilotUnmount.current);
-      processor.current?.destroy();
+      mask.current?.destroy();
       try { rawCamera.current?.stop(); } catch { /* already stopped */ }
     };
   }, []);
@@ -3701,6 +3712,32 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     applySendCapsRef.current();
   }, []);
 
+  /**
+   * Adopt a track the mask driver has just started producing.
+   *
+   * The one thing the room has to do differently for `MaskDriver`. A
+   * `BackgroundProcessor` had a fixed output track, so the swap happened once
+   * where it was built. A driver's output changes: the room starts on a
+   * main-thread composite so nobody ever sees a black tile, and moves to the
+   * worker's output when a real frame has arrived from it. Both arrive here.
+   */
+  const onMaskTrack = useCallback((track: MediaStreamTrack) => {
+    cameraTrackRef.current = track;
+    // Mid-share the camera is off the wire entirely, and restoreCameraTrack is
+    // what puts it back -- from this same ref, which has just been updated.
+    // Touching the senders here would replace the screen somebody is presenting
+    // with their face. Read from the ref rather than the state: this callback is
+    // handed to the driver once and outlives every render.
+    if (shareOnRef.current) return;
+    // `false`, emphatically. The driver owns the lifetime of every track it
+    // hands over, and stopping the one being replaced is how the main-thread
+    // composite dies at the exact moment the worker is taking over from it.
+    swapOutgoingVideo(track, false);
+  }, [swapOutgoingVideo]);
+  /** Held in a ref because the driver is given this callback exactly once. */
+  const onMaskTrackRef = useRef(onMaskTrack);
+  useEffect(() => { onMaskTrackRef.current = onMaskTrack; }, [onMaskTrack]);
+
   /** Put the camera back on the wire after a screen share ends. */
   const restoreCameraTrack = useCallback(() => {
     shareOnRef.current = false;
@@ -3728,11 +3765,11 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     // from this ref when it puts a track on the wire.
     camOnRef.current = false;
     setCamOn(false);
-    const processor = processorRef.current;
-    processorRef.current = null;
+    const mask = maskRef.current;
+    maskRef.current = null;
     cameraTrackRef.current = rawCameraTrackRef.current;
     if (!shareOn) swapOutgoingVideo(rawCameraTrackRef.current, false);
-    processor?.destroy();
+    mask?.destroy();
     announceVideoStateRef.current();
     setBgNotice(message);
   }, [shareOn, swapOutgoingVideo]);
@@ -3740,11 +3777,17 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
   /**
    * Apply a background choice to the outgoing video.
    *
-   * "None" tears the processor down rather than leaving it idling: segmentation
-   * is the expensive part of this feature and nobody who turned it off should
-   * still be paying for it. Anything else builds the processor over the raw
-   * camera once and thereafter only changes what it paints, so switching
-   * between backgrounds never touches the peer connections.
+   * "None" tears the driver down rather than leaving it idling: segmentation is
+   * the expensive part of this feature and nobody who turned it off should still
+   * be paying for it. Anything else builds the driver over the raw camera once
+   * and thereafter only changes what it paints.
+   *
+   * "Never touches the peer connections" used to be true of everything but the
+   * first build. It no longer is, and that is the point of `MaskDriver`: it
+   * starts the room on a main-thread composite and moves it onto a worker's
+   * output a beat later, which is one `replaceTrack` per peer. Every swap goes
+   * through `onMaskTrack` above rather than being open-coded here, so there is
+   * one place that knows how a changing output track reaches the wire.
    */
   const applyBackground = useCallback(async (effect: BackgroundEffect, image?: Blob | null) => {
     bgEffectRef.current = effect;
@@ -3754,13 +3797,13 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     const raw = rawCameraTrackRef.current;
 
     if (!needsSegmentation(effect)) {
-      const processor = processorRef.current;
-      processorRef.current = null;
+      const mask = maskRef.current;
+      maskRef.current = null;
       cameraTrackRef.current = raw;
       if (!shareOn) swapOutgoingVideo(raw, false);
       // Destroyed only after the camera is back on the wire, so there is no
       // frame where the peers are holding a track nobody is drawing to.
-      processor?.destroy();
+      mask?.destroy();
       setBgNotice(null);
       bgSuspendedRef.current = false;
       return;
@@ -3768,9 +3811,9 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
 
     if (!raw) return;
 
-    if (!processorRef.current) {
-      if (processorBuildingRef.current) return;
-      processorBuildingRef.current = true;
+    if (!maskRef.current) {
+      if (maskBuildingRef.current) return;
+      maskBuildingRef.current = true;
       // The flag is cleared in a finally and the throw is swallowed for the
       // same reason: this guard blocks every future build while it is set, so a
       // canvas or a WASM loader that throws rather than returning null would
@@ -3778,10 +3821,29 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
       // the camera held off the wire by enterRoom with nothing coming to
       // release it. A failure to build is a failure to build, however it is
       // reported.
-      let processor: BackgroundProcessor | null = null;
+      /**
+       * Whether this attempt is still the one the room wants.
+       *
+       * It cannot be an identity check against `maskRef.current`: the driver
+       * puts a track on the wire from inside `create`, before anything has been
+       * assigned anywhere, and the only two ways the room abandons an attempt
+       * are the two discards below. A driver the room DID keep is only ever
+       * dropped by destroying it, and a destroyed driver announces nothing.
+       */
+      const attempt = { live: true };
+      // Built paused when there is nothing to send. Somebody who joined with
+      // their camera off and a remembered background would otherwise composite
+      // at 24fps for a wire that discards every frame — and would start the
+      // worker's first-frame clock against a worker nobody is going to ask for
+      // a frame, which the deadline reads as a broken pipeline and latches.
+      // From the refs, not the state: this runs inside an async build that
+      // began renders ago.
+      const startPaused = !camOnRef.current || shareOnRef.current;
+      let mask: MaskDriver | null = null;
       try {
-        const { BackgroundProcessor } = await import("@/lib/meetings/background-processor");
-        processor = await BackgroundProcessor.create(raw, {
+        const { MaskDriver } = await import("@/lib/meetings/mask-driver");
+        mask = await MaskDriver.create(raw, bgEffectRef.current, {
+          onTrack: (track) => { if (attempt.live) onMaskTrackRef.current(track); },
           onSlowFrames: (consecutive) => {
             if (bgSuspendedRef.current) return;
             const decision = shouldSuspendEffect({ bwMode: bwModeRef.current, consecutiveSlowFrames: consecutive });
@@ -3794,21 +3856,43 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
             setBgUnavailable(true);
             abandonBackgroundRef.current("Background effects couldn't load — your camera is off so your room stays private. Turn it on when you're ready.");
           },
-        });
+          // Only the phases that settle something: which pipeline the member
+          // ended up on, and the reason if it was the main thread. The
+          // intermediate ones are churn, and the fallback's whole virtue is
+          // that nothing it does is visible from anywhere else.
+          onPhase: (phase) => {
+            if (phase.phase === "worker" || phase.phase === "main") {
+              console.info("[meeting] mask pipeline", phase);
+            }
+          },
+          onStats: (report) => {
+            maskReportsRef.current += 1;
+            // The first report, then once a minute — the worker reports once a
+            // second. Enough to read the readback cost off a real call without
+            // turning a long meeting into a log.
+            if (maskReportsRef.current === 1 || maskReportsRef.current % 60 === 0) {
+              console.info("[meeting] mask worker timing", report);
+            }
+          },
+        }, null, startPaused);
       } catch (err) {
-        console.warn("[meeting] background processor failed to build", err);
+        console.warn("[meeting] mask driver failed to build", err);
       } finally {
-        processorBuildingRef.current = false;
+        maskBuildingRef.current = false;
       }
-      if (!processor) {
+      if (!mask) {
+        attempt.live = false;
         setBgUnavailable(true);
         abandonBackground("Background effects aren't available here — your camera is off so your room stays private. Turn it on when you're ready.");
         return;
       }
       // The choice may have moved on during the build — a 12MB download is long
-      // enough for someone to change their mind twice.
-      if (!needsSegmentation(bgEffectRef.current)) { processor.destroy(); return; }
-      processorRef.current = processor;
+      // enough for someone to change their mind twice. `destroy` stops the
+      // track this driver already put on the wire from inside `create`, and the
+      // call that moved the choice on has already swapped the camera back, so
+      // the wire is correct before this runs rather than after it.
+      if (!needsSegmentation(bgEffectRef.current)) { attempt.live = false; mask.destroy(); return; }
+      maskRef.current = mask;
     }
 
     // What is wanted NOW, not what this call was asked for. A pick made while
@@ -3831,15 +3915,21 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
       }
       blob = stored.blob;
     }
-    // One more look: the store read above is another await, and a processor
-    // torn down under it must not be spoken to.
-    if (!processorRef.current || !needsSegmentation(bgEffectRef.current)) return;
+    // One more look: the store read above is another await, and a driver torn
+    // down under it must not be spoken to.
+    if (!maskRef.current || !needsSegmentation(bgEffectRef.current)) return;
 
-    processorRef.current.setEffect(wanted, blob);
-    cameraTrackRef.current = processorRef.current.track;
-    // The processed track is what goes out now, so the hold enterRoom put on the
-    // camera lifts here: swapOutgoingVideo re-enables video as it makes the swap.
-    if (!shareOn) swapOutgoingVideo(processorRef.current.track, false);
+    maskRef.current.setEffect(wanted, blob);
+    // Unconditional, and on the build path above it is a repeat of what
+    // `onTrack` already did. Left that way deliberately: this is also the path
+    // where an effect changes on a driver that was ALREADY running, where no
+    // track changed and so nothing was announced, and it is the line the
+    // comment on enterRoom's camera hold is about — `swapOutgoingVideo` sets
+    // `enabled` from camOnRef as it goes. The repeat costs one `replaceTrack`
+    // with the track already on the sender; getting the condition subtly wrong
+    // costs a member their video.
+    const track = maskRef.current.track;
+    if (track) onMaskTrackRef.current(track);
   }, [shareOn, swapOutgoingVideo, abandonBackground]);
 
   // The processor callbacks are created once but need the current handler, and
@@ -3852,28 +3942,45 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
   /**
    * Adopt a newly opened camera device.
    *
-   * The processor is bound to the track it was created from, so a new device
-   * means a new processor. Rebuilt before the swap and torn down after it, so
-   * the room never sees a gap.
+   * The driver outlives the camera, which is the whole reason it is a driver and
+   * not a processor. `BackgroundProcessor` was bound to the track it was built
+   * from, so this used to tear the whole thing down and build another -- and the
+   * fallback latch went with it, so a member on a browser where the worker does
+   * not work paid a fresh first-frame deadline, and a fresh doomed hand-over,
+   * every time they changed camera. `replaceSource` re-attempts on the new
+   * device and keeps what was already learned.
    */
   const adoptCameraTrack = useCallback(async (track: MediaStreamTrack) => {
     const previousRaw = rawCameraTrackRef.current;
-    const previousProcessor = processorRef.current;
     rawCameraTrackRef.current = track;
     setRawCameraTrack(track);
 
-    if (needsSegmentation(bgEffectRef.current)) {
-      processorRef.current = null;
-      await applyBackgroundRef.current(bgEffectRef.current);
-      // Only if the rebuild actually took; otherwise applyBackground has already
-      // fallen back to the plain camera and set cameraTrackRef itself.
-      if (!processorRef.current) cameraTrackRef.current = track;
-    } else {
+    if (!needsSegmentation(bgEffectRef.current)) {
+      const mask = maskRef.current;
+      maskRef.current = null;
       cameraTrackRef.current = track;
       if (!shareOn) swapOutgoingVideo(track, false);
+      // After the swap, as everywhere else: the peers are never left holding a
+      // track nobody is drawing to.
+      mask?.destroy();
+    } else if (maskRef.current) {
+      // Awaited for the stop below, and its result deliberately ignored. A main
+      // pipeline that will not rebuild reports itself through `onUnavailable`,
+      // which is the one place that decides what the member is told and turns
+      // their camera off to protect the room. Acting on the return value here
+      // as well would mean two notices racing for the same banner, saying
+      // different things about the same failure.
+      await maskRef.current.replaceSource(track);
+    } else {
+      // No driver to re-point: joined with the camera off, or an earlier build
+      // failed. Build one now, and if that fails applyBackground has already
+      // fallen back to the plain camera and set cameraTrackRef itself.
+      await applyBackgroundRef.current(bgEffectRef.current);
+      if (!maskRef.current) cameraTrackRef.current = track;
     }
 
-    previousProcessor?.destroy();
+    // Last, and only now: `replaceSource` does not resolve until the new
+    // pipeline is up, so until here something may still have been reading this.
     if (previousRaw && previousRaw !== track) { try { previousRaw.stop(); } catch { /* already stopped */ } }
   }, [shareOn, swapOutgoingVideo]);
 
@@ -4777,8 +4884,8 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
       try { recognitionRef.current.onend = null; recognitionRef.current.stop(); } catch { /* already stopped */ }
       recognitionRef.current = null;
     }
-    processorRef.current?.destroy();
-    processorRef.current = null;
+    maskRef.current?.destroy();
+    maskRef.current = null;
     try { rawCameraTrackRef.current?.stop(); } catch { /* already stopped */ }
     rawCameraTrackRef.current = null;
     setRawCameraTrack(null);

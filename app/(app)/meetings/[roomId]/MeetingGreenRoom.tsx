@@ -195,6 +195,19 @@ function BackgroundPreview({
   // hand this component a new object and restart segmentation.
   const raw = useMemo(() => new MediaStream([track]), [track]);
 
+  // Deliberately still `BackgroundProcessor`, not the room's `MaskDriver`.
+  //
+  // The driver's whole value is moving a long call's per-frame cost off the main
+  // thread, and this preview is neither long nor competing with anything: there
+  // are no peers, no decoding, no React tree being re-rendered by a dozen
+  // channels. What it would add is a second worker and a second 12MB WASM heap,
+  // standing up at the exact moment the room is standing up its own -- the two
+  // overlap by a few hundred milliseconds on every join, which is the handover
+  // `watchSource` exists for. Paying that to speed up a preview that is about to
+  // be thrown away would be a regression precisely where joining is slowest.
+  //
+  // The preview still warms what matters: the segmenter is cached per page, so
+  // the room's pipeline finds it already loaded either way.
   useEffect(() => {
     if (!needsSegmentation(effect)) { setProcessed(null); return; }
 

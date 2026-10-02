@@ -551,3 +551,63 @@ describe("driverAwaitingWorker", () => {
     expect(driverAwaitingWorker(fallen)).toBe(false);
   });
 });
+
+describe("driverStep: paused", () => {
+  const pause = (paused: boolean, nowMs: number): DriverEvent => ({ kind: "paused", paused, nowMs });
+
+  it("does not let a pause spend the first-frame deadline", () => {
+    // The defect this event exists for. A member joins with their camera off
+    // and a remembered background: the worker is handed the track, correctly
+    // emits nothing because there is nothing to composite, and the deadline
+    // fires. The latch makes that verdict final, so they spend the whole call
+    // on the main thread having never seen a frame of either pipeline.
+    const trying = run([begin(chrome, 1_000), pause(true, 1_100)]).state;
+    const resumed = driverStep(trying, pause(false, 60_000));
+    expect(resumed.state.phase).toMatchObject({ phase: "trying", sinceMs: 60_000 });
+    // A tick that would have been 59 seconds late against the old clock.
+    expect(driverStep(resumed.state, { kind: "tick", nowMs: 60_100 }).actions).toEqual([]);
+  });
+
+  it("still gives up when the deadline passes after resuming", () => {
+    // Re-based, not disabled. A worker that produces nothing once the camera is
+    // back on is still a worker that produces nothing.
+    const resumed = run([begin(chrome, 1_000), pause(true, 1_100), pause(false, 60_000)]).state;
+    const { state, actions } = { ...driverStep(resumed, { kind: "tick", nowMs: 60_000 + FIRST_FRAME_DEADLINE_MS }) };
+    expect(state.phase).toEqual({ phase: "main", reason: "no-first-frame" });
+    expect(actions).toEqual([{ kind: "stop-worker", reason: "no-first-frame" }]);
+  });
+
+  it("re-bases a probe that was paused before the worker answered", () => {
+    const probing = run([begin(standardMain, 1_000), pause(true, 1_100)]).state;
+    expect(driverStep(probing, pause(false, 60_000)).state.phase).toEqual({
+      phase: "probing",
+      sinceMs: 60_000,
+    });
+  });
+
+  it("emits no actions either way, because pausing is not a routing decision", () => {
+    const trying = run([begin(chrome, 1_000)]).state;
+    expect(driverStep(trying, pause(true, 1_100)).actions).toEqual([]);
+    expect(driverStep(trying, pause(false, 1_100)).actions).toEqual([]);
+  });
+
+  it("leaves a settled driver alone", () => {
+    const adopted = run([begin(chrome, 1_000), { kind: "worker-frame" }]).state;
+    expect(driverStep(adopted, pause(false, 60_000)).state).toEqual(adopted);
+    const fallen = run([
+      begin(chrome, 1_000),
+      { kind: "tick", nowMs: 1_000 + FIRST_FRAME_DEADLINE_MS },
+    ]).state;
+    expect(driverStep(fallen, pause(false, 60_000)).state).toEqual(fallen);
+  });
+
+  it("does not resurrect the worker after the latch", () => {
+    const fallen = run([
+      begin(chrome, 1_000),
+      { kind: "tick", nowMs: 1_000 + FIRST_FRAME_DEADLINE_MS },
+    ]).state;
+    const after = driverStep(fallen, pause(false, 60_000));
+    expect(after.state.fellBack).toBe(true);
+    expect(driverNeedsWorker(after.state)).toBe(false);
+  });
+});

@@ -132,6 +132,19 @@ export type DriverEvent =
   | { kind: "worker-failed"; reason: string }
   /** Time passed; check the first-frame deadline. */
   | { kind: "tick"; nowMs: number }
+  /**
+   * Compositing stopped or started again, because the camera was switched off
+   * or a screen share took the video sender.
+   *
+   * A transition the deadline has to know about, not a detail of the shell. A
+   * paused worker is SUPPOSED to produce nothing, so a clock left running
+   * across a pause reports `no-first-frame` for a worker that was never asked
+   * for one -- and the latch means that verdict is final. Somebody who joins
+   * with their camera off and a remembered background would be held on the
+   * main thread for the rest of the call, having never seen a frame of either
+   * pipeline.
+   */
+  | { kind: "paused"; paused: boolean; nowMs: number }
   /** The member's camera changed, so the attempt starts again. */
   | { kind: "restart"; main: PipelineSupport; nowMs: number };
 
@@ -280,6 +293,21 @@ export function driverStep(
       }
       if (state.fellBack) return idle();
       return stay("worker-failed", [{ kind: "stop-worker", reason: "worker-failed" }]);
+    }
+
+    case "paused": {
+      // Resuming re-bases the clock; pausing does not need to stop it, because
+      // the shell stops asking. Both waiting phases are re-based together: the
+      // worker answers `probing` from its own startup rather than from frames,
+      // so its clock would survive a pause, but one rule that cannot be wrong
+      // in the direction that strands people beats two that are each right.
+      if (event.paused) return idle();
+      const phase = state.phase;
+      if (phase.phase === "probing") return go({ phase: "probing", sinceMs: event.nowMs });
+      if (phase.phase === "trying") {
+        return go({ phase: "trying", protocol: phase.protocol, sinceMs: event.nowMs });
+      }
+      return idle();
     }
 
     case "tick": {
