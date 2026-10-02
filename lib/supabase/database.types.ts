@@ -993,6 +993,20 @@ export type DataRoomView = {
   action: "open" | "download" | "read" | null;
 };
 
+// A follow-up email sent to a data-room reader from the activity view
+// (migration 20261002204615).
+export type DataRoomFollowUp = {
+  id: string;
+  organization_id: string;
+  room_id: string;
+  viewer_key: string;
+  recipient_email: string;
+  subject: string;
+  body: string;
+  sent_by: string | null;
+  sent_at: string;
+};
+
 // Earn's read of one investor's activity in one room (migration 20261002160000).
 export type DataRoomEngagementRead = {
   room_id: string;
@@ -3252,6 +3266,7 @@ export type Database = {
       data_room_open_alerts: TableShape<DataRoomOpenAlert>;
       data_room_link_readers: TableShape<DataRoomLinkReader>;
       data_room_engagement_reads: TableShape<DataRoomEngagementRead>;
+      data_room_follow_ups: TableShape<DataRoomFollowUp>;
       investor_portal_shares: TableShape<InvestorPortalShare>;
       investor_portal_views: TableShape<InvestorPortalView>;
       valuation_marks: TableShape<ValuationMark>;

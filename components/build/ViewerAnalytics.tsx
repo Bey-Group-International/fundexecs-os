@@ -4,6 +4,10 @@ import { formatSeconds, type InvestorActivity, type Signal } from "@/lib/data-ro
 import { loadRoomEngagement } from "@/lib/data-room-engagement.server";
 import type { DataRoomEngagementRead } from "@/lib/supabase/database.types";
 import { AskEarnButton } from "./AskEarnButton";
+import { FollowUpComposer } from "./FollowUpComposer";
+import Link from "next/link";
+import { normalizeEmail } from "@/lib/crm/contact-match";
+import { crmMatches, type CrmMatch } from "@/lib/data-room-crm.server";
 
 // Who read what in one room: a line per investor (named first, then by time
 // read), their documents and day-by-day timeline on expand, Earn's read of
@@ -39,7 +43,21 @@ function SignalPill({ signal }: { signal: Signal }) {
   );
 }
 
-function Investor({ a, read, now }: { a: InvestorActivity; read: DataRoomEngagementRead | undefined; now: number }) {
+function Investor({
+  a,
+  read,
+  now,
+  roomId,
+  crm,
+  lastFollowUp,
+}: {
+  a: InvestorActivity;
+  read: DataRoomEngagementRead | undefined;
+  now: number;
+  roomId: string;
+  crm: CrmMatch | undefined;
+  lastFollowUp: string | undefined;
+}) {
   const docsRead = a.documents.filter((d) => d.seconds > 0).length;
   // Newer activity than Earn has seen: its read may no longer hold.
   const stale = read?.activity_through ? a.lastSeen > read.activity_through : false;
@@ -52,6 +70,11 @@ function Investor({ a, read, now }: { a: InvestorActivity; read: DataRoomEngagem
           {formatSeconds(a.seconds)} · {docsRead} doc{docsRead === 1 ? "" : "s"}
           {a.downloads ? ` · ${a.downloads} download${a.downloads === 1 ? "" : "s"}` : ""}
         </span>
+        {lastFollowUp ? (
+          <span className="rounded-full border border-emerald-500/30 px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider text-emerald-300">
+            Followed up {day(lastFollowUp)}
+          </span>
+        ) : null}
         <span className="ml-auto font-mono text-[11px] text-fg-muted">{ago(a.lastSeen, now)}</span>
         <span aria-hidden className="font-mono text-[11px] text-fg-muted transition group-open:rotate-90">
           ›
@@ -64,6 +87,33 @@ function Investor({ a, read, now }: { a: InvestorActivity; read: DataRoomEngagem
           </span>
         ) : null}
       </summary>
+
+      {a.email ? (
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-line/60 px-4 py-3">
+          <span className="text-xs text-fg-muted">
+            {crm?.contactId ? (
+              <>
+                On record:{" "}
+                <Link href={`/network/${crm.contactId}`} className="text-fg-secondary hover:underline">
+                  {crm.contactName || a.email} →
+                </Link>
+              </>
+            ) : crm?.investorId ? (
+              <>
+                Investor:{" "}
+                <Link href={`/investor/${crm.investorId}`} className="text-fg-secondary hover:underline">
+                  {crm.investorName || a.email} →
+                </Link>
+              </>
+            ) : (
+              "Not in your CRM yet"
+            )}
+          </span>
+          <div className="min-w-0 flex-1 basis-full">
+            <FollowUpComposer roomId={roomId} viewerKey={a.key} emphasis={(read?.signal ?? a.signal) === "hot"} />
+          </div>
+        </div>
+      ) : null}
 
       <div className="grid gap-4 border-t border-line/60 px-4 py-4 md:grid-cols-2">
         <div>
@@ -123,6 +173,26 @@ export async function ViewerAnalytics({ roomId }: { roomId?: string } = {}) {
   const now = Date.now();
   const maxDocSeconds = Math.max(1, ...topDocuments.map((d) => d.seconds));
   const readCount = investors.filter((a) => reads.has(a.key)).length;
+
+  // Who each named reader is in the CRM, and when they were last followed up.
+  const shown = investors.slice(0, SHOWN);
+  const [crm, followUpRows] = await Promise.all([
+    crmMatches(
+      supabase,
+      ctx.orgId,
+      shown.flatMap((a) => (a.email ? [a.email] : [])),
+    ).catch(() => new Map<string, CrmMatch>()),
+    supabase
+      .from("data_room_follow_ups")
+      .select("viewer_key, sent_at")
+      .eq("organization_id", ctx.orgId)
+      .eq("room_id", roomId)
+      .order("sent_at", { ascending: false })
+      .limit(500)
+      .then((r) => (r.data ?? []) as { viewer_key: string; sent_at: string }[]),
+  ]);
+  const lastFollowUp = new Map<string, string>();
+  for (const f of followUpRows) if (!lastFollowUp.has(f.viewer_key)) lastFollowUp.set(f.viewer_key, f.sent_at);
 
   return (
     <div className="mt-8">
@@ -189,8 +259,16 @@ export async function ViewerAnalytics({ roomId }: { roomId?: string } = {}) {
                 Investors · {investors.length}
               </p>
               <div className="space-y-2">
-                {investors.slice(0, SHOWN).map((a) => (
-                  <Investor key={a.key} a={a} read={reads.get(a.key)} now={now} />
+                {shown.map((a) => (
+                  <Investor
+                    key={a.key}
+                    a={a}
+                    read={reads.get(a.key)}
+                    now={now}
+                    roomId={roomId}
+                    crm={a.email ? crm.get(normalizeEmail(a.email)) : undefined}
+                    lastFollowUp={lastFollowUp.get(a.key)}
+                  />
                 ))}
               </div>
               {investors.length > SHOWN ? (

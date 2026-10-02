@@ -19,6 +19,7 @@ import {
   type Signal,
 } from "@/lib/data-room-engagement";
 import type { Database, DataRoomEngagementRead } from "@/lib/supabase/database.types";
+import { syncRoomTimeline } from "@/lib/data-room-crm.server";
 
 const MODEL = process.env.CLAUDE_MODEL || "claude-sonnet-4-6";
 /** Most-engaged first; the long tail of one-glance visitors adds cost, not insight. */
@@ -198,6 +199,9 @@ export async function refreshRoomReads(
 ): Promise<{ ok: boolean; count: number }> {
   const { engagement } = await loadRoomEngagement(supabase, orgId, room.id);
   if (engagement.investors.length === 0) return { ok: true, count: 0 };
+  // Readers' activity onto their CRM contact's timeline. Independent of Earn:
+  // a failure here must not cost the read, nor the read this.
+  await syncRoomTimeline(supabase, orgId, room, engagement.investors, now).catch(() => undefined);
   const reads = await readEngagement(engagement.investors, { roomName: room.name, today: now.toISOString().slice(0, 10) });
   const lastSeen = new Map(engagement.investors.map((a) => [a.key, a.lastSeen]));
   const { error } = await supabase.from("data_room_engagement_reads").upsert(
