@@ -872,6 +872,19 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
   // driver, and the loser would keep a camera tap and a render loop alive.
   const maskBuildingRef = useRef(false);
   /**
+   * The room is gone. Checked by anything that opens hardware across an await.
+   *
+   * `maskRef.current?.destroy()` in the teardown paths only reaches a driver
+   * that has already been assigned, and a build in flight has not been. The
+   * driver clones the camera the moment it hands over -- a clone is an
+   * independent track, so stopping the original does not stop it -- which means
+   * a build that completed after teardown left a camera capturing, with its
+   * light on, for a call that had ended, and no reference left to stop it with.
+   *
+   * `BackgroundProcessor` never cloned, so this arrived with the driver.
+   */
+  const tornDownRef = useRef(false);
+  /**
    * How many timing reports the worker has sent, to thin them out in the log.
    *
    * The number this whole change was started for -- the ~520KB GPU-to-CPU mask
@@ -1181,7 +1194,11 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     const copilotUnmount = copilotUnmountRef;
     const mask = maskRef;
     const rawCamera = rawCameraTrackRef;
+    const tornDown = tornDownRef;
     return () => {
+      // First: everything below releases what EXISTS, and this is what stops
+      // anything still being built from being adopted after it.
+      tornDown.current = true;
       try { peerConnections.forEach((pc) => pc.close()); } catch { /* ignore */ }
       peerConnections.clear();
       pendingIce.clear();
@@ -3952,7 +3969,15 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
       // track this driver already put on the wire from inside `create`, and the
       // call that moved the choice on has already swapped the camera back, so
       // the wire is correct before this runs rather than after it.
-      if (!needsSegmentation(bgEffectRef.current)) { attempt.live = false; mask.destroy(); return; }
+      //
+      // Or the room itself has gone, which the teardown paths cannot catch:
+      // they destroy the driver in `maskRef`, and this one was never put there.
+      // Destroying it here is what stops its camera clone outliving the call.
+      if (tornDownRef.current || !needsSegmentation(bgEffectRef.current)) {
+        attempt.live = false;
+        mask.destroy();
+        return;
+      }
       maskRef.current = mask;
     }
 
@@ -4072,6 +4097,9 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
         setMediaError(cameraMessage(opened.outcome.failure ?? "unknown"));
         return;
       }
+      // The same hazard as the driver build, one await earlier: a camera opened
+      // for a room that has since gone is a camera nothing will stop.
+      if (tornDownRef.current) { try { opened.track.stop(); } catch { /* already stopped */ } return; }
       // Before adopting: swapOutgoingVideo takes the track's intended enabled
       // state from this ref, so setting it afterwards would put a disabled
       // track on the wire.
@@ -4945,6 +4973,7 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
       try { recognitionRef.current.onend = null; recognitionRef.current.stop(); } catch { /* already stopped */ }
       recognitionRef.current = null;
     }
+    tornDownRef.current = true;
     maskRef.current?.destroy();
     maskRef.current = null;
     try { rawCameraTrackRef.current?.stop(); } catch { /* already stopped */ }
@@ -5316,11 +5345,19 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
                 onClick={() => {
                   // Both, when both are gone: one press should fix what one
                   // address-bar decision just allowed.
+                  //
+                  // Logged, not swallowed. `startCamera` is try/finally with no
+                  // catch, so a rejection out of it escapes a bare `void` as an
+                  // unhandled rejection -- but an EMPTY catch is worse, because
+                  // the banner stays up either way and the console was the only
+                  // place a broken retry showed at all.
+                  const failed = (what: string) => (err: unknown) =>
+                    console.warn(`[meeting] ${what} retry failed`, err);
                   if (participation.reason !== "no-camera") {
-                    void reacquireMicRef.current().catch(() => { /* the banner stays */ });
+                    void reacquireMicRef.current().catch(failed("microphone"));
                   }
                   if (participation.reason !== "no-microphone") {
-                    void startCameraRef.current();
+                    void startCameraRef.current().catch(failed("camera"));
                   }
                 }}
                 className="shrink-0 rounded-full border border-red-500/50 px-3 py-1 text-xs font-semibold text-red-600 dark:text-red-400 hover:bg-red-500/10 transition-colors">
