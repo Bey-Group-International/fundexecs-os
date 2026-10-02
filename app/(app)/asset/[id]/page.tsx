@@ -2,6 +2,7 @@ import { notFound, redirect } from "next/navigation";
 import { getSessionContext } from "@/lib/auth";
 import { getAssetWarRoom } from "@/lib/execute-war-room";
 import { AssetWarRoom } from "@/components/execute/AssetWarRoom";
+import { AskEarnButton } from "@/components/AskEarnButton";
 
 export const dynamic = "force-dynamic";
 
@@ -18,5 +19,12 @@ export default async function AssetPage(props: { params: Promise<{ id: string }>
   const data = await getAssetWarRoom(ctx.orgId, params.id);
   if (!data) notFound();
 
-  return <AssetWarRoom data={data} />;
+  return (
+    <>
+      <div className="mb-3 flex justify-end">
+        <AskEarnButton type="asset" id={params.id} name={data.asset.name} />
+      </div>
+      <AssetWarRoom data={data} />
+    </>
+  );
 }

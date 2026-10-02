@@ -7,7 +7,8 @@
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { suggestRoomShareSettings } from "@/lib/document-review";
 import { inputClass } from "./DraftWithEarn";
-import { createShare, revokeShare, updateShareAlerts } from "./materials-actions";
+import { createShare, revokeShare, updateShareAccess, updateShareAlerts } from "./materials-actions";
+import { describeDomains, parseDomains } from "@/lib/data-room-link-rules";
 
 /** A section this room publishes, with how many documents sit in it. */
 export interface PublishedSection {
@@ -32,6 +33,12 @@ export interface ShareView {
   notify_on_open?: boolean;
   /** Email the creator a daily summary of activity on the link. */
   daily_digest?: boolean;
+  /** Only gate emails at these domains get in. */
+  allowed_email_domains?: string[] | null;
+  /** At most this many distinct readers. */
+  max_readers?: number | null;
+  /** Distinct readers admitted through the email gate so far. */
+  reader_count?: number;
 }
 
 function status(s: ShareView): { label: string; tone: string } {
@@ -68,6 +75,8 @@ function ShareRow({ share }: { share: ShareView }) {
           share.document_id ? "One document" : null,
           share.allow_download === false ? "View-only" : null,
           share.watermark ? "Watermarked" : null,
+          share.allowed_email_domains?.length ? describeDomains(share.allowed_email_domains) : null,
+          share.max_readers ? `${share.reader_count ?? 0} of ${share.max_readers} readers` : null,
         ]
           .filter(Boolean)
           .map((tag) => (
@@ -131,8 +140,114 @@ function ShareRow({ share }: { share: ShareView }) {
             </p>
           )}
           <AlertToggles share={share} />
+          <AccessEditor share={share} />
         </div>
       ) : null}
+    </div>
+  );
+}
+
+const EXPIRY_CHOICES = [
+  { value: "keep", label: "Keep current expiry" },
+  { value: "7", label: "7 days from today" },
+  { value: "14", label: "14 days from today" },
+  { value: "30", label: "30 days from today" },
+  { value: "90", label: "90 days from today" },
+  { value: "never", label: "No expiry" },
+];
+
+/** Change a live link's expiry, domain list and reader cap in place. */
+function AccessEditor({ share }: { share: ShareView }) {
+  const [open, setOpen] = useState(false);
+  const [expiry, setExpiry] = useState("keep");
+  const [domains, setDomains] = useState((share.allowed_email_domains ?? []).join(", "));
+  const [maxReaders, setMaxReaders] = useState(share.max_readers ? String(share.max_readers) : "");
+  const [message, setMessage] = useState<{ tone: "ok" | "error"; text: string } | null>(null);
+  const [pending, startTransition] = useTransition();
+
+  if (!open) {
+    return (
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="mt-2 font-mono text-[10px] uppercase tracking-wider text-fg-muted hover:text-fg-secondary"
+      >
+        Edit access →
+      </button>
+    );
+  }
+
+  const invalid = parseDomains(domains).invalid;
+  const save = () =>
+    startTransition(async () => {
+      setMessage(null);
+      const cap = maxReaders.trim();
+      const res = await updateShareAccess(share.id, {
+        expiresInDays: expiry === "keep" ? undefined : expiry === "never" ? null : Number(expiry),
+        allowedDomains: domains,
+        maxReaders: cap ? Number(cap) : null,
+      }).catch(() => ({ ok: false as const, error: "Couldn't save. Try again." }));
+      setMessage(res.ok ? { tone: "ok", text: "Saved. The link keeps its URL." } : { tone: "error", text: res.error });
+      if (res.ok) setExpiry("keep");
+    });
+
+  return (
+    <div className="mt-3 space-y-3 rounded-lg border border-line bg-surface-1 p-3">
+      <label className="block">
+        <span className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">Expiry</span>
+        <select value={expiry} onChange={(e) => setExpiry(e.target.value)} className={`${inputClass} mt-1`}>
+          {EXPIRY_CHOICES.map((c) => (
+            <option key={c.value} value={c.value}>
+              {c.label}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label className="block">
+        <span className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">Only these email domains</span>
+        <input
+          value={domains}
+          onChange={(e) => setDomains(e.target.value)}
+          placeholder="e.g. calpers.ca.gov, ilpa.org — blank for anyone"
+          className={`${inputClass} mt-1`}
+        />
+        {invalid.length ? <span className="mt-1 block text-[11px] text-amber-400">Not a domain: {invalid.join(", ")}</span> : null}
+      </label>
+      <label className="block">
+        <span className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+          Reader limit {share.max_readers ? `(${share.reader_count ?? 0} admitted)` : ""}
+        </span>
+        <input
+          type="number"
+          min={1}
+          value={maxReaders}
+          onChange={(e) => setMaxReaders(e.target.value)}
+          placeholder="Blank for no limit"
+          className={`${inputClass} mt-1`}
+        />
+      </label>
+      <p className="text-[11px] leading-relaxed text-fg-muted">
+        Domain and reader limits ask every reader for their email. Emails aren&apos;t verified, so a domain limit stops
+        casual forwarding but can&apos;t prove who someone is.
+      </p>
+      <div className="flex items-center gap-3">
+        <button
+          type="button"
+          disabled={pending || invalid.length > 0}
+          onClick={save}
+          className="rounded-lg border border-gold-500/40 bg-gold-500/10 px-3 py-1.5 font-mono text-[11px] uppercase tracking-wider text-gold-300 transition hover:bg-gold-500/20 disabled:opacity-50"
+        >
+          {pending ? "Saving…" : "Save access"}
+        </button>
+        <button type="button" onClick={() => setOpen(false)} className="text-xs text-fg-muted hover:text-fg-secondary">
+          Close
+        </button>
+        {message ? (
+          <span role={message.tone === "error" ? "alert" : "status"} className={`text-[11px] ${message.tone === "error" ? "text-amber-400" : "text-emerald-300"}`}>
+            {message.text}
+          </span>
+        ) : null}
+      </div>
     </div>
   );
 }
@@ -200,6 +315,10 @@ function CreateShareForm({
   const [requirePassword, setRequirePassword] = useState(false);
   const [notifyOnOpen, setNotifyOnOpen] = useState(false);
   const [dailyDigest, setDailyDigest] = useState(false);
+  const [allowedDomains, setAllowedDomains] = useState("");
+  const [maxReaders, setMaxReaders] = useState("");
+  const domainInvalid = parseDomains(allowedDomains).invalid;
+  const readerRules = parseDomains(allowedDomains).domains.length > 0 || Number(maxReaders) > 0;
   const applyEarn = () => {
     setLabel((v) => v || earn.label);
     setExpiresDays(String(earn.expiresInDays));
@@ -297,7 +416,8 @@ function CreateShareForm({
             type="checkbox"
             name="require_email"
             value="1"
-            checked={requireEmail}
+            checked={requireEmail || readerRules}
+            disabled={readerRules}
             onChange={(e) => setRequireEmail(e.target.checked)}
             className="h-3.5 w-3.5 accent-gold-400"
           />
@@ -354,6 +474,36 @@ function CreateShareForm({
             className={`${inputClass} mt-1`}
           />
         )}
+
+        <div className="grid gap-2 pt-1 sm:grid-cols-2">
+          <label className="block">
+            <span className="text-[11px] text-fg-muted">Only these email domains</span>
+            <input
+              name="allowed_domains"
+              value={allowedDomains}
+              onChange={(e) => setAllowedDomains(e.target.value)}
+              placeholder="e.g. calpers.ca.gov"
+              className={`${inputClass} mt-1 text-xs`}
+            />
+          </label>
+          <label className="block">
+            <span className="text-[11px] text-fg-muted">Reader limit</span>
+            <input
+              name="max_readers"
+              type="number"
+              min={1}
+              value={maxReaders}
+              onChange={(e) => setMaxReaders(e.target.value)}
+              placeholder="No limit"
+              className={`${inputClass} mt-1 text-xs`}
+            />
+          </label>
+        </div>
+        {domainInvalid.length ? (
+          <p className="text-[11px] text-amber-400">Not a domain: {domainInvalid.join(", ")}</p>
+        ) : readerRules ? (
+          <p className="text-[11px] text-fg-muted">Domain and reader limits ask every reader for their email.</p>
+        ) : null}
 
         <label className="flex cursor-pointer items-center gap-2.5">
           <input
@@ -456,7 +606,7 @@ function CreateShareForm({
 
       <div className="mt-3 flex items-center gap-3">
         <button
-          disabled={pending}
+          disabled={pending || domainInvalid.length > 0}
           className="rounded-lg bg-gold-400 px-4 py-2 text-sm font-medium text-on-gold transition hover:bg-gold-300 disabled:opacity-60"
         >
           {pending ? "Creating…" : "Create link"}

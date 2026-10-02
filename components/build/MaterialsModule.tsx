@@ -99,6 +99,20 @@ export async function MaterialsModule({ roomId }: { roomId?: string } = {}) {
 
   const libraryDocs = (libraryRes.data ?? []) as Document[];
   const shares = (sharesRes.data ?? []) as DataRoomShare[];
+  // Readers admitted per capped link, for "3 of 10 readers". Only capped links
+  // need the count, so only they are asked about.
+  const cappedIds = shares.filter((s) => s.max_readers).map((s) => s.id);
+  const readerCounts = new Map<string, number>();
+  if (cappedIds.length) {
+    const { data: readerRows } = await supabase
+      .from("data_room_link_readers")
+      .select("share_id")
+      .eq("organization_id", orgId)
+      .in("share_id", cappedIds);
+    for (const r of (readerRows ?? []) as { share_id: string }[]) {
+      readerCounts.set(r.share_id, (readerCounts.get(r.share_id) ?? 0) + 1);
+    }
+  }
   const publishedIds = new Set(published.map((d) => d.id));
   const roomSections = groupRoomDocuments(published);
 
@@ -265,6 +279,9 @@ export async function MaterialsModule({ roomId }: { roomId?: string } = {}) {
               document_id: s.document_id ?? null,
               notify_on_open: s.notify_on_open ?? false,
               daily_digest: s.daily_digest ?? false,
+              allowed_email_domains: s.allowed_email_domains ?? null,
+              max_readers: s.max_readers ?? null,
+              reader_count: readerCounts.get(s.id) ?? 0,
             }))}
             activeCount={activeShareCount}
           />

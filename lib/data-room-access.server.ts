@@ -59,6 +59,7 @@ export async function resolveSharedDocument(token: string, documentId: string): 
       require_email: share.require_email ?? false,
       require_nda: share.require_nda ?? false,
       password_hash: share.password_hash,
+      allowed_email_domains: share.allowed_email_domains ?? null,
     },
     pass,
   );

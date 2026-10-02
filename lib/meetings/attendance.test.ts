@@ -1,8 +1,9 @@
 import { LONG_RUN_TIMEOUT_MS } from "@/lib/anthropic-client";
 import {
-  PARTICIPANT_CONFLICT_TARGET,
   PRESENCE_STALE_MS,
   attendanceRecord,
+  guestAttendanceUrl,
+  participantConflictTarget,
   attendedButNotHosted,
   canViewReport,
   isPresent,
@@ -16,32 +17,105 @@ import {
 const NOW = new Date("2026-09-08T12:00:00.000Z");
 const T = NOW.getTime();
 
-describe("PARTICIPANT_CONFLICT_TARGET", () => {
+const MEMBER = { kind: "member", userId: "u1" } as const;
+const GUEST = { kind: "guest", guestKey: "g-77" } as const;
+
+describe("participantConflictTarget", () => {
   // The upsert shipped naming a constraint that did not exist, so every join
   // was rejected with 42P10 and the table stayed empty. The columns here and
-  // the UNIQUE constraint in the migration are one fact in two places.
-  it("names the columns of the unique constraint", () => {
-    expect(PARTICIPANT_CONFLICT_TARGET).toBe("meeting_id,user_id");
+  // the unique indexes in the migrations are one fact in two places.
+  it("names the member index for a member", () => {
+    expect(participantConflictTarget(MEMBER)).toBe("meeting_id,user_id");
+  });
+
+  /**
+   * A guest cannot use the member index, and not for tidiness: NULLs are
+   * distinct in a unique index, so `(meeting_id, user_id)` constrains nothing
+   * about a row whose user_id is NULL. Every reload would insert another row.
+   */
+  it("names the guest index for a guest", () => {
+    expect(participantConflictTarget(GUEST)).toBe("meeting_id,guest_key");
+  });
+
+  it("never gives the two kinds the same arbiter", () => {
+    expect(participantConflictTarget(MEMBER)).not.toBe(participantConflictTarget(GUEST));
   });
 });
 
 describe("attendanceRecord", () => {
-  it("records the member with a timestamp", () => {
-    expect(attendanceRecord("m1", "u1", "Harvey Specter", NOW)).toEqual({
+  it("records the member with a timestamp, and no guest key", () => {
+    expect(attendanceRecord("m1", MEMBER, "Harvey Specter", NOW)).toEqual({
       meeting_id: "m1",
       user_id: "u1",
+      guest_key: null,
       display_name: "Harvey Specter",
       joined_at: "2026-09-08T12:00:00.000Z",
       left_at: null,
     });
   });
 
+  /**
+   * The row that could not be written at all before this. `user_id` was always
+   * nullable, but the table's only policy is `user_id = auth.uid()` — for a
+   * guest that compares NULL to NULL, which is not true, so every insert was
+   * denied silently. The guest was absent from the head-count, absent from the
+   * report, and locked out of the report themselves.
+   */
+  it("records a guest by the key their browser holds, and no account", () => {
+    expect(attendanceRecord("m1", GUEST, "Dana", NOW)).toEqual({
+      meeting_id: "m1",
+      user_id: null,
+      guest_key: "g-77",
+      display_name: "Dana",
+      joined_at: "2026-09-08T12:00:00.000Z",
+      left_at: null,
+    });
+  });
+
+  /** Both columns are always present. A row that omitted one would leave the
+   *  previous value in place on an upsert, which is how a guest row could end
+   *  up carrying somebody else's account. */
+  it("always writes both identity columns, so an upsert cannot keep a stale one", () => {
+    expect(Object.keys(attendanceRecord("m1", GUEST, "Dana", NOW)).sort())
+      .toEqual(Object.keys(attendanceRecord("m1", MEMBER, "Harvey", NOW)).sort());
+  });
+
   it("clears a previous departure, so a rejoin reads as present", () => {
-    expect(attendanceRecord("m1", "u1", "Harvey", NOW).left_at).toBeNull();
+    expect(attendanceRecord("m1", MEMBER, "Harvey", NOW).left_at).toBeNull();
+    expect(attendanceRecord("m1", GUEST, "Dana", NOW).left_at).toBeNull();
   });
 
   it("falls back rather than storing a blank name", () => {
-    expect(attendanceRecord("m1", "u1", "   ", NOW).display_name).toBe("Guest");
+    expect(attendanceRecord("m1", MEMBER, "   ", NOW).display_name).toBe("Guest");
+    expect(attendanceRecord("m1", GUEST, "", NOW).display_name).toBe("Guest");
+  });
+});
+
+/**
+ * The guest write has no other way in, so the address it is sent to is part of
+ * the contract rather than a detail. The route reads the key from the QUERY
+ * STRING — it is what `authorizeMeetingCaller` checks the admission against —
+ * so a wrong parameter name is not a 404 you would notice but a 401 that reads
+ * exactly like a guest who was never admitted.
+ */
+describe("guestAttendanceUrl", () => {
+  it("names the parameter the route authorises on", () => {
+    expect(guestAttendanceUrl("m1", "g-7")).toBe("/api/meetings/m1/attendance?guestKey=g-7");
+  });
+
+  it("escapes a key that would otherwise change the query", () => {
+    // A key is a uuid today, but it is read out of localStorage, where anything
+    // could be sitting — and an unescaped `&` would silently truncate it.
+    expect(guestAttendanceUrl("m1", "a&b=c")).toBe("/api/meetings/m1/attendance?guestKey=a%26b%3Dc");
+  });
+
+  it("escapes the meeting id too, so a path cannot be climbed out of", () => {
+    expect(guestAttendanceUrl("../admin", "g")).toBe("/api/meetings/..%2Fadmin/attendance?guestKey=g");
+  });
+
+  /** Arrival and departure must address the same row; they share this. */
+  it("is stable for the same pair", () => {
+    expect(guestAttendanceUrl("m1", "g-7")).toBe(guestAttendanceUrl("m1", "g-7"));
   });
 });
 
@@ -86,6 +160,76 @@ describe("presenceByMeeting", () => {
     const presence = presenceByMeeting(rows, T);
     expect(presence.a).toEqual({ count: 2, names: ["Harvey", "Donna"] });
     expect(presence.b).toEqual({ count: 1, names: ["Jessica"] });
+  });
+
+  /**
+   * The head-count a host reads off the meetings list. A guest reloading used
+   * to insert a second row — `(meeting_id, user_id)` cannot constrain a NULL
+   * user_id — so one person showed as two. The partial guest index stops the
+   * row being written; this stops the number being wrong if one ever was.
+   */
+  it("counts one guest once, however many rows they left behind", () => {
+    const row = (over: Record<string, unknown>) => ({
+      meeting_id: "a",
+      display_name: "Dana",
+      joined_at: new Date(T - 1000).toISOString(),
+      ...over,
+    });
+    const presence = presenceByMeeting(
+      [row({ guest_key: "g-1" }), row({ guest_key: "g-1" }), row({ guest_key: "g-1" })],
+      T,
+    );
+    expect(presence.a).toEqual({ count: 1, names: ["Dana"] });
+  });
+
+  it("counts one member once, by their account", () => {
+    const row = { meeting_id: "a", display_name: "Harvey", joined_at: new Date(T - 1000).toISOString(), user_id: "u1" };
+    expect(presenceByMeeting([row, { ...row }], T).a.count).toBe(1);
+  });
+
+  /** A guest key shaped like an account id must not match an account. The
+   *  prefixing in `subjectKey` is what prevents it; this is the caller that
+   *  would show the collision as a missing person. */
+  it("never mistakes a guest for a member with the same identifier", () => {
+    const base = { meeting_id: "a", joined_at: new Date(T - 1000).toISOString() };
+    const presence = presenceByMeeting(
+      [
+        { ...base, display_name: "Harvey", user_id: "same-id" },
+        { ...base, display_name: "Dana", guest_key: "same-id" },
+      ],
+      T,
+    );
+    expect(presence.a.count).toBe(2);
+  });
+
+  /**
+   * A row naming nobody still counts. It cannot be de-duplicated — nothing
+   * tells it from the next one like it — but dropping it would hide somebody
+   * who was in the room from the count of who is in the room, and understating
+   * a head-count is the worse of the two errors.
+   */
+  it("counts a row that names nobody, rather than hiding them", () => {
+    const row = { meeting_id: "a", display_name: "?", joined_at: new Date(T - 1000).toISOString() };
+    expect(presenceByMeeting([row, { ...row }], T).a.count).toBe(2);
+  });
+
+  /**
+   * This is handed rows for MANY meetings at once — the meetings list reads
+   * every live room in one query — so the de-duplication has to be per meeting.
+   * Keyed on identity alone, somebody in two live rooms would be counted in
+   * only the first, and the second room would show a head-count short.
+   */
+  it("counts the same person in two meetings once in each", () => {
+    const joined = new Date(T - 1000).toISOString();
+    const presence = presenceByMeeting(
+      [
+        { meeting_id: "a", display_name: "Harvey", joined_at: joined, user_id: "u1" },
+        { meeting_id: "b", display_name: "Harvey", joined_at: joined, user_id: "u1" },
+      ],
+      T,
+    );
+    expect(presence.a.count).toBe(1);
+    expect(presence.b.count).toBe(1);
   });
 
   it("caps the names it carries but not the count", () => {

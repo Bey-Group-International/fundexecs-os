@@ -63,7 +63,7 @@ function EmailGate({
       if (result.ok) {
         onNext(trimmed);
       } else {
-        setError("Something went wrong. Please try again.");
+        setError(result.error);
       }
     });
   }

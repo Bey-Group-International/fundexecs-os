@@ -31,6 +31,10 @@ export interface ShareInput {
   notifyOnOpen: boolean;
   /** Daily activity digest to the creator. */
   dailyDigest?: boolean;
+  /** Only readers whose gate email is at one of these domains. */
+  allowedEmailDomains?: string[] | null;
+  /** At most this many distinct readers (by gate email). */
+  maxReaders?: number | null;
   allowedSections: string[] | null;
   allowDownload: boolean;
   watermark: boolean;
@@ -55,6 +59,8 @@ export async function insertShare(
       ? new Date(Date.now() + input.expiresInDays * 86_400_000).toISOString()
       : null;
   const password_hash = input.password ? await hashSharePassword(input.password) : null;
+  const domains = input.allowedEmailDomains?.length ? input.allowedEmailDomains : null;
+  const maxReaders = input.maxReaders && input.maxReaders > 0 ? Math.floor(input.maxReaders) : null;
 
   const { data: inserted } = await supabase
     .from("data_room_shares")
@@ -65,13 +71,17 @@ export async function insertShare(
       label: input.label,
       expires_at,
       created_by: input.userId,
-      require_email: input.requireEmail,
+      // Domain and reader limits work on the gate email, so either one turns
+      // the email gate on (the database holds the same rule).
+      require_email: input.requireEmail || Boolean(domains) || Boolean(maxReaders),
       require_nda: input.requireNda,
       nda_text: input.ndaText,
       password_hash,
       recipient_email: input.recipientEmail,
       notify_on_open: input.notifyOnOpen,
       daily_digest: input.dailyDigest ?? false,
+      allowed_email_domains: domains,
+      max_readers: maxReaders,
       // A document link is already scoped to one document; a section allowlist
       // on top of it could only ever hide that document.
       allowed_sections: input.documentId ? null : input.allowedSections,
