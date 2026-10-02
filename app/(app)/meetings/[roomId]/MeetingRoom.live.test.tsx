@@ -355,6 +355,57 @@ describe("the tile grid", () => {
   });
 });
 
+describe("where the call's sound comes from", () => {
+  // Echo: a voice played twice, or played by an element that moves with the
+  // layout, comes out of the speakers a beat apart and goes back into the mic.
+
+  it("never plays sound from a tile — every <video> is muted, the local one included", async () => {
+    await enterCall();
+    await peerArrives("peer-1", "Brett");
+    await peerArrives("peer-2", "Carla");
+
+    const videos = Array.from(document.querySelectorAll("video"));
+    expect(videos.length).toBe(3);
+    for (const v of videos) expect(v.muted).toBe(true);
+  });
+
+  it("plays each peer's voice from exactly one element, and none for the member themselves", async () => {
+    await enterCall();
+    expect(document.querySelectorAll("audio[data-peer-audio]").length).toBe(0);
+
+    await peerArrives("peer-1", "Brett");
+    await peerArrives("peer-2", "Carla");
+
+    const audios = Array.from(document.querySelectorAll<HTMLAudioElement>("audio[data-peer-audio]"));
+    expect(audios.length).toBe(2);
+    for (const a of audios) expect(a.muted).toBe(false);
+    // Two different people, two different streams: nobody is played twice.
+    expect(new Set(audios.map((a) => a.srcObject)).size).toBe(2);
+  });
+
+  it("transcribes from the call's echo-cancelled mic track, not a second raw capture", async () => {
+    const starts: unknown[][] = [];
+    class FakeRecognition {
+      continuous = false; interimResults = false; lang = "";
+      onstart: (() => void) | null = null; onresult = null; onerror = null; onend = null; onspeechstart = null;
+      start(...args: unknown[]) { starts.push(args); }
+      stop() {}
+    }
+    const w = window as unknown as { SpeechRecognition?: unknown };
+    const previous = w.SpeechRecognition;
+    w.SpeechRecognition = FakeRecognition;
+    try {
+      await enterCall();
+      await flush(20, 3);
+      expect(starts.length).toBeGreaterThan(0);
+      const [track] = starts[0] as [{ kind?: string } | undefined];
+      expect(track?.kind).toBe("audio");
+    } finally {
+      w.SpeechRecognition = previous;
+    }
+  });
+});
+
 describe("what a peer announces about themselves", () => {
   // Mic state is announced, never inferred: a newcomer is assumed unmuted until
   // they say otherwise, so the announcement is the only thing that can put the

@@ -39,7 +39,7 @@ const SPEAKER_COLORS = [
 
 /** The markup for one face. Exported memoised, as `VideoTile` below. */
 function VideoTileImpl({
-  stream, videoTrack, label, muted = false, isLocal = false, showingScreenShare = false,
+  stream, videoTrack, label, isLocal = false, showingScreenShare = false,
   handRaised = false, reaction = "", large = false,
   micOn = true, speaking = false, camOn = true, videoPaused = false,
   status = "live", watchId,
@@ -58,7 +58,7 @@ function VideoTileImpl({
    * so the old track and the new one are two different values to compare.
    */
   videoTrack: MediaStreamTrack | null;
-  label: string; muted?: boolean; isLocal?: boolean;
+  label: string; isLocal?: boolean;
   /**
    * Whether this tile's video is a display capture rather than a camera.
    *
@@ -107,9 +107,21 @@ function VideoTileImpl({
   // element re-mounts later with no srcObject and shows black; keeping it mounted
   // avoids that. Autoplay can be blocked, so call play() explicitly (joining is a
   // user gesture) and again on canplay once frames are ready.
+  //
+  // The element is ALWAYS muted, for every tile, local or remote. A tile is
+  // pictures only: a remote voice is played once, by that peer's `PeerAudio`,
+  // and never by a tile. Tiles are layout — the same person can be the stage
+  // tile, then a strip thumbnail, then a grid cell, and every one of those moves
+  // re-mounted or re-pointed an unmuted element at their stream. Each re-mount
+  // restarted their audio, and any overlap played it twice, a beat apart: an
+  // echo of the far end coming out of this room's speakers, and a second copy
+  // the canceller has no clean reference for, so some of it went back out to
+  // everyone else too. Set on the element as well as in the markup, because the
+  // property, not the attribute, is what silences playback.
   useEffect(() => {
     const el = videoRef.current;
     if (!el) return;
+    el.muted = true;
     if (el.srcObject !== (stream ?? null)) el.srcObject = stream ?? null;
     if (stream) void el.play().catch(() => { /* autoplay race — retried on canplay */ });
   }, [stream]);
@@ -156,7 +168,7 @@ function VideoTileImpl({
 
   return (
     <div className={`relative rounded-2xl overflow-hidden bg-[var(--surface-2)] border transition-shadow flex items-center justify-center ${ring} ${large ? "w-full h-full" : "aspect-video"}`}>
-      <video ref={videoRef} autoPlay playsInline muted={muted}
+      <video ref={videoRef} autoPlay playsInline muted
         onCanPlay={(e) => void (e.currentTarget as HTMLVideoElement).play().catch(() => {})}
         className={`w-full h-full object-cover ${mirrorSelfView({ isLocal, showingScreenShare }) ? "scale-x-[-1]" : ""} ${hasVideo ? "" : "opacity-0"}`} />
       {!hasVideo && (
@@ -205,6 +217,62 @@ function VideoTileImpl({
  * which is exactly why the track is a prop. See the note on it above.
  */
 export const VideoTile = React.memo(VideoTileImpl);
+
+// ─── PeerAudio ────────────────────────────────────────────────────────────────
+
+/**
+ * The one place a remote participant's voice is played.
+ *
+ * Exactly one per peer, keyed by peer id and mounted beside the stage rather
+ * than inside it, so changing layout, focus or the strip never touches it: the
+ * voice does not restart, and can never be playing from two elements at once.
+ * See the note on the tile's <video> for what went wrong when tiles carried it.
+ *
+ * An <audio> playing a WebRTC track is also the path the browser's echo
+ * canceller takes its reference from, so what comes out of the speakers here is
+ * what gets subtracted from the microphone.
+ *
+ * `audioTrack` is passed in for the same reason `videoTrack` is on the tile: a
+ * replaced track arrives inside the same MediaStream object, and without it the
+ * memo would not see the change and `play()` would not be re-tried.
+ */
+function PeerAudioImpl({ stream, audioTrack }: {
+  stream: MediaStream | null;
+  audioTrack: MediaStreamTrack | null;
+}) {
+  const ref = useRef<HTMLAudioElement>(null);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    el.muted = false;
+    const source = audioTrack ? stream : null;
+    if (el.srcObject !== source) el.srcObject = source;
+    if (!source) return;
+    const play = () => { void el.play()?.catch(() => { /* retried below */ }); };
+    play();
+    // Autoplay with sound can be refused until the page has been interacted
+    // with. Joining is a click, so this is rare, but a voice that silently never
+    // starts is the worst failure a call has: try again on the next gesture.
+    document.addEventListener("pointerdown", play, { once: true });
+    document.addEventListener("keydown", play, { once: true });
+    return () => {
+      document.removeEventListener("pointerdown", play);
+      document.removeEventListener("keydown", play);
+    };
+  }, [stream, audioTrack]);
+
+  // Release the device's playback on the way out rather than when the element
+  // is collected.
+  useEffect(() => () => {
+    const el = ref.current;
+    if (el) { try { el.pause(); el.srcObject = null; } catch { /* already gone */ } }
+  }, []);
+
+  return <audio ref={ref} autoPlay data-peer-audio="" className="hidden" />;
+}
+
+export const PeerAudio = React.memo(PeerAudioImpl);
 
 
 // ─── DeviceChevron ────────────────────────────────────────────────────────────
@@ -1246,4 +1314,4 @@ function GridViewIcon() {
     </svg>
   );
 }
-export { videoTrackOf } from "./room-shared";
+export { audioTrackOf, videoTrackOf } from "./room-shared";
