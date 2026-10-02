@@ -46,17 +46,20 @@ jest.mock("next/navigation", () => ({
  * MeetingRoom.admission.test.tsx uses, and joining with both devices off keeps
  * the media path to the minimum the room needs to go live.
  */
+/**
+ * What the stand-in green room hands over. Mutable so one test can join WANTING
+ * the microphone, which is the only way to reach the case where the member
+ * believes they are audible.
+ */
+const joinChoice = { cameraId: "", micId: "", speakerId: "", cameraEnabled: false, micEnabled: false, background: null as unknown };
 jest.mock("./MeetingGreenRoom", () => ({
   MeetingGreenRoom: ({ onJoin }: { onJoin: (c: unknown) => void }) => (
-    <button
-      onClick={() =>
-        onJoin({ cameraId: "", micId: "", speakerId: "", cameraEnabled: false, micEnabled: false, background: null })
-      }
-    >
-      Join now
-    </button>
+    <button onClick={() => onJoin({ ...joinChoice })}>Join now</button>
   ),
 }));
+
+/** Everything the room broadcast about itself, newest last. */
+const sent: unknown[] = [];
 
 /** Lets a test put a message on the room's signalling channel. */
 const realtime = {
@@ -93,7 +96,10 @@ const supabaseStub = {
         return api;
       },
       subscribe: (cb?: (s: string) => void) => { cb?.("SUBSCRIBED"); return entry; },
-      send: async () => "ok",
+      // Recorded, not discarded: what the room SAYS about itself is the subject
+      // of the participation tests below, where announcing the wrong thing was
+      // the whole defect.
+      send: async (m: unknown) => { sent.push(m); return "ok"; },
       unsubscribe: async () => "ok",
     };
     return api;
@@ -141,6 +147,9 @@ beforeEach(() => {
   jest.useFakeTimers({ doNotFake: ["nextTick", "setImmediate"] });
   jest.clearAllMocks();
   realtime.reset();
+  sent.length = 0;
+  joinChoice.cameraEnabled = false;
+  joinChoice.micEnabled = false;
   pcs.length = 0;
   peerAudioIds.length = 0;
   speakerNow = "";
@@ -505,5 +514,131 @@ describe("the second hand", () => {
 
     expect(document.body.textContent).toMatch(/00:0[3-9]/);
     expect(document.querySelectorAll("video").length).toBe(tilesBefore);
+  });
+});
+
+describe("a member with no microphone", () => {
+  /**
+   * The defect, end to end.
+   *
+   * A guest denies the permission prompt and joins. They have no audio track at
+   * all, but the control was captioned "Unmute" and pressing it set
+   * `enabled = true` on an empty list, flipped the button to on, cleared the
+   * watcher that was trying to get the device back, and broadcast `micOn: true`.
+   * So they believed they were speaking, the host had been told they were
+   * speaking, and the meeting waited for somebody who could not speak to it.
+   *
+   * Nothing in jsdom can prove a microphone works. What it can prove is the
+   * part that was wrong: what the room claims, to the member and to the room.
+   */
+  beforeEach(() => {
+    // Both wanted. The camera arrives and the microphone does not, so the
+    // notice is about the one device that is actually missing.
+    joinChoice.micEnabled = true;
+    joinChoice.cameraEnabled = true;
+    Object.defineProperty(navigator, "mediaDevices", {
+      configurable: true,
+      value: {
+        // A camera, and no microphone — the shape a denied mic prompt leaves.
+        getUserMedia: async () => fakeStream([fakeTrack("video")]),
+        getDisplayMedia: async () => fakeStream([fakeTrack("video")]),
+        enumerateDevices: async () => [],
+        addEventListener: () => {}, removeEventListener: () => {},
+      },
+    });
+  });
+
+  /**
+   * The microphone control, by the captions it is allowed to have.
+   *
+   * Queried over buttons only: the local tile carries a "Muted — not being
+   * transcribed" badge with a title of its own, and a looser selector matches
+   * both.
+   */
+  const micButton = () => {
+    const el = document.querySelector<HTMLButtonElement>(
+      'button[title="No microphone — retry"], button[title="Mute"], button[title="Unmute"]',
+    );
+    if (!el) throw new Error("no microphone control on screen");
+    return el;
+  };
+
+  it("says so, instead of offering to unmute a microphone that is not there", async () => {
+    await enterCall();
+    expect(micButton().getAttribute("title")).toBe("No microphone — retry");
+  });
+
+  it("tells the member nobody can hear them, with something to press", async () => {
+    await enterCall();
+    expect(screen.getByText(/Nobody can hear you/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Retry" })).toBeInTheDocument();
+  });
+
+  it("never announces itself as unmuted when there is no microphone", async () => {
+    await enterCall();
+    await act(async () => { micButton().click(); await Promise.resolve(); });
+    await flush(10, 2);
+
+    // The assertion the bug turned on. A `mic` announcement with `micOn: true`
+    // is the room telling everybody else to expect this member's voice.
+    const claims = sent.filter((m) => {
+      const payload = (m as { payload?: { type?: string; micOn?: boolean } }).payload;
+      return payload?.type === "mic" && payload.micOn === true;
+    });
+    expect(claims).toEqual([]);
+  });
+
+  it("does not flip the control to on when the press cannot deliver", async () => {
+    await enterCall();
+    await act(async () => { micButton().click(); await Promise.resolve(); });
+    await flush(10, 2);
+    // Still the honest caption, and still the banner: the press asked for the
+    // device and the device is still not there.
+    expect(micButton().getAttribute("title")).toBe("No microphone — retry");
+    expect(screen.getByText(/Nobody can hear you/)).toBeInTheDocument();
+  });
+
+  it("goes and asks for the device when the member presses the control", async () => {
+    await enterCall();
+    const asked = jest.spyOn(navigator.mediaDevices, "getUserMedia");
+    await act(async () => { micButton().click(); await Promise.resolve(); });
+    await flush(10, 2);
+    // The press means "try to get my microphone back" now, which is what the
+    // camera's own toggle has always done and the microphone's never did.
+    expect(asked).toHaveBeenCalled();
+  });
+
+  it("stops saying it once a microphone actually arrives", async () => {
+    await enterCall();
+    expect(screen.getByText(/Nobody can hear you/)).toBeInTheDocument();
+
+    // The retry succeeds this time.
+    Object.defineProperty(navigator, "mediaDevices", {
+      configurable: true,
+      value: {
+        getUserMedia: async () => fakeStream([fakeTrack("audio"), fakeTrack("video")]),
+        getDisplayMedia: async () => fakeStream([fakeTrack("video")]),
+        enumerateDevices: async () => [],
+        addEventListener: () => {}, removeEventListener: () => {},
+      },
+    });
+    await act(async () => { screen.getByRole("button", { name: "Retry" }).click(); await Promise.resolve(); });
+    await flush(20, 3);
+
+    // Derived, not stored: nothing had to remember to clear this.
+    await waitFor(() => expect(screen.queryByText(/Nobody can hear you/)).not.toBeInTheDocument());
+    expect(micButton().getAttribute("title")).not.toBe("No microphone — retry");
+  });
+});
+
+describe("a member who simply muted themselves", () => {
+  it("is not nagged about a microphone they have", async () => {
+    // The other half of the rule. Joining muted is the ordinary thing, and a
+    // banner here would follow every member of every meeting who did it.
+    joinChoice.micEnabled = false;
+    await enterCall();
+    expect(screen.queryByText(/Nobody can hear you/)).not.toBeInTheDocument();
+    // The ordinary caption, on a control that can deliver what it says.
+    expect(document.querySelector('button[title="Unmute"]')).not.toBeNull();
   });
 });
