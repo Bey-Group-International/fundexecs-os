@@ -774,7 +774,7 @@ export function DocuSignPanel() {
             </p>
           </div>
         ) : (
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto overflow-y-hidden">
             <table className="w-full min-w-[500px] text-left">
               <thead>
                 <tr className="border-b border-neutral-100 dark:border-neutral-800">

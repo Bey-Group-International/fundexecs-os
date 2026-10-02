@@ -7,7 +7,7 @@
 // other way to read anything). PDFs, images and video render natively from a
 // same-origin URL; Word, Excel and PowerPoint render from the structured
 // preview extracted server-side — no third-party viewer ever receives the file.
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { PreviewKind } from "@/lib/document-files";
 import type { OfficePreview } from "@/lib/ooxml";
 
@@ -42,14 +42,12 @@ export function FilePreview({
 
   if (kind === "pdf") {
     return (
-      <div className={frame}>
-        <iframe
-          title={name}
-          // #toolbar=0 hides the download/print bar in Chromium's viewer.
-          src={viewOnly ? `${src}#toolbar=0&navpanes=0` : src}
-          className="block h-[min(80dvh,56rem)] w-full bg-white"
-        />
-      </div>
+      <PdfFrame
+        className={frame}
+        title={name}
+        // #toolbar=0 hides the download/print bar in Chromium's viewer.
+        src={viewOnly ? `${src}#toolbar=0&navpanes=0` : src}
+      />
     );
   }
 
@@ -99,6 +97,43 @@ export function FilePreview({
       <p className="mt-1 text-xs text-fg-muted">
         {viewOnly ? "Ask the sender for a copy." : "Open or download it to read it."}
       </p>
+    </div>
+  );
+}
+
+// The browser's PDF viewer takes every wheel turned over it, so a tall preview
+// stopped the page dead whenever the cursor crossed it. Until the reader clicks
+// in, a shield lets the wheel scroll the page past it; once clicked, the PDF
+// has the wheel until the cursor (or a tap elsewhere) leaves it.
+function PdfFrame({ className, title, src }: { className: string; title: string; src: string }) {
+  const [active, setActive] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!active) return;
+    // Touch has no mouseleave: a tap outside hands the wheel back.
+    const onPointerDown = (e: PointerEvent) => {
+      if (!ref.current?.contains(e.target as Node)) setActive(false);
+    };
+    document.addEventListener("pointerdown", onPointerDown);
+    return () => document.removeEventListener("pointerdown", onPointerDown);
+  }, [active]);
+
+  return (
+    <div ref={ref} className={`group ${className}`} onMouseLeave={() => setActive(false)}>
+      <iframe title={title} src={src} className="block h-[min(80dvh,56rem)] w-full bg-white" />
+      {active ? null : (
+        <button
+          type="button"
+          onClick={() => setActive(true)}
+          aria-label={`Scroll inside ${title}`}
+          className="absolute inset-0 flex cursor-default items-end justify-center bg-transparent pb-4 focus:outline-none"
+        >
+          <span className="rounded-full border border-line bg-surface-0/90 px-3 py-1 font-mono text-[11px] uppercase tracking-wider text-fg-secondary opacity-0 shadow transition group-hover:opacity-100 group-focus-within:opacity-100">
+            Click to scroll the document
+          </span>
+        </button>
+      )}
     </div>
   );
 }
@@ -166,7 +201,7 @@ function StructuredPreview({ url, viewOnly }: { url: string; viewOnly: boolean }
   const { preview, text } = state.data;
   if (!preview) {
     return (
-      <pre className="max-h-[min(80dvh,56rem)] overflow-auto overscroll-contain whitespace-pre-wrap px-5 py-4 font-mono text-xs leading-relaxed text-fg-secondary">
+      <pre className="max-h-[min(80dvh,56rem)] overflow-auto whitespace-pre-wrap px-5 py-4 font-mono text-xs leading-relaxed text-fg-secondary">
         {text || "This file is empty."}
       </pre>
     );
@@ -181,7 +216,7 @@ function DocxView({ preview }: { preview: Extract<OfficePreview, { kind: "docx" 
     return <p className="px-5 py-10 text-center text-sm text-fg-muted">This document has no text.</p>;
   }
   return (
-    <article className="mx-auto max-h-[min(80dvh,56rem)] max-w-3xl overflow-y-auto overscroll-contain px-6 py-6 text-sm leading-relaxed text-fg-secondary">
+    <article className="mx-auto max-h-[min(80dvh,56rem)] max-w-3xl overflow-y-auto px-6 py-6 text-sm leading-relaxed text-fg-secondary">
       {preview.blocks.map((b, i) =>
         b.style === "h1" ? (
           <h2 key={i} className="mb-2 mt-5 font-display text-lg font-semibold text-fg-primary first:mt-0">
@@ -233,7 +268,7 @@ function XlsxView({ preview }: { preview: Extract<OfficePreview, { kind: "xlsx" 
           ))}
         </div>
       ) : null}
-      <div className="max-h-[min(75dvh,52rem)] overflow-auto overscroll-contain">
+      <div className="max-h-[min(75dvh,52rem)] overflow-auto">
         <table className="min-w-full border-collapse font-mono text-[11px] text-fg-secondary">
           <tbody>
             {sheet.rows.map((row, r) => (
@@ -263,7 +298,7 @@ function PptxView({ preview }: { preview: Extract<OfficePreview, { kind: "pptx" 
     return <p className="px-5 py-10 text-center text-sm text-fg-muted">This deck has no slides.</p>;
   }
   return (
-    <ol className="grid max-h-[min(80dvh,56rem)] gap-3 overflow-y-auto overscroll-contain p-4 sm:grid-cols-2">
+    <ol className="grid max-h-[min(80dvh,56rem)] gap-3 overflow-y-auto p-4 sm:grid-cols-2">
       {preview.slides.map((s, i) => (
         <li key={i} className="flex aspect-video flex-col overflow-hidden rounded-lg border border-line bg-surface-1 p-4">
           <p className="font-mono text-[11px] text-fg-muted">Slide {i + 1}</p>

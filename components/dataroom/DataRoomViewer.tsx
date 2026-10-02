@@ -8,6 +8,7 @@ import type { GateConfig } from "./ViewerGate";
 import { trackDwell } from "@/components/build/materials-actions";
 import { FilePreview } from "@/components/documents/FilePreview";
 import type { PreviewKind } from "@/lib/document-files";
+import { forwardWheel } from "@/lib/wheel-forward";
 
 export type { GateConfig };
 
@@ -193,7 +194,19 @@ export function DataRoomViewer({
     : undefined;
   const [selected, setSelected] = useState<string>(focusSection ?? nav[0]?.key ?? "overview");
   const mainRef = useRef<HTMLElement>(null);
+  const shellRef = useRef<HTMLDivElement>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  // The full-screen viewer is an app shell: only the reading pane scrolls, so a
+  // wheel over the header or a short contents rail used to do nothing. Send it
+  // to the pane. Not in the GP preview — there the page around it scrolls — and
+  // not while the mobile drawer covers the pane.
+  useEffect(() => {
+    const shell = shellRef.current;
+    const pane = mainRef.current;
+    if (!contentReady || preview || sidebarOpen || !shell || !pane) return;
+    return forwardWheel(shell, pane);
+  }, [contentReady, preview, sidebarOpen]);
 
   // The nav can change under a live selection — most visibly in the GP preview,
   // where scoping to a link removes the section being read. Resolve the
@@ -320,6 +333,7 @@ export function DataRoomViewer({
 
   return (
     <div
+      ref={shellRef}
       className={`flex flex-col bg-surface-0 text-fg-primary ${
         // Exactly the viewport, so the contents rail stays put and only the
         // reading pane scrolls. With min-h-screen the row grew with its
@@ -398,7 +412,7 @@ export function DataRoomViewer({
             />
           ) : null}
 
-          <div className="relative z-10 flex flex-1 flex-col overflow-y-auto overscroll-contain py-4">
+          <div className="relative z-10 flex flex-1 flex-col overflow-y-auto py-4">
             <p className="px-4 pb-2 font-mono text-[11px] uppercase tracking-[0.16em] text-fg-muted">Contents</p>
             <nav className="flex flex-col gap-0.5 px-2">
               {nav.map((item) => {
@@ -437,7 +451,7 @@ export function DataRoomViewer({
         </aside>
 
         {/* Content panel */}
-        <main ref={mainRef} className="min-w-0 flex-1 overflow-y-auto overscroll-contain px-6 py-8 lg:px-10">
+        <main ref={mainRef} className="min-w-0 flex-1 overflow-y-auto px-6 py-8 lg:px-10">
           <ContentPanel
             selected={effectiveSelected}
             org={org}

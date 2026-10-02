@@ -210,7 +210,7 @@ export async function ViewerAnalytics({ roomId }: { roomId?: string } = {}) {
                 </div>
 
                 {/* Rows table */}
-                <div className="overflow-x-auto">
+                <div className="overflow-x-auto overflow-y-hidden">
                   <table className="w-full min-w-[600px] text-sm">
                     <thead>
                       <tr className="border-b border-line/50">

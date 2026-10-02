@@ -278,7 +278,7 @@ export function LibraryWorkspace({
             </select>
           </div>
 
-          <nav className="hidden min-h-0 flex-col gap-0.5 overflow-y-auto overscroll-contain p-2 lg:flex lg:flex-1">
+          <nav className="hidden min-h-0 flex-col gap-0.5 overflow-y-auto p-2 lg:flex lg:flex-1">
             <button
               type="button"
               onClick={() => setSection(null)}
@@ -509,7 +509,7 @@ export function LibraryWorkspace({
             ))}
           </ul>
           ) : (
-          <div className="overflow-x-auto rounded-xl border border-line bg-surface-0">
+          <div className="overflow-x-auto overflow-y-hidden rounded-xl border border-line bg-surface-0">
             <table className="w-full min-w-[56rem] border-collapse text-sm">
               <thead>
                 <tr className="border-b border-line text-left font-mono text-[11px] uppercase tracking-wider text-fg-muted">
