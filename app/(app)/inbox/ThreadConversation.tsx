@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { InboxChannel } from "@/lib/supabase/database.types";
 import { relativeMeeting } from "./format";
+import { LinkToContact } from "./LinkToContact";
 import {
   getThreadMessages,
   replyToThread,
@@ -170,6 +171,9 @@ export function ThreadConversation({
 
   return (
     <div className="mt-2 rounded-lg border border-line/70 bg-surface-0/40 p-3">
+      <div className="mb-2 flex justify-end">
+        <LinkToContact threadId={card.id} counterparty={card.counterparty} />
+      </div>
       {msgLoading && messages === null ? (
         <p className="text-xs text-fg-muted">Loading conversation…</p>
       ) : messages && messages.length > 0 ? (
