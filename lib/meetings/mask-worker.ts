@@ -125,8 +125,6 @@ interface Session {
   /** Built here on the standard route, so it is this file's to stop. */
   generator: { track?: MediaStreamTrack } | null;
   paused: boolean;
-  /** Whether the first delivered frame has been reported. */
-  announced: boolean;
 }
 
 let session: Session | null = null;
@@ -199,9 +197,26 @@ async function pump(active: Session): Promise<void> {
   }
 }
 
-function buildLoop(active: Omit<Session, "loop">): MaskFrameLoop<SegmentResult, VideoFrame> {
+/**
+ * Build the loop for a session, with its callbacks closed over THAT session.
+ *
+ * Takes the session by accessor rather than by value, which is not ceremony:
+ * the loop's callbacks have to be able to ask "am I still the current
+ * session?", and they can only do that if they hold the same object `session`
+ * holds. Building the deps against a half-made object and spreading it into the
+ * real one afterwards -- which is what this did -- left the callbacks closed
+ * over something that was never the session, so the check was impossible to
+ * write and `announced` was being set on an object nobody read.
+ */
+function buildLoop(
+  compositor: MaskCompositor,
+  current: () => Session | null,
+  self: () => Session,
+): MaskFrameLoop<SegmentResult, VideoFrame> {
+  /** Whether the first delivered frame has been reported, for this session. */
+  let announced = false;
   return new MaskFrameLoop<SegmentResult, VideoFrame>({
-    compositor: active.compositor,
+    compositor,
     // Attached later by `setSegmenter`: frames flow before the runtime lands.
     segmenter: null,
     readMask: readMaskSample,
@@ -215,16 +230,22 @@ function buildLoop(active: Omit<Session, "loop">): MaskFrameLoop<SegmentResult, 
     // rejects did not consume its chunk -- the stream was already closed or
     // errored -- so the frame is still this side's and the loop closes it. The
     // loop does not await this, so the camera is never paced to the sink.
-    deliver: (frame) => active.writer.write(frame).then(() => true, () => false),
+    deliver: (frame) => self().writer.write(frame).then(() => true, () => false),
     closeFrame: (frame) => { try { frame.close(); } catch { /* already closed */ } },
     now: () => performance.now(),
-    // Only the FIRST one. All the main thread needs is for its first-frame
-    // deadline to stop applying, and a message per frame would be 24
-    // postMessages a second onto the thread this whole exercise exists to free
-    // -- paying part of the cost back for a number `stats` already carries.
+    // Only the FIRST one, and only while this session is still the current one.
+    //
+    // The first half is cost: a message per frame would be 24 postMessages a
+    // second onto the thread this whole exercise exists to free, for a number
+    // `stats` already carries. The second half is correctness. A `write` queued
+    // before `teardown` can fulfil after it, and this message carries no session
+    // of its own -- so without the check, a frame from the session that just
+    // ended would announce itself as the new one's first frame and clear a
+    // deadline nothing had satisfied. There is no main-thread consumer yet, so
+    // today it is latent; a disarmed deadline is not a thing to leave latent.
     onDelivered: (index) => {
-      if (active.announced) return;
-      active.announced = true;
+      if (current() !== self() || announced) return;
+      announced = true;
       post({ kind: "frame", index });
     },
     onStats: (stats) => post({ kind: "stats", stats }),
@@ -302,15 +323,20 @@ async function start(
     return;
   }
 
-  const base = {
+  // Declared before the loop so the loop's callbacks can close over the real
+  // session object, and assigned before anything can call them: the first
+  // callback cannot run until a frame arrives, which cannot happen until `pump`
+  // starts below.
+  let active: Session;
+  const loop = buildLoop(compositor, () => session, () => active);
+  active = {
     compositor,
+    loop,
     reader: readable.getReader(),
     writer: writable.getWriter(),
     generator,
     paused: false,
-    announced: false,
   };
-  const active: Session = { ...base, loop: buildLoop(base) };
   session = active;
 
   post(
