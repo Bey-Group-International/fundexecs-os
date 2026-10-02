@@ -21,6 +21,9 @@ import {
 import { MeetingGreenRoom, type GreenRoomChoice } from "./MeetingGreenRoom";
 import {
   constraintsFor,
+  facingConstraints,
+  releaseStream,
+  settledFacing,
   displayConstraints,
   levelFromSamples,
   needsSinkChange,
@@ -4220,16 +4223,27 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
    * not, so a mid-call switch to a headset was forgotten by the next call.
    */
   const switchMic = useCallback(async (deviceId: string) => {
+    let opened: MediaStream | null = null;
+    // The microphone has no async hand-over, so there is no window between
+    // opening and owning -- but the release is written the same way as the two
+    // camera paths so the three cannot drift, and so a `stop()` on a track that
+    // already ended stops being reported as "that microphone could not be
+    // opened".
+    let adopted = false;
     try {
-      const s = await navigator.mediaDevices.getUserMedia({
+      opened = await navigator.mediaDevices.getUserMedia({
         audio: constraintsFor("audioinput", deviceId || null),
         video: false,
       });
-      const t = s.getAudioTracks()[0];
-      if (!t || !localStreamRef.current) { s.getTracks().forEach((x) => x.stop()); return; }
+      const t = opened.getAudioTracks()[0];
+      if (!t || !localStreamRef.current) return;
+      // A microphone left open after the call is the same fault as a camera,
+      // minus the indicator light that would have told them. See `flipCamera`.
+      if (tornDownRef.current) return;
       t.enabled = micOnRef.current;
       t.contentHint = contentHintFor("microphone");
       audioSenderRef.current.forEach((sender) => { void sender.replaceTrack(t).catch(() => { /* peer closed */ }); });
+      adopted = true;
       localStreamRef.current.getAudioTracks().forEach((t2) => { try { t2.stop(); } catch { /* already stopped */ } localStreamRef.current!.removeTrack(t2); });
       localStreamRef.current.addTrack(t);
       setLocalStream(new MediaStream(localStreamRef.current.getTracks()));
@@ -4245,22 +4259,32 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
       // Silence is the failure mode here, and silence looks exactly like
       // nobody talking. Say so rather than leaving them on a dead mic.
       setMediaError("That microphone could not be opened. Your previous one is still live.");
+    } finally {
+      if (!adopted) releaseStream(opened);
     }
   }, []);
 
   /** The same, for the camera. `adoptCameraTrack` re-attaches any background effect. */
   const switchCam = useCallback(async (deviceId: string) => {
+    let opened: MediaStream | null = null;
+    // See `flipCamera`: the same hand-over, and the same reason the release has
+    // to be conditional on it having happened.
+    let adopted = false;
     try {
-      const s = await navigator.mediaDevices.getUserMedia({
+      opened = await navigator.mediaDevices.getUserMedia({
         // Without these the new camera comes up at its own idea of a sensible
         // resolution — 4K on some webcams — and on a mesh call every
         // participant uploads a copy of it to every other participant.
         video: constraintsFor("videoinput", deviceId || null),
         audio: false,
       });
-      const t = s.getVideoTracks()[0];
-      if (!t || !localStreamRef.current) { s.getTracks().forEach((x) => x.stop()); return; }
+      const t = opened.getVideoTracks()[0];
+      if (!t || !localStreamRef.current) return;
+      // See `flipCamera`: a non-null local stream is not evidence the room is
+      // still here, and an adopted camera in a dead room is one nothing stops.
+      if (tornDownRef.current) return;
       await adoptCameraTrack(t);
+      adopted = true;
       setSelectedCamId(t.getSettings().deviceId || deviceId);
       rememberDevice("videoinput", deviceId);
       setCameraToRecover(null);
@@ -4268,6 +4292,8 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     } catch (e) {
       console.warn("[switchCam]", e);
       setMediaError("That camera could not be opened. Your previous one is still live.");
+    } finally {
+      if (!adopted) releaseStream(opened);
     }
   }, [adoptCameraTrack]);
 
@@ -4714,16 +4740,72 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
 
   const muteAll = useCallback(() => { sendSignal({ type: "mute_all", from: myIdRef.current }); }, [sendSignal]);
 
+  /**
+   * Swap between the front and rear cameras.
+   *
+   * Three things here were wrong, and all three only bite on a phone -- which
+   * is the only place this button appears.
+   *
+   * It asked for `{ facingMode }` and nothing else, while `switchCam` fifty
+   * lines up carried capture bounds and a comment explaining why. On a phone
+   * that omission is the worst available, because the rear camera is the
+   * highest-resolution sensor on the device: the flip opened a 4K 60fps capture
+   * on a mesh call, and nothing downstream undoes it -- `videoSendCap` sets
+   * `scaleResolutionDownBy: 1` at any healthy bitrate, so the encoder is told
+   * to keep every pixel. The bounds now live in `cameraBounds` so the two
+   * callers cannot drift apart again.
+   *
+   * It leaked the stream on the early return, where both of its siblings stop
+   * it. That leaves a second live capture of the same sensor and the hardware
+   * light on -- and two captures of one sensor is also how a camera starts
+   * hunting its own exposure.
+   *
+   * And it recorded the side it ASKED for. `facingConstraints` asks rather than
+   * demands, because an exact match throws on a one-camera machine, so a flip
+   * can legitimately come back with the same camera -- and the button then
+   * claimed the rear camera while showing a face.
+   */
   const flipCamera = useCallback(async () => {
     const next = facingMode === "user" ? "environment" : "user";
+    let opened: MediaStream | null = null;
+    // Flipped the instant the hand-over completes, because from then on the
+    // track is the ROOM's: releasing it would stop the camera the member is now
+    // using. Which is why the release below is conditional rather than
+    // unconditional -- it has to cover a throw BEFORE adoption without
+    // punishing anything that goes wrong after it.
+    let adopted = false;
     try {
-      const s = await navigator.mediaDevices.getUserMedia({ video: { facingMode: next }, audio: false });
-      const t = s.getVideoTracks()[0];
+      opened = await navigator.mediaDevices.getUserMedia({
+        video: facingConstraints(next),
+        audio: false,
+      });
+      const t = opened.getVideoTracks()[0];
       if (!t || !localStreamRef.current) return;
+      // The same hazard `startCamera` guards one await earlier, and the reason
+      // it cannot lean on the check above: teardown stops the tracks in
+      // `localStreamRef.current` but never nulls the ref, so a non-null stream
+      // is NOT evidence the room is still there. A capture that resolves after
+      // someone leaves -- a permission prompt they answered on the way out, a
+      // slow camera -- would otherwise be adopted into a dead room and left
+      // running, with the hardware light on, after the call they left.
+      if (tornDownRef.current) return;
       await adoptCameraTrack(t);
+      adopted = true;
       setSelectedCamId(t.getSettings().deviceId || "");
-      setFacingMode(next);
-    } catch (e) { console.warn("[flipCamera]", e); }
+      setFacingMode(settledFacing(t.getSettings().facingMode, next));
+      setMediaError(null);
+    } catch (e) {
+      console.warn("[flipCamera]", e);
+      // Said rather than swallowed, as `switchCam` says it: a flip that fails
+      // silently reads as a dead button, and the member cannot tell that the
+      // camera they still have is the one they are still sending.
+      setMediaError("That camera could not be opened. Your previous one is still live.");
+    } finally {
+      // One place for every way this can end without handing the track over:
+      // no usable track, no local stream, or a throw out of `adoptCameraTrack`.
+      // Each of those leaves a live capture and the hardware light on.
+      if (!adopted) releaseStream(opened);
+    }
   }, [facingMode, adoptCameraTrack]);
 
   /**

@@ -133,6 +133,89 @@ export const SCREEN_SHARE_FPS = 15;
  */
 export const SCREEN_SHARE_MAX_HEIGHT = 1440;
 
+/**
+ * The capture bounds every camera this app opens is held to.
+ *
+ * In one place because having them in two is what went wrong: `switchCam`
+ * carried them with a comment explaining why, and `flipCamera` -- fifty lines
+ * away, doing the same job -- asked for `{ facingMode }` and nothing else. On a
+ * phone that is the worst possible omission, because the rear camera is the
+ * HIGHEST-resolution sensor on the device: flipping to it opened a 4K 60fps
+ * capture, on a mesh call where every participant uploads a copy to every
+ * other.
+ *
+ * Nothing downstream rescues that. `videoSendCap` sets
+ * `scaleResolutionDownBy: 1` at any healthy bitrate, so the encoder is told to
+ * keep every one of those pixels; and the masking pipeline is handed frames at
+ * twice the rate its per-frame filters were measured at.
+ *
+ * 720p is the ceiling worth sending on a mesh: every participant uploads a copy
+ * to every other, so doubling resolution multiplies across the call.
+ */
+function cameraBounds(): MediaTrackConstraints {
+  return {
+    width: { ideal: 1280, max: 1280 },
+    height: { ideal: 720, max: 720 },
+    frameRate: { ideal: 30, max: 30 },
+  };
+}
+
+/**
+ * Stop every track in a stream nobody took ownership of.
+ *
+ * The three paths that open a device mid-call -- `switchMic`, `switchCam`,
+ * `flipCamera` -- each have to release what they opened if the hand-over does
+ * not complete, and each wrote its own `forEach(x => x.stop())`. Two of them
+ * covered only the early return and not a throw, which leaves a live capture
+ * and the hardware light on; and none of them guarded `stop()` itself, so a
+ * track that was already ended turned a clean release into the catch block's
+ * "that camera could not be opened".
+ *
+ * The caller still decides WHETHER to release. That decision is the one thing
+ * this cannot know: once a track has been adopted it belongs to the room, and
+ * stopping it then would kill the camera the member is now using.
+ */
+export function releaseStream(stream: { getTracks(): MediaStreamTrack[] } | null | undefined): void {
+  if (!stream) return;
+  let tracks: MediaStreamTrack[];
+  try { tracks = stream.getTracks(); } catch { return; }
+  for (const track of tracks) {
+    try { track.stop(); } catch { /* already stopped */ }
+  }
+}
+
+/**
+ * Constraints for flipping between the front and rear cameras.
+ *
+ * `facingMode` is left as a plain value rather than `{ exact }` on purpose. An
+ * exact match throws OverconstrainedError on any machine with one camera, and
+ * for a flip button a failed open is worse than getting the same camera back --
+ * so this asks, and the caller reads `getSettings().facingMode` to find out
+ * what it actually got. See `settledFacing`.
+ */
+export function facingConstraints(facing: "user" | "environment"): MediaTrackConstraints {
+  const video = cameraBounds();
+  video.facingMode = facing;
+  return video;
+}
+
+/**
+ * Which camera a flip actually landed on.
+ *
+ * Because `facingConstraints` asks rather than demands, a flip on a one-camera
+ * machine comes back with the same camera -- and recording the side that was
+ * REQUESTED would leave the button claiming you are on the rear camera while
+ * your face is on screen. The browser's own answer wins; the request is only
+ * the fallback for a browser that does not report one.
+ */
+export function settledFacing(
+  reported: string | null | undefined,
+  asked: "user" | "environment",
+): "user" | "environment" {
+  if (reported === "user" || reported === "environment") return reported;
+  return asked;
+}
+
 /** Constraints for one chosen device, or the system default when none is chosen. */
 export function constraintsFor(
   kind: "audioinput" | "videoinput",
@@ -153,13 +236,7 @@ export function constraintsFor(
     return audio;
   }
 
-  const video: MediaTrackConstraints = {
-    // 720p is the ceiling worth sending on a mesh: every participant uploads a
-    // copy to every other, so doubling resolution multiplies across the call.
-    width: { ideal: 1280, max: 1280 },
-    height: { ideal: 720, max: 720 },
-    frameRate: { ideal: 30, max: 30 },
-  };
+  const video = cameraBounds();
   if (deviceId) video.deviceId = { exact: deviceId };
   return video;
 }

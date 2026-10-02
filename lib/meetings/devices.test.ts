@@ -2,6 +2,9 @@ import {
   type Device,
   canJoin,
   constraintsFor,
+  facingConstraints,
+  releaseStream,
+  settledFacing,
   devicesOfKind,
   levelBars,
   levelFromSamples,
@@ -102,6 +105,136 @@ describe("constraintsFor", () => {
     const c = constraintsFor("videoinput", null) as MediaTrackConstraints;
     expect(c.width).toEqual({ ideal: 1280, max: 1280 });
     expect(c.frameRate).toEqual({ ideal: 30, max: 30 });
+  });
+});
+
+/**
+ * Flipping to the rear camera on a phone opens the HIGHEST-resolution sensor on
+ * the device. `flipCamera` asked for `{ facingMode }` and nothing else while
+ * `switchCam`, doing the same job fifty lines away, carried the bounds — so a
+ * flip put a 4K 60fps capture on a mesh call, and nothing downstream undoes it:
+ * `videoSendCap` sets `scaleResolutionDownBy: 1` at any healthy bitrate, so the
+ * encoder is told to keep every one of those pixels.
+ *
+ * The bounds live in one place now, and these tests are what keep the two
+ * callers from drifting apart again.
+ */
+describe("facingConstraints", () => {
+  it("holds a flipped camera to the same 720p30 ceiling as a chosen one", () => {
+    const flipped = facingConstraints("environment");
+    const chosen = constraintsFor("videoinput", null) as MediaTrackConstraints;
+    expect(flipped.width).toEqual(chosen.width);
+    expect(flipped.height).toEqual(chosen.height);
+    expect(flipped.frameRate).toEqual(chosen.frameRate);
+  });
+
+  it("asks for the side it was given", () => {
+    expect(facingConstraints("environment").facingMode).toBe("environment");
+    expect(facingConstraints("user").facingMode).toBe("user");
+  });
+
+  /**
+   * `{ exact: ... }` would throw OverconstrainedError on any machine with one
+   * camera, and for a flip button a failed open is worse than getting the same
+   * camera back. So it asks, and the caller reads back what it got.
+   */
+  it("asks rather than demands, so a one-camera machine still opens", () => {
+    expect(facingConstraints("environment").facingMode).not.toHaveProperty("exact");
+  });
+
+  it("does not pin a device, which would contradict the side", () => {
+    expect(facingConstraints("user").deviceId).toBeUndefined();
+  });
+
+  /** A fresh object each time: a shared one could be mutated by a caller and
+   *  silently change what every later camera is opened with. */
+  it("hands back its own object", () => {
+    const first = facingConstraints("user");
+    first.width = { ideal: 4096 };
+    expect(facingConstraints("user").width).toEqual({ ideal: 1280, max: 1280 });
+    expect((constraintsFor("videoinput", null) as MediaTrackConstraints).width)
+      .toEqual({ ideal: 1280, max: 1280 });
+  });
+});
+
+/**
+ * The three paths that open a device mid-call each have to release what they
+ * opened when the hand-over does not complete. Two of them covered only the
+ * early return and not a throw — which leaves a live capture of the same sensor
+ * and the hardware light on — and none guarded `stop()` itself, so a track that
+ * had already ended turned a clean release into "that camera could not be
+ * opened".
+ *
+ * Whether to release stays with the caller, because that is the one thing this
+ * cannot know: an adopted track belongs to the room, and stopping it then would
+ * kill the camera the member is now using.
+ */
+describe("releaseStream", () => {
+  const stream = (count: number) => {
+    const tracks = Array.from({ length: count }, () => ({ stopped: 0, stop() { this.stopped += 1; } }));
+    return { tracks, stream: { getTracks: () => tracks as unknown as MediaStreamTrack[] } };
+  };
+
+  it("stops every track it was given", () => {
+    const { tracks, stream: s } = stream(3);
+    releaseStream(s);
+    expect(tracks.map((t) => t.stopped)).toEqual([1, 1, 1]);
+  });
+
+  it("does nothing when there is no stream", () => {
+    expect(() => releaseStream(null)).not.toThrow();
+    expect(() => releaseStream(undefined)).not.toThrow();
+  });
+
+  /** The case that turned a clean release into a reported failure: a track that
+   *  had already ended. */
+  it("keeps going when a track refuses to stop", () => {
+    const later = { stopped: 0, stop() { this.stopped += 1; } };
+    const s = {
+      getTracks: () => [
+        { stop() { throw new Error("already stopped"); } },
+        later,
+      ] as unknown as MediaStreamTrack[],
+    };
+    expect(() => releaseStream(s)).not.toThrow();
+    // And the track after the throwing one is still released, which is the
+    // whole point of stopping each one inside its own guard.
+    expect(later.stopped).toBe(1);
+  });
+
+  it("survives a stream that cannot list its tracks", () => {
+    const s = { getTracks: () => { throw new Error("gone"); } };
+    expect(() => releaseStream(s)).not.toThrow();
+  });
+
+  it("is fine with a stream holding nothing", () => {
+    expect(() => releaseStream({ getTracks: () => [] })).not.toThrow();
+  });
+});
+
+/**
+ * Because the flip asks rather than demands, it can legitimately come back with
+ * the camera it started on — and recording the side that was REQUESTED left the
+ * button claiming the rear camera while showing a face.
+ */
+describe("settledFacing", () => {
+  it("believes the browser over the request", () => {
+    expect(settledFacing("user", "environment")).toBe("user");
+    expect(settledFacing("environment", "user")).toBe("environment");
+  });
+
+  it("falls back to what was asked when the browser reports nothing", () => {
+    expect(settledFacing(undefined, "environment")).toBe("environment");
+    expect(settledFacing(null, "user")).toBe("user");
+    expect(settledFacing("", "environment")).toBe("environment");
+  });
+
+  /** A desktop camera may report "left"/"right", neither of which is a side
+   *  this button can show. The request is the better answer than a value the
+   *  rest of the room cannot read. */
+  it("ignores a facing it does not recognise", () => {
+    expect(settledFacing("left", "user")).toBe("user");
+    expect(settledFacing("environment ", "user")).toBe("user");
   });
 });
 
