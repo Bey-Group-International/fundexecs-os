@@ -161,6 +161,30 @@ function cameraBounds(): MediaTrackConstraints {
 }
 
 /**
+ * Stop every track in a stream nobody took ownership of.
+ *
+ * The three paths that open a device mid-call -- `switchMic`, `switchCam`,
+ * `flipCamera` -- each have to release what they opened if the hand-over does
+ * not complete, and each wrote its own `forEach(x => x.stop())`. Two of them
+ * covered only the early return and not a throw, which leaves a live capture
+ * and the hardware light on; and none of them guarded `stop()` itself, so a
+ * track that was already ended turned a clean release into the catch block's
+ * "that camera could not be opened".
+ *
+ * The caller still decides WHETHER to release. That decision is the one thing
+ * this cannot know: once a track has been adopted it belongs to the room, and
+ * stopping it then would kill the camera the member is now using.
+ */
+export function releaseStream(stream: { getTracks(): MediaStreamTrack[] } | null | undefined): void {
+  if (!stream) return;
+  let tracks: MediaStreamTrack[];
+  try { tracks = stream.getTracks(); } catch { return; }
+  for (const track of tracks) {
+    try { track.stop(); } catch { /* already stopped */ }
+  }
+}
+
+/**
  * Constraints for flipping between the front and rear cameras.
  *
  * `facingMode` is left as a plain value rather than `{ exact }` on purpose. An
