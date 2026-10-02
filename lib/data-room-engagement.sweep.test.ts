@@ -1,5 +1,7 @@
 jest.mock("server-only", () => ({}), { virtual: true });
 jest.mock("@/lib/anthropic-client", () => ({ anthropicClient: jest.fn(), LONG_RUN_TIMEOUT_MS: 1 }));
+const syncRoomTimeline = jest.fn(async () => ({ written: 0 }));
+jest.mock("@/lib/data-room-crm.server", () => ({ syncRoomTimeline: (...a: unknown[]) => syncRoomTimeline(...(a as [])) }));
 
 import { refreshActiveRoomReads, refreshRoomReads, MAX_ROOMS_PER_SWEEP } from "./data-room-engagement.server";
 
@@ -129,4 +131,17 @@ it("reports a failed activity read instead of passing it off as a quiet day", as
 it("reports a failed room lookup", async () => {
   const db = fakeDb({ ...base, data_room_views: [view({})], data_rooms: [] }, ["data_rooms"]);
   await expect(refreshActiveRoomReads(db.client, now)).rejects.toThrow("data rooms: boom");
+});
+
+it("puts readers on the CRM timeline from the daily sweep, never from the button", async () => {
+  syncRoomTimeline.mockClear();
+  const tables = {
+    ...base,
+    data_room_views: [view({})],
+    data_rooms: [{ id: "room-1", name: "Fund II", organization_id: "org-1", archived_at: null }],
+  };
+  await refreshRoomReads(fakeDb(tables).client, "org-1", { id: "room-1", name: "Fund II" }, now);
+  expect(syncRoomTimeline).not.toHaveBeenCalled();
+  await refreshActiveRoomReads(fakeDb(tables).client, now);
+  expect(syncRoomTimeline).toHaveBeenCalledTimes(1);
 });

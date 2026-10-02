@@ -196,12 +196,17 @@ export async function refreshRoomReads(
   orgId: string,
   room: { id: string; name: string },
   now = new Date(),
+  opts: { syncTimeline?: boolean } = {},
 ): Promise<{ ok: boolean; count: number }> {
   const { engagement } = await loadRoomEngagement(supabase, orgId, room.id);
   if (engagement.investors.length === 0) return { ok: true, count: 0 };
-  // Readers' activity onto their CRM contact's timeline. Independent of Earn:
-  // a failure here must not cost the read, nor the read this.
-  await syncRoomTimeline(supabase, orgId, room, engagement.investors, now).catch(() => undefined);
+  // Readers' activity onto their CRM contact's timeline, from the daily sweep
+  // only: those entries are system rows, which members may not update (RLS),
+  // so the service role keeps them. Independent of Earn: neither failure costs
+  // the other.
+  if (opts.syncTimeline) {
+    await syncRoomTimeline(supabase, orgId, room, engagement.investors, now).catch(() => undefined);
+  }
   const reads = await readEngagement(engagement.investors, { roomName: room.name, today: now.toISOString().slice(0, 10) });
   const lastSeen = new Map(engagement.investors.map((a) => [a.key, a.lastSeen]));
   const { error } = await supabase.from("data_room_engagement_reads").upsert(
@@ -279,7 +284,10 @@ export async function refreshActiveRoomReads(
   const worker = async () => {
     while (next < open.length && Date.now() < deadline) {
       const r = open[next++];
-      const res = await refreshRoomReads(supabase, r.organization_id, r, now).catch(() => ({ ok: false, count: 0 }));
+      const res = await refreshRoomReads(supabase, r.organization_id, r, now, { syncTimeline: true }).catch(() => ({
+        ok: false,
+        count: 0,
+      }));
       if (res.ok) {
         done += 1;
         reads += res.count;
