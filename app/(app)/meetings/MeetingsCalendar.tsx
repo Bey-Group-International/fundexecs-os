@@ -73,6 +73,16 @@ import {
 } from "@/lib/meetings/day-agenda";
 import { actionForKey, SHORTCUT_HELP } from "@/lib/meetings/calendar-shortcuts";
 import {
+  QUICK_DURATIONS,
+  calendarConflicts,
+  conflictLabel,
+  joinableNow,
+  quickCreatePayload,
+  swipeStep,
+  type Conflict,
+} from "@/lib/meetings/calendar-insights";
+import { parseAttendeeInput } from "@/lib/meetings/attendees";
+import {
   MIN_DURATION_MINUTES,
   canDragMeeting,
   columnFromOffset,
@@ -91,8 +101,6 @@ import {
 } from "@/lib/meetings/calendar-drag";
 import { MeetingEditScreen, type MeetingEditInitial } from "./MeetingEditScreen";
 import { seriesPositionLabel } from "@/lib/meetings/recurrence";
-import { UpcomingMeetingsList, type UpcomingMeeting } from "./UpcomingMeetingsList";
-import { PastMeetingsList, type PastMeeting } from "./PastMeetingsList";
 import { useNow, useLivePresence, nextChannelName, type RoomPresence } from "./hooks";
 import { useFocusTrap } from "@/hooks/useFocusTrap";
 
@@ -105,6 +113,7 @@ const CAL_SELECT =
   "id, room_code, title, status, host_id, created_at, started_at, ended_at, scheduled_at, duration_minutes, timezone, meeting_type, attendees, preparation_status, followup_status, assigned_copilot_agent, is_draft, locked_at, updated_at, description, location, meeting_url, objective, agenda, preparation_requirements, related_record_type, related_record_id, calendar_visibility, reminder_minutes, priority, tags, external_calendar_provider, external_calendar_sync_enabled, external_calendar_sync_status, guest_quick_access, series_id, series_index, series_rule";
 
 const HOUR_PX = 46; // row height in the week/day time grid
+const HOURS = Array.from({ length: 24 }, (_, h) => h);
 const DAY_SCROLL_HOUR = 7; // initial scroll position for time views
 
 // The lifecycle statuses offered in the filter menu, in a sensible order.
@@ -172,16 +181,12 @@ function toEditInitial(m: CalendarMeeting): MeetingEditInitial {
 
 export function MeetingsCalendar({
   initialMeetings,
-  initialUpcoming,
-  initialPast,
   userId,
   orgId,
   openScheduler = false,
   onSchedulerOpened,
 }: {
   initialMeetings: CalendarMeeting[];
-  initialUpcoming: UpcomingMeeting[];
-  initialPast: PastMeeting[];
   userId: string;
   orgId: string;
   /** Open the scheduler on top of the calendar ("Schedule for later"). */
@@ -203,6 +208,9 @@ export function MeetingsCalendar({
   const [detail, setDetail] = useState<CalendarMeeting | null>(null);
   const [editing, setEditing] = useState<CalendarMeeting | null>(null);
   const [scheduleAt, setScheduleAt] = useState<string | null>(null);
+  // What a quick-create had filled in when "More options" took it to the full
+  // form, so nothing typed into the popover is typed twice.
+  const [scheduleExtra, setScheduleExtra] = useState<Partial<MeetingEditInitial> | null>(null);
   const [scheduleOpen, setScheduleOpen] = useState(false);
   const [blocks, setBlocks] = useState<CalendarBlock[]>([]);
   // Connected calendars and their events. Fetched per visible window rather
@@ -226,6 +234,7 @@ export function MeetingsCalendar({
   const [expandedDay, setExpandedDay] = useState<Date | null>(null);
   const [expandedItemKey, setExpandedItemKey] = useState<string | null>(null);
   const refreshTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const swipeFrom = useRef<{ x: number; y: number } | null>(null);
   const requestsTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [channelName] = useState(() => nextChannelName("calendar-meetings"));
 
@@ -456,10 +465,24 @@ export function MeetingsCalendar({
     return "Schedule";
   }, [view, anchor]);
 
-  function openScheduleAt(iso: string) {
+  function openScheduleAt(iso: string, extra: Partial<MeetingEditInitial> | null = null) {
     setScheduleAt(iso);
+    setScheduleExtra(extra);
     setScheduleOpen(true);
   }
+
+  // A phone opens on the agenda: seven columns of a week on a 360px screen are
+  // seven slivers, and a month grid is a field of dots. Only when nothing has
+  // chosen a view yet — the member's own choice on this visit stands.
+  const viewChosenRef = useRef(false);
+  useEffect(() => {
+    if (viewChosenRef.current) return;
+    if (window.matchMedia?.("(max-width: 639px)").matches) setView("agenda");
+  }, []);
+  const chooseView = useCallback((v: CalendarView) => {
+    viewChosenRef.current = true;
+    setView(v);
+  }, []);
 
   // "Schedule for later" arrives here wanting the scheduler, not a calendar to
   // find the button on.
@@ -720,8 +743,19 @@ export function MeetingsCalendar({
     [],
   );
 
+  // Double bookings, and meetings on time a connected calendar has as busy.
+  // Computed once for everything loaded rather than per view, so switching
+  // between week and agenda does not redo it.
+  const conflicts = useMemo(() => calendarConflicts(visible, busyExternal), [visible, busyExternal]);
+
+  // The day lists the time grid draws, held stable so the grid's own per-day
+  // work is not redone on every fifteen-second tick.
+  const weekDayList = useMemo(() => weekDays(anchor), [anchor]);
+  const oneDayList = useMemo(() => [anchor], [anchor]);
+
   const shared = {
     now,
+    conflicts,
     today,
     presence,
     statusOf,
@@ -744,7 +778,7 @@ export function MeetingsCalendar({
       <Toolbar
         title={title}
         view={view}
-        onView={setView}
+        onView={chooseView}
         onPrev={() => go(-1)}
         onNext={() => go(1)}
         onToday={() => setAnchor(startOfDay(new Date()))}
@@ -775,7 +809,23 @@ export function MeetingsCalendar({
 
       <div className={`grid gap-6 pb-6 ${railOpen ? "lg:grid-cols-[minmax(0,1fr)_340px]" : ""}`}>
         {/* Calendar surface */}
-        <div className="min-w-0 rounded-2xl border border-[var(--line)] bg-[var(--surface-1)] p-2 sm:p-3">
+        <div
+          className="min-w-0 rounded-2xl border border-[var(--line)] bg-[var(--surface-1)] p-2 sm:p-3"
+          // A sideways swipe moves a period on a touch screen, the way every
+          // phone calendar does; see swipeStep for what counts as one.
+          onTouchStart={(e) => {
+            const t = e.touches[0];
+            swipeFrom.current = t ? { x: t.clientX, y: t.clientY } : null;
+          }}
+          onTouchEnd={(e) => {
+            const from = swipeFrom.current;
+            swipeFrom.current = null;
+            const t = e.changedTouches[0];
+            if (!from || !t || view === "agenda") return;
+            const step = swipeStep(t.clientX - from.x, t.clientY - from.y);
+            if (step !== 0) go(step);
+          }}
+        >
           {view === "month" ? (
             <MonthView
               anchor={anchor}
@@ -796,8 +846,8 @@ export function MeetingsCalendar({
               onEditMeeting={(m) => (isBookingRequest(m) ? setDetail(m) : setEditing(m))}
             />
           ) : null}
-          {view === "week" ? <TimeGridView days={weekDays(anchor)} meetings={visible} {...shared} /> : null}
-          {view === "day" ? <TimeGridView days={[anchor]} meetings={visible} {...shared} /> : null}
+          {view === "week" ? <TimeGridView days={weekDayList} meetings={visible} {...shared} /> : null}
+          {view === "day" ? <TimeGridView days={oneDayList} meetings={visible} {...shared} /> : null}
           {view === "agenda" ? <AgendaView anchor={anchor} meetings={visible} {...shared} /> : null}
         </div>
 
@@ -815,13 +865,18 @@ export function MeetingsCalendar({
             syncNote={syncNote}
             unavailable={unavailable}
           />
-          <Legend meetings={meetings} />
-          <div className="rounded-2xl border border-[var(--line)] bg-[var(--surface-1)] p-4">
-            <UpcomingMeetingsList compact initialMeetings={initialUpcoming} reuseRecent />
-          </div>
-          <div className="rounded-2xl border border-[var(--line)] bg-[var(--surface-1)] p-4">
-            <PastMeetingsList compact initialMeetings={initialPast} userId={userId} />
-          </div>
+          {/* Today, in a line each, with Join on whatever is starting. The
+              upcoming and past lists that used to be here are the meetings
+              workspace's own tabs now; the legend is in the filter menu, beside
+              the types it explains. */}
+          <TodayRail
+            meetings={visible}
+            today={today}
+            now={now}
+            presence={presence}
+            conflicts={conflicts}
+            onSelect={(m) => setDetail(m)}
+          />
         </aside>
       </div>
 
@@ -842,6 +897,7 @@ export function MeetingsCalendar({
           presence={presence[detail.id]}
           status={statusOf(detail)}
           now={now}
+          conflict={conflictLabel(conflicts.get(detail.id))}
           onClose={() => setDetail(null)}
           onEdit={() => {
             const m = detail;
@@ -866,7 +922,7 @@ export function MeetingsCalendar({
       {scheduleOpen ? (
         <MeetingEditScreen
           mode="create"
-          initial={scheduleAt ? { scheduledAt: scheduleAt } : undefined}
+          initial={scheduleAt ? { ...scheduleExtra, scheduledAt: scheduleAt } : undefined}
           onClose={() => setScheduleOpen(false)}
           onSaved={() => {
             setScheduleOpen(false);
@@ -877,12 +933,18 @@ export function MeetingsCalendar({
       ) : null}
 
       {slotMenu ? (
-        <SlotMenu
+        <QuickCreate
+          iso={slotMenu.iso}
           x={slotMenu.x}
           y={slotMenu.y}
           onClose={() => setSlotMenu(null)}
-          onSchedule={() => {
-            openScheduleAt(slotMenu.iso);
+          onCreated={() => {
+            setSlotMenu(null);
+            void refresh();
+            router.refresh();
+          }}
+          onMoreOptions={(extra) => {
+            openScheduleAt(slotMenu.iso, extra);
             setSlotMenu(null);
           }}
           onBlock={() => {
@@ -952,23 +1014,38 @@ function ShortcutsOverlay({ onClose }: { onClose: () => void }) {
   );
 }
 
-// ── Slot menu ───────────────────────────────────────────────────────────────
-// Clicking empty calendar space is ambiguous — it could mean "meet then" or
-// "keep that free". The grid already resolves the click to an exact time, so
-// the menu just asks which of the two was meant.
-function SlotMenu({
+// ── Quick create ────────────────────────────────────────────────────────────
+// A click on empty calendar space used to ask "New meeting or Block time?" and
+// then open the full scheduling screen — a dozen fields — for what is usually
+// a title and a length. The grid already knows the time, so the popover asks
+// for the rest in place and saves; "More options" carries what was typed into
+// the full form, and blocking the time is still one press away.
+function QuickCreate({
+  iso,
   x,
   y,
   onClose,
-  onSchedule,
+  onCreated,
+  onMoreOptions,
   onBlock,
 }: {
+  iso: string;
   x: number;
   y: number;
   onClose: () => void;
-  onSchedule: () => void;
+  onCreated: () => void;
+  onMoreOptions: (extra: Partial<MeetingEditInitial>) => void;
   onBlock: () => void;
 }) {
+  const [title, setTitle] = useState("");
+  const [minutes, setMinutes] = useState<number>(30);
+  const [invitees, setInvitees] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  // Set when the server refused the time as taken; the next press saves anyway.
+  const [conflict, setConflict] = useState(false);
+  const panelRef = useRef<HTMLDivElement>(null);
+
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if (e.key === "Escape") onClose();
@@ -977,32 +1054,148 @@ function SlotMenu({
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
 
-  // Keep the menu on screen when the click lands near the right or bottom edge.
-  const left = Math.min(x, (typeof window !== "undefined" ? window.innerWidth : 1024) - 200);
-  const top = Math.min(y, (typeof window !== "undefined" ? window.innerHeight : 768) - 110);
+  const start = new Date(iso);
+  const when = `${start.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })} · ${shortTime(iso)}`;
+
+  const extra = (): Partial<MeetingEditInitial> => ({
+    title: title.trim() || undefined,
+    durationMinutes: minutes,
+    attendees: parseAttendeeInput(invitees),
+  });
+
+  async function save(allowConflict: boolean) {
+    if (!title.trim()) {
+      setError("Give the meeting a title.");
+      return;
+    }
+    setSaving(true);
+    setError(null);
+    try {
+      const body = {
+        ...quickCreatePayload({
+          title,
+          start,
+          minutes,
+          attendees: parseAttendeeInput(invitees),
+          timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
+        }),
+        allowConflict,
+      };
+      const res = await fetch("/api/meetings/schedule", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      if (res.status === 409) {
+        const json = (await res.json().catch(() => ({}))) as {
+          error?: string;
+          conflicts?: unknown[];
+          blockedBy?: unknown[];
+          busyElsewhere?: unknown[];
+        };
+        // Only the conflict kinds "anyway" can clear; another booking holding
+        // the slot is final, and saying "save anyway" over it would be a lie.
+        const overridable = Boolean(json.conflicts?.length || json.blockedBy?.length || json.busyElsewhere?.length);
+        setConflict(overridable);
+        setError(overridable ? "That time clashes with something else." : json.error ?? "That time is no longer available.");
+        return;
+      }
+      if (!res.ok) {
+        const json = (await res.json().catch(() => ({}))) as { error?: string };
+        setError(json.error ?? "Couldn't create the meeting.");
+        return;
+      }
+      onCreated();
+    } catch {
+      setError("Couldn't reach the server.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  // Beside the click on a wide screen, kept on screen near an edge; a sheet
+  // from the bottom on a phone, where "beside the click" is under the thumb.
+  const vw = typeof window !== "undefined" ? window.innerWidth : 1024;
+  const vh = typeof window !== "undefined" ? window.innerHeight : 768;
+  const narrow = vw < 640;
+  const style = narrow ? undefined : { left: Math.max(8, Math.min(x, vw - 328)), top: Math.max(8, Math.min(y, vh - 360)) };
 
   return (
-    <div className="fixed inset-0 z-50" onClick={onClose}>
+    <div className="fixed inset-0 z-50 bg-slate-900/20 sm:bg-transparent" onClick={onClose}>
       <div
-        role="menu"
+        ref={panelRef}
+        role="dialog"
+        aria-label="New meeting"
         onClick={(e) => e.stopPropagation()}
-        className="absolute w-48 overflow-hidden rounded-xl border border-[var(--line)] bg-[var(--surface-1)] shadow-xl"
-        style={{ left, top }}
+        className={`${narrow ? "fixed inset-x-0 bottom-0 rounded-t-2xl pb-[max(1rem,env(safe-area-inset-bottom))]" : "absolute w-80 rounded-xl"} border border-[var(--line)] bg-[var(--surface-1)] p-4 shadow-2xl`}
+        style={style}
       >
-        <button
-          type="button"
-          onClick={onSchedule}
-          className="block w-full px-3 py-2.5 text-left text-sm text-[var(--fg-primary)] hover:bg-[var(--surface-0)]"
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            void save(conflict);
+          }}
+          className="flex flex-col gap-3"
         >
-          New meeting
-        </button>
-        <button
-          type="button"
-          onClick={onBlock}
-          className="block w-full border-t border-[var(--line)] px-3 py-2.5 text-left text-sm text-[var(--fg-primary)] hover:bg-[var(--surface-0)]"
-        >
-          Block time
-        </button>
+          <p className="text-xs text-[var(--fg-muted)]">{when}</p>
+          <input
+            autoFocus
+            value={title}
+            onChange={(e) => { setTitle(e.target.value); setError(null); }}
+            placeholder="Meeting title"
+            aria-label="Meeting title"
+            className="rounded-lg border border-[var(--line)] bg-[var(--surface-0)] px-3 py-2 text-base text-[var(--fg-primary)] placeholder:text-[var(--fg-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--gold-400)] sm:text-sm"
+          />
+          <div role="radiogroup" aria-label="Length" className="flex gap-1.5">
+            {QUICK_DURATIONS.map((d) => (
+              <button
+                key={d}
+                type="button"
+                role="radio"
+                aria-checked={minutes === d}
+                onClick={() => { setMinutes(d); setConflict(false); }}
+                className={`min-h-9 flex-1 rounded-lg border text-xs font-medium transition-colors ${
+                  minutes === d
+                    ? "border-gold-400/60 bg-gold-400/10 text-[var(--gold-400)]"
+                    : "border-[var(--line)] text-[var(--fg-secondary)] hover:text-[var(--fg-primary)]"
+                }`}
+              >
+                {d} min
+              </button>
+            ))}
+          </div>
+          <input
+            value={invitees}
+            onChange={(e) => setInvitees(e.target.value)}
+            placeholder="Invite by email (optional)"
+            aria-label="Invitees"
+            className="rounded-lg border border-[var(--line)] bg-[var(--surface-0)] px-3 py-2 text-base text-[var(--fg-primary)] placeholder:text-[var(--fg-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--gold-400)] sm:text-sm"
+          />
+          {error ? <p role="alert" className="text-xs text-[var(--status-danger)]">{error}</p> : null}
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="submit"
+              disabled={saving}
+              className="min-h-9 rounded-lg bg-[var(--gold-400)] px-3 text-xs font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-60"
+            >
+              {saving ? "Saving…" : conflict ? "Create anyway" : "Create"}
+            </button>
+            <button
+              type="button"
+              onClick={() => onMoreOptions(extra())}
+              className="min-h-9 rounded-lg border border-[var(--line)] px-3 text-xs text-[var(--fg-secondary)] hover:text-[var(--fg-primary)]"
+            >
+              More options
+            </button>
+            <button
+              type="button"
+              onClick={onBlock}
+              className="ml-auto min-h-9 px-1 text-xs text-[var(--fg-muted)] underline-offset-2 hover:text-[var(--fg-primary)] hover:underline"
+            >
+              Block time instead
+            </button>
+          </div>
+        </form>
       </div>
     </div>
   );
@@ -1170,7 +1363,7 @@ function Toolbar({
 
         {/* Date navigation */}
         <div className="flex items-center gap-1">
-          <button onClick={onToday} className="rounded-lg border border-[var(--line)] px-3 py-1.5 text-xs font-medium text-[var(--fg-secondary)] hover:bg-[var(--surface-1)] hover:text-[var(--fg-primary)]">
+          <button onClick={onToday} className="min-h-9 rounded-lg border border-[var(--line)] px-3 text-xs font-medium text-[var(--fg-secondary)] hover:bg-[var(--surface-1)] hover:text-[var(--fg-primary)] sm:min-h-0 sm:py-1.5">
             Today
           </button>
           <IconBtn label="Previous" onClick={onPrev}><ChevronLeft /></IconBtn>
@@ -1186,7 +1379,7 @@ function Toolbar({
                 key={v}
                 onClick={() => onView(v)}
                 aria-pressed={view === v}
-                className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
+                className={`min-h-9 rounded-md px-2.5 text-xs font-medium transition-colors sm:min-h-0 sm:py-1 ${
                   view === v ? "bg-[var(--gold-400)] text-white" : "text-[var(--fg-secondary)] hover:text-[var(--fg-primary)]"
                 }`}
               >
@@ -1221,7 +1414,7 @@ function Toolbar({
             {filterOpen ? <FilterMenu filter={filter} onFilter={onFilter} /> : null}
           </div>
 
-          {/* Mini month, connected calendars, upcoming and past. */}
+          {/* Mini month, connected calendars and today. */}
           <button
             type="button"
             onClick={onToggleRail}
@@ -1232,7 +1425,7 @@ function Toolbar({
                 : "border-[var(--line)] text-[var(--fg-secondary)] hover:text-[var(--fg-primary)]"
             }`}
           >
-            {railOpen ? "Hide side panel" : "Calendars & lists"}
+            {railOpen ? "Hide side panel" : "Calendars & today"}
           </button>
         </div>
       </div>
@@ -1259,7 +1452,9 @@ function FilterMenu({ filter, onFilter }: { filter: CalendarFilter; onFilter: (f
         <input type="checkbox" checked={filter.mineOnly} onChange={(e) => onFilter({ ...filter, mineOnly: e.target.checked })} />
         Only meetings I host
       </label>
-      <p className="mb-1.5 font-mono text-[11px] uppercase tracking-wider text-[var(--fg-muted)]">Type</p>
+      {/* The type chips are also the calendar's colour key: the side panel's
+          separate legend repeated this list in another place. */}
+      <p className="mb-1.5 font-mono text-[11px] uppercase tracking-wider text-[var(--fg-muted)]">Type · colour key</p>
       <div className="mb-3 flex flex-wrap gap-1.5">
         {CALENDAR_TYPE_ORDER.map((t) => {
           const meta = typeMeta(t);
@@ -1299,6 +1494,8 @@ function FilterMenu({ filter, onFilter }: { filter: CalendarFilter; onFilter: (f
 interface SharedViewProps {
   meetings: CalendarMeeting[];
   now: number;
+  /** Double bookings and meetings on busy time, by meeting id. */
+  conflicts: Map<string, Conflict>;
   today: Date;
   presence: Record<string, RoomPresence>;
   statusOf: (m: CalendarMeeting) => MeetingDisplayStatus;
@@ -1972,7 +2169,7 @@ function MonthChip({ m, live, onClick }: { m: CalendarMeeting; live: boolean; on
 }
 
 // ── Week / Day time grid ────────────────────────────────────────────────────
-function TimeGridView({ days, meetings, blocks, externalEvents, busyEvents, layersById, now, today, presence, statusOf, onSelectEvent, onSelectBlock, onSelectSlot, onMoveMeeting }: SharedViewProps & { days: Date[] }) {
+function TimeGridView({ days, meetings, blocks, externalEvents, busyEvents, layersById, now, today, presence, conflicts, onSelectEvent, onSelectBlock, onSelectSlot, onMoveMeeting }: SharedViewProps & { days: Date[] }) {
   const busyIds = useMemo(() => new Set(busyEvents.map((e) => e.id)), [busyEvents]);
   const scrollRef = useRef<HTMLDivElement>(null);
   const columnsRef = useRef<HTMLDivElement>(null);
@@ -1980,8 +2177,23 @@ function TimeGridView({ days, meetings, blocks, externalEvents, busyEvents, laye
     if (scrollRef.current) scrollRef.current.scrollTop = DAY_SCROLL_HOUR * HOUR_PX;
   }, [days.length]);
 
-  const hours = Array.from({ length: 24 }, (_, h) => h);
+  const hours = HOURS;
   const nowMin = new Date(now).getHours() * 60 + new Date(now).getMinutes();
+  // Whether today is one of the columns: the now line is drawn across the
+  // whole week then, faintly, so the hour reads across every day and not only
+  // in today's column.
+  const showsToday = days.some((d) => isSameDay(d, today));
+
+  // Each column's meetings and their lanes, worked out when the meetings or the
+  // days change — not on every fifteen-second tick of the clock, which is when
+  // this view used to redo all of it for every column.
+  const columns = useMemo(
+    () => days.map((d) => {
+      const evs = eventsForDay(meetings, d);
+      return { evs, layout: layoutDayEvents(evs) };
+    }),
+    [days, meetings],
+  );
 
   // ── Drag to move / resize ─────────────────────────────────────────────────
   //
@@ -2123,7 +2335,15 @@ function TimeGridView({ days, meetings, blocks, externalEvents, busyEvents, laye
       {/* Body */}
       <div className="flex">
         {/* Hour gutter */}
-        <div className="w-14 shrink-0">
+        <div className="relative w-14 shrink-0">
+          {showsToday ? (
+            <span
+              className="pointer-events-none absolute right-1 z-10 -translate-y-1/2 rounded bg-[var(--status-danger)] px-1 text-[10px] font-semibold tabular-nums text-white"
+              style={{ top: (nowMin / 60) * HOUR_PX }}
+            >
+              {shortTime(new Date(now).toISOString())}
+            </span>
+          ) : null}
           {hours.map((h) => (
             <div key={h} className="relative border-b border-transparent" style={{ height: HOUR_PX }}>
               <span className="absolute -top-2 right-1.5 text-[11px] text-[var(--fg-muted)]">
@@ -2135,8 +2355,7 @@ function TimeGridView({ days, meetings, blocks, externalEvents, busyEvents, laye
 
         <div ref={columnsRef} className="flex flex-1">
         {days.map((d, dayIndex) => {
-          const evs = eventsForDay(meetings, d);
-          const layout = layoutDayEvents(evs);
+          const { evs, layout } = columns[dayIndex];
           // A meeting only appears in the column of the day it is scheduled on,
           // so dragging it to another day hid it in the old column and never
           // drew it in the new one — it simply vanished until dropped. Inject it
@@ -2271,11 +2490,17 @@ function TimeGridView({ days, meetings, blocks, externalEvents, busyEvents, laye
                 );
               })}
 
-              {/* Now indicator */}
-              {isToday ? (
-                <div className="pointer-events-none absolute left-0 right-0 z-10 flex items-center" style={{ top: (nowMin / 60) * HOUR_PX }}>
-                  <span className="h-2 w-2 -translate-x-1 rounded-full bg-[var(--gold-400)]" />
-                  <span className="h-px flex-1 bg-[var(--gold-400)]" />
+              {/* Now. Bold in today's column, faint across the others so the
+                  hour lines up across the week. Red, not the brand colour: the
+                  gold was the same as the selected day and every accent, and
+                  the line people look for first was the one they could not find. */}
+              {showsToday ? (
+                <div
+                  className={`pointer-events-none absolute left-0 right-0 z-10 flex items-center ${isToday ? "" : "opacity-30"}`}
+                  style={{ top: (nowMin / 60) * HOUR_PX }}
+                >
+                  {isToday ? <span className="h-2.5 w-2.5 -translate-x-1 rounded-full bg-[var(--status-danger)]" /> : null}
+                  <span className={`flex-1 bg-[var(--status-danger)] ${isToday ? "h-0.5" : "h-px"}`} />
                 </div>
               ) : null}
 
@@ -2299,15 +2524,18 @@ function TimeGridView({ days, meetings, blocks, externalEvents, busyEvents, laye
                 // until it is dropped.
                 const widthPct = dragging ? 100 : 100 / lanes;
                 const laneOffset = dragging ? 0 : lane * widthPct;
-                const live = (presence[m.id]?.count ?? 0) > 0;
+                const inRoom = presence[m.id]?.count ?? 0;
+                const live = inRoom > 0;
                 const ts = meetingTimeState(m.scheduled_at, m.duration_minutes, now);
                 const draggable = Boolean(onMoveMeeting) && canDragMeeting(m, now);
+                const clash = dragging ? null : conflictLabel(conflicts.get(m.id));
+                const joinable = !dragging && joinableNow(m, now, inRoom);
                 // A request's length is the meeting type's; it moves, it does
                 // not stretch. Drawn dashed: it is a hold, not yet a meeting.
                 const request = isBookingRequest(m);
                 return (
+                  <Fragment key={m.id}>
                   <button
-                    key={m.id}
                     onPointerDown={(e) => { if (draggable) beginDrag(e, m, "move", dayIndex); }}
                     onClick={(e) => {
                       e.stopPropagation();
@@ -2315,9 +2543,14 @@ function TimeGridView({ days, meetings, blocks, externalEvents, busyEvents, laye
                       if (swallowClick.current) { swallowClick.current = false; return; }
                       onSelectEvent(m);
                     }}
+                    aria-label={`${m.title}${m.scheduled_at ? `, ${shortTime(m.scheduled_at)}` : ""}${live ? ", live now" : ""}${clash ? `. ${clash}` : ""}`}
                     className={`absolute overflow-hidden rounded-md border-l-2 px-1.5 py-1 text-left shadow-sm ${
                       draggable ? "cursor-grab active:cursor-grabbing" : ""
-                    } ${dragging ? "z-20 opacity-90 shadow-lg ring-2 ring-[var(--gold-400)]" : ""}`}
+                    } ${dragging ? "z-20 opacity-90 shadow-lg ring-2 ring-[var(--gold-400)]" : ""} ${
+                      // A clash outlines the block in red; a live room rings it
+                      // green and pulses, so both read at a glance across a week.
+                      !dragging && clash ? "ring-1 ring-[var(--status-danger)]" : ""
+                    } ${!dragging && live ? "ring-2 ring-[var(--status-success)] animate-[pulse_2.4s_ease-in-out_infinite]" : ""}`}
                     style={{
                       top,
                       height,
@@ -2330,12 +2563,13 @@ function TimeGridView({ days, meetings, blocks, externalEvents, busyEvents, laye
                         : `color-mix(in srgb, ${meta.accent} 16%, var(--surface-1))`,
                       touchAction: draggable ? "none" : undefined,
                     }}
-                    title={m.title}
+                    title={clash ?? m.title}
                   >
                     <div className="flex items-center gap-1">
                       {live ? <span className="h-1.5 w-1.5 shrink-0 animate-pulse rounded-full bg-[var(--status-success)]" /> : null}
                       <span className="truncate text-[11px] font-medium text-[var(--fg-primary)]">{m.title}</span>
                       <RepeatMark m={m} />
+                      {clash ? <ConflictMark label={clash} /> : null}
                     </div>
                     <div className="truncate text-[11px] text-[var(--fg-muted)]">
                       {inThisColumn
@@ -2366,6 +2600,19 @@ function TimeGridView({ days, meetings, blocks, externalEvents, busyEvents, laye
                       </>
                     ) : null}
                   </button>
+                  {/* Join, at the block's top-right corner from shortly before
+                      the start. A sibling rather than inside the block: a link
+                      inside a button is not valid, and a press on it must not
+                      also open the event or start a drag. */}
+                  {joinable && height >= 30 ? (
+                    <div
+                      className="absolute z-[11]"
+                      style={{ top: top + 3, left: `calc(${laneOffset + widthPct}% - 6px)`, transform: "translateX(-100%)" }}
+                    >
+                      <JoinButton roomCode={m.room_code} live={live} compact />
+                    </div>
+                  ) : null}
+                  </Fragment>
                 );
               })}
             </div>
@@ -2378,13 +2625,16 @@ function TimeGridView({ days, meetings, blocks, externalEvents, busyEvents, laye
 }
 
 // ── Agenda / Schedule view ──────────────────────────────────────────────────
-function AgendaView({ anchor, meetings, now, today, presence, statusOf, onSelectEvent }: SharedViewProps & { anchor: Date }) {
+function AgendaView({ anchor, meetings, now, today, presence, statusOf, conflicts, onSelectEvent }: SharedViewProps & { anchor: Date }) {
   // Show the 21 days starting at the later of the anchor or today, grouped by day.
-  const start = startOfDay(anchor).getTime() < today.getTime() ? today : startOfDay(anchor);
-  const days = Array.from({ length: 21 }, (_, i) => addDays(start, i));
-  const withEvents = days
-    .map((d) => ({ d, evs: eventsForDay(meetings, d) }))
-    .filter((g) => g.evs.length > 0);
+  const startMs = (startOfDay(anchor).getTime() < today.getTime() ? today : startOfDay(anchor)).getTime();
+  // Regrouped when the meetings or the starting day change, not every clock tick.
+  const withEvents = useMemo(() => {
+    const start = new Date(startMs);
+    return Array.from({ length: 21 }, (_, i) => addDays(start, i))
+      .map((d) => ({ d, evs: eventsForDay(meetings, d) }))
+      .filter((g) => g.evs.length > 0);
+  }, [startMs, meetings]);
 
   if (withEvents.length === 0) {
     return (
@@ -2409,16 +2659,21 @@ function AgendaView({ anchor, meetings, now, today, presence, statusOf, onSelect
           <div className="flex min-w-0 flex-1 flex-col gap-1.5">
             {evs.map((m) => {
               const meta = typeMeta(m.meeting_type);
-              const live = (presence[m.id]?.count ?? 0) > 0;
+              const inRoom = presence[m.id]?.count ?? 0;
+              const live = inRoom > 0;
               const ts = meetingTimeState(m.scheduled_at, m.duration_minutes, now);
+              const clash = conflictLabel(conflicts.get(m.id));
+              const joinable = joinableNow(m, now, inRoom);
               return (
+                <div key={m.id} className="flex items-center gap-2">
                 <button
-                  key={m.id}
                   onClick={() => onSelectEvent(m)}
-                  className="flex items-center gap-3 rounded-lg border border-[var(--line)] bg-[var(--surface-0)] px-3 py-2 text-left hover:border-fg-muted/40"
+                  className={`flex min-h-12 min-w-0 flex-1 items-center gap-3 rounded-lg border bg-[var(--surface-0)] px-3 py-2 text-left hover:border-fg-muted/40 ${
+                    clash ? "border-status-danger/50" : live ? "border-status-success/50" : "border-[var(--line)]"
+                  }`}
                 >
                   <span className="h-8 w-1 shrink-0 rounded-full" style={{ backgroundColor: meta.accent }} />
-                  <div className="w-20 shrink-0 text-xs tabular-nums text-[var(--fg-secondary)]">{m.scheduled_at ? shortTime(m.scheduled_at) : ""}</div>
+                  <div className="w-16 shrink-0 text-xs tabular-nums text-[var(--fg-secondary)] sm:w-20">{m.scheduled_at ? shortTime(m.scheduled_at) : ""}</div>
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-1.5">
                       {live ? <span className="h-1.5 w-1.5 shrink-0 animate-pulse rounded-full bg-[var(--status-success)]" /> : null}
@@ -2431,8 +2686,11 @@ function AgendaView({ anchor, meetings, now, today, presence, statusOf, onSelect
                       {ts && (ts.phase === "imminent" || ts.phase === "in_progress") ? ` · ${ts.phase === "in_progress" ? "In progress" : ts.label}` : ""}
                     </div>
                   </div>
-                  <span className="shrink-0 font-mono text-[11px] uppercase tracking-wider text-[var(--fg-muted)]">{statusOf(m)}</span>
+                  {clash ? <ConflictMark label={clash} /> : null}
+                  <span className="hidden shrink-0 font-mono text-[11px] uppercase tracking-wider text-[var(--fg-muted)] sm:inline">{statusOf(m)}</span>
                 </button>
+                {joinable ? <JoinButton roomCode={m.room_code} live={live} /> : null}
+                </div>
               );
             })}
           </div>
@@ -2528,28 +2786,93 @@ function MiniMonth({
   );
 }
 
-function Legend({ meetings }: { meetings: CalendarMeeting[] }) {
-  const present = useMemo(() => {
-    const seen = new Set<string>();
-    for (const m of meetings) seen.add(m.meeting_type ?? "other");
-    return CALENDAR_TYPE_ORDER.filter((t) => seen.has(t));
-  }, [meetings]);
-  if (present.length === 0) return null;
+/**
+ * Today, in the side rail: one line per meeting, Join on whatever is starting
+ * or running, and a mark on anything double-booked. The question the rail most
+ * often answers is "what's next today", and the mini month above it does not.
+ */
+function TodayRail({
+  meetings,
+  today,
+  now,
+  presence,
+  conflicts,
+  onSelect,
+}: {
+  meetings: CalendarMeeting[];
+  today: Date;
+  now: number;
+  presence: Record<string, RoomPresence>;
+  conflicts: Map<string, Conflict>;
+  onSelect: (m: CalendarMeeting) => void;
+}) {
+  const todays = eventsForDay(meetings, today);
   return (
     <div className="rounded-2xl border border-[var(--line)] bg-[var(--surface-1)] p-3">
-      <p className="mb-2 font-mono text-[11px] font-semibold uppercase tracking-wider text-[var(--fg-muted)]">Meeting types</p>
-      <div className="flex flex-wrap gap-x-3 gap-y-1.5">
-        {present.map((t) => {
-          const meta = typeMeta(t);
-          return (
-            <span key={t} className="inline-flex items-center gap-1.5 text-[11px] text-[var(--fg-secondary)]">
-              <span className={`h-2 w-2 rounded-full ${meta.dot}`} />
-              {meta.label}
-            </span>
-          );
-        })}
-      </div>
+      <p className="mb-2 font-mono text-[11px] font-semibold uppercase tracking-wider text-[var(--fg-muted)]">
+        Today{todays.length ? ` · ${todays.length}` : ""}
+      </p>
+      {todays.length === 0 ? (
+        <p className="text-xs text-[var(--fg-muted)]">Nothing scheduled today.</p>
+      ) : (
+        <ul className="flex flex-col gap-1">
+          {todays.map((m) => {
+            const inRoom = presence[m.id]?.count ?? 0;
+            const joinable = joinableNow(m, now, inRoom);
+            const clash = conflictLabel(conflicts.get(m.id));
+            const ended = m.status === "ended";
+            return (
+              <li key={m.id} className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => onSelect(m)}
+                  className={`flex min-h-9 min-w-0 flex-1 items-center gap-2 rounded-lg px-1.5 text-left hover:bg-[var(--surface-0)] ${ended ? "opacity-60" : ""}`}
+                  title={clash ?? m.title}
+                >
+                  <span className="w-14 shrink-0 text-[11px] tabular-nums text-[var(--fg-muted)]">
+                    {m.scheduled_at ? shortTime(m.scheduled_at) : ""}
+                  </span>
+                  {inRoom > 0 ? <span className="h-1.5 w-1.5 shrink-0 animate-pulse rounded-full bg-[var(--status-success)]" /> : null}
+                  <span className="truncate text-xs text-[var(--fg-primary)]">{m.title}</span>
+                  {clash ? <ConflictMark label={clash} /> : null}
+                </button>
+                {joinable ? <JoinButton roomCode={m.room_code} live={inRoom > 0} /> : null}
+              </li>
+            );
+          })}
+        </ul>
+      )}
     </div>
+  );
+}
+
+/** "Join" on an event, from shortly before it starts until it ends. */
+function JoinButton({ roomCode, live, compact = false }: { roomCode: string; live: boolean; compact?: boolean }) {
+  return (
+    <Link
+      href={`/meetings/${roomCode}`}
+      onClick={(e) => e.stopPropagation()}
+      onPointerDown={(e) => e.stopPropagation()}
+      className={`inline-flex shrink-0 items-center justify-center rounded-md font-semibold text-white transition-opacity hover:opacity-90 ${
+        live ? "bg-[var(--status-success)]" : "bg-[var(--gold-400)]"
+      } ${compact ? "h-5 px-1.5 text-[10px]" : "min-h-8 px-2.5 text-[11px]"}`}
+    >
+      Join
+    </Link>
+  );
+}
+
+/** The mark on a double-booked meeting, with the clash in words for anyone who asks. */
+function ConflictMark({ label }: { label: string }) {
+  return (
+    <span
+      role="img"
+      aria-label={label}
+      title={label}
+      className="inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-status-danger/15 text-[10px] font-bold text-[var(--status-danger)]"
+    >
+      !
+    </span>
   );
 }
 
@@ -2676,6 +2999,7 @@ function EventDetail({
   presence,
   status,
   now,
+  conflict = null,
   onClose,
   onEdit,
 }: {
@@ -2683,6 +3007,8 @@ function EventDetail({
   presence?: RoomPresence;
   status: MeetingDisplayStatus;
   now: number;
+  /** What it clashes with, in words, when it does. */
+  conflict?: string | null;
   onClose: () => void;
   onEdit: () => void;
 }) {
@@ -2697,16 +3023,29 @@ function EventDetail({
   const meta = typeMeta(meeting.meeting_type);
 
   return (
-    <div onClick={onClose} className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4 backdrop-blur-sm">
-      <div onClick={(e) => e.stopPropagation()} className="w-full max-w-md overflow-hidden rounded-2xl border border-[var(--line)] bg-[var(--surface-1)] shadow-2xl">
+    // A sheet from the bottom on a phone, where a centred card sits out of the
+    // thumb's reach; a card in the middle everywhere else.
+    <div onClick={onClose} className="fixed inset-0 z-50 flex items-end justify-center bg-slate-900/40 backdrop-blur-sm sm:items-center sm:p-4">
+      <div
+        role="dialog"
+        aria-label={meeting.title}
+        onClick={(e) => e.stopPropagation()}
+        className="max-h-[85vh] w-full overflow-y-auto rounded-t-2xl border border-[var(--line)] bg-[var(--surface-1)] pb-[env(safe-area-inset-bottom)] shadow-2xl sm:max-w-md sm:rounded-2xl sm:pb-0"
+      >
         <div className="flex items-start gap-3 border-b border-[var(--line)] p-4" style={{ borderLeft: `3px solid ${meta.accent}` }}>
           <div className="min-w-0 flex-1">
             <MeetingDetailHeading meeting={meeting} status={status} presence={presence} now={now} />
           </div>
-          <button onClick={onClose} aria-label="Close" className="rounded-full p-1.5 text-[var(--fg-muted)] hover:bg-[var(--surface-0)] hover:text-[var(--fg-primary)]">
+          <button onClick={onClose} aria-label="Close" className="flex h-9 w-9 items-center justify-center rounded-full text-[var(--fg-muted)] hover:bg-[var(--surface-0)] hover:text-[var(--fg-primary)]">
             <CloseIcon />
           </button>
         </div>
+        {conflict ? (
+          <p className="flex items-start gap-2 border-b border-[var(--line)] bg-status-danger/10 px-4 py-2 text-xs text-[var(--status-danger)]">
+            <span aria-hidden="true">!</span>
+            <span>{conflict}</span>
+          </p>
+        ) : null}
         <MeetingDetailBody meeting={meeting} presence={presence} now={now} onEdit={onEdit} onAfterEarn={onClose} />
       </div>
     </div>
@@ -2845,7 +3184,7 @@ function IconBtn({ children, label, onClick, small }: { children: React.ReactNod
     <button
       onClick={onClick}
       aria-label={label}
-      className={`flex items-center justify-center rounded-lg text-[var(--fg-secondary)] hover:bg-[var(--surface-1)] hover:text-[var(--fg-primary)] ${small ? "h-6 w-6" : "h-8 w-8 border border-[var(--line)]"}`}
+      className={`flex items-center justify-center rounded-lg text-[var(--fg-secondary)] hover:bg-[var(--surface-1)] hover:text-[var(--fg-primary)] ${small ? "h-6 w-6" : "h-9 w-9 border border-[var(--line)] sm:h-8 sm:w-8"}`}
     >
       {children}
     </button>

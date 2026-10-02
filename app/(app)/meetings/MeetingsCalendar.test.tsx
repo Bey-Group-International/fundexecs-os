@@ -22,8 +22,6 @@
 import { render, screen, act } from "@testing-library/react";
 import { fireEvent } from "@testing-library/dom";
 import type { CalendarMeeting } from "@/lib/meetings/calendar";
-import type { UpcomingMeeting } from "./UpcomingMeetingsList";
-import type { PastMeeting } from "./PastMeetingsList";
 
 jest.mock("next/navigation", () => ({
   useRouter: () => ({ push: jest.fn(), replace: jest.fn() }),
@@ -138,8 +136,6 @@ async function show(
   const out = render(
     <MeetingsCalendar
       initialMeetings={meetings}
-      initialUpcoming={[] as UpcomingMeeting[]}
-      initialPast={[] as PastMeeting[]}
       userId="u1"
       orgId="o1"
       {...extra}
@@ -289,7 +285,7 @@ describe("the side panel", () => {
 
   it("is folded away so the grid gets the whole screen, and comes back on request", async () => {
     await show([]);
-    const toggle = screen.getByRole("button", { name: "Calendars & lists" });
+    const toggle = screen.getByRole("button", { name: "Calendars & today" });
     expect(document.querySelector("aside")).toHaveAttribute("hidden");
 
     fireEvent.click(toggle);
@@ -353,7 +349,7 @@ describe("time a connected calendar has taken", () => {
     expect(blocked[0].getAttribute("title")).toContain("Client call");
 
     fireEvent.click(blocked[0]);
-    expect(screen.queryByRole("menu")).toBeNull();
+    expect(screen.queryByRole("dialog", { name: "New meeting" })).toBeNull();
   });
 
   it("stops a click on the column from landing in it", async () => {
@@ -361,11 +357,11 @@ describe("time a connected calendar has taken", () => {
     const column = document.querySelector('[data-busy="true"]')!.parentElement!;
     // 10:30, inside the busy hour.
     fireEvent.click(column, { clientY: 10.5 * 46 });
-    expect(screen.queryByRole("menu")).toBeNull();
+    expect(screen.queryByRole("dialog", { name: "New meeting" })).toBeNull();
 
     // 8:00 is free.
     fireEvent.click(column, { clientY: 8 * 46 });
-    expect(screen.getByRole("menu")).toBeInTheDocument();
+    expect(screen.getByRole("dialog", { name: "New meeting" })).toBeInTheDocument();
   });
 
   it("stays blocked when that calendar is hidden, without naming the event", async () => {
@@ -519,5 +515,160 @@ describe("a pending booking request", () => {
     fireEvent.click(screen.getByRole("button", { name: /^approve$/i }));
     await act(async () => { await Promise.resolve(); await Promise.resolve(); });
     expect(patches[0]).toEqual({ url: "/api/meetings/scheduling/bookings/bk-1", body: { action: "approve" } });
+  });
+});
+
+// ── Conflicts, Join and quick create ────────────────────────────────────────
+
+async function inWeek(meetings: CalendarMeeting[]) {
+  await show(meetings);
+  fireEvent.click(screen.getByRole("button", { name: "Week" }));
+  await act(async () => { await Promise.resolve(); });
+}
+
+/** The day columns of the week grid, Sunday first. */
+const dayColumns = () =>
+  Array.from(document.querySelectorAll<HTMLElement>("div")).filter((el) => el.style.height === `${24 * 46}px`);
+
+describe("double bookings", () => {
+  it("are marked on both meetings, saying what they clash with", async () => {
+    await inWeek([
+      meeting({ id: "a", title: "LP call", scheduled_at: new Date(2026, 8, 16, 14, 0).toISOString() }),
+      meeting({ id: "b", title: "Board prep", scheduled_at: new Date(2026, 8, 16, 14, 30).toISOString() }),
+    ]);
+    expect(screen.getAllByRole("img", { name: "Overlaps Board prep" }).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole("img", { name: "Overlaps LP call" }).length).toBeGreaterThan(0);
+  });
+
+  it("leave back-to-back meetings alone", async () => {
+    await inWeek([
+      meeting({ id: "a", scheduled_at: new Date(2026, 8, 16, 14, 0).toISOString() }),
+      meeting({ id: "b", scheduled_at: new Date(2026, 8, 16, 15, 0).toISOString() }),
+    ]);
+    expect(screen.queryAllByRole("img", { name: /Overlaps/ })).toHaveLength(0);
+  });
+});
+
+describe("joining from the calendar", () => {
+  it("puts Join on a meeting about to start, linking to its room", async () => {
+    await inWeek([meeting({ id: "soon", scheduled_at: new Date(2026, 8, 16, 9, 5).toISOString() })]);
+    const join = screen.getAllByRole("link", { name: "Join" });
+    expect(join[0]).toHaveAttribute("href", "/meetings/room-soon");
+  });
+
+  it("does not offer it on a meeting hours away", async () => {
+    await inWeek([meeting({ id: "later", scheduled_at: new Date(2026, 8, 16, 15, 0).toISOString() })]);
+    expect(screen.queryByRole("link", { name: "Join" })).toBeNull();
+  });
+
+  it("lists today in the side panel, with Join where it is due", async () => {
+    // Folded, whatever an earlier test left remembered.
+    window.localStorage.clear();
+    await show([
+      meeting({ id: "soon", title: "Standup", scheduled_at: new Date(2026, 8, 16, 9, 5).toISOString() }),
+      meeting({ id: "tmrw", title: "Tomorrow's call", scheduled_at: new Date(2026, 8, 17, 9, 0).toISOString() }),
+    ]);
+    fireEvent.click(screen.getByRole("button", { name: "Calendars & today" }));
+    const rail = document.querySelector("aside")!;
+    expect(rail.textContent).toContain("Today · 1");
+    expect(rail.textContent).toContain("Standup");
+    expect(rail.textContent).not.toContain("Tomorrow's call");
+    expect(rail.querySelector('a[href="/meetings/room-soon"]')).not.toBeNull();
+  });
+});
+
+describe("quick create", () => {
+  let calls: Array<{ url: string; init?: RequestInit }>;
+  let answer: { status: number; body: unknown };
+
+  beforeEach(() => {
+    calls = [];
+    answer = { status: 200, body: { id: "new", roomCode: "new-room" } };
+    global.fetch = (async (url: string, init?: RequestInit) => {
+      calls.push({ url, init });
+      if (url === "/api/meetings/schedule") {
+        return { ok: answer.status < 300, status: answer.status, json: async () => answer.body };
+      }
+      return { ok: true, status: 200, json: async () => ({ blocks: [], calendars: [], events: [] }) };
+    }) as unknown as typeof fetch;
+  });
+
+  async function openAt(hour: number) {
+    await inWeek([]);
+    fireEvent.click(dayColumns()[3], { clientY: hour * 46 });
+    return screen.getByRole("dialog", { name: "New meeting" });
+  }
+
+  it("creates a meeting from a title and a length, at the slot that was clicked", async () => {
+    await openAt(8);
+    fireEvent.change(screen.getByLabelText("Meeting title"), { target: { value: "Intro with Rae" } });
+    fireEvent.click(screen.getByRole("radio", { name: "45 min" }));
+    fireEvent.change(screen.getByLabelText("Invitees"), { target: { value: "rae@acme.com" } });
+    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Create" })); });
+
+    const post = calls.find((c) => c.url === "/api/meetings/schedule")!;
+    const body = JSON.parse(String(post.init!.body));
+    expect(body).toMatchObject({
+      title: "Intro with Rae",
+      date: "2026-09-16",
+      startTime: "08:00",
+      endTime: "08:45",
+      meetingType: "internal_strategy",
+      allowConflict: false,
+    });
+    expect(body.attendees[0].email).toBe("rae@acme.com");
+    expect(screen.queryByRole("dialog", { name: "New meeting" })).toBeNull();
+  });
+
+  it("asks for a title rather than sending an empty meeting", async () => {
+    await openAt(8);
+    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Create" })); });
+    expect(screen.getByRole("alert")).toHaveTextContent(/title/i);
+    expect(calls.some((c) => c.url === "/api/meetings/schedule")).toBe(false);
+  });
+
+  it("offers to create anyway when the time clashes, and then does", async () => {
+    answer = { status: 409, body: { conflicts: [{ id: "x", title: "LP call", scheduledAt: "" }] } };
+    await openAt(8);
+    fireEvent.change(screen.getByLabelText("Meeting title"), { target: { value: "Intro" } });
+    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Create" })); });
+    expect(screen.getByRole("alert")).toHaveTextContent(/clashes/);
+
+    answer = { status: 200, body: { id: "new" } };
+    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Create anyway" })); });
+    const posts = calls.filter((c) => c.url === "/api/meetings/schedule");
+    expect(JSON.parse(String(posts[1].init!.body)).allowConflict).toBe(true);
+  });
+
+  it("still offers to block the time instead", async () => {
+    await openAt(8);
+    fireEvent.click(screen.getByRole("button", { name: "Block time instead" }));
+    expect(screen.queryByRole("dialog", { name: "New meeting" })).toBeNull();
+  });
+});
+
+describe("on a phone", () => {
+  const original = window.matchMedia;
+  afterEach(() => { window.matchMedia = original; });
+
+  function phone(matches: boolean) {
+    window.matchMedia = ((query: string) => ({
+      matches: matches && query.includes("max-width: 639px"),
+      media: query,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+    })) as unknown as typeof window.matchMedia;
+  }
+
+  it("opens on the agenda rather than a month of dots", async () => {
+    phone(true);
+    await show([]);
+    expect(screen.getByRole("button", { name: "Schedule" })).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("keeps the month on a wide screen", async () => {
+    phone(false);
+    await show([]);
+    expect(screen.getByRole("button", { name: "Month" })).toHaveAttribute("aria-pressed", "true");
   });
 });

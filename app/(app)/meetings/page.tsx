@@ -6,7 +6,6 @@ import type { PendingFollowUp } from "@/lib/meetings/workspace";
 import { MeetingsLanding } from "./MeetingsLanding";
 import type { CalendarMeeting } from "@/lib/meetings/calendar";
 import type { UpcomingMeeting } from "./UpcomingMeetingsList";
-import type { PastMeeting } from "./PastMeetingsList";
 import { readOAuthOutcome } from "@/lib/oauth-outcome";
 import { OAuthOutcomeBanner } from "@/components/OAuthOutcomeBanner";
 import { mailboxConfigured } from "@/lib/meetings/mailbox.server";
@@ -21,7 +20,7 @@ import {
   toLogEntry,
   type LoggedMeeting,
 } from "@/lib/meetings/meeting-log";
-import { isPastMeeting, isUpcomingMeeting, upcomingWindowStart } from "@/lib/meetings/schedule";
+import { isUpcomingMeeting, upcomingWindowStart } from "@/lib/meetings/schedule";
 import { attendedButNotHosted } from "@/lib/meetings/attendance";
 import { MEETING_KIND } from "@/lib/meetings/one-way";
 import { CALENDAR_VIEW_PARAM, parseCalendarView } from "./calendar-view";
@@ -115,7 +114,7 @@ async function getMeetings(
     /**
      * Whether to read the history the calendar draws from.
      *
-     * Off for an ordinary visit. `initialMeetings` and `initialPast` are passed
+     * Off for an ordinary visit. `initialMeetings` is passed
      * to exactly one component — MeetingsCalendar — which is code-split behind
      * `?view=`, is not mounted on first paint, and refetches its own five
      * hundred rows the moment it does mount. So every meetings page load was
@@ -304,19 +303,14 @@ export default async function MeetingsPage(props: {
     loadMeetingLog(client, ctx.orgId, userId),
     loadPendingFollowUps(client, ctx.orgId, userId, now),
   ]);
-  // Past is the complement of Upcoming, asked directly rather than derived by
-  // subtraction. `!upcoming.some(...)` inside a filter both scanned the upcoming
-  // list once per meeting and defined Past as "whatever Upcoming rejected",
-  // which quietly swept up drafts and ad-hoc rooms that belong in neither.
-  //
-  // Both of these go to the calendar overlay and nowhere else, so on a visit
-  // that is not opening it they are sent empty rather than sent unread: the
+  // The history goes to the calendar overlay and nowhere else, so on a visit
+  // that is not opening it, it is sent empty rather than sent unread: the
   // overlay only exists at `?view=`, and it reloads its own window on mount.
+  //
   // An environment read, not a request: whether calls can be relayed for
   // guests on networks that block direct connections.
   const relay = relayStatus();
   const history = calendarRequested ? meetings : [];
-  const past = history.filter((m) => isPastMeeting(m, now));
 
   // Only meetings that have actually happened — `belongsInLog`, the same rule the
   // log's search route applies, so a hit is never the only place a meeting
@@ -350,7 +344,6 @@ export default async function MeetingsPage(props: {
       <MeetingsLanding
         initialMeetings={history as unknown as CalendarMeeting[]}
         initialUpcoming={upcoming as unknown as UpcomingMeeting[]}
-        initialPast={past as unknown as PastMeeting[]}
         initialLogs={logs}
         initialPendingFollowUps={pendingFollowUps}
         userId={userId}
