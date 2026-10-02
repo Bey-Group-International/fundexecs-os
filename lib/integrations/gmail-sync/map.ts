@@ -145,20 +145,59 @@ const ENTITIES: Record<string, string> = {
 };
 
 /**
+ * Remove every <script>, <style> and <head> element, contents included.
+ *
+ * A scan rather than a regex: a non-greedy pattern over nested or unclosed
+ * elements is the classic incomplete sanitiser. An element with no closing tag
+ * takes the rest of the document with it, which is the safe direction to fail.
+ */
+export function stripNonContent(html: string): string {
+  const lower = html.toLowerCase();
+  let out = "";
+  let i = 0;
+  while (i < html.length) {
+    const open = lower.indexOf("<", i);
+    if (open === -1) {
+      out += html.slice(i);
+      break;
+    }
+    const name = ["script", "style", "head"].find(
+      (n) => lower.startsWith(n, open + 1) && !/[a-z0-9-]/.test(lower.charAt(open + 1 + n.length)),
+    );
+    if (!name) {
+      out += html.slice(i, open + 1);
+      i = open + 1;
+      continue;
+    }
+    out += html.slice(i, open);
+    const close = lower.indexOf(`</${name}`, open);
+    if (close === -1) return out;
+    const end = lower.indexOf(">", close);
+    if (end === -1) return out;
+    i = end + 1;
+  }
+  return out;
+}
+
+/**
  * HTML down to readable text. Good enough for a preview and a report; not a
  * renderer, and never rendered as HTML — every surface that shows it escapes.
  *
  * Tags are stripped until none are left, because one pass over "<scr<b>ipt>"
- * leaves "<script>" behind. Entities are decoded in ONE pass, so "&amp;lt;"
- * becomes the text "&lt;" rather than being unescaped twice into "<".
+ * leaves "<script>" behind, and any bracket that survives is dropped. Entities
+ * are decoded in ONE pass and last, so "&amp;lt;" becomes the text "&lt;"
+ * rather than being unescaped twice into "<".
  */
 export function htmlToText(html: string): string {
-  let text = html.replace(/<br\s*\/?>/gi, "\n").replace(/<\/(p|div|li|tr|h[1-6])>/gi, "\n");
+  let text = stripNonContent(html)
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<\/(p|div|li|tr|h[1-6])>/gi, "\n");
   for (let previous = ""; previous !== text; ) {
     previous = text;
-    text = text.replace(/<(script|style|head)\b[\s\S]*?<\/\1\s*>/gi, "").replace(/<[^<>]*>/g, "");
+    text = text.replace(/<[^<>]*>/g, "");
   }
   return text
+    .replace(/[<>]/g, "")
     .replace(/&(?:nbsp|amp|lt|gt|quot|#39);/gi, (entity) => ENTITIES[entity.toLowerCase()] ?? entity)
     .replace(/[ \t]+\n/g, "\n")
     .replace(/\n{3,}/g, "\n\n")

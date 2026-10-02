@@ -144,6 +144,17 @@ describe("helpers", () => {
     expect(htmlToText("<style>p{}</style><p>a &amp; b</p>")).toBe("a & b");
   });
 
+  it("removes script elements whole, including unclosed and look-alike ones", () => {
+    expect(htmlToText("a<script>x()</script >b")).toBe("ab");
+    expect(htmlToText("a<SCRIPT src=x>y</SCRIPT>b")).toBe("ab");
+    expect(htmlToText("keep<scripts>this</scripts>")).toBe("keepthis");
+    expect(htmlToText("a<script>never closed")).toBe("a");
+  });
+
+  it("drops stray brackets but keeps encoded ones as text", () => {
+    expect(htmlToText("1 < 2 &lt; 3")).toBe("1  2 < 3");
+  });
+
   it("strips nested tags until none are left", () => {
     expect(htmlToText("<scr<b>ipt>x")).toBe("x");
   });
