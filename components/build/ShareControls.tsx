@@ -416,8 +416,8 @@ function CreateShareForm({
             type="checkbox"
             name="require_email"
             value="1"
-            checked={requireEmail || readerRules}
-            disabled={readerRules}
+            checked={requireEmail || readerRules || requireNda}
+            disabled={readerRules || requireNda}
             onChange={(e) => setRequireEmail(e.target.checked)}
             className="h-3.5 w-3.5 accent-gold-400"
           />

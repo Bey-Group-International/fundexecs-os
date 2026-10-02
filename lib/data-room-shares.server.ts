@@ -71,9 +71,10 @@ export async function insertShare(
       label: input.label,
       expires_at,
       created_by: input.userId,
-      // Domain and reader limits work on the gate email, so either one turns
-      // the email gate on (the database holds the same rule).
-      require_email: input.requireEmail || Boolean(domains) || Boolean(maxReaders),
+      // Domain and reader limits work on the gate email, and an NDA signature
+      // takes its email from the gate, so any of them turns the email gate on
+      // (the database holds the same rules).
+      require_email: input.requireEmail || input.requireNda || Boolean(domains) || Boolean(maxReaders),
       require_nda: input.requireNda,
       nda_text: input.ndaText,
       password_hash,

@@ -4,75 +4,45 @@ import { headers } from "next/headers";
 import { createServiceClient } from "@/lib/supabase/server";
 
 /**
- * Records an NDA signature in nda_signatures.
- * Uses the service client so the insert bypasses RLS
- * (the table has no authenticated-role insert policy by design).
+ * Signs the link's NDA for this reader and emails them their copy.
  *
- * On success, grants the "nda" gate for this share via a signed server-side
- * pass — the page withholds content until every configured gate is granted.
+ * The browser sends only the typed name and the "I agree" tick. The signing
+ * time is the server's, the email is the one this reader gave the link's
+ * email gate (read from the signed pass, never from the form), and the text
+ * recorded is the link's NDA as it stands now. On success the "nda" gate is
+ * granted via the signed server-side pass.
  */
-export async function recordNdaSignature(formData: FormData): Promise<{ ok: boolean }> {
+export async function recordNdaSignature(formData: FormData): Promise<{ ok: true } | { ok: false; error: string }> {
   const shareId = String(formData.get("share_id") ?? "").trim();
-  const signerName = String(formData.get("signer_name") ?? "").trim();
-  const signerEmail = String(formData.get("signer_email") ?? "").trim() || null;
-  const signedAt = String(formData.get("signed_at") ?? "").trim();
+  const signerName = String(formData.get("signer_name") ?? "");
+  const agreed = formData.get("agree") === "1";
+  if (!shareId) return { ok: false, error: "We couldn't record your signature. Please try again." };
 
-  if (!shareId || !signerName || !signedAt) return { ok: false };
-
-  // Derive IP hint (first 3 octets) for lightweight audit trail.
-  // We never store the full IP to minimise PII exposure.
+  // A partial address for the audit trail: the first 3 octets (IPv4) or
+  // groups (IPv6). The full IP is never stored.
   let ipHint: string | null = null;
   try {
     const headersList = await headers();
-    const rawIp =
-      headersList.get("x-forwarded-for")?.split(",")[0]?.trim() ??
-      headersList.get("x-real-ip") ??
-      null;
+    const rawIp = headersList.get("x-forwarded-for")?.split(",")[0]?.trim() ?? headersList.get("x-real-ip") ?? null;
     if (rawIp) {
       const parts = rawIp.split(".");
-      if (parts.length === 4) {
-        // IPv4 — keep first 3 octets
-        ipHint = parts.slice(0, 3).join(".");
-      } else {
-        // IPv6 — keep first 3 groups
-        const v6parts = rawIp.split(":");
-        ipHint = v6parts.slice(0, 3).join(":");
-      }
+      ipHint = parts.length === 4 ? parts.slice(0, 3).join(".") : rawIp.split(":").slice(0, 3).join(":");
     }
   } catch {
-    // headers() unavailable in some edge environments — skip
+    // headers() unavailable in some edge environments; skip
   }
 
+  const { readGatePass, grantGate } = await import("@/lib/data-room-gate");
+  const pass = await readGatePass(shareId);
   const supabase = createServiceClient();
+  const { signNda, sendNdaCopy } = await import("@/lib/nda-signing.server");
+  const result = await signNda(supabase, { shareId, signerName, agreed, gateEmail: pass?.email ?? null, ipHint });
+  if (!result.ok) return result;
 
-  // Resolve the organization_id from the share row so we can store it
-  // on the signature for efficient RLS-policy lookups, and reject a
-  // revoked/expired share rather than recording a signature against it.
-  const { data: share, error: shareErr } = await supabase
-    .from("data_room_shares")
-    .select("organization_id, revoked_at, expires_at")
-    .eq("id", shareId)
-    .single();
-
-  if (shareErr || !share) return { ok: false };
-  const shareRow = share as { organization_id: string; revoked_at: string | null; expires_at: string | null };
-  if (shareRow.revoked_at) return { ok: false };
-  if (shareRow.expires_at && new Date(shareRow.expires_at).getTime() < Date.now()) return { ok: false };
-
-  const { error: insertErr } = await supabase.from("nda_signatures" as never).insert({
-    share_id: shareId,
-    organization_id: shareRow.organization_id,
-    signer_name: signerName,
-    signer_email: signerEmail,
-    signed_at: signedAt,
-    ip_hint: ipHint,
-  } as never);
-
-  if (insertErr) return { ok: false };
-
-  const { grantGate } = await import("@/lib/data-room-gate");
   await grantGate(shareId, { nda: true });
-
+  // After the response, so the reader is not kept waiting on the mail send.
+  const { after } = await import("next/server");
+  after(() => sendNdaCopy(supabase, result.signatureId, result.orgId).then(() => undefined, () => undefined));
   return { ok: true };
 }
 
