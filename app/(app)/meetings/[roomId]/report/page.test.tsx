@@ -540,3 +540,28 @@ describe("the sidebar and the meeting at a glance", () => {
     expect(screen.getByText(/No decisions were recorded/)).toBeInTheDocument();
   });
 });
+
+describe("the report's tabs", () => {
+  it("offers a tab only for what the meeting has", async () => {
+    db.report = { summary: "Done.", key_points: [], action_items: [], analysis: {}, full_transcript: "x" };
+    await renderPage();
+    const names = screen.getAllByRole("tab").map((t) => t.textContent);
+    expect(names).toEqual(["Overview", "Transcript", "Details"]);
+  });
+
+  it("adds the follow-up and the chat when there are any", async () => {
+    db.report = {
+      summary: "Done.",
+      key_points: [],
+      action_items: [],
+      analysis: { follow_up_draft: "Hi all,\n\nThanks for today." },
+      full_transcript: "x",
+    };
+    db.chat = [{ id: "c1", author_id: "u1", author_name: "Ana", body: "deck?", ts: "2026-09-23T14:05:00.000Z" }];
+    await renderPage();
+    const names = screen.getAllByRole("tab").map((t) => t.textContent);
+    expect(names).toEqual(["Overview", "Follow-upNot sent", "Transcript", "Chat1", "Details"]);
+    // Every panel is in the page, so nothing has to load on a tab switch.
+    expect(screen.getByTestId("follow-up")).toBeInTheDocument();
+  });
+});
