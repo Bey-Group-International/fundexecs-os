@@ -1,4 +1,4 @@
--- 20261002120000_scheduling_attended_busy.sql
+-- 20261002142640_scheduling_attended_busy.sql
 -- Meetings a host is INVITED to hold their time on their booking link too.
 --
 -- busyIntervals() read live_meetings by host_id alone, so a meeting a colleague

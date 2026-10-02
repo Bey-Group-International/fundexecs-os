@@ -3269,7 +3269,7 @@ export type Database = {
     Views: Record<string, never>;
     Functions: {
       // Spans of live meetings the host is invited to but does not host
-      // (migration 20261002120000) — what busyIntervals adds so a booking link
+      // (migration 20261002142640) — what busyIntervals adds so a booking link
       // never offers time the host already gave to a colleague's meeting.
       scheduling_attended_busy: {
         Args: { p_host: string; p_org: string; p_from: string; p_to: string };
