@@ -189,6 +189,11 @@ export function videoTrackOf(stream: MediaStream | null): MediaStreamTrack | nul
   return stream?.getVideoTracks()[0] ?? null;
 }
 
+/** The live audio track inside a stream. See `videoTrackOf`. */
+export function audioTrackOf(stream: MediaStream | null): MediaStreamTrack | null {
+  return stream?.getAudioTracks?.()[0] ?? null;
+}
+
 /**
  * Wrap a set of handlers in functions whose identity never changes and which
  * always call the handlers from the latest render.
