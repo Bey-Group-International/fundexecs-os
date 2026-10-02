@@ -168,3 +168,59 @@ describe("while one is in flight", () => {
     release!();
   });
 });
+
+describe("before anything is sent", () => {
+  const recipients = [
+    { name: "Jane Doe", email: "jane@lp.test", role: "invitee" as const, attended: true, receivesFollowUp: true },
+    { name: "Mark Lee", email: "mark@fund.test", role: "attendee" as const, attended: true, receivesFollowUp: true },
+  ];
+  const draft = "Hi {{first_name}},\n\n**Thanks** for today.\n\n1. Send deck\n2. Book call";
+
+  function full() {
+    return render(
+      <FollowUpPanel
+        meetingId="m1"
+        draft={draft}
+        canSend
+        recipients={recipients}
+        unreachable={["Guest"]}
+        hostName="Alex Rivera"
+        status={{ kind: "not_sent" }}
+      />,
+    );
+  }
+
+  it("names who it goes to, in their roles, and who it cannot reach", () => {
+    full();
+    expect(screen.getByText("Invitee")).toBeInTheDocument();
+    expect(screen.getByText("Attendee")).toBeInTheDocument();
+    expect(screen.getByText(/No email address for Guest/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /send now to 2/i })).toBeInTheDocument();
+  });
+
+  it("shows where the follow-up stands", () => {
+    full();
+    expect(screen.getByText("Not sent")).toBeInTheDocument();
+  });
+
+  it("previews each recipient's own copy, formatted", async () => {
+    full();
+    expect(screen.getByText("Hi Jane,")).toBeInTheDocument();
+    expect(screen.getByText("Thanks").tagName).toBe("STRONG");
+    expect(screen.getByText("Send deck").tagName).toBe("LI");
+
+    await userEvent.selectOptions(screen.getByLabelText(/preview as/i), "1");
+    expect(screen.getByText("Hi Mark,")).toBeInTheDocument();
+  });
+
+  it("formats from the toolbar", async () => {
+    full();
+    await userEvent.click(screen.getByRole("button", { name: /^edit$/i }));
+    const field = screen.getByRole("textbox") as HTMLTextAreaElement;
+    await userEvent.clear(field);
+    await userEvent.type(field, "deck");
+    field.setSelectionRange(0, 4);
+    await userEvent.click(screen.getByRole("button", { name: "Bold" }));
+    expect(field.value).toBe("**deck**");
+  });
+});

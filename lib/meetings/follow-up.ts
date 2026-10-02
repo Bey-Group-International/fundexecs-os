@@ -9,7 +9,7 @@
 // connected mailbox; everything needed to send it was already here.
 //
 // Pure. The mailbox and the send live in the route.
-import { escapeHtml } from "@/lib/email";
+import { followUpBodyHtml } from "@/lib/meetings/follow-up-format";
 
 /** Longest body this will send. A follow-up is an email, not a document. */
 export const MAX_FOLLOW_UP_CHARS = 20_000;
@@ -39,18 +39,20 @@ export function followUpBody(draft: string | null | undefined): string {
 }
 
 /**
- * The plain-text draft as an email body.
+ * The draft as an email body.
  *
- * Escaped, because this is model output that the host may then have edited by
- * hand, and it is about to be rendered in other people's mail clients. Line
- * breaks are preserved, because the draft's numbered lists and sign-off are
- * carried entirely by them.
+ * Escaped before anything else, because this is model output that the host may
+ * then have edited by hand, and it is about to be rendered in other people's
+ * mail clients. The editor's marks — bold, italics, bulleted and numbered
+ * lists — are turned into tags only after that (follow-up-format.ts). Line
+ * breaks inside a paragraph are kept, because a sign-off is carried by them.
  */
 export function followUpHtml(body: string): string {
-  const paragraphs = escapeHtml(body)
-    .split(/\n{2,}/)
-    .map((block) => block.replace(/\n/g, "<br />"))
-    .filter((block) => block.trim().length > 0);
+  const content = followUpBodyHtml(body, {
+    p: "font-size:14px;line-height:1.6;margin:0 0 16px",
+    list: "font-size:14px;line-height:1.6;margin:0 0 16px;padding-left:22px",
+    li: "margin:0 0 4px",
+  });
 
   return `<!DOCTYPE html>
 <html>
@@ -59,7 +61,7 @@ export function followUpHtml(body: string): string {
   <div style="margin-bottom:24px">
     <span style="font-family:monospace;font-size:13px;color:#b8a36a;letter-spacing:0.1em;text-transform:uppercase">FundExecs OS</span>
   </div>
-  ${paragraphs.map((p) => `<p style="font-size:14px;line-height:1.6;margin:0 0 16px">${p}</p>`).join("\n  ")}
+  ${content}
 </body>
 </html>`;
 }

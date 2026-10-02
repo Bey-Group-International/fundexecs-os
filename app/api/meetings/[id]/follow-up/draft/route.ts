@@ -26,6 +26,7 @@ import { meetingRecipients } from "@/lib/meetings/recipients";
 import { loadPresentPeople } from "@/lib/meetings/recipients.server";
 import { followUpBody, followUpSubject } from "@/lib/meetings/follow-up";
 import { personalizeFollowUp } from "@/lib/meetings/follow-up-greeting";
+import { plainFollowUp } from "@/lib/meetings/follow-up-format";
 import { loadHost } from "@/lib/meetings/report-roles.server";
 import {
   DRAFT_CHANNEL,
@@ -190,7 +191,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
           thread_id: threadId,
           organization_id: auth.ctx.orgId,
           // This attendee's own copy: greeted by name, never as the host.
-          body: personalizeFollowUp(draft, target.name, { hostName: host?.full_name ?? null }),
+          // Without the editor's emphasis marks: the composer shows text as text.
+          body: plainFollowUp(
+            personalizeFollowUp(draft, target.name, { hostName: host?.full_name ?? null }),
+          ),
           source: "meeting_follow_up",
           source_meeting_id: id,
           created_by: auth.ctx.userId,
