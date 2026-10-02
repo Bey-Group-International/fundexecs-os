@@ -60,6 +60,13 @@ import {
 import { defaultBlockEnd } from "@/lib/meetings/blocks";
 import { MEETING_KIND } from "@/lib/meetings/one-way";
 import {
+  bookingIdOf,
+  isBookingRequest,
+  moveRequestFor,
+  requestToCalendarItem,
+  type PendingBookingRequest,
+} from "@/lib/meetings/booking-requests";
+import {
   buildDayAgenda,
   summarizeDayAgenda,
   type DayAgendaItem,
@@ -184,6 +191,9 @@ export function MeetingsCalendar({
 }) {
   const router = useRouter();
   const [meetings, setMeetings] = useState<CalendarMeeting[]>(initialMeetings);
+  // Pending scheduling-link requests, drawn alongside the meetings. They have no
+  // room until approved, so the meetings read never returns them.
+  const [requests, setRequests] = useState<CalendarMeeting[]>([]);
   const [view, setView] = useState<CalendarView>("month");
   const [anchor, setAnchor] = useState<Date>(() => startOfDay(new Date()));
   const [filter, setFilter] = useState<CalendarFilter>(emptyFilter);
@@ -282,9 +292,29 @@ export function MeetingsCalendar({
     }
   }
 
+  // The host's pending requests over the same window. Through the API, which
+  // scopes to the session; a failure leaves them off the grid, never the grid
+  // off the page.
+  async function refreshRequests() {
+    const { from, to } = meetingWindowRef.current;
+    try {
+      const res = await fetch(
+        `/api/meetings/scheduling/bookings?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`,
+        { cache: "no-store" },
+      );
+      if (!res.ok) return;
+      const json = (await res.json()) as { requests?: PendingBookingRequest[] };
+      if (meetingWindowRef.current.from !== from) return;
+      setRequests((json.requests ?? []).map((r) => requestToCalendarItem(r, userId)));
+    } catch {
+      // Left as they were.
+    }
+  }
+
   // Re-read when the window moves to another month.
   useEffect(() => {
     void refresh();
+    void refreshRequests();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [meetingWindow.from, meetingWindow.to]);
 
@@ -330,9 +360,10 @@ export function MeetingsCalendar({
   }, []);
   const selectDayItem = useCallback((itemKey: string | null) => setExpandedItemKey(itemKey), []);
 
+  const calendarItems = useMemo(() => (requests.length > 0 ? [...meetings, ...requests] : meetings), [meetings, requests]);
   const visible = useMemo(
-    () => applyCalendarFilter(meetings, filter, userId, statusOf),
-    [meetings, filter, userId, statusOf],
+    () => applyCalendarFilter(calendarItems, filter, userId, statusOf),
+    [calendarItems, filter, userId, statusOf],
   );
 
   // Presence only for meetings anyone could plausibly be sitting in: already
@@ -346,6 +377,8 @@ export function MeetingsCalendar({
     const to = dayStartMs + 2 * DAY_MS;
     return visible
       .filter((m) => {
+        // A request has no room for anyone to be sitting in.
+        if (isBookingRequest(m)) return false;
         if (m.status === "active") return true;
         if (!m.scheduled_at) return true;
         const at = new Date(m.scheduled_at).getTime();
@@ -466,26 +499,37 @@ export function MeetingsCalendar({
   // `refresh` is redeclared each render; hold it by ref so the drag handler
   // below stays stable instead of being rebuilt on every tick of the clock.
   const refreshRef = useRef(refresh);
-  useEffect(() => { refreshRef.current = refresh; });
+  const refreshRequestsRef = useRef(refreshRequests);
+  useEffect(() => {
+    refreshRef.current = refresh;
+    refreshRequestsRef.current = refreshRequests;
+  });
 
   // ── Moving a meeting by dragging it ───────────────────────────────────────
   //
   // Optimistic: the block stays where it was dropped while the request is in
   // flight, because a meeting that snaps back for half a second and then
   // returns reads as a bug. A failure puts it back and says why.
+  //
+  // A pending booking request moves through the booking route instead: its
+  // length is fixed by the meeting type the invitee chose, so only its start
+  // changes, and the invitee is emailed the new time.
   const moveMeeting = useCallback(async (m: CalendarMeeting, startIso: string, durationMinutes: number) => {
+    const bookingId = bookingIdOf(m);
     const before = { scheduled_at: m.scheduled_at, duration_minutes: m.duration_minutes };
+    const setItems = bookingId ? setRequests : setMeetings;
     const applyLocal = (next: { scheduled_at: string | null; duration_minutes: number | null }) =>
-      setMeetings((prev) => prev.map((x) => (x.id === m.id ? { ...x, ...next } : x)));
+      setItems((prev) => prev.map((x) => (x.id === m.id ? { ...x, ...next } : x)));
 
-    applyLocal({ scheduled_at: startIso, duration_minutes: durationMinutes });
+    applyLocal(
+      bookingId
+        ? { scheduled_at: startIso, duration_minutes: m.duration_minutes }
+        : { scheduled_at: startIso, duration_minutes: durationMinutes },
+    );
 
     async function send(allowConflict: boolean) {
-      return fetch(`/api/meetings/${m.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ scheduledAt: startIso, durationMinutes, ...(allowConflict ? { allowConflict: true } : {}) }),
-      });
+      const { url, body } = moveRequestFor(m, startIso, durationMinutes, allowConflict);
+      return fetch(url, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
     }
 
     try {
@@ -519,7 +563,7 @@ export function MeetingsCalendar({
       setMoveError(null);
       // Re-read rather than trusting the local guess: the server clamps the
       // duration and may have touched sync status on the way through.
-      await refreshRef.current();
+      await (bookingId ? refreshRequestsRef.current() : refreshRef.current());
     } catch {
       applyLocal(before);
       setMoveError("Could not reach the server. The meeting has been put back.");
@@ -730,7 +774,8 @@ export function MeetingsCalendar({
                 setBlockDraft({ startsAt: iso, endsAt: defaultBlockEnd(iso) });
                 setBlockError(null);
               }}
-              onEditMeeting={(m) => setEditing(m)}
+              // A booking request has nothing to edit; it opens as a request.
+              onEditMeeting={(m) => (isBookingRequest(m) ? setDetail(m) : setEditing(m))}
             />
           ) : null}
           {view === "week" ? <TimeGridView days={weekDays(anchor)} meetings={visible} {...shared} /> : null}
@@ -762,7 +807,17 @@ export function MeetingsCalendar({
         </aside>
       </div>
 
-      {detail ? (
+      {detail && isBookingRequest(detail) ? (
+        <RequestDetail
+          request={detail}
+          onClose={() => setDetail(null)}
+          onDecided={() => {
+            setDetail(null);
+            void refreshRequests();
+            void refresh();
+          }}
+        />
+      ) : detail ? (
         <EventDetail
           meeting={detail}
           presence={presence[detail.id]}
@@ -1768,7 +1823,20 @@ function DayItemDetail({
         </div>
       </div>
 
-      {item.meeting && status ? (
+      {item.meeting && isBookingRequest(item.meeting) ? (
+        <div className="flex flex-wrap items-center gap-2 p-3">
+          <p className="min-w-0 flex-1 text-xs text-[var(--fg-muted)]">
+            A request through your scheduling link, waiting on you. Drag it in week or day view to offer another time.
+          </p>
+          <button
+            type="button"
+            onClick={() => { const m = item.meeting!; onDone(); onEditMeeting(m); }}
+            className="rounded-lg bg-[var(--gold-400)] px-3 py-1.5 text-xs font-semibold text-white hover:bg-[var(--gold-500)]"
+          >
+            Approve or decline
+          </button>
+        </div>
+      ) : item.meeting && status ? (
         <MeetingDetailBody
           meeting={item.meeting}
           presence={presence}
@@ -1924,6 +1992,7 @@ function TimeGridView({ days, meetings, blocks, externalEvents, busyEvents, laye
 
   const beginDrag = useCallback((e: React.PointerEvent, m: CalendarMeeting, mode: DragMode, dayIndex: number) => {
     if (!onMoveMeeting || !canDragMeeting(m)) return;
+    if (mode !== "move" && isBookingRequest(m)) return;
     // Left button only: a right-click is a context menu, and a two-finger
     // gesture on a trackpad is a scroll.
     if (e.button !== 0) return;
@@ -2213,7 +2282,10 @@ function TimeGridView({ days, meetings, blocks, externalEvents, busyEvents, laye
                 const laneOffset = dragging ? 0 : lane * widthPct;
                 const live = (presence[m.id]?.count ?? 0) > 0;
                 const ts = meetingTimeState(m.scheduled_at, m.duration_minutes, now);
-                const draggable = Boolean(onMoveMeeting) && canDragMeeting(m);
+                const draggable = Boolean(onMoveMeeting) && canDragMeeting(m, now);
+                // A request's length is the meeting type's; it moves, it does
+                // not stretch. Drawn dashed: it is a hold, not yet a meeting.
+                const request = isBookingRequest(m);
                 return (
                   <button
                     key={m.id}
@@ -2232,8 +2304,11 @@ function TimeGridView({ days, meetings, blocks, externalEvents, busyEvents, laye
                       height,
                       left: `calc(${laneOffset}% + 2px)`,
                       width: `calc(${widthPct}% - 4px)`,
-                      borderLeftColor: meta.accent,
-                      backgroundColor: `color-mix(in srgb, ${meta.accent} 16%, var(--surface-1))`,
+                      borderLeftColor: request ? "var(--status-warning)" : meta.accent,
+                      borderLeftStyle: request ? "dashed" : undefined,
+                      backgroundColor: request
+                        ? "color-mix(in srgb, var(--status-warning) 10%, var(--surface-1))"
+                        : `color-mix(in srgb, ${meta.accent} 16%, var(--surface-1))`,
                       touchAction: draggable ? "none" : undefined,
                     }}
                     title={m.title}
@@ -2255,7 +2330,7 @@ function TimeGridView({ days, meetings, blocks, externalEvents, busyEvents, laye
                     {/* Resize handles. Rendered inside the block but above its
                         text, and only when the event can actually be moved —
                         offering a grip that does nothing is worse than none. */}
-                    {draggable ? (
+                    {draggable && !request ? (
                       <>
                         <span
                           onPointerDown={(e) => { e.stopPropagation(); beginDrag(e, m, "resize-start", dayIndex); }}
@@ -2614,6 +2689,116 @@ function EventDetail({
           </button>
         </div>
         <MeetingDetailBody meeting={meeting} presence={presence} now={now} onEdit={onEdit} onAfterEarn={onClose} />
+      </div>
+    </div>
+  );
+}
+
+/**
+ * A pending scheduling-link request, opened from the calendar. Not a meeting
+ * yet — no room, nothing to edit — so it offers what the booking card offers:
+ * approve it, or decline it. Moving it is a drag on the grid.
+ */
+function RequestDetail({
+  request,
+  onClose,
+  onDecided,
+}: {
+  request: CalendarMeeting;
+  onClose: () => void;
+  onDecided: () => void;
+}) {
+  const [busy, setBusy] = useState<"approve" | "decline" | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const invitee = request.attendees?.[0];
+
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") onClose();
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  async function decide(action: "approve" | "decline") {
+    const bookingId = bookingIdOf(request);
+    if (!bookingId) return;
+    if (action === "decline" && !window.confirm(`Decline the request from ${invitee?.name ?? "this invitee"}? They'll be emailed.`)) return;
+    setBusy(action);
+    setError(null);
+    const send = (allowConflict: boolean) =>
+      fetch(`/api/meetings/scheduling/bookings/${bookingId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action, ...(allowConflict ? { allowConflict: true } : {}) }),
+      });
+    try {
+      let res = await send(false);
+      if (res.status === 409) {
+        const body = (await res.json().catch(() => ({}))) as { error?: string; overridable?: boolean };
+        if (body.overridable !== true || !window.confirm(`${body.error ?? "That time overlaps something."}\n\nApprove anyway?`)) {
+          if (body.overridable !== true) setError(body.error ?? "That didn't work.");
+          return;
+        }
+        res = await send(true);
+      }
+      if (!res.ok) {
+        const body = (await res.json().catch(() => ({}))) as { error?: string };
+        setError(body.error ?? "That didn't work.");
+        return;
+      }
+      onDecided();
+    } catch {
+      setError("Could not reach the server.");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  return (
+    <div onClick={onClose} className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4 backdrop-blur-sm">
+      <div
+        role="dialog"
+        aria-label="Booking request"
+        onClick={(e) => e.stopPropagation()}
+        className="w-full max-w-md overflow-hidden rounded-2xl border border-[var(--line)] bg-[var(--surface-1)] shadow-2xl"
+      >
+        <div className="flex items-start gap-3 border-b border-[var(--line)] p-4" style={{ borderLeft: "3px dashed var(--status-warning)" }}>
+          <div className="min-w-0 flex-1">
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-[var(--status-warning)]">Waiting on you</p>
+            <h3 className="mt-0.5 text-base font-semibold text-[var(--fg-primary)]">{request.title}</h3>
+            <p className="mt-0.5 text-xs text-[var(--fg-muted)]">
+              {calendarWhenLabel(request.scheduled_at) ?? ""} · {request.duration_minutes} min
+            </p>
+          </div>
+          <button onClick={onClose} aria-label="Close" className="rounded-full p-1.5 text-[var(--fg-muted)] hover:bg-[var(--surface-0)] hover:text-[var(--fg-primary)]">
+            <CloseIcon />
+          </button>
+        </div>
+        <div className="flex flex-col gap-3 p-4">
+          {invitee?.email ? <DetailRow label="From" value={`${invitee.name} <${invitee.email}>`} /> : null}
+          {request.description ? <DetailRow label="Note" value={request.description} /> : null}
+          <p className="text-xs text-[var(--fg-muted)]">Drag it on the calendar to offer a different time.</p>
+          {error ? <p role="alert" className="text-xs text-[var(--status-danger)]">{error}</p> : null}
+          <div className="flex gap-2">
+            <button
+              type="button"
+              disabled={busy !== null}
+              onClick={() => void decide("approve")}
+              className="rounded-lg bg-[var(--gold-400)] px-3 py-1.5 text-xs font-semibold text-white hover:bg-[var(--gold-500)] disabled:opacity-50"
+            >
+              {busy === "approve" ? "Approving…" : "Approve"}
+            </button>
+            <button
+              type="button"
+              disabled={busy !== null}
+              onClick={() => void decide("decline")}
+              className="rounded-lg border border-[var(--line)] px-3 py-1.5 text-xs font-medium text-[var(--fg-secondary)] hover:text-[var(--status-danger)] disabled:opacity-50"
+            >
+              {busy === "decline" ? "Declining…" : "Decline"}
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   );

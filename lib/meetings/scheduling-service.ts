@@ -1047,15 +1047,23 @@ async function updateBookingRow(
 export async function listBookingsForHost(
   client: SchedulingClient,
   hostUserId: string,
-  opts: { limit?: number } = {},
+  opts: {
+    limit?: number;
+    /** Which live statuses to list; both by default. */
+    statuses?: Array<"pending" | "confirmed">;
+    /** Bookings still running at or after this instant; now by default. */
+    fromIso?: string;
+    /** Bookings starting before this instant; unbounded by default. */
+    toIso?: string;
+  } = {},
 ): Promise<Array<SchedulingBooking & { event_title: string | null }>> {
-  const { data, error } = await table(client, "scheduling_bookings")
+  let query = table(client, "scheduling_bookings")
     .select(BOOKING_COLUMNS)
     .eq("host_user_id", hostUserId)
-    .in("status", ["pending", "confirmed"])
-    .gte("ends_at", new Date().toISOString())
-    .order("starts_at", { ascending: true })
-    .limit(opts.limit ?? 25);
+    .in("status", opts.statuses ?? ["pending", "confirmed"])
+    .gte("ends_at", opts.fromIso ?? new Date().toISOString());
+  if (opts.toIso) query = query.lt("starts_at", opts.toIso);
+  const { data, error } = await query.order("starts_at", { ascending: true }).limit(opts.limit ?? 25);
   if (error) throw new Error(error.message);
 
   const bookings = (data ?? []) as unknown as SchedulingBooking[];

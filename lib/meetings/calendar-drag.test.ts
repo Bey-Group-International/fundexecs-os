@@ -207,23 +207,36 @@ describe("isNoOp", () => {
 });
 
 describe("canDragMeeting", () => {
-  const base = { scheduled_at: "2026-08-26T14:00:00.000Z", status: "waiting", locked_at: null } as Pick<
-    CalendarMeeting,
-    "scheduled_at" | "status" | "locked_at"
-  >;
+  const NOW = Date.parse("2026-08-26T12:00:00.000Z");
+  const base = {
+    scheduled_at: "2026-08-26T14:00:00.000Z",
+    status: "waiting",
+    duration_minutes: 30,
+  } as Pick<CalendarMeeting, "scheduled_at" | "status" | "duration_minutes">;
 
   it("allows a scheduled, open meeting", () => {
-    expect(canDragMeeting(base)).toBe(true);
-    expect(canDragMeeting({ ...base, status: "active" })).toBe(true);
+    expect(canDragMeeting(base, NOW)).toBe(true);
+    expect(canDragMeeting({ ...base, status: "active" }, NOW)).toBe(true);
+  });
+
+  // Every saved meeting is stamped locked_at; refusing it made every real
+  // meeting undraggable.
+  it("allows a saved meeting, whatever its locked_at", () => {
+    expect(canDragMeeting({ ...base, locked_at: "2026-08-20T10:00:00.000Z" } as typeof base, NOW)).toBe(true);
   });
 
   it("refuses one with no time to drag from", () => {
-    expect(canDragMeeting({ ...base, scheduled_at: null })).toBe(false);
+    expect(canDragMeeting({ ...base, scheduled_at: null }, NOW)).toBe(false);
   });
 
   it("refuses to rewrite history", () => {
-    expect(canDragMeeting({ ...base, status: "ended" })).toBe(false);
-    expect(canDragMeeting({ ...base, locked_at: "2026-08-26T10:00:00.000Z" })).toBe(false);
+    expect(canDragMeeting({ ...base, status: "ended" }, NOW)).toBe(false);
+    // Over by the time anyone could drag it.
+    expect(canDragMeeting({ ...base, scheduled_at: "2026-08-26T11:00:00.000Z" }, NOW)).toBe(false);
+  });
+
+  it("still allows one that is under way", () => {
+    expect(canDragMeeting({ ...base, scheduled_at: "2026-08-26T11:45:00.000Z" }, NOW)).toBe(true);
   });
 });
 
