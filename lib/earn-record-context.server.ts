@@ -13,7 +13,9 @@ import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { getDocumentText } from "@/lib/document-text.server";
 import { loadContactRecord } from "@/lib/network-contact";
-import type { Commitment, Database, Deal, DiligenceItem, Document, Investor, PulseItem } from "@/lib/supabase/database.types";
+import { loadReportPage } from "@/lib/meetings/report-page.server";
+import { reportContent } from "@/lib/meetings/report-page";
+import type { Asset, Commitment, Database, Deal, DiligenceItem, Document, Investor, PulseItem } from "@/lib/supabase/database.types";
 import type { ExplainRecordRef } from "@/lib/earn-explain";
 
 const DOC_EXCERPT_CHARS = 12_000;
@@ -225,6 +227,58 @@ async function pulseContext(
   return { name: item.entity_name, block };
 }
 
+async function assetContext(
+  supabase: SupabaseClient<Database>,
+  orgId: string,
+  id: string,
+): Promise<ExplainRecordContext | null> {
+  const { data } = await supabase.from("assets").select("*").eq("id", id).eq("organization_id", orgId).maybeSingle();
+  const asset = data as Asset | null;
+  if (!asset) return null;
+  const moic =
+    asset.acquisition_cost && asset.current_value ? `${(asset.current_value / asset.acquisition_cost).toFixed(2)}x` : null;
+  const block =
+    `<asset name="${asset.name.replace(/"/g, "'")}">\n` +
+    fields([
+      ["Type", asset.asset_type],
+      ["Status", asset.status],
+      ["Acquired", asset.acquisition_date],
+      ["Acquisition cost", money(asset.acquisition_cost)],
+      ["Current value", money(asset.current_value)],
+      ["Gross MOIC", moic],
+      ["NOI", money(asset.noi)],
+      ["Cap rate", asset.cap_rate !== null ? `${asset.cap_rate}%` : null],
+    ]) +
+    `\n</asset>`;
+  return { name: asset.name, block };
+}
+
+async function meetingContext(
+  supabase: SupabaseClient<Database>,
+  orgId: string,
+  roomCode: string,
+): Promise<ExplainRecordContext | null> {
+  // The report page's own access rules: a meeting outside the caller's org, or
+  // one they did not attend, loads as missing/forbidden and stays invisible.
+  const page = await loadReportPage(supabase as never, roomCode);
+  if (page.state === "missing" || page.state === "forbidden" || !page.meeting || !page.report) return null;
+  const meetingOrg = (page.meeting as { organization_id?: string | null }).organization_id;
+  if (meetingOrg && meetingOrg !== orgId) return null;
+  const c = reportContent(page.report);
+  const title = page.meeting.title ?? "Meeting";
+  const list = (label: string, items: string[]) =>
+    items.length ? `\n${label}:\n${items.slice(0, 20).map((i) => `  - ${clip(i, 300)}`).join("\n")}` : "";
+  const block =
+    `<meeting name="${title.replace(/"/g, "'")}">` +
+    (clip(c.summary, 3000) ? `\nSummary:\n${clip(c.summary, 3000)}` : "") +
+    list("Key points", c.keyPoints) +
+    list("Decisions", c.decisions) +
+    list("Action items", c.actionItems) +
+    (c.nextMeeting ? `\nSuggested next meeting: ${clip(c.nextMeeting, 300)}` : "") +
+    `\n</meeting>`;
+  return { name: title, block };
+}
+
 /** Load and compose the record an Explain conversation is about, or null. */
 export async function loadExplainRecordContext(
   supabase: SupabaseClient<Database>,
@@ -242,5 +296,9 @@ export async function loadExplainRecordContext(
       return documentContext(supabase, orgId, ref.id);
     case "pulse":
       return pulseContext(supabase, orgId, ref.id);
+    case "asset":
+      return assetContext(supabase, orgId, ref.id);
+    case "meeting":
+      return meetingContext(supabase, orgId, ref.id);
   }
 }

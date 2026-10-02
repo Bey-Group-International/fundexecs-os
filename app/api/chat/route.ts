@@ -12,8 +12,10 @@ import { StreamingContactRedactor, redactContacts } from "@/lib/contact-sanitize
 import { loadMeetingPrepContext, loadMeetingFollowupContext } from "@/lib/meetings/meeting-context";
 import { getActiveMandateRow, mandateContextBlock } from "@/lib/mandates";
 import { documentContextBlock } from "@/lib/earn-documents-context.server";
-import { explainInstructions, parseExplainRecordRef } from "@/lib/earn-explain";
-import { loadExplainRecordContext } from "@/lib/earn-record-context.server";
+import { explainFollowupInstructions, explainInstructions, parseExplainRecordRef } from "@/lib/earn-explain";
+import { getCachedExplanation, saveExplanation, type CachedExplanation } from "@/lib/earn-explain-cache.server";
+import { encodeStatus } from "@/lib/earn-stream-status";
+import { loadExplainRecordContext, type ExplainRecordContext } from "@/lib/earn-record-context.server";
 import {
   earnWebSearchEnabled,
   extractWebSources,
@@ -55,7 +57,7 @@ export async function POST(request: Request) {
     });
   }
 
-  const { body, model: requestedModel, prior, session_id, meeting_context, start_session, pathname, timezone, record_context } =
+  const { body, model: requestedModel, prior, session_id, meeting_context, start_session, pathname, timezone, record_context, record_refresh, record_followup, stream_status } =
     await request.json().catch(() => ({ body: "" }));
   if (!body || typeof body !== "string") {
     return new Response(JSON.stringify({ error: "Missing 'body'" }), {
@@ -85,7 +87,30 @@ export async function POST(request: Request) {
   // authenticated seat could drive unbounded Anthropic spend by scripting
   // requests against it. A no-op when Claude isn't configured (the fallback
   // path below costs nothing real).
-  const gate = await gateConversationalSpend(orgId, CONVERSATIONAL_COST.chat, "chat");
+  // An "Explain this" request: like meeting prep, the client sends only a
+  // one-liner and a { type, id } reference; the record is loaded server-side,
+  // under the caller's own permissions (a record they can't see loads as null).
+  // A conversation opened on a record keeps it attached for follow-ups.
+  const recordRef = parseExplainRecordRef(record_context);
+  const isFollowup = record_followup === true;
+  let recordCtx: ExplainRecordContext | null = null;
+  if (recordRef) {
+    try {
+      recordCtx = await loadExplainRecordContext(await createServerClient(), orgId, recordRef);
+    } catch {
+      // Non-fatal — Earn still answers the one-liner without the record.
+    }
+  }
+
+  // The first Explain on a record is cached org-wide for 24h: a repeat open is
+  // served from the cache at no credit cost unless the operator asked to
+  // refresh. Only ever after the record itself loaded for this caller above.
+  let cached: CachedExplanation | null = null;
+  if (recordRef && recordCtx && !isFollowup && record_refresh !== true) {
+    cached = await getCachedExplanation(orgId, recordRef).catch(() => null);
+  }
+
+  const gate = cached ? { ok: true as const } : await gateConversationalSpend(orgId, CONVERSATIONAL_COST.chat, "chat");
   if (!gate.ok) {
     // Carry the wall itself, not just the refusal — the client resolves it in
     // place rather than sending the operator off to the Wallet page.
@@ -104,10 +129,6 @@ export async function POST(request: Request) {
     ((meeting_context as { mode?: unknown }).mode === "prep" || (meeting_context as { mode?: unknown }).mode === "followup")
       ? (meeting_context as { id: string; mode: "prep" | "followup" })
       : null;
-
-  // An "Explain this" request: like meeting prep, the client sends only a
-  // one-liner and a { type, id } reference; the record is loaded server-side.
-  const recordRef = parseExplainRecordRef(record_context);
 
   // --- Model routing: route simple queries to a faster/cheaper model ---
   const wordCount = body.trim().split(/\s+/).length;
@@ -291,17 +312,12 @@ export async function POST(request: Request) {
   // --- Explain-this record context (server-side injection) ---
   // Org-scoped and best-effort; a record the caller can't see loads as null and
   // the reply proceeds without it.
-  if (recordRef) {
-    try {
-      const supabase = await createServerClient();
-      const record = await loadExplainRecordContext(supabase, orgId, recordRef);
-      if (record) {
-        const block = `${explainInstructions(recordRef.type, { webSearch })}\n\n${record.block}`;
-        liveContext = liveContext ? `${liveContext}\n\n${block}` : block;
-      }
-    } catch {
-      // Non-fatal — Earn still answers the one-liner without the record.
-    }
+  if (recordRef && recordCtx) {
+    const instructions = isFollowup
+      ? explainFollowupInstructions(recordRef.type, { webSearch })
+      : explainInstructions(recordRef.type, { webSearch });
+    const block = `${instructions}\n\n${recordCtx.block}`;
+    liveContext = liveContext ? `${liveContext}\n\n${block}` : block;
   }
 
   // --- Prior artifact context: last 5 completed deliverables so Earn can
@@ -417,6 +433,20 @@ export async function POST(request: Request) {
   }
 
   const encoder = new TextEncoder();
+
+  // A cached Explain answer: served as-is, no model call and no credits.
+  if (cached) {
+    void persist(cached.content);
+    return new Response(encoder.encode(cached.content), {
+      headers: {
+        "Content-Type": "text/plain; charset=utf-8",
+        "Cache-Control": "no-store",
+        "X-Earn-Cached": cached.createdAt,
+        ...(openedSessionId ? { "X-Earn-Session": openedSessionId } : {}),
+      },
+    });
+  }
+
   const identityBlock = await identityPromise;
   const stream = earnChatStream({
     body,
@@ -450,7 +480,19 @@ export async function POST(request: Request) {
       // verified block below is the ONLY sanctioned source of contact details.
       // Streaming-safe: only complete, clause-bounded text is emitted.
       const redactor = new StreamingContactRedactor();
+      // In-band progress notes for callers that opt in (the dock), framed so
+      // they never mix into the answer or the persisted reply.
+      const status = (text: string) => {
+        if (stream_status === true) controller.enqueue(encoder.encode(encodeStatus(text)));
+      };
+      let completed = false;
       try {
+        if (recordCtx) status(`Reviewing ${recordCtx.name}…`);
+        stream.on("streamEvent", (event) => {
+          if (event.type !== "content_block_start") return;
+          if (event.content_block.type === "server_tool_use") status("Searching the web…");
+          else if (event.content_block.type === "web_search_tool_result") status("Reading sources…");
+        });
         stream.on("text", (delta: string) => {
           const safe = redactor.push(delta);
           if (safe) {
@@ -493,6 +535,7 @@ export async function POST(request: Request) {
         } catch {
           // Enrichment is additive — never let it break the reply.
         }
+        completed = true;
       } catch {
         controller.enqueue(
           encoder.encode(
@@ -502,6 +545,9 @@ export async function POST(request: Request) {
       } finally {
         controller.close();
         await persist(reply);
+        if (completed && recordRef && recordCtx && !isFollowup && reply.trim()) {
+          await saveExplanation(orgId, recordRef, reply, { model, userId });
+        }
       }
     },
   });
