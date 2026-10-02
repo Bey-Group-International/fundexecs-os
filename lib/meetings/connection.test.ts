@@ -2,6 +2,10 @@ import {
   DISCONNECT_GRACE_MS,
   INITIAL_LINK,
   INITIAL_RECOVERY,
+  announceReason,
+  REANNOUNCE_CADENCE_MS,
+  REANNOUNCE_STEPS_MS,
+  reannounceDelayMs,
   canSetLocalOffer,
   connectionStateFromIce,
   peerConfig,
@@ -62,6 +66,91 @@ describe("offerCollision", () => {
     // setLocalDescription has not resolved yet, so signalingState is still
     // stable — the flag is the only evidence that we are mid-offer.
     expect(offerCollision({ signalingState: "stable", makingOffer: true, polite: false })).toBe("ignore");
+  });
+});
+
+describe("announceReason", () => {
+  const reason = (first: boolean, ...peerStates: RTCPeerConnectionState[]) =>
+    announceReason({ first, peerStates });
+
+  it("announces the opening hello whatever the room looks like", () => {
+    expect(reason(true)).toBe("first");
+    expect(reason(true, "connected", "connected")).toBe("first");
+  });
+
+  /**
+   * The defect this exists for. A client holding no peer connections is either
+   * alone — where the message costs one packet nobody receives — or is the
+   * participant whose `join` never arrived, in which case this is the only
+   * thing in the product that can put them back in the room.
+   *
+   * The rule it replaced asked only whether a HELD connection was stalled, and
+   * `some()` over nothing is false: the one participant who needed to say hello
+   * again was the one guaranteed never to.
+   */
+  it("says hello again when it holds no peer connections at all", () => {
+    expect(reason(false)).toBe("alone");
+  });
+
+  it("counts a map of nothing but closed connections as holding none", () => {
+    // We closed them, and they carry nothing. Reading this as "we have peers"
+    // was the same silence by another route.
+    expect(reason(false, "closed")).toBe("alone");
+    expect(reason(false, "closed", "closed")).toBe("alone");
+  });
+
+  it("rebuilds when something it holds is not up", () => {
+    expect(reason(false, "failed")).toBe("stalled");
+    expect(reason(false, "connected", "disconnected")).toBe("stalled");
+    expect(reason(false, "new")).toBe("stalled");
+  });
+
+  /**
+   * The case the resubscribe guard was written for, and the reason this cannot
+   * simply announce on every reconnect: a socket that blipped while the media
+   * kept flowing needs nothing, and a `join` tears down every peer connection
+   * in the room and rebuilds it.
+   */
+  it("stays quiet when every connection it holds is up", () => {
+    expect(reason(false, "connected")).toBeNull();
+    expect(reason(false, "connected", "connected", "closed")).toBeNull();
+  });
+});
+
+describe("reannounceDelayMs", () => {
+  it("starts long enough to outlast an answer in flight", () => {
+    // A peer entry appears when the far end's offer lands — one broadcast hop,
+    // not a connection — so this waits on a message, not on ICE.
+    expect(reannounceDelayMs(0)).toBe(3_000);
+  });
+
+  it("stretches as the silence goes on", () => {
+    const first = [0, 1, 2].map(reannounceDelayMs);
+    expect(first).toEqual([...REANNOUNCE_STEPS_MS]);
+    for (let i = 1; i < first.length; i++) expect(first[i]).toBeGreaterThan(first[i - 1]);
+  });
+
+  it("settles into a heartbeat rather than giving up", () => {
+    // An unanswered hello does not become less wrong with time. The host whose
+    // socket was down for two minutes still has somebody in their meeting.
+    //
+    // Asserted as a schedulable delay, not as `=== REANNOUNCE_CADENCE_MS`:
+    // comparing the function against the very constant it returns passes for
+    // any value including Infinity, which is giving up with extra steps.
+    const resting = reannounceDelayMs(REANNOUNCE_STEPS_MS.length);
+    expect(Number.isFinite(resting)).toBe(true);
+    expect(resting).toBeLessThanOrEqual(60_000);
+    expect(resting).toBeGreaterThanOrEqual(REANNOUNCE_STEPS_MS[REANNOUNCE_STEPS_MS.length - 1]);
+    expect(reannounceDelayMs(9_999)).toBe(resting);
+  });
+
+  it("treats a nonsense attempt count as the first one", () => {
+    for (const bad of [-1, Number.NaN, Number.POSITIVE_INFINITY * 0]) {
+      expect(reannounceDelayMs(bad)).toBe(REANNOUNCE_STEPS_MS[0]);
+    }
+    // Never zero: a delay of zero would spin a timer against a room that is
+    // simply empty.
+    expect(reannounceDelayMs(0.9)).toBeGreaterThan(0);
   });
 });
 

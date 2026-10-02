@@ -119,6 +119,8 @@ import { attendanceRecord, guestAttendanceUrl, participantConflictTarget } from 
 import type { MeetingSubject } from "@/lib/meetings/subject";
 import {
   DISCONNECT_GRACE_MS,
+  announceReason,
+  reannounceDelayMs,
   canSetLocalOffer,
   connectionStateFromIce,
   INITIAL_LINK,
@@ -1540,6 +1542,40 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
   const announceVideoStateRef = useRef(announceVideoState);
   useEffect(() => { announceVideoStateRef.current = announceVideoState; }, [announceVideoState]);
 
+  /**
+   * Every peer connection's state, as the announcement rules want to read it.
+   *
+   * `connectionState` is absent on a few engines, which is why the room already
+   * carries `connectionStateFromIce` — and why this goes through it rather than
+   * defaulting the gap to something. Defaulting it would read as "not up" and
+   * make those engines re-announce on every socket reconnect, which is the one
+   * thing the resubscribe guard exists to prevent.
+   */
+  const peerStatesNow = useCallback((): RTCPeerConnectionState[] =>
+    [...peersRef.current.values()].map(
+      (pc) => pc.connectionState ?? connectionStateFromIce(pc.iceConnectionState),
+    ), []);
+
+  /**
+   * Say who we are, and what our microphone and camera are doing.
+   *
+   * One function, because the three messages are one statement and have always
+   * had to travel together. `join` is what makes anybody build a connection to
+   * us; the other two are the state they would otherwise have to assume, and
+   * what they assume is "unmuted, camera on".
+   *
+   * The name is passed in rather than read from the ref: the opening
+   * announcement happens inside the join that SET that name, and a render has
+   * not necessarily mirrored it yet.
+   */
+  const announceSelf = useCallback((name: string) => {
+    sendSignalRef.current({ type: "join", from: myIdRef.current, displayName: name });
+    sendSignalRef.current({ type: "mic", from: myIdRef.current, micOn: micOnRef.current, displayName: name });
+    announceVideoStateRef.current();
+  }, []);
+  const announceSelfRef = useRef(announceSelf);
+  useEffect(() => { announceSelfRef.current = announceSelf; }, [announceSelf]);
+
   /** Recompute one peer's badge from its live connection state. */
   const refreshPeerStatus = useCallback((peerId: string) => {
     const pc = peersRef.current.get(peerId);
@@ -1896,7 +1932,11 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     const myId = myIdRef.current;
 
     if (msg.type === "join" && msg.from !== myId) {
-      playChime("join");
+      // Only for somebody we did not already have. A `join` is now also the
+      // REPAIR for a hello that went missing (see the re-announce effect), and
+      // a room that chimed at every one of them would turn a silent fix into a
+      // noise nobody could account for.
+      if (!peersRef.current.has(msg.from)) playChime("join");
       // The door is the enforcement point — the knock route refuses a removed
       // subject before anything else — but the signalling channel has never
       // been gated by the waiting room, so a client that simply skipped the
@@ -2475,13 +2515,15 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
           // media kept flowing needs nothing, and a `join` tears down every
           // peer connection in the room and rebuilds it. So it is sent only
           // when there is something to rebuild.
-          const stalled = [...peersRef.current.values()].some(
-            (pc) => pc.connectionState !== "connected" && pc.connectionState !== "closed",
-          );
-          if (!first && !stalled) return;
-          sendSignal({ type: "join", from: myIdRef.current, displayName: name });
-          sendSignal({ type: "mic", from: myIdRef.current, micOn: micOnRef.current, displayName: name });
-          announceVideoStateRef.current();
+          //
+          // That judgement is announceReason's, including the case the test
+          // here used to get backwards. It asked whether a connection this
+          // client HELD was stalled — and `some()` over nothing is false, so a
+          // client holding NO connections read as "nothing to rebuild" when it
+          // is the only state that cannot recover on its own. See the
+          // re-announce effect below for what that cost.
+          if (!announceReason({ first, peerStates: peerStatesNow() })) return;
+          announceSelfRef.current(name);
         });
       });
 
@@ -2499,7 +2541,7 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     // be suppressed for want of activation, which costs nothing, because the
     // alternative is a host who is never offered it at all.
     requestHostNotifications(isHostRef.current);
-  }, [supabase, roomCode, handleSignal, sendSignal, clearWaitingTimers]);
+  }, [supabase, roomCode, handleSignal, peerStatesNow, clearWaitingTimers]);
 
   /**
    * Fetch the ICE servers for this call.
@@ -2592,6 +2634,74 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
   // Stable handle so the waiting-room poll can enter without re-creating itself.
   const enterRoomRef = useRef(enterRoom);
   useEffect(() => { enterRoomRef.current = enterRoom; }, [enterRoom]);
+
+  /**
+   * Keep saying hello while nobody has answered.
+   *
+   * `join` is the only message in this protocol that makes anybody build a peer
+   * connection to us. An offer answers a join, an answer answers an offer, and
+   * an ICE candidate belongs to a connection that already exists — so nothing
+   * else in the room can create one from nothing. It was sent exactly once,
+   * fire and forget, over a broadcast socket a few milliseconds old, and its
+   * delivery result was discarded.
+   *
+   * When that one message did not arrive, what happened was not a dropped
+   * packet. It was somebody sitting in the meeting with their camera and
+   * microphone open, their own room drawn correctly around them, whom nobody
+   * else could see or hear — and no way back. The resubscribe above could not
+   * rescue it: it asked whether a connection this client held was stalled, and
+   * this client held none. Only a reload fixed it, and nothing anywhere told
+   * the person to reload.
+   *
+   * Invite-link guests wore it worst, which is why it arrives as a guest
+   * complaint. Their hello is the last one sent and the one sent from the worst
+   * place: straight out of the waiting room, on somebody else's network, on a
+   * socket opened moments before — the same population `shouldForceRelay`
+   * exists for. The host says "I admitted them and I can't see or hear them",
+   * and the guest sees nothing wrong at all.
+   *
+   * So while this client holds no peer connection, it keeps saying it. When the
+   * room really is empty that is one small message on a widening interval that
+   * nobody receives. When it is not, it is the only thing that puts somebody
+   * back in the meeting.
+   *
+   * Only when ALONE, deliberately. A peer that exists and is merely struggling
+   * already has the ICE recovery path working on it, and a `join` would tear
+   * that down and start again — so "stalled" is left to the machinery built for
+   * it, and this covers the one case that machinery cannot see.
+   */
+  useEffect(() => {
+    // `sessionLive`, not `ready`: `ready` is never set back to false, because it
+    // also decides which screen is drawn, so keying this on it would leave the
+    // timer rescheduling itself for as long as the tab stayed open after the
+    // call. Nothing would be SENT — teardownCall nulls the channel and
+    // sendSignalAck reports a null channel as a failure rather than a no-op —
+    // which is also why no test here can tell the two gates apart: the only
+    // trace is one pending timer, beside another this room already leaves
+    // behind, and an assertion on that number would break on anybody else's
+    // unrelated timer. So this line is held by reading, not by a test.
+    if (!sessionLive) return;
+    let attempts = 0;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+
+    const again = () => {
+      timer = setTimeout(() => {
+        // Somebody is here. Nothing to repair, and the counter resets so a peer
+        // lost later gets the quick opening retries rather than the slow tail.
+        if (announceReason({ first: false, peerStates: peerStatesNow() }) !== "alone") {
+          attempts = 0;
+          again();
+          return;
+        }
+        attempts += 1;
+        announceSelfRef.current(localNameRef.current);
+        again();
+      }, reannounceDelayMs(attempts));
+    };
+
+    again();
+    return () => { if (timer) clearTimeout(timer); };
+  }, [sessionLive, peerStatesNow]);
 
   // What we ask for follows what we draw — and, since the link state is built
   // entirely from inbound measurements, what we can afford to receive.
