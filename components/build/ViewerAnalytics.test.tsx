@@ -1,7 +1,24 @@
 jest.mock("server-only", () => ({}), { virtual: true });
 jest.mock("@/lib/auth", () => ({ getSessionContext: async () => ({ orgId: "org-1", role: "admin" }) }));
-jest.mock("@/lib/supabase/server", () => ({ createServerClient: async () => ({}) }));
+let followUps: { viewer_key: string; sent_at: string }[] = [];
+jest.mock("@/lib/supabase/server", () => ({
+  createServerClient: async () => ({
+    from: () => {
+      const q: Record<string, unknown> = {
+        select: () => q,
+        eq: () => q,
+        order: () => q,
+        limit: () => q,
+        then: (resolve: (v: unknown) => unknown) => Promise.resolve({ data: followUps }).then(resolve),
+      };
+      return q;
+    },
+  }),
+}));
 jest.mock("./engagement-actions", () => ({ refreshEngagementReads: jest.fn() }));
+jest.mock("./follow-up-actions", () => ({ draftInvestorFollowUp: jest.fn(), sendInvestorFollowUp: jest.fn() }));
+let crm = new Map();
+jest.mock("@/lib/data-room-crm.server", () => ({ crmMatches: async () => crm }));
 
 import { render, screen, within } from "@testing-library/react";
 import { buildEngagement, type EngagementView } from "@/lib/data-room-engagement";
@@ -36,6 +53,8 @@ async function show() {
 beforeEach(() => {
   views = [];
   reads = new Map();
+  followUps = [];
+  crm = new Map();
 });
 
 it("says so when nobody has opened the room", async () => {
@@ -84,4 +103,24 @@ it("shows Earn's read and flags activity newer than it", async () => {
   expect(screen.getByText("(new activity since Earn's read)")).toBeInTheDocument();
   expect(screen.getByText("Warm")).toBeInTheDocument(); // Earn's signal wins over the rules'
   expect(screen.getByRole("button", { name: "Refresh Earn's read" })).toBeInTheDocument();
+});
+
+it("links a reader to their CRM record, offers a follow-up, and shows when they were last followed up", async () => {
+  views = [row({ document_id: "ppm", viewer_email: "lp@x.com", duration_seconds: 900 })];
+  crm = new Map([["lp@x.com", { contactId: "c1", contactName: "Jane Doe", investorId: null, investorName: null }]]);
+  followUps = [{ viewer_key: "email:lp@x.com", sent_at: "2026-10-01T10:00:00Z" }];
+  await show();
+  expect(screen.getByRole("link", { name: "Jane Doe →" }).getAttribute("href")).toBe("/network/c1");
+  expect(screen.getByText("Followed up Oct 1")).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Draft follow-up" })).toBeInTheDocument();
+});
+
+it("says when a named reader isn't in the CRM, and offers no follow-up to unnamed ones", async () => {
+  views = [
+    row({ document_id: "ppm", viewer_email: "new@x.com", duration_seconds: 60 }),
+    row({ document_id: "deck", session_id: "b9", duration_seconds: 60 }),
+  ];
+  await show();
+  expect(screen.getByText("Not in your CRM yet")).toBeInTheDocument();
+  expect(screen.getAllByRole("button", { name: "Draft follow-up" })).toHaveLength(1);
 });
