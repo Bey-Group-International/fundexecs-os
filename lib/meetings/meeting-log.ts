@@ -17,6 +17,7 @@
 //
 // Pure: no DOM, no Supabase, no model calls.
 
+import { reportActionItems } from "@/lib/meetings/action-item-source";
 import { normalizeNoteList, normalizeNoteText } from "@/lib/meetings/live-notes";
 import { isPastMeeting } from "@/lib/meetings/schedule";
 
@@ -158,7 +159,7 @@ export function toLogEntry(
     summary,
     keyPoints: normalizeNoteList(report?.key_points),
     decisions: normalizeNoteList(analysis?.decisions),
-    actionItems: normalizeNoteList(report?.action_items),
+    actionItems: reportActionItems(report?.action_items, analysis),
     sentiment: normalizeNoteText(analysis?.sentiment),
     hasReport: summary.length > 0,
     canRegenerate: report?.has_transcript === true,

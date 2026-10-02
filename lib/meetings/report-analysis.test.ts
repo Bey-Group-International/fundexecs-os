@@ -40,3 +40,42 @@ describe("reportPrompt", () => {
     expect(prompt).not.toContain("Old summary");
   });
 });
+
+describe("generateMeetingReport's action items", () => {
+  function clientReturning(input: Record<string, unknown>) {
+    return {
+      messages: {
+        create: async () => ({
+          stop_reason: "tool_use",
+          content: [{ type: "tool_use", id: "t", name: "meeting_report", input }],
+        }),
+      },
+    } as never;
+  }
+
+  it("fills an empty list from the follow-up email the model wrote", async () => {
+    const { generateMeetingReport } = await import("@/lib/meetings/report-analysis");
+    const report = await generateMeetingReport(
+      clientReturning({
+        summary: "Agreed to proceed.",
+        action_items: [],
+        follow_up_draft: "Hi {{first_name}},\n\nAction items:\n1. Jane: send the deck\n2. Mark: book the call\n\nBest,\nAlex",
+      }),
+      "model",
+      { ...base, host: { name: "Alex Rivera" } },
+    );
+    expect(report.action_items).toEqual(["Jane: send the deck", "Mark: book the call"]);
+  });
+
+  it("gives the host a closing step when there is nothing else", async () => {
+    const { generateMeetingReport } = await import("@/lib/meetings/report-analysis");
+    const report = await generateMeetingReport(
+      clientReturning({ summary: "A short catch-up.", action_items: [], follow_up_draft: "Hi all" }),
+      "model",
+      { ...base, host: { name: "Alex Rivera" } },
+    );
+    expect(report.action_items).toEqual([
+      "Alex Rivera: Send the follow-up and confirm next steps with everyone in the meeting",
+    ]);
+  });
+});

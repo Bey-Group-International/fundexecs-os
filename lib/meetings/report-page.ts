@@ -12,6 +12,7 @@
 // the shape of what a page needs, and the one rule that changed meaning when it
 // crossed over — how long a missing report has been missing.
 
+import { reportActionItems } from "@/lib/meetings/action-item-source";
 import { REPORT_WAIT_LIMIT_MS } from "@/lib/meetings/attendance";
 import { normalizeNoteList, normalizeNoteText } from "@/lib/meetings/live-notes";
 import { TRUNCATED_KEY } from "@/lib/meetings/report-analysis";
@@ -151,7 +152,9 @@ export function reportContent(report: ReportRow): ReportContent {
   return {
     summary: report.summary,
     keyPoints: normalizeNoteList(report.key_points),
-    actionItems: normalizeNoteList(report.action_items),
+    // The report's own list, or — for a report the model left without one —
+    // the items its follow-up email lists, so they are never only in the email.
+    actionItems: reportActionItems(report.action_items, analysis),
     decisions: normalizeNoteList(analysis?.decisions),
     followUp: normalizeNoteText(analysis?.follow_up_draft) || null,
     sentiment: typeof analysis?.sentiment === "string" ? analysis.sentiment : null,

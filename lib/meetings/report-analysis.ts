@@ -12,6 +12,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { normalizeNoteList, normalizeNoteText } from "@/lib/meetings/live-notes";
 import { FIRST_NAME_TOKEN } from "@/lib/meetings/follow-up-greeting";
 import { cleanCorrection } from "@/lib/meetings/report-versions";
+import { ensureActionItems } from "@/lib/meetings/action-item-source";
 
 /**
  * Model context / cost budget, in characters. The tail is kept: a meeting ends
@@ -110,7 +111,9 @@ export const MEETING_REPORT_SCHEMA = {
     action_items: {
       type: "array",
       items: { type: "string" },
-      description: "Action items prefixed with owner name, e.g. 'Sarah: Send deck by Friday'",
+      minItems: 1,
+      description:
+        "Every commitment from the meeting, one per item, as 'Owner: task (by deadline if stated)', e.g. 'Sarah: Send the deck by Friday'. Never empty: when nothing was explicitly assigned, list the clear next steps the discussion implies, owned by whoever is best placed (the host by default). These are the same items, in the same order, as the follow-up email's numbered action items.",
     },
     decisions: { type: "array", items: { type: "string" }, description: "Key decisions reached" },
     sentiment: { type: "string", enum: ["positive", "neutral", "negative", "mixed"] },
@@ -146,6 +149,7 @@ Produce comprehensive, actionable meeting reports. Transcript lines are prefixed
 For the follow_up_draft, write a ready-to-send professional email covering: (1) brief summary paragraph, (2) decisions made, (3) numbered action items with owners and deadlines where stated, (4) proposed next meeting if relevant, (5) professional closing. Plain text only.
 The follow_up_draft is written BY the host and sent FROM the host's mailbox TO the recipients — the other people in the meeting. Write it in the host's voice ("Thanks for your time today", "I will send…"). Never address it to the host, never thank the host as though they were the reader, and sign it off with the host's name.
 Begin the follow_up_draft with exactly the line "Hi ${FIRST_NAME_TOKEN}," — that placeholder is replaced with each recipient's first name when the email is sent. Do not put anybody's name in the greeting.
+action_items is the authoritative list of commitments and is never empty — every meeting leaves somebody something to do. The follow_up_draft's numbered action items are exactly the action_items, same items, same owners, same order: do not put a commitment in the email that is missing from action_items.
 When the host gives corrections, they are authoritative: they override anything you would otherwise infer from the transcript, and they apply to the whole report, not only the follow-up.`;
 
 /**
@@ -295,11 +299,15 @@ export async function generateMeetingReport(
   }
 
   const raw = toolUse.input as Record<string, unknown>;
+  const summary = normalizeNoteText(raw.summary);
   return {
     ...raw,
-    summary: normalizeNoteText(raw.summary),
+    summary,
     key_points: normalizeNoteList(raw.key_points),
-    action_items: normalizeNoteList(raw.action_items),
+    // Never none for a report that says anything: the model's list, else the
+    // follow-up email's, else a closing step for the host. See
+    // action-item-source.ts for why the email and the list disagreed.
+    action_items: ensureActionItems({ ...raw, summary }, input.host?.name ?? null),
     decisions: normalizeNoteList(raw.decisions),
     [TRUNCATED_KEY]: truncated,
   };

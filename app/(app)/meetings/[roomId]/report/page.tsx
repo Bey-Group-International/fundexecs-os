@@ -243,6 +243,21 @@ export default async function MeetingReportPage({
             </Section>
           )}
 
+          {/* Action items — straight after the summary, because they are what the
+              meeting left people to do. Ticked off here, as the tasks they became. */}
+          {actionItems.length > 0 ? (
+            <ActionItemsList
+              meetingId={meeting.id}
+              items={actionItems}
+              viewerId={data.viewerId}
+              isHost={data.isHost}
+            />
+          ) : hasBody ? (
+            <Section title="Action items">
+              <EmptyNote>No action items were captured in this meeting.</EmptyNote>
+            </Section>
+          ) : null}
+
           {/* Decisions + key points. Decisions first: they are what the meeting
               settled, and the follow-up commits people to them. */}
           {hasBody && (content.decisions.length > 0 || content.keyPoints.length > 0) && (
@@ -277,20 +292,6 @@ export default async function MeetingReportPage({
               </Section>
             </div>
           )}
-
-          {/* Action items — ticked off here, as the tasks they became. */}
-          {actionItems.length > 0 ? (
-            <ActionItemsList
-              meetingId={meeting.id}
-              items={actionItems}
-              viewerId={data.viewerId}
-              isHost={data.isHost}
-            />
-          ) : hasBody ? (
-            <Section title="Action items">
-              <EmptyNote>No action items were captured in this meeting.</EmptyNote>
-            </Section>
-          ) : null}
 
           {/* Next meeting suggestion */}
           {content.nextMeeting && (
