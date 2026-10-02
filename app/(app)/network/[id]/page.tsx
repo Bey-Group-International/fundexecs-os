@@ -6,6 +6,7 @@ import { createServerClient } from "@/lib/supabase/server";
 import { loadContactRecord, loadPrincipalNames } from "@/lib/network-contact";
 import { recordNetworkAudit } from "@/lib/network-audit";
 import { ContactRecordView } from "@/components/source/ContactRecordView";
+import { ContactLive } from "@/components/source/ContactLive";
 import { AskEarnButton } from "@/components/AskEarnButton";
 
 export const dynamic = "force-dynamic";
@@ -90,6 +91,8 @@ export default async function ContactPage({ params }: Props) {
         canDelete={canCorrect}
         canCorrect={canCorrect}
       />
+      {/* New mail and meetings land on this record while it is open. */}
+      <ContactLive contactId={view.contact.id} />
     </div>
   );
 }

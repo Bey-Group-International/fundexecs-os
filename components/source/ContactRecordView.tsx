@@ -17,6 +17,7 @@ import { CONTACT_STAGES, STAGE_LABEL, type ContactStage } from "@/lib/network-st
 import { LOGGABLE_TYPES } from "@/lib/network-contact";
 import { reportUrlFromMetadata } from "@/lib/meetings/crm-activity";
 import { identityIsAsserted } from "@/lib/crm/identity-assurance";
+import { ContactReportMenu } from "@/components/source/ContactReportMenu";
 import type {
   ContactRecordView as RecordView,
   ContactRecord,
@@ -71,6 +72,13 @@ function formatDateTime(iso: string): string {
     hour: "numeric",
     minute: "2-digit",
   });
+}
+
+/** The inbox thread a timeline entry describes, when it describes one. */
+function threadIdFromMetadata(metadata: unknown): string | null {
+  if (!metadata || typeof metadata !== "object") return null;
+  const raw = (metadata as { thread_id?: unknown }).thread_id;
+  return typeof raw === "string" && raw ? raw : null;
 }
 
 function humanize(v: string): string {
@@ -304,6 +312,9 @@ export function ContactRecordView({ initial, owners, currentUserId, canCorrect }
             {contact.strengthScore}
           </span>
           <span className="text-[11px] text-fg-muted">{humanize(contact.strengthLabel)}</span>
+          <div className="mt-2">
+            <ContactReportMenu contactId={contact.id} />
+          </div>
         </div>
       </header>
 
@@ -665,6 +676,14 @@ function Timeline({
               >
                 Open the full report →
               </a>
+            )}
+            {threadIdFromMetadata(e.metadata) && e.subject && (
+              <Link
+                href={`/inbox?q=${encodeURIComponent(e.subject)}`}
+                className="mt-1 inline-block text-[11px] text-gold-400 hover:underline"
+              >
+                Open in inbox →
+              </Link>
             )}
             {e.misattributedAt && (
               <p className="mt-1 text-[11px] text-fg-muted">

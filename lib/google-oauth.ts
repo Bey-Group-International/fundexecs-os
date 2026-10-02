@@ -21,9 +21,16 @@ import { getOrgSecret } from "@/lib/org-secrets";
 
 const AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth";
 const TOKEN_URL = "https://oauth2.googleapis.com/token";
-// gmail.send is the only Gmail scope the OS needs (outbound identity); openid
-// email lets the callback label the connection with the connected address.
-const SCOPES = "openid email https://www.googleapis.com/auth/gmail.send";
+// gmail.send is the outbound identity. gmail.readonly is what lets the hourly
+// mailbox sweep (lib/integrations/gmail-sync) bring the conversations people
+// have in Gmail itself into the inbox, and from there onto the CRM timeline
+// and every report built on it. Like gmail.send it is a RESTRICTED scope:
+// Google verification is required before it works outside the test list. An
+// org that connected before it was added keeps sending and is told to
+// reconnect by the sweep (gmail_mailbox_sync.status = 'needs_reconnect').
+// openid email lets the callback label the connection with the address.
+export const GMAIL_READ_SCOPE = "https://www.googleapis.com/auth/gmail.readonly";
+const SCOPES = `openid email https://www.googleapis.com/auth/gmail.send ${GMAIL_READ_SCOPE}`;
 
 const STATE_TTL_MS = 10 * 60 * 1000;
 // Google's token endpoint answers in well under a second; a hung connection

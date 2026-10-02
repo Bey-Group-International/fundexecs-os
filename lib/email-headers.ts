@@ -142,3 +142,10 @@ export function formatMailbox(name: string, email: string): string {
 export function sanitizeMimeParam(value: string): string {
   return sanitizeHeaderValue(value).replace(/["\\]/g, "");
 }
+
+/**
+ * Stamped on every message this app sends through a connected mailbox, so the
+ * mailbox sweep (lib/integrations/gmail-sync) can tell the app's own sends from
+ * mail a person wrote in Gmail — the former is already on its inbox thread.
+ */
+export const FUNDEXECS_ORIGIN_HEADER = "X-FundExecs-Origin";

@@ -33,6 +33,10 @@ export interface InboundMessageSeed {
   occurredAt?: string | null;
   // Provenance and provider extras, stored on inbox_messages.metadata.
   metadata?: Record<string, unknown>;
+  // Which way it went. Webhooks only ever deliver inbound mail, so absent
+  // means inbound; the mailbox sweep also reads the Sent folder, and a message
+  // the org sent must neither mark its thread unread nor reopen it.
+  direction?: "inbound" | "outbound";
 }
 
 /** One verified, mapped webhook event ready to ingest. */

@@ -156,6 +156,33 @@ describe("ingestInboundEvent", () => {
     });
   });
 
+  it("records a message the org sent as outbound, without re-flagging its thread", async () => {
+    const { supabase, recorded } = makeSupabase({ existingThreadId: "thr-1" });
+    const sent: InboundEvent = {
+      ...BOOKING_EVENT,
+      eventId: "gmail:msg-9",
+      message: { ...BOOKING_EVENT.message, body: "Sending the deck.", direction: "outbound" },
+    };
+    await ingestInboundEvent(supabase, "org-1", "gmail_sync", sent);
+
+    const threadUpdate = recorded.updates.find((u) => u.table === "inbox_threads")!;
+    expect(threadUpdate.patch).not.toHaveProperty("unread");
+    expect(threadUpdate.patch).not.toHaveProperty("status");
+    const message = recorded.inserts.find((i) => i.table === "inbox_messages")!;
+    expect(message.row.direction).toBe("outbound");
+  });
+
+  it("creates a thread the org started as read", async () => {
+    const { supabase, recorded } = makeSupabase();
+    await ingestInboundEvent(supabase, "org-1", "gmail_sync", {
+      ...BOOKING_EVENT,
+      eventId: "gmail:msg-10",
+      message: { ...BOOKING_EVENT.message, direction: "outbound" },
+    });
+    const thread = recorded.inserts.find((i) => i.table === "inbox_threads")!;
+    expect(thread.row.unread).toBe(false);
+  });
+
   it("leaves meeting fields alone when the event does not speak to them", async () => {
     const { supabase, recorded } = makeSupabase({ existingThreadId: "thr-1" });
     const emailEvent: InboundEvent = {

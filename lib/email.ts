@@ -36,7 +36,13 @@
 // deliberate — an org that has not connected a mailbox yet must still be able
 // to save a meeting, cancel a booking, or issue an invoice. Nothing in this
 // module throws.
-import { encodeHeaderValue, formatMailbox, sanitizeHeaderValue, sanitizeMimeParam } from "@/lib/email-headers";
+import {
+  encodeHeaderValue,
+  FUNDEXECS_ORIGIN_HEADER,
+  formatMailbox,
+  sanitizeHeaderValue,
+  sanitizeMimeParam,
+} from "@/lib/email-headers";
 import { getGoogleAccessToken, googleOAuthConfigured } from "@/lib/google-oauth";
 import { getOrgSecretBounded } from "@/lib/org-secrets";
 
@@ -124,6 +130,11 @@ function buildRfc2822(args: SendEmailArgs, from: string | null): string {
     ...(from ? [`From: ${formatMailbox(args.fromName ?? "FundExecs", from)}`] : []),
     `To: ${formatMailbox(args.to.name, args.to.email)}`,
     `Subject: ${encodeHeaderValue(args.subject)}`,
+    // Marks mail this app sent through the mailbox. The mailbox sweep
+    // (lib/integrations/gmail-sync) reads the Sent folder too, and without this
+    // every reply sent from the inbox would come back as a second copy of
+    // itself — the app already recorded it on its own thread when it sent it.
+    `${FUNDEXECS_ORIGIN_HEADER}: 1`,
     `MIME-Version: 1.0`,
   ];
 

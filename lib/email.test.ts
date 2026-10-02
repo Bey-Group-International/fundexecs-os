@@ -459,6 +459,8 @@ describe("sendEmail header injection", () => {
       // Quoted because the injected text left a colon in the phrase.
       'To: "b X-Injected: 2" <lp@acme.test>',
       "Subject: a X-Injected: 1",
+      // Ours, fixed text: the mailbox sweep skips what the app itself sent.
+      "X-FundExecs-Origin: 1",
       "MIME-Version: 1.0",
       "Content-Type: text/html; charset=utf-8",
     ]);

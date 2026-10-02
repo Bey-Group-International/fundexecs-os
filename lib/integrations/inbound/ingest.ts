@@ -56,6 +56,7 @@ export async function ingestInboundEvent(
 
   try {
     const seed = event.thread;
+    const outbound = event.message.direction === "outbound";
     const preview = event.message.body.replace(/\s+/g, " ").trim().slice(0, 200);
     const occurredAt = event.message.occurredAt ?? new Date().toISOString();
 
@@ -74,14 +75,15 @@ export async function ingestInboundEvent(
 
     if (existing.data) {
       threadId = existing.data.id;
-      // New activity reopens and re-flags the thread; meeting fields are only
-      // touched when the event speaks to them (undefined = leave as-is,
-      // null = explicitly cleared, e.g. a cancellation).
+      // New inbound activity reopens and re-flags the thread; meeting fields
+      // are only touched when the event speaks to them (undefined = leave
+      // as-is, null = explicitly cleared, e.g. a cancellation). A message the
+      // org itself sent moves the thread forward without asking for attention:
+      // nobody needs to be told about their own reply.
       const update: Database["public"]["Tables"]["inbox_threads"]["Update"] = {
         preview,
         last_message_at: occurredAt,
-        unread: true,
-        status: "open",
+        ...(outbound ? {} : { unread: true, status: "open" as const }),
       };
       if (seed.meetingAt !== undefined) update.meeting_at = seed.meetingAt;
       if (seed.meetingUrl !== undefined) update.meeting_url = seed.meetingUrl;
@@ -98,10 +100,10 @@ export async function ingestInboundEvent(
           counterparty_name: seed.counterpartyName,
           counterparty_email: seed.counterpartyEmail,
           preview,
-          unread: true,
+          unread: !outbound,
           priority: computePriority({
             category: seed.category,
-            unread: true,
+            unread: !outbound,
             hasContext: false,
             ageHours: 0,
             intent: null,
@@ -121,7 +123,7 @@ export async function ingestInboundEvent(
     const message = await supabase.from("inbox_messages").insert({
       organization_id: orgId,
       thread_id: threadId,
-      direction: "inbound",
+      direction: outbound ? "outbound" : "inbound",
       author: event.message.author,
       body: event.message.body,
       occurred_at: occurredAt,

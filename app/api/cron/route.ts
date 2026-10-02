@@ -11,6 +11,7 @@ import { runProactiveSweepAllOrgs } from "@/lib/proactive/orchestrate";
 import { runIntelligenceSyncAllOrgs } from "@/lib/intelligence/sweep";
 import { refreshStaleFeeds } from "@/lib/calendar/feeds.server";
 import { syncStaleGoogleConnections } from "@/lib/calendar/google.server";
+import { syncConnectedMailboxes, type MailboxSweepSummary } from "@/lib/integrations/gmail-sync/sync.server";
 import { runMeetingReminders, type ReminderSweepStats } from "@/lib/meetings/reminder-sweep.server";
 import {
   runBookingConfirmationRetries,
@@ -303,6 +304,20 @@ export async function GET(request: Request) {
     console.error("google_calendar_sync failed", e);
   }
 
+  // Connected Gmail mailboxes: what people wrote and received in Gmail itself,
+  // into the inbox and from there onto each contact's timeline and the reports
+  // built on it. Incremental by Gmail's history cursor, so a quiet mailbox is
+  // one request. Best-effort like the calendar sync above — one org's revoked
+  // grant is recorded on its own sync row and never aborts the sweep.
+  let mailboxes: MailboxSweepSummary = {
+    mailboxes: 0, ingested: 0, failed: 0, needsReconnect: 0, incomplete: false,
+  };
+  try {
+    mailboxes = await syncConnectedMailboxes(supabase, { now });
+  } catch (e) {
+    console.error("gmail_mailbox_sync failed", e);
+  }
+
   // Meeting reminders: `reminder_minutes` is set on the schedule screen and,
   // until this ran, was only ever honoured by Google for meetings that happened
   // to be synced there. This is what makes the setting mean something for the
@@ -427,6 +442,10 @@ export async function GET(request: Request) {
         googleCalendarConnectionsSynced: googleCalendars.connections,
         googleCalendarEventsUpserted: googleCalendars.upserted,
         googleCalendarSyncFailures: googleCalendars.failed,
+        gmailMailboxesSynced: mailboxes.mailboxes,
+        gmailMessagesIngested: mailboxes.ingested,
+        gmailMailboxFailures: mailboxes.failed,
+        gmailMailboxesNeedingReconnect: mailboxes.needsReconnect,
         webhooksDelivered: webhooks.delivered,
         webhooksFailed: webhooks.failed,
         proactiveSurfaced: proactive.surfaced,
