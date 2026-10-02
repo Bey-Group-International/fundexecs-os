@@ -116,9 +116,10 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
         if (err instanceof SlotUnavailableError) throw new SlotUnavailableError(HOST_BOOKING_OVERLAP_MESSAGE);
         throw err;
       }
-      // A pending request has said nothing to the invitee's calendar yet, but
-      // they still need to know the time they asked for is not the one on offer.
-      emailKind = "rescheduled_by_host";
+      // A confirmed booking is a meeting that moved. A pending request is not
+      // a meeting yet: the invitee hears that a different time is on offer,
+      // with no calendar invite for something the host has not accepted.
+      emailKind = next.booking.status === "confirmed" ? "rescheduled_by_host" : "request_moved_by_host";
     } else if (action === "decline") {
       next = await declineBooking(service, ctx, reason);
       emailKind = "declined";
@@ -165,9 +166,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       // endpoint refuses anything that is not confirmed regardless.
       manageToken: holdsCalendarEntry ? next.booking.manage_token : null,
       reason,
-      // No booking id, no .ics: a pending request moved by the host is still
-      // only a request, and must not land in anyone's calendar as a meeting.
-      bookingId: action === "reschedule" && !holdsCalendarEntry ? null : next.booking.id,
+      bookingId: next.booking.id,
       bookingCreatedAt: next.booking.created_at,
       bookingUpdatedAt: next.booking.updated_at,
       bookingSequence: next.booking.calendar_sequence,

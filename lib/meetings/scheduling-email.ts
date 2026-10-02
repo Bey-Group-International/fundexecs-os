@@ -168,6 +168,8 @@ export function inviteMethodFor(kind: BookingEmailKind): "REQUEST" | "CANCEL" | 
       return "CANCEL";
     case "requested":
     case "request_reminder":
+    // Still a request: nothing is in anyone's calendar to move.
+    case "request_moved_by_host":
       return null;
   }
 }
@@ -219,6 +221,8 @@ export type BookingEmailKind =
   | "declined"
   | "rescheduled"
   | "rescheduled_by_host"
+  /** The host offered a different time for a request they have not approved yet. */
+  | "request_moved_by_host"
   | "cancelled_by_invitee"
   | "cancelled_by_host";
 
@@ -457,6 +461,32 @@ function buildBookingMessages(
           }),
         });
       }
+      break;
+
+    // The host moved a request they have not approved yet. Nothing is booked,
+    // so this is not "your meeting moved": it says the time they asked for is
+    // not the one on offer, that the request is still waiting, and how to take
+    // the new time or pick another. Invitee only — the host made the change
+    // and holds no calendar entry for a request.
+    case "request_moved_by_host":
+      messages.push({
+        to: inviteeTo,
+        subject: `New time suggested: ${ctx.eventTitle} with ${ctx.hostName}`,
+        html: buildSchedulingEmailHtml({
+          heading: "A different time for your request",
+          intro: `${ctx.hostName} suggested a different time from the one you asked for. Your request is still waiting on their confirmation, now at the new time.`,
+          rows: [
+            ["Meeting", ctx.eventTitle],
+            ["Suggested time", inviteeWhen],
+            ["You asked for", inviteePrevious],
+            ["With", ctx.hostName],
+          ],
+          cta: null,
+          footnote: ctx.manageUrl
+            ? `If the new time doesn't work, cancel or pick another: ${ctx.manageUrl}`
+            : null,
+        }),
+      });
       break;
 
     case "cancelled_by_invitee":

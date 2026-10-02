@@ -226,6 +226,7 @@ export function MeetingsCalendar({
   const [expandedDay, setExpandedDay] = useState<Date | null>(null);
   const [expandedItemKey, setExpandedItemKey] = useState<string | null>(null);
   const refreshTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const requestsTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [channelName] = useState(() => nextChannelName("calendar-meetings"));
 
   // Every label this clock drives is minute-grained ("in 5 min", "12 min
@@ -311,6 +312,10 @@ export function MeetingsCalendar({
     }
   }
 
+  // Held by ref for the realtime handler and the drag handler, which outlive
+  // the render that created them.
+  const refreshRequestsRef = useRef(refreshRequests);
+
   // Re-read when the window moves to another month.
   useEffect(() => {
     void refresh();
@@ -325,13 +330,27 @@ export function MeetingsCalendar({
       if (refreshTimer.current) clearTimeout(refreshTimer.current);
       refreshTimer.current = setTimeout(() => void refresh(), 350);
     }
+    // A request arriving, being cancelled by its invitee, or moved by them
+    // from their manage link shows up while the calendar is open, rather than
+    // on the next month change. RLS delivers only the host's own bookings; the
+    // filter keeps the channel from carrying anyone else's.
+    function scheduleRequestsRefresh() {
+      if (requestsTimer.current) clearTimeout(requestsTimer.current);
+      requestsTimer.current = setTimeout(() => void refreshRequestsRef.current(), 350);
+    }
     const channel = supabase
       .channel(channelName)
       .on("postgres_changes", { event: "*", schema: "public", table: "live_meetings" }, () => scheduleRefresh())
       .on("postgres_changes", { event: "*", schema: "public", table: "scheduling_blocks" }, () => void refreshBlocks())
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "scheduling_bookings", filter: `host_user_id=eq.${userId}` },
+        () => scheduleRequestsRefresh(),
+      )
       .subscribe();
     return () => {
       if (refreshTimer.current) clearTimeout(refreshTimer.current);
+      if (requestsTimer.current) clearTimeout(requestsTimer.current);
       void supabase.removeChannel(channel);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -499,7 +518,6 @@ export function MeetingsCalendar({
   // `refresh` is redeclared each render; hold it by ref so the drag handler
   // below stays stable instead of being rebuilt on every tick of the clock.
   const refreshRef = useRef(refresh);
-  const refreshRequestsRef = useRef(refreshRequests);
   useEffect(() => {
     refreshRef.current = refresh;
     refreshRequestsRef.current = refreshRequests;
