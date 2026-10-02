@@ -7,7 +7,7 @@
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { suggestRoomShareSettings } from "@/lib/document-review";
 import { inputClass } from "./DraftWithEarn";
-import { createShare, revokeShare } from "./materials-actions";
+import { createShare, revokeShare, updateShareAlerts } from "./materials-actions";
 
 /** A section this room publishes, with how many documents sit in it. */
 export interface PublishedSection {
@@ -28,6 +28,10 @@ export interface ShareView {
   watermark?: boolean;
   /** Set on a single-document link made from a document's review page. */
   document_id?: string | null;
+  /** Email the creator the first time each reader opens the link. */
+  notify_on_open?: boolean;
+  /** Email the creator a daily summary of activity on the link. */
+  daily_digest?: boolean;
 }
 
 function status(s: ShareView): { label: string; tone: string } {
@@ -126,8 +130,48 @@ function ShareRow({ share }: { share: ShareView }) {
               Sections: {share.allowed_sections.join(", ")}
             </p>
           )}
+          <AlertToggles share={share} />
         </div>
       ) : null}
+    </div>
+  );
+}
+
+/** On/off for a live link's alerts, without making a new link. */
+function AlertToggles({ share }: { share: ShareView }) {
+  const [notify, setNotify] = useState(Boolean(share.notify_on_open));
+  const [digest, setDigest] = useState(Boolean(share.daily_digest));
+  const [pending, startTransition] = useTransition();
+
+  const flip = (which: "notify" | "digest") => {
+    const next = which === "notify" ? !notify : !digest;
+    if (which === "notify") setNotify(next);
+    else setDigest(next);
+    startTransition(async () => {
+      try {
+        await updateShareAlerts(share.id, which === "notify" ? { notifyOnOpen: next } : { dailyDigest: next });
+      } catch {
+        // Put the switch back where the server still has it.
+        if (which === "notify") setNotify(!next);
+        else setDigest(!next);
+      }
+    });
+  };
+
+  const chip = (on: boolean) =>
+    `rounded-full border px-2.5 py-1 font-mono text-[10px] uppercase tracking-wider transition disabled:opacity-50 ${
+      on ? "border-gold-500/50 bg-gold-500/10 text-gold-300" : "border-line text-fg-muted hover:text-fg-secondary"
+    }`;
+
+  return (
+    <div className="mt-2 flex flex-wrap items-center gap-1.5">
+      <span className="mr-1 font-mono text-[10px] uppercase tracking-wider text-fg-muted/70">Email me</span>
+      <button type="button" aria-pressed={notify} disabled={pending} onClick={() => flip("notify")} className={chip(notify)}>
+        First open per reader
+      </button>
+      <button type="button" aria-pressed={digest} disabled={pending} onClick={() => flip("digest")} className={chip(digest)}>
+        Daily digest
+      </button>
     </div>
   );
 }
@@ -155,6 +199,7 @@ function CreateShareForm({
   const [showNdaText, setShowNdaText] = useState(false);
   const [requirePassword, setRequirePassword] = useState(false);
   const [notifyOnOpen, setNotifyOnOpen] = useState(false);
+  const [dailyDigest, setDailyDigest] = useState(false);
   const applyEarn = () => {
     setLabel((v) => v || earn.label);
     setExpiresDays(String(earn.expiresInDays));
@@ -319,7 +364,19 @@ function CreateShareForm({
             onChange={(e) => setNotifyOnOpen(e.target.checked)}
             className="h-3.5 w-3.5 accent-gold-400"
           />
-          <span className="text-sm text-fg-secondary">Notify me when this link is opened</span>
+          <span className="text-sm text-fg-secondary">Email me the first time each reader opens it</span>
+        </label>
+        <label className="flex cursor-pointer items-center gap-2.5">
+          <input
+            type="checkbox"
+            name="daily_digest"
+            value="1"
+            checked={dailyDigest}
+            onChange={(e) => setDailyDigest(e.target.checked)}
+            className="h-3.5 w-3.5 accent-gold-400"
+          />
+          <span className="text-sm text-fg-secondary">Daily activity digest</span>
+          <span className="ml-auto text-[11px] text-fg-muted">Only on days with activity</span>
         </label>
       </div>
 

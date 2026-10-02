@@ -263,6 +263,8 @@ export async function MaterialsModule({ roomId }: { roomId?: string } = {}) {
               allow_download: s.allow_download ?? true,
               watermark: s.watermark ?? false,
               document_id: s.document_id ?? null,
+              notify_on_open: s.notify_on_open ?? false,
+              daily_digest: s.daily_digest ?? false,
             }))}
             activeCount={activeShareCount}
           />

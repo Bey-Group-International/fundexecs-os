@@ -913,6 +913,20 @@ export type DataRoomShare = {
   watermark: boolean;
   // Single-document link: opens only this document. Null = the whole room.
   document_id: string | null;
+  // Daily activity digest to the creator (migration 20261002150000).
+  // digest_sent_at ends the window last reported.
+  daily_digest: boolean;
+  digest_sent_at: string | null;
+};
+
+// One row per (link, reader) whose first open the creator has been told about
+// (migration 20261002150000). The primary key is the dedupe.
+export type DataRoomOpenAlert = {
+  share_id: string;
+  viewer_key: string;
+  organization_id: string;
+  viewer_email: string | null;
+  created_at: string;
 };
 
 // Text layer of an uploaded file (migration 20260930200000). Keyed to the
@@ -3147,6 +3161,7 @@ export type Database = {
       data_room_documents: TableShape<DataRoomDocument>;
       data_room_shares: TableShape<DataRoomShare>;
       data_room_views: TableShape<DataRoomView>;
+      data_room_open_alerts: TableShape<DataRoomOpenAlert>;
       investor_portal_shares: TableShape<InvestorPortalShare>;
       investor_portal_views: TableShape<InvestorPortalView>;
       valuation_marks: TableShape<ValuationMark>;

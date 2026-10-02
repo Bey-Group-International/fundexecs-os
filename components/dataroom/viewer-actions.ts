@@ -101,3 +101,52 @@ export async function passEmailGate(token: string, email: string): Promise<{ ok:
 
   return { ok: true };
 }
+
+/**
+ * The reader is now looking at the room's content. Records their first open
+ * of this link and, the first time only, emails the link's creator when they
+ * asked to be told. Called once per page view from the viewer.
+ *
+ * Re-checks everything the page did — the link is live and every gate this
+ * reader must pass is passed — because a Server Action is a public endpoint
+ * and the page's word for it is not enough.
+ */
+export async function recordRoomOpen(token: string, visitorId: string): Promise<void> {
+  if (typeof token !== "string" || !token || typeof visitorId !== "string") return;
+  const { hasSupabaseServiceEnv } = await import("@/lib/supabase/server");
+  if (!hasSupabaseServiceEnv()) return;
+  const supabase = createServiceClient();
+  const { data } = await supabase
+    .from("data_room_shares")
+    .select(
+      "id, organization_id, room_id, label, notify_on_open, created_by, revoked_at, expires_at, require_email, require_nda, password_hash",
+    )
+    .eq("token", token)
+    .maybeSingle();
+  const share = data as {
+    id: string;
+    organization_id: string;
+    room_id: string | null;
+    label: string | null;
+    notify_on_open: boolean;
+    created_by: string | null;
+    revoked_at: string | null;
+    expires_at: string | null;
+    require_email: boolean;
+    require_nda: boolean;
+    password_hash: string | null;
+  } | null;
+  if (!share || share.revoked_at || !share.room_id) return;
+  if (share.expires_at && new Date(share.expires_at).getTime() < Date.now()) return;
+
+  const { readGatePass, gateSatisfied } = await import("@/lib/data-room-gate");
+  const pass = await readGatePass(share.id);
+  if (!gateSatisfied(share, pass)) return;
+
+  const { viewerKeyFor } = await import("@/lib/data-room-alerts");
+  const viewerEmail = pass?.email ?? null;
+  const key = viewerKeyFor(viewerEmail, visitorId);
+  if (!key) return;
+  const { recordFirstOpen } = await import("@/lib/data-room-alerts.server");
+  await recordFirstOpen(supabase, share, key, viewerEmail).catch(() => undefined);
+}
