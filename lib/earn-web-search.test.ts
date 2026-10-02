@@ -2,39 +2,10 @@ import {
   earnWebSearchEnabled,
   extractWebSources,
   formatSourcesBlock,
-  parseEarnPersona,
-  candorPersonaBlock,
   webSearchCount,
   webSearchTool,
   WEB_SEARCH_MAX_USES,
-} from "@/lib/earn-persona";
-
-describe("parseEarnPersona", () => {
-  it("accepts 'candor' (and the legacy 'spicy'); everything else is standard", () => {
-    expect(parseEarnPersona("candor")).toBe("candor");
-    expect(parseEarnPersona("spicy")).toBe("candor");
-    expect(parseEarnPersona("standard")).toBe("standard");
-    expect(parseEarnPersona("unhinged")).toBe("standard");
-    expect(parseEarnPersona(null)).toBe("standard");
-    expect(parseEarnPersona(undefined)).toBe("standard");
-  });
-});
-
-describe("candorPersonaBlock", () => {
-  it("keeps the voice clean and grounded", () => {
-    const block = candorPersonaBlock({ webSearch: false });
-    expect(block).toMatch(/no profanity/i);
-    expect(block).toMatch(/never at people/i);
-    expect(block).toMatch(/no invented figures/i);
-  });
-
-  it("mentions the web_search tool only when search is on", () => {
-    expect(candorPersonaBlock({ webSearch: true })).toMatch(/web_search tool/);
-    const off = candorPersonaBlock({ webSearch: false });
-    expect(off).not.toMatch(/web_search tool/);
-    expect(off).toMatch(/live search is off/);
-  });
-});
+} from "@/lib/earn-web-search";
 
 describe("earnWebSearchEnabled", () => {
   const env = process.env;

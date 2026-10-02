@@ -31,7 +31,6 @@ import { TeamTasksFeed } from "@/components/copilot/TeamTasksFeed";
 import { EarnOrb } from "@/components/copilot/EarnOrb";
 import { Markdown } from "@/components/Markdown";
 import { classifyIntent } from "@/lib/intent";
-import { EARN_PERSONA_STORAGE_KEY, parseEarnPersona, type EarnPersonaKey } from "@/lib/earn-persona";
 import {
   CONVERSATIONS_KEY,
   LEGACY_THREAD_KEY,
@@ -102,15 +101,6 @@ type Turn =
 
 /** A stable id for a conversation turn. */
 let turnSeq = 0;
-// The operator's Candor-mode choice, set from the workspace composer's toggle.
-function storedPersona(): EarnPersonaKey {
-  try {
-    return parseEarnPersona(localStorage.getItem(EARN_PERSONA_STORAGE_KEY));
-  } catch {
-    return "standard";
-  }
-}
-
 function newTurnId(): string {
   turnSeq += 1;
   return `t${Date.now().toString(36)}-${turnSeq}`;
@@ -378,8 +368,6 @@ export function EarnCopilotDock({ name }: { name: string }) {
           // day off for anyone west of Greenwich in the evening — exactly the
           // person most likely to ask what's on their plate today.
           timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-          // Candor mode follows the operator from the workspace composer.
-          persona: storedPersona(),
         }),
         signal: controller.signal,
       });
