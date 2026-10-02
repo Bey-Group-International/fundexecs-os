@@ -22,6 +22,7 @@
 // that would otherwise only be discovered in a real call.
 
 import type { CompositorFrame, MaskSample, Surface2D } from "@/lib/meetings/mask-compositor";
+import { FRAME_BUDGET_MS, OUTPUT_FPS, shouldDrawFrame } from "@/lib/meetings/backgrounds";
 import {
   accumulateTiming,
   createTimingAccumulator,
@@ -101,6 +102,16 @@ export interface FrameLoopDeps<TResult, TOut> {
   /** A frame the sink really accepted, with the running count. */
   onDelivered?: (index: number) => void;
   onStats: (report: TimingReport) => void;
+  /**
+   * Consecutive over-budget frames, as a running count, zero when it breaks.
+   *
+   * The main thread's processor has always reported this and the room suspends
+   * the effect on a long run of it. The worker did not, so once the room moved
+   * onto the worker NOTHING was watching whether the machine could keep up --
+   * the one place the number matters most, because it is the path the member
+   * spends the call on.
+   */
+  onSlowFrames?: (consecutive: number) => void;
   /** Reported once per cause, not per frame: a broken loop at 24fps would
    *  otherwise post a thousand messages a minute. */
   onError: (reason: string) => void;
@@ -122,6 +133,10 @@ export class MaskFrameLoop<TResult, TOut> {
    *  synthetic track. */
   private lastTimestamp = -1;
   private stopped = false;
+  /** When the last frame was actually composited, for pacing. Null draws. */
+  private lastDrawnAt: number | null = null;
+  /** Consecutive frames over budget, which is what "not keeping up" means. */
+  private slowFrames = 0;
   /** Causes already reported, so a loop failing every frame says it once. */
   private readonly reported = new Set<string>();
 
@@ -171,6 +186,28 @@ export class MaskFrameLoop<TResult, TOut> {
       const width = frame.displayWidth;
       const height = frame.displayHeight;
       if (!(width > 0) || !(height > 0)) return false;
+
+      // Pace to the rate the output is captured at.
+      //
+      // `MediaStreamTrackProcessor` delivers at the CAMERA's rate -- 30fps
+      // commonly, 60 on plenty of laptops -- and nothing here was throttling it.
+      // The main thread's loop has always paced, through this same rule, because
+      // the segmentation, the readback, the per-pixel chain and both blurs are
+      // pure waste on a frame nobody will ever see.
+      //
+      // It is not only waste. The temporal blend in `backgrounds.ts` is a
+      // PER-FRAME filter whose constants were measured at this rate, so running
+      // it two and a half times too fast shrinks its time constant by the same
+      // factor and most of the flicker suppression goes with it -- a shimmering
+      // edge. And a machine asked for 2.5x the work it was budgeted for stops
+      // keeping up, which arrives as judder on movement. Both of those are what
+      // losing the pacing looks like, and losing it is what moving this loop
+      // into the worker did.
+      //
+      // A skipped frame falls to the `finally` below and is closed there, which
+      // is the only thing that matters about skipping it.
+      if (!shouldDrawFrame(this.lastDrawnAt, started, OUTPUT_FPS)) return false;
+      this.lastDrawnAt = started;
 
       // The one cast in this file, and it is honest: a real `VideoFrame` is a
       // `CanvasImageSource`, which is exactly why the chain can draw it. The
@@ -262,8 +299,20 @@ export class MaskFrameLoop<TResult, TOut> {
         return;
       }
       this.delivered += 1;
-      const timing: FrameTiming = { readbackMs, chainMs, totalMs: d.now() - started };
+      const totalMs = d.now() - started;
+      const timing: FrameTiming = { readbackMs, chainMs, totalMs };
       accumulateTiming(this.timing, timing);
+      // Counted as a RUN, as the main thread counts it: one long frame is a
+      // garbage collection pause, and a machine that is genuinely too slow
+      // produces them one after another. `backgrounds.ts` owns how long a run
+      // has to be before the room acts on it.
+      if (totalMs > FRAME_BUDGET_MS) {
+        this.slowFrames += 1;
+        d.onSlowFrames?.(this.slowFrames);
+      } else if (this.slowFrames !== 0) {
+        this.slowFrames = 0;
+        d.onSlowFrames?.(0);
+      }
       if (shouldReportStats(this.timing.frames)) {
         d.onStats(timingReport(this.timing));
         // Reset so each report describes its own second rather than the whole

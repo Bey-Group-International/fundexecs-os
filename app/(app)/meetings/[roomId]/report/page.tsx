@@ -14,7 +14,7 @@ import { ReportWaiting } from "./ReportWaiting";
 import { LocalTime } from "./LocalTime";
 import { loadReportPage } from "@/lib/meetings/report-page.server";
 import { loadReportSide } from "@/lib/meetings/report-side.server";
-import { linkActionItems, type ReportParticipant } from "@/lib/meetings/report-participants";
+import { linkActionItems, presenceFromSpeech, type ReportParticipant } from "@/lib/meetings/report-participants";
 import {
   meetingHappenedAt,
   meetingMinutes,
@@ -112,6 +112,12 @@ export default async function MeetingReportPage({
     hostId: meeting.host_id,
     invited: data.invited,
     hasFollowUp: Boolean(content.followUp),
+    // The attendance table cannot hold an unauthenticated guest -- its RLS is
+    // `user_id = auth.uid()` -- so an invitee who opened the link without
+    // signing in left no row and the page reported them absent. Their lines in
+    // the transcript are the evidence that survives, and the rows are already
+    // loaded above.
+    spoke: presenceFromSpeech(data.cueRows),
   });
   const actionItems = linkActionItems(content.actionItems, side.tasks);
   const recipients = side.participants.filter((p) => p.receivesFollowUp);

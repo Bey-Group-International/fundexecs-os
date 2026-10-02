@@ -41,9 +41,118 @@ function invitedEmails(invited: unknown): Set<string> {
 }
 
 /**
+ * Who the transcript proves was in the room, for people the attendance table
+ * structurally cannot hold.
+ *
+ * `live_meeting_participants` has an RLS policy of `user_id = auth.uid()` and
+ * the join path writes a row only `if (user)` -- so an unauthenticated guest
+ * leaves NO attendance row at all. An invitee who opens the link without
+ * signing in is therefore absent from every attendance read, and the report
+ * told the host they did not join.
+ *
+ * Their lines in the transcript are the evidence that survives. They are
+ * written through an API route rather than straight to the table, so a guest
+ * CAN write them, and `speaker` is the name they chose at the door -- which is
+ * the only identity this system has for them either way.
+ *
+ * Only guest rows. A member who spoke already has an attendance row with a
+ * directory name and address against it, and `loadPresentPeople` prefers the
+ * directory's name over the one typed into a join screen -- so adding their
+ * typed name here would introduce an identity nothing can match and turn every
+ * known absence into "cannot tell".
+ *
+ * Pure, and takes the rows the report page has already loaded: this is not
+ * worth a query of its own.
+ */
+export function presenceFromSpeech(
+  rows: readonly { speaker?: string | null; speaker_user_id?: string | null }[],
+): PresentPerson[] {
+  const seen = new Set<string>();
+  const people: PresentPerson[] = [];
+  for (const row of rows) {
+    if (!row || typeof row !== "object") continue;
+    // A row stamped with an account is a member, already in attendance. Rows
+    // written before the column existed are null and are read as guests: the
+    // cost is an unmatched name, which makes an absence unknown rather than
+    // false, and that is the safe direction.
+    if (row.speaker_user_id) continue;
+    const name = typeof row.speaker === "string" ? row.speaker.trim() : "";
+    if (!name) continue;
+    const key = name.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    people.push({ name, email: null });
+  }
+  return people;
+}
+
+/**
+ * The identities the room actually recorded, split by what they pin down.
+ *
+ * `live_meeting_participants` carries a user id and a display name and NO
+ * address; `recipients.server.ts` fills the address in from `principals`, which
+ * it can only do for somebody who was signed in. So a row is either pinned to
+ * an address or it is a NAME and nothing else — and the name is the only
+ * identity this system has for that person.
+ */
+interface RoomIdentities {
+  /** Addresses in the room. Matching one of these is certainty. */
+  emails: Set<string>;
+  /** Names of rows with no address, lowercased. Matching one is a judgement. */
+  anonymousNames: Set<string>;
+  /** Rows with neither an address nor a name: they could be anybody. */
+  nameless: number;
+}
+
+function roomIdentities(present: readonly PresentPerson[]): RoomIdentities {
+  const emails = new Set<string>();
+  const anonymousNames = new Set<string>();
+  let nameless = 0;
+  for (const person of present) {
+    if (!person || typeof person !== "object") continue;
+    const email = lower(person.email);
+    if (email) {
+      // Already fully identified. Its name is deliberately NOT added below: a
+      // row that resolved to one address must not be used to claim that a
+      // DIFFERENT address was in the room because two people share a name.
+      emails.add(email);
+      continue;
+    }
+    const name = lower(person.name);
+    if (name) anonymousNames.add(name);
+    else nameless += 1;
+  }
+  return { emails, anonymousNames, nameless };
+}
+
+/**
  * Everyone in the meeting, host first, then in the order the follow-up's own
  * recipient rule lists them — so the people shown here are exactly the people
  * a send would reach, plus the host and anyone with no address.
+ *
+ * ── Why attendance is three-valued, and why it has to be ────────────────────
+ *
+ * This matched attendance on ADDRESS alone, and the room often has no address
+ * for somebody who was unmistakably in it: an invitee who opened the link
+ * without signing in has a row with `email: null`. The report then told the
+ * host "didn't join" about a person they had just spent an hour talking to —
+ * which is the bug this answers, and the worst kind, because it is a confident
+ * false statement about a fact the reader cannot check from the page.
+ *
+ * So there are three answers rather than two:
+ *
+ *   true   their address is in the room, OR a row with no address carries their
+ *          name. A guest row's display name is the only identity available, and
+ *          `recipients.ts` already treats a name match as the same person when
+ *          it decides who is unreachable — this makes the two agree.
+ *   false  every row in the room was pinned to an ADDRESS, or to a name that is
+ *          somebody else on this list, and theirs is not among them. Only then
+ *          is absence something that is known rather than assumed.
+ *   null   somebody in the room could not be accounted for. One of those rows
+ *          may be this person under a name nothing can match — "sarah's
+ *          iPhone", a nickname, a blank that became "Guest". The page prints
+ *          nothing for null and "didn't join" only for false, so this is the
+ *          distinction that stops the report inventing an absence.
  */
 export function reportParticipants(input: {
   host: { name: string | null; email: string | null } | null;
@@ -51,7 +160,7 @@ export function reportParticipants(input: {
   present: readonly PresentPerson[];
 }): ReportParticipant[] {
   const hostEmail = lower(input.host?.email) || null;
-  const presentEmails = new Set(input.present.map((p) => lower(p.email)).filter(Boolean));
+  const room = roomIdentities(input.present);
   const invited = invitedEmails(input.invited);
   const audience = meetingRecipients({
     invited: input.invited,
@@ -59,31 +168,68 @@ export function reportParticipants(input: {
     senderEmail: hostEmail,
   });
 
-  const people: ReportParticipant[] = [];
+  /** Anonymous rows this list has claimed, so the rest can still be told apart. */
+  const claimed = new Set<string>();
+  const wasInRoom = (email: string | null, name: string): boolean => {
+    if (email && room.emails.has(email)) return true;
+    const key = lower(name);
+    if (key && room.anonymousNames.has(key)) {
+      claimed.add(key);
+      return true;
+    }
+    return false;
+  };
+
+  const hostName = (input.host?.name ?? "").trim() || hostEmail || "Host";
+  const seats: Array<{ person: ReportParticipant; matched: boolean }> = [];
+
   if (input.host && (input.host.name || hostEmail)) {
-    people.push({
-      name: (input.host.name ?? "").trim() || hostEmail || "Host",
-      email: hostEmail,
-      role: "host",
-      attended: hostEmail ? presentEmails.has(hostEmail) || null : null,
-      receivesFollowUp: false,
+    seats.push({
+      person: {
+        name: hostName,
+        email: hostEmail,
+        role: "host",
+        // Resolved below for a match; left null otherwise rather than false.
+        // The host is not necessarily recorded as a participant on every path
+        // that creates a meeting, and "the host didn't join their own meeting"
+        // is too strong a claim to make off a row that may never be written.
+        attended: null,
+        receivesFollowUp: false,
+      },
+      matched: wasInRoom(hostEmail, hostName),
     });
   }
 
   for (const r of audience.recipients) {
     const email = lower(r.email);
-    const wasInvited = invited.has(email);
-    people.push({
-      name: r.name,
-      email,
-      role: wasInvited ? "invitee" : "attendee",
-      // Attendance is only known for people the room recorded. Somebody on the
-      // invitation who never joined is "did not join"; with no attendance rows
-      // at all (a meeting held before they were kept) it is unknown.
-      attended: presentEmails.has(email) ? true : input.present.length ? false : null,
-      receivesFollowUp: true,
+    seats.push({
+      person: {
+        name: r.name,
+        email,
+        role: invited.has(email) ? "invitee" : "attendee",
+        attended: null,
+        receivesFollowUp: true,
+      },
+      matched: wasInRoom(email, r.name),
     });
   }
+
+  // Whether anybody in the room is still unaccounted for, which is what decides
+  // between "did not join" and "cannot tell". Computed after every seat has had
+  // its chance to claim a name: one unmatchable guest must not make the whole
+  // invite list unknown when the rest of the room is fully identified.
+  const unaccounted =
+    room.nameless > 0 || [...room.anonymousNames].some((name) => !claimed.has(name));
+
+  const people = seats.map(({ person, matched }) => {
+    if (matched) return { ...person, attended: true };
+    // No attendance rows at all — a meeting held before they were kept — is
+    // unknown rather than empty.
+    if (input.present.length === 0) return person;
+    if (unaccounted) return person;
+    // The host keeps the benefit of the doubt. See the seat above.
+    return person.role === "host" ? person : { ...person, attended: false };
+  });
 
   for (const name of audience.unreachable) {
     people.push({ name, email: null, role: "attendee", attended: true, receivesFollowUp: false });

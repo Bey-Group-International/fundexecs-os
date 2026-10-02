@@ -254,7 +254,9 @@ export async function loadReportPage(
       readAllTranscriptRows((from, to) =>
         supabase
           .from("live_meeting_transcripts")
-          .select("speaker, text, ts, confidence, overlapped")
+          // `speaker_user_id` is not rendered: the report's attendance reads it
+          // to tell a guest's line from a member's. See `presenceFromSpeech`.
+          .select("speaker, text, ts, confidence, overlapped, speaker_user_id")
           .eq("meeting_id", meeting.id)
           .order("ts", { ascending: true })
           .order("id", { ascending: true })

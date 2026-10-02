@@ -11,6 +11,7 @@
 // ImageBitmaps -- travels in the transfer list beside the message, never inside
 // it, and the field that names it says so.
 
+import { SLOW_FRAME_RUN } from "@/lib/meetings/backgrounds";
 import type { PipelineProtocol } from "@/lib/meetings/mask-pipeline";
 import type { BackgroundEffect } from "@/lib/meetings/backgrounds";
 import type { PipelineSupport } from "@/lib/meetings/mask-pipeline";
@@ -67,6 +68,16 @@ export type WorkerToMain =
   | { kind: "frame"; index: number }
   /** Periodic timing, so the saving can be stated rather than assumed. */
   | { kind: "stats"; stats: TimingReport }
+  /**
+   * The machine is not keeping up, as a run of over-budget frames.
+   *
+   * The main thread's processor has always reported this and the room suspends
+   * the effect on a long enough run. The worker did not, so once the room moved
+   * onto the worker nothing was watching the number -- on the path the member
+   * spends the whole call on. Sent on the two counts that change anything, not
+   * per frame: see `shouldReportSlowFrames`.
+   */
+  | { kind: "slow"; consecutive: number }
   /**
    * Something went wrong badly enough that the main thread should composite
    * instead. A string rather than an Error because Errors do not clone
@@ -166,6 +177,29 @@ export function shouldReportStats(frames: number, interval = STATS_INTERVAL_FRAM
   if (!Number.isInteger(frames) || frames <= 0) return false;
   const step = Number.isInteger(interval) && interval > 0 ? interval : STATS_INTERVAL_FRAMES;
   return frames % step === 0;
+}
+
+/**
+ * Whether this slow-frame count is worth a message.
+ *
+ * The loop counts a run and would offer every count in it. The room reads the
+ * number through `shouldSuspendEffect`, which acts on a run of SLOW_FRAME_RUN
+ * and on nothing else -- so the only two counts that change anything are the
+ * one that reaches the run and the zero that ends it. Everything between is a
+ * `postMessage` per frame saying the same thing, onto the thread this whole
+ * exercise exists to free.
+ *
+ * `alreadyReported` is the caller's memory of whether it is currently in a
+ * reported run, which is what makes this a transition rather than a threshold:
+ * without it a sustained run posts once a frame for as long as it lasts.
+ */
+export function shouldReportSlowFrames(alreadyReported: boolean, consecutive: number): boolean {
+  if (!Number.isFinite(consecutive) || consecutive < 0) return false;
+  if (consecutive >= SLOW_FRAME_RUN) return !alreadyReported;
+  // Only the zero. A run that merely got shorter has not ended, and the room
+  // has no use for a count below the threshold it acts on.
+  if (consecutive === 0) return alreadyReported;
+  return false;
 }
 
 /**

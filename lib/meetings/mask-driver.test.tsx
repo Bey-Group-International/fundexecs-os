@@ -177,13 +177,14 @@ describe("MaskDriver", () => {
     const camera = over.camera ?? new FakeTrack();
     const tracks: MediaStreamTrack[] = [];
     const phases: string[] = [];
+    const slow: number[] = [];
     let unavailable = 0;
     const driver = await MaskDriver.create(
       camera as unknown as MediaStreamTrack,
       { kind: "blur", strength: "light" },
       {
         onTrack: (t) => { tracks.push(t); FakeWorker.log.push("track"); },
-        onSlowFrames: () => {},
+        onSlowFrames: (n) => { slow.push(n); },
         onUnavailable: () => { unavailable += 1; },
         onPhase: (p) => { phases.push(p.phase); },
       },
@@ -191,7 +192,7 @@ describe("MaskDriver", () => {
       over.paused ?? false,
     );
     if (!driver) throw new Error("driver did not build");
-    return { driver, camera, tracks, phases, worker: () => FakeWorker.built[0], get unavailable() { return unavailable; } };
+    return { driver, camera, tracks, phases, slow, worker: () => FakeWorker.built[0], get unavailable() { return unavailable; } };
   }
 
   it("puts the main thread's track on the wire before the worker has said anything", async () => {
@@ -462,6 +463,70 @@ describe("MaskDriver", () => {
     h.driver.setPaused(true);
     expect(h.worker().sent).toHaveLength(before);
     h.driver.destroy();
+  });
+
+  /**
+   * The room suspends the background on a long run of over-budget frames, and
+   * reads that number through one callback. So exactly one pipeline may ever be
+   * speaking into it: two would have each one's good frames cancelling the
+   * other's bad ones, and the member would keep an effect their machine cannot
+   * run -- or lose one it can.
+   */
+  describe("who reports that the machine is not keeping up", () => {
+    it("ignores the worker while the room is still on the main thread", async () => {
+      const h = await build();
+      // `ready` and not a frame: the pipeline is built, but the room has not
+      // been moved, so the main processor is the one feeding the wire.
+      h.worker().emit({ kind: "ready", protocol: "transfer-streams", track: null });
+      h.worker().emit({ kind: "slow", consecutive: 45 });
+      expect(h.slow).toEqual([]);
+      h.driver.destroy();
+    });
+
+    it("forwards the worker's count once the room is watching it", async () => {
+      const h = await build();
+      h.worker().emit({ kind: "ready", protocol: "transfer-streams", track: null });
+      h.worker().emit({ kind: "frame", index: 0 });
+      h.worker().emit({ kind: "slow", consecutive: 45 });
+      expect(h.slow).toEqual([45]);
+      h.driver.destroy();
+    });
+
+    it("forwards the zero that ends a run, so a recovered machine keeps its effect", async () => {
+      const h = await build();
+      h.worker().emit({ kind: "ready", protocol: "transfer-streams", track: null });
+      h.worker().emit({ kind: "frame", index: 0 });
+      h.worker().emit({ kind: "slow", consecutive: 45 });
+      h.worker().emit({ kind: "slow", consecutive: 0 });
+      expect(h.slow).toEqual([45, 0]);
+      h.driver.destroy();
+    });
+
+    /**
+     * The guard above covers the window where a live worker is not the one on
+     * the wire. Once it has been given up on there is a second, blunter reason
+     * it cannot report: teardown unhooks its handler before terminating it, so
+     * a message already queued when the room moved back cannot arrive at all.
+     *
+     * Asserted on the handler rather than through `emit`, because asserting it
+     * through `emit` is what makes the test vacuous -- it would pass against a
+     * driver that forwarded everything.
+     */
+    it("unhooks a worker it has given up on, so a queued count cannot arrive", async () => {
+      const h = await build();
+      h.worker().emit({ kind: "ready", protocol: "transfer-streams", track: null });
+      h.worker().emit({ kind: "frame", index: 0 });
+      const worker = FakeWorker.built[0];
+      expect(worker.onmessage).not.toBeNull();
+
+      h.worker().emit({ kind: "failed", reason: "gpu lost" });
+      await flush();
+
+      expect(worker.onmessage).toBeNull();
+      expect(worker.terminated).toBe(1);
+      expect(h.slow).toEqual([]);
+      h.driver.destroy();
+    });
   });
 
   it("reports the worker's timing through to the caller", async () => {

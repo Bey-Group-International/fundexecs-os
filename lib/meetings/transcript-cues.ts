@@ -21,6 +21,15 @@ export interface CueRow {
   ts: string;
   confidence?: number | null;
   overlapped?: boolean | null;
+  /**
+   * The account behind the speaker; null for a guest.
+   *
+   * Nothing in the cue rendering uses it. It is selected because the transcript
+   * is the only place this system records that an unauthenticated guest was in
+   * the room at all -- `live_meeting_participants` cannot hold them, so the
+   * report's attendance reads it. See `presenceFromSpeech`.
+   */
+  speaker_user_id?: string | null;
 }
 
 /** One speaker's turn, placed on the recording's clock. */

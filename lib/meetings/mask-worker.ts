@@ -44,7 +44,12 @@ import {
   monotonicSegmenter,
   type IncomingFrame,
 } from "@/lib/meetings/mask-worker-core";
-import { isMainToWorker, type MainToWorker, type WorkerToMain } from "@/lib/meetings/mask-worker-protocol";
+import {
+  isMainToWorker,
+  shouldReportSlowFrames,
+  type MainToWorker,
+  type WorkerToMain,
+} from "@/lib/meetings/mask-worker-protocol";
 
 const WASM_PATH = "/mediapipe";
 const MODEL_PATH = "/mediapipe/selfie_segmenter.tflite";
@@ -215,6 +220,8 @@ function buildLoop(
 ): MaskFrameLoop<SegmentResult, VideoFrame> {
   /** Whether the first delivered frame has been reported, for this session. */
   let announced = false;
+  /** Whether this session is currently inside a reported slow run. */
+  let slowReported = false;
   return new MaskFrameLoop<SegmentResult, VideoFrame>({
     compositor,
     // Attached later by `setSegmenter`: frames flow before the runtime lands.
@@ -249,6 +256,15 @@ function buildLoop(
       post({ kind: "frame", index });
     },
     onStats: (stats) => post({ kind: "stats", stats }),
+    // The same session check as `onDelivered`, for the same reason: a frame
+    // whose write fulfils after `teardown` would otherwise have the session
+    // that just ended convict the new one's hardware.
+    onSlowFrames: (consecutive) => {
+      if (current() !== self()) return;
+      if (!shouldReportSlowFrames(slowReported, consecutive)) return;
+      slowReported = consecutive !== 0;
+      post({ kind: "slow", consecutive });
+    },
     onError: (reason) => post({ kind: "failed", reason }),
   });
 }
