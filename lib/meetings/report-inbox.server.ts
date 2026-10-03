@@ -83,7 +83,7 @@ export async function loadAttendeeInboxHistory(
     const { data, error } = await supabase
       .from("inbox_threads")
       .select(
-        "id, channel, subject, counterparty_email, status, unread, ai_summary, preview, last_message_at, meeting_id",
+        "id, channel, subject, counterparty_email, status, unread, ai_summary, preview, last_message_at, meeting_id, last_inbound_at, meeting_linked_at",
       )
       .eq("organization_id", input.organizationId)
       // The generated lowercase column (migration 20260930180000), not the raw

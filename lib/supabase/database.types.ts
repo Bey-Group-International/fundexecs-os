@@ -1471,6 +1471,19 @@ export type TrackedMailThread = {
   created_at: string;
 };
 
+// Cached "Draft with Earn" per meeting and attendee (migration 20261003151646).
+export type MeetingConversationDraft = {
+  id: string;
+  organization_id: string;
+  meeting_id: string;
+  email_lower: string;
+  subject: string;
+  body: string;
+  report_created_at: string | null;
+  created_by: string | null;
+  created_at: string;
+};
+
 export type AuditLog = {
   id: string;
   organization_id: string | null;
@@ -1568,6 +1581,9 @@ export type InboxThread = Timestamps & {
   meeting_id: string | null;
   // When ai_summary was last written; the hourly batch picks newer messages.
   ai_summary_at: string | null;
+  // Newest inbound message, and when meeting_id was set (migration 20261003151646).
+  last_inbound_at: string | null;
+  meeting_linked_at: string | null;
 };
 
 // One message within an inbox thread (migration 0038).
@@ -2729,6 +2745,11 @@ export type LiveMeeting = {
   sync_status: string;
   preparation_status: string;
   followup_status: string;
+  // Linked inbox threads, those with a reply since linking, and those unread
+  // (trigger-maintained, migration 20261003151646).
+  followup_threads: number;
+  followup_replies: number;
+  followup_unread: number;
   notes_snapshot: Json | null;
   objective: string | null;
   agenda: string | null;
@@ -3279,6 +3300,7 @@ export type Database = {
       ingest_log: TableShape<IngestLog>;
       gmail_mailbox_sync: TableShape<GmailMailboxSync>;
       tracked_mail_threads: TableShape<TrackedMailThread>;
+      meeting_conversation_drafts: TableShape<MeetingConversationDraft>;
       audit_log: TableShape<AuditLog>;
       source_feedback: TableShape<SourceFeedback>;
       sourcing_entities: TableShape<SourcingEntity>;

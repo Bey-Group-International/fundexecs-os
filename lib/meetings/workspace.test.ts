@@ -151,3 +151,20 @@ describe("initialsOf", () => {
     expect(initialsOf("")).toBe("?");
   });
 });
+
+describe("reply status on a row", () => {
+  it("shows unread replies first, then how many answered, instead of 'Follow-up sent'", () => {
+    expect(rowChips(m("1", { followup_status: "done", followup_threads: 3, followup_replies: 2, followup_unread: 1 }))).toEqual([
+      { label: "1 new reply", tone: "accent" },
+    ]);
+    expect(rowChips(m("1", { followup_status: "done", followup_threads: 3, followup_replies: 2, followup_unread: 0 }))).toEqual([
+      { label: "Replied 2/3", tone: "success" },
+    ]);
+  });
+
+  it("falls back to the follow-up state while nobody has replied", () => {
+    expect(rowChips(m("1", { followup_status: "done", followup_threads: 3, followup_replies: 0 }))).toEqual([
+      { label: "Follow-up sent", tone: "success" },
+    ]);
+  });
+});

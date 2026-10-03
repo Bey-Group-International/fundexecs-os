@@ -28,6 +28,10 @@ import {
 import { personalizeFollowUp } from "@/lib/meetings/follow-up-greeting";
 import { loadHost } from "@/lib/meetings/report-roles.server";
 import { recordFollowUpThreads } from "@/lib/meetings/follow-up-threads.server";
+import { ensureMeetingThread } from "@/lib/meetings/meeting-thread.server";
+import { gateDecision } from "@/lib/gates";
+import { getActiveMandate } from "@/lib/mandates";
+import { replyToThread } from "@/app/(app)/inbox/actions";
 import { createServiceClient, hasSupabaseServiceEnv } from "@/lib/supabase/server";
 
 export const runtime = "nodejs";
@@ -134,6 +138,53 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     );
   }
 
+  const subject = followUpSubject(meeting.title);
+  const hostName = host?.full_name ?? null;
+
+  // The same gate every inbox reply passes. An organisation whose mandate does
+  // not pre-authorise outbound replies gets the follow-up in approvals — one
+  // per attendee, each on that attendee's thread for this meeting — instead of
+  // an immediate send; nothing reaches anybody until it is approved.
+  const mandate = await getActiveMandate(supabase, auth.ctx.orgId);
+  if (gateDecision("send_reply", mandate).requiresApproval) {
+    let queued = 0;
+    const failed: string[] = [];
+    for (const r of recipients) {
+      const personal = personalizeFollowUp(draft, r.name, { hostName });
+      const thread = await ensureMeetingThread(supabase, {
+        orgId: auth.ctx.orgId,
+        actorId: auth.ctx.userId,
+        meetingId: id,
+        recipient: r,
+        subject,
+        preview: personal,
+      });
+      if (!thread.ok) {
+        failed.push(r.email);
+        continue;
+      }
+      const fd = new FormData();
+      fd.set("thread_id", thread.threadId);
+      fd.set("body", personal);
+      const result = await replyToThread(fd);
+      if (result.ok) queued++;
+      else failed.push(r.email);
+    }
+    if (queued === 0) {
+      return NextResponse.json(
+        { error: "The follow-up could not be queued for approval.", failed, total: recipients.length },
+        { status: 502 },
+      );
+    }
+    return NextResponse.json({
+      gated: true,
+      queued,
+      total: recipients.length,
+      unreachable: audience.unreachable,
+      failed,
+    });
+  }
+
   const mailbox = await mailboxLookup;
   if (!mailbox.ok) {
     return NextResponse.json(
@@ -141,9 +192,6 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       { status: 409 },
     );
   }
-
-  const subject = followUpSubject(meeting.title);
-  const hostName = host?.full_name ?? null;
 
   // Per recipient, and settled: one bad address must not stop the rest of the
   // room hearing from the meeting they were in. And personalised per recipient:

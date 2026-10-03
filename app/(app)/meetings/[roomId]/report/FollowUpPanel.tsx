@@ -31,6 +31,8 @@ type SendState =
   | { kind: "idle" }
   | { kind: "sending" }
   | { kind: "sent"; sent: number; total: number; unreachable: string[]; failed: string[] }
+  // Gated by the organisation's mandate: waiting in approvals, nothing sent yet.
+  | { kind: "queued"; queued: number; total: number }
   | { kind: "failed"; message: string }
   // Drafting is not a kind of sending, and sharing the state is what keeps the
   // two from being confused in the UI: "Drafted" must never read as "Sent".
@@ -183,6 +185,8 @@ export const FollowUpPanel = memo(function FollowUpPanel({
         body: JSON.stringify({ body }),
       });
       const json = (await res.json().catch(() => ({}))) as {
+        gated?: boolean;
+        queued?: number;
         sent?: number;
         total?: number;
         unreachable?: string[];
@@ -191,6 +195,10 @@ export const FollowUpPanel = memo(function FollowUpPanel({
       };
       if (!res.ok) {
         setState({ kind: "failed", message: json.error ?? "The follow-up could not be sent." });
+        return;
+      }
+      if (json.gated) {
+        setState({ kind: "queued", queued: json.queued ?? 0, total: json.total ?? 0 });
         return;
       }
       setState({
@@ -370,6 +378,15 @@ export const FollowUpPanel = memo(function FollowUpPanel({
                 unreachable: state.unreachable,
                 failed: state.failed,
               })}
+            </p>
+          )}
+          {state.kind === "queued" && (
+            <p className="text-xs text-[var(--fg-muted)]">
+              Waiting in approvals for {state.queued} of {state.total}{" "}
+              {state.total === 1 ? "attendee" : "attendees"} — nothing has been sent yet.{" "}
+              <a href="/inbox" className="text-[var(--gold-400)] hover:underline">
+                Review approvals
+              </a>
             </p>
           )}
           {state.kind === "drafted" && (

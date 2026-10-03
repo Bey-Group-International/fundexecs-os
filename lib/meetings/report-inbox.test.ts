@@ -11,6 +11,7 @@ import {
   SUMMARY_MAX,
   THREADS_PER_ATTENDEE,
   attendeeInboxHistory,
+  meetingReplySummary,
   historyAddresses,
   threadCounterparty,
   type InboxThreadRow,
@@ -276,5 +277,36 @@ describe("this meeting's follow-up thread", () => {
       threads: [thread({ meeting_id: "m1" })],
     });
     expect(history.attendees[0].threads[0].fromThisMeeting).toBe(false);
+  });
+});
+
+describe("replies to this meeting", () => {
+  it("counts an inbound message after the thread was linked, not one before", () => {
+    const history = attendeeInboxHistory({
+      recipients: [ANA, BEN],
+      meetingId: "m1",
+      threads: [
+        thread({ id: "a", meeting_id: "m1", meeting_linked_at: "2026-09-20T10:00:00Z", last_inbound_at: "2026-09-21T10:00:00Z" }),
+        thread({
+          id: "b",
+          counterparty_email: "ben@acme.com",
+          meeting_id: "m1",
+          meeting_linked_at: "2026-09-20T10:00:00Z",
+          last_inbound_at: "2026-09-19T10:00:00Z",
+        }),
+      ],
+    });
+    expect(history.attendees.map((a) => a.threads[0].replied)).toEqual([true, false]);
+    expect(meetingReplySummary(history)).toEqual({ written: 2, replied: 1 });
+  });
+
+  it("is never a reply on another meeting's thread", () => {
+    const history = attendeeInboxHistory({
+      recipients: [ANA],
+      meetingId: "m1",
+      threads: [thread({ meeting_id: "m2", last_inbound_at: "2026-09-21T10:00:00Z" })],
+    });
+    expect(history.attendees[0].threads[0].replied).toBe(false);
+    expect(meetingReplySummary(history)).toEqual({ written: 0, replied: 0 });
   });
 });

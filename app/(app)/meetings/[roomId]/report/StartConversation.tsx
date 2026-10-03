@@ -24,26 +24,31 @@ export function StartConversation({
   meetingTitle,
   recipient,
   actionItems,
+  continuing = null,
 }: {
   meetingId: string;
   meetingTitle: string | null;
   recipient: { name: string; email: string };
   actionItems: readonly string[];
+  /** This meeting's existing thread with them; the message continues it. */
+  continuing?: { subject: string } | null;
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [subject, setSubject] = useState("");
   const [body, setBody] = useState("");
   const [status, setStatus] = useState<Status>({ kind: "idle" });
+  const [note, setNote] = useState<string | null>(null);
   const [drafting, startDraft] = useTransition();
   const [sending, startSend] = useTransition();
 
   function openComposer() {
     // Seeded once, on open, from what the page already holds: free and instant.
     const t = conversationTemplate({ meetingTitle, recipientName: recipient.name, actionItems });
-    setSubject(t.subject);
+    setSubject(continuing?.subject ?? t.subject);
     setBody(t.body);
     setStatus({ kind: "idle" });
+    setNote(null);
     setOpen(true);
   }
 
@@ -54,9 +59,11 @@ export function StartConversation({
         setStatus({ kind: "error", message: r.error });
         return;
       }
-      setSubject(r.subject);
+      // Continuing a thread keeps its subject; the reply lands where they look.
+      if (!continuing) setSubject(r.subject);
       setBody(r.body);
       setStatus(r.live ? { kind: "idle" } : { kind: "error", message: "Earn is unavailable; kept the template." });
+      setNote(r.cached ? "Reused the Earn draft written from this report." : null);
     });
   }
 
@@ -105,7 +112,7 @@ export function StartConversation({
         onClick={openComposer}
         className="mt-2 rounded-md border border-[var(--line)] px-2.5 py-1 text-xs text-[var(--fg-secondary)] transition-colors hover:border-[var(--gold-400)] hover:text-[var(--fg-primary)]"
       >
-        Start conversation
+        {continuing ? "Continue conversation" : "Start conversation"}
       </button>
     );
   }
@@ -117,13 +124,19 @@ export function StartConversation({
         To {recipient.name && recipient.name !== recipient.email ? `${recipient.name} · ` : ""}
         {recipient.email}
       </p>
-      <input
-        value={subject}
-        onChange={(e) => setSubject(e.target.value)}
-        aria-label="Subject"
-        placeholder="Subject"
-        className="rounded-md border border-[var(--line)] bg-[var(--surface-0)] px-2 py-1 text-sm text-[var(--fg-primary)] outline-none focus:border-[var(--gold-400)]"
-      />
+      {continuing ? (
+        <p className="text-xs text-[var(--fg-secondary)]">
+          Continuing “{continuing.subject}” — replies stay on this meeting&apos;s thread.
+        </p>
+      ) : (
+        <input
+          value={subject}
+          onChange={(e) => setSubject(e.target.value)}
+          aria-label="Subject"
+          placeholder="Subject"
+          className="rounded-md border border-[var(--line)] bg-[var(--surface-0)] px-2 py-1 text-sm text-[var(--fg-primary)] outline-none focus:border-[var(--gold-400)]"
+        />
+      )}
       <textarea
         value={body}
         onChange={(e) => setBody(e.target.value)}
@@ -132,6 +145,7 @@ export function StartConversation({
         className="resize-y rounded-md border border-[var(--line)] bg-[var(--surface-0)] px-2 py-1.5 text-sm text-[var(--fg-primary)] outline-none focus:border-[var(--gold-400)]"
       />
       {status.kind === "error" && <p className="text-xs text-[var(--status-danger)]">{status.message}</p>}
+      {note && <p className="text-[11px] text-[var(--fg-muted)]">{note}</p>}
       <div className="flex flex-wrap items-center justify-between gap-2">
         <span className="text-[11px] text-[var(--fg-muted)]">Goes through your inbox · approvals if required</span>
         <div className="flex items-center gap-2">
