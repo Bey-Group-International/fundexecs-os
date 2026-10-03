@@ -1,4 +1,11 @@
 import {
+  cleanCallTitle,
+  groupCalls,
+  longestRecording,
+  passesChips,
+  rangeStart,
+  statsLine,
+  totalRecorded,
   SNIPPET_AFTER,
   SNIPPET_BEFORE,
   callWhen,
@@ -162,5 +169,120 @@ describe("call dates are not re-formatted per row", () => {
     expect(callWhen("2026-09-29T14:30:00.000Z", now)).toMatch(/^Today, /);
     expect(callWhen("2026-03-04T14:30:00.000Z", now)).not.toMatch(/2026/);
     expect(callWhen("2024-03-04T14:30:00.000Z", now)).toContain("2024");
+  });
+});
+
+// ── The list around the rows ────────────────────────────────────────────────
+
+
+describe("longestRecording", () => {
+  it("picks the longest surviving recording, with its id", () => {
+    expect(
+      longestRecording([
+        { id: "a", duration_seconds: 8, deleted_at: null },
+        { id: "b", duration_seconds: 600, deleted_at: null },
+        { id: "c", duration_seconds: 900, deleted_at: "2026-01-01T00:00:00Z" },
+      ]),
+    ).toEqual({ id: "b", seconds: 600 });
+  });
+
+  it("is null when nothing playable is left", () => {
+    expect(longestRecording([{ id: "a", duration_seconds: 0, deleted_at: null }])).toBeNull();
+    expect(longestRecording(null)).toBeNull();
+  });
+});
+
+describe("rangeStart", () => {
+  const now = new Date(2026, 9, 3, 12, 0);
+  it("reads all time as no bound", () => expect(rangeStart("all", now)).toBeNull());
+  it("goes back seven and thirty days", () => {
+    expect(Date.parse(rangeStart("7d", now)!)).toBe(now.getTime() - 7 * 86_400_000);
+    expect(Date.parse(rangeStart("30d", now)!)).toBe(now.getTime() - 30 * 86_400_000);
+  });
+  it("starts this year at the reader's own new year", () => {
+    expect(rangeStart("year", now)).toBe(new Date(2026, 0, 1).toISOString());
+  });
+});
+
+const archived = (over: Partial<ArchivedCall> = {}): ArchivedCall => ({
+  id: "c",
+  roomCode: "r",
+  title: "Call",
+  at: new Date(2026, 9, 3, 9, 0).toISOString(),
+  durationSeconds: 60,
+  summary: "Said things.",
+  consented: true,
+  ...over,
+});
+
+describe("passesChips", () => {
+  it("keeps everything with no chips on", () => {
+    expect(passesChips(archived({ summary: "", durationSeconds: null }), { withSummary: false, withRecording: false })).toBe(true);
+  });
+  it("drops calls without a summary or a recording when asked", () => {
+    expect(passesChips(archived({ summary: "" }), { withSummary: true, withRecording: false })).toBe(false);
+    expect(passesChips(archived({ durationSeconds: null }), { withSummary: false, withRecording: true })).toBe(false);
+    expect(passesChips(archived(), { withSummary: true, withRecording: true })).toBe(true);
+  });
+});
+
+describe("groupCalls", () => {
+  const now = new Date(2026, 9, 20, 15, 0);
+  const at = (m: number, d: number, h = 10, y = 2026) => new Date(y, m, d, h).toISOString();
+
+  it("heads calls by how a person scans back through them, keeping their order", () => {
+    const groups = groupCalls(
+      [
+        archived({ id: "1", at: at(9, 20) }),
+        archived({ id: "2", at: at(9, 19) }),
+        archived({ id: "3", at: at(9, 16) }),
+        archived({ id: "4", at: at(9, 2) }),
+        archived({ id: "5", at: at(8, 28) }),
+        archived({ id: "6", at: at(11, 3, 10, 2025) }),
+      ],
+      now,
+    );
+    expect(groups.map((g) => [g.label, g.calls.map((c) => c.id)])).toEqual([
+      ["Today", ["1"]],
+      ["Yesterday", ["2"]],
+      ["Earlier this week", ["3"]],
+      ["Earlier this month", ["4"]],
+      ["September", ["5"]],
+      ["December 2025", ["6"]],
+    ]);
+  });
+
+  it("re-labels against the day it is given, not the clock", () => {
+    const call = archived({ at: at(9, 20, 23) });
+    expect(groupCalls([call], now)[0].label).toBe("Today");
+    expect(groupCalls([call], new Date(2026, 9, 21, 0, 5))[0].label).toBe("Yesterday");
+  });
+});
+
+describe("the header's stats", () => {
+  it("says a total the way a person would", () => {
+    expect(totalRecorded(0)).toBe("0m");
+    expect(totalRecorded(30)).toBe("under a minute");
+    expect(totalRecorded(25 * 60)).toBe("25m");
+    expect(totalRecorded(4 * 3600 + 10 * 60)).toBe("4h 10m");
+    expect(totalRecorded(2 * 3600)).toBe("2h");
+  });
+
+  it("says nothing when nothing was recorded", () => {
+    expect(statsLine(null)).toBeNull();
+    expect(statsLine({ count: 0, seconds: 0, days: 30 })).toBeNull();
+  });
+
+  it("counts calls and time in one line", () => {
+    expect(statsLine({ count: 12, seconds: 15_000, days: 30 })).toBe("Last 30 days: 12 calls · 4h 10m recorded");
+    expect(statsLine({ count: 1, seconds: 90, days: 30 })).toBe("Last 30 days: 1 call · 1m recorded");
+  });
+});
+
+describe("cleanCallTitle", () => {
+  it("collapses spaces and refuses an empty name", () => {
+    expect(cleanCallTitle("  Dunbar   diligence ")).toBe("Dunbar diligence");
+    expect(cleanCallTitle("   ")).toBeNull();
+    expect(cleanCallTitle("x".repeat(300))).toHaveLength(120);
   });
 });
