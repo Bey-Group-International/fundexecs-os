@@ -272,8 +272,10 @@ const GROUP_MONTH_THIS_YEAR = new Intl.DateTimeFormat("en-US", { month: "long" }
 export function groupCalls<T extends ArchivedCall>(calls: readonly T[], now: Date = new Date()): CallGroup<T>[] {
   const startOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
   const today = startOfDay(now);
-  const yesterday = today - 86_400_000;
-  const weekAgo = today - 6 * 86_400_000;
+  // Calendar arithmetic, not 24-hour steps: the day after clocks go back is
+  // 25 hours long, and `today - 24h` would leave yesterday's first hour out.
+  const yesterday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1).getTime();
+  const weekAgo = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 6).getTime();
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
 
   const out: CallGroup<T>[] = [];
