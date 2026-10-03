@@ -15,6 +15,7 @@
 // configured, so the inbox behaves identically in CI and preview builds.
 import Anthropic from "@anthropic-ai/sdk";
 import { anthropicClient, isAnthropicTimeout } from "@/lib/anthropic-client";
+import { effortConfig } from "@/lib/claude";
 import type { ActionKind } from "@/lib/gates";
 import type { InboxCategory } from "@/lib/supabase/database.types";
 
@@ -362,9 +363,13 @@ const SUMMARY_SCHEMA = {
  * present; otherwise returns a deterministic summary from the latest inbound
  * message so the inbox stays fully functional offline.
  */
-export async function summarizeThread(input: ThreadDigestInput): Promise<ThreadSummary> {
+export async function summarizeThread(
+  input: ThreadDigestInput,
+  opts: { model?: string } = {},
+): Promise<ThreadSummary> {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) return fallbackSummary(input);
+  const model = opts.model ?? MODEL;
   try {
     const anthropic = anthropicClient(apiKey);
     const transcript = input.messages
@@ -372,12 +377,14 @@ export async function summarizeThread(input: ThreadDigestInput): Promise<ThreadS
       .map((m) => `${m.direction === "inbound" ? input.counterparty ?? "Them" : "You"}: ${m.body}`)
       .join("\n");
     const message = await anthropic.messages.create({
-      model: MODEL,
+      model,
       max_tokens: 300,
       system:
         "You triage a private-markets operator's inbox. Given one thread, state plainly what the " +
         "counterparty wants and what the operator owes back. Be terse and specific; never invent facts.",
-      output_config: { effort: "low", format: { type: "json_schema", schema: SUMMARY_SCHEMA } },
+      // effortConfig, not a literal: the batch runs on Haiku, which rejects
+      // `effort` with a 400. The schema is sent either way.
+      ...effortConfig(model, "low", SUMMARY_SCHEMA),
       messages: [
         {
           role: "user",

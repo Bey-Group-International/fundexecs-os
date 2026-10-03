@@ -23,6 +23,13 @@ export interface ThreadContext {
   href: string;
 }
 
+/** The meeting a thread came out of — its follow-up — with a link to the report. */
+export interface ThreadMeeting {
+  id: string;
+  title: string;
+  href: string;
+}
+
 export interface ThreadAssignee {
   id: string;
   name: string;
@@ -33,6 +40,8 @@ export interface InboxThreadView {
   context: ThreadContext | null;
   // The teammate the thread is routed to, resolved to a name; null if unassigned.
   assignee: ThreadAssignee | null;
+  /** The meeting this thread is the follow-up of, when it is one. */
+  meeting: ThreadMeeting | null;
   /**
    * Unsent reply text waiting on this thread, written by a meeting report's
    * follow-up. Null for almost every thread.
@@ -170,7 +179,11 @@ export async function getInboxThreads(
     ...new Set(threads.map((t) => t.assigned_to).filter((v): v is string => !!v)),
   ];
 
-  const [dealsRes, investorsRes, assigneesRes] = await Promise.all([
+  const meetingIds = [
+    ...new Set(threads.map((t) => t.meeting_id).filter((v): v is string => !!v)),
+  ];
+
+  const [dealsRes, investorsRes, assigneesRes, meetingsRes] = await Promise.all([
     dealIds.length
       ? supabase.from("deals").select("id, name").in("id", dealIds)
       : Promise.resolve({ data: [] as { id: string; name: string }[] }),
@@ -180,7 +193,20 @@ export async function getInboxThreads(
     assigneeIds.length
       ? supabase.from("principals").select("id, full_name").in("id", assigneeIds)
       : Promise.resolve({ data: [] as { id: string; full_name: string | null }[] }),
+    meetingIds.length
+      ? supabase.from("live_meetings").select("id, title, room_code").in("id", meetingIds)
+      : Promise.resolve({ data: [] as { id: string; title: string | null; room_code: string | null }[] }),
   ]);
+  const meetingById = new Map(
+    ((meetingsRes.data ?? []) as { id: string; title: string | null; room_code: string | null }[]).map((m) => [
+      m.id,
+      {
+        id: m.id,
+        title: (m.title ?? "").trim() || "Meeting",
+        href: m.room_code ? `/meetings/${m.room_code}/report` : "/meetings",
+      },
+    ]),
+  );
 
   const dealName = new Map((dealsRes.data ?? []).map((d) => [d.id, d.name]));
   const investorName = new Map((investorsRes.data ?? []).map((i) => [i.id, i.name]));
@@ -199,6 +225,7 @@ export async function getInboxThreads(
         thread.assigned_to && assigneeName.has(thread.assigned_to)
           ? { id: thread.assigned_to, name: assigneeName.get(thread.assigned_to)! }
           : null,
+      meeting: (thread.meeting_id && meetingById.get(thread.meeting_id)) || null,
       draft: drafts.get(thread.id) ?? null,
     })),
     (view) => view.draft !== null,
@@ -305,7 +332,7 @@ export async function refreshThreadSummary(
 
     await supabase
       .from("inbox_threads")
-      .update({ ai_summary: summary, intent, priority })
+      .update({ ai_summary: summary, intent, priority, ai_summary_at: now().toISOString() })
       .eq("organization_id", orgId)
       .eq("id", threadId);
 

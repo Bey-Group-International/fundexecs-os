@@ -253,3 +253,28 @@ describe("the addresses the query asks for", () => {
     ).toEqual(["ana@acme.com", "ben@acme.com"]);
   });
 });
+
+describe("this meeting's follow-up thread", () => {
+  it("is marked, and shown first so its replies are the first thing on the report", () => {
+    const history = attendeeInboxHistory({
+      recipients: [ANA],
+      meetingId: "m1",
+      threads: [
+        thread({ id: "newer", last_message_at: "2026-09-25T00:00:00.000Z" }),
+        thread({ id: "followup", meeting_id: "m1", last_message_at: "2026-09-21T00:00:00.000Z" }),
+        thread({ id: "other-meeting", meeting_id: "m2", last_message_at: "2026-09-24T00:00:00.000Z" }),
+      ],
+    });
+    const threads = history.attendees[0].threads;
+    expect(threads.map((t) => t.id)).toEqual(["followup", "newer", "other-meeting"]);
+    expect(threads.map((t) => t.fromThisMeeting)).toEqual([true, false, false]);
+  });
+
+  it("marks nothing when the caller does not say which meeting this is", () => {
+    const history = attendeeInboxHistory({
+      recipients: [ANA],
+      threads: [thread({ meeting_id: "m1" })],
+    });
+    expect(history.attendees[0].threads[0].fromThisMeeting).toBe(false);
+  });
+});

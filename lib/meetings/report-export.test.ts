@@ -470,6 +470,7 @@ describe("attendee correspondence", () => {
             unread: true,
             summary: "Ready to sign.",
             lastMessageAt: "2026-09-30T10:00:00.000Z",
+            fromThisMeeting: true,
           },
         ],
         total: 3,
@@ -489,7 +490,7 @@ describe("attendee correspondence", () => {
     const md = buildReportMarkdown({ ...base, correspondence }, { includeCorrespondence: true });
     expect(md).toContain("## Correspondence With Attendees");
     expect(md).toContain("**Ana Lopez** (ana@acme.com)");
-    expect(md).toContain("- Series B terms (");
+    expect(md).toContain("- Series B terms — this meeting's follow-up (");
     expect(md).toContain("— Ready to sign.");
     expect(md).toContain("- *2 more in the inbox*");
     expect(md).toContain("**No correspondence yet:** Bo Chen (bo@x.io)");

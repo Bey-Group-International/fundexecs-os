@@ -109,7 +109,7 @@ export default async function InboxPage(
 
   // Prepare every comms display field on the server so the client board never
   // imports the intelligence module (and its AI SDK) into the browser bundle.
-  const cards: InboxCardData[] = views.map(({ thread, context, assignee, draft }) => {
+  const cards: InboxCardData[] = views.map(({ thread, context, assignee, meeting, draft }) => {
     const meta = channelMeta(thread.channel);
     const move = suggestedAction(thread);
     // Follow-up nudge: hours since the last message drive the "waiting on you /
@@ -144,7 +144,9 @@ export default async function InboxPage(
       tab: inboxTab({
         priority: thread.priority,
         unread: thread.unread,
-        hasContext: Boolean(context),
+        // A meeting's follow-up thread is context too: the replies to it are
+        // exactly what belongs in Focused.
+        hasContext: Boolean(context || meeting),
       }),
       unread: thread.unread,
       starred: thread.starred,
@@ -154,6 +156,7 @@ export default async function InboxPage(
       meetingUrl: thread.meeting_url,
       context,
       assignee,
+      meeting,
       // Whether this org has connected the thread's channel (gateway-resolved).
       // Drives the composer's "connect to send" hint and matches how dispatch
       // decides prepared (draft) vs queued (route through the connected provider).

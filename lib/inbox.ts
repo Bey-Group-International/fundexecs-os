@@ -187,6 +187,8 @@ export interface ApprovalCandidate
   created_at?: string | null;
   /** Id of the still-pending `approvals` row for this task, when there is one. */
   approvalId?: string | null;
+  /** The meeting the workflow was started from (tasks.meeting_id), when known. */
+  meeting_id?: string | null;
 }
 
 /**
@@ -286,6 +288,8 @@ export function riskToInboxItem(
 
 // A meeting, reduced to what deciding "has it happened yet?" needs.
 export interface InboxMeeting {
+  /** Present when read from the database; lets a task's meeting_id match exactly. */
+  id?: string;
   title: string | null;
   status: string | null;
   scheduled_at: string | null;
@@ -319,20 +323,34 @@ export function isPrematureFollowupPack(
   taskTitle: string,
   meetings: InboxMeeting[],
   nowIso: string,
+  meetingId?: string | null,
 ): boolean {
   if (!FOLLOWUP_PACK_RE.test(taskTitle)) return false;
+  const now = Date.parse(nowIso);
+  const isUpcoming = (m: InboxMeeting) => {
+    if (m.status === "ended") return false;
+    const scheduledMs = m.scheduled_at ? Date.parse(m.scheduled_at) : NaN;
+    return Number.isNaN(scheduledMs) || scheduledMs > now;
+  };
+
+  // The task knows its meeting: decide on that meeting alone. `meetings` holds
+  // only the unfinished ones, so a meeting missing from it has ended (or was
+  // deleted) and its follow-up is owed — never held back, and never matched by
+  // name to some other meeting that happens to share words with the title.
+  if (meetingId) {
+    const own = meetings.find((m) => m.id === meetingId);
+    return own ? isUpcoming(own) : false;
+  }
+
+  // Older tasks, and packs started outside a meeting page: the title match.
   const subject = packSubject(taskTitle);
   if (!subject) return false;
-  const now = Date.parse(nowIso);
   for (const m of meetings) {
     if (!m.title) continue;
     const name = normalizeName(m.title);
     if (!name) continue;
     if (!(subject.includes(name) || name.includes(subject))) continue;
-    const ended = m.status === "ended";
-    const scheduledMs = m.scheduled_at ? Date.parse(m.scheduled_at) : NaN;
-    const upcoming = !ended && (Number.isNaN(scheduledMs) || scheduledMs > now);
-    if (upcoming) return true;
+    if (isUpcoming(m)) return true;
   }
   return false;
 }
@@ -355,7 +373,7 @@ export function buildInbox(
   // A follow-up pack for a meeting that hasn't happened yet is held back until
   // the meeting is over — the work isn't discarded, just time-gated.
   const needsApproval = awaitingApproval
-    .filter((t) => !isPrematureFollowupPack(t.title ?? "", meetings, nowIso))
+    .filter((t) => !isPrematureFollowupPack(t.title ?? "", meetings, nowIso, t.meeting_id))
     .map(workflowToApprovalItem);
 
   const overdueDiligence: InboxItem[] = [];
@@ -393,7 +411,7 @@ async function fetchAwaitingApproval(orgId: string): Promise<ApprovalCandidate[]
   const supabase = await createServerClient();
   const { data } = await supabase
     .from("tasks")
-    .select("id, title, session_id, assigned_agent, description, hub, result, created_at")
+    .select("id, title, session_id, assigned_agent, description, hub, result, created_at, meeting_id")
     .eq("organization_id", orgId)
     .is("parent_task_id", null)
     .eq("status", "awaiting_approval")
@@ -452,7 +470,7 @@ async function fetchUnfinishedMeetings(orgId: string): Promise<InboxMeeting[]> {
   const supabase = await createServerClient();
   const { data } = await supabase
     .from("live_meetings")
-    .select("title, status, scheduled_at")
+    .select("id, title, status, scheduled_at")
     .eq("organization_id", orgId)
     .is("deleted_at", null)
     .neq("status", "ended")
@@ -599,7 +617,7 @@ export async function getApprovalsCount(orgId: string): Promise<number> {
       fetchUnfinishedMeetings(orgId),
     ]);
     return awaitingApproval.filter(
-      (t) => !isPrematureFollowupPack(t.title ?? "", meetings, nowIso),
+      (t) => !isPrematureFollowupPack(t.title ?? "", meetings, nowIso, t.meeting_id),
     ).length;
   } catch {
     return 0;

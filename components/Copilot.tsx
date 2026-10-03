@@ -27,6 +27,7 @@ import type { ActiveIntegration } from "@/lib/integrations/active";
 import type { AgentPlan } from "@/lib/claude";
 import type { EarnPlan } from "@/lib/earn-plan";
 import { classifyIntent } from "@/lib/intent";
+import { roomCodeFromPath } from "@/lib/meetings/prompt-meeting";
 import { Markdown } from "@/components/Markdown";
 import { ModelCompare, type ModelComparison } from "@/components/ModelCompare";
 import { CommandPalette, type Command } from "@/components/CommandPalette";
@@ -445,6 +446,13 @@ export default function Copilot({
     requestAnimationFrame(() => inputRef.current?.focus());
   }
 
+  // The meeting page this prompt is being sent from, if any, so a follow-up pack
+  // the workflow produces is tied to that meeting rather than matched by title.
+  function meetingRoomField(): { meeting_room?: string } {
+    const room = typeof window === "undefined" ? null : roomCodeFromPath(window.location.pathname);
+    return room ? { meeting_room: room } : {};
+  }
+
   // Non-streaming fallback (and the path when the live stream errors): plan +
   // materialize in one shot, then follow into the session or refresh in place.
   async function runTaskFallback(envelope: string) {
@@ -455,6 +463,7 @@ export default function Copilot({
         body: envelope,
         ...(sessionId ? { session_id: sessionId } : {}),
         ...(delegate ? { delegate } : {}),
+        ...meetingRoomField(),
       }),
     }).catch(() => null);
     setBusy(false);
@@ -495,6 +504,7 @@ export default function Copilot({
           body: envelope,
           ...(sessionId ? { session_id: sessionId } : {}),
           ...(delegate ? { delegate } : {}),
+          ...meetingRoomField(),
         }),
       });
       if (!res.ok || !res.body) throw new Error("stream unavailable");

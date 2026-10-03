@@ -431,6 +431,8 @@ export type Task = Timestamps & {
   // LifecycleStage / TargetEngine unions in lib/intelligence.ts.
   lifecycle_stage: string | null;
   target_engine: string | null;
+  // The meeting a workflow was started from (migration 20261003040855).
+  meeting_id: string | null;
 }
 
 export type TeamTask = Timestamps & {
@@ -1453,6 +1455,22 @@ export type GmailMailboxSync = {
   updated_at: string;
 };
 
+// Gmail threads the app started from a member's own mailbox, read back for
+// replies only (migration 20261003040855). Service-role writes only.
+export type TrackedMailThread = {
+  id: string;
+  organization_id: string;
+  user_id: string;
+  gmail_thread_id: string;
+  inbox_thread_id: string | null;
+  meeting_id: string | null;
+  mailbox_email: string | null;
+  last_checked_at: string | null;
+  last_error: string | null;
+  expires_at: string;
+  created_at: string;
+};
+
 export type AuditLog = {
   id: string;
   organization_id: string | null;
@@ -1546,6 +1564,10 @@ export type InboxThread = Timestamps & {
   // index — the column itself holds the address as the provider sent it. Never
   // written directly.
   counterparty_email_lower: string | null;
+  // The meeting this thread came out of (migration 20261003040855).
+  meeting_id: string | null;
+  // When ai_summary was last written; the hourly batch picks newer messages.
+  ai_summary_at: string | null;
 };
 
 // One message within an inbox thread (migration 0038).
@@ -3256,6 +3278,7 @@ export type Database = {
       dispatch_log: TableShape<DispatchLog>;
       ingest_log: TableShape<IngestLog>;
       gmail_mailbox_sync: TableShape<GmailMailboxSync>;
+      tracked_mail_threads: TableShape<TrackedMailThread>;
       audit_log: TableShape<AuditLog>;
       source_feedback: TableShape<SourceFeedback>;
       sourcing_entities: TableShape<SourcingEntity>;

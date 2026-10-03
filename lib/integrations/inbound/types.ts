@@ -23,6 +23,10 @@ export interface InboundThreadSeed {
   // Booking/video specifics, when the event carries them.
   meetingAt?: string | null;
   meetingUrl?: string | null;
+  // The meeting this conversation came out of (inbox_threads.meeting_id). Set by
+  // a meeting's follow-up send and by the replies read back for it; undefined
+  // leaves an existing thread's link as it is.
+  meetingId?: string;
 }
 
 /** The message an inbound event appends to its thread. */

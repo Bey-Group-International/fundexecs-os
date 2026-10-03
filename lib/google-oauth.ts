@@ -70,8 +70,14 @@ export const GOOGLE_PEOPLE_SCOPES =
 // A member who connected before this scope was added has calendar and not
 // send. granted_scope records what Google actually returned, so that case is
 // detectable and the member is told to reconnect rather than left wondering.
+//
+// gmail.readonly rides on it too, for one narrow job: reading back the replies
+// to the follow-ups a host sent from this mailbox. The app reads ONLY the Gmail
+// threads it started (tracked_mail_threads, 30-day expiry) — see
+// lib/integrations/gmail-sync/tracked.server.ts. A member whose grant predates
+// it keeps sending, and is told to reconnect for replies to reach the inbox.
 export const GOOGLE_CALENDAR_SCOPES =
-  "openid email https://www.googleapis.com/auth/calendar https://www.googleapis.com/auth/gmail.send";
+  "openid email https://www.googleapis.com/auth/calendar https://www.googleapis.com/auth/gmail.send https://www.googleapis.com/auth/gmail.readonly";
 
 export function googleOAuthConfigured(): boolean {
   return Boolean(

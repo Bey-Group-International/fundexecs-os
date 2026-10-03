@@ -354,6 +354,22 @@ describe("isPrematureFollowupPack", () => {
     ).toBe(false);
   });
 
+  describe("when the task carries its meeting's id", () => {
+    it("holds it back while that meeting is upcoming", () => {
+      expect(isPrematureFollowupPack(followup, [meeting({ id: "m1" })], NOW, "m1")).toBe(true);
+    });
+
+    it("releases it once that meeting is no longer unfinished, whatever else shares its name", () => {
+      // m1 ended, so it is not in the unfinished list; m2 has the same title and
+      // is upcoming, which by title alone would wrongly hold the pack back.
+      expect(isPrematureFollowupPack(followup, [meeting({ id: "m2" })], NOW, "m1")).toBe(false);
+    });
+
+    it("matches by id even when the title names nothing", () => {
+      expect(isPrematureFollowupPack("Follow-up pack", [meeting({ id: "m1", title: "Board call" })], NOW, "m1")).toBe(true);
+    });
+  });
+
   it("never suppresses a prep / walkthrough pack, even with an upcoming meeting", () => {
     const prep = "BGI x Evolution Accelerator – FundExecs OS Walkthrough Prep Pack";
     expect(isPrematureFollowupPack(prep, [meeting()], NOW)).toBe(false);

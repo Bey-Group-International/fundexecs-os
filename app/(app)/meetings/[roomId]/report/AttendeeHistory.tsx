@@ -169,6 +169,12 @@ function ThreadRow({ thread }: { thread: ThreadDigest }) {
       <div className="min-w-0">
         <p className="text-[var(--fg-primary)]">
           <span className={thread.unread ? "font-semibold" : ""}>{thread.subject}</span>
+          {/* This meeting's own follow-up thread, where replies to it arrive. */}
+          {thread.fromThisMeeting && (
+            <span className="ml-2 rounded border border-[var(--gold-400)]/40 px-1 font-mono text-[10px] uppercase tracking-wider text-[var(--gold-400)]">
+              Follow-up
+            </span>
+          )}
           <span className="ml-2 text-[var(--fg-muted)]">{channelLabel(thread.channel)}</span>
           {/* A done or snoozed thread reads very differently from an open one on
               a page about what to do next, so the status is said rather than

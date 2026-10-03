@@ -329,6 +329,11 @@ describe("direction", () => {
  * the way out rather than trusted on the way in.
  */
 describe("reportUrlFromMetadata", () => {
+  it("links a backfilled entry to its report by room code, within the app", () => {
+    expect(reportUrlFromMetadata({ room_code: "abc-123" })).toBe("/meetings/abc-123/report");
+    expect(reportUrlFromMetadata({ room_code: "../x" })).toBeNull();
+  });
+
   it("returns an ordinary report link", () => {
     expect(reportUrlFromMetadata({ report_url: "https://app.test/meetings/abc/report" })).toBe(
       "https://app.test/meetings/abc/report",

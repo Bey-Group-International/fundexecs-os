@@ -12,6 +12,8 @@ import { runIntelligenceSyncAllOrgs } from "@/lib/intelligence/sweep";
 import { refreshStaleFeeds } from "@/lib/calendar/feeds.server";
 import { syncStaleGoogleConnections } from "@/lib/calendar/google.server";
 import { syncConnectedMailboxes, type MailboxSweepSummary } from "@/lib/integrations/gmail-sync/sync.server";
+import { syncTrackedThreads, type TrackedSweepSummary } from "@/lib/integrations/gmail-sync/tracked.server";
+import { refreshStaleSummaries, type SummarySweepResult } from "@/lib/inbox/summaries.server";
 import { runMeetingReminders, type ReminderSweepStats } from "@/lib/meetings/reminder-sweep.server";
 import {
   runBookingConfirmationRetries,
@@ -318,6 +320,26 @@ export async function GET(request: Request) {
     console.error("gmail_mailbox_sync failed", e);
   }
 
+  // Replies to meeting follow-ups sent from a host's OWN mailbox. Reads only the
+  // Gmail threads the app started (tracked_mail_threads), never the rest of a
+  // member's mail, so the reply lands on the follow-up's inbox thread.
+  let trackedThreads: TrackedSweepSummary = { threads: 0, ingested: 0, needsReconnect: 0, failed: 0 };
+  try {
+    trackedThreads = await syncTrackedThreads(supabase, { now });
+  } catch (e) {
+    console.error("gmail_tracked_threads failed", e);
+  }
+
+  // Summaries for the threads that changed since their last one — after both
+  // mail sweeps, so this hour's mail is summarised this hour. Small model,
+  // bounded, cached on the row for every report and timeline that reads it.
+  let summaries: SummarySweepResult = { candidates: 0, summarized: 0 };
+  try {
+    summaries = await refreshStaleSummaries(supabase);
+  } catch (e) {
+    console.error("inbox_summaries failed", e);
+  }
+
   // Meeting reminders: `reminder_minutes` is set on the schedule screen and,
   // until this ran, was only ever honoured by Google for meetings that happened
   // to be synced there. This is what makes the setting mean something for the
@@ -446,6 +468,11 @@ export async function GET(request: Request) {
         gmailMessagesIngested: mailboxes.ingested,
         gmailMailboxFailures: mailboxes.failed,
         gmailMailboxesNeedingReconnect: mailboxes.needsReconnect,
+        followUpThreadsChecked: trackedThreads.threads,
+        followUpRepliesIngested: trackedThreads.ingested,
+        followUpThreadsNeedingReconnect: trackedThreads.needsReconnect,
+        inboxSummariesWritten: summaries.summarized,
+        inboxSummariesPending: summaries.candidates - summaries.summarized,
         webhooksDelivered: webhooks.delivered,
         webhooksFailed: webhooks.failed,
         proactiveSurfaced: proactive.surfaced,
