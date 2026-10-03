@@ -96,6 +96,12 @@ export interface MeetingGreenRoomProps {
    * owns them.
    */
   onPreviewStream?: (stream: MediaStream | null, release: () => void) => void;
+  /**
+   * "check" is a rehearsal with no meeting behind it: the same preview, meter,
+   * devices and backgrounds, with no name to give, no link to share and Done
+   * where Join would be. Reached from the lobby's "Test your camera & mic".
+   */
+  mode?: "join" | "check";
 }
 
 /** MediaDeviceInfo is a live browser object; this is the plain shape we test against. */
@@ -309,7 +315,9 @@ export function MeetingGreenRoom({
   admission = "idle",
   onCancelAdmission,
   onPreviewStream,
+  mode = "join",
 }: MeetingGreenRoomProps) {
+  const checking = mode === "check";
   const [devices, setDevices] = useState<Device[]>([]);
   // Seeded from the remembered preference rather than left blank. Reading it
   // after the first open is what made joining open the default camera and then
@@ -984,9 +992,16 @@ export function MeetingGreenRoom({
         <div className="rounded-2xl border border-[var(--line)] bg-[var(--surface-1)]">
           <div className="flex flex-col gap-4 px-5 pb-4 pt-5">
             <h2 className="font-display text-lg font-semibold text-[var(--fg-primary)]">
-              {waitCopy && admission !== "failed" && admission !== "gave-up" ? "Almost in" : isHost ? "Ready to start?" : "Ready to join?"}
+              {checking
+                ? "Check your camera & mic"
+                : waitCopy && admission !== "failed" && admission !== "gave-up" ? "Almost in" : isHost ? "Ready to start?" : "Ready to join?"}
             </h2>
 
+            {checking ? (
+              <p className="text-xs text-[var(--fg-muted)]">
+                Nobody can see or hear this. Talk to watch the meter move, and try a background.
+              </p>
+            ) : (
             <label className="flex flex-col gap-1.5">
               <span className="text-xs text-[var(--fg-muted)]">Your name</span>
               <input
@@ -998,6 +1013,7 @@ export function MeetingGreenRoom({
                 className="rounded-lg border border-[var(--line)] bg-[var(--surface-0)] px-3 py-2.5 text-base text-[var(--fg-primary)] placeholder:text-[var(--fg-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--gold-400)] sm:text-sm"
               />
             </label>
+            )}
 
             {otherProblems.length > 0 && (
               <ul className="flex flex-col gap-1.5">
@@ -1109,7 +1125,14 @@ export function MeetingGreenRoom({
               card, Join was a scroll away on the screen whose only job is to
               get somebody into the call. */}
           <div className="sticky bottom-0 z-10 border-t border-[var(--line)] bg-[var(--surface-1)] px-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] pt-3 md:static">
-            {waitCopy ? (
+            {checking ? (
+              <a
+                href="/meetings"
+                className="flex min-h-11 w-full items-center justify-center rounded-lg bg-[var(--gold-400)] py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[var(--gold-500)]"
+              >
+                Done
+              </a>
+            ) : waitCopy ? (
               <WaitStatus
                 admission={admission}
                 title={waitCopy.title}
@@ -1129,10 +1152,13 @@ export function MeetingGreenRoom({
             )}
           </div>
 
-          {/* The meeting's own link, ready to hand to whoever is missing */}
-          <div className="rounded-b-2xl border-t border-[var(--line)] bg-[var(--surface-0)] px-5 py-3">
-            <MeetingShareLink roomCode={roomCode} title={meetingTitle} scheduledAt={scheduledAt} />
-          </div>
+          {/* The meeting's own link, ready to hand to whoever is missing. A
+              rehearsal has no meeting, so nothing to share. */}
+          {checking ? null : (
+            <div className="rounded-b-2xl border-t border-[var(--line)] bg-[var(--surface-0)] px-5 py-3">
+              <MeetingShareLink roomCode={roomCode} title={meetingTitle} scheduledAt={scheduledAt} />
+            </div>
+          )}
         </div>
       </div>
     </div>

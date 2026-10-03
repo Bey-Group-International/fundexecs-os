@@ -4,6 +4,9 @@ import { useEffect, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import nextDynamic from "next/dynamic";
+import { roomCodeFromInput } from "@/lib/meetings/lobby";
+import { meetingInviteUrl } from "@/lib/meetings/share";
+import { copyText } from "./MeetingShareLink";
 
 
 /**
@@ -48,8 +51,14 @@ const MeetingEditScreen = nextDynamic(
 export function MeetingLobby({
   onOpenCalendar,
   onScheduleLater,
+  booking,
 }: {
   onOpenCalendar?: () => void;
+  /**
+   * The member's booking link, drawn into the toolbar rather than as a row of
+   * its own beneath it. Passed in so the lobby stays usable without it.
+   */
+  booking?: React.ReactNode;
   /**
    * "Schedule for later": the calendar with the scheduler already open on top
    * of it. Picking that item means somebody is here to book a meeting, and
@@ -63,6 +72,9 @@ export function MeetingLobby({
   const [isPending, startTransition] = useTransition();
   const [scheduleOpen, setScheduleOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  // Set once an instant room exists and its link is on the clipboard, for the
+  // moment between that and the room opening.
+  const [instantNote, setInstantNote] = useState<string | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
 
   // Close the "New meeting" menu on outside click or Escape.
@@ -97,6 +109,12 @@ export function MeetingLobby({
           throw new Error(err.error ?? "Failed to create meeting");
         }
         const data = (await res.json()) as { id: string; roomCode: string };
+        // The link first, then the room. An instant meeting is almost always
+        // one somebody is about to send to someone, and the moment the room
+        // opens is the moment their hands are busy with a camera and a
+        // microphone. A clipboard refusal is not a reason to stay here.
+        const copied = await copyText(meetingInviteUrl(window.location.origin, data.roomCode)).catch(() => false);
+        setInstantNote(copied ? "Invite link copied — opening the room…" : "Opening the room…");
         router.push(`/meetings/${data.roomCode}`);
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to create meeting");
@@ -122,8 +140,13 @@ export function MeetingLobby({
 
   function handleJoin(e: React.FormEvent) {
     e.preventDefault();
-    const code = joinCode.trim().toLowerCase().replace(/\s/g, "");
-    if (!code) return;
+    if (!joinCode.trim()) return;
+    // A pasted link is read for the code it carries; see roomCodeFromInput.
+    const code = roomCodeFromInput(joinCode);
+    if (!code) {
+      setError("That doesn't look like a meeting code or link. Codes look like abc-defg-hij.");
+      return;
+    }
     setError(null);
     router.push(`/meetings/${code}`);
   }
@@ -134,93 +157,111 @@ export function MeetingLobby({
     // is what made the toolbar sit off-axis from everything under it.
     <div className="w-full">
       <div className="flex w-full flex-col gap-3">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-          <div className="flex items-center gap-2">
-            <div className="relative flex-1 sm:flex-none" ref={menuRef}>
-              <button
-                type="button"
-                onClick={() => setMenuOpen((v) => !v)}
-                disabled={isPending}
-                aria-haspopup="menu"
-                aria-expanded={menuOpen}
-                className="fx-btn flex w-full items-center justify-center gap-2 rounded-lg bg-gold-400 px-4 py-2 text-sm font-semibold text-white hover:bg-gold-500 sm:w-auto"
-              >
-                {isPending ? <SpinnerIcon /> : <VideoIcon />}
-                {isPending ? "Starting…" : "New meeting"}
-                <CaretIcon />
-              </button>
-
-              {menuOpen ? (
-                <div
-                  role="menu"
-                  className="absolute left-0 top-full z-20 mt-1.5 w-64 overflow-hidden rounded-xl border border-line bg-surface-1 shadow-[0_18px_40px_-20px_rgb(15_23_42/0.45)]"
-                >
-                  <MenuItem
-                    icon={<BoltIcon />}
-                    title="Start an instant meeting"
-                    subtitle="Create a room and join now"
-                    onClick={startInstant}
-                  />
-                  <div className="h-px bg-line" />
-                  <MenuItem
-                    icon={<CalendarIcon />}
-                    title="Schedule for later"
-                    subtitle="Pick a time, with your calendar behind it"
-                    onClick={scheduleLater}
-                  />
-                  <div className="h-px bg-line" />
-                  {/* No room, no second participant: a call somebody is taking
-                      elsewhere, recorded for the transcript and the summary. It
-                      belongs in this menu because "I need a record of a
-                      conversation" is the same intent as the two above it. */}
-                  <MenuItem
-                    icon={<MicIcon />}
-                    title="Record a call"
-                    subtitle="For a phone call — recording, transcript and summary"
-                    onClick={() => { setMenuOpen(false); router.push("/meetings/record"); }}
-                  />
-                </div>
-              ) : null}
-            </div>
-
-            {/* The archive of recorded calls, beside the calendar: both are
-                "where is the thing that already happened". */}
-            <Link
-              href="/meetings/calls"
-              className="fx-btn flex shrink-0 items-center justify-center gap-2 rounded-lg border border-line bg-surface-1 px-4 py-2 text-sm font-semibold text-fg-secondary hover:border-gold-400/40 hover:bg-surface-2 hover:text-fg-primary"
-            >
-              <span className="text-[var(--gold-300)]"><MicIcon /></span>
-              Calls
-            </Link>
-
-            {/* The calendar, one click from the page a member opens every day. */}
+        {/* One wrapping row: the ways to start, the ways to look back, the
+            booking link, then the code field taking whatever is left. On a
+            phone, New meeting is full width, the secondary doors are icons,
+            and the code field drops to a row of its own. */}
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="relative w-full sm:w-auto" ref={menuRef}>
             <button
               type="button"
-              onClick={openCalendar}
-              className="fx-btn flex shrink-0 items-center justify-center gap-2 rounded-lg border border-line bg-surface-1 px-4 py-2 text-sm font-semibold text-fg-secondary hover:border-gold-400/40 hover:bg-surface-2 hover:text-fg-primary"
+              onClick={() => setMenuOpen((v) => !v)}
+              disabled={isPending}
+              aria-haspopup="menu"
+              aria-expanded={menuOpen}
+              className="fx-btn flex min-h-11 w-full items-center justify-center gap-2 rounded-lg bg-gold-400 px-4 text-sm font-semibold text-white hover:bg-gold-500 sm:min-h-10 sm:w-auto"
             >
-              <span className="text-[var(--gold-300)]"><CalendarIcon /></span>
-              Calendar
+              {isPending ? <SpinnerIcon /> : <VideoIcon />}
+              {isPending ? "Starting…" : "New meeting"}
+              <CaretIcon />
             </button>
+
+            {menuOpen ? (
+              <div
+                role="menu"
+                className="absolute left-0 top-full z-20 mt-1.5 w-full overflow-hidden rounded-xl border border-line bg-surface-1 shadow-[0_18px_40px_-20px_rgb(15_23_42/0.45)] sm:w-72"
+              >
+                <MenuItem
+                  icon={<BoltIcon />}
+                  title="Start an instant meeting"
+                  subtitle="Create a room, copy its link, and join"
+                  onClick={startInstant}
+                />
+                <div className="h-px bg-line" />
+                <MenuItem
+                  icon={<CalendarIcon />}
+                  title="Schedule for later"
+                  subtitle="Pick a time, with your calendar behind it"
+                  onClick={scheduleLater}
+                />
+                <div className="h-px bg-line" />
+                {/* No room, no second participant: a call somebody is taking
+                    elsewhere, recorded for the transcript and the summary. It
+                    belongs in this menu because "I need a record of a
+                    conversation" is the same intent as the two above it. */}
+                <MenuItem
+                  icon={<MicIcon />}
+                  title="Record a call"
+                  subtitle="For a phone call — recording, transcript and summary"
+                  onClick={() => { setMenuOpen(false); router.push("/meetings/record"); }}
+                />
+                <div className="h-px bg-line" />
+                {/* A rehearsal, with nobody watching: the same camera, mic and
+                    background screen a meeting opens with, without a room. */}
+                <MenuItem
+                  icon={<CheckIcon />}
+                  title="Test your camera & mic"
+                  subtitle="Check how you look and sound, without joining"
+                  onClick={() => { setMenuOpen(false); router.push("/meetings/device-check"); }}
+                />
+              </div>
+            ) : null}
           </div>
 
-          {/* Code entry */}
-          <form onSubmit={handleJoin} className="flex flex-1 items-center gap-2">
-            <div className="flex flex-1 items-center gap-2 rounded-lg border border-line bg-surface-1 px-3 py-1.5 transition-colors focus-within:border-gold-400 focus-within:ring-2 focus-within:ring-gold-400/30">
+          {/* The archive of recorded calls, beside the calendar: both are
+              "where is the thing that already happened". Icons on a phone. */}
+          <Link
+            href="/meetings/calls"
+            aria-label="Calls"
+            className="fx-btn flex min-h-11 min-w-11 shrink-0 items-center justify-center gap-2 rounded-lg border border-line bg-surface-1 px-3 text-sm font-semibold text-fg-secondary hover:border-gold-400/40 hover:bg-surface-2 hover:text-fg-primary sm:min-h-10 sm:px-4"
+          >
+            <span className="text-[var(--gold-300)]"><MicIcon /></span>
+            <span className="hidden sm:inline">Calls</span>
+          </Link>
+
+          {/* The calendar, one click from the page a member opens every day. */}
+          <button
+            type="button"
+            onClick={openCalendar}
+            aria-label="Calendar"
+            className="fx-btn flex min-h-11 min-w-11 shrink-0 items-center justify-center gap-2 rounded-lg border border-line bg-surface-1 px-3 text-sm font-semibold text-fg-secondary hover:border-gold-400/40 hover:bg-surface-2 hover:text-fg-primary sm:min-h-10 sm:px-4"
+          >
+            <span className="text-[var(--gold-300)]"><CalendarIcon /></span>
+            <span className="hidden sm:inline">Calendar</span>
+          </button>
+
+          {booking}
+
+          {/* Code entry. A pasted link works as well as a typed code. */}
+          <form onSubmit={handleJoin} className="flex w-full min-w-0 items-center gap-2 lg:w-auto lg:min-w-[18rem] lg:flex-1">
+            <div className="flex min-h-11 min-w-0 flex-1 items-center gap-2 rounded-lg border border-line bg-surface-1 px-3 transition-colors focus-within:border-gold-400 focus-within:ring-2 focus-within:ring-gold-400/30 sm:min-h-10">
               <span className="text-fg-muted"><KeyboardIcon /></span>
               <input
                 type="text"
-                aria-label="Meeting code"
+                aria-label="Meeting code or link"
                 value={joinCode}
-                onChange={(e) => setJoinCode(e.target.value)}
-                placeholder="Enter a meeting code"
-                className="w-full bg-transparent py-1 text-sm text-fg-primary placeholder:text-fg-muted focus:outline-none"
+                onChange={(e) => { setJoinCode(e.target.value); setError(null); }}
+                placeholder="Enter a code or paste a link"
+                autoCapitalize="none"
+                autoCorrect="off"
+                spellCheck={false}
+                className="w-full min-w-0 bg-transparent py-1 text-base text-fg-primary placeholder:text-fg-muted focus:outline-none sm:text-sm"
               />
             </div>
             <button
               type="submit"
               disabled={!joinCode.trim()}
-              className={`fx-btn rounded-lg px-4 py-2 text-sm font-semibold ${
+              className={`fx-btn min-h-11 rounded-lg px-4 text-sm font-semibold sm:min-h-10 ${
                 joinCode.trim()
                   ? "text-[var(--gold-300)] hover:bg-gold-400/10"
                   : "cursor-not-allowed text-fg-muted"
@@ -231,6 +272,9 @@ export function MeetingLobby({
           </form>
         </div>
 
+        {instantNote ? (
+          <p role="status" className="text-xs text-[var(--status-success)]">{instantNote}</p>
+        ) : null}
         {error ? <ErrorMsg msg={error} /> : null}
       </div>
 
@@ -349,3 +393,11 @@ function CalendarIcon() {
   );
 }
 
+function CheckIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+      <polyline points="22 4 12 14.01 9 11.01" />
+    </svg>
+  );
+}

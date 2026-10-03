@@ -43,6 +43,8 @@ import { ConfirmBox, MeetingEditScreen, toEditInitial } from "./meeting-shared";
 import { copyText } from "./MeetingShareLink";
 import { useLivePresence, useNow } from "./hooks";
 import { useUpcomingMeetings } from "./useUpcomingMeetings";
+import { UpNextStrip } from "./UpNextStrip";
+import { upNextMeeting } from "@/lib/meetings/lobby";
 import type { UpcomingMeeting } from "./UpcomingMeetingsList";
 
 /** How often the list re-reads the clock. Every label it drives is minute-grained. */
@@ -282,8 +284,13 @@ export function MeetingsWorkspace({
 
   if (!mounted) return <WorkspaceSkeleton />;
 
+  // The meeting to join now, from the same live list and room presence the
+  // tabs below draw on — no second subscription for one line.
+  const next = upNextMeeting(meetings, presence, now);
+
   return (
     <div className="flex flex-col gap-3">
+      <UpNextStrip next={next} now={now} />
       {/* Tabs, search, and — for Upcoming — the week. */}
       <div className="flex flex-col gap-3 border-b border-line pb-3 md:flex-row md:items-end md:justify-between">
         <div role="tablist" aria-label="Meetings" className="-mb-px flex gap-1 overflow-x-auto">

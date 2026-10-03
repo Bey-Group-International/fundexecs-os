@@ -25,7 +25,17 @@ const SchedulingSettings = nextDynamic(
  * overlay as the lobby's "Schedule for later", so the calendar had two doors
  * with different names. The lobby owns that door now.
  */
-export function SchedulingLinkCard() {
+export function SchedulingLinkCard({
+  inline = false,
+}: {
+  /**
+   * Drawn into the lobby's toolbar rather than as a card of its own: the copy
+   * button, a pending-requests chip and Availability sit among the lobby's
+   * buttons, and the booking lists open on a row beneath them. The card was a
+   * second toolbar under the first, holding one link most visits never copy.
+   */
+  inline?: boolean;
+} = {}) {
   const [snapshot, setSnapshot] = useState<SchedulingSnapshot | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -242,6 +252,14 @@ export function SchedulingLinkCard() {
   }
 
   if (loading) {
+    if (inline) {
+      return (
+        <span className="fx-btn flex min-h-11 shrink-0 items-center gap-2 rounded-lg border border-line bg-surface-1 px-3 text-sm text-fg-muted sm:min-h-10">
+          <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-[var(--gold-400)] border-t-transparent" />
+          <span className="hidden sm:inline">Booking link</span>
+        </span>
+      );
+    }
     return (
       <div className="w-full">
         <div className="flex items-center gap-2 rounded-xl border border-line bg-surface-1 px-4 py-5 text-sm text-fg-muted">
@@ -253,6 +271,9 @@ export function SchedulingLinkCard() {
   }
 
   if (!snapshot) {
+    // In the toolbar a link that failed to load is not worth a row of its own;
+    // the scheduling page is still reachable from settings.
+    if (inline) return null;
     return error ? (
       <div className="w-full">
         <p className="rounded-xl border border-line bg-surface-1 px-4 py-4 text-sm text-fg-muted">
@@ -266,46 +287,76 @@ export function SchedulingLinkCard() {
   const confirmed = snapshot.bookings.filter((b) => b.status === "confirmed");
   const activeTypes = snapshot.eventTypes.filter((t) => t.isActive);
 
+  const Shell = inline ? "div" : "section";
+  const btn = inline ? "min-h-11 px-3 text-sm sm:min-h-10" : "px-3 py-1.5 text-xs";
+
   return (
-    <div className="w-full">
-      <section className="fx-card px-3 py-2.5">
+    <div className={inline ? "contents" : "w-full"}>
+      <Shell className={inline ? "contents" : "fx-card px-3 py-2.5"}>
         {/* One line at rest. The link is the whole point of this card; the
             bookings behind it only earn space when you ask for them, and only
             a pending approval is loud enough to announce itself. */}
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="shrink-0 text-[var(--gold-300)]" title="Your scheduling link">
-            <LinkIcon />
-          </span>
-          <code className="min-w-0 flex-1 truncate font-mono text-xs text-fg-secondary">
-            {snapshot.bookingUrl}
-          </code>
+        <div className={inline ? "contents" : "flex flex-wrap items-center gap-2"}>
+          {inline ? null : (
+            <>
+              <span className="shrink-0 text-[var(--gold-300)]" title="Your scheduling link">
+                <LinkIcon />
+              </span>
+              <code className="min-w-0 flex-1 truncate font-mono text-xs text-fg-secondary">
+                {snapshot.bookingUrl}
+              </code>
+            </>
+          )}
 
           {pending.length > 0 ? (
             <button
               type="button"
               onClick={() => setOpenList(openList === "pending" ? null : "pending")}
               aria-expanded={openList === "pending"}
-              className="fx-btn shrink-0 rounded-lg border border-status-warning/45 bg-status-warning/10 px-2.5 py-1.5 text-xs font-semibold text-[var(--status-warning)] hover:bg-status-warning/20"
+              className={`fx-btn shrink-0 rounded-lg border border-status-warning/45 bg-status-warning/10 font-semibold text-[var(--status-warning)] hover:bg-status-warning/20 ${btn}`}
             >
-              {pending.length} waiting on you
+              {pending.length} {inline ? "booking request" + (pending.length === 1 ? "" : "s") : "waiting on you"}
             </button>
           ) : null}
 
           <button
             type="button"
             onClick={() => void copyLink()}
-            className="fx-btn shrink-0 rounded-lg bg-gold-400 px-3 py-1.5 text-xs font-semibold text-white hover:bg-gold-500"
+            title={snapshot.bookingUrl}
+            className={
+              inline
+                ? `fx-btn flex shrink-0 items-center gap-2 rounded-lg border border-line bg-surface-1 font-semibold text-fg-secondary hover:border-gold-400/40 hover:bg-surface-2 hover:text-fg-primary ${btn}`
+                : "fx-btn shrink-0 rounded-lg bg-gold-400 px-3 py-1.5 text-xs font-semibold text-white hover:bg-gold-500"
+            }
           >
-            {copied ? "Copied" : "Copy link"}
+            {inline ? <span className="text-[var(--gold-300)]"><LinkIcon /></span> : null}
+            {inline ? (
+              copied ? "Copied" : (
+                // "Copy" goes on a phone: the row is full, and the button
+                // still says what it is for.
+                <><span className="hidden sm:inline">Copy booking link</span><span className="sm:hidden">Booking link</span></>
+              )
+            ) : copied ? "Copied" : "Copy link"}
           </button>
           <button
             type="button"
             onClick={() => setSettingsOpen(true)}
-            className="fx-btn shrink-0 rounded-lg border border-line bg-surface-1 px-2.5 py-1.5 text-xs font-medium text-fg-secondary hover:bg-surface-2 hover:text-fg-primary"
+            aria-label={inline ? "Availability" : undefined}
+            title={inline ? "Availability" : undefined}
+            className={`fx-btn flex shrink-0 items-center justify-center gap-2 rounded-lg border border-line bg-surface-1 font-medium text-fg-secondary hover:bg-surface-2 hover:text-fg-primary ${inline ? `${btn} min-w-11` : "px-2.5 py-1.5 text-xs"}`}
           >
-            Manage availability
+            {inline ? (
+              <>
+                <span className="sm:hidden"><GearIcon /></span>
+                <span className="hidden sm:inline">Availability</span>
+              </>
+            ) : "Manage availability"}
           </button>
         </div>
+
+        {/* Everything below the buttons. In the toolbar it is a row of its own
+            under them, and takes no room at all when there is nothing to say. */}
+        <div className={inline ? "w-full basis-full empty:hidden" : undefined}>
 
         {/* A link nobody can book through is worth interrupting for — these
             only render when the link is actually broken. */}
@@ -461,7 +512,8 @@ export function SchedulingLinkCard() {
             ) : null}
           </ul>
         ) : null}
-      </section>
+        </div>
+      </Shell>
 
       {settingsOpen && mounted
         ? createPortal(
@@ -509,6 +561,15 @@ function toLocalInput(iso: string): string {
   if (isNaN(d.getTime())) return "";
   const pad = (n: number) => String(n).padStart(2, "0");
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+function GearIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <circle cx="12" cy="12" r="3" />
+      <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+    </svg>
+  );
 }
 
 function LinkIcon() {
