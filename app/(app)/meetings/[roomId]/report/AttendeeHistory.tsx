@@ -14,9 +14,10 @@ import { createServerClient } from "@/lib/supabase/server";
 import { INBOX_CHANNELS } from "@/lib/inbox/channels";
 import type { InboxChannel } from "@/lib/supabase/database.types";
 import { loadAttendeeInboxHistory } from "@/lib/meetings/report-inbox.server";
-import type { AttendeeHistory as Attendee, ThreadDigest } from "@/lib/meetings/report-inbox";
+import { meetingReplySummary, type AttendeeHistory as Attendee, type ThreadDigest } from "@/lib/meetings/report-inbox";
 import { LocalTime } from "./LocalTime";
 import { StartConversation } from "./StartConversation";
+import { MessageEveryoneNew } from "./MessageEveryoneNew";
 import { getSessionContext } from "@/lib/auth";
 
 /**
@@ -63,13 +64,15 @@ export async function AttendeeHistoryPanel({
   // Only a member of the meeting's organisation has an inbox to start a
   // conversation from. A guest attendee reads the same report without it.
   const canMessage = Boolean(organizationId) && session?.orgId === organizationId;
-  const composer = (recipient: { name: string; email: string }) =>
+  const replies = meetingReplySummary(history);
+  const composer = (recipient: { name: string; email: string }, continuing: { subject: string } | null = null) =>
     canMessage ? (
       <StartConversation
         meetingId={meetingId}
         meetingTitle={meetingTitle}
         recipient={recipient}
         actionItems={actionItems}
+        continuing={continuing}
       />
     ) : null;
 
@@ -84,6 +87,11 @@ export async function AttendeeHistoryPanel({
       <div className="flex items-baseline justify-between gap-3">
         <h2 className="text-xs font-medium uppercase tracking-wide text-[var(--fg-secondary)]">
           Where we are with them
+          {replies.written > 0 && (
+            <span className="ml-2 normal-case tracking-normal text-[var(--fg-muted)]">
+              · {replies.replied} of {replies.written} replied
+            </span>
+          )}
         </h2>
         <Link href="/inbox" className="shrink-0 text-xs text-[var(--gold-400)] hover:underline">
           Open inbox
@@ -96,7 +104,14 @@ export async function AttendeeHistoryPanel({
             <AttendeeCard
               key={attendee.email}
               attendee={attendee}
-              composer={composer({ name: attendee.name, email: attendee.email })}
+              composer={composer(
+                { name: attendee.name, email: attendee.email },
+                // This meeting's thread with them, when there is one: continue it.
+                (() => {
+                  const own = attendee.threads.find((t) => t.fromThisMeeting);
+                  return own ? { subject: own.subject } : null;
+                })(),
+              )}
             />
           ))}
         </ul>
@@ -117,6 +132,14 @@ export async function AttendeeHistoryPanel({
               </span>
               .
             </p>
+          )}
+          {canMessage && (
+            <MessageEveryoneNew
+              meetingId={meetingId}
+              meetingTitle={meetingTitle}
+              people={history.untouched}
+              actionItems={actionItems}
+            />
           )}
           {/* The people most likely to need a first message: offered one each. */}
           {canMessage && (
@@ -216,7 +239,7 @@ function ThreadRow({ thread }: { thread: ThreadDigest }) {
           {/* This meeting's own follow-up thread, where replies to it arrive. */}
           {thread.fromThisMeeting && (
             <span className="ml-2 rounded border border-[var(--gold-400)]/40 px-1 font-mono text-[10px] uppercase tracking-wider text-[var(--gold-400)]">
-              Follow-up
+              {thread.replied ? (thread.unread ? "New reply" : "Replied") : "Follow-up"}
             </span>
           )}
           <span className="ml-2 text-[var(--fg-muted)]">{channelLabel(thread.channel)}</span>

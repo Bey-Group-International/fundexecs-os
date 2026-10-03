@@ -56,3 +56,18 @@ export function conversationProblem(draft: { subject: string; body: string }): s
   if (draft.body.length > BODY_MAX) return "The message is too long.";
   return null;
 }
+
+/** The token a group message carries where each person's first name goes. */
+export const FIRST_NAME_TOKEN = "{first_name}";
+
+/** The group template: one body, greeting filled in per recipient on send. */
+export function groupTemplate(input: Omit<ConversationTemplateInput, "recipientName">): ConversationDraft {
+  const t = conversationTemplate({ ...input, recipientName: "" });
+  return { subject: t.subject, body: t.body.replace(/^Hi,/, `Hi ${FIRST_NAME_TOKEN},`) };
+}
+
+/** Fill the first-name token for one recipient; with no name, drop it cleanly. */
+export function personalizeGroupBody(body: string, recipientName: string): string {
+  const first = firstName(recipientName);
+  return first ? body.split(FIRST_NAME_TOKEN).join(first) : body.split(` ${FIRST_NAME_TOKEN}`).join("").split(FIRST_NAME_TOKEN).join("");
+}

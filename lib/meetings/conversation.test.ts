@@ -1,4 +1,12 @@
-import { conversationProblem, conversationTemplate, firstName, TEMPLATE_ACTION_ITEMS } from "./conversation";
+import {
+  conversationProblem,
+  conversationTemplate,
+  firstName,
+  FIRST_NAME_TOKEN,
+  groupTemplate,
+  personalizeGroupBody,
+  TEMPLATE_ACTION_ITEMS,
+} from "./conversation";
 
 describe("conversationTemplate", () => {
   it("greets by first name and carries the meeting's action items", () => {
@@ -37,5 +45,14 @@ describe("helpers", () => {
     expect(conversationProblem({ subject: "", body: "x" })).toBe("Add a subject.");
     expect(conversationProblem({ subject: "s", body: "  " })).toBe("Write a message first.");
     expect(conversationProblem({ subject: "s", body: "b" })).toBeNull();
+  });
+});
+
+describe("group messages", () => {
+  it("writes the greeting once with a first-name token, filled per person", () => {
+    const t = groupTemplate({ meetingTitle: "IC prep", actionItems: [] });
+    expect(t.body.startsWith(`Hi ${FIRST_NAME_TOKEN},`)).toBe(true);
+    expect(personalizeGroupBody(t.body, "Ana Lopez").startsWith("Hi Ana,")).toBe(true);
+    expect(personalizeGroupBody(t.body, "bo@x.io").startsWith("Hi,")).toBe(true);
   });
 });

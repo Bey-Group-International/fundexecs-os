@@ -36,6 +36,10 @@ export interface WorkspaceMeeting {
   priority?: string | null;
   preparation_status?: string | null;
   followup_status?: string | null;
+  /** Trigger-maintained counts of the meeting's inbox threads (20261003151646). */
+  followup_threads?: number | null;
+  followup_replies?: number | null;
+  followup_unread?: number | null;
   deal_id?: string | null;
 }
 
@@ -241,12 +245,29 @@ export function rowChips(m: WorkspaceMeeting): RowChip[] {
   if (m.priority === "critical") chips.push({ label: "Critical", tone: "danger" });
   else if (m.priority === "high") chips.push({ label: "High priority", tone: "warning" });
 
-  if (m.followup_status === "done") chips.push({ label: "Follow-up sent", tone: "success" });
+  // Replies outrank "sent": once somebody has answered, that is the news.
+  const reply = replyChip(m);
+  if (reply) chips.push(reply);
+  else if (m.followup_status === "done") chips.push({ label: "Follow-up sent", tone: "success" });
   else if (m.followup_status === "draft") chips.push({ label: "Follow-up drafted", tone: "info" });
 
   if (m.deal_id) chips.push({ label: "Deal", tone: "accent" });
   for (const tag of (m.tags ?? []).slice(0, 2)) chips.push({ label: tag, tone: "neutral" });
   return chips;
+}
+
+/**
+ * Where the meeting's conversations stand: unread replies first (that is the
+ * badge — something to read), then how many of the people written to answered.
+ * Null when nobody has replied yet, so the follow-up chip says the rest.
+ */
+export function replyChip(m: WorkspaceMeeting): RowChip | null {
+  const threads = m.followup_threads ?? 0;
+  const replies = m.followup_replies ?? 0;
+  const unread = m.followup_unread ?? 0;
+  if (unread > 0) return { label: `${unread} new ${unread === 1 ? "reply" : "replies"}`, tone: "accent" };
+  if (replies > 0) return { label: `Replied ${replies}/${Math.max(threads, replies)}`, tone: "success" };
+  return null;
 }
 
 /** Up to two letters for an avatar: letters only, first and last word. */

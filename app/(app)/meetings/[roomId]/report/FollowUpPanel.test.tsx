@@ -224,3 +224,14 @@ describe("before anything is sent", () => {
     expect(field.value).toBe("**deck**");
   });
 });
+
+describe("when the organisation gates outbound replies", () => {
+  it("says the follow-up is waiting in approvals, never that it was sent", async () => {
+    captureFetch({ gated: true, queued: 2, total: 3 });
+    panel();
+    await userEvent.click(screen.getByRole("button", { name: /send now/i }));
+    expect(await screen.findByText(/Waiting in approvals for 2 of 3 attendees/)).toBeInTheDocument();
+    expect(screen.getByText(/nothing has been sent yet/i)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /review approvals/i })).toHaveAttribute("href", "/inbox");
+  });
+});

@@ -1,18 +1,18 @@
 /**
  * Starting an inbox conversation from a meeting report: only org members, only
- * to someone who was in the meeting, on the thread their reply will land on,
- * and always through the inbox's own gated send.
+ * to someone who was in the meeting, on the meeting's thread with them, always
+ * through the inbox's own gated send — and Earn drafts reused per report.
  */
 const requireOrgContext = jest.fn();
 const replyToThread = jest.fn();
-const recordThreadOnTimeline = jest.fn();
+const ensureMeetingThread = jest.fn();
 const draftMeetingConversation = jest.fn();
 let present: Array<{ name: string; email: string | null }> = [];
 
 jest.mock("@/lib/auth", () => ({ requireOrgContext: () => requireOrgContext() }));
 jest.mock("@/app/(app)/inbox/actions", () => ({ replyToThread: (fd: FormData) => replyToThread(fd) }));
-jest.mock("@/lib/inbox/crm-activity.server", () => ({
-  recordThreadOnTimeline: (...a: unknown[]) => recordThreadOnTimeline(...a),
+jest.mock("@/lib/meetings/meeting-thread.server", () => ({
+  ensureMeetingThread: (...a: unknown[]) => ensureMeetingThread(...a),
 }));
 jest.mock("@/lib/meetings/conversation-draft.server", () => ({
   draftMeetingConversation: (...a: unknown[]) => draftMeetingConversation(...a),
@@ -21,34 +21,35 @@ jest.mock("@/lib/meetings/recipients.server", () => ({ loadPresentPeople: async 
 jest.mock("@/lib/rate-limit", () => ({ checkRateLimit: () => ({ ok: true }) }));
 
 type Row = Record<string, unknown> | null;
-const db: {
-  meeting: Row;
-  existingThread: Row;
-  report: Row;
-  inserts: Array<Record<string, unknown>>;
-  updates: Array<Record<string, unknown>>;
-} = { meeting: null, existingThread: null, report: null, inserts: [], updates: [] };
+const db: { meeting: Row; report: Row; cached: Row; upserts: unknown[]; deletes: string[] } = {
+  meeting: null,
+  report: null,
+  cached: null,
+  upserts: [],
+  deletes: [],
+};
 
 jest.mock("@/lib/supabase/server", () => ({
   createServerClient: async () => ({
     from: (table: string) => {
       const chain: Record<string, unknown> = {};
-      const result = () =>
-        table === "live_meetings" ? db.meeting : table === "inbox_threads" ? db.existingThread : db.report;
       Object.assign(chain, {
         select: () => chain,
         eq: () => chain,
         is: () => chain,
         order: () => chain,
         limit: () => chain,
-        maybeSingle: async () => ({ data: result(), error: null }),
-        insert: (row: Record<string, unknown>) => {
-          db.inserts.push(row);
-          return { select: () => ({ single: async () => ({ data: { id: "thr-new" }, error: null }) }) };
+        maybeSingle: async () => ({
+          data: table === "live_meetings" ? db.meeting : table === "live_meeting_reports" ? db.report : db.cached,
+          error: null,
+        }),
+        upsert: async (row: unknown) => {
+          db.upserts.push(row);
+          return { error: null };
         },
-        update: (patch: Record<string, unknown>) => {
-          db.updates.push(patch);
-          return { eq: () => ({ eq: async () => ({ error: null }) }) };
+        delete: () => {
+          db.deletes.push(table);
+          return chain;
         },
       });
       return chain;
@@ -74,40 +75,30 @@ function form(over: Record<string, string> = {}) {
 
 beforeEach(() => {
   jest.clearAllMocks();
-  db.meeting = MEETING;
-  db.existingThread = null;
-  db.report = null;
-  db.inserts = [];
-  db.updates = [];
+  Object.assign(db, { meeting: MEETING, report: null, cached: null, upserts: [], deletes: [] });
   present = [];
   requireOrgContext.mockResolvedValue({ ok: true, ctx: { orgId: "org-1", userId: "u1", email: "host@fund.com" } });
+  ensureMeetingThread.mockResolvedValue({ ok: true, threadId: "thr-new", subject: "Next steps", continued: false });
   replyToThread.mockResolvedValue({ ok: true, gated: true, message: "Tier 2 — sent to your approvals before it goes out." });
 });
 
 describe("startConversation", () => {
-  it("creates the thread on the reply key, linked to the meeting, and sends through the inbox gate", async () => {
+  it("sends on the meeting's thread with them, through the inbox gate", async () => {
     const r = await startConversation(form());
-    expect(r).toEqual({ ok: true, threadId: "thr-new", gated: true, message: expect.stringContaining("approvals") });
-    expect(db.inserts[0]).toMatchObject({
-      organization_id: "org-1",
-      channel: "gmail",
-      counterparty_email: "ana@acme.com",
-      external_id: "email:ana@acme.com:next steps",
-      meeting_id: "m1",
-      subject: "Next steps",
-    });
-    expect(recordThreadOnTimeline).toHaveBeenCalledTimes(1);
+    expect(r).toMatchObject({ ok: true, threadId: "thr-new", gated: true, continued: false });
+    const [, input] = ensureMeetingThread.mock.calls[0] as [unknown, Record<string, any>];
+    expect(input).toMatchObject({ orgId: "org-1", meetingId: "m1", subject: "Next steps", preview: "Hi Ana" });
+    expect(input.recipient.email.toLowerCase()).toBe("ana@acme.com");
     const fd = replyToThread.mock.calls[0][0] as FormData;
     expect(fd.get("thread_id")).toBe("thr-new");
     expect(fd.get("body")).toBe("Hi Ana");
+    // The cached Earn draft is spent.
+    expect(db.deletes).toEqual(["meeting_conversation_drafts"]);
   });
 
-  it("continues an existing thread rather than opening a second one", async () => {
-    db.existingThread = { id: "thr-1", meeting_id: null };
-    const r = await startConversation(form());
-    expect(r).toMatchObject({ ok: true, threadId: "thr-1" });
-    expect(db.inserts).toEqual([]);
-    expect(db.updates).toEqual([{ meeting_id: "m1" }]);
+  it("reports when it continued an existing meeting thread", async () => {
+    ensureMeetingThread.mockResolvedValue({ ok: true, threadId: "thr-1", subject: "Follow-up: Series B sync", continued: true });
+    expect(await startConversation(form())).toMatchObject({ ok: true, threadId: "thr-1", continued: true, subject: "Follow-up: Series B sync" });
   });
 
   it("writes to people who were present, not only the invited", async () => {
@@ -116,9 +107,11 @@ describe("startConversation", () => {
   });
 
   it("refuses someone who was not in the meeting", async () => {
-    const r = await startConversation(form({ email: "stranger@else.com" }));
-    expect(r).toEqual({ ok: false, error: "That person was not in this meeting." });
-    expect(replyToThread).not.toHaveBeenCalled();
+    expect(await startConversation(form({ email: "stranger@else.com" }))).toEqual({
+      ok: false,
+      error: "That person was not in this meeting.",
+    });
+    expect(ensureMeetingThread).not.toHaveBeenCalled();
   });
 
   it("refuses a meeting in another organisation", async () => {
@@ -131,18 +124,21 @@ describe("startConversation", () => {
     expect(requireOrgContext).not.toHaveBeenCalled();
   });
 
-  it("reports a send that failed", async () => {
+  it("reports a send that failed, and keeps the cached draft", async () => {
     replyToThread.mockResolvedValue({ ok: false, error: "Mailbox not connected" });
     expect(await startConversation(form())).toEqual({ ok: false, error: "Mailbox not connected" });
+    expect(db.deletes).toEqual([]);
   });
 });
 
 describe("draftConversation", () => {
-  it("drafts from the report's own record", async () => {
-    db.report = { summary: "Agreed terms.", action_items: ["Send the model"], analysis: { decisions: ["Proceed"] } };
+  const REPORT = { summary: "Agreed terms.", action_items: ["Send the model"], analysis: { decisions: ["Proceed"] }, created_at: "2026-10-03T10:00:00Z" };
+
+  it("drafts from the report's own record and remembers a live draft", async () => {
+    db.report = REPORT;
     draftMeetingConversation.mockResolvedValue({ subject: "S", body: "B", live: true });
     const r = await draftConversation("m1", "ana@acme.com");
-    expect(r).toEqual({ ok: true, subject: "S", body: "B", live: true });
+    expect(r).toEqual({ ok: true, cached: false, subject: "S", body: "B", live: true });
     expect(draftMeetingConversation).toHaveBeenCalledWith({
       meetingTitle: "Series B sync",
       recipientName: "Ana Lopez",
@@ -150,11 +146,34 @@ describe("draftConversation", () => {
       decisions: ["Proceed"],
       actionItems: ["Send the model"],
     });
+    expect(db.upserts).toEqual([
+      expect.objectContaining({ meeting_id: "m1", email_lower: "ana@acme.com", subject: "S", report_created_at: REPORT.created_at }),
+    ]);
+  });
+
+  it("reuses a draft written from the same report, with no model call", async () => {
+    db.report = REPORT;
+    db.cached = { subject: "Cached", body: "Cached body", report_created_at: REPORT.created_at };
+    const r = await draftConversation("m1", "ana@acme.com");
+    expect(r).toEqual({ ok: true, live: true, cached: true, subject: "Cached", body: "Cached body" });
+    expect(draftMeetingConversation).not.toHaveBeenCalled();
+  });
+
+  it("drafts afresh once the report has been regenerated", async () => {
+    db.report = REPORT;
+    db.cached = { subject: "Old", body: "Old", report_created_at: "2026-10-01T00:00:00Z" };
+    draftMeetingConversation.mockResolvedValue({ subject: "New", body: "New", live: true });
+    expect(await draftConversation("m1", "ana@acme.com")).toMatchObject({ cached: false, subject: "New" });
+  });
+
+  it("does not remember the template fallback", async () => {
+    draftMeetingConversation.mockResolvedValue({ subject: "T", body: "T", live: false });
+    await draftConversation("m1", "ana@acme.com");
+    expect(db.upserts).toEqual([]);
   });
 
   it("refuses an outsider without drafting", async () => {
-    const r = await draftConversation("m1", "stranger@else.com");
-    expect(r.ok).toBe(false);
+    expect((await draftConversation("m1", "stranger@else.com")).ok).toBe(false);
     expect(draftMeetingConversation).not.toHaveBeenCalled();
   });
 });

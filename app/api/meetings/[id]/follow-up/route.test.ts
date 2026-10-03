@@ -11,6 +11,9 @@ const sendEmail = jest.fn();
 const mailboxFor = jest.fn();
 const recordFollowUpThreads = jest.fn();
 let serviceEnv = false;
+let gated = false;
+const replyToThread = jest.fn();
+const ensureMeetingThread = jest.fn();
 
 jest.mock("@/lib/auth", () => ({ requireOrgContext: () => requireOrgContext() }));
 jest.mock("@/lib/supabase/server", () => ({
@@ -20,6 +23,12 @@ jest.mock("@/lib/supabase/server", () => ({
 }));
 jest.mock("@/lib/meetings/follow-up-threads.server", () => ({
   recordFollowUpThreads: (...a: unknown[]) => recordFollowUpThreads(...a),
+}));
+jest.mock("@/lib/mandates", () => ({ getActiveMandate: async () => undefined }));
+jest.mock("@/lib/gates", () => ({ gateDecision: () => ({ requiresApproval: gated, tier: gated ? 2 : 1 }) }));
+jest.mock("@/app/(app)/inbox/actions", () => ({ replyToThread: (fd: FormData) => replyToThread(fd) }));
+jest.mock("@/lib/meetings/meeting-thread.server", () => ({
+  ensureMeetingThread: (...a: unknown[]) => ensureMeetingThread(...a),
 }));
 jest.mock("@/lib/email", () => ({
   sendEmail: (...a: unknown[]) => sendEmail(...a),
@@ -85,6 +94,7 @@ beforeEach(() => {
   mailboxFor.mockResolvedValue({ ok: true, token: "tok" });
   sendEmail.mockResolvedValue({ ok: true });
   serviceEnv = false;
+  gated = false;
   recordFollowUpThreads.mockResolvedValue({ recorded: 0, tracked: 0 });
 });
 
@@ -325,5 +335,35 @@ describe("the conversation it starts", () => {
     wire();
     await POST(req(), { params });
     expect(recordFollowUpThreads).not.toHaveBeenCalled();
+  });
+});
+
+describe("when the organisation gates outbound replies", () => {
+  beforeEach(() => {
+    gated = true;
+    ensureMeetingThread.mockResolvedValue({ ok: true, threadId: "thr-1", subject: "Follow-up: Series B sync", continued: false });
+    replyToThread.mockResolvedValue({ ok: true, gated: true });
+  });
+
+  it("queues one approval per attendee on their meeting thread, and sends nothing", async () => {
+    wire();
+    const res = await POST(req(), { params });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ gated: true, queued: 1, total: 1 });
+    expect(sendEmail).not.toHaveBeenCalled();
+    expect(mailboxFor).toHaveBeenCalled(); // started early, but never awaited for the send
+    const [, input] = ensureMeetingThread.mock.calls[0] as [unknown, Record<string, any>];
+    expect(input).toMatchObject({ meetingId: "m1", subject: "Follow-up: Series B sync" });
+    expect(input.recipient.email).toBe("sarah@fund.test");
+    const fd = replyToThread.mock.calls[0][0] as FormData;
+    expect(fd.get("thread_id")).toBe("thr-1");
+    expect(String(fd.get("body"))).toContain("Good meeting.");
+  });
+
+  it("says so when nothing could be queued", async () => {
+    replyToThread.mockResolvedValue({ ok: false, error: "x" });
+    wire();
+    const res = await POST(req(), { params });
+    expect(res.status).toBe(502);
   });
 });

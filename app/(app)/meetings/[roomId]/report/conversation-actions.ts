@@ -26,9 +26,7 @@ import { normalizeNoteList } from "@/lib/meetings/live-notes";
 import { reportActionItems } from "@/lib/meetings/action-item-source";
 import { conversationProblem, type ConversationDraft } from "@/lib/meetings/conversation";
 import { draftMeetingConversation } from "@/lib/meetings/conversation-draft.server";
-import { followUpThreadKey } from "@/lib/meetings/follow-up-threads.server";
-import { computePriority } from "@/lib/inbox/intelligence";
-import { recordThreadOnTimeline } from "@/lib/inbox/crm-activity.server";
+import { ensureMeetingThread } from "@/lib/meetings/meeting-thread.server";
 import { replyToThread } from "@/app/(app)/inbox/actions";
 
 type ServerClient = Awaited<ReturnType<typeof createServerClient>>;
@@ -83,7 +81,7 @@ async function contextFor(
 }
 
 export type DraftConversationResult =
-  | ({ ok: true; live: boolean } & ConversationDraft)
+  | ({ ok: true; live: boolean; cached: boolean } & ConversationDraft)
   | { ok: false; error: string };
 
 export async function draftConversation(meetingId: string, email: string): Promise<DraftConversationResult> {
@@ -98,25 +96,58 @@ export async function draftConversation(meetingId: string, email: string): Promi
   // were in the meeting, and a reader who may not see it drafts from the title.
   const { data: report } = await ctx.supabase
     .from("live_meeting_reports")
-    .select("summary, action_items, analysis")
+    .select("summary, action_items, analysis, created_at")
     .eq("meeting_id", ctx.meeting.id)
     .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle();
-  const analysis = ((report as { analysis?: unknown } | null)?.analysis ?? null) as Record<string, unknown> | null;
+  const r = report as { summary?: string | null; action_items?: unknown; analysis?: unknown; created_at?: string | null } | null;
+  const reportAt = r?.created_at ?? null;
+  const emailLower = normalizeEmail(ctx.recipient.email);
 
+  // A draft already written from this same report is reused: reopening the
+  // composer, or a second person drafting to the same attendee, costs nothing.
+  const { data: cached } = await ctx.supabase
+    .from("meeting_conversation_drafts")
+    .select("subject, body, report_created_at")
+    .eq("organization_id", ctx.orgId)
+    .eq("meeting_id", ctx.meeting.id)
+    .eq("email_lower", emailLower)
+    .maybeSingle();
+  if (cached && (cached.report_created_at ?? null) === reportAt) {
+    return { ok: true, live: true, cached: true, subject: cached.subject as string, body: cached.body as string };
+  }
+
+  const analysis = (r?.analysis ?? null) as Record<string, unknown> | null;
   const draft = await draftMeetingConversation({
     meetingTitle: ctx.meeting.title,
     recipientName: ctx.recipient.name,
-    summary: (report as { summary?: string | null } | null)?.summary ?? null,
+    summary: r?.summary ?? null,
     decisions: normalizeNoteList(analysis?.decisions),
-    actionItems: report ? reportActionItems((report as { action_items?: unknown }).action_items, analysis) : [],
+    actionItems: r ? reportActionItems(r.action_items, analysis) : [],
   });
-  return { ok: true, ...draft };
+
+  // Only a real model draft is worth keeping; the template is free to rebuild.
+  if (draft.live) {
+    await ctx.supabase.from("meeting_conversation_drafts").upsert(
+      {
+        organization_id: ctx.orgId,
+        meeting_id: ctx.meeting.id,
+        email_lower: emailLower,
+        subject: draft.subject,
+        body: draft.body,
+        report_created_at: reportAt,
+        created_by: ctx.userId,
+        created_at: new Date().toISOString(),
+      },
+      { onConflict: "meeting_id,email_lower" },
+    );
+  }
+  return { ok: true, cached: false, ...draft };
 }
 
 export type StartConversationResult =
-  | { ok: true; threadId: string; gated: boolean; message: string }
+  | { ok: true; threadId: string; continued: boolean; subject: string; gated: boolean; message: string }
   | { ok: false; error: string };
 
 export async function startConversation(formData: FormData): Promise<StartConversationResult> {
@@ -134,69 +165,18 @@ export async function startConversation(formData: FormData): Promise<StartConver
   const rl = checkRateLimit({ key: `org:${ctx.orgId}:meeting-conversation`, limit: 30, windowMs: 60_000 });
   if (!rl.ok) return { ok: false, error: "Too many messages at once — try again in a minute." };
 
-  const counterparty = normalizeEmail(ctx.recipient.email);
-  const threadKey = followUpThreadKey(counterparty, subject);
-  const now = new Date().toISOString();
-
-  // Find-or-create on the same key an inbound reply resolves to, so the answer
-  // lands on this thread whether it arrives by webhook or by a mailbox sweep.
-  const { data: existing } = await ctx.supabase
-    .from("inbox_threads")
-    .select("id, meeting_id")
-    .eq("organization_id", ctx.orgId)
-    .eq("channel", "gmail")
-    .eq("external_id", threadKey)
-    .maybeSingle();
-
-  let threadId: string;
-  if (existing) {
-    threadId = existing.id as string;
-    if (!existing.meeting_id) {
-      await ctx.supabase
-        .from("inbox_threads")
-        .update({ meeting_id: ctx.meeting.id })
-        .eq("organization_id", ctx.orgId)
-        .eq("id", threadId);
-    }
-  } else {
-    const { data: created, error } = await ctx.supabase
-      .from("inbox_threads")
-      .insert({
-        organization_id: ctx.orgId,
-        channel: "gmail",
-        category: "messaging",
-        subject,
-        counterparty_name: ctx.recipient.name || null,
-        counterparty_email: counterparty,
-        preview: body.replace(/\s+/g, " ").slice(0, 200),
-        unread: false,
-        status: "open",
-        priority: computePriority({ category: "messaging", unread: false, hasContext: true, ageHours: 0, intent: null }),
-        last_message_at: now,
-        meeting_id: ctx.meeting.id,
-        external_id: threadKey,
-      })
-      .select("id")
-      .single();
-    if (error || !created) return { ok: false, error: error?.message ?? "Could not start the conversation." };
-    threadId = created.id as string;
-
-    // Onto the person's CRM record, the same entry an inbound thread makes.
-    await recordThreadOnTimeline(ctx.supabase as never, {
-      orgId: ctx.orgId,
-      actorId: ctx.userId,
-      now,
-      thread: {
-        id: threadId,
-        channel: "gmail",
-        subject,
-        counterpartyEmail: counterparty,
-        aiSummary: null,
-        preview: body.slice(0, 200),
-        lastMessageAt: now,
-      },
-    });
-  }
+  // This meeting's thread with them if there is one (the follow-up, or an
+  // earlier conversation), else the reply-key thread, else a new one.
+  const thread = await ensureMeetingThread(ctx.supabase, {
+    orgId: ctx.orgId,
+    actorId: ctx.userId,
+    meetingId: ctx.meeting.id,
+    recipient: ctx.recipient,
+    subject,
+    preview: body,
+  });
+  if (!thread.ok) return thread;
+  const threadId = thread.threadId;
 
   // The inbox's own send: gate, approval or dispatch, outbound message recorded.
   const fd = new FormData();
@@ -204,9 +184,20 @@ export async function startConversation(formData: FormData): Promise<StartConver
   fd.set("body", body);
   const result = await replyToThread(fd);
   if (!result.ok) return { ok: false, error: result.error ?? "The message could not be sent." };
+
+  // The cached Earn draft has been used (or overridden); drop it.
+  await ctx.supabase
+    .from("meeting_conversation_drafts")
+    .delete()
+    .eq("organization_id", ctx.orgId)
+    .eq("meeting_id", ctx.meeting.id)
+    .eq("email_lower", normalizeEmail(ctx.recipient.email));
+
   return {
     ok: true,
     threadId,
+    continued: thread.continued,
+    subject: thread.subject,
     gated: Boolean(result.gated),
     message: result.gated
       ? (result.message ?? "Sent to your approvals before it goes out.")

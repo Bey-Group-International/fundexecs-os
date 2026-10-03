@@ -46,6 +46,9 @@ export interface InboxThreadRow {
   last_message_at: string | null;
   /** The meeting the thread came out of — set on a meeting's follow-up threads. */
   meeting_id?: string | null;
+  /** Newest inbound message, and when the thread was linked to its meeting. */
+  last_inbound_at?: string | null;
+  meeting_linked_at?: string | null;
 }
 
 /** One thread, shaped for rendering. */
@@ -61,6 +64,8 @@ export interface ThreadDigest {
   lastMessageAt: string | null;
   /** True for the thread this meeting's follow-up started, where its replies land. */
   fromThisMeeting: boolean;
+  /** This meeting's thread, answered since it was linked. */
+  replied: boolean;
 }
 
 /** One attendee, with what the inbox holds on them. */
@@ -141,7 +146,28 @@ function digest(thread: InboxThreadRow, meetingId: string | null): ThreadDigest 
     summary: summary ? boundedBody(summary, SUMMARY_MAX) : null,
     lastMessageAt: thread.last_message_at,
     fromThisMeeting: Boolean(meetingId) && thread.meeting_id === meetingId,
+    replied: Boolean(meetingId) && thread.meeting_id === meetingId && hasReply(thread),
   };
+}
+
+/** An inbound message after the thread was tied to its meeting. */
+export function hasReply(thread: InboxThreadRow): boolean {
+  if (!thread.last_inbound_at) return false;
+  if (!thread.meeting_linked_at) return true;
+  return Date.parse(thread.last_inbound_at) > Date.parse(thread.meeting_linked_at);
+}
+
+/** Of the attendees this meeting wrote to, how many have answered. */
+export function meetingReplySummary(history: ReportInboxHistory): { written: number; replied: number } {
+  let written = 0;
+  let replied = 0;
+  for (const a of history.attendees) {
+    const own = a.threads.filter((t) => t.fromThisMeeting);
+    if (own.length === 0) continue;
+    written++;
+    if (own.some((t) => t.replied)) replied++;
+  }
+  return { written, replied };
 }
 
 /**

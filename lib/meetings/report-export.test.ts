@@ -471,6 +471,7 @@ describe("attendee correspondence", () => {
             summary: "Ready to sign.",
             lastMessageAt: "2026-09-30T10:00:00.000Z",
             fromThisMeeting: true,
+            replied: false,
           },
         ],
         total: 3,
