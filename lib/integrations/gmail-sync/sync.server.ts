@@ -61,9 +61,9 @@ export interface MailboxSweepSummary {
   incomplete: boolean;
 }
 
-type FetchLike = typeof fetch;
+export type FetchLike = typeof fetch;
 
-class GmailError extends Error {
+export class GmailError extends Error {
   constructor(
     readonly status: number,
     message: string,
@@ -72,7 +72,7 @@ class GmailError extends Error {
   }
 }
 
-async function gmail<T>(fetchImpl: FetchLike, token: string, path: string): Promise<T> {
+export async function gmail<T>(fetchImpl: FetchLike, token: string, path: string): Promise<T> {
   const res = await fetchImpl(`${GMAIL_API}${path}`, {
     headers: { Authorization: `Bearer ${token}` },
     signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),

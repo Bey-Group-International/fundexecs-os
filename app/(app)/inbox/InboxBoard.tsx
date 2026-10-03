@@ -73,6 +73,8 @@ export interface InboxCardData {
   meetingUrl: string | null;
   context: { kind: "deal" | "investor"; id: string; name: string; href: string } | null;
   assignee: { id: string; name: string } | null;
+  // The meeting this thread is the follow-up of; links to its report.
+  meeting: { id: string; title: string; href: string } | null;
   // Whether this org has connected the thread's channel; drives the composer's
   // "connect to send" hint.
   connected: boolean;
@@ -627,6 +629,11 @@ const ThreadCard = memo(function ThreadCard({
         ) : (
           <span className="text-fg-muted">No linked context</span>
         )}
+        {card.meeting ? (
+          <Link href={card.meeting.href} className="text-gold-300 hover:underline">
+            Follow-up of {card.meeting.title} →
+          </Link>
+        ) : null}
         {card.meetingAt ? (
           <span className="text-fg-secondary">🗓 {relativeMeeting(card.meetingAt)}</span>
         ) : null}

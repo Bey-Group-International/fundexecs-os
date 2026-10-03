@@ -3,6 +3,7 @@ import { requireOrgContext } from "@/lib/auth";
 import { planPrompts, materializePrompts } from "@/lib/engine";
 import { isExecutive } from "@/lib/intelligence";
 import { CONVERSATIONAL_COST, gateConversationalSpend } from "@/lib/conversational-gate";
+import { meetingIdForRoom } from "@/lib/meetings/prompt-meeting.server";
 
 // Plan generation calls Claude; give it room beyond the default.
 export const maxDuration = 60;
@@ -24,7 +25,7 @@ export async function POST(request: Request) {
     });
   }
 
-  const { body, session_id, delegate } = await request.json().catch(() => ({ body: "" }));
+  const { body, session_id, delegate, meeting_room } = await request.json().catch(() => ({ body: "" }));
   if (!body || typeof body !== "string") {
     return new Response(JSON.stringify({ error: "Missing 'body'" }), {
       status: 400,
@@ -36,6 +37,8 @@ export async function POST(request: Request) {
 
   const supabase = await createServerClient();
   const ctx = { supabase, orgId: auth.ctx.orgId, actorId: auth.ctx.userId };
+  // Sent from a meeting page: tie the workflow to that meeting (see /api/prompt).
+  const meetingId = await meetingIdForRoom(supabase, auth.ctx.orgId, meeting_room);
   const encoder = new TextEncoder();
 
   const readable = new ReadableStream<Uint8Array>({
@@ -61,7 +64,7 @@ export async function POST(request: Request) {
         // Reveal the primary plan in the canvas; `split` tells the client more
         // than one workflow was routed (the rest load with the session).
         send({ type: "plan", plan: plans[0], plans, split: plans.length > 1 });
-        const { session_id: sid, workflows } = await materializePrompts(ctx, body, plans, sessionId);
+        const { session_id: sid, workflows } = await materializePrompts(ctx, body, plans, sessionId, { meetingId });
         send({ type: "ready", session_id: sid, workflow_id: workflows[0]?.workflow.id, split: plans.length > 1 });
       } catch {
         send({ type: "error" });

@@ -578,7 +578,8 @@ export function correspondenceSection(history: ReportInboxHistory | null | undef
     }${attendee.unread ? `, ${attendee.unread} unread` : ""}`;
     const threads = attendee.threads.map((t) => {
       const when = headerDate(t.lastMessageAt);
-      return `- ${t.subject}${when ? ` (${when})` : ""}${t.summary ? ` — ${t.summary}` : ""}`;
+      const tag = t.fromThisMeeting ? " — this meeting's follow-up" : "";
+      return `- ${t.subject}${tag}${when ? ` (${when})` : ""}${t.summary ? ` — ${t.summary}` : ""}`;
     });
     const more = attendee.total - attendee.threads.length;
     if (more > 0) threads.push(`- *${more} more in the inbox*`);

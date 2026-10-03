@@ -9,10 +9,17 @@ const requireOrgContext = jest.fn();
 const from = jest.fn();
 const sendEmail = jest.fn();
 const mailboxFor = jest.fn();
+const recordFollowUpThreads = jest.fn();
+let serviceEnv = false;
 
 jest.mock("@/lib/auth", () => ({ requireOrgContext: () => requireOrgContext() }));
 jest.mock("@/lib/supabase/server", () => ({
   createServerClient: async () => ({ from: (t: string) => from(t) }),
+  createServiceClient: () => ({ service: true }),
+  hasSupabaseServiceEnv: () => serviceEnv,
+}));
+jest.mock("@/lib/meetings/follow-up-threads.server", () => ({
+  recordFollowUpThreads: (...a: unknown[]) => recordFollowUpThreads(...a),
 }));
 jest.mock("@/lib/email", () => ({
   sendEmail: (...a: unknown[]) => sendEmail(...a),
@@ -77,6 +84,8 @@ beforeEach(() => {
   requireOrgContext.mockResolvedValue(HOST);
   mailboxFor.mockResolvedValue({ ok: true, token: "tok" });
   sendEmail.mockResolvedValue({ ok: true });
+  serviceEnv = false;
+  recordFollowUpThreads.mockResolvedValue({ recorded: 0, tracked: 0 });
 });
 
 describe("permission", () => {
@@ -285,5 +294,36 @@ describe("who each copy greets", () => {
     const html = (sendEmail.mock.calls[0][0] as { htmlBody: string }).htmlBody;
     expect(html).toContain("Hi Sarah,");
     expect(html).not.toContain("Hi Alex,");
+  });
+});
+
+describe("the conversation it starts", () => {
+  it("records every copy against the meeting so replies land in the inbox", async () => {
+    serviceEnv = true;
+    mailboxFor.mockResolvedValue({ ok: true, token: "tok", source: "member", email: "host@fund.test" });
+    sendEmail.mockResolvedValue({ ok: true, channel: "gmail", detail: "sent", gmailThreadId: "g1" });
+    wire();
+    const res = await POST(req(), { params });
+    expect(res.status).toBe(200);
+
+    expect(recordFollowUpThreads).toHaveBeenCalledTimes(1);
+    const [, input] = recordFollowUpThreads.mock.calls[0] as [unknown, Record<string, unknown>];
+    expect(input).toMatchObject({
+      orgId: "org-1",
+      meetingId: "m1",
+      hostId: "host-1",
+      subject: "Follow-up: Series B sync",
+      mailbox: { source: "member", email: "host@fund.test" },
+    });
+    const sends = input.sends as Array<{ recipient: { email: string }; body: string }>;
+    expect(sends.map((x) => x.recipient.email)).toEqual(["sarah@fund.test"]);
+    // The personalised text, the same words the attendee received.
+    expect(sends[0].body).toContain("Good meeting.");
+  });
+
+  it("does not try without a service role to write with", async () => {
+    wire();
+    await POST(req(), { params });
+    expect(recordFollowUpThreads).not.toHaveBeenCalled();
   });
 });

@@ -27,6 +27,8 @@ import {
 } from "@/lib/meetings/follow-up";
 import { personalizeFollowUp } from "@/lib/meetings/follow-up-greeting";
 import { loadHost } from "@/lib/meetings/report-roles.server";
+import { recordFollowUpThreads } from "@/lib/meetings/follow-up-threads.server";
+import { createServiceClient, hasSupabaseServiceEnv } from "@/lib/supabase/server";
 
 export const runtime = "nodejs";
 
@@ -146,17 +148,35 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   // Per recipient, and settled: one bad address must not stop the rest of the
   // room hearing from the meeting they were in. And personalised per recipient:
   // each copy greets its own reader, never the host who is sending it.
+  const bodies = recipients.map((r) => personalizeFollowUp(draft, r.name, { hostName }));
   const results = await Promise.allSettled(
-    recipients.map((r) =>
+    recipients.map((r, i) =>
       sendEmail({
         orgId: auth.ctx.orgId,
         credentials: { gmailAccessToken: mailbox.token },
         to: { name: r.name, email: r.email },
         subject,
-        htmlBody: followUpHtml(personalizeFollowUp(draft, r.name, { hostName })),
+        htmlBody: followUpHtml(bodies[i]),
       }),
     ),
   );
+
+  // Each delivered copy becomes an inbox thread with that attendee, linked to
+  // this meeting, so the replies land in the inbox beside it — and, when it went
+  // out from the host's own mailbox, that Gmail thread is tracked so the replies
+  // there are read back too. Service role: the ingest ledger and the tracking
+  // table are not member-writable. Never throws.
+  if (hasSupabaseServiceEnv()) {
+    await recordFollowUpThreads(createServiceClient(), {
+      orgId: auth.ctx.orgId,
+      meetingId: id,
+      hostId: auth.ctx.userId,
+      hostName,
+      subject,
+      mailbox: { source: mailbox.source, email: mailbox.email },
+      sends: recipients.map((recipient, i) => ({ recipient, body: bodies[i], result: results[i] })),
+    });
+  }
 
   const { sent, failed } = deliveryOutcome(recipients, results);
   // Whether the meeting can honestly be called followed up: everybody who was

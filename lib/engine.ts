@@ -140,6 +140,8 @@ async function materializePlan(
     workflowId?: string;
     automationId?: string | null;
     sessionId?: string | null;
+    /** The meeting the prompt was sent from; lets a follow-up pack wait for exactly it. */
+    meetingId?: string | null;
   },
 ): Promise<{ workflow: Task; approvalId: string | null }> {
   let workflow: Task;
@@ -184,6 +186,7 @@ async function materializePlan(
         step_order: 0,
         automation_id: opts.automationId ?? null,
         session_id: opts.sessionId ?? null,
+        meeting_id: opts.meetingId ?? null,
       })
       .select("*")
       .single();
@@ -623,7 +626,13 @@ export async function materializePrompt(ctx: Ctx, body: string, plan: AgentPlan,
  * message; each split workflow's description is its own slice (the plan summary)
  * so the cards read distinctly rather than repeating the full prompt.
  */
-export async function materializePrompts(ctx: Ctx, body: string, plans: AgentPlan[], sessionId?: string) {
+export async function materializePrompts(
+  ctx: Ctx,
+  body: string,
+  plans: AgentPlan[],
+  sessionId?: string,
+  opts: { meetingId?: string | null } = {},
+) {
   // Strip any operator-context prefix from the body before using it as a
   // fallback session name (the client prepends "[The operator is working in …]").
   const sessionName = plans[0]?.title || body.replace(/^\[[\s\S]*?\]\s*/, "").trim() || "Untitled session";
@@ -663,7 +672,7 @@ export async function materializePrompts(ctx: Ctx, body: string, plans: AgentPla
       ctx,
       split ? plan.summary || plan.title : body,
       plan,
-      { promptId: prompt?.id ?? null, sessionId: session },
+      { promptId: prompt?.id ?? null, sessionId: session, meetingId: opts.meetingId ?? null },
     );
     workflows.push({ plan, workflow, approval_id: approvalId });
   }
@@ -671,9 +680,15 @@ export async function materializePrompts(ctx: Ctx, body: string, plans: AgentPla
   return { workflows, session_id: session, split };
 }
 
-export async function handlePrompt(ctx: Ctx, body: string, sessionId?: string, delegate?: Executive) {
+export async function handlePrompt(
+  ctx: Ctx,
+  body: string,
+  sessionId?: string,
+  delegate?: Executive,
+  opts: { meetingId?: string | null } = {},
+) {
   const plans = await planPrompts(ctx, body, sessionId, delegate);
-  const { workflows, session_id, split } = await materializePrompts(ctx, body, plans, sessionId);
+  const { workflows, session_id, split } = await materializePrompts(ctx, body, plans, sessionId, opts);
   const primary = workflows[0];
   // Keep the original single-workflow contract (plan/workflow/approval_id) for
   // existing callers; expose the full set + split flag for richer consumers.

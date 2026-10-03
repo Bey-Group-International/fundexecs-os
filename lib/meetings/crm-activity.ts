@@ -203,7 +203,14 @@ export function meetingActivities(input: CrmMeetingInput): CrmMeetingActivity[] 
 export function reportUrlFromMetadata(metadata: unknown): string | null {
   if (!metadata || typeof metadata !== "object") return null;
   const raw = (metadata as { report_url?: unknown }).report_url;
-  if (typeof raw !== "string" || !raw) return null;
+  if (typeof raw !== "string" || !raw) {
+    // Entries the database backfills (network_contact_backfill_links) know the
+    // room code but not the site's origin, so they link within the app.
+    const room = (metadata as { room_code?: unknown }).room_code;
+    return typeof room === "string" && /^[A-Za-z0-9_-]{1,64}$/.test(room)
+      ? `/meetings/${room}/report`
+      : null;
+  }
   try {
     const parsed = new URL(raw);
     if (parsed.protocol !== "https:" && parsed.protocol !== "http:") return null;

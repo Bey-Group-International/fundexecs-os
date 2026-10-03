@@ -83,7 +83,7 @@ export async function loadAttendeeInboxHistory(
     const { data, error } = await supabase
       .from("inbox_threads")
       .select(
-        "id, channel, subject, counterparty_email, status, unread, ai_summary, preview, last_message_at",
+        "id, channel, subject, counterparty_email, status, unread, ai_summary, preview, last_message_at, meeting_id",
       )
       .eq("organization_id", input.organizationId)
       // The generated lowercase column (migration 20260930180000), not the raw
@@ -100,7 +100,11 @@ export async function loadAttendeeInboxHistory(
     }
 
     const threads = (data ?? []) as unknown as InboxThreadRow[];
-    const history = attendeeInboxHistory({ recipients: audience.recipients, threads });
+    const history = attendeeInboxHistory({
+      recipients: audience.recipients,
+      threads,
+      meetingId: input.meetingId,
+    });
 
     // The ceiling is shared across every attendee, so one counterparty with a long
     // history can fill it and push another attendee's threads out of the result —

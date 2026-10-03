@@ -87,6 +87,7 @@ export async function ingestInboundEvent(
       };
       if (seed.meetingAt !== undefined) update.meeting_at = seed.meetingAt;
       if (seed.meetingUrl !== undefined) update.meeting_url = seed.meetingUrl;
+      if (seed.meetingId !== undefined) update.meeting_id = seed.meetingId;
       const updated = await supabase.from("inbox_threads").update(update).eq("id", threadId);
       if (updated.error) throw new Error(updated.error.message);
     } else {
@@ -111,6 +112,7 @@ export async function ingestInboundEvent(
           last_message_at: occurredAt,
           meeting_at: seed.meetingAt ?? null,
           meeting_url: seed.meetingUrl ?? null,
+          meeting_id: seed.meetingId ?? null,
           external_id: seed.threadKey,
         })
         .select("id")

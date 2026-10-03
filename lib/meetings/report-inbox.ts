@@ -44,6 +44,8 @@ export interface InboxThreadRow {
   ai_summary: string | null;
   preview: string | null;
   last_message_at: string | null;
+  /** The meeting the thread came out of — set on a meeting's follow-up threads. */
+  meeting_id?: string | null;
 }
 
 /** One thread, shaped for rendering. */
@@ -57,6 +59,8 @@ export interface ThreadDigest {
   summary: string | null;
   /** ISO, or null for a thread that has no messages yet. */
   lastMessageAt: string | null;
+  /** True for the thread this meeting's follow-up started, where its replies land. */
+  fromThisMeeting: boolean;
 }
 
 /** One attendee, with what the inbox holds on them. */
@@ -120,7 +124,7 @@ function byRecencyDesc(a: InboxThreadRow, b: InboxThreadRow): number {
   return at < bt ? 1 : -1;
 }
 
-function digest(thread: InboxThreadRow): ThreadDigest {
+function digest(thread: InboxThreadRow, meetingId: string | null): ThreadDigest {
   // Trimmed BEFORE the fallback, not after. `ai_summary ?? preview` falls
   // through only on null, so a model that answered with a blank line — which it
   // does — suppressed a perfectly good message preview and the row said nothing
@@ -136,6 +140,7 @@ function digest(thread: InboxThreadRow): ThreadDigest {
     unread: thread.unread === true,
     summary: summary ? boundedBody(summary, SUMMARY_MAX) : null,
     lastMessageAt: thread.last_message_at,
+    fromThisMeeting: Boolean(meetingId) && thread.meeting_id === meetingId,
   };
 }
 
@@ -152,7 +157,10 @@ export function attendeeInboxHistory(input: {
   recipients: readonly MeetingRecipient[];
   threads: readonly InboxThreadRow[];
   perAttendee?: number;
+  /** This meeting, so its own follow-up threads are marked and shown first. */
+  meetingId?: string | null;
 }): ReportInboxHistory {
+  const meetingId = input.meetingId ?? null;
   const limit = Math.max(0, input.perAttendee ?? THREADS_PER_ATTENDEE);
 
   const byEmail = new Map<string, InboxThreadRow[]>();
@@ -179,11 +187,17 @@ export function attendeeInboxHistory(input: {
       continue;
     }
 
-    const ordered = [...mine].sort(byRecencyDesc);
+    // This meeting's follow-up thread first, where the replies to it are: on a
+    // report it is the conversation that matters. Recency after that.
+    const ordered = [...mine].sort((a, b) => {
+      const af = meetingId !== null && a.meeting_id === meetingId ? 0 : 1;
+      const bf = meetingId !== null && b.meeting_id === meetingId ? 0 : 1;
+      return af - bf || byRecencyDesc(a, b);
+    });
     attendees.push({
       name: recipient.name,
       email: recipient.email,
-      threads: ordered.slice(0, limit).map(digest),
+      threads: ordered.slice(0, limit).map((t) => digest(t, meetingId)),
       total: ordered.length,
       // Across everything they have, not across what is shown: with the bound at
       // five, a sixth thread is still the last time this person was in touch.

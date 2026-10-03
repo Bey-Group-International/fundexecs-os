@@ -99,6 +99,12 @@ export interface SendEmailResult {
   ok: boolean;
   channel: "gmail" | "fallback" | "in-app";
   detail: string;
+  /**
+   * Gmail's ids for a message it accepted. The thread id is what lets a sender
+   * read the replies back later (lib/integrations/gmail-sync/tracked.server.ts).
+   */
+  gmailMessageId?: string;
+  gmailThreadId?: string;
 }
 
 /**
@@ -267,7 +273,17 @@ async function sendViaGmail(
     const text = await res.text().catch(() => res.statusText);
     return { ok: false, channel: "gmail", detail: text };
   }
-  return { ok: true, channel: "gmail", detail: "sent" };
+  // Gmail answers with the message resource. Read defensively: the send has
+  // already happened, so a body that will not parse must not turn it into a
+  // failure.
+  const sent = (await res.json().catch(() => null)) as { id?: unknown; threadId?: unknown } | null;
+  return {
+    ok: true,
+    channel: "gmail",
+    detail: "sent",
+    ...(typeof sent?.id === "string" ? { gmailMessageId: sent.id } : {}),
+    ...(typeof sent?.threadId === "string" ? { gmailThreadId: sent.threadId } : {}),
+  };
 }
 
 export interface EmailConfigStatus {
