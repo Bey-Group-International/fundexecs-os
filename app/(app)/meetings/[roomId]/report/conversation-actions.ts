@@ -24,25 +24,29 @@ import { meetingRecipients, type MeetingRecipient } from "@/lib/meetings/recipie
 import { loadPresentPeople } from "@/lib/meetings/recipients.server";
 import { normalizeNoteList } from "@/lib/meetings/live-notes";
 import { reportActionItems } from "@/lib/meetings/action-item-source";
-import { conversationProblem, type ConversationDraft } from "@/lib/meetings/conversation";
+import { conversationProblem, personalizeGroupBody, type ConversationDraft } from "@/lib/meetings/conversation";
 import { draftMeetingConversation } from "@/lib/meetings/conversation-draft.server";
 import { ensureMeetingThread } from "@/lib/meetings/meeting-thread.server";
 import { replyToThread } from "@/app/(app)/inbox/actions";
 
 type ServerClient = Awaited<ReturnType<typeof createServerClient>>;
 
-interface Context {
+interface MeetingContext {
   supabase: ServerClient;
   orgId: string;
   userId: string;
   meeting: { id: string; title: string | null };
+  /** Everyone this meeting may write to: invited or present, minus the sender. */
+  recipients: MeetingRecipient[];
+}
+
+interface Context extends MeetingContext {
   recipient: MeetingRecipient;
 }
 
-async function contextFor(
+async function meetingContextFor(
   meetingId: string,
-  email: string,
-): Promise<{ ok: true; ctx: Context } | { ok: false; error: string }> {
+): Promise<{ ok: true; ctx: MeetingContext } | { ok: false; error: string }> {
   const auth = await requireOrgContext();
   if (!auth.ok) return { ok: false, error: "Not authorized." };
   const supabase = await createServerClient();
@@ -64,9 +68,6 @@ async function contextFor(
     present,
     senderEmail: auth.ctx.email,
   });
-  const wanted = normalizeEmail(email);
-  const recipient = recipients.find((r) => normalizeEmail(r.email) === wanted);
-  if (!wanted || !recipient) return { ok: false, error: "That person was not in this meeting." };
 
   return {
     ok: true,
@@ -75,9 +76,26 @@ async function contextFor(
       orgId: auth.ctx.orgId,
       userId: auth.ctx.userId,
       meeting: { id: meeting.id as string, title: (meeting.title as string | null) ?? null },
-      recipient,
+      recipients,
     },
   };
+}
+
+function recipientIn(recipients: readonly MeetingRecipient[], email: string): MeetingRecipient | null {
+  const wanted = normalizeEmail(email);
+  if (!wanted) return null;
+  return recipients.find((r) => normalizeEmail(r.email) === wanted) ?? null;
+}
+
+async function contextFor(
+  meetingId: string,
+  email: string,
+): Promise<{ ok: true; ctx: Context } | { ok: false; error: string }> {
+  const m = await meetingContextFor(meetingId);
+  if (!m.ok) return m;
+  const recipient = recipientIn(m.ctx.recipients, email);
+  if (!recipient) return { ok: false, error: "That person was not in this meeting." };
+  return { ok: true, ctx: { ...m.ctx, recipient } };
 }
 
 export type DraftConversationResult =
@@ -165,13 +183,23 @@ export async function startConversation(formData: FormData): Promise<StartConver
   const rl = checkRateLimit({ key: `org:${ctx.orgId}:meeting-conversation`, limit: 30, windowMs: 60_000 });
   if (!rl.ok) return { ok: false, error: "Too many messages at once — try again in a minute." };
 
+  return sendOne(ctx, ctx.recipient, subject, body);
+}
+
+/** One attendee's message: their meeting thread, the inbox's gated send, the cached draft dropped. */
+async function sendOne(
+  ctx: MeetingContext,
+  recipient: MeetingRecipient,
+  subject: string,
+  body: string,
+): Promise<StartConversationResult> {
   // This meeting's thread with them if there is one (the follow-up, or an
   // earlier conversation), else the reply-key thread, else a new one.
   const thread = await ensureMeetingThread(ctx.supabase, {
     orgId: ctx.orgId,
     actorId: ctx.userId,
     meetingId: ctx.meeting.id,
-    recipient: ctx.recipient,
+    recipient,
     subject,
     preview: body,
   });
@@ -191,7 +219,7 @@ export async function startConversation(formData: FormData): Promise<StartConver
     .delete()
     .eq("organization_id", ctx.orgId)
     .eq("meeting_id", ctx.meeting.id)
-    .eq("email_lower", normalizeEmail(ctx.recipient.email));
+    .eq("email_lower", normalizeEmail(recipient.email));
 
   return {
     ok: true,
@@ -203,4 +231,76 @@ export async function startConversation(formData: FormData): Promise<StartConver
       ? (result.message ?? "Sent to your approvals before it goes out.")
       : (result.message ?? "Sent."),
   };
+}
+
+/** The most people one "Message everyone new" may write to in a single send. */
+const MAX_BATCH_RECIPIENTS = 50;
+/** How many attendees are written to at once; enough to be quick, few enough to be polite to the mail API. */
+const BATCH_CONCURRENCY = 4;
+
+export interface BatchOutcome {
+  email: string;
+  name: string;
+  ok: boolean;
+  gated?: boolean;
+  error?: string;
+}
+
+export type StartConversationsResult = { ok: true; results: BatchOutcome[] } | { ok: false; error: string };
+
+/**
+ * "Message everyone new" in one round trip: the meeting and its attendee list are
+ * read once, then each person gets their own thread and their own first name in
+ * the greeting, a few at a time. Every send still goes through the inbox's gate,
+ * and one person failing is reported by name without stopping the rest. The work
+ * is on the server, so closing the tab mid-send does not cut the list short.
+ */
+export async function startConversations(input: {
+  meetingId: string;
+  subject: string;
+  /** May carry {first_name}, replaced per person. */
+  body: string;
+  emails: string[];
+}): Promise<StartConversationsResult> {
+  const subject = String(input.subject ?? "").trim();
+  const body = String(input.body ?? "").trim();
+  const problem = conversationProblem({ subject, body });
+  if (problem) return { ok: false, error: problem };
+
+  const emails = Array.from(new Set((input.emails ?? []).map((e) => normalizeEmail(String(e))).filter(Boolean)));
+  if (emails.length === 0) return { ok: false, error: "Nobody to send to." };
+  if (emails.length > MAX_BATCH_RECIPIENTS) {
+    return { ok: false, error: `That is more than ${MAX_BATCH_RECIPIENTS} people — send in smaller groups.` };
+  }
+
+  const m = await meetingContextFor(input.meetingId);
+  if (!m.ok) return m;
+  const { ctx } = m;
+
+  // One batch is one act; the per-message limit would cut a large meeting off halfway.
+  const rl = checkRateLimit({ key: `org:${ctx.orgId}:meeting-conversation-batch`, limit: 5, windowMs: 60_000 });
+  if (!rl.ok) return { ok: false, error: "Too many group messages at once — try again in a minute." };
+
+  const results: BatchOutcome[] = new Array(emails.length);
+  let next = 0;
+  async function worker() {
+    while (next < emails.length) {
+      const i = next++;
+      const recipient = recipientIn(ctx.recipients, emails[i]);
+      if (!recipient) {
+        results[i] = { email: emails[i], name: "", ok: false, error: "not in this meeting" };
+        continue;
+      }
+      try {
+        const r = await sendOne(ctx, recipient, subject, personalizeGroupBody(body, recipient.name));
+        results[i] = r.ok
+          ? { email: recipient.email, name: recipient.name, ok: true, gated: r.gated }
+          : { email: recipient.email, name: recipient.name, ok: false, error: r.error };
+      } catch {
+        results[i] = { email: recipient.email, name: recipient.name, ok: false, error: "failed" };
+      }
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(BATCH_CONCURRENCY, emails.length) }, worker));
+  return { ok: true, results };
 }

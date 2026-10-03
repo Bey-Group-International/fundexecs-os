@@ -243,18 +243,24 @@ export type FollowUpState =
   | { kind: "none" }
   | { kind: "not_sent" }
   | { kind: "drafted"; threads: number }
-  | { kind: "sent" };
+  | { kind: "awaiting_approval" }
+  | { kind: "sent" }
+  | { kind: "replied" };
 
 /**
- * Read off what is stored: `followup_status` is "done" only once a send reached
- * everyone, and drafts are rows on the inbox threads this meeting wrote to.
+ * Read off what is stored: `followup_status` is "done" once a send reached
+ * everyone or an approved copy went out, "pending_approval" while copies wait on
+ * an approver, "replied" once somebody answered; drafts are rows on the inbox
+ * threads this meeting wrote to.
  */
 export function followUpState(input: {
   hasDraft: boolean;
   followupStatus: string | null | undefined;
   draftedThreads: number;
 }): FollowUpState {
+  if (input.followupStatus === "replied") return { kind: "replied" };
   if (input.followupStatus === "done") return { kind: "sent" };
+  if (input.followupStatus === "pending_approval") return { kind: "awaiting_approval" };
   if (!input.hasDraft) return { kind: "none" };
   if (input.draftedThreads > 0) return { kind: "drafted", threads: input.draftedThreads };
   return { kind: "not_sent" };
@@ -262,8 +268,12 @@ export function followUpState(input: {
 
 export function followUpStateLabel(state: FollowUpState): string {
   switch (state.kind) {
+    case "replied":
+      return "Replied";
     case "sent":
-      return "Sent to everyone";
+      return "Sent";
+    case "awaiting_approval":
+      return "Awaiting approval";
     case "drafted":
       return state.threads === 1 ? "Drafted in inbox" : `Drafted in inbox (${state.threads})`;
     case "not_sent":

@@ -57,7 +57,7 @@ jest.mock("@/lib/supabase/server", () => ({
   }),
 }));
 
-import { draftConversation, startConversation } from "./conversation-actions";
+import { draftConversation, startConversation, startConversations } from "./conversation-actions";
 
 const MEETING = {
   id: "m1",
@@ -175,5 +175,71 @@ describe("draftConversation", () => {
   it("refuses an outsider without drafting", async () => {
     expect((await draftConversation("m1", "stranger@else.com")).ok).toBe(false);
     expect(draftMeetingConversation).not.toHaveBeenCalled();
+  });
+});
+
+describe("startConversations", () => {
+  const TEAM = {
+    ...MEETING,
+    attendees: [
+      { name: "Ana Lopez", email: "ana@acme.com" },
+      { name: "Bo Chen", email: "bo@x.io" },
+    ],
+  };
+
+  it("reads the meeting once and sends each person their own greeting on their own thread", async () => {
+    db.meeting = TEAM;
+    ensureMeetingThread.mockImplementation(async (_c: unknown, i: { recipient: { email: string } }) => ({
+      ok: true,
+      threadId: `thr-${i.recipient.email}`,
+      subject: "Next steps",
+      continued: false,
+    }));
+    const r = await startConversations({
+      meetingId: "m1",
+      subject: "Next steps",
+      body: "Hi {first_name},\n\nThanks.",
+      emails: ["ana@acme.com", "BO@x.io", "ana@acme.com"],
+    });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.results.map((o) => [o.email, o.ok, o.gated])).toEqual([
+      ["ana@acme.com", true, true],
+      ["bo@x.io", true, true],
+    ]);
+    expect(requireOrgContext).toHaveBeenCalledTimes(1);
+    const bodies = replyToThread.mock.calls.map((c) => String((c[0] as FormData).get("body"))).sort();
+    expect(bodies).toEqual(["Hi Ana,\n\nThanks.", "Hi Bo,\n\nThanks."]);
+  });
+
+  it("reports someone not in the meeting, and a failed send, by person without stopping the rest", async () => {
+    db.meeting = TEAM;
+    replyToThread
+      .mockResolvedValueOnce({ ok: false, error: "Mailbox not connected" })
+      .mockResolvedValue({ ok: true, gated: false });
+    const r = await startConversations({
+      meetingId: "m1",
+      subject: "Next steps",
+      body: "Hi {first_name}",
+      emails: ["ana@acme.com", "stranger@else.com", "bo@x.io"],
+    });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.results.find((o) => o.email === "stranger@else.com")).toMatchObject({ ok: false, error: "not in this meeting" });
+    expect(r.results.filter((o) => o.ok)).toHaveLength(1);
+    expect(r.results.filter((o) => !o.ok && o.error === "Mailbox not connected")).toHaveLength(1);
+  });
+
+  it("refuses an empty message, an empty list, an oversized list and an outsider", async () => {
+    expect(await startConversations({ meetingId: "m1", subject: "S", body: "  ", emails: ["ana@acme.com"] })).toMatchObject({ ok: false });
+    expect(await startConversations({ meetingId: "m1", subject: "S", body: "Hi", emails: [] })).toMatchObject({ ok: false });
+    const many = Array.from({ length: 51 }, (_, i) => `p${i}@x.io`);
+    expect(await startConversations({ meetingId: "m1", subject: "S", body: "Hi", emails: many })).toMatchObject({ ok: false });
+    db.meeting = { ...MEETING, organization_id: "org-2" };
+    expect(await startConversations({ meetingId: "m1", subject: "S", body: "Hi", emails: ["ana@acme.com"] })).toEqual({
+      ok: false,
+      error: "Meeting not found.",
+    });
+    expect(replyToThread).not.toHaveBeenCalled();
   });
 });

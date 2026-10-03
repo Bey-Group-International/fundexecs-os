@@ -264,6 +264,14 @@ export interface ScheduledMeetingShape {
 }
 
 /**
+ * Whether a meeting's follow-up still wants the host: drafted, or held for
+ * approval. Not once it went out ("done") or somebody answered ("replied").
+ */
+export function followUpOpen(status: string | null | undefined): boolean {
+  return Boolean(status) && status !== "not_started" && status !== "done" && status !== "replied";
+}
+
+/**
  * Derive the Upcoming Meetings card status from a persisted meeting row.
  * Priority reflects the real-world lifecycle:
  *  active room               -> Live
@@ -283,16 +291,14 @@ export function deriveMeetingStatus(
 
   if (status === "active") return "Live";
   if (status === "ended") {
-    return meeting.followup_status && meeting.followup_status !== "not_started" && meeting.followup_status !== "done"
-      ? "Follow-Up Needed"
-      : "Completed";
+    return followUpOpen(meeting.followup_status) ? "Follow-Up Needed" : "Completed";
   }
 
   // Meeting whose end time has passed but the room was never ended.
   if (meeting.scheduled_at) {
     const end = new Date(meeting.scheduled_at).getTime() + (meeting.duration_minutes ?? 60) * 60_000;
     if (end < now) {
-      if (meeting.followup_status && meeting.followup_status !== "not_started" && meeting.followup_status !== "done") {
+      if (followUpOpen(meeting.followup_status)) {
         return "Follow-Up Needed";
       }
       // Its time is over and its room never opened. Unless it was meant to

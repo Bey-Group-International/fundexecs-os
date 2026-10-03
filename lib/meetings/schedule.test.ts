@@ -7,6 +7,7 @@ import {
   durationMinutesFromTimes,
   localToIso,
   deriveMeetingStatus,
+  followUpOpen,
   isPastMeeting,
   isUpcomingMeeting,
   upcomingWindowStart,
@@ -111,6 +112,21 @@ describe("deriveMeetingStatus", () => {
 
   it("returns Completed for an ended room", () => {
     expect(deriveMeetingStatus({ ...base, status: "ended" }, now)).toBe("Completed");
+  });
+
+  it("treats a replied follow-up as Completed and one held for approval as still open", () => {
+    expect(deriveMeetingStatus({ ...base, status: "ended", followup_status: "replied" }, now)).toBe("Completed");
+    expect(deriveMeetingStatus({ ...base, status: "ended", followup_status: "pending_approval" }, now)).toBe(
+      "Follow-Up Needed",
+    );
+    expect([null, "not_started", "draft", "pending_approval", "done", "replied"].map(followUpOpen)).toEqual([
+      false,
+      false,
+      true,
+      true,
+      false,
+      false,
+    ]);
   });
 
   it("returns Follow-Up Needed when follow-up is open after end", () => {

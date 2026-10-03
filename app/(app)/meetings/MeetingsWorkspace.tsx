@@ -444,7 +444,7 @@ export function MeetingsWorkspace({
             {tab !== "needs" ? null : actions.length === 0 ? (
               <EmptyState
                 title="Nothing needs you"
-                body="Meetings that still need preparing, and follow-ups that haven't gone out, show up here."
+                body="Meetings that still need preparing, follow-ups that haven't gone out, and follow-ups nobody has answered show up here."
                 query={query}
               />
             ) : (
@@ -456,9 +456,13 @@ export function MeetingsWorkspace({
                     <span className="flex min-w-0 flex-1 flex-col gap-1">
                       <span className="truncate text-sm font-medium text-fg-primary">{item.past.title}</span>
                       <span className="flex flex-wrap items-center gap-1">
-                        <span className={chip("warning")}>{ACTION_LABEL.unsent}</span>
+                        <span className={chip(item.reason === "awaiting" ? "info" : "warning")}>{ACTION_LABEL[item.reason]}</span>
                         <span className="text-[11px] text-fg-muted">
-                          Ended {new Date(item.past.occurred_at).toLocaleDateString(undefined, { month: "short", day: "numeric" })}
+                          {item.reason === "awaiting" ? "Sent " : "Ended "}
+                          {new Date(item.past.occurred_at).toLocaleDateString(undefined, { month: "short", day: "numeric" })}
+                          {item.reason === "awaiting" && item.past.threads
+                            ? ` · no reply from ${item.past.threads} ${item.past.threads === 1 ? "person" : "people"}`
+                            : ""}
                         </span>
                       </span>
                     </span>
@@ -466,7 +470,7 @@ export function MeetingsWorkspace({
                       href={`/meetings/${item.past.room_code}/report#follow-up`}
                       className="fx-btn shrink-0 rounded-lg bg-[var(--gold-400)] px-3 py-1.5 text-xs font-semibold text-[#0d0d10] hover:opacity-90"
                     >
-                      Review follow-up
+                      {item.reason === "awaiting" ? "Follow up again" : "Review follow-up"}
                     </Link>
                   </div>
                 ) : null,

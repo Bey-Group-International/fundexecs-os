@@ -223,6 +223,10 @@ describe("reportParticipants attendance", () => {
 describe("followUpState", () => {
   it("is sent only once everyone was reached", () => {
     expect(followUpState({ hasDraft: true, followupStatus: "done", draftedThreads: 0 })).toEqual({ kind: "sent" });
+    expect(followUpState({ hasDraft: true, followupStatus: "replied", draftedThreads: 0 })).toEqual({ kind: "replied" });
+    expect(followUpState({ hasDraft: true, followupStatus: "pending_approval", draftedThreads: 0 })).toEqual({
+      kind: "awaiting_approval",
+    });
     expect(followUpState({ hasDraft: true, followupStatus: "draft", draftedThreads: 2 })).toEqual({
       kind: "drafted",
       threads: 2,
@@ -234,6 +238,8 @@ describe("followUpState", () => {
   it("labels each state", () => {
     expect(followUpStateLabel({ kind: "drafted", threads: 2 })).toBe("Drafted in inbox (2)");
     expect(followUpStateLabel({ kind: "not_sent" })).toBe("Not sent");
+    expect(followUpStateLabel({ kind: "awaiting_approval" })).toBe("Awaiting approval");
+    expect(followUpStateLabel({ kind: "replied" })).toBe("Replied");
   });
 });
 
