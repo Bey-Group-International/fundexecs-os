@@ -167,15 +167,27 @@ export function matchesQuery(m: WorkspaceMeeting, query: string): boolean {
   return words.every((w) => haystack.includes(w));
 }
 
-/** A past meeting whose follow-up was drafted and never sent. */
+/**
+ * A past meeting still owed something on its follow-up: drafted and never sent
+ * ("unsent"), or sent days ago with nobody answering yet ("awaiting").
+ */
 export interface PendingFollowUp {
   id: string;
   room_code: string;
   title: string;
   occurred_at: string;
+  /** Absent means "unsent", which is all this list held before. */
+  kind?: "unsent" | "awaiting";
+  /** When the follow-up went out; for "awaiting". */
+  sent_at?: string | null;
+  /** How many people were written to; for "awaiting". */
+  threads?: number;
 }
 
-export type ActionReason = "prep" | "followup" | "unsent";
+/** Days after sending with no reply before a meeting counts as awaiting one. */
+export const AWAITING_REPLY_DAYS = 3;
+
+export type ActionReason = "prep" | "followup" | "unsent" | "awaiting";
 
 export interface ActionItem<T> {
   reason: ActionReason;
@@ -192,7 +204,8 @@ export const PREP_HORIZON_DAYS = 7;
  * What is waiting on the host, most urgent first:
  *  - a meeting in the next week that still needs preparing;
  *  - a meeting that has run and wants a follow-up;
- *  - a past meeting whose follow-up was drafted and never sent.
+ *  - a past meeting whose follow-up was drafted and never sent;
+ *  - a past meeting whose follow-up went out days ago and nobody has answered.
  * `status` is the display status the page already derives for each meeting.
  */
 export function needsAction<T extends WorkspaceMeeting>(
@@ -215,17 +228,23 @@ export function needsAction<T extends WorkspaceMeeting>(
       prep.push({ reason: "prep", meeting: m, past: null });
     }
   }
-  const unsent = pending
-    .filter((p) => !seen.has(p.id))
-    .map((p) => ({ reason: "unsent" as const, meeting: null, past: p }));
+  const unsent: ActionItem<T>[] = [];
+  const awaiting: ActionItem<T>[] = [];
+  for (const p of pending) {
+    if (seen.has(p.id)) continue;
+    seen.add(p.id);
+    if (p.kind === "awaiting") awaiting.push({ reason: "awaiting", meeting: null, past: p });
+    else unsent.push({ reason: "unsent", meeting: null, past: p });
+  }
 
-  return [...prep, ...followUp, ...unsent];
+  return [...prep, ...followUp, ...unsent, ...awaiting];
 }
 
 export const ACTION_LABEL: Record<ActionReason, string> = {
   prep: "Needs prep",
   followup: "Follow-up needed",
   unsent: "Follow-up not sent",
+  awaiting: "Awaiting reply",
 };
 
 export type ChipTone = "neutral" | "accent" | "success" | "warning" | "info" | "danger";
@@ -248,7 +267,9 @@ export function rowChips(m: WorkspaceMeeting): RowChip[] {
   // Replies outrank "sent": once somebody has answered, that is the news.
   const reply = replyChip(m);
   if (reply) chips.push(reply);
+  else if (m.followup_status === "replied") chips.push({ label: "Replied", tone: "success" });
   else if (m.followup_status === "done") chips.push({ label: "Follow-up sent", tone: "success" });
+  else if (m.followup_status === "pending_approval") chips.push({ label: "Follow-up awaiting approval", tone: "warning" });
   else if (m.followup_status === "draft") chips.push({ label: "Follow-up drafted", tone: "info" });
 
   if (m.deal_id) chips.push({ label: "Deal", tone: "accent" });

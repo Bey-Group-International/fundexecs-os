@@ -3,26 +3,22 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import {
-  FIRST_NAME_TOKEN,
-  conversationProblem,
-  groupTemplate,
-  personalizeGroupBody,
-} from "@/lib/meetings/conversation";
-import { startConversation } from "./conversation-actions";
+import { FIRST_NAME_TOKEN, conversationProblem, groupTemplate } from "@/lib/meetings/conversation";
+import { startConversations, type BatchOutcome } from "./conversation-actions";
 
 // "Message everyone new": one composer for every attendee the inbox has never
 // heard from. Each person still gets their own thread, linked to the meeting,
 // with their own first name in the greeting — the text is written once and sent
-// as N separate conversations, each through the inbox's gates. Sequential, so a
-// failure for one person is reported by name and never stops the rest.
+// as N separate conversations, each through the inbox's gates. One server call
+// does the lot (startConversations), and a failure for one person is reported by
+// name without stopping the rest.
 
 interface Person {
   name: string;
   email: string;
 }
 
-type Outcome = { email: string; name: string; ok: boolean; gated?: boolean; error?: string };
+type Outcome = BatchOutcome;
 
 export function MessageEveryoneNew({
   meetingId,
@@ -40,7 +36,7 @@ export function MessageEveryoneNew({
   const [subject, setSubject] = useState("");
   const [body, setBody] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const [progress, setProgress] = useState<number | null>(null);
+  const [sending, setSending] = useState(false);
   const [outcomes, setOutcomes] = useState<Outcome[] | null>(null);
 
   if (people.length < 2) return null;
@@ -61,30 +57,28 @@ export function MessageEveryoneNew({
       return;
     }
     setError(null);
-    const results: Outcome[] = [];
-    for (let i = 0; i < people.length; i++) {
-      setProgress(i);
-      const person = people[i];
-      const fd = new FormData();
-      fd.set("meeting_id", meetingId);
-      fd.set("email", person.email);
-      fd.set("subject", subject);
-      fd.set("body", personalizeGroupBody(body, person.name));
-      try {
-        const r = await startConversation(fd);
-        results.push(
-          r.ok
-            ? { email: person.email, name: person.name, ok: true, gated: r.gated }
-            : { email: person.email, name: person.name, ok: false, error: r.error },
-        );
-      } catch {
-        results.push({ email: person.email, name: person.name, ok: false, error: "Could not reach the server." });
+    setSending(true);
+    try {
+      const r = await startConversations({
+        meetingId,
+        subject,
+        body,
+        emails: people.map((p) => p.email),
+      });
+      if (!r.ok) {
+        setError(r.error);
+        return;
       }
+      // The server knows names from the attendee list; fall back to ours.
+      const names = new Map(people.map((p) => [p.email.toLowerCase(), p.name]));
+      setOutcomes(r.results.map((o) => ({ ...o, name: o.name || names.get(o.email.toLowerCase()) || "" })));
+      setOpen(false);
+      router.refresh();
+    } catch {
+      setError("Could not reach the server.");
+    } finally {
+      setSending(false);
     }
-    setProgress(null);
-    setOutcomes(results);
-    setOpen(false);
-    router.refresh();
   }
 
   if (outcomes) {
@@ -123,7 +117,6 @@ export function MessageEveryoneNew({
     );
   }
 
-  const sending = progress !== null;
   return (
     <div className="mt-2 flex flex-col gap-2 rounded-lg border border-[var(--line)] bg-[var(--surface-1)] p-2.5">
       <p className="text-[11px] uppercase tracking-wide text-[var(--fg-muted)]">
@@ -161,7 +154,7 @@ export function MessageEveryoneNew({
           disabled={sending || !body.trim()}
           className="rounded-md border border-[var(--line)] bg-[var(--surface-0)] px-2.5 py-1 text-xs text-[var(--fg-primary)] hover:border-[var(--gold-400)] disabled:opacity-50"
         >
-          {sending ? `Sending ${progress! + 1} of ${people.length}…` : `Send to ${people.length}`}
+          {sending ? `Sending to ${people.length}…` : `Send to ${people.length}`}
         </button>
       </div>
     </div>

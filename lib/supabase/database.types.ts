@@ -2745,6 +2745,7 @@ export type LiveMeeting = {
   sync_status: string;
   preparation_status: string;
   followup_status: string;
+  followup_sent_at: string | null;
   // Linked inbox threads, those with a reply since linking, and those unread
   // (trigger-maintained, migration 20261003151646).
   followup_threads: number;

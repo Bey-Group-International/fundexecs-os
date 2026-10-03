@@ -48,9 +48,9 @@ const ROLE_LABEL: Record<ReportParticipant["role"], string> = {
 /** The chip's colour follows the state, so "Not sent" reads as something to do. */
 export function FollowUpStatusChip({ state }: { state: FollowUpState }) {
   const tone =
-    state.kind === "sent"
+    state.kind === "sent" || state.kind === "replied"
       ? "bg-[var(--status-success)]/15 text-[var(--status-success)]"
-      : state.kind === "drafted"
+      : state.kind === "drafted" || state.kind === "awaiting_approval"
         ? "bg-[var(--gold-400)]/15 text-[var(--gold-400)]"
         : state.kind === "not_sent"
           ? "bg-[var(--status-warning,#f59e0b)]/15 text-[var(--status-warning,#f59e0b)]"
@@ -222,7 +222,9 @@ export const FollowUpPanel = memo(function FollowUpPanel({
       ? { kind: "sent" }
       : state.kind === "drafted"
         ? { kind: "drafted", threads: status.kind === "drafted" ? status.threads : 1 }
-        : status;
+        : state.kind === "queued" && status.kind !== "replied"
+          ? { kind: "awaiting_approval" }
+          : status;
 
   return (
     <section

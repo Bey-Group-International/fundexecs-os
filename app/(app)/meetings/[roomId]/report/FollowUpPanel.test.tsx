@@ -234,4 +234,11 @@ describe("when the organisation gates outbound replies", () => {
     expect(screen.getByText(/nothing has been sent yet/i)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /review approvals/i })).toHaveAttribute("href", "/inbox");
   });
+
+  it("shows the follow-up as awaiting approval in its status chip", async () => {
+    captureFetch({ gated: true, queued: 1, total: 1 });
+    panel();
+    await userEvent.click(screen.getByRole("button", { name: /send now/i }));
+    expect(await screen.findByText("Awaiting approval")).toBeInTheDocument();
+  });
 });

@@ -1,11 +1,11 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
-const startConversation = jest.fn();
+const startConversations = jest.fn();
 const refresh = jest.fn();
 jest.mock("next/navigation", () => ({ useRouter: () => ({ refresh }) }));
 jest.mock("./conversation-actions", () => ({
-  startConversation: (...a: unknown[]) => startConversation(...a),
+  startConversations: (...a: unknown[]) => startConversations(...a),
 }));
 
 import { MessageEveryoneNew } from "./MessageEveryoneNew";
@@ -24,20 +24,37 @@ it("is not offered for a single person", () => {
   expect(container.textContent).toBe("");
 });
 
-it("sends one conversation per person, each greeted by name, and reports failures by name", async () => {
-  startConversation
-    .mockResolvedValueOnce({ ok: true, threadId: "t1", gated: true, continued: false, subject: "IC", message: "" })
-    .mockResolvedValueOnce({ ok: false, error: "Mailbox not connected" });
+it("sends everyone in one batched call and reports failures by name", async () => {
+  startConversations.mockResolvedValueOnce({
+    ok: true,
+    results: [
+      { email: "ana@acme.com", name: "Ana Lopez", ok: true, gated: true },
+      { email: "bo@x.io", name: "", ok: false, error: "Mailbox not connected" },
+    ],
+  });
   const user = userEvent.setup();
   render(<MessageEveryoneNew meetingId="m1" meetingTitle="IC" people={PEOPLE} actionItems={[]} />);
   await user.click(screen.getByRole("button", { name: /Message everyone new \(2\)/ }));
   await user.click(screen.getByRole("button", { name: "Send to 2" }));
 
   expect(await screen.findByText(/1 of 2 waiting in approvals/)).toBeTruthy();
+  // The name the server left blank comes from the attendee list.
   expect(screen.getByText(/Not sent to Bo Chen \(Mailbox not connected\)/)).toBeTruthy();
-  const bodies = startConversation.mock.calls.map((c) => String((c[0] as FormData).get("body")));
-  expect(bodies[0].startsWith("Hi Ana,")).toBe(true);
-  expect(bodies[1].startsWith("Hi Bo,")).toBe(true);
-  expect(startConversation.mock.calls.map((c) => (c[0] as FormData).get("email"))).toEqual(["ana@acme.com", "bo@x.io"]);
+  expect(startConversations).toHaveBeenCalledTimes(1);
+  const arg = startConversations.mock.calls[0][0] as { meetingId: string; body: string; emails: string[] };
+  expect(arg.meetingId).toBe("m1");
+  expect(arg.emails).toEqual(["ana@acme.com", "bo@x.io"]);
+  // Personalised on the server, so the token travels as written.
+  expect(arg.body).toContain("{first_name}");
   expect(refresh).toHaveBeenCalled();
+});
+
+it("shows a whole-batch refusal in the composer", async () => {
+  startConversations.mockResolvedValueOnce({ ok: false, error: "Too many group messages at once — try again in a minute." });
+  const user = userEvent.setup();
+  render(<MessageEveryoneNew meetingId="m1" meetingTitle="IC" people={PEOPLE} actionItems={[]} />);
+  await user.click(screen.getByRole("button", { name: /Message everyone new \(2\)/ }));
+  await user.click(screen.getByRole("button", { name: "Send to 2" }));
+  expect(await screen.findByText(/Too many group messages/)).toBeTruthy();
+  expect(refresh).not.toHaveBeenCalled();
 });

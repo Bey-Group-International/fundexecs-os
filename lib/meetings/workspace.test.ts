@@ -1,4 +1,5 @@
 import {
+  ACTION_LABEL,
   dayLabel,
   groupByDay,
   inWeek,
@@ -129,6 +130,18 @@ describe("needsAction", () => {
       ["unsent", "old"],
     ]);
   });
+
+  it("lists follow-ups nobody has answered after the unsent ones", () => {
+    const items = needsAction([], () => "", [
+      { id: "quiet", room_code: "q", title: "Quiet", occurred_at: at(-4), kind: "awaiting", threads: 3 },
+      { id: "old", room_code: "r", title: "Old", occurred_at: at(-3) },
+    ], NOW);
+    expect(items.map((i) => [i.reason, i.past?.id])).toEqual([
+      ["unsent", "old"],
+      ["awaiting", "quiet"],
+    ]);
+    expect(ACTION_LABEL.awaiting).toBe("Awaiting reply");
+  });
 });
 
 describe("rowChips", () => {
@@ -141,6 +154,13 @@ describe("rowChips", () => {
 
   it("says nothing for a plain meeting", () => {
     expect(rowChips(m("1", { priority: "normal" }))).toEqual([]);
+  });
+
+  it("shows a follow-up held for approval, and a replied one without loaded counts", () => {
+    expect(rowChips(m("1", { followup_status: "pending_approval" })).map((c) => c.label)).toEqual([
+      "Follow-up awaiting approval",
+    ]);
+    expect(rowChips(m("1", { followup_status: "replied" })).map((c) => c.label)).toEqual(["Replied"]);
   });
 });
 
