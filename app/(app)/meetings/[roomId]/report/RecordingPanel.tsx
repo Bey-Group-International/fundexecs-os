@@ -141,6 +141,7 @@ export const RecordingPanel = memo(function RecordingPanel({
                 // Only one: two players reporting into the same follower would
                 // make the transcript jump between two clocks.
                 onTime={rec.id === playableId ? onTime : undefined}
+                shareable={rec.id === playableId}
               />
               <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-[var(--fg-muted)]">
                 {rec.status === "recording" && (
