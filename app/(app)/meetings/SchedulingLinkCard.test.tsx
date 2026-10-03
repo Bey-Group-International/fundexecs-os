@@ -147,3 +147,28 @@ it("moves a booking to any time the host picks", async () => {
     startIso: new Date("2099-10-06T06:15").toISOString(),
   });
 });
+
+describe("in the lobby's toolbar", () => {
+  it("is a copy button and Availability, with no link text and no card", async () => {
+    serve([]);
+    const { container } = render(<SchedulingLinkCard inline />);
+    const copy = await screen.findByRole("button", { name: /copy booking link/i });
+    expect(copy).toHaveAttribute("title", "https://app.test/book/ana");
+    expect(screen.getByRole("button", { name: "Availability" })).toBeTruthy();
+    expect(screen.queryByText("https://app.test/book/ana")).toBeNull();
+    expect(container.querySelector("section")).toBeNull();
+  });
+
+  it("announces requests waiting on the host, and opens them below", async () => {
+    serve([booking({ status: "pending" })]);
+    render(<SchedulingLinkCard inline />);
+    fireEvent.click(await screen.findByRole("button", { name: /1 booking request/i }));
+    expect(screen.getByRole("button", { name: "Approve" })).toBeTruthy();
+  });
+
+  it("stays out of the toolbar when the link could not be loaded", async () => {
+    fetchMock.mockImplementation(async () => ({ ok: false, json: async () => ({ error: "nope" }) }));
+    const { container } = render(<SchedulingLinkCard inline />);
+    await waitFor(() => expect(container.textContent).toBe(""));
+  });
+});

@@ -160,3 +160,13 @@ describe("waiting to be let in", () => {
     expect(screen.queryByText(/^Waiting \d/)).not.toBeInTheDocument();
   });
 });
+
+describe("a device check with no meeting", () => {
+  it("asks for no name, shares no link, and offers Done instead of Join", async () => {
+    await show({ mode: "check", roomCode: "" });
+    expect(screen.getByRole("heading", { name: /check your camera & mic/i })).toBeTruthy();
+    expect(screen.queryByPlaceholderText("Your name")).toBeNull();
+    expect(screen.queryByRole("button", { name: /join meeting/i })).toBeNull();
+    expect(screen.getByRole("link", { name: "Done" })).toHaveAttribute("href", "/meetings");
+  });
+});

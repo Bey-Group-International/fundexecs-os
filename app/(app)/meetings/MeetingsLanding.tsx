@@ -177,11 +177,14 @@ export function MeetingsLanding({
         </p>
       </header>
 
-      <MeetingLobby onOpenCalendar={() => openCalendar("calendar")} onScheduleLater={scheduleLater} />
-      {/* Booking link sits between "start a meeting" and "meetings you have":
-          it's how meetings arrive when someone else picks the time. Collapsed to
-          a single row — it no longer competes with the meetings themselves. */}
-      <SchedulingLinkCard />
+      {/* The booking link rides in the lobby's toolbar: it is how meetings
+          arrive when someone else picks the time, and a row of its own under
+          the toolbar was a second toolbar. */}
+      <MeetingLobby
+        onOpenCalendar={() => openCalendar("calendar")}
+        onScheduleLater={scheduleLater}
+        booking={<SchedulingLinkCard inline />}
+      />
 
       {/* What needs you, today, what is coming, and what happened — with one
           search across them. See MeetingsWorkspace. */}
