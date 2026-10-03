@@ -16,6 +16,8 @@ import type { InboxChannel } from "@/lib/supabase/database.types";
 import { loadAttendeeInboxHistory } from "@/lib/meetings/report-inbox.server";
 import type { AttendeeHistory as Attendee, ThreadDigest } from "@/lib/meetings/report-inbox";
 import { LocalTime } from "./LocalTime";
+import { StartConversation } from "./StartConversation";
+import { getSessionContext } from "@/lib/auth";
 
 /**
  * The inbox has no per-thread URL — threads expand in place on the board — so
@@ -37,19 +39,39 @@ export async function AttendeeHistoryPanel({
   organizationId,
   invited,
   viewerEmail,
+  meetingTitle = null,
+  actionItems = [],
 }: {
   meetingId: string;
   organizationId: string | null;
   invited: unknown;
   viewerEmail: string | null;
+  /** For the "Start conversation" composer's opening message. */
+  meetingTitle?: string | null;
+  actionItems?: readonly string[];
 }) {
   const supabase = await createServerClient();
-  const history = await loadAttendeeInboxHistory(supabase, {
-    meetingId,
-    organizationId,
-    invited,
-    viewerEmail,
-  });
+  const [history, session] = await Promise.all([
+    loadAttendeeInboxHistory(supabase, {
+      meetingId,
+      organizationId,
+      invited,
+      viewerEmail,
+    }),
+    getSessionContext(),
+  ]);
+  // Only a member of the meeting's organisation has an inbox to start a
+  // conversation from. A guest attendee reads the same report without it.
+  const canMessage = Boolean(organizationId) && session?.orgId === organizationId;
+  const composer = (recipient: { name: string; email: string }) =>
+    canMessage ? (
+      <StartConversation
+        meetingId={meetingId}
+        meetingTitle={meetingTitle}
+        recipient={recipient}
+        actionItems={actionItems}
+      />
+    ) : null;
 
   // Nothing to say: no attendee has a thread and none is missing one either,
   // which is every one-way recording and every meeting the reader held alone.
@@ -71,7 +93,11 @@ export async function AttendeeHistoryPanel({
       {history.attendees.length > 0 && (
         <ul className="flex flex-col gap-3">
           {history.attendees.map((attendee) => (
-            <AttendeeCard key={attendee.email} attendee={attendee} />
+            <AttendeeCard
+              key={attendee.email}
+              attendee={attendee}
+              composer={composer({ name: attendee.name, email: attendee.email })}
+            />
           ))}
         </ul>
       )}
@@ -80,13 +106,30 @@ export async function AttendeeHistoryPanel({
         // The most actionable line on a follow-up page, and the reason these are
         // listed together instead of each getting an empty card: eight cards
         // saying "nothing" is the reliable way to make nobody read any of them.
-        <p className="text-xs text-[var(--fg-muted)] border-t border-[var(--line)] pt-3">
-          No inbox history for{" "}
-          <span className="text-[var(--fg-secondary)]">
-            {history.untouched.map((person) => person.name).join(", ")}
-          </span>
-          .
-        </p>
+        <div className="border-t border-[var(--line)] pt-3">
+          {canMessage ? (
+            <p className="text-xs text-[var(--fg-muted)]">No inbox history yet:</p>
+          ) : (
+            <p className="text-xs text-[var(--fg-muted)]">
+              No inbox history for{" "}
+              <span className="text-[var(--fg-secondary)]">
+                {history.untouched.map((person) => person.name).join(", ")}
+              </span>
+              .
+            </p>
+          )}
+          {/* The people most likely to need a first message: offered one each. */}
+          {canMessage && (
+            <ul className="mt-1 flex flex-col">
+              {history.untouched.map((person) => (
+                <li key={person.email} className="text-xs text-[var(--fg-secondary)]">
+                  <span className="mr-2">{person.name}</span>
+                  {composer({ name: person.name, email: person.email })}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
       )}
 
       {/* Said instead of the line above, never alongside it. The read was cut
@@ -106,7 +149,7 @@ export async function AttendeeHistoryPanel({
   );
 }
 
-function AttendeeCard({ attendee }: { attendee: Attendee }) {
+function AttendeeCard({ attendee, composer }: { attendee: Attendee; composer: React.ReactNode }) {
   return (
     <li className="rounded-lg border border-[var(--line)] bg-[var(--surface-0)] p-3">
       <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
@@ -156,6 +199,7 @@ function AttendeeCard({ attendee }: { attendee: Attendee }) {
           {attendee.total - attendee.threads.length} more in the inbox
         </Link>
       )}
+      {composer}
     </li>
   );
 }

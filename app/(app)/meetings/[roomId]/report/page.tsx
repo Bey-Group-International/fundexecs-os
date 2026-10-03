@@ -407,6 +407,8 @@ export default async function MeetingReportPage({
                 organizationId={data.organizationId}
                 invited={data.invited}
                 viewerEmail={data.viewerEmail}
+                meetingTitle={meeting.title}
+                actionItems={content.actionItems}
               />
             </Suspense>
           </>
