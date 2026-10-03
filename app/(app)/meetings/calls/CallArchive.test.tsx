@@ -69,6 +69,12 @@ function deferred<T>() {
   return { promise, resolve };
 }
 
+/** Delete lives in the row's menu: open it, then choose Delete. */
+async function askToDelete(title: string) {
+  await userEvent.click(screen.getByRole("button", { name: `More actions for ${title}` }));
+  await userEvent.click(screen.getByRole("menuitem", { name: new RegExp(`Delete ${title} permanently`) }));
+}
+
 afterEach(() => jest.restoreAllMocks());
 
 describe("arriving on the page", () => {
@@ -220,7 +226,7 @@ describe("deleting a call", () => {
     await userEvent.type(box, "dunbar");
     await waitFor(() => expect((global.fetch as jest.Mock).mock.calls.length).toBe(1));
 
-    await userEvent.click(screen.getByRole("button", { name: /Delete Dunbar diligence note/ }));
+    await askToDelete("Dunbar diligence note");
     await userEvent.click(screen.getByRole("button", { name: "Yes, delete" }));
     await waitFor(() => expect(screen.queryByText("Dunbar diligence note")).toBeNull());
 
@@ -236,7 +242,7 @@ describe("deleting a call", () => {
     );
     render(<CallArchive initial={[call()]} />);
 
-    await userEvent.click(screen.getByRole("button", { name: /Delete Dunbar diligence note/ }));
+    await askToDelete("Dunbar diligence note");
     await userEvent.click(screen.getByRole("button", { name: "Yes, delete" }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent("could not be deleted");
@@ -296,8 +302,11 @@ describe("what a keystroke costs", () => {
   it("re-renders only the row whose delete was pressed", async () => {
     const user = userEvent.setup();
     render(<CallArchive initial={manyCalls} />);
+    // Opening the row's menu is the row's own state; counted from after it, so
+    // what is measured is the parent's `confirming` reaching the rows.
+    await user.click(screen.getByRole("button", { name: "More actions for Call 7" }));
     const renders = countRowRenders();
-    await user.click(screen.getByRole("button", { name: /Delete Call 7 permanently/ }));
+    await user.click(screen.getByRole("menuitem", { name: /Delete Call 7 permanently/ }));
     expect(screen.getByText("Delete call and recording?")).toBeInTheDocument();
     // Exactly the one row. `< 30` would also have accepted 29, which is
     // twenty-eight unchanged rows re-rendering — an assertion that passes on
@@ -363,5 +372,166 @@ describe("the day the rows are labelled against", () => {
       fireEvent.change(box, { target: { value: "d" } });
     });
     expect(renders).toBe(0);
+  });
+});
+
+// ── The list around the rows ────────────────────────────────────────────────
+
+jest.mock("../MeetingShareLink", () => ({ copyText: jest.fn(async () => true) }));
+const { copyText: copyTextMock } = require("../MeetingShareLink") as { copyText: jest.Mock };
+
+describe("headings and older calls", () => {
+  afterEach(() => jest.useRealTimers());
+
+  it("puts calls under day headings", () => {
+    jest.useFakeTimers({ doNotFake: ["nextTick", "setImmediate"] });
+    jest.setSystemTime(new Date(2026, 8, 30, 12, 0));
+    render(
+      <CallArchive
+        initial={[
+          call({ id: "a", title: "Morning call", at: new Date(2026, 8, 30, 9, 0).toISOString() }),
+          call({ id: "b", title: "Old call", at: new Date(2026, 7, 4, 9, 0).toISOString() }),
+        ]}
+      />,
+    );
+    expect(screen.getByRole("heading", { name: "Today" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "August" })).toBeInTheDocument();
+  });
+
+  it("loads the calls before the last one shown, and adds them below", async () => {
+    const urls = mockFetch(async () => ({
+      body: { calls: [call({ id: "older", title: "Older call", at: "2026-08-01T10:00:00.000Z" })], hasMore: false },
+    }));
+    render(<CallArchive initial={[call()]} initialHasMore />);
+
+    await userEvent.click(screen.getByRole("button", { name: "Load older calls" }));
+
+    expect(await screen.findByText("Older call")).toBeInTheDocument();
+    expect(screen.getByText("Dunbar diligence note")).toBeInTheDocument();
+    expect(urls).toEqual([`/api/meetings/calls?q=&before=${encodeURIComponent("2026-09-07T14:47:00.000Z")}`]);
+    // That was the end: the button goes.
+    expect(screen.queryByRole("button", { name: "Load older calls" })).toBeNull();
+  });
+
+  it("offers no Load more when the first page was the whole archive", () => {
+    render(<CallArchive initial={[call()]} />);
+    expect(screen.queryByRole("button", { name: "Load older calls" })).toBeNull();
+  });
+});
+
+describe("narrowing", () => {
+  it("asks the server for a range, from the reader's clock", async () => {
+    const urls = mockFetch(async () => ({ body: { calls: [], hasMore: false } }));
+    render(<CallArchive initial={[call()]} />);
+
+    await userEvent.click(screen.getByRole("button", { name: "7 days" }));
+
+    await waitFor(() => expect(urls).toHaveLength(1));
+    expect(urls[0]).toMatch(/^\/api\/meetings\/calls\?q=&since=\d{4}-/);
+    expect(await screen.findByText("No recorded calls in that range.")).toBeInTheDocument();
+  });
+
+  it("narrows what is drawn with the chips, without asking the server", async () => {
+    const urls = mockFetch(async () => ({ body: {} }));
+    render(
+      <CallArchive
+        initial={[call(), call({ id: "c2", title: "Unsummarised", summary: "" })]}
+      />,
+    );
+
+    await userEvent.click(screen.getByRole("button", { name: "Has summary" }));
+
+    expect(screen.queryByText("Unsummarised")).toBeNull();
+    expect(screen.getByText("Dunbar diligence note")).toBeInTheDocument();
+    await settleDebounce();
+    expect(urls).toEqual([]);
+  });
+});
+
+describe("a row's own actions", () => {
+  it("plays the recording in place, one at a time", async () => {
+    render(
+      <CallArchive
+        initial={[call({ recordingId: "r1" }), call({ id: "c2", title: "Second", recordingId: "r2" })]}
+      />,
+    );
+    expect(document.querySelector("audio")).toBeNull();
+
+    await userEvent.click(screen.getByRole("button", { name: "Play Dunbar diligence note" }));
+    expect(document.querySelector("audio")?.getAttribute("src")).toBe("/api/meetings/c1/recording/r1/stream");
+
+    await userEvent.click(screen.getByRole("button", { name: "Play Second" }));
+    const players = document.querySelectorAll("audio");
+    expect(players).toHaveLength(1);
+    expect(players[0].getAttribute("src")).toBe("/api/meetings/c2/recording/r2/stream");
+
+    await userEvent.click(screen.getByRole("button", { name: "Stop playing Second" }));
+    expect(document.querySelector("audio")).toBeNull();
+  });
+
+  it("has no play button when nothing was kept", () => {
+    render(<CallArchive initial={[call({ recordingId: null })]} />);
+    expect(screen.queryByRole("button", { name: /^Play / })).toBeNull();
+  });
+
+  it("renames a call once the server agrees", async () => {
+    const urls = mockFetch(async () => ({ body: { id: "c1", title: "Dunbar follow-up" } }));
+    render(<CallArchive initial={[call()]} />);
+
+    await userEvent.click(screen.getByRole("button", { name: "More actions for Dunbar diligence note" }));
+    await userEvent.click(screen.getByRole("menuitem", { name: /Rename/ }));
+    const field = screen.getByRole("textbox", { name: "Call name" });
+    await userEvent.clear(field);
+    await userEvent.type(field, "Dunbar follow-up{Enter}");
+
+    expect(await screen.findByText("Dunbar follow-up")).toBeInTheDocument();
+    expect(urls).toEqual(["/api/meetings/calls/c1"]);
+    expect(screen.queryByRole("textbox", { name: "Call name" })).toBeNull();
+  });
+
+  it("keeps the field open, with what was typed, when the rename fails", async () => {
+    mockFetch(async () => ({ ok: false, body: {} }));
+    render(<CallArchive initial={[call()]} />);
+
+    await userEvent.click(screen.getByRole("button", { name: "More actions for Dunbar diligence note" }));
+    await userEvent.click(screen.getByRole("menuitem", { name: /Rename/ }));
+    const field = screen.getByRole("textbox", { name: "Call name" });
+    await userEvent.clear(field);
+    await userEvent.type(field, "New name{Enter}");
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("could not be saved");
+    expect(screen.getByRole("textbox", { name: "Call name" })).toHaveValue("New name");
+  });
+
+  it("copies the report's link and says so", async () => {
+    render(<CallArchive initial={[call()]} />);
+    await userEvent.click(screen.getByRole("button", { name: "More actions for Dunbar diligence note" }));
+    await userEvent.click(screen.getByRole("menuitem", { name: /Copy link/ }));
+
+    expect(copyTextMock).toHaveBeenCalledWith(`${window.location.origin}/meetings/dun-bar-42/report`);
+    expect(await screen.findByText("Link copied")).toBeInTheDocument();
+  });
+
+  it("offers the download only when there is a recording", async () => {
+    render(<CallArchive initial={[call({ recordingId: "r1" }), call({ id: "c2", title: "Second", recordingId: null })]} />);
+    await userEvent.click(screen.getByRole("button", { name: "More actions for Dunbar diligence note" }));
+    expect(screen.getByRole("menuitem", { name: /Download recording/ })).toHaveAttribute(
+      "href",
+      "/api/meetings/c1/recording/r1/stream?download=1",
+    );
+    await userEvent.click(screen.getByRole("button", { name: "More actions for Second" }));
+    expect(screen.queryByRole("menuitem", { name: /Download recording/ })).toBeNull();
+  });
+});
+
+describe("the header", () => {
+  it("says how much was recorded lately", () => {
+    render(<CallArchive initial={[call()]} stats={{ count: 3, seconds: 5400, days: 30 }} />);
+    expect(screen.getByText("Last 30 days: 3 calls · 1h 30m recorded")).toBeInTheDocument();
+  });
+
+  it("says nothing when nothing was", () => {
+    render(<CallArchive initial={[]} stats={{ count: 0, seconds: 0, days: 30 }} />);
+    expect(screen.queryByText(/Last 30 days/)).toBeNull();
   });
 });

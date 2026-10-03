@@ -68,6 +68,7 @@ const CALLS: CallHit[] = [
     title: "Dunbar diligence note",
     at: "2026-09-07T14:47:00.000Z",
     durationSeconds: 754,
+    recordingId: "r1",
     summary: "Walked through the outstanding diligence note and agreed who chases counsel.",
     consented: true,
     matches: 14,
@@ -87,7 +88,15 @@ const CALLS: CallHit[] = [
 ];
 
 function archive(): string {
-  return renderToStaticMarkup(React.createElement(CallArchive, { initial: CALLS }));
+  // Every part of the page at once: the stats line, the filters, a row with a
+  // play button and one without, and Load more.
+  return renderToStaticMarkup(
+    React.createElement(CallArchive, {
+      initial: CALLS,
+      initialHasMore: true,
+      stats: { count: 12, seconds: 15_000, days: 30 },
+    }),
+  );
 }
 
 // Serialised into the page, so it closes over nothing out here.
@@ -142,6 +151,27 @@ describeVisual("the recorded-call archive's layout", () => {
   for (const width of [NARROW, ...VIEWPORTS.map((v) => v.width)]) {
     it(`keeps each meta item on one line at ${width}px`, async () => {
       expect(await foldedMetaItems(width)).toEqual([]);
+    }, 60_000);
+  }
+
+  for (const width of [NARROW, 400]) {
+    it(`never scrolls sideways and leaves the title room at ${width}px`, async () => {
+      const page = await browser.newPage({ viewport: { width, height: 900 } });
+      try {
+        await page.setContent(await pageHtml(archive()), { waitUntil: "load" });
+        const m = (await page.evaluate(`(() => {
+          const title = document.querySelector('li a span.truncate');
+          return {
+            scroll: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+            title: title ? title.getBoundingClientRect().width : 0,
+          };
+        })()`)) as { scroll: number; title: number };
+        expect(m.scroll).toBeLessThanOrEqual(0);
+        // Two 44px buttons beside the row must still leave a readable title.
+        expect(m.title).toBeGreaterThanOrEqual(120);
+      } finally {
+        await page.close();
+      }
     }, 60_000);
   }
 
