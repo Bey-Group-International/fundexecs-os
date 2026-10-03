@@ -1,11 +1,12 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { RecordingPanel } from "./RecordingPanel";
 import { TranscriptPanel } from "./TranscriptPanel";
 import { transcriptCues, type CueRow } from "@/lib/meetings/transcript-cues";
 import { playableRecording, type ReportRecording } from "@/lib/meetings/report-page";
 import type { RecordingPlayerHandle } from "./RecordingPlayer";
+import { momentFromSearch, SEEK_EVENT, type SeekDetail } from "@/lib/meetings/report-moments";
 import { useRef } from "react";
 
 /**
@@ -37,7 +38,7 @@ export function ReportMedia({
   /** The stored transcript block, which is what renders when there are no cues. */
   transcript: string | null;
 }) {
-  const playerRef = useRef<RecordingPlayerHandle>(null);
+  const playerRef = useRef<RecordingPlayerHandle | null>(null);
   /**
    * Where the recording has got to, so the transcript can follow it.
    *
@@ -56,9 +57,43 @@ export function ReportMedia({
     );
   }, []);
 
-  const seekRecording = useCallback((ms: number) => {
-    playerRef.current?.seekTo(ms);
+  /**
+   * A jump asked for before the player existed. It is loaded lazily, so on
+   * arrival — when a shared link asks for its moment — there is no handle yet.
+   */
+  const queued = useRef<{ ms: number; play: boolean } | null>(null);
+  const attachPlayer = useCallback((handle: RecordingPlayerHandle | null) => {
+    playerRef.current = handle;
+    const wanted = queued.current;
+    if (handle && wanted) {
+      queued.current = null;
+      handle.seekTo(wanted.ms, { play: wanted.play });
+    }
   }, []);
+  const seek = useCallback((ms: number, play: boolean) => {
+    if (playerRef.current) playerRef.current.seekTo(ms, { play });
+    else queued.current = { ms, play };
+  }, []);
+
+  const seekRecording = useCallback((ms: number) => seek(ms, false), [seek]);
+
+  /**
+   * Moments asked for from elsewhere on the page — a "▶ 12:34" chip on a
+   * decision or an action item — and the one a shared link carries in `?t=`.
+   *
+   * The link is followed once, on arrival. The player keeps a jump it cannot
+   * make yet, so this does not wait for it to load.
+   */
+  useEffect(() => {
+    const onSeek = (e: Event) => {
+      const detail = (e as CustomEvent<SeekDetail>).detail;
+      if (detail && Number.isFinite(detail.ms)) seek(detail.ms, detail.play);
+    };
+    window.addEventListener(SEEK_EVENT, onSeek);
+    const linked = momentFromSearch(window.location.search);
+    if (linked !== null) seek(linked, true);
+    return () => window.removeEventListener(SEEK_EVENT, onSeek);
+  }, [seek]);
 
   /**
    * The clock the cues are placed on.
@@ -78,7 +113,7 @@ export function ReportMedia({
       <RecordingPanel
         meetingId={meetingId}
         recordings={recordings}
-        playerRef={playerRef}
+        playerRef={attachPlayer}
         onTime={handleTime}
       />
 

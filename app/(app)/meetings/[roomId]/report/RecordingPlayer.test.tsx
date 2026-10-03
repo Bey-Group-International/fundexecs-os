@@ -89,7 +89,13 @@ interface Harness {
 
 async function setup(
   partCount: number,
-  opts: { supported?: boolean; ref?: React.Ref<RecordingPlayerHandle> } = {},
+  opts: {
+    supported?: boolean;
+    ref?: React.Ref<RecordingPlayerHandle>;
+    shareable?: boolean;
+    /** Runs after render and before the source opens: the "not ready yet" window. */
+    beforeOpen?: () => void;
+  } = {},
 ): Promise<Harness> {
   sources = [];
   FakeMediaSource.supported = opts.supported ?? true;
@@ -132,7 +138,7 @@ async function setup(
   }) as unknown as typeof fetch;
 
   const { container } = render(
-    <RecordingPlayer meetingId="m1" recordingId="r1" ref={opts.ref} />,
+    <RecordingPlayer meetingId="m1" recordingId="r1" ref={opts.ref} shareable={opts.shareable} />,
   );
 
   // Let the timeline fetch land, which is what decides native vs MediaSource.
@@ -166,6 +172,7 @@ async function setup(
     configurable: true,
   });
 
+  opts.beforeOpen?.();
   const source = sources[sources.length - 1];
   if (source) {
     await act(async () => {
@@ -276,5 +283,101 @@ describe("releasing watched video", () => {
     });
     const after = h.fetched.slice(before).flat();
     expect(after).toContain(0);
+  });
+});
+
+// ── Moving around ───────────────────────────────────────────────────────────
+
+describe("controls", () => {
+  let play: jest.SpyInstance;
+  beforeEach(() => {
+    play = jest.spyOn(HTMLMediaElement.prototype, "play").mockImplementation(() => Promise.resolve());
+    jest.spyOn(HTMLMediaElement.prototype, "pause").mockImplementation(() => {});
+  });
+  afterEach(() => jest.restoreAllMocks());
+
+  it("keeps a jump asked for before the player could make it, and plays from there", async () => {
+    // A link to a moment is followed on arrival, before the source has opened.
+    const ref = createRef<RecordingPlayerHandle>();
+    const h = await setup(60, { ref, beforeOpen: () => ref.current!.seekTo(90_000, { play: true }) });
+    // Played once the part holding the moment has been appended: a fetch and
+    // an updateend later, each a turn of the loop.
+    for (let i = 0; i < 6; i++) {
+      await act(async () => {
+        await new Promise((r) => setTimeout(r, 0));
+      });
+    }
+    expect(h.video.currentTime).toBe(90);
+    expect(play).toHaveBeenCalled();
+  });
+
+  it("does not start playing for a plain seek", async () => {
+    const ref = createRef<RecordingPlayerHandle>();
+    await setup(60, { ref });
+    await act(async () => {
+      ref.current!.seekTo(30_000);
+      await new Promise((r) => setTimeout(r, 0));
+    });
+    expect(play).not.toHaveBeenCalled();
+  });
+
+  it("skips fifteen seconds either way", async () => {
+    const h = await setup(60);
+    await h.tick(60_000);
+    await act(async () => {
+      fireEvent.click(document.querySelector('[aria-label="Forward 15 seconds"]')!);
+      await new Promise((r) => setTimeout(r, 0));
+    });
+    expect(h.video.currentTime).toBe(75);
+    await act(async () => {
+      fireEvent.click(document.querySelector('[aria-label="Back 15 seconds"]')!);
+      await new Promise((r) => setTimeout(r, 0));
+    });
+    expect(h.video.currentTime).toBe(60);
+  });
+
+  it("skips with the arrow keys once the player has focus", async () => {
+    const h = await setup(60);
+    await h.tick(30_000);
+    await act(async () => {
+      fireEvent.keyDown(h.video, { key: "ArrowRight" });
+      await new Promise((r) => setTimeout(r, 0));
+    });
+    expect(h.video.currentTime).toBe(45);
+  });
+
+  it("steps through playback speeds and applies them", async () => {
+    const h = await setup(20);
+    const speed = () => document.querySelector('[aria-label^="Playback speed"]') as HTMLButtonElement;
+    expect(speed().textContent).toBe("1×");
+    await act(async () => {
+      fireEvent.click(speed());
+    });
+    expect(speed().textContent).toBe("1.25×");
+    expect(h.video.playbackRate).toBe(1.25);
+    for (let i = 0; i < 3; i++) {
+      await act(async () => {
+        fireEvent.click(speed());
+      });
+    }
+    expect(speed().textContent).toBe("1×");
+  });
+
+  it("copies a link that opens the report at this moment", async () => {
+    const writeText = jest.fn(async () => {});
+    Object.assign(navigator, { clipboard: { writeText } });
+    const h = await setup(60, { shareable: true });
+    await h.tick(754_000);
+    await act(async () => {
+      fireEvent.click(document.querySelector('[title^="Copy a link"]')!);
+      await new Promise((r) => setTimeout(r, 0));
+    });
+    expect(writeText).toHaveBeenCalledWith(expect.stringMatching(/\?t=754#recording$/));
+    expect(document.body.textContent).toContain("Link copied");
+  });
+
+  it("offers no link from a recording the transcript is not timed against", async () => {
+    await setup(20);
+    expect(document.querySelector('[title^="Copy a link"]')).toBeNull();
   });
 });

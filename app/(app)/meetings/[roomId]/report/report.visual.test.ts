@@ -70,6 +70,18 @@ const SIDE = {
   ],
 };
 
+// A recording and a timed transcript, so every list carries its "▶ 0:00"
+// chips: the crowded case, and the one a phone has least room for.
+const RECORDINGS = [
+  { id: "r1", status: "complete", deleted_at: null, started_at: "2026-09-23T14:00:00.000Z", duration_seconds: 4320, size_bytes: 1, expires_at: null, started_by_name: "Alex Rivera" },
+];
+const TRANSCRIPT = [
+  { speaker: "Priya Shah-Lindqvist", text: "I'll circulate the redlined side letter to counsel by Friday.", ts: "2026-09-23T14:12:00.000Z" },
+  { speaker: "Alex Rivera", text: "Then we proceed to confirmatory diligence, agreed.", ts: "2026-09-23T14:30:00.000Z" },
+  { speaker: "Marcus Oyelaran-Whitfield", text: "And we cap the co-invest allocation at fifteen percent.", ts: "2026-09-23T14:41:00.000Z" },
+  { speaker: "Alex Rivera", text: "I'll book the LPAC call for next Thursday.", ts: "2026-09-23T15:02:00.000Z" },
+];
+
 jest.mock("@/lib/meetings/report-side.server", () => ({ loadReportSide: async () => SIDE }));
 jest.mock("@/lib/supabase/server", () => ({
   createServerClient: async () => ({
@@ -80,14 +92,15 @@ jest.mock("@/lib/supabase/server", () => ({
         eq: () => chain,
         order: () => chain,
         limit: () => chain,
-        range: async () => ({ data: [], error: null }),
+        range: async () => ({ data: TRANSCRIPT, error: null }),
         maybeSingle: async () => {
           if (table === "live_meetings") return { data: MEETING };
           if (table === "live_meeting_reports") return { data: REPORT };
           if (table === "live_meeting_participants") return { data: { meeting_id: "m1" } };
           return { data: null };
         },
-        then: (resolve: (v: unknown) => unknown) => Promise.resolve({ data: [] }).then(resolve),
+        then: (resolve: (v: unknown) => unknown) =>
+          Promise.resolve({ data: table === "live_meeting_recordings" ? RECORDINGS : [] }).then(resolve),
       };
       return chain;
     },
@@ -95,6 +108,7 @@ jest.mock("@/lib/supabase/server", () => ({
 }));
 
 import MeetingReportPage from "./page";
+import { RecordingPlayer } from "./RecordingPlayer";
 
 const exe = chromiumPath();
 if (!exe && process.env.CI) {
@@ -132,5 +146,22 @@ describeVisual("the report page's layout", () => {
         await page.close();
       }
     }, 120_000);
+  }
+
+  it("draws the moment chips beside the lines they place", () => {
+    expect(markup).toMatch(/Play from \d+:\d{2}, where this action item/);
+    expect(markup).toMatch(/Play from \d+:\d{2}, where this decision/);
+  });
+
+  // The player's controls, on their own: the page's player is loaded lazily
+  // and is not in its static markup.
+  for (const width of [360, 400]) {
+    it(`keeps the player's controls on screen and apart at ${width}px`, async () => {
+      const player = renderToStaticMarkup(
+        React.createElement(RecordingPlayer, { meetingId: "m1", recordingId: "r1", shareable: true }),
+      );
+      const issues = await inspect(browser, player, { width });
+      if (issues.length) throw new Error(report("recording player", width, issues));
+    }, 60_000);
   }
 });

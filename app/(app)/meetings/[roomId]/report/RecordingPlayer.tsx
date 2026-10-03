@@ -30,6 +30,10 @@ import {
   rangeHeaderFor,
   type TimelinePart,
 } from "@/lib/meetings/recording-timeline";
+import { momentLink } from "@/lib/meetings/report-moments";
+
+const CONTROL =
+  "inline-flex min-h-10 items-center justify-center rounded-lg border border-[var(--line)] bg-[var(--surface-1)] px-3 text-xs text-[var(--fg-secondary)] transition-colors hover:border-gold-400/40 hover:text-[var(--fg-primary)] sm:min-h-8 sm:px-2.5";
 
 /** How much video to keep appended ahead of where the viewer is watching. */
 const BUFFER_AHEAD_MS = 30_000;
@@ -46,18 +50,35 @@ interface PartsResponse {
 }
 
 export interface RecordingPlayerHandle {
-  /** Jump to a moment, in milliseconds from the start of the recording. */
-  seekTo: (ms: number) => void;
+  /**
+   * Jump to a moment, in milliseconds from the start of the recording, and
+   * optionally start playing there. Asked before the player has loaded, the
+   * jump is kept and made once it can be — a link to a moment is followed on
+   * arrival, which is before anything has loaded.
+   */
+  seekTo: (ms: number, opts?: { play?: boolean }) => void;
 }
+
+/** The speeds the speed button steps through. */
+export const PLAYBACK_RATES = [1, 1.25, 1.5, 2] as const;
+/** How far the skip buttons and arrow keys move. */
+const SKIP_MS = 15_000;
 
 export function RecordingPlayer({
   meetingId,
   recordingId,
   onTime,
+  shareable = false,
   ref,
 }: {
   meetingId: string;
   recordingId: string;
+  /**
+   * Offer "Copy link to this moment". Only on the recording the transcript is
+   * timed against: a link opens THAT player, so offering one from another
+   * would point at a different recording than the one being watched.
+   */
+  shareable?: boolean;
   /**
    * Where playback has got to, in milliseconds.
    *
@@ -76,6 +97,12 @@ export function RecordingPlayer({
   const [playing, setPlaying] = useState(false);
   const [positionMs, setPositionMs] = useState(0);
   const [scrubbing, setScrubbing] = useState(false);
+  const [rate, setRate] = useState<number>(1);
+  const [copied, setCopied] = useState<"ok" | "failed" | null>(null);
+  /** A jump asked for before the player could make it. */
+  const pending = useRef<{ ms: number; play: boolean } | null>(null);
+  /** The latest `seekTo`, for the MediaSource open handler, which predates it. */
+  const seekRef = useRef<RecordingPlayerHandle["seekTo"] | null>(null);
 
   const streamUrl = `/api/meetings/${meetingId}/recording/${recordingId}/stream`;
 
@@ -194,6 +221,12 @@ export function RecordingPlayer({
         // scrubber a length, and it is the whole reason the parts are timed.
         if (meta.durationMs > 0) source.duration = meta.durationMs / 1000;
         append(partsToAppend(meta.parts, 0, BUFFER_AHEAD_MS));
+        // A moment asked for before there was a buffer to put it in.
+        const wanted = pending.current;
+        if (wanted) {
+          pending.current = null;
+          seekRef.current?.(wanted.ms, { play: wanted.play });
+        }
       } catch (err) {
         console.warn("[recording] MediaSource unavailable, falling back", err);
         setNative(true);
@@ -289,14 +322,26 @@ export function RecordingPlayer({
   }, [append, evict, native]);
 
   const seekTo = useCallback(
-    (ms: number) => {
+    (ms: number, opts?: { play?: boolean }) => {
       const video = videoRef.current;
       const s = state.current;
-      if (!video) return;
+      const play = opts?.play === true;
       const target = Math.max(0, Math.min(ms, meta?.durationMs ?? ms));
+      // Not ready: no element yet, no timeline yet, or (native) no metadata —
+      // a currentTime set before metadata is quietly dropped by browsers.
+      if (!video || (!native && !s.buffer) || (native && video.readyState < 1)) {
+        pending.current = { ms: target, play };
+        return;
+      }
+      // Autoplay with sound is refused without a gesture; a link followed on
+      // arrival lands paused at the moment, which is the next best thing.
+      const start = () => {
+        if (play) void video.play().catch(() => {});
+      };
 
       if (native || !s.parts.length) {
         video.currentTime = target / 1000;
+        start();
         return;
       }
 
@@ -309,19 +354,84 @@ export function RecordingPlayer({
       video.currentTime = s.parts[idx].offsetMs / 1000;
       void s.queue.then(() => {
         if (videoRef.current) videoRef.current.currentTime = target / 1000;
+        start();
       });
     },
     [append, meta?.durationMs, native],
   );
+  seekRef.current = seekTo;
 
   useImperativeHandle(ref, () => ({ seekTo }), [seekTo]);
+
+  // The chosen speed survives a seek and a source swap: set on the element
+  // whenever either changes, not once.
+  useEffect(() => {
+    if (videoRef.current) videoRef.current.playbackRate = rate;
+  }, [rate, meta, native]);
+
+  useEffect(() => {
+    if (!copied) return;
+    const t = setTimeout(() => setCopied(null), 2000);
+    return () => clearTimeout(t);
+  }, [copied]);
+
+  const skip = (delta: number) => {
+    const now = (videoRef.current?.currentTime ?? 0) * 1000;
+    seekTo(now + delta, { play: playing });
+  };
+
+  const nextRate = () => {
+    const i = PLAYBACK_RATES.indexOf(rate as (typeof PLAYBACK_RATES)[number]);
+    setRate(PLAYBACK_RATES[(i + 1) % PLAYBACK_RATES.length]);
+  };
+
+  const copyMoment = async () => {
+    const ms = (videoRef.current?.currentTime ?? 0) * 1000;
+    const link = momentLink(window.location.href, ms);
+    try {
+      await navigator.clipboard.writeText(link);
+      setCopied("ok");
+    } catch {
+      setCopied("failed");
+    }
+  };
+
+  /** Space, J/K/L and the arrows, while the player has focus. */
+  const onKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    const target = e.target as HTMLElement;
+    // The scrubber handles its own arrows; a button its own Space.
+    if (target.tagName === "INPUT" || (target.tagName === "BUTTON" && (e.key === " " || e.key === "Enter"))) return;
+    const video = videoRef.current;
+    if (!video) return;
+    if (e.key === " " || e.key === "k" || e.key === "K") {
+      if (video.paused) void video.play().catch(() => {});
+      else video.pause();
+    } else if (e.key === "ArrowLeft" || e.key === "j" || e.key === "J") skip(-SKIP_MS);
+    else if (e.key === "ArrowRight" || e.key === "l" || e.key === "L") skip(SKIP_MS);
+    else return;
+    e.preventDefault();
+  };
 
   const durationMs = meta?.durationMs ?? 0;
 
   if (native) {
     return (
       <div className="flex flex-col gap-2">
-        <video controls preload="metadata" className="w-full rounded-lg bg-black aspect-video" src={streamUrl} />
+        <video
+          ref={videoRef}
+          controls
+          preload="metadata"
+          className="w-full rounded-lg bg-black aspect-video"
+          src={streamUrl}
+          onLoadedMetadata={() => {
+            const wanted = pending.current;
+            if (wanted) {
+              pending.current = null;
+              seekTo(wanted.ms, { play: wanted.play });
+            }
+          }}
+          onTimeUpdate={() => onTime?.((videoRef.current?.currentTime ?? 0) * 1000)}
+        />
         <p className="text-[11px] text-[var(--fg-muted)]">
           This browser cannot seek inside a meeting recording. It will play from the start.
         </p>
@@ -330,9 +440,12 @@ export function RecordingPlayer({
   }
 
   return (
-    <div className="flex flex-col gap-2">
+    // Focusable so the keyboard shortcuts work once somebody has clicked into
+    // the player, without stealing keys from the rest of the page.
+    <div className="flex flex-col gap-2" onKeyDown={onKeyDown} role="group" aria-label="Recording player">
       <video
         ref={videoRef}
+        tabIndex={0}
         playsInline
         className="w-full rounded-lg bg-black aspect-video"
         onClick={() => (playing ? videoRef.current?.pause() : void videoRef.current?.play())}
@@ -350,15 +463,9 @@ export function RecordingPlayer({
         onWaiting={refill}
       />
 
-      <div className="flex items-center gap-3">
-        <button
-          onClick={() => (playing ? videoRef.current?.pause() : void videoRef.current?.play())}
-          aria-label={playing ? "Pause" : "Play"}
-          className="shrink-0 rounded-lg border border-[var(--line)] bg-[var(--surface-1)] px-2.5 py-1 text-xs text-[var(--fg-primary)] hover:border-gold-400/40 transition-colors"
-        >
-          {playing ? "❚❚" : "▶"}
-        </button>
-
+      {/* One row on a wide screen; on a phone the scrubber takes its own
+          line so it is long enough to aim at, and the buttons sit under it. */}
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-2 sm:flex-nowrap sm:gap-3">
         <input
           type="range"
           min={0}
@@ -381,12 +488,66 @@ export function RecordingPlayer({
             setScrubbing(false);
             seekTo(Number((e.target as HTMLInputElement).value));
           }}
-          className="w-full accent-[var(--gold-400)]"
+          className="order-first h-8 w-full basis-full accent-[var(--gold-400)] sm:order-none sm:h-auto sm:basis-auto"
         />
 
-        <span className="shrink-0 font-mono text-[11px] tabular-nums text-[var(--fg-muted)]">
+        <span className="shrink-0 font-mono text-[11px] tabular-nums text-[var(--fg-muted)] sm:order-last">
           {formatClock(positionMs)} / {formatClock(durationMs)}
         </span>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-1.5">
+        <button
+          type="button"
+          onClick={() => skip(-SKIP_MS)}
+          aria-label="Back 15 seconds"
+          title="Back 15 seconds (J or ←)"
+          className={CONTROL}
+        >
+          −15s
+        </button>
+        <button
+          type="button"
+          onClick={() => (playing ? videoRef.current?.pause() : void videoRef.current?.play())}
+          aria-label={playing ? "Pause" : "Play"}
+          title={playing ? "Pause (Space)" : "Play (Space)"}
+          className={`${CONTROL} min-w-12 text-[var(--fg-primary)]`}
+        >
+          {playing ? "❚❚" : "▶"}
+        </button>
+        <button
+          type="button"
+          onClick={() => skip(SKIP_MS)}
+          aria-label="Forward 15 seconds"
+          title="Forward 15 seconds (L or →)"
+          className={CONTROL}
+        >
+          +15s
+        </button>
+        <button
+          type="button"
+          onClick={nextRate}
+          aria-label={`Playback speed ${rate}×. Change speed`}
+          title="Playback speed"
+          className={`${CONTROL} font-mono tabular-nums`}
+        >
+          {rate}×
+        </button>
+        {shareable && (
+          <button
+            type="button"
+            onClick={() => void copyMoment()}
+            title="Copy a link that opens this report playing from here"
+            className={`${CONTROL} ml-auto`}
+          >
+            {copied === "ok" ? "Link copied" : copied === "failed" ? "Copy failed" : `Link to ${formatClock(positionMs)}`}
+          </button>
+        )}
+        {copied && (
+          <span role="status" className="sr-only">
+            {copied === "ok" ? "Link to this moment copied" : "The link could not be copied"}
+          </span>
+        )}
       </div>
     </div>
   );

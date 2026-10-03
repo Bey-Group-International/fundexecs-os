@@ -10,6 +10,9 @@ import { FollowUpStatusChip } from "./FollowUpPanel";
 import { ExportMenu } from "./ExportMenu";
 import { ChatPanel } from "./ChatPanel";
 import { ReportMedia } from "./ReportMedia";
+import { MomentChip } from "./MomentChip";
+import { momentFor } from "@/lib/meetings/report-moments";
+import { cuesAreTimed, transcriptCues } from "@/lib/meetings/transcript-cues";
 import { ReportWaiting } from "./ReportWaiting";
 import { ReportTabs } from "./ReportTabs";
 import { reportTabs } from "@/lib/meetings/report-tabs";
@@ -135,6 +138,15 @@ export default async function MeetingReportPage({
   const recordedSeconds = playableRecording(data.recordings)?.duration_seconds ?? null;
   const lengthLabel = duration ? `${duration} min` : recordedSeconds ? callClock(recordedSeconds) : null;
   const doneCount = actionItems.filter((item) => item.done).length;
+
+  // Where each line of the report was said, so it can play from there. Only
+  // with a recording to play and a transcript timed against it — the same
+  // clock the media panel uses — and only where the match is convincing; see
+  // report-moments.ts. Computed here, once, rather than in each list.
+  const playable = playableRecording(data.recordings);
+  const momentCues = playable?.started_at ? transcriptCues(data.cueRows, playable.started_at) : [];
+  const momentsOn = momentCues.length > 0 && cuesAreTimed(momentCues);
+  const momentOf = (text: string) => (momentsOn ? momentFor(text, momentCues) : null);
   const hasBody =
     Boolean(content.summary) || content.keyPoints.length > 0 || content.decisions.length > 0;
 
@@ -273,6 +285,7 @@ export default async function MeetingReportPage({
                 <ActionItemsList
                   meetingId={meeting.id}
                   items={actionItems}
+                  moments={actionItems.map((item) => momentOf(item.task))}
                   viewerId={data.viewerId}
                   isHost={data.isHost}
                 />
@@ -289,12 +302,16 @@ export default async function MeetingReportPage({
                   <Section title="Decisions" count={content.decisions.length}>
                     {content.decisions.length > 0 ? (
                       <ul className="flex flex-col gap-2">
-                        {content.decisions.map((d, i) => (
-                          <li key={i} className="flex items-start gap-2 text-sm text-[var(--fg-primary)]">
-                            <span className="mt-0.5 text-[var(--status-success)]" aria-hidden="true">✓</span>
-                            {d}
-                          </li>
-                        ))}
+                        {content.decisions.map((d, i) => {
+                          const at = momentOf(d);
+                          return (
+                            <li key={i} className="flex items-start gap-2 text-sm text-[var(--fg-primary)]">
+                              <span className="mt-0.5 text-[var(--status-success)]" aria-hidden="true">✓</span>
+                              <span className="min-w-0 flex-1">{d}</span>
+                              {at !== null && <MomentChip ms={at} what="this decision" />}
+                            </li>
+                          );
+                        })}
                       </ul>
                     ) : (
                       <EmptyNote>No decisions were recorded.</EmptyNote>
@@ -303,12 +320,16 @@ export default async function MeetingReportPage({
                   <Section title="Key points" count={content.keyPoints.length}>
                     {content.keyPoints.length > 0 ? (
                       <ul className="flex flex-col gap-2">
-                        {content.keyPoints.map((pt, i) => (
-                          <li key={i} className="flex items-start gap-2 text-sm text-[var(--fg-primary)]">
-                            <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--gold-400)]" aria-hidden="true" />
-                            {pt}
-                          </li>
-                        ))}
+                        {content.keyPoints.map((pt, i) => {
+                          const at = momentOf(pt);
+                          return (
+                            <li key={i} className="flex items-start gap-2 text-sm text-[var(--fg-primary)]">
+                              <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--gold-400)]" aria-hidden="true" />
+                              <span className="min-w-0 flex-1">{pt}</span>
+                              {at !== null && <MomentChip ms={at} what="this point" />}
+                            </li>
+                          );
+                        })}
                       </ul>
                     ) : (
                       <EmptyNote>No key points were recorded.</EmptyNote>

@@ -8,6 +8,7 @@
 // due, and lets the host — or the person it is for — tick it off from here.
 import { useState } from "react";
 import type { ReportActionItem } from "@/lib/meetings/report-participants";
+import { MomentChip } from "./MomentChip";
 
 function dueLabel(iso: string): { text: string; overdue: boolean } {
   const due = new Date(iso);
@@ -18,11 +19,14 @@ function dueLabel(iso: string): { text: string; overdue: boolean } {
 export function ActionItemsList({
   meetingId,
   items,
+  moments,
   viewerId,
   isHost,
 }: {
   meetingId: string;
   items: ReportActionItem[];
+  /** Where each item was said, by index; null where no moment was found. */
+  moments?: ReadonlyArray<number | null>;
   viewerId: string | null;
   isHost: boolean;
 }) {
@@ -76,6 +80,7 @@ export function ActionItemsList({
             Boolean(item.taskId) && (isHost || (viewerId !== null && item.assignedTo === viewerId));
           const due = item.dueAt ? dueLabel(item.dueAt) : null;
           const id = `action-item-${i}`;
+          const at = moments?.[i] ?? null;
           return (
             <li
               key={i}
@@ -109,7 +114,7 @@ export function ActionItemsList({
                 >
                   {item.task}
                 </label>
-                {(item.owner || due) && (
+                {(item.owner || due || at !== null) && (
                   <div className="flex flex-wrap items-center gap-1.5">
                     {item.owner && (
                       <span className="rounded-full bg-[var(--surface-3)] px-2 py-0.5 text-[11px] text-[var(--fg-secondary)]">
@@ -127,6 +132,7 @@ export function ActionItemsList({
                         {due.text}
                       </span>
                     )}
+                    {at !== null && <MomentChip ms={at} what="this action item" />}
                   </div>
                 )}
               </div>
