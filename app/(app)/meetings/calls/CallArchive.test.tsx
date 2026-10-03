@@ -448,6 +448,19 @@ describe("narrowing", () => {
   });
 });
 
+describe("a failed read", () => {
+  it("keeps the list on screen and says the calls could not be loaded", async () => {
+    mockFetch(async () => ({ ok: false, body: { error: "boom" } }));
+    render(<CallArchive initial={[call()]} />);
+
+    await userEvent.click(screen.getByRole("button", { name: "7 days" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("could not be loaded");
+    expect(screen.getByText("Dunbar diligence note")).toBeInTheDocument();
+    expect(screen.queryByText("No recorded calls in that range.")).toBeNull();
+  });
+});
+
 describe("a row's own actions", () => {
   it("plays the recording in place, one at a time", async () => {
     render(

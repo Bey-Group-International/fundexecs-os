@@ -83,6 +83,9 @@ export function CallArchive({
     setLoadError(null);
     try {
       const res = await fetch(callsUrl(q, rangeStart(r)));
+      // A failed read keeps the list on screen and says so, rather than
+      // replacing it with "Nothing matched" for calls that do exist.
+      if (!res.ok) throw new Error(String(res.status));
       const body = (await res.json().catch(() => ({}))) as {
         calls?: CallHit[];
         scanned?: number;
