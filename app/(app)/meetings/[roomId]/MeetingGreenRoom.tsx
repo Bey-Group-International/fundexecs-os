@@ -14,8 +14,23 @@ import {
   smoothLevel,
   type Device,
   type DeviceKind,
+  type ReadinessProblem,
 } from "@/lib/meetings/devices";
 import { echoRisk, echoRiskNotice } from "@/lib/meetings/echo";
+import {
+  CAMERA_OFF_STEPS,
+  CAMERA_SETTLE_MS,
+  blockedReason,
+  cameraOffBlocksEntry,
+  checkCopy,
+  checkStage,
+  deviceChanged,
+  deviceCheckRequired,
+  entryAllowed,
+  shouldLatch,
+  type CheckStage,
+  type CheckedDevice,
+} from "@/lib/meetings/device-check";
 import {
   RETRY_SAME_DEVICE_MS,
   canRetrySameDevice,
@@ -65,6 +80,12 @@ export interface GreenRoomChoice {
 export interface MeetingGreenRoomProps {
   roomCode: string;
   isHost: boolean;
+  /**
+   * An invite-link guest, who has to prove their camera and microphone work
+   * before this screen will let them through. See lib/meetings/device-check.ts
+   * for why it is only them.
+   */
+  isGuest?: boolean;
   joining: boolean;
   displayName: string;
   onDisplayNameChange: (name: string) => void;
@@ -161,6 +182,89 @@ function MicMeter({ level, active, bars = MIC_METER_BARS }: { level: number; act
         />
       ))}
     </div>
+  );
+}
+
+
+/**
+ * One device's row in the required check.
+ *
+ * Three things, always in the same place: what it is, where it has got to, and
+ * what to do about it. The question stays visible while the steps are showing,
+ * because the steps are what to change and the question is how the person says
+ * the change worked — a row that only accused and never let them answer again
+ * would be a dead end with instructions on it.
+ */
+function CheckRow({
+  device, stage, message, steps, onAnswer,
+}: {
+  device: CheckedDevice;
+  stage: CheckStage;
+  /** The named fault for this device, when there is one, in its own words. */
+  message: string | null;
+  steps: readonly string[];
+  onAnswer: (yes: boolean) => void;
+}) {
+  const copy = checkCopy(device, stage);
+  const passed = stage === "passed";
+  const wrong = stage === "blocked" || stage === "rejected";
+
+  return (
+    <li className="flex flex-col gap-1.5 rounded-lg bg-[var(--surface-2)] px-2.5 py-2">
+      <div className="flex items-center gap-2">
+        <span
+          aria-hidden="true"
+          className={
+            passed ? "text-[var(--status-success,#16a34a)]"
+            : wrong ? "text-[var(--status-danger)]"
+            : "text-[var(--fg-muted)]"
+          }
+        >
+          {passed ? "✓" : wrong ? "⚠" : "•"}
+        </span>
+        <span className="text-xs font-medium text-[var(--fg-primary)]">{copy.label}</span>
+        <span className="ml-auto text-[11px] text-[var(--fg-muted)]">
+          {passed ? "Checked"
+            : stage === "measuring" ? "Checking…"
+            : stage === "confirming" ? "Your turn"
+            : "Needs attention"}
+        </span>
+      </div>
+
+      {copy.question && (
+        <div className="flex flex-wrap items-center gap-2 pl-6">
+          <span className="text-xs text-[var(--fg-secondary)]">{copy.question}</span>
+          <span className="flex gap-1.5">
+            <button
+              type="button"
+              onClick={() => onAnswer(true)}
+              className="min-h-11 rounded-md bg-[var(--gold-400)] px-3 text-xs font-semibold text-white transition-colors hover:bg-[var(--gold-500)] sm:min-h-8"
+            >
+              Yes
+            </button>
+            <button
+              type="button"
+              onClick={() => onAnswer(false)}
+              className="min-h-11 rounded-md border border-[var(--line)] px-3 text-xs font-medium text-[var(--fg-secondary)] transition-colors hover:bg-[var(--surface-3)] sm:min-h-8"
+            >
+              No
+            </button>
+          </span>
+        </div>
+      )}
+
+      {/* The device's own words when something named itself, ours otherwise. */}
+      {(message || steps.length > 0) && (
+        <div className="pl-6">
+          {message && <p className="text-[11px] leading-snug text-[var(--fg-secondary)]">{message}</p>}
+          {steps.length > 0 && (
+            <ol className="mt-1 flex list-decimal flex-col gap-0.5 pl-4 text-[11px] leading-snug text-[var(--fg-secondary)]">
+              {steps.map((step) => <li key={step}>{step}</li>)}
+            </ol>
+          )}
+        </div>
+      )}
+    </li>
   );
 }
 
@@ -306,6 +410,7 @@ function SpeakerGlyph() {
 export function MeetingGreenRoom({
   roomCode,
   isHost,
+  isGuest = false,
   joining,
   displayName,
   onDisplayNameChange,
@@ -347,6 +452,24 @@ export function MeetingGreenRoom({
   const [audioTrack, setAudioTrack] = useState<MediaStreamTrack | null>(null);
   const [level, setLevel] = useState(0);
   const [micSettled, setMicSettled] = useState(false);
+
+  // ── The required check, for a guest ──────────────────────────────────────
+  //
+  // Two halves per device, and both are needed: the browser has to report
+  // signal, and the person has to say the signal is of them. See
+  // lib/meetings/device-check.ts for why neither alone is enough.
+  //
+  // `*Checked` are LATCHES. Once a device has been proved, nothing un-proves
+  // it — not falling silent, not switching the camera off before joining —
+  // because the alternative is a screen that takes the pass away again and
+  // cannot be completed. Choosing a DIFFERENT device does clear it, below:
+  // what was proved was one piece of hardware.
+  const [cameraSeen, setCameraSeen] = useState(false);
+  const [cameraSettled, setCameraSettled] = useState(false);
+  const [cameraSaidYes, setCameraSaidYes] = useState<boolean | null>(null);
+  const [micSaidYes, setMicSaidYes] = useState<boolean | null>(null);
+  const [cameraChecked, setCameraChecked] = useState(false);
+  const [micChecked, setMicChecked] = useState(false);
 
   // Background, chosen here and carried into the call. Restored from the last
   // call so someone who always blurs does not have to say so every time.
@@ -792,6 +915,52 @@ export function MeetingGreenRoom({
     setMicSettled(false);
   }, [micId]);
 
+  // ── Camera signal ────────────────────────────────────────────────────────
+  //
+  // Taken from the TRACK rather than from the preview element, deliberately. A
+  // camera track is born `muted` and fires `unmute` when frames begin, so this
+  // is the camera's own report of whether it is producing — and it stays true
+  // when a background effect is on, where reading the rendered preview would
+  // instead be reporting on the segmenter. A failed segmenter is not a failed
+  // camera, and telling a guest to go and find another camera because a 12MB
+  // model did not download is the wrong instruction entirely.
+  useEffect(() => {
+    const track = videoTrack;
+    if (!track || !cameraEnabled) { setCameraSeen(false); return; }
+
+    const look = () => setCameraSeen(track.readyState === "live" && !track.muted);
+    look();
+    for (const ev of ["unmute", "mute", "ended"]) track.addEventListener(ev, look);
+    return () => { for (const ev of ["unmute", "mute", "ended"]) track.removeEventListener(ev, look); };
+  }, [videoTrack, cameraEnabled]);
+
+  // The camera's grace period, which `MIC_SETTLE_MS` is for the microphone: a
+  // freshly opened camera reports no frame for a moment, and condemning it
+  // immediately would accuse one that is merely starting.
+  useEffect(() => {
+    setCameraSettled(false);
+    const settle = setTimeout(() => setCameraSettled(true), CAMERA_SETTLE_MS);
+    return () => clearTimeout(settle);
+  }, [camId, cameraEnabled]);
+
+  // A different device is a different question. Clearing the answer AND the
+  // latch is what stops somebody passing the check on a working webcam and
+  // joining on the broken one they picked afterwards.
+  const lastCamId = useRef(camId);
+  const lastMicId = useRef(micId);
+  useEffect(() => {
+    if (!deviceChanged(lastCamId.current, camId)) return;
+    lastCamId.current = camId;
+    setCameraSaidYes(null);
+    setCameraChecked(false);
+  }, [camId]);
+  useEffect(() => {
+    if (!deviceChanged(lastMicId.current, micId)) return;
+    lastMicId.current = micId;
+    setMicSaidYes(null);
+    setMicChecked(false);
+  }, [micId]);
+
   // ── Remembered choices ───────────────────────────────────────────────────
   useEffect(() => {
     if (devices.length === 0) return;
@@ -817,6 +986,46 @@ export function MeetingGreenRoom({
   const joinable = canJoinWith({ micDenied, mics: mics.length });
   const listenOnly = joinable && micDenied;
 
+  // ── The gate ─────────────────────────────────────────────────────────────
+  //
+  // A guest only. `problemFor` hands each row the named fault for its own
+  // device, so a blocked microphone is reported as blocked rather than as the
+  // generic silence it also looks like.
+  const checkRequired = deviceCheckRequired({ isGuest });
+  const problemFor = (device: CheckedDevice): ReadinessProblem | null =>
+    problems.find((p) =>
+      device === "camera" ? p.kind.startsWith("camera") || p.kind === "no_camera"
+                          : p.kind.startsWith("mic") || p.kind === "no_mic",
+    ) ?? null;
+
+  const cameraStage = checkStage({
+    passed: cameraChecked,
+    problem: problemFor("camera"),
+    signal: cameraEnabled && cameraSeen,
+    signalSettled: cameraSettled,
+    answer: cameraSaidYes,
+  });
+  const micStage = checkStage({
+    passed: micChecked,
+    problem: problemFor("microphone"),
+    signal: micEnabled && micPeakRef.current > MIC_SILENT_PEAK,
+    signalSettled: micSettled,
+    answer: micSaidYes,
+  });
+  const stages: Record<CheckedDevice, CheckStage> = { camera: cameraStage, microphone: micStage };
+  const gateOpen = !checkRequired || entryAllowed(stages);
+  const gateReason = checkRequired ? blockedReason(stages) : null;
+
+  // Latching is a render-time decision taken in an effect, because it is state:
+  // the stage is derived, and the whole point of the latch is that it outlives
+  // the thing that produced it.
+  useEffect(() => {
+    if (shouldLatch(cameraStage, cameraChecked)) setCameraChecked(true);
+  }, [cameraStage, cameraChecked]);
+  useEffect(() => {
+    if (shouldLatch(micStage, micChecked)) setMicChecked(true);
+  }, [micStage, micChecked]);
+
   const choose = (kind: DeviceKind, deviceId: string) => {
     rememberDevice(kind, deviceId);
     if (kind === "videoinput") setCamId(deviceId);
@@ -826,6 +1035,10 @@ export function MeetingGreenRoom({
 
   const join = () => {
     if (!canPressJoin(admission)) return;
+    // Guarded here as well as on the button. The button being disabled is a
+    // presentation detail; this is the rule, and a guest who has not proved
+    // their devices does not get past it however the press arrived.
+    if (!gateOpen) return;
     rememberDevice("videoinput", camId);
     rememberDevice("audioinput", micId);
     rememberDevice("audiooutput", speakerId);
@@ -1029,6 +1242,40 @@ export function MeetingGreenRoom({
               </ul>
             )}
 
+            {/* The required check, for a guest. Above the Join button it gates
+                and above the device pickers it sends them to, because a row that
+                says "pick another microphone" with the pickers somewhere else on
+                the screen is an instruction nobody can follow. */}
+            {checkRequired && (
+              <div className="flex flex-col gap-2">
+                <p className="text-xs font-medium text-[var(--fg-secondary)]">
+                  Check your camera and mic
+                </p>
+                <ul className="flex flex-col gap-1.5">
+                  <CheckRow
+                    device="camera"
+                    stage={cameraStage}
+                    message={problemFor("camera")?.message ?? null}
+                    steps={
+                      cameraOffBlocksEntry({ enabled: cameraEnabled, passed: cameraChecked })
+                        ? CAMERA_OFF_STEPS
+                        : problemFor("camera")
+                          ? []
+                          : checkCopy("camera", cameraStage).steps
+                    }
+                    onAnswer={(yes) => setCameraSaidYes(yes)}
+                  />
+                  <CheckRow
+                    device="microphone"
+                    stage={micStage}
+                    message={problemFor("microphone")?.message ?? null}
+                    steps={problemFor("microphone") ? [] : checkCopy("microphone", micStage).steps}
+                    onAnswer={(yes) => setMicSaidYes(yes)}
+                  />
+                </ul>
+              </div>
+            )}
+
             {/* Devices, folded to one line. Most people never change them, and
                 three dropdowns above the Join button made the screen look like a
                 settings page. A problem the pickers can fix opens them. */}
@@ -1141,14 +1388,22 @@ export function MeetingGreenRoom({
                 onCancel={onCancelAdmission}
               />
             ) : (
-              <button
-                type="button"
-                onClick={join}
-                disabled={joining}
-                className="min-h-11 w-full rounded-lg bg-[var(--gold-400)] py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[var(--gold-500)] disabled:opacity-50"
-              >
-                {joinLabel}
-              </button>
+              <>
+                <button
+                  type="button"
+                  onClick={join}
+                  disabled={joining || !gateOpen}
+                  className="min-h-11 w-full rounded-lg bg-[var(--gold-400)] py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[var(--gold-500)] disabled:opacity-50"
+                >
+                  {joinLabel}
+                </button>
+                {/* Names the device that is actually in the way. "Check your
+                    devices", in front of somebody whose camera is fine and whose
+                    microphone is not, costs them the next two minutes. */}
+                {gateReason && (
+                  <p className="mt-2 text-center text-[11px] text-[var(--fg-muted)]">{gateReason}</p>
+                )}
+              </>
             )}
           </div>
 
