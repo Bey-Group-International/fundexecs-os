@@ -8,8 +8,11 @@
 import {
   CAMERA_SETTLE_MS,
   CAMERA_OFF_STEPS,
+  MIC_OFF_STEPS,
   blockedReason,
-  cameraOffBlocksEntry,
+  deviceOffBlocksEntry,
+  measuringChosenDevice,
+  offSteps,
   checkCopy,
   checkStage,
   deviceChanged,
@@ -139,10 +142,50 @@ describe("deviceChanged", () => {
     expect(deviceChanged("cam-a", "cam-a")).toBe(false);
   });
 
-  it("does not reset on an empty id", () => {
-    // Device lists arrive empty before permission is granted; treating that as a
-    // change would clear a pass every time the list was re-read.
-    expect(deviceChanged("cam-a", "")).toBe(false);
+  /**
+   * The empty id is a change, not an exemption. An earlier version of this
+   * exempted it, and that was wrong: the green room clears the id deliberately
+   * when a REMEMBERED device turns out to be unplugged, so the next open takes
+   * the system default. Exempting it meant a pass earned on the camera that is
+   * no longer there survived onto its replacement.
+   */
+  it("resets when the id is cleared, because that is the system default taking over", () => {
+    expect(deviceChanged("cam-a", "")).toBe(true);
+  });
+
+  it("still does not reset when nothing moved", () => {
+    expect(deviceChanged("", "")).toBe(false);
+  });
+});
+
+describe("measuringChosenDevice", () => {
+  /**
+   * The window a device swap opens. The choice changes at once, the new track
+   * arrives later, and in between the rejected device is still open and still
+   * feeding the meter — so without this a guest could answer "yes, the bars
+   * move" about the microphone they had just replaced.
+   */
+  it("refuses to credit a track that is not the chosen device", () => {
+    expect(measuringChosenDevice("mic-b", "mic-a")).toBe(false);
+  });
+
+  it("credits the chosen device", () => {
+    expect(measuringChosenDevice("mic-b", "mic-b")).toBe(true);
+  });
+
+  /** An empty choice is "whatever the system default is" — nothing contradicts it. */
+  it("credits anything when no particular device was chosen", () => {
+    expect(measuringChosenDevice("", "mic-a")).toBe(true);
+  });
+
+  /**
+   * A browser that does not report the device must not lock somebody out of
+   * hardware that is working. Silence is read as agreement, not as a mismatch.
+   */
+  it("credits a track whose device the browser did not report", () => {
+    expect(measuringChosenDevice("mic-b", null)).toBe(true);
+    expect(measuringChosenDevice("mic-b", undefined)).toBe(true);
+    expect(measuringChosenDevice("mic-b", "")).toBe(true);
   });
 });
 
@@ -187,27 +230,42 @@ describe("checkCopy", () => {
   });
 });
 
-describe("cameraOffBlocksEntry", () => {
-  it("holds the gate shut on a camera that was never checked", () => {
-    expect(cameraOffBlocksEntry({ enabled: false, passed: false })).toBe(true);
+describe("deviceOffBlocksEntry", () => {
+  it("holds the gate shut on a device that was never checked", () => {
+    expect(deviceOffBlocksEntry({ enabled: false, passed: false })).toBe(true);
   });
 
   /**
-   * The point of the latch, from the other side: joining with the camera off is
-   * a state people want, and once it has been checked, switching it off must not
-   * shut them out again.
+   * The point of the latch, from the other side: joining muted or with the
+   * camera off is a state people want, and once a device has been checked,
+   * switching it off must not shut them out again.
    */
-  it("lets a checked camera be switched off again", () => {
-    expect(cameraOffBlocksEntry({ enabled: false, passed: true })).toBe(false);
+  it("lets a checked device be switched off again", () => {
+    expect(deviceOffBlocksEntry({ enabled: false, passed: true })).toBe(false);
   });
 
-  it("is not what is wrong when the camera is on", () => {
-    expect(cameraOffBlocksEntry({ enabled: true, passed: false })).toBe(false);
+  it("is not what is wrong when the device is on", () => {
+    expect(deviceOffBlocksEntry({ enabled: true, passed: false })).toBe(false);
   });
 
-  it("says how to get out of it, including that it is not permanent", () => {
-    expect(CAMERA_OFF_STEPS.length).toBeGreaterThan(1);
-    expect(CAMERA_OFF_STEPS.join(" ")).toMatch(/turn it straight back off|back off/i);
+  /**
+   * Both devices, not just the camera. The first version covered the camera
+   * only, which left a guest who muted themselves being told their microphone
+   * was broken and handed a list of other microphones to try.
+   */
+  it("tells each device how to get out of it, and that it is not permanent", () => {
+    for (const device of ["camera", "microphone"] as const) {
+      const steps = offSteps(device);
+      expect(steps.length).toBeGreaterThan(1);
+      expect(steps.join(" ")).toMatch(/back off|mute again/i);
+    }
+    expect(offSteps("camera")).toBe(CAMERA_OFF_STEPS);
+    expect(offSteps("microphone")).toBe(MIC_OFF_STEPS);
+  });
+
+  it("asks the microphone to be unmuted, not replaced", () => {
+    expect(MIC_OFF_STEPS[0]).toMatch(/unmute/i);
+    expect(MIC_OFF_STEPS.join(" ")).not.toMatch(/different microphone|another microphone/i);
   });
 });
 

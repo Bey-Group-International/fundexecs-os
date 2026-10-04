@@ -118,11 +118,21 @@ export function entryAllowed(stages: Record<CheckedDevice, CheckStage>): boolean
  * It does, and it has to. The thing that was verified was a particular piece of
  * hardware; a different camera is a different question, and carrying the answer
  * across is how somebody passes the check on a working webcam and joins on a
- * broken one. Only a real change counts — a re-render that hands back the same
- * id must not reset anything, or the check could never be completed at all.
+ * broken one. A re-render that hands back the same id must not reset anything,
+ * or the check could never be completed at all.
+ *
+ * The empty id is a CHANGE, not an exemption, and an earlier version of this
+ * exempted it on the theory that device lists arrive empty before permission is
+ * granted. They do not arrive here: the green room only ever widens an empty
+ * choice (`current || picked || ""`), so nothing hands this an empty id by
+ * accident. What DOES set one deliberately is the fallback for a remembered
+ * device that has since been unplugged — it clears the id so the next open
+ * takes the system default. That is a different piece of hardware, and
+ * exempting it meant a pass earned on the unplugged camera survived onto its
+ * replacement: the exact leak this function exists to stop.
  */
 export function deviceChanged(previousId: string, nextId: string): boolean {
-  return previousId !== nextId && nextId !== "";
+  return previousId !== nextId;
 }
 
 export interface CheckCopy {
@@ -203,27 +213,64 @@ export function checkCopy(device: CheckedDevice, stage: CheckStage): CheckCopy {
 }
 
 /**
- * Whether the camera being switched off is what is holding the gate shut.
+ * Whether the track being measured is the device the person actually chose.
  *
- * Joining with the camera deliberately off is a state this product supports and
- * people want — the toggle exists so the hardware light stays dark. But a camera
- * that is off produces nothing, so it cannot be verified, and the generic "your
- * camera isn't sending a picture" would be a lie told to somebody who switched
- * it off on purpose.
+ * Replacing a device is asynchronous: the choice changes at once, the new track
+ * arrives later, and in between the OLD device is still open and still feeding
+ * the meter. Without this, a guest could pick a different microphone and
+ * immediately answer "yes, the bars move" — about the microphone they had just
+ * rejected — and latch a pass onto a device that had never made a sound. The
+ * same holds for a camera.
+ *
+ * So a row is only answerable while the two agree. `reported` is what the live
+ * track says it is; an empty `chosen` is "whatever the system default is", which
+ * nothing can contradict, and an absent `reported` means the browser did not say
+ * — so both are treated as agreement rather than as a reason to lock somebody
+ * out of a working device.
+ */
+export function measuringChosenDevice(chosen: string, reported: string | null | undefined): boolean {
+  if (!chosen) return true;
+  if (!reported) return true;
+  return chosen === reported;
+}
+
+/**
+ * Whether a device being switched off is what is holding the gate shut.
+ *
+ * Joining muted, or with the camera off, is a state this product supports and
+ * people want — the camera toggle exists so the hardware light stays dark. But a
+ * device that is off produces nothing, so it cannot be verified, and the generic
+ * "isn't picking anything up / isn't sending a picture" would be a lie told to
+ * somebody who switched it off on purpose, ending in advice to go and find
+ * different hardware.
  *
  * So this case gets its own sentence, and the resolution is the honest one: turn
  * it on long enough to be checked, then turn it off again. The latch in
  * `checkStage` is what makes that second half true.
+ *
+ * Both devices, not just the camera. The first version of this covered the
+ * camera only, which left a guest who muted themselves before the check being
+ * told their microphone was broken and offered a list of other microphones.
  */
-export function cameraOffBlocksEntry(state: { enabled: boolean; passed: boolean }): boolean {
+export function deviceOffBlocksEntry(state: { enabled: boolean; passed: boolean }): boolean {
   return !state.enabled && !state.passed;
 }
 
-/** What to say in that case. */
+/** What to say in that case, per device. */
 export const CAMERA_OFF_STEPS: readonly string[] = [
   "Turn your camera on so it can be checked.",
   "You can turn it straight back off before you join — once it has been checked it stays checked.",
 ];
+
+export const MIC_OFF_STEPS: readonly string[] = [
+  "Unmute so your microphone can be checked.",
+  "You can mute again before you join — once it has been checked it stays checked.",
+];
+
+/** The steps for a device that is switched off and not yet proved. */
+export function offSteps(device: CheckedDevice): readonly string[] {
+  return device === "camera" ? CAMERA_OFF_STEPS : MIC_OFF_STEPS;
+}
 
 /**
  * The sentence under a blocked Join button.

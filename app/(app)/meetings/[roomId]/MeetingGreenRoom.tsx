@@ -18,15 +18,16 @@ import {
 } from "@/lib/meetings/devices";
 import { echoRisk, echoRiskNotice } from "@/lib/meetings/echo";
 import {
-  CAMERA_OFF_STEPS,
   CAMERA_SETTLE_MS,
   blockedReason,
-  cameraOffBlocksEntry,
   checkCopy,
   checkStage,
   deviceChanged,
   deviceCheckRequired,
+  deviceOffBlocksEntry,
   entryAllowed,
+  measuringChosenDevice,
+  offSteps,
   shouldLatch,
   type CheckStage,
   type CheckedDevice,
@@ -909,11 +910,20 @@ export function MeetingGreenRoom({
     };
   }, [audioTrack, micEnabled]);
 
-  // A fresh microphone deserves a fresh verdict.
+  // A fresh microphone deserves a fresh verdict — on the TRACK as well as on the
+  // choice.
+  //
+  // Replacing a device is asynchronous. The choice changes now; the new track
+  // arrives later; and in between, the old analyser's animation frame is still
+  // filling `micPeakRef` from the microphone the guest just rejected. Resetting
+  // on `micId` alone left that carried-over peak in place when the new track
+  // landed, so an unproved device showed signal that was never its own. Resetting
+  // on the track too clears it at the moment the new one takes over; `measured`
+  // below is what covers the window itself.
   useEffect(() => {
     micPeakRef.current = 0;
     setMicSettled(false);
-  }, [micId]);
+  }, [micId, audioTrack]);
 
   // ── Camera signal ────────────────────────────────────────────────────────
   //
@@ -937,11 +947,24 @@ export function MeetingGreenRoom({
   // The camera's grace period, which `MIC_SETTLE_MS` is for the microphone: a
   // freshly opened camera reports no frame for a moment, and condemning it
   // immediately would accuse one that is merely starting.
+  //
+  // Started when the TRACK arrives, not when the choice changes. Keyed on
+  // `camId` it began while the permission prompt was still on screen, so a guest
+  // who took more than three seconds to read the prompt and press Allow was told
+  // "your camera opened but isn't sending a picture" about a camera they had not
+  // yet allowed. The same premature verdict landed on every "Try again", which
+  // starts a fresh open.
   useEffect(() => {
     setCameraSettled(false);
+    // A camera switched off on purpose is not "merely slow" — there is nothing
+    // coming and nothing to wait for, so the row says so at once rather than
+    // sitting on "Checking…" for ever. What it says is deviceOffBlocksEntry's
+    // sentence, not the broken-camera one.
+    if (!cameraEnabled) { setCameraSettled(true); return; }
+    if (!videoTrack) return;
     const settle = setTimeout(() => setCameraSettled(true), CAMERA_SETTLE_MS);
     return () => clearTimeout(settle);
-  }, [camId, cameraEnabled]);
+  }, [videoTrack, cameraEnabled]);
 
   // A different device is a different question. Clearing the answer AND the
   // latch is what stops somebody passing the check on a working webcam and
@@ -998,21 +1021,51 @@ export function MeetingGreenRoom({
                           : p.kind.startsWith("mic") || p.kind === "no_mic",
     ) ?? null;
 
+  // Only the device the guest actually chose counts. While a replacement is
+  // still opening, the one they rejected is live and feeding the meter, and
+  // without this they could answer "yes" about it and latch a pass onto
+  // hardware that never produced anything. See measuringChosenDevice.
+  const measuringCamera = measuringChosenDevice(camId, videoTrack?.getSettings?.().deviceId);
+  const measuringMic = measuringChosenDevice(micId, audioTrack?.getSettings?.().deviceId);
+
   const cameraStage = checkStage({
     passed: cameraChecked,
     problem: problemFor("camera"),
-    signal: cameraEnabled && cameraSeen,
-    signalSettled: cameraSettled,
+    signal: cameraEnabled && cameraSeen && measuringCamera,
+    signalSettled: cameraSettled && measuringCamera,
     answer: cameraSaidYes,
   });
   const micStage = checkStage({
     passed: micChecked,
     problem: problemFor("microphone"),
-    signal: micEnabled && micPeakRef.current > MIC_SILENT_PEAK,
-    signalSettled: micSettled,
+    signal: micEnabled && measuringMic && micPeakRef.current > MIC_SILENT_PEAK,
+    signalSettled: micSettled && measuringMic,
     answer: micSaidYes,
   });
   const stages: Record<CheckedDevice, CheckStage> = { camera: cameraStage, microphone: micStage };
+  /**
+   * The steps under one row, in priority order.
+   *
+   * Switched off outranks everything: a guest who muted themselves, or turned
+   * their camera off, must not be told the device is broken and handed a list of
+   * replacements. That was the shape of the first version — the camera had this
+   * case and the microphone did not — which is why it is one function for both
+   * rows rather than a condition written twice.
+   *
+   * Then a named fault, whose own message the row prints and whose steps the
+   * guide over the preview is already walking them through. Then ours.
+   */
+  const stepsFor = (
+    device: CheckedDevice,
+    enabled: boolean,
+    checked: boolean,
+    stage: CheckStage,
+  ): readonly string[] => {
+    if (deviceOffBlocksEntry({ enabled, passed: checked })) return offSteps(device);
+    if (problemFor(device)) return [];
+    return checkCopy(device, stage).steps;
+  };
+
   const gateOpen = !checkRequired || entryAllowed(stages);
   const gateReason = checkRequired ? blockedReason(stages) : null;
 
@@ -1256,20 +1309,14 @@ export function MeetingGreenRoom({
                     device="camera"
                     stage={cameraStage}
                     message={problemFor("camera")?.message ?? null}
-                    steps={
-                      cameraOffBlocksEntry({ enabled: cameraEnabled, passed: cameraChecked })
-                        ? CAMERA_OFF_STEPS
-                        : problemFor("camera")
-                          ? []
-                          : checkCopy("camera", cameraStage).steps
-                    }
+                    steps={stepsFor("camera", cameraEnabled, cameraChecked, cameraStage)}
                     onAnswer={(yes) => setCameraSaidYes(yes)}
                   />
                   <CheckRow
                     device="microphone"
                     stage={micStage}
                     message={problemFor("microphone")?.message ?? null}
-                    steps={problemFor("microphone") ? [] : checkCopy("microphone", micStage).steps}
+                    steps={stepsFor("microphone", micEnabled, micChecked, micStage)}
                     onAnswer={(yes) => setMicSaidYes(yes)}
                   />
                 </ul>

@@ -34,6 +34,7 @@ let micIsLive = true;
 /** Whether the fake camera has produced a frame. A track is born muted. */
 let cameraIsLive = true;
 
+
 function track(kind: "video" | "audio", deviceId: string) {
   const listeners: Record<string, Array<() => void>> = {};
   return {
@@ -245,6 +246,57 @@ describe("a guest arriving by invite link", () => {
     fireEvent.change(screen.getByRole("combobox", { name: /camera/i }), { target: { value: "cam-other" } });
 
     await waitFor(() => expect(joinButton()).toBeDisabled());
+  });
+});
+
+/**
+ * The three defects CodeRabbit found in the first cut of this gate. Each one
+ * made the check accuse somebody falsely, or pass a device it had not actually
+ * measured, so each gets a test rather than a fix on trust.
+ */
+describe("what the check must not get wrong", () => {
+  /**
+   * NOT TESTED HERE, and deliberately said so rather than left to look covered.
+   *
+   * The camera's grace period now starts when the TRACK arrives rather than when
+   * the device choice changes, because a timer keyed on the choice was already
+   * running while the permission prompt was on screen and had expired by the
+   * time a slow "Allow" produced a frame. The reachable path is a re-open —
+   * "Try again" does not change `camId`, so the old keying never restarted the
+   * timer and the row accused the camera the moment its track went away.
+   *
+   * Two attempts to pin that here passed for the wrong reason: during a pending
+   * prompt the device list is still empty, so a named `no_camera` problem
+   * outranks the signal and the row reads the same either way. Reproducing the
+   * re-open case needs more scaffolding than the one-line fix warrants, so this
+   * line is held by reading. The fix is in MeetingGreenRoom's camera grace-period
+   * effect, which says the same thing beside the code.
+   */
+
+  /**
+   * Muting before the check used to reach the "blocked" stage, where the row
+   * said the microphone was picking nothing up and offered a list of other
+   * microphones — advice aimed at hardware, given to somebody who had pressed
+   * the mute button. The camera had this case handled and the microphone did
+   * not.
+   */
+  it("asks a muted guest to unmute rather than telling them their mic is broken", async () => {
+    await show({ isGuest: true });
+    fireEvent.click(screen.getByRole("button", { name: /join muted/i }));
+
+    await waitFor(() => expect(screen.getByText(/unmute so your microphone/i)).toBeInTheDocument());
+    expect(screen.queryByText(/pick a different microphone/i)).not.toBeInTheDocument();
+    expect(joinButton()).toBeDisabled();
+  });
+
+  /**
+   * And it says the mute is not a one-way door, because the latch means it
+   * genuinely is not.
+   */
+  it("tells them the mute can go back on afterwards", async () => {
+    await show({ isGuest: true });
+    fireEvent.click(screen.getByRole("button", { name: /join muted/i }));
+    await waitFor(() => expect(screen.getByText(/mute again before you join/i)).toBeInTheDocument());
   });
 });
 
