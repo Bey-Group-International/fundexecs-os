@@ -986,7 +986,7 @@ const PANEL_TITLE: Record<PanelTab, string> = { chat: "Chat", people: "People", 
 // negotiation and a Realtime channel, and a test that mocked all of that would
 // be testing its own mocks.
 export function CopilotSidebar({
-  srStatus, participants, roomCode, meetingTitle,
+  srStatus, srNoisy = false, participants, roomCode, meetingTitle,
   chatMessages, chatUnread, onSendChat, onRetryChat, isHost, raisedHands, onKick, onAdmit, onDeny, onAdmitAll, waitingPeers, onChatVisibility,
   meetingId = null, canShareDocs = false,
   removedPeople, onAllowBack,
@@ -1002,6 +1002,13 @@ export function CopilotSidebar({
   tab?: PanelTab;
   onTabChange?: (tab: PanelTab) => void;
   srStatus: "idle" | "active" | "error" | "unsupported";
+  /**
+   * The recogniser has been hearing mostly noise: the engine itself scores a
+   * run of what it heard below even odds. Nearly always the wrong microphone --
+   * a phone on a desk, a headset on the wrong input -- and worth saying while
+   * the meeting is still going, which is the only time it can be fixed.
+   */
+  srNoisy?: boolean;
   participants: { id: string; displayName: string; micOn: boolean; isLocal: boolean }[];
   /** Ids of everyone whose voice is in the room right now. */
   /**
@@ -1118,6 +1125,14 @@ export function CopilotSidebar({
           {srStatus === "active" && (
             <span className="flex items-center gap-1 text-xs text-[var(--status-success)]">
               <span className="w-1.5 h-1.5 rounded-full bg-[var(--status-success)] animate-pulse" /> Live
+            </span>
+          )}
+          {srStatus === "active" && srNoisy && (
+            <span
+              className="text-xs text-[var(--status-warning,#f59e0b)]"
+              title="Speech recognition is hearing mostly noise. Check which microphone is selected (the arrow beside the mic button)."
+            >
+              ⚠ Unclear audio
             </span>
           )}
           {srStatus === "error" && <span className="text-xs text-[var(--status-danger)]">⚠ Mic</span>}

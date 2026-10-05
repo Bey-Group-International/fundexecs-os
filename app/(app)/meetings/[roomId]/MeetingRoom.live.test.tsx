@@ -395,10 +395,11 @@ describe("where the call's sound comes from", () => {
 
   it("transcribes from the call's echo-cancelled mic track, not a second raw capture", async () => {
     const starts: unknown[][] = [];
+    const langs: string[] = [];
     class FakeRecognition {
       continuous = false; interimResults = false; lang = "";
       onstart: (() => void) | null = null; onresult = null; onerror = null; onend = null; onspeechstart = null;
-      start(...args: unknown[]) { starts.push(args); }
+      start(...args: unknown[]) { starts.push(args); langs.push(this.lang); }
       stop() {}
     }
     const w = window as unknown as { SpeechRecognition?: unknown };
@@ -410,6 +411,8 @@ describe("where the call's sound comes from", () => {
       expect(starts.length).toBeGreaterThan(0);
       const [track] = starts[0] as [{ kind?: string } | undefined];
       expect(track?.kind).toBe("audio");
+      // And in the browser's language, not en-US for everyone.
+      expect(langs).toEqual([navigator.language]);
     } finally {
       w.SpeechRecognition = previous;
     }
@@ -575,6 +578,30 @@ describe("a member with no microphone", () => {
   it("says so, instead of offering to unmute a microphone that is not there", async () => {
     await enterCall();
     expect(micButton().getAttribute("title")).toBe("No microphone — retry");
+  });
+
+  // With no track to start on, the recogniser used to fall through to a bare
+  // `start()`: a raw capture of whatever the OS default input is -- on a Mac
+  // with an iPhone nearby, the phone -- transcribed under this member's name
+  // while the call itself had no microphone. Now it waits for one.
+  it("does not transcribe from a raw capture of the default device", async () => {
+    const starts: unknown[][] = [];
+    class FakeRecognition {
+      continuous = false; interimResults = false; lang = "";
+      onstart: (() => void) | null = null; onresult = null; onerror = null; onend = null; onspeechstart = null;
+      start(...args: unknown[]) { starts.push(args); }
+      stop() {}
+    }
+    const w = window as unknown as { SpeechRecognition?: unknown };
+    const previous = w.SpeechRecognition;
+    w.SpeechRecognition = FakeRecognition;
+    try {
+      await enterCall();
+      await flush(20, 3);
+      expect(starts).toEqual([]);
+    } finally {
+      w.SpeechRecognition = previous;
+    }
   });
 
   it("tells the member nobody can hear them, with something to press", async () => {

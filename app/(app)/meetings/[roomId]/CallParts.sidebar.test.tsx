@@ -253,6 +253,15 @@ describe("the panel still says what it said", () => {
     expect(link).toHaveAttribute("rel", expect.stringContaining("noopener"));
   });
 
+  // The warning that would have told the host, during the Gary Jinks meeting,
+  // that their microphone was hearing rustle rather than them.
+  it("warns when the recogniser is hearing mostly noise", () => {
+    const { rerender } = render(<CopilotSidebar {...props({ srNoisy: true })} />);
+    expect(screen.getByText("⚠ Unclear audio")).toHaveAttribute("title", expect.stringContaining("microphone"));
+    rerender(<CopilotSidebar {...props({ srNoisy: false })} />);
+    expect(screen.queryByText("⚠ Unclear audio")).not.toBeInTheDocument();
+  });
+
   it("lights the dot on the person who is speaking, and only them", async () => {
     render(<CopilotSidebar {...props({ speaking: new Set(["p2"]) })} />);
     await userEvent.click(screen.getByRole("button", { name: /People/ }));
