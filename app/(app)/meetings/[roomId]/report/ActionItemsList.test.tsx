@@ -58,3 +58,27 @@ it("cannot tick an item that never became a task", () => {
   render(<ActionItemsList meetingId="m1" items={ITEMS} viewerId="host-1" isHost />);
   expect(screen.getByLabelText("Untracked")).toBeDisabled();
 });
+
+describe("by person", () => {
+  const MANY: ReportActionItem[] = [
+    { line: "Sarah: Send the deck", task: "Send the deck", owner: "Sarah", done: true, dueAt: null, taskId: "t1", assignedTo: "u-sarah" },
+    { line: "Mark: Book the call", task: "Book the call", owner: "Mark", done: false, dueAt: null, taskId: "t2", assignedTo: "u-mark" },
+    { line: "Sarah: Draft the memo", task: "Draft the memo", owner: "Sarah", done: false, dueAt: null, taskId: "t3", assignedTo: "u-sarah" },
+  ];
+
+  it("groups what each person took away", async () => {
+    render(<ActionItemsList meetingId="m1" items={MANY} viewerId="host-1" isHost />);
+    await userEvent.click(screen.getByRole("button", { name: "By person" }));
+
+    expect(screen.getByRole("heading", { name: "Sarah" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Mark" })).toBeInTheDocument();
+    expect(screen.getByText("1 of 2 done")).toBeInTheDocument();
+    // The items keep their own checkboxes, by their place in the report.
+    expect(screen.getByLabelText("Draft the memo")).not.toBeChecked();
+  });
+
+  it("is not offered when only one person owns anything", () => {
+    render(<ActionItemsList meetingId="m1" items={[MANY[0], MANY[2]]} viewerId="host-1" isHost />);
+    expect(screen.queryByRole("button", { name: "By person" })).toBeNull();
+  });
+});

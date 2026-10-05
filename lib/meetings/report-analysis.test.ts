@@ -142,3 +142,43 @@ describe("generateMeetingReport's gaps", () => {
     expect(report[OPEN_QUESTIONS_KEY]).toEqual([]);
   });
 });
+
+describe("the report's insight fields", () => {
+  it("asks for highlights, unresolved questions, risks and an agenda, before the follow-up", () => {
+    const required = MEETING_REPORT_SCHEMA.required as readonly string[];
+    for (const key of ["highlights", "unresolved", "risks", "next_meeting_agenda"]) {
+      expect(required).toContain(key);
+    }
+    // The follow-up is the longest field and stays last, so a report that runs
+    // out of room loses it rather than everything after it.
+    const keys = Object.keys(MEETING_REPORT_SCHEMA.properties);
+    expect(keys[keys.length - 1]).toBe("follow_up_draft");
+  });
+
+  it("normalizes what the model returns for them", async () => {
+    const { generateMeetingReport } = await import("@/lib/meetings/report-analysis");
+    const client = {
+      messages: {
+        create: async () => ({
+          stop_reason: "tool_use",
+          content: [{
+            type: "tool_use", id: "t", name: "meeting_report",
+            input: {
+              summary: "Agreed.",
+              action_items: ["Jane: send the deck"],
+              highlights: [{ point: "Terms agreed", quote: "\"forty pre\"" }, "Second"],
+              unresolved: [{ owner: "Sam", question: "Who signs?" }],
+              risks: ["Counsel may be late"],
+              next_meeting_agenda: ["Side letter"],
+            },
+          }],
+        }),
+      },
+    } as never;
+    const report = await generateMeetingReport(client, "model", { title: "M", participants: [], transcript: "x" });
+    expect(report.highlights).toEqual([{ point: "Terms agreed", quote: "forty pre" }, { point: "Second", quote: "" }]);
+    expect(report.unresolved).toEqual(["Sam: Who signs?"]);
+    expect(report.risks).toEqual(["Counsel may be late"]);
+    expect(report.next_meeting_agenda).toEqual(["Side letter"]);
+  });
+});

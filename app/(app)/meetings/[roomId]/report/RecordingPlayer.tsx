@@ -69,6 +69,7 @@ export function RecordingPlayer({
   recordingId,
   onTime,
   shareable = false,
+  markers = [],
   ref,
 }: {
   meetingId: string;
@@ -79,6 +80,12 @@ export function RecordingPlayer({
    * would point at a different recording than the one being watched.
    */
   shareable?: boolean;
+  /**
+   * Moments to mark on the scrubber — the report's highlights — each a tick
+   * that plays from there. Only meaningful on the timed recording, like
+   * `shareable`.
+   */
+  markers?: ReadonlyArray<{ ms: number; label: string }>;
   /**
    * Where playback has got to, in milliseconds.
    *
@@ -466,6 +473,7 @@ export function RecordingPlayer({
       {/* One row on a wide screen; on a phone the scrubber takes its own
           line so it is long enough to aim at, and the buttons sit under it. */}
       <div className="flex flex-wrap items-center gap-x-2 gap-y-2 sm:flex-nowrap sm:gap-3">
+        <div className="relative order-first w-full basis-full sm:order-none sm:basis-auto sm:flex-1">
         <input
           type="range"
           min={0}
@@ -488,8 +496,31 @@ export function RecordingPlayer({
             setScrubbing(false);
             seekTo(Number((e.target as HTMLInputElement).value));
           }}
-          className="order-first h-8 w-full basis-full accent-[var(--gold-400)] sm:order-none sm:h-auto sm:basis-auto"
+          className="h-8 w-full accent-[var(--gold-400)] sm:h-auto"
         />
+        {/* The highlights, as ticks under the track: where the meeting's
+            moments are, and one press to play from any of them. Under rather
+            than on the track so they never sit beneath the thumb being dragged. */}
+        {durationMs > 0 && markers.length > 0 && (
+          <div className="relative h-3">
+            {markers
+              .filter((m) => m.ms >= 0 && m.ms <= durationMs)
+              .map((m, i) => (
+                <button
+                  key={i}
+                  type="button"
+                  onClick={() => seekTo(m.ms, { play: true })}
+                  aria-label={`Highlight at ${formatClock(m.ms)}: ${m.label}`}
+                  title={`${formatClock(m.ms)} — ${m.label}`}
+                  style={{ left: `${(m.ms / durationMs) * 100}%` }}
+                  className="group absolute top-0 flex h-3 w-4 -translate-x-1/2 items-start justify-center"
+                >
+                  <span className="h-2.5 w-1 rounded-full bg-[var(--gold-400)] opacity-70 transition-opacity group-hover:opacity-100" />
+                </button>
+              ))}
+          </div>
+        )}
+        </div>
 
         <span className="shrink-0 font-mono text-[11px] tabular-nums text-[var(--fg-muted)] sm:order-last">
           {formatClock(positionMs)} / {formatClock(durationMs)}

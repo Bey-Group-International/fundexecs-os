@@ -48,6 +48,16 @@ const REPORT = {
   analysis: {
     decisions: ["Proceed to confirmatory diligence", "Cap co-invest at 15%"],
     sentiment: "positive",
+    highlights: [
+      { point: "Syndicate agreed to proceed at $40M pre-money", quote: "Then we proceed to confirmatory diligence, agreed" },
+      { point: "Co-invest allocation capped at fifteen percent after LPAC pushback", quote: "we cap the co-invest allocation at fifteen percent" },
+    ],
+    unresolved: [
+      "Priya Shah-Lindqvist: Will counsel accept the MFN carve-out in the side letter before the Friday close?",
+      "Who owns the administrator relationship once the wire instructions are confirmed?",
+    ],
+    risks: ["Counsel's review of the side letter may slip past Friday and delay the confirmatory diligence timeline"],
+    next_meeting_agenda: ["Side letter: counsel's redline and MFN carve-out", "LPAC vote on the co-invest cap", "Wire instructions and closing checklist"],
     next_meeting_suggestion: "Reconvene next Thursday once counsel has reviewed the side letter.",
     follow_up_draft:
       "Hi {{first_name}},\n\nThanks for your time today. **Here is where we landed:**\n\n- Proceed to confirmatory diligence\n- Cap co-invest at 15%\n\nNext steps:\n1. Priya to circulate the redlined side letter by Friday\n2. Alex to book the LPAC call\n\nBest,\nAlex Rivera",

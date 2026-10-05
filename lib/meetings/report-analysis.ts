@@ -14,6 +14,14 @@ import { FIRST_NAME_TOKEN } from "@/lib/meetings/follow-up-greeting";
 import { cleanCorrection } from "@/lib/meetings/report-versions";
 import { ensureActionItems } from "@/lib/meetings/action-item-source";
 import { OPEN_QUESTIONS_KEY, reportGaps } from "@/lib/meetings/report-gaps";
+import {
+  AGENDA_KEY,
+  HIGHLIGHTS_KEY,
+  MAX_HIGHLIGHTS,
+  RISKS_KEY,
+  UNRESOLVED_KEY,
+  normalizeHighlights,
+} from "@/lib/meetings/report-insights";
 
 /**
  * Model context / cost budget, in characters. The tail is kept: a meeting ends
@@ -128,6 +136,47 @@ export const MEETING_REPORT_SCHEMA = {
       description:
         "Questions only the host can answer, asked when the transcript is too incomplete, inaudible, cut short or ambiguous to confirm a decision, an owner, a figure or a date — one specific question per item, tied to what was being discussed (e.g. 'Did Jane commit to the $10M re-up, or only to reviewing the terms?'), never a generic request for 'more context'. Empty when the transcript is clear.",
     },
+    // What makes the report worth more than minutes: where to look again, what
+    // is still open, what could go wrong, and what to cover next time. Asked
+    // for here, in the one call the meeting already makes when it ends — the
+    // call itself stays silent. Before the follow-up draft, which is the
+    // longest field: a report that runs out of room loses fields from the end.
+    [HIGHLIGHTS_KEY]: {
+      type: "array",
+      maxItems: MAX_HIGHLIGHTS,
+      items: {
+        type: "object",
+        properties: {
+          point: { type: "string", description: "What happened at this moment, in one short line." },
+          quote: {
+            type: "string",
+            description:
+              "5-15 words copied EXACTLY from the transcript at that moment (no speaker name, no paraphrase), so the moment can be found on the recording.",
+          },
+        },
+        required: ["point", "quote"],
+      },
+      description:
+        "The 3-8 moments most worth going back to: a decision being made, a number or term agreed, a concern raised, a commitment given, a turning point. In the order they happened. Empty for a meeting with nothing notable.",
+    },
+    [UNRESOLVED_KEY]: {
+      type: "array",
+      items: { type: "string" },
+      description:
+        "Questions raised IN the meeting that were not answered or settled, as 'Who should answer: question', e.g. 'Jane: Will the LPAC accept a 15% co-invest cap?'. Not questions to the host about the transcript (those go in open_questions). Empty when everything raised was settled.",
+    },
+    [RISKS_KEY]: {
+      type: "array",
+      items: { type: "string" },
+      description:
+        "Risks, concerns, objections or blockers that came up, each stated specifically with what is at stake (e.g. 'Counsel may not clear the MFN clause before the Friday close'). Empty when none came up.",
+    },
+    [AGENDA_KEY]: {
+      type: "array",
+      items: { type: "string" },
+      description:
+        "A draft agenda for the next meeting, 3-6 items, built from the unresolved questions, risks and action items due back — each item short and specific. Empty only when no further meeting makes sense.",
+    },
     sentiment: { type: "string", enum: ["positive", "neutral", "negative", "mixed"] },
     next_meeting_suggestion: {
       type: "string",
@@ -139,7 +188,11 @@ export const MEETING_REPORT_SCHEMA = {
         `Complete follow-up email written BY the host TO the recipients, opening with the line "Hi ${FIRST_NAME_TOKEN},", then: 1-paragraph summary, bullet list of decisions made, numbered action items with owners, next meeting proposal (if applicable), and a sign-off with the host's name. Use plain text, no markdown.`,
     },
   },
-  required: ["summary", "key_points", "action_items", "decisions", OPEN_QUESTIONS_KEY, "sentiment", "next_meeting_suggestion", "follow_up_draft"],
+  required: [
+    "summary", "key_points", "action_items", "decisions", OPEN_QUESTIONS_KEY,
+    HIGHLIGHTS_KEY, UNRESOLVED_KEY, RISKS_KEY, AGENDA_KEY,
+    "sentiment", "next_meeting_suggestion", "follow_up_draft",
+  ],
 };
 
 /**
@@ -163,6 +216,7 @@ The follow_up_draft is written BY the host and sent FROM the host's mailbox TO t
 Begin the follow_up_draft with exactly the line "Hi ${FIRST_NAME_TOKEN}," — that placeholder is replaced with each recipient's first name when the email is sent. Do not put anybody's name in the greeting.
 action_items is the authoritative list of commitments and is never empty — every meeting leaves somebody something to do. The follow_up_draft's numbered action items are exactly the action_items, same items, same owners, same order: do not put a commitment in the email that is missing from action_items.
 When the host gives corrections, they are authoritative: they override anything you would otherwise infer from the transcript, and they apply to the whole report, not only the follow-up. A correction written as "Q: … / A: …" pairs is the host answering this report's earlier open questions: treat each answer as fact and ask that question no more.
+Highlights quote the transcript word for word, because the quote is what finds the moment on the recording. Unresolved questions are ones the participants raised and left open; open_questions are yours to the host about gaps in the transcript — never put the same thing in both.
 When the transcript is incomplete — poor audio, inaudible or garbled passages, a recording that starts late or cuts out, speakers you cannot tell apart — do not describe the problem anywhere in the report and never write that something "could not be confirmed". Report only what the transcript supports, and for each thing you could not confirm (a decision, an owner, a figure, a date) ask the host one specific question in open_questions. The follow_up_draft never mentions the recording, the transcript or audio quality, and never says that nothing was decided: it covers what is clear, and the host completes it after answering the questions.
 When the transcript is too incomplete to know what was agreed, do not invent commitments for the other attendees — no "reschedule in a quieter room", no "come prepared with materials". action_items then holds the host's own step only: confirm with the attendees what was decided and what each person owes. Every open question is a thing the host must settle, not a task for somebody else.`;
 
@@ -181,6 +235,10 @@ export const EMPTY_REPORT: Record<string, unknown> = {
   action_items: [],
   decisions: [],
   [OPEN_QUESTIONS_KEY]: [],
+  [HIGHLIGHTS_KEY]: [],
+  [UNRESOLVED_KEY]: [],
+  [RISKS_KEY]: [],
+  [AGENDA_KEY]: [],
   sentiment: "neutral",
   next_meeting_suggestion: "",
   follow_up_draft: "",
@@ -328,6 +386,10 @@ export async function generateMeetingReport(
     action_items: ensureActionItems({ ...raw, summary }, input.host?.name ?? null),
     decisions: gaps.decisions,
     [OPEN_QUESTIONS_KEY]: gaps.openQuestions,
+    [HIGHLIGHTS_KEY]: normalizeHighlights(raw[HIGHLIGHTS_KEY]),
+    [UNRESOLVED_KEY]: normalizeNoteList(raw[UNRESOLVED_KEY]),
+    [RISKS_KEY]: normalizeNoteList(raw[RISKS_KEY]),
+    [AGENDA_KEY]: normalizeNoteList(raw[AGENDA_KEY]),
     [TRUNCATED_KEY]: truncated,
   };
 }

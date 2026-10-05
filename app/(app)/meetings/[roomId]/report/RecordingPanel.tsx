@@ -66,6 +66,7 @@ export const RecordingPanel = memo(function RecordingPanel({
   recordings,
   playerRef,
   onTime,
+  markers,
 }: {
   meetingId: string;
   /**
@@ -84,6 +85,8 @@ export const RecordingPanel = memo(function RecordingPanel({
   playerRef?: React.Ref<RecordingPlayerHandle>;
   /** Where that recording has got to, so the transcript can follow it back. */
   onTime?: (ms: number) => void;
+  /** The report's highlights, for the timed recording's scrubber. */
+  markers?: ReadonlyArray<{ ms: number; label: string }>;
 }) {
   if (!recordings.length) return null;
 
@@ -142,6 +145,7 @@ export const RecordingPanel = memo(function RecordingPanel({
                 // make the transcript jump between two clocks.
                 onTime={rec.id === playableId ? onTime : undefined}
                 shareable={rec.id === playableId}
+                markers={rec.id === playableId ? markers : undefined}
               />
               <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-[var(--fg-muted)]">
                 {rec.status === "recording" && (
