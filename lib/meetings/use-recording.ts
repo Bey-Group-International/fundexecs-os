@@ -273,7 +273,13 @@ export function useRecording(input: UseRecordingInput): UseRecordingResult {
         await new Promise((resolve) => setTimeout(resolve, delay));
         // The recording may have been stopped and a new one started while this
         // part was waiting. Storing it now would write into the wrong recording.
-        if (runRef.current !== run) return;
+        // Abandoned is as lost as retried-out: it has to be counted, or the
+        // notice tells the host less time is missing than really is.
+        if (runRef.current !== run) {
+          run.dropped += 1;
+          console.warn("[recording] part abandoned mid-retry", index);
+          return;
+        }
       }
     }
   }, [supabase, meetingId]);
