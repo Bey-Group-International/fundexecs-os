@@ -99,30 +99,114 @@ describe("openCallMedia, when the camera is held by another application", () => 
     expect(out.camera.failure).toBe("in_use");
   });
 
-  it("takes a camera that is free when the chosen one is not", async () => {
+  // The regression behind "my camera shows my phone". A desktop member picked
+  // their webcam; it was busy for a moment (the green room's preview not yet
+  // released, a Zoom not yet quit); and the walk took the next camera along,
+  // which on a Mac with an iPhone nearby is the iPhone. They joined the meeting
+  // on a phone lying face-up on the desk, and nothing said so.
+  it("keeps a member on the camera they chose when it is merely busy", async () => {
     const g = gatewayFor(
       (c) => {
         if (!c.video) return streamOf([reporting(track("audio", "mic-1"))]);
         const want = askedFor(c, "video");
-        // The chosen camera is busy; anything else opens.
-        if (want === "cam-busy") return err("NotReadableError");
-        return streamOf([reporting(track("video", want || "cam-free"))]);
+        if (want === "webcam") return err("NotReadableError");
+        return streamOf([reporting(track("video", want || "iphone"))]);
       },
-      [device("videoinput", "cam-busy"), device("videoinput", "cam-free"), device("audioinput", "mic-1")],
+      [
+        device("videoinput", "webcam"),
+        Object.assign(device("videoinput", "iphone"), { label: "iPhone Camera" }),
+        device("audioinput", "mic-1"),
+      ],
     );
 
     const out = await openCallMedia({
       ...BASE,
       wantCamera: true,
-      cameraId: "cam-busy",
+      cameraId: "webcam",
       gateway: g.gateway,
     });
 
+    // No camera, said plainly -- the reacquire loop goes back for THIS one.
+    expect(out.cameraTrack).toBeNull();
+    expect(out.camera.failure).toBe("in_use");
+    expect(out.camera.deviceId).toBeNull();
+    // Nothing but the chosen camera was ever asked for.
+    const videoAsks = g.calls.filter((c) => c.video).map((c) => askedFor(c, "video"));
+    expect(new Set(videoAsks)).toEqual(new Set(["webcam"]));
+    expect(out.micTrack).not.toBeNull();
+  });
+
+  // The same holds for the camera remembered from last time: it was chosen too.
+  it("keeps a member on their usual camera when it is merely busy", async () => {
+    const g = gatewayFor((c) => {
+      if (!c.video) return streamOf([reporting(track("audio", "mic-1"))]);
+      if (askedFor(c, "video") === "usual") return err("NotReadableError");
+      return streamOf([reporting(track("video", "other"))]);
+    }, [device("videoinput", "usual"), device("videoinput", "other")]);
+
+    const out = await openCallMedia({
+      ...BASE,
+      wantCamera: true,
+      rememberedCameraId: "usual",
+      gateway: g.gateway,
+    });
+
+    expect(out.cameraTrack).toBeNull();
+    expect(out.camera.failure).toBe("in_use");
+  });
+
+  // With no choice to stay faithful to, a busy camera is still worth replacing.
+  it("takes a camera that is free when the member chose none and the default is busy", async () => {
+    const g = gatewayFor(
+      (c) => {
+        if (!c.video) return streamOf([reporting(track("audio", "mic-1"))]);
+        const want = askedFor(c, "video");
+        // Unconstrained and "cam-busy" both land on the busy camera; the other opens.
+        if (want === "" || want === "cam-busy") return err("NotReadableError");
+        return streamOf([reporting(track("video", want))]);
+      },
+      [device("videoinput", "cam-busy"), device("videoinput", "cam-free"), device("audioinput", "mic-1")],
+    );
+
+    const out = await openCallMedia({ ...BASE, wantCamera: true, gateway: g.gateway });
+
     expect(out.cameraTrack).not.toBeNull();
-    expect(out.camera.fellBack).toBe(true);
+    expect(out.camera.deviceId).toBe("cam-free");
+    // Nothing was asked for, so nothing was overridden.
+    expect(out.camera.fellBack).toBe(false);
     // The FIRST failure is the one reported, not whatever the walk hit later.
     expect(out.camera.failure).toBe("in_use");
     expect(out.micTrack).not.toBeNull();
+  });
+
+  // The same desk, nothing chosen: the walk names the webcam itself rather than
+  // letting the OS pick, because the OS picks the phone.
+  it("names a desktop camera before letting the browser choose, when nothing was chosen", async () => {
+    const g = gatewayFor(
+      (c) => {
+        if (!c.video) return streamOf([reporting(track("audio", "mic-1"))]);
+        const want = askedFor(c, "video");
+        return streamOf([reporting(track("video", want || "iphone"))]);
+      },
+      [
+        Object.assign(device("videoinput", "iphone"), { label: "iPhone Camera" }),
+        Object.assign(device("videoinput", "webcam"), { label: "FaceTime HD Camera" }),
+      ],
+    );
+    // The combined request is the only one that must stay unconstrained -- it
+    // is the single permission prompt -- so make it fail and watch the walk.
+    let first = true;
+    const picky: MediaGateway = {
+      ...g.gateway,
+      async getUserMedia(c) {
+        if (first) { first = false; throw err("NotReadableError"); }
+        return g.gateway.getUserMedia(c);
+      },
+    };
+
+    const out = await openCallMedia({ ...BASE, wantCamera: true, gateway: picky });
+
+    expect(out.camera.deviceId).toBe("webcam");
   });
 
   // Releasing a camera is asynchronous. The green room stops its preview and

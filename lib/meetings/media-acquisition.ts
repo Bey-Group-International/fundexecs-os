@@ -14,10 +14,12 @@
 //
 //   - a device that is DENIED cannot be helped by trying a different one; the
 //     permission is per-origin, not per-camera.
-//   - a device that is IN USE often can, either by a second camera or by the
+//   - a device that is IN USE often can, either by a second device or by the
 //     same one a moment later — releasing a camera is asynchronous on Windows,
 //     and reopening it immediately is a race the room loses roughly as often
-//     as it wins.
+//     as it wins. For a MICROPHONE any other one will do: being heard is the
+//     floor of a call. For a CAMERA the member chose, it will not — see
+//     canTryAnotherCamera.
 //   - a device that is MISSING is a remembered id that has since been
 //     unplugged, and the system default is the right next guess.
 //
@@ -28,7 +30,7 @@
 //
 // Pure: no navigator, no DOM, no timers. open-media.ts makes the browser calls.
 
-import type { Device } from "./devices";
+import { isPhoneCamera, type Device } from "./devices";
 
 /** Why a getUserMedia call failed, in terms of what can be done about it. */
 export type MediaFailure =
@@ -88,6 +90,32 @@ export function canTryAnotherDevice(failure: MediaFailure): boolean {
 }
 
 /**
+ * Whether a DIFFERENT camera is worth trying.
+ *
+ * Stricter than the microphone's rule, and the difference is who gets moved.
+ * A microphone that falls back to the laptop's own still carries the member's
+ * voice. A camera that falls back carries whatever the next camera is pointed
+ * at -- and on a desktop the next camera is very often a phone: an iPhone
+ * sitting beside a Mac, a paired Android, a virtual-camera app. So a member who
+ * picked their webcam, whose webcam was merely BUSY (the green room's preview a
+ * few milliseconds from being released, a Zoom not yet quit), was put on
+ * their phone's camera for the meeting, silently, and the phone was lying on
+ * the desk.
+ *
+ * So for a camera that was chosen (`chosen`: asked for this time, or remembered
+ * from last time), only a camera that is GONE or cannot do what was asked moves
+ * the walk on. Busy, interrupted or unexplained means: come back with nothing,
+ * say so, and let the reacquire loop keep asking for the camera they meant.
+ * With no choice at all there is nothing to stay faithful to, and the ordinary
+ * rule applies.
+ */
+export function canTryAnotherCamera(failure: MediaFailure, chosen: boolean): boolean {
+  if (!canTryAnotherDevice(failure)) return false;
+  if (!chosen) return true;
+  return failure === "missing" || failure === "overconstrained";
+}
+
+/**
  * Whether the SAME device is worth trying again in a moment.
  *
  * Only for the two failures that are about timing rather than about the
@@ -124,11 +152,18 @@ export const MAX_DEVICE_ATTEMPTS = 4;
  * `available` may legitimately be empty: before permission is granted the
  * browser reports devices with blank ids, so the first two entries are kept
  * whether or not they appear in it.
+ *
+ * For a camera (`kind: "videoinput"`), a phone standing in for one goes last,
+ * and when nothing at all was chosen a desktop camera is named BEFORE the
+ * unconstrained attempt. "Let the browser choose" is exactly the step that put
+ * desktop members on their phone: the OS ranks a nearby iPhone as the default
+ * camera, and the browser does as it is told.
  */
 export function deviceAttemptOrder(input: {
   requested: string | null;
   remembered: string | null;
   available: readonly Device[];
+  kind?: "audioinput" | "videoinput";
 }): string[] {
   const order: string[] = [];
   const seen = new Set<string>();
@@ -138,16 +173,31 @@ export function deviceAttemptOrder(input: {
     order.push(id);
   };
 
+  const camera = input.kind === "videoinput";
+  const rest = camera ? camerasPhonesLast(input.available) : input.available;
+
   if (input.requested) push(input.requested);
   if (input.remembered) push(input.remembered);
+  if (camera && !input.requested && !input.remembered) {
+    const desktop = rest.find((d) => d.deviceId && !isPhoneCamera(d.label));
+    if (desktop) push(desktop.deviceId);
+  }
   // The system default, expressed as "no constraint" rather than as the id
   // "default": some browsers do not enumerate a device by that name, and an
   // exact constraint on an id that does not exist is an OverconstrainedError
   // where the plain request would have succeeded.
   push("");
-  for (const d of input.available) if (d.deviceId) push(d.deviceId);
+  for (const d of rest) if (d.deviceId) push(d.deviceId);
 
   return order.slice(0, MAX_DEVICE_ATTEMPTS);
+}
+
+/** The cameras, in the order given, with the phones moved to the back. */
+function camerasPhonesLast(available: readonly Device[]): Device[] {
+  const desktop: Device[] = [];
+  const phones: Device[] = [];
+  for (const d of available) (isPhoneCamera(d.label) ? phones : desktop).push(d);
+  return [...desktop, ...phones];
 }
 
 /** What one kind of device ended up doing. */

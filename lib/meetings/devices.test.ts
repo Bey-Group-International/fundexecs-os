@@ -6,6 +6,7 @@ import {
   releaseStream,
   settledFacing,
   devicesOfKind,
+  isPhoneCamera,
   levelBars,
   levelFromSamples,
   pickDevice,
@@ -80,6 +81,60 @@ describe("pickDevice", () => {
 
   it("returns nothing when there is nothing of that kind", () => {
     expect(pickDevice(list, "videoinput", null)).toBeNull();
+  });
+
+  // A Mac with an iPhone nearby lists the iPhone first. Somebody sitting at
+  // the laptop wants the laptop's camera, and chose nothing yet.
+  it("starts a desktop member on a desktop camera rather than a phone", () => {
+    const cams = [
+      d({ deviceId: "iphone", kind: "videoinput", label: "iPhone Camera" }),
+      d({ deviceId: "webcam", kind: "videoinput", label: "FaceTime HD Camera" }),
+    ];
+    expect(pickDevice(cams, "videoinput", null)?.deviceId).toBe("webcam");
+  });
+
+  it("still honours a phone camera the member chose last time", () => {
+    const cams = [
+      d({ deviceId: "iphone", kind: "videoinput", label: "iPhone Camera" }),
+      d({ deviceId: "webcam", kind: "videoinput", label: "FaceTime HD Camera" }),
+    ];
+    expect(pickDevice(cams, "videoinput", "iphone")?.deviceId).toBe("iphone");
+  });
+
+  it("takes a phone camera when it is the only camera", () => {
+    const cams = [d({ deviceId: "iphone", kind: "videoinput", label: "iPhone Camera" })];
+    expect(pickDevice(cams, "videoinput", null)?.deviceId).toBe("iphone");
+  });
+});
+
+describe("isPhoneCamera", () => {
+  it("recognises the phones that desktops list as cameras", () => {
+    for (const label of [
+      "iPhone Camera",
+      "Sheika's iPhone (Continuity Camera)",
+      "iPad Camera",
+      "DroidCam Source 3",
+      "Camo Camera",
+      "Iriun Webcam",
+      "EpocCam Camera",
+      "e2eSoft iVCam",
+      "Phone Link Camera",
+      "Android Webcam",
+    ]) {
+      expect(isPhoneCamera(label)).toBe(true);
+    }
+  });
+
+  it("leaves real cameras alone", () => {
+    for (const label of ["FaceTime HD Camera", "Logitech BRIO", "Integrated Webcam", "OBS Virtual Camera", "Camera 1", "HD Pro Webcam C920"]) {
+      expect(isPhoneCamera(label)).toBe(false);
+    }
+  });
+
+  it("reads an unlabelled device as not a phone", () => {
+    expect(isPhoneCamera("")).toBe(false);
+    expect(isPhoneCamera(null)).toBe(false);
+    expect(isPhoneCamera(undefined)).toBe(false);
   });
 });
 
