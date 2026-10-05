@@ -159,6 +159,47 @@ describe("a remembered device that has been unplugged", () => {
   });
 });
 
+describe("a desktop with an iPhone within reach", () => {
+  // The order macOS reports when Continuity Camera is available: the phone
+  // first, and it is what an unconstrained request opens.
+  const PHONE_FIRST = [
+    { deviceId: "iphone-cam", kind: "videoinput", label: "iPhone Camera", groupId: "g1" },
+    { deviceId: "facetime-cam", kind: "videoinput", label: "FaceTime HD Camera", groupId: "g2" },
+    { deviceId: "mic-default", kind: "audioinput", label: "MacBook Mic", groupId: "g2" },
+  ];
+
+  beforeEach(() => {
+    (navigator.mediaDevices.enumerateDevices as jest.Mock).mockImplementation(
+      () => new Promise((r) => setTimeout(() => r(PHONE_FIRST), 0)),
+    );
+    getUserMedia.mockImplementation(async (c: Constraints) => {
+      const tracks = [];
+      if (c.video) tracks.push(track("video", requestedId(c.video) || "iphone-cam"));
+      if (c.audio) tracks.push(track("audio", "mic-default"));
+      return new (globalThis as { MediaStream: new (t: unknown[]) => MediaStream }).MediaStream(tracks);
+    });
+  });
+
+  // The regression behind "my camera shows my phone": the first open is
+  // unconstrained (it is also the permission prompt), the browser opened the
+  // iPhone, and the screen recorded the iPhone as the member's choice.
+  it("settles on the laptop's camera rather than the phone the browser picked", async () => {
+    await show();
+    await waitFor(() => expect(videoRequests()).toContain("facetime-cam"));
+    await waitFor(() => expect(screen.getByText(/FaceTime HD Camera · MacBook Mic/)).toBeInTheDocument());
+    // The phone's track was released, not left running beside the webcam.
+    const phone = opened.find((t) => t.kind === "video" && t.id === "iphone-cam");
+    expect(phone?.stop).toHaveBeenCalled();
+  });
+
+  it("still honours a phone camera the member chose last time", async () => {
+    window.localStorage.setItem(DEVICE_PREF_KEYS.videoinput, "iphone-cam");
+    await show();
+    await waitFor(() => expect(screen.getByText(/iPhone Camera · MacBook Mic/)).toBeInTheDocument());
+    expect(videoRequests()).not.toContain("facetime-cam");
+  });
+});
+
 describe("a device another application is holding", () => {
   it("says it is taken, not that it is missing", async () => {
     getUserMedia.mockImplementation(async (c: Constraints) => {

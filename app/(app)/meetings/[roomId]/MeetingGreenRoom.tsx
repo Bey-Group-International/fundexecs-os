@@ -15,6 +15,7 @@ import {
   type Device,
   type DeviceKind,
   type ReadinessProblem,
+  settleCamera,
 } from "@/lib/meetings/devices";
 import { echoRisk, echoRiskNotice } from "@/lib/meetings/echo";
 import {
@@ -601,12 +602,16 @@ export function MeetingGreenRoom({
     [micId, speakerId, devices],
   );
 
-  const refreshDevices = useCallback(async () => {
+  /** Re-read the device list. Returns it too, for a decision that cannot wait a render. */
+  const refreshDevices = useCallback(async (): Promise<Device[]> => {
     try {
       const all = await navigator.mediaDevices.enumerateDevices();
-      setDevices(toDevices(all));
+      const list = toDevices(all);
+      setDevices(list);
+      return list;
     } catch {
       setDevices([]);
+      return [];
     }
   }, []);
 
@@ -702,9 +707,13 @@ export function MeetingGreenRoom({
 
         // Labels only arrive once permission is granted, so the pickers stay
         // anonymous until this point. Re-enumerating here is what fills them in.
-        await refreshDevices();
+        const list = await refreshDevices();
         if (cancelled) return;
-        if (!cam && openedCamRef.current) setCamId(openedCamRef.current);
+        // What the browser opened becomes the choice -- unless, now that the
+        // labels are in, it turns out to be a phone standing in for a camera
+        // and a real one is plugged in. Then the real one is the choice, and
+        // the camera effect below swaps to it. See settleCamera.
+        if (!cam && openedCamRef.current) setCamId(settleCamera(list, openedCamRef.current));
         if (!mic && openedMicRef.current) setMicId(openedMicRef.current);
         return;
       } catch (err) {
@@ -779,10 +788,19 @@ export function MeetingGreenRoom({
         });
         if (cancelled) { s.getTracks().forEach((t) => t.stop()); return; }
         adoptVideo(s.getVideoTracks()[0] ?? null);
-        openedCamRef.current = camId || s.getVideoTracks()[0]?.getSettings().deviceId || null;
+        const openedId = camId || s.getVideoTracks()[0]?.getSettings().deviceId || null;
+        openedCamRef.current = openedId;
         setCameraDenied(false);
         setCameraBusy(false);
-        await refreshDevices();
+        const list = await refreshDevices();
+        if (cancelled) return;
+        // Unconstrained again -- a remembered camera that was unplugged was
+        // forgotten and the browser chose -- so the same settling applies as
+        // on the first open: a phone the browser picked gives way to a camera.
+        if (!camId && openedId) {
+          const settled = settleCamera(list, openedId);
+          if (settled !== openedId) setCamId(settled);
+        }
       } catch (err) {
         if (!cancelled) handleOpenFailure("videoinput", err);
       }
