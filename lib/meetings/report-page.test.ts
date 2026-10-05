@@ -210,6 +210,12 @@ describe("reportContent", () => {
     expect(c.nextMeeting).toBeNull();
   });
 
+  it("reads the open questions the report asks the host", () => {
+    expect(reportContent(row({ analysis: { open_questions: ["Did Ana commit?", { text: "Who owns the deck?" }] } })).openQuestions)
+      .toEqual(["Did Ana commit?", "Who owns the deck?"]);
+    expect(reportContent(row()).openQuestions).toEqual([]);
+  });
+
   it("is null for a follow-up draft that normalizes to nothing", () => {
     // An empty draft must not render a panel with a send button and no words.
     expect(reportContent(row({ analysis: { follow_up_draft: "   " } })).followUp).toBeNull();

@@ -134,6 +134,11 @@ const side = {
 jest.mock("@/lib/meetings/report-side.server", () => ({
   loadReportSide: async () => side,
 }));
+jest.mock("./OpenQuestions", () => ({
+  OpenQuestions: ({ questions, isHost }: { questions: string[]; isHost: boolean }) => (
+    <div data-testid="open-questions" data-host={String(isHost)} data-questions={JSON.stringify(questions)} />
+  ),
+}));
 jest.mock("./ReportRevisions", () => ({
   ReportRevisions: ({ isHost }: { isHost: boolean }) => (
     <div data-testid="report-revisions" data-host={String(isHost)} />
@@ -531,6 +536,26 @@ describe("the sidebar and the meeting at a glance", () => {
 
     expect(screen.getByLabelText("Send the deck")).toBeChecked();
     expect(screen.getByText("1/2 done")).toBeInTheDocument();
+  });
+
+  it("puts the report's open questions to the host", async () => {
+    db.report = {
+      summary: "Done.",
+      key_points: [],
+      action_items: ["Ana: Send the deck"],
+      analysis: { decisions: [], open_questions: ["Did Ana commit to the $10M re-up?"] },
+      full_transcript: "x",
+    };
+    await renderPage();
+    const card = screen.getByTestId("open-questions");
+    expect(card).toHaveAttribute("data-host", "true");
+    expect(card).toHaveAttribute("data-questions", JSON.stringify(["Did Ana commit to the $10M re-up?"]));
+  });
+
+  it("asks nothing when the report has no open questions", async () => {
+    db.report = { summary: "Done.", key_points: [], action_items: ["Ana: Send the deck"], analysis: { decisions: ["Proceed"] }, full_transcript: "x" };
+    await renderPage();
+    expect(screen.queryByTestId("open-questions")).not.toBeInTheDocument();
   });
 
   it("says when a meeting captured no action items, rather than leaving a gap", async () => {

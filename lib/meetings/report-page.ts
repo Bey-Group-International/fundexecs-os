@@ -16,6 +16,7 @@ import { reportActionItems } from "@/lib/meetings/action-item-source";
 import { REPORT_WAIT_LIMIT_MS } from "@/lib/meetings/attendance";
 import { normalizeNoteList, normalizeNoteText } from "@/lib/meetings/live-notes";
 import { TRUNCATED_KEY } from "@/lib/meetings/report-analysis";
+import { OPEN_QUESTIONS_KEY } from "@/lib/meetings/report-gaps";
 
 /** The meeting fields the page renders. */
 export interface ReportMeeting {
@@ -138,6 +139,8 @@ export interface ReportContent {
   keyPoints: string[];
   actionItems: string[];
   decisions: string[];
+  /** What the host is asked, because the transcript could not settle it. */
+  openQuestions: string[];
   /** The draft, or null when the model wrote nothing usable. */
   followUp: string | null;
   sentiment: string | null;
@@ -156,6 +159,7 @@ export function reportContent(report: ReportRow): ReportContent {
     // the items its follow-up email lists, so they are never only in the email.
     actionItems: reportActionItems(report.action_items, analysis),
     decisions: normalizeNoteList(analysis?.decisions),
+    openQuestions: normalizeNoteList(analysis?.[OPEN_QUESTIONS_KEY]),
     followUp: normalizeNoteText(analysis?.follow_up_draft) || null,
     sentiment: typeof analysis?.sentiment === "string" ? analysis.sentiment : null,
     nextMeeting:
