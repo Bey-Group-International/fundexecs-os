@@ -632,3 +632,57 @@ describe("moments on the report's lines", () => {
     expect(screen.queryByRole("button", { name: /Play from/ })).toBeNull();
   });
 });
+
+/**
+ * What the report adds beyond minutes: the moments to go back to, what is
+ * still open, what could go wrong, and what the next meeting should cover.
+ */
+describe("the report's insights", () => {
+  const insightReport = {
+    summary: "They settled the valuation.",
+    key_points: [],
+    action_items: ["Sam: Send the valuation memo by Friday"],
+    analysis: {
+      decisions: ["Hold the valuation at forty"],
+      highlights: [{ point: "Valuation held at forty", quote: "we hold the valuation at forty, no higher" }],
+      unresolved: ["Ana: Will the LPAC accept a 15% cap?"],
+      risks: ["Counsel may not clear the side letter by Friday"],
+      next_meeting_suggestion: "Reconvene next Thursday.",
+      next_meeting_agenda: ["Side letter status", "LPAC vote"],
+    },
+    full_transcript: "x",
+  };
+
+  it("shows highlights placed on the recording, open questions with who answers, risks and the agenda", async () => {
+    db.report = { ...insightReport };
+    db.transcript = [
+      { speaker: "Priya", text: "Morning everyone.", ts: "2026-09-23T14:00:05.000Z" },
+      // Another speaker: consecutive lines from one person are one turn, timed
+      // from its first line.
+      { speaker: "Sam", text: "So we hold the valuation at forty, no higher.", ts: "2026-09-23T14:05:00.000Z" },
+    ];
+    db.recordings = [
+      { id: "r1", status: "complete", deleted_at: null, started_at: "2026-09-23T14:00:00.000Z", duration_seconds: 600 },
+    ];
+    await renderPage();
+
+    expect(screen.getByText("Valuation held at forty")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Play from 5:00, where this highlight/ })).toBeInTheDocument();
+    expect(screen.getByText("Will the LPAC accept a 15% cap?")).toBeInTheDocument();
+    expect(screen.getByText("Ana to answer")).toBeInTheDocument();
+    expect(screen.getByText("Counsel may not clear the side letter by Friday")).toBeInTheDocument();
+    expect(screen.getByText("Suggested agenda")).toBeInTheDocument();
+    expect(screen.getByText("LPAC vote")).toBeInTheDocument();
+  });
+
+  it("shows none of it for a report written before these fields existed", async () => {
+    db.report = { summary: "Done.", key_points: [], action_items: [], analysis: { decisions: ["Proceed"] }, full_transcript: "x" };
+    db.recordings = [];
+    await renderPage();
+
+    expect(screen.queryByText("Highlights")).toBeNull();
+    expect(screen.queryByText("Open questions")).toBeNull();
+    expect(screen.queryByText("Risks & concerns")).toBeNull();
+    expect(screen.queryByText("Suggested agenda")).toBeNull();
+  });
+});

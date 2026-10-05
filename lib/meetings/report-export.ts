@@ -13,6 +13,7 @@
 //
 // Pure: no DOM, no Supabase, no model calls.
 
+import { reportInsights } from "@/lib/meetings/report-insights";
 import { normalizeNoteList, normalizeNoteText } from "@/lib/meetings/live-notes";
 import { reportActionItems } from "@/lib/meetings/action-item-source";
 import { displayFollowUp } from "@/lib/meetings/follow-up-greeting";
@@ -345,6 +346,7 @@ export function buildReportMarkdown(
   const followUp = displayFollowUp(normalizeNoteText(analysis?.follow_up_draft));
   const nextMeeting = normalizeNoteText(analysis?.next_meeting_suggestion);
   const sentiment = normalizeNoteText(analysis?.sentiment);
+  const insights = reportInsights(analysis);
 
   const title = (input.title ?? "").trim() || UNTITLED_MEETING;
   const duration = meetingDurationMinutes(input.startedAt, input.endedAt);
@@ -396,8 +398,12 @@ export function buildReportMarkdown(
     ...section("Summary", normalizeNoteText(input.summary) || missingSummaryNote(input)),
     ...section("Decisions", numbered(decisions)),
     ...section("Action Items", numbered(actionItems)),
+    ...section("Open Questions", bullets(insights.unresolved.map((q) => (q.owner ? `${q.owner}: ${q.text}` : q.text)))),
+    ...section("Risks", bullets(insights.risks)),
+    ...section("Highlights", bullets(insights.highlights.map((h) => (h.quote ? `${h.point} — “${h.quote}”` : h.point)))),
     ...section("Discussion", bullets(keyPoints)),
     ...section("Next Meeting", nextMeeting),
+    ...section("Next Meeting Agenda", numbered(insights.agenda)),
     ...section("Follow-up Draft", followUp),
   );
 

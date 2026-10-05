@@ -507,3 +507,27 @@ describe("attendee correspondence", () => {
     expect(correspondenceSection(null)).toBe("");
   });
 });
+
+describe("the report's insight sections", () => {
+  it("files open questions, risks, highlights and the next agenda", () => {
+    const md = buildReportMarkdown({
+      ...base,
+      analysis: {
+        ...base.analysis,
+        unresolved: ["Sam: Who signs the side letter?"],
+        risks: ["Counsel may not clear the MFN clause"],
+        highlights: [{ point: "Terms agreed", quote: "forty pre" }],
+        next_meeting_agenda: ["Side letter status", "LPAC vote"],
+      },
+    });
+    expect(md).toContain("## Open Questions\n\n- Sam: Who signs the side letter?");
+    expect(md).toContain("## Risks\n\n- Counsel may not clear the MFN clause");
+    expect(md).toContain("## Highlights\n\n- Terms agreed — “forty pre”");
+    expect(md).toContain("## Next Meeting Agenda\n\n1. Side letter status\n2. LPAC vote");
+  });
+
+  it("adds no empty headings for a report without them", () => {
+    const md = buildReportMarkdown(base);
+    expect(md).not.toMatch(/## (Open Questions|Risks|Highlights|Next Meeting Agenda)/);
+  });
+});

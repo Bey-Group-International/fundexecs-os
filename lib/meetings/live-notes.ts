@@ -27,7 +27,7 @@ export function emptyLiveNotes(): LiveNotes {
 
 /** Field order for flattening an object item into a line, most useful first. */
 const OWNER_KEYS = ["owner", "assignee", "who", "speaker", "name", "person"];
-const BODY_KEYS = ["task", "item", "action", "action_item", "text", "description", "point", "decision", "title", "summary", "value"];
+const BODY_KEYS = ["task", "item", "action", "action_item", "text", "description", "point", "decision", "question", "risk", "title", "summary", "value"];
 const DUE_KEYS = ["due", "due_date", "deadline", "by", "when"];
 
 function readString(source: Record<string, unknown>, keys: string[]): string {

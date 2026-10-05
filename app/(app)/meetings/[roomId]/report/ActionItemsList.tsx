@@ -6,7 +6,8 @@
 // was not, on a page the host returns to precisely to see what is still owed.
 // Each item is already a task on somebody's list; this shows whose, when it is
 // due, and lets the host — or the person it is for — tick it off from here.
-import { useState } from "react";
+import { useMemo, useState } from "react";
+import { commitmentsByPerson } from "@/lib/meetings/report-insights";
 import type { ReportActionItem } from "@/lib/meetings/report-participants";
 import { MomentChip } from "./MomentChip";
 
@@ -37,6 +38,8 @@ export function ActionItemsList({
   const [error, setError] = useState<string | null>(null);
 
   const completed = items.filter((_, i) => done[i]).length;
+  const [view, setView] = useState<"list" | "person">("list");
+  const groups = useMemo(() => commitmentsByPerson(items), [items]);
 
   async function toggle(i: number) {
     const item = items[i];
@@ -64,17 +67,9 @@ export function ActionItemsList({
     }
   }
 
-  return (
-    <section className="rounded-xl border border-[var(--line)] bg-[var(--surface-1)] p-4 sm:p-5 flex flex-col gap-3">
-      <div className="flex items-center justify-between gap-3">
-        <h2 className="text-xs font-medium uppercase tracking-wide text-[var(--fg-secondary)]">Action items</h2>
-        <span className="text-xs text-[var(--fg-muted)]">
-          {completed} of {items.length} done
-        </span>
-      </div>
-
-      <ul className="flex flex-col gap-2">
-        {items.map((item, i) => {
+  // One item's row, the same in either view: the list in the report's own
+  // order, or grouped by who owns it.
+  function renderItem(item: ReportActionItem, i: number) {
           const checked = Boolean(done[i]);
           const canToggle =
             Boolean(item.taskId) && (isHost || (viewerId !== null && item.assignedTo === viewerId));
@@ -138,8 +133,60 @@ export function ActionItemsList({
               </div>
             </li>
           );
-        })}
-      </ul>
+        }
+
+  return (
+    <section className="rounded-xl border border-[var(--line)] bg-[var(--surface-1)] p-4 sm:p-5 flex flex-col gap-3">
+      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
+        <h2 className="text-xs font-medium uppercase tracking-wide text-[var(--fg-secondary)]">Action items</h2>
+        <div className="flex items-center gap-3">
+          {/* By person only helps when there is more than one person: the
+              list of what each owner took away, ready to read down or send. */}
+          {groups.length > 1 && (
+            <div role="group" aria-label="Show action items" className="inline-flex rounded-lg border border-[var(--line)] p-0.5">
+              {(["list", "person"] as const).map((v) => (
+                <button
+                  key={v}
+                  type="button"
+                  aria-pressed={view === v}
+                  onClick={() => setView(v)}
+                  className={`min-h-8 rounded-md px-2.5 text-[11px] font-medium sm:min-h-7 ${
+                    view === v ? "bg-[var(--surface-3)] text-[var(--fg-primary)]" : "text-[var(--fg-muted)] hover:text-[var(--fg-secondary)]"
+                  }`}
+                >
+                  {v === "list" ? "List" : "By person"}
+                </button>
+              ))}
+            </div>
+          )}
+          <span className="text-xs text-[var(--fg-muted)]">
+            {completed} of {items.length} done
+          </span>
+        </div>
+      </div>
+
+      {view === "person" ? (
+        <div className="flex flex-col gap-4">
+          {groups.map((group) => {
+            const groupDone = group.items.filter(({ index }) => done[index]).length;
+            return (
+              <div key={group.owner ?? "—"} className="flex flex-col gap-2">
+                <div className="flex items-baseline justify-between gap-3">
+                  <h3 className="text-sm font-medium text-[var(--fg-primary)]">{group.owner ?? "Not assigned"}</h3>
+                  <span className="text-[11px] tabular-nums text-[var(--fg-muted)]">
+                    {groupDone} of {group.items.length} done
+                  </span>
+                </div>
+                <ul className="flex flex-col gap-2">
+                  {group.items.map(({ item, index }) => renderItem(item, index))}
+                </ul>
+              </div>
+            );
+          })}
+        </div>
+      ) : (
+        <ul className="flex flex-col gap-2">{items.map((item, i) => renderItem(item, i))}</ul>
+      )}
 
       {error && (
         <p role="alert" className="text-xs text-[var(--status-danger,#ef4444)]">
