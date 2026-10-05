@@ -565,3 +565,45 @@ describe("the report's tabs", () => {
     expect(screen.getByTestId("follow-up")).toBeInTheDocument();
   });
 });
+
+/**
+ * "Play from" beside the lines of the report: placed on the recording's clock,
+ * and only where there is a recording to play.
+ */
+describe("moments on the report's lines", () => {
+  const timedReport = {
+    summary: "They settled the valuation.",
+    key_points: ["Second analyst hire planned for next quarter"],
+    action_items: ["Sam: Send the valuation memo to counsel by Friday"],
+    analysis: { decisions: ["Hold the valuation at forty"] },
+    full_transcript: "x",
+  };
+  const rows = [
+    { speaker: "Priya", text: "Morning everyone.", ts: "2026-09-23T14:00:05.000Z" },
+    { speaker: "Sam", text: "I'll send the valuation memo to counsel by Friday.", ts: "2026-09-23T14:03:10.000Z" },
+    { speaker: "Priya", text: "We hold the valuation at forty, no higher.", ts: "2026-09-23T14:05:00.000Z" },
+    { speaker: "Ana", text: "And we hire a second analyst next quarter.", ts: "2026-09-23T14:07:00.000Z" },
+  ];
+
+  it("offers to play each line from where it was said", async () => {
+    db.report = { ...timedReport };
+    db.transcript = rows;
+    db.recordings = [
+      { id: "r1", status: "complete", deleted_at: null, started_at: "2026-09-23T14:00:00.000Z", duration_seconds: 600 },
+    ];
+    await renderPage();
+
+    expect(screen.getByRole("button", { name: /Play from 3:10, where this action item/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Play from 5:00, where this decision/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Play from 7:00, where this point/ })).toBeInTheDocument();
+  });
+
+  it("offers nothing when there is no recording to play", async () => {
+    db.report = { ...timedReport };
+    db.transcript = rows;
+    db.recordings = [];
+    await renderPage();
+
+    expect(screen.queryByRole("button", { name: /Play from/ })).toBeNull();
+  });
+});
