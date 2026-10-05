@@ -225,9 +225,16 @@ export function attendeeInboxHistory(input: {
       email: recipient.email,
       threads: ordered.slice(0, limit).map((t) => digest(t, meetingId)),
       total: ordered.length,
-      // Across everything they have, not across what is shown: with the bound at
-      // five, a sixth thread is still the last time this person was in touch.
-      lastContactAt: ordered.find((t) => t.last_message_at)?.last_message_at ?? null,
+      // Across everything they have, not across what is shown — and the maximum,
+      // not the first of `ordered`: that list puts this meeting's follow-up
+      // thread first, so its date is not the newest whenever the person has a
+      // more recent conversation about something else, and "last contact" on a
+      // record must not understate how recently they were in touch.
+      lastContactAt: mine.reduce<string | null>(
+        (newest, t) =>
+          t.last_message_at && (!newest || t.last_message_at > newest) ? t.last_message_at : newest,
+        null,
+      ),
       unread: ordered.filter((t) => t.unread === true).length,
     });
   }

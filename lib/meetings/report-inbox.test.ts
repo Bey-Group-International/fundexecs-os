@@ -271,6 +271,22 @@ describe("this meeting's follow-up thread", () => {
     expect(threads.map((t) => t.fromThisMeeting)).toEqual([true, false, false]);
   });
 
+  // The follow-up thread is shown first, and "last contact" must not read its
+  // date off that ordering: a person with a newer conversation about something
+  // else was in touch more recently than the meeting's own thread says.
+  it("does not let the meeting-first ordering understate the last contact", () => {
+    const history = attendeeInboxHistory({
+      recipients: [ANA],
+      meetingId: "m1",
+      threads: [
+        thread({ id: "newer", last_message_at: "2026-09-25T00:00:00.000Z" }),
+        thread({ id: "followup", meeting_id: "m1", last_message_at: "2026-09-21T00:00:00.000Z" }),
+      ],
+    });
+    expect(history.attendees[0].threads[0].id).toBe("followup");
+    expect(history.attendees[0].lastContactAt).toBe("2026-09-25T00:00:00.000Z");
+  });
+
   it("marks nothing when the caller does not say which meeting this is", () => {
     const history = attendeeInboxHistory({
       recipients: [ANA],
