@@ -22,7 +22,7 @@ import type {
 } from "@/lib/supabase/database.types";
 import { generateRoomCode } from "@/lib/meetings/service";
 import { DEFAULT_REMINDER_MINUTES } from "@/lib/meetings/reminder";
-import { blocksToBusyIntervals } from "@/lib/meetings/blocks";
+import { blocksToBusyIntervals, MAX_BLOCK_MINUTES } from "@/lib/meetings/blocks";
 import { externalBusyForUser } from "@/lib/calendar/feeds.server";
 import { googleBusyForUser } from "@/lib/calendar/google.server";
 import {
@@ -304,6 +304,16 @@ async function hostCommitments(
   // scan bounded instead of reading the host's whole history.
   const lookback = new Date(new Date(opts.fromIso).getTime() - MAX_MEETING_MINUTES * 60_000).toISOString();
 
+  // Blocks get their own, longer reach-back: a block runs up to MAX_BLOCK_MINUTES
+  // (24 hours), three times the meeting cap, and `hostConflicts` passes the bare
+  // slot window through here. Read with the meeting-sized lookback, an
+  // out-of-office block that began the previous afternoon was filtered out of
+  // the query itself — so the one caller whose whole job is to warn the host
+  // ("that time overlaps something on your calendar") never saw it.
+  const blockLookback = new Date(
+    new Date(opts.fromIso).getTime() - MAX_BLOCK_MINUTES * 60_000,
+  ).toISOString();
+
   // Time already taken in a connected calendar: a subscribed ICS feed
   // (Outlook, Apple, Calendly) or Google Calendar itself. Served from what the
   // last sync stored — never fetched here, because this runs inside a public
@@ -353,12 +363,12 @@ async function hostCommitments(
       .lt("starts_at", opts.toIso)
       .order("starts_at", { ascending: true })
       .limit(BUSY_ROW_CAP),
-    // Time the host marked unavailable by hand. Same lookback as the others:
-    // a block can start before the window and run into it.
+    // Time the host marked unavailable by hand. Its own lookback, sized to the
+    // block cap: a block can start up to a day before the window and run into it.
     table(client, "scheduling_blocks")
       .select("starts_at, ends_at")
       .eq("user_id", opts.hostUserId)
-      .gte("starts_at", lookback)
+      .gte("starts_at", blockLookback)
       .lt("starts_at", opts.toIso)
       .order("starts_at", { ascending: true })
       .limit(BUSY_ROW_CAP),
