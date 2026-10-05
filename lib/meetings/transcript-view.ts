@@ -76,7 +76,15 @@ export function parseTranscript(text: string): TranscriptTurn[] {
 
     // "Name: said" or "Name (uncertain — …): said".
     const match = /^([^:]{1,80}?)(?:\s*\(([^)]{0,120})\))?\s*:\s+(.+)$/.exec(line);
-    const speaker = match ? readSpeaker(match[1]) : null;
+    // The note slot only ever holds the formatter's own confidence marker. A
+    // parenthetical that is not one — "Rae (Acme)", a name a guest typed at the
+    // door — is part of the NAME, and reading it as a note would truncate the
+    // name and mark every line of theirs with a doubt the room never recorded.
+    const rawNote = match ? (match[2] ?? "").trim() : "";
+    const isNote = rawNote.length > 0 && rawNote.toLowerCase().startsWith("uncertain");
+    const speaker = match
+      ? readSpeaker(rawNote && !isNote ? `${match[1].trim()} (${rawNote})` : match[1])
+      : null;
 
     if (!speaker) {
       // Unparseable, or a line that is simply prose. Attach it to the turn in
@@ -87,7 +95,7 @@ export function parseTranscript(text: string): TranscriptTurn[] {
       continue;
     }
 
-    const note = (match![2] ?? "").trim();
+    const note = isNote ? rawNote : "";
     const uncertain = note.length > 0;
     const overlapped = note.includes(OVERLAP_NOTE);
     const said = match![3].trim();

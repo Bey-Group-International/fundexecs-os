@@ -35,6 +35,26 @@ describe("parseTranscript", () => {
     expect(turn.overlapped).toBe(true);
   });
 
+  // The note slot only ever holds the formatter's own confidence marker. A
+  // guest who typed "Rae (Acme)" at the door is not uncertain — they are
+  // called that, and truncating the name would merge two guests named Rae.
+  it("keeps a parenthetical that is not a confidence note as part of the name", () => {
+    const [turn] = parseTranscript("Rae (Acme): We can close Friday.");
+    expect(turn.speaker).toBe("Rae (Acme)");
+    expect(turn.uncertain).toBe(false);
+    expect(turn.overlapped).toBe(false);
+    expect(turn.paragraphs).toEqual(["We can close Friday."]);
+  });
+
+  // ...but the combined prefix still has to look like a name: a clause that
+  // happens to end in a parenthetical is prose, not a speaker.
+  it("rejects a prose prefix even when it ends in a parenthetical", () => {
+    const turns = parseTranscript("Ray: Hello.\nThe question is this (roughly): do we hold?");
+    expect(turns).toHaveLength(1);
+    expect(turns[0].speaker).toBe("Ray");
+    expect(turns[0].paragraphs).toEqual(["Hello.", "The question is this (roughly): do we hold?"]);
+  });
+
   // Merging across a change in confidence would make the marker claim more or
   // less than the room actually reported.
   it("does not merge across a change in confidence", () => {
