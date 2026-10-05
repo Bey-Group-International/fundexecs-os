@@ -93,20 +93,26 @@ export function formatTransceivers(states: readonly TransceiverState[]): string 
 }
 
 /**
- * Whether this peer's video sender is carrying the wrong thing.
+ * Whether this peer's sender is carrying the wrong thing.
  *
  * The one failure mode a sender can repair by itself: it holds no track, or a
- * track that has ended, while the local camera is live. Replacing it is
+ * track that has ended, while the local device is live. Replacing it is
  * idempotent and needs no renegotiation, because the transceiver and its
  * m-line already exist — which is precisely why the connection can be up and
- * carrying audio while this one direction stays dark.
+ * carrying one kind of media while the other direction stays dark.
  *
  * Deliberately NOT true when the local track is absent (nothing to attach) or
- * when the sender already holds it. A disabled track is also left alone: that
- * is someone's camera switched off, not a fault, and replacing it would turn
- * their camera back on for everyone else.
+ * when the sender already holds it. Whether the local track is ENABLED is not
+ * consulted, and must not be: a disabled track is somebody muted or with their
+ * camera off, and attaching one sends silence or black rather than turning their
+ * device on. Attaching it is what makes un-muting work later without
+ * renegotiating, so skipping the repair while they are muted would leave the
+ * sender permanently empty — exactly the fault this exists to fix.
+ *
+ * Kind-agnostic on purpose. Audio had no repair at all, which is a connection
+ * that is up, shows the far end's picture, and carries not one word they say.
  */
-export function videoSenderNeedsRepair(
+export function senderNeedsRepair(
   senderTrack: MediaStreamTrackLike | null | undefined,
   localTrack: MediaStreamTrackLike | null | undefined,
 ): boolean {
@@ -137,4 +143,29 @@ export function looksLikeMissingVideo(input: {
   if (input.connectedForMs < settle) return false;
   if (!input.peerSaysCameraOn) return false;
   return !input.hasInboundVideoTrack;
+}
+
+/**
+ * Whether a connected peer looks like it is failing to deliver audio.
+ *
+ * Stricter than the video question, and deliberately: muting does not remove an
+ * audio track, it disables one. A negotiated audio m-section therefore always
+ * produces an inbound track, whether the far end is talking, silent or muted —
+ * so a connected peer with NO inbound audio track has not negotiated audio at
+ * all, and no amount of them unmuting will ever be heard. There is no benign
+ * reading of it and nothing to ask them first.
+ *
+ * `settleMs` exists only because `connected` can arrive a moment before the
+ * tracks that were negotiated with it are attached.
+ */
+export function looksLikeMissingAudio(input: {
+  connectionState: string;
+  connectedForMs: number;
+  hasInboundAudioTrack: boolean;
+  settleMs?: number;
+}): boolean {
+  const settle = input.settleMs ?? 5_000;
+  if (input.connectionState !== "connected") return false;
+  if (input.connectedForMs < settle) return false;
+  return !input.hasInboundAudioTrack;
 }

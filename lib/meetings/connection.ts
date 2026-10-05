@@ -101,6 +101,100 @@ export function shouldForceRelay(input: { isGuest: boolean; relayAvailable: bool
   return input.isGuest && input.relayAvailable;
 }
 
+/**
+ * How long to wait for a relay candidate before concluding there will not be one.
+ *
+ * A TURN allocation is one request and one reply over an already-open socket, so
+ * a server that is going to answer answers in well under a second; this is slack
+ * for a slow mobile link, not a budget. It only ever matters when the allocation
+ * is NOT going to succeed — gathering ends by itself when it does — and in that
+ * case it is the whole cost of the mistake, so it is short.
+ */
+export const RELAY_PROBE_MS = 3_000;
+
+/** The parts of an ICE candidate that say whether it came from a relay. */
+export interface CandidateLike {
+  /** Populated by every engine that implements RTCIceCandidate.type. */
+  type?: string | null;
+  /** The raw a=candidate line, which always carries the type. */
+  candidate?: string | null;
+}
+
+/**
+ * Whether this candidate is an address on a relay.
+ *
+ * Read from `type` where the engine provides it and parsed from the candidate
+ * line where it does not — the line is normative and present everywhere, and a
+ * candidate that arrived as plain JSON (a buffered one, a test fixture) has the
+ * line and no `type` at all.
+ *
+ * The end-of-candidates signal is an empty candidate, which is not a relay and
+ * must not be read as one.
+ */
+export function isRelayCandidate(candidate: CandidateLike | null | undefined): boolean {
+  if (!candidate) return false;
+  if (typeof candidate.type === "string" && candidate.type.length > 0) return candidate.type === "relay";
+  const line = candidate.candidate ?? "";
+  return / typ relay(\s|$)/.test(line);
+}
+
+/** What a relay-only connection has managed to do so far. */
+export interface RelayProbe {
+  /** Whether this client was told to use the relay and nothing else. */
+  relayOnly: boolean;
+  /** Whether a candidate of type `relay` has been gathered. */
+  sawRelay: boolean;
+  /** Whether the browser has finished gathering: no more candidates are coming. */
+  gatheringComplete: boolean;
+  /** How long gathering has been running. */
+  elapsedMs: number;
+  /** Whether a relay-only connection has reached `failed`. */
+  failed: boolean;
+}
+
+/**
+ * Whether to stop insisting on the relay and let this client try a direct path.
+ *
+ * `shouldForceRelay` guards on whether a relay was CONFIGURED, which is the only
+ * thing the endpoint handing out credentials can know. It is not the same
+ * question as whether the relay WORKS. Credentials are minted from a secret, or
+ * issued by a provider, without anybody allocating anything — so a TURN server
+ * that is down, whose shared secret no longer matches, whose monthly quota is
+ * spent, or that this network cannot reach, is indistinguishable from a healthy
+ * one at the moment the policy is chosen.
+ *
+ * On a relay-only connection that difference is total. `iceTransportPolicy:
+ * "relay"` removes the host and server-reflexive candidates, so a failed
+ * allocation leaves the connection with NO candidates: it cannot fail over to a
+ * direct path because it has been told not to have one. There is nothing to
+ * retry, no state change to react to, and nothing in the UI that distinguishes
+ * it from a peer who has not finished joining. A guest on an ordinary home
+ * network — who would have connected directly without ever needing the relay —
+ * simply never appears for anybody, and the host sits looking at a tile that
+ * stays empty for the whole meeting.
+ *
+ * So the policy is provisional, and these are the three ways it is withdrawn:
+ *
+ *  - gathering finished and produced no relay candidate. Conclusive: the
+ *    allocation was refused or the server never answered, and no further
+ *    candidate is coming.
+ *  - the deadline passed with no relay candidate. The same conclusion for a
+ *    server that neither answers nor refuses, where gathering can hang.
+ *  - a relay candidate WAS gathered and the connection still failed. The relay
+ *    exists but cannot carry this call; a direct path is the only thing left to
+ *    try, and "all" is a superset of "relay" so nothing is given up by asking
+ *    for it.
+ *
+ * Withdrawing it is strictly a widening — every candidate the relay-only
+ * connection had is still allowed — so the worst case of being wrong is a direct
+ * path that is attempted and fails, which is what every non-guest already does.
+ */
+export function shouldAbandonRelayOnly(probe: RelayProbe): boolean {
+  if (!probe.relayOnly) return false;
+  if (probe.sawRelay) return probe.failed;
+  return probe.gatheringComplete || probe.elapsedMs >= RELAY_PROBE_MS;
+}
+
 // ─── Perfect negotiation ─────────────────────────────────────────────────────
 
 /**

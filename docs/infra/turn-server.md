@@ -208,8 +208,49 @@ office WiFi**. Cellular CGNAT is exactly the network that needed the relay.
 | `reason: "unconfigured"` after setting the variables | No redeploy                                                                                                                          |
 | `reason: "misconfigured"`                            | `TURN_URLS` has only a `stun:` entry, or `TURN_SECRET` is blank                                                                      |
 | Credentials issued, allocation returns 401           | `TURN_SECRET` ≠ `static-auth-secret`; usually stray whitespace                                                                       |
+| Guests connect, but only after a few seconds          | The relay never allocated, and the client withdrew relay-only for them (see below). Fix the relay; the delay is the symptom.          |
 | Allocation succeeds, media never flows               | Relay port range 49152–65535/UDP is closed, or `external-ip` is wrong                                                                |
 | Works on WiFi, fails on mobile                       | You are testing the direct path; the relay is not being exercised. Force it with `iceTransportPolicy: "relay"` in `webrtc-internals` |
+
+## What the client does when the relay does not work
+
+Invite-link guests are put on `iceTransportPolicy: "relay"` — the direct path
+they would otherwise try first is the one that fails on the networks they are
+on, so skipping it forms their call on the first attempt instead of after a
+failure, a restart and a stall.
+
+That decision can only be made from whether a relay is CONFIGURED. Credentials
+are computed from `TURN_SECRET`, or issued by Cloudflare, and nothing allocates
+anything on the way — so a relay that is down, whose secret no longer matches,
+whose quota is spent, or that a particular network cannot reach is
+indistinguishable from a healthy one at the moment the policy is chosen.
+
+On a relay-only connection that gap is the whole call. The policy removes the
+host and server-reflexive candidates, so a refused allocation leaves a
+connection with **no candidates at all**: it cannot fail over to a direct path,
+because it has been told not to have one. Nothing fails, nothing retries, and
+the guest's tile simply never arrives for anybody.
+
+So the policy is provisional. The client withdraws it, for the rest of that
+call, when any of these happens:
+
+- ICE gathering finishes having produced no `relay` candidate — the allocation
+  was refused;
+- `RELAY_PROBE_MS` (3s) passes with no `relay` candidate — the relay is not
+  answering at all;
+- a `relay` candidate was gathered and the connection still failed.
+
+Withdrawing is a widening: `all` permits every candidate `relay` permitted, so
+nothing is given up. Connections that have already formed over the relay are
+left alone; the ones that have not are rebuilt on the wider policy. The console
+says which of the two causes it saw, because they have different owners — an
+allocation that never happened is a credentials or quota problem, and one that
+happened and could not carry the call is a network problem.
+
+This is a safety net, not a substitute for a working relay. A guest it rescues
+is a guest who paid several seconds for it and who will still fail outright if
+they are behind the symmetric NAT or CGNAT that needed the relay in the first
+place. Treat any occurrence of those console lines as the relay being broken.
 
 ## What this costs
 
