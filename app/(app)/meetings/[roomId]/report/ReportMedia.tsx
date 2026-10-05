@@ -30,6 +30,7 @@ export function ReportMedia({
   recordings,
   cueRows,
   transcript,
+  markers,
 }: {
   meetingId: string;
   recordings: readonly ReportRecording[];
@@ -37,6 +38,8 @@ export function ReportMedia({
   cueRows: readonly CueRow[];
   /** The stored transcript block, which is what renders when there are no cues. */
   transcript: string | null;
+  /** The report's highlights, placed on the recording; ticks on the scrubber. */
+  markers?: ReadonlyArray<{ ms: number; label: string }>;
 }) {
   const playerRef = useRef<RecordingPlayerHandle | null>(null);
   /**
@@ -115,6 +118,7 @@ export function ReportMedia({
         recordings={recordings}
         playerRef={attachPlayer}
         onTime={handleTime}
+        markers={markers}
       />
 
       {/* Full transcript, read back into turns rather than shown as the raw

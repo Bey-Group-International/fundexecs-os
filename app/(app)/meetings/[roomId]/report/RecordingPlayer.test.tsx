@@ -93,6 +93,7 @@ async function setup(
     supported?: boolean;
     ref?: React.Ref<RecordingPlayerHandle>;
     shareable?: boolean;
+    markers?: Array<{ ms: number; label: string }>;
     /** Runs after render and before the source opens: the "not ready yet" window. */
     beforeOpen?: () => void;
   } = {},
@@ -138,7 +139,7 @@ async function setup(
   }) as unknown as typeof fetch;
 
   const { container } = render(
-    <RecordingPlayer meetingId="m1" recordingId="r1" ref={opts.ref} shareable={opts.shareable} />,
+    <RecordingPlayer meetingId="m1" recordingId="r1" ref={opts.ref} shareable={opts.shareable} markers={opts.markers} />,
   );
 
   // Let the timeline fetch land, which is what decides native vs MediaSource.
@@ -211,6 +212,15 @@ async function setup(
       applyRemovals();
     },
   };
+}
+
+/** The harness, with highlights on the scrubber. */
+function setupWithMarkers(
+  parts: number,
+  ref: React.Ref<RecordingPlayerHandle>,
+  markers: Array<{ ms: number; label: string }>,
+) {
+  return setup(parts, { ref, markers });
 }
 
 // ── Appending ───────────────────────────────────────────────────────────────
@@ -379,5 +389,35 @@ describe("controls", () => {
   it("offers no link from a recording the transcript is not timed against", async () => {
     await setup(20);
     expect(document.querySelector('[title^="Copy a link"]')).toBeNull();
+  });
+});
+
+describe("highlight markers", () => {
+  afterEach(() => jest.restoreAllMocks());
+
+  it("marks each highlight on the scrubber and plays from it when pressed", async () => {
+    const play = jest.spyOn(HTMLMediaElement.prototype, "play").mockImplementation(() => Promise.resolve());
+    sources = [];
+    // Rendered through the harness, with markers on the timed recording.
+    const ref = createRef<RecordingPlayerHandle>();
+    const h = await setupWithMarkers(60, ref, [{ ms: 120_000, label: "Terms agreed" }]);
+    const tick = document.querySelector('[aria-label="Highlight at 2:00: Terms agreed"]') as HTMLButtonElement;
+    expect(tick).not.toBeNull();
+    await act(async () => {
+      fireEvent.click(tick);
+    });
+    for (let i = 0; i < 6; i++) {
+      await act(async () => {
+        await new Promise((r) => setTimeout(r, 0));
+      });
+    }
+    expect(h.video.currentTime).toBe(120);
+    expect(play).toHaveBeenCalled();
+  });
+
+  it("drops a marker past the end of the recording", async () => {
+    const ref = createRef<RecordingPlayerHandle>();
+    await setupWithMarkers(10, ref, [{ ms: 999_000, label: "Late" }]);
+    expect(document.querySelector('[aria-label^="Highlight at"]')).toBeNull();
   });
 });

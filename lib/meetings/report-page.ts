@@ -17,6 +17,7 @@ import { REPORT_WAIT_LIMIT_MS } from "@/lib/meetings/attendance";
 import { normalizeNoteList, normalizeNoteText } from "@/lib/meetings/live-notes";
 import { TRUNCATED_KEY } from "@/lib/meetings/report-analysis";
 import { OPEN_QUESTIONS_KEY } from "@/lib/meetings/report-gaps";
+import { reportInsights, type ReportInsights } from "@/lib/meetings/report-insights";
 
 /** The meeting fields the page renders. */
 export interface ReportMeeting {
@@ -148,6 +149,8 @@ export interface ReportContent {
   /** The analysis ran out of room before it finished. */
   truncated: boolean;
   transcript: string | null;
+  /** Highlights, unresolved questions, risks and the next agenda. See report-insights.ts. */
+  insights: ReportInsights;
 }
 
 export function reportContent(report: ReportRow): ReportContent {
@@ -168,6 +171,7 @@ export function reportContent(report: ReportRow): ReportContent {
         : null,
     truncated: analysis?.[TRUNCATED_KEY] === true,
     transcript: report.full_transcript,
+    insights: reportInsights(analysis),
   };
 }
 

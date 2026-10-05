@@ -148,6 +148,15 @@ export default async function MeetingReportPage({
   const momentCues = playable?.started_at ? transcriptCues(data.cueRows, playable.started_at) : [];
   const momentsOn = momentCues.length > 0 && cuesAreTimed(momentCues);
   const momentOf = (text: string) => (momentsOn ? momentFor(text, momentCues) : null);
+  // A highlight is placed by its quote — the words that were said — and only
+  // falls back to its own summary line when there is no quote, or the quote
+  // was not convincingly found.
+  const { highlights, unresolved, risks, agenda } = content.insights;
+  const highlightAt = highlights.map((h) => (h.quote ? momentOf(h.quote) : null) ?? momentOf(h.point));
+  // The same moments as ticks on the recording's scrubber.
+  const markers = highlights
+    .map((h, i) => ({ ms: highlightAt[i], label: h.point }))
+    .filter((m): m is { ms: number; label: string } => m.ms !== null);
   const hasBody =
     Boolean(content.summary) || content.keyPoints.length > 0 || content.decisions.length > 0;
 
@@ -287,6 +296,30 @@ export default async function MeetingReportPage({
                 </Section>
               )}
 
+              {/* The moments worth going back to, each one press from the recording.
+                  Chosen by the report call when the meeting ended; nothing marked
+                  them during the call, which stays silent. */}
+              {highlights.length > 0 && (
+                <Section title="Highlights" count={highlights.length}>
+                  <ol className="flex flex-col gap-3">
+                    {highlights.map((h, i) => (
+                      <li key={i} className="flex items-start gap-3">
+                        <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-gold-400/15 text-[11px] font-semibold tabular-nums text-[var(--gold-400)]" aria-hidden="true">
+                          {i + 1}
+                        </span>
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm text-[var(--fg-primary)]">{h.point}</p>
+                          {h.quote && (
+                            <p className="mt-0.5 text-xs italic text-[var(--fg-muted)]">“{h.quote}”</p>
+                          )}
+                        </div>
+                        {highlightAt[i] !== null && <MomentChip ms={highlightAt[i]!} what="this highlight" />}
+                      </li>
+                    ))}
+                  </ol>
+                </Section>
+              )}
+
               {/* Action items — straight after the summary, because they are what the
                   meeting left people to do. Ticked off here, as the tasks they became. */}
               {actionItems.length > 0 ? (
@@ -346,13 +379,63 @@ export default async function MeetingReportPage({
                 </div>
               )}
 
-              {/* Next meeting suggestion */}
-              {content.nextMeeting && (
+              {/* What the meeting left open and what could go wrong — the two lists
+                  that decide whether there needs to be a next meeting at all. */}
+              {(unresolved.length > 0 || risks.length > 0) && (
+                <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+                  {unresolved.length > 0 && (
+                    <Section title="Open questions" count={unresolved.length}>
+                      <ul className="flex flex-col gap-2.5">
+                        {unresolved.map((q, i) => (
+                          <li key={i} className="flex items-start gap-2 text-sm text-[var(--fg-primary)]">
+                            <span className="mt-0.5 text-[var(--status-warning)]" aria-hidden="true">?</span>
+                            <div className="min-w-0 flex-1">
+                              {q.text}
+                              {q.owner && (
+                                <span className="ml-1.5 inline-block rounded-full bg-[var(--surface-3)] px-2 py-0.5 align-middle text-[11px] text-[var(--fg-secondary)]">
+                                  {q.owner} to answer
+                                </span>
+                              )}
+                            </div>
+                          </li>
+                        ))}
+                      </ul>
+                    </Section>
+                  )}
+                  {risks.length > 0 && (
+                    <Section title="Risks & concerns" count={risks.length}>
+                      <ul className="flex flex-col gap-2.5">
+                        {risks.map((r, i) => (
+                          <li key={i} className="flex items-start gap-2 text-sm text-[var(--fg-primary)]">
+                            <span className="mt-0.5 text-[var(--status-danger)]" aria-hidden="true">!</span>
+                            <span className="min-w-0 flex-1">{r}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </Section>
+                  )}
+                </div>
+              )}
+
+              {/* The next meeting: when, and what it should cover — built from
+                  what is still open, so the follow-up meeting starts where this
+                  one stopped. */}
+              {(content.nextMeeting || agenda.length > 0) && (
                 <div className="flex items-start gap-3 rounded-xl border border-gold-400/20 bg-gold-400/5 px-4 py-3">
                   <span className="shrink-0 text-base text-[var(--gold-400)]" aria-hidden="true">📅</span>
-                  <div>
+                  <div className="min-w-0 flex-1">
                     <p className="text-[11px] font-medium uppercase tracking-wide text-[var(--fg-muted)]">Next meeting</p>
-                    <p className="mt-0.5 text-sm text-[var(--fg-primary)]">{content.nextMeeting}</p>
+                    {content.nextMeeting && (
+                      <p className="mt-0.5 text-sm text-[var(--fg-primary)]">{content.nextMeeting}</p>
+                    )}
+                    {agenda.length > 0 && (
+                      <>
+                        <p className="mt-3 text-[11px] font-medium uppercase tracking-wide text-[var(--fg-muted)]">Suggested agenda</p>
+                        <ol className="mt-1 list-decimal space-y-1 pl-5 text-sm text-[var(--fg-primary)] marker:text-[var(--fg-muted)]">
+                          {agenda.map((item, i) => <li key={i}>{item}</li>)}
+                        </ol>
+                      </>
+                    )}
                   </div>
                 </div>
               )}
@@ -387,6 +470,7 @@ export default async function MeetingReportPage({
                 recordings={data.recordings}
                 cueRows={data.cueRows}
                 transcript={content.transcript}
+                markers={markers}
               />
             </>
           ),
