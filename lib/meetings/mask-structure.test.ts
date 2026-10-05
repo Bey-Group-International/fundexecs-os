@@ -184,6 +184,47 @@ describe("keepTouchingStructures", () => {
     expect(keepTouchingStructures(g.coverage, g.width, g.height, reach, tiny)).toEqual({ kept: 0, quieted: 0 });
     expect(at(g, 1, 0)).toBe(60);
   });
+
+  /**
+   * And refuses it on EITHER field being short, not just the first.
+   *
+   * The buffer here is PARTIALLY short, and that is the whole test. A buffer short
+   * by everything reads back `undefined` for every cell, and `undefined` compares
+   * false against every reach — so the unguarded pass coincidentally does nothing,
+   * exactly like the guarded one, and an assertion against it passes either way.
+   * (The first version of this test did that and survived the mutation.) Half a
+   * buffer is the case that separates them: the cells inside it are decided and
+   * the cells past it are not, so a pass that checked one buffer and wrote to two
+   * would half-process the frame and report success.
+   */
+  it("refuses a short buffer whichever of the two fields it is", () => {
+    const scene = () => gridOf([
+      [255, 255, 60, 60, 60, 0],
+      [255, 255, 60, 60, 60, 0],
+      [255, 255, 60, 60, 60, 0],
+      [0, 0, 0, 0, 0, 0],
+      [0, 0, 0, 0, 0, 0],
+      [0, 0, 0, 0, 0, 0],
+    ]);
+
+    // With both fields whole, the middle of that band is a structure and is kept —
+    // otherwise the assertions below pass on a scene with nothing to decide.
+    const whole = scene();
+    keepTouchingStructures(whole.coverage, whole.width, whole.height, reach,
+      createStructureScratch(whole.coverage.length));
+    expect(at(whole, 3, 1)).toBe(255);
+
+    for (const field of ["toBackground", "toPerson"] as const) {
+      const g = scene();
+      const half = {
+        ...createStructureScratch(g.coverage.length),
+        [field]: new Uint16Array(Math.floor(g.coverage.length / 2)),
+      };
+      expect(keepTouchingStructures(g.coverage, g.width, g.height, reach, half))
+        .toEqual({ kept: 0, quieted: 0 });
+      expect(at(g, 3, 1)).toBe(60);
+    }
+  });
 });
 
 describe("fillEnclosedHoles", () => {

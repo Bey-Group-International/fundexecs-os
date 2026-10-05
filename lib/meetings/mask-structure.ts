@@ -544,7 +544,15 @@ export function keepTouchingStructures(
   const h = Math.max(0, Math.floor(height));
   const report: StructureReport = { kept: 0, quieted: 0 };
   const n = w * h;
-  if (n <= 0 || coverage.length < n || scratch.toBackground.length < n) return report;
+  // Both fields, not just the first: `distanceFields` writes to each of them for
+  // every cell, and a short buffer takes the writes silently — a typed array drops
+  // an out-of-range write and reads back `undefined`, which compares false against
+  // every reach, so the pass would make its keep-and-quiet decisions from nothing
+  // and say so to no one. (CodeRabbit's finding on #1296. Not reachable through
+  // `createStructureScratch`, which sizes all four the same; this is the guard
+  // being as honest as the other two passes' guards.)
+  if (n <= 0 || coverage.length < n) return report;
+  if (scratch.toBackground.length < n || scratch.toPerson.length < n) return report;
 
   const toBackground = scratch.toBackground;
   const toPerson = scratch.toPerson;
