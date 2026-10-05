@@ -44,6 +44,9 @@ function fakeClient() {
   /** Uploads refused outright — a 4xx, which upload-retry gives up on. */
   let refuseUploads = false;
 
+  /** Uploads that fail with a 5xx, which upload-retry asks again about. */
+  let stumbleUploads = false;
+
   const client = {
     from(table: string) {
       return {
@@ -76,6 +79,7 @@ function fakeClient() {
           upload: async () => {
             if (holdUploads) await new Promise<void>((resolve) => held.push(resolve));
             if (refuseUploads) return { error: Object.assign(new Error("refused"), { status: 403 }) };
+            if (stumbleUploads) return { error: Object.assign(new Error("stumbled"), { status: 503 }) };
             return { error: null };
           },
         };
@@ -89,6 +93,7 @@ function fakeClient() {
     failNextInsert: () => { insertFails = true; },
     holdUploads: () => { holdUploads = true; },
     refuseUploads: () => { refuseUploads = true; },
+    stumbleUploads: () => { stumbleUploads = true; },
     releaseUploads: () => { holdUploads = false; held.splice(0).forEach((r) => r()); },
   };
 }
@@ -233,6 +238,38 @@ describe("how long the recording says it is", () => {
 
     const closed = sb.updates.find((u) => u.id === "r1" && u.patch.status === "complete");
     expect(closed?.patch.duration_seconds).toBe(0);
+  });
+});
+
+describe("a part abandoned mid-retry", () => {
+  // The defect: a part waiting out a retry delay when the next recording
+  // started was returned from without being counted. It is exactly as lost as
+  // one that exhausted its retries — but `dropped` stayed 0, so the recording
+  // closed with no notice and the host was never told time was missing.
+  it("is counted, so the notice says what was lost", async () => {
+    jest.spyOn(console, "warn").mockImplementation(() => {});
+    const sb = fakeClient();
+    const { result } = setup(sb);
+
+    await act(async () => { await result.current.start(); });
+
+    // A part whose upload stumbles (5xx): retried, so it enters the delay.
+    sb.stumbleUploads();
+    act(() => { composer!.handlers.onChunk(new Blob(["a"]), 0, { offsetMs: 0, durationMs: 5000 }); });
+    await flush();
+
+    // Stop, and record again while that part is still waiting to retry.
+    act(() => { composer!.handlers.onStopped("stopped"); });
+    await flush();
+    await act(async () => { await result.current.start(); });
+
+    // The retry delay elapses; the part finds a newer recording and is
+    // abandoned. Real time, because the delay is a real setTimeout.
+    await act(async () => { await new Promise((r) => setTimeout(r, 700)); });
+
+    const closed = sb.updates.find((u) => u.id === "r1" && u.patch.status === "complete");
+    expect(closed?.patch.chunk_count).toBe(0);
+    expect(result.current.notice).toMatch(/missing/);
   });
 });
 
