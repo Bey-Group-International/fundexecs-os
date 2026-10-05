@@ -208,7 +208,7 @@ office WiFi**. Cellular CGNAT is exactly the network that needed the relay.
 | `reason: "unconfigured"` after setting the variables | No redeploy                                                                                                                          |
 | `reason: "misconfigured"`                            | `TURN_URLS` has only a `stun:` entry, or `TURN_SECRET` is blank                                                                      |
 | Credentials issued, allocation returns 401           | `TURN_SECRET` ≠ `static-auth-secret`; usually stray whitespace                                                                       |
-| Guests connect, but only after a few seconds          | The relay never allocated, and the client withdrew relay-only for them (see below). Fix the relay; the delay is the symptom.          |
+| Guests connect, but only after a few seconds         | The relay never allocated, and the client withdrew relay-only for them (see below). Fix the relay; the delay is the symptom.         |
 | Allocation succeeds, media never flows               | Relay port range 49152–65535/UDP is closed, or `external-ip` is wrong                                                                |
 | Works on WiFi, fails on mobile                       | You are testing the direct path; the relay is not being exercised. Force it with `iceTransportPolicy: "relay"` in `webrtc-internals` |
 
