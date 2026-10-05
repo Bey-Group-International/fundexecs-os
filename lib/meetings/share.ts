@@ -42,6 +42,27 @@ export function meetingInviteUrl(origin: string, roomCode: string): string {
   return `${(origin ?? "").trim().replace(/\/+$/, "")}/meeting-invite/${encodeURIComponent(code)}`;
 }
 
+/**
+ * The link an invitee should actually press to join.
+ *
+ * A meeting imported from a synced calendar can carry its own conferencing
+ * link (`meeting_url`: a Meet or Zoom room the host is really in). When it
+ * does, that is where the meeting happens, and sending the FundExecs room
+ * instead lands the guest in an empty room while everybody else is elsewhere.
+ * The reminder sweep, the host-triggered reminder and the reschedule notice
+ * each used to decide this on their own, and two of them decided differently —
+ * so one guest could get two emails about one meeting pointing at two rooms.
+ *
+ * Only an http(s) link counts: anything else cannot be an href an email
+ * template will render, so the room link is the safer fallback. Returns "" when
+ * there is neither a usable external link nor a room code.
+ */
+export function meetingJoinUrl(origin: string, roomCode: string | null | undefined, meetingUrl?: string | null): string {
+  const external = (meetingUrl ?? "").trim();
+  if (/^https?:\/\//i.test(external)) return external;
+  return meetingInviteUrl(origin, roomCode ?? "");
+}
+
 /** When the meeting is, phrased for a person, or "" if there's nothing to say. */
 export function formatMeetingWhen(scheduledAt: string | null | undefined, timeZone?: string | null): string {
   if (!scheduledAt) return "";

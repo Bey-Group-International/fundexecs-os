@@ -356,6 +356,10 @@ export async function POST(req: NextRequest) {
             title: body.title ?? "Meeting",
             senderName: userData.user?.email ?? "Someone",
             emails,
+            // Where it happens, so the invitation and the later update notices
+            // (which already carry these) name the same place.
+            location: body.location ?? null,
+            meetingUrl: body.meetingUrl ?? null,
             hostEmail: auth.ctx.email ?? userData.user?.email ?? null,
             // Identity of the calendar entry, so the reschedule and cancel
             // paths move this one rather than adding a second.

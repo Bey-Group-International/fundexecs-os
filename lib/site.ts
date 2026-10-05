@@ -41,8 +41,38 @@ export const SITE_DESCRIPTION =
 // Canonical production URL. Overridable per-environment via NEXT_PUBLIC_APP_URL
 // (e.g. Vercel preview deployments, localhost). The fallback is the real
 // production domain — never the placeholder ".os" TLD, which is invalid.
-export const SITE_URL =
-  process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, "") || "https://fundexecs.com";
+export const PRODUCTION_SITE_URL = "https://fundexecs.com";
+
+/**
+ * Reduce a configured site URL to an absolute `scheme://host[:port]` origin.
+ *
+ * Every link the app emails — meeting invites, booking confirmations,
+ * reminders, the .ics "Save to calendar" button — is `SITE_URL` plus a path,
+ * and every email template refuses to render an href that does not start with
+ * http(s). So a value configured as a bare host (`fundexecs.com`, the shape
+ * Vercel's own URL variables take) or with stray whitespace used to produce
+ * links like `fundexecs.com/meeting-invite/abc`: dropped by the templates, so
+ * invitees got an invitation with a dead "Join meeting" button and a calendar
+ * entry with no URL. Normalising here fixes every path at once.
+ *
+ * Only the origin is kept: a configured path (`https://x.test/app`) would be
+ * prepended to every route the app already serves at the root.
+ */
+export function normalizeSiteUrl(raw: string | null | undefined, fallback: string = PRODUCTION_SITE_URL): string {
+  const trimmed = (raw ?? "").trim();
+  if (!trimmed) return fallback;
+  const withScheme = /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+  try {
+    // Only the origin survives, which also drops any trailing slash.
+    const url = new URL(withScheme);
+    if (!url.hostname) return fallback;
+    return `${url.protocol}//${url.host}`;
+  } catch {
+    return fallback;
+  }
+}
+
+export const SITE_URL = normalizeSiteUrl(process.env.NEXT_PUBLIC_APP_URL);
 
 // Brand colors as fully-resolved hex, mirroring the `:root` tokens in
 // app/globals.css. Used anywhere Tailwind classes can't reach — the web app

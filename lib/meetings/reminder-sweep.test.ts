@@ -351,3 +351,25 @@ describe("runMeetingReminders for a meeting booked through a scheduling link", (
     }
   });
 });
+
+describe("runMeetingReminders — which link it sends", () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    sendEmailMock.mockResolvedValue({ ok: true, channel: "gmail", detail: "sent" });
+    hostCredentialsMock.mockResolvedValue({ gmailAccessToken: "tok" });
+  });
+
+  it("prefers the meeting's own conferencing link, as the host-triggered reminder does", async () => {
+    const { supabase } = client([meeting({ meeting_url: "https://zoom.us/j/123" })]);
+    await runMeetingReminders(supabase, { now: NOW });
+    const html = (sendEmailMock.mock.calls[0][0] as { htmlBody: string }).htmlBody;
+    expect(html).toContain('href="https://zoom.us/j/123"');
+    expect(html).not.toContain("/meeting-invite/abc-def\"");
+  });
+
+  it("falls back to the room when the stored link cannot be rendered", async () => {
+    const { supabase } = client([meeting({ meeting_url: "zoom.us/j/123" })]);
+    await runMeetingReminders(supabase, { now: NOW });
+    expect((sendEmailMock.mock.calls[0][0] as { htmlBody: string }).htmlBody).toContain("/meeting-invite/abc-def");
+  });
+});

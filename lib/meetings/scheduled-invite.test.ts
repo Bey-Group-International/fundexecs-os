@@ -2,8 +2,10 @@
 // theory that they already knew — but the confirmation is also what puts the
 // meeting in their own calendar.
 import {
+  buildMeetingCalendarUrl,
   canInviteToCalendar,
   inviteEndIso,
+  meetingPlace,
   scheduledRecipients,
 } from "./scheduled-invite";
 
@@ -72,5 +74,39 @@ describe("inviteEndIso", () => {
     expect(inviteEndIso("2026-09-10T15:00:00.000Z", null)).toBe("2026-09-10T16:00:00.000Z");
     expect(inviteEndIso("2026-09-10T15:00:00.000Z", 0)).toBe("2026-09-10T16:00:00.000Z");
     expect(inviteEndIso("2026-09-10T15:00:00.000Z", -5)).toBe("2026-09-10T16:00:00.000Z");
+  });
+});
+
+describe("buildMeetingCalendarUrl", () => {
+  it("serves the .ics off the room code", () => {
+    expect(buildMeetingCalendarUrl("https://app.test", "abc-def")).toBe(
+      "https://app.test/api/meetings/public/abc-def/calendar.ics",
+    );
+  });
+
+  it("encodes the room code the same way the invite link does", () => {
+    // The two links in one email must name the same room.
+    expect(buildMeetingCalendarUrl("https://app.test/", " a b ")).toBe(
+      "https://app.test/api/meetings/public/a%20b/calendar.ics",
+    );
+  });
+});
+
+describe("meetingPlace", () => {
+  const joinUrl = "https://app.test/meeting-invite/abc";
+
+  it("is the room when the meeting has nowhere else to be", () => {
+    expect(meetingPlace({ joinUrl })).toEqual({ place: joinUrl, description: `Join: ${joinUrl}` });
+    expect(meetingPlace({ location: "  ", meetingUrl: null, joinUrl }).place).toBe(joinUrl);
+  });
+
+  it("is the meeting's own link when it has one, with the room as a second line", () => {
+    const out = meetingPlace({ meetingUrl: "https://zoom.us/j/1", joinUrl });
+    expect(out.place).toBe("https://zoom.us/j/1");
+    expect(out.description).toBe(`https://zoom.us/j/1\n\nMeeting room: ${joinUrl}`);
+  });
+
+  it("puts a physical place ahead of any link", () => {
+    expect(meetingPlace({ location: " Room 4 ", meetingUrl: "https://zoom.us/j/1", joinUrl }).place).toBe("Room 4");
   });
 });

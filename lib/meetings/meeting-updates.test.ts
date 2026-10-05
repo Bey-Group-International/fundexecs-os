@@ -382,3 +382,27 @@ describe("cancelling the rest of a series", () => {
     );
   });
 });
+
+describe("buildMeetingUpdateEmail — where the button goes", () => {
+  it("sends a rescheduled guest to the meeting's own link when it has one", () => {
+    const { html } = buildMeetingUpdateEmail("rescheduled", { ...CTX, meetingUrl: "https://zoom.us/j/123" });
+    expect(html).toContain('href="https://zoom.us/j/123"');
+    // The reminder, the invitation and this notice must agree, or one guest is
+    // sent to two rooms for one meeting.
+    expect(html).not.toContain('href="https://app.test/meeting-invite/abc"');
+  });
+
+  it("falls back to the room when the stored link is not one an email can render", () => {
+    const { html } = buildMeetingUpdateEmail("rescheduled", { ...CTX, meetingUrl: "zoom.us/j/123" });
+    expect(html).toContain('href="https://app.test/meeting-invite/abc"');
+  });
+
+  it("applies the same rule to a relocation", () => {
+    const { html } = buildMeetingUpdateEmail("relocated", {
+      ...CTX,
+      meetingUrl: "zoom.us/j/123",
+      previousMeetingUrl: "https://meet.test/old",
+    });
+    expect(html).toContain('href="https://app.test/meeting-invite/abc"');
+  });
+});

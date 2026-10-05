@@ -19,6 +19,8 @@ export const MAX_ATTENDEES = 100;
 
 export interface WritableMeeting {
   id: string;
+  /** The FundExecs room, from which the event's join link is built. */
+  room_code?: string | null;
   title: string | null;
   description: string | null;
   location: string | null;

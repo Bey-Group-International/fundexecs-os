@@ -361,3 +361,17 @@ describe("POST /api/meetings/[id]/remind — falling back to the org connection"
     expect(json.warning).toBeUndefined();
   });
 });
+
+describe("POST /api/meetings/[id]/remind — which link", () => {
+  it("prefers the meeting's own conferencing link", async () => {
+    mockDb(meetingRow({ meeting_url: "https://zoom.us/j/123" }));
+    await POST(req(), { params });
+    expect(sendEmailMock.mock.calls[0][0].htmlBody).toContain('href="https://zoom.us/j/123"');
+  });
+
+  it("falls back to the room rather than sending no button when the stored link has no scheme", async () => {
+    mockDb(meetingRow({ meeting_url: "zoom.us/j/123" }));
+    await POST(req(), { params });
+    expect(sendEmailMock.mock.calls[0][0].htmlBody).toContain('href="https://app.test/meeting-invite/abc-def"');
+  });
+});

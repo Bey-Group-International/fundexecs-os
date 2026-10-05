@@ -74,7 +74,11 @@ export default function MeetingInvitePage() {
   }
 
   function handleSignIn() {
-    router.push(`/login?redirect=/meetings/${roomCode}`);
+    // `next` is the parameter the login page, the sign-in actions and
+    // /auth/callback all read (lib/safe-next-path.ts). This used to send
+    // `redirect=`, which nothing reads, so an invitee who signed in landed on
+    // the workspace instead of in the meeting they had been invited to.
+    router.push(`/login?next=${encodeURIComponent(`/meetings/${roomCode}`)}`);
   }
 
   async function handleGuestJoin(e: React.FormEvent) {

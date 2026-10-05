@@ -9,6 +9,8 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/supabase/database.types";
 import { accessTokenFor, type ConnectionRow } from "@/lib/calendar/google.server";
 import { describeGoogleError } from "@/lib/calendar/google";
+import { meetingJoinUrl } from "@/lib/meetings/share";
+import { SITE_URL } from "@/lib/site";
 import {
   FUNDEXECS_MARKER_KEY,
   decideWrite,
@@ -200,7 +202,10 @@ export async function pushMeetingToGoogle(
 
   let body: ReturnType<typeof toGoogleEvent>;
   try {
-    body = toGoogleEvent(meeting);
+    // The link the event carries. Without it a native meeting's Google event
+    // had no way to join at all: the description only ever named
+    // `meeting_url`, which a meeting held in the FundExecs room does not have.
+    body = toGoogleEvent(meeting, { joinUrl: meetingJoinUrl(SITE_URL, meeting.room_code, meeting.meeting_url) || null });
   } catch (err) {
     const error = err instanceof Error ? err.message : "Could not build the event.";
     await recordSync(client, meeting.id, { status: "sync_failed", eventId: meeting.external_calendar_event_id, error });

@@ -1,4 +1,5 @@
 import type { createServerClient } from "@/lib/supabase/server";
+import { meetingInviteUrl } from "@/lib/meetings/share";
 import type { Json, LiveMeeting } from "@/lib/supabase/database.types";
 import { writeDashboardAudit } from "@/lib/dashboard/audit";
 import type { MeetingAttendeeInput } from "@/lib/meetings/attendees";
@@ -126,8 +127,13 @@ function cleanDuration(value: number | null | undefined): number {
   return Math.min(MAX_MEETING_MINUTES, Math.max(15, Math.trunc(value!)));
 }
 
+/**
+ * The invite link, as every server path builds it. Delegates to the one
+ * client-safe builder in lib/meetings/share.ts so an emailed link and a copied
+ * link can never disagree about trimming or encoding the room code.
+ */
 export function buildMeetingInviteUrl(origin: string, roomCode: string): string {
-  return `${origin.replace(/\/$/, "")}/meeting-invite/${roomCode}`;
+  return meetingInviteUrl(origin, roomCode);
 }
 
 export function buildMeetingRoomUrl(origin: string, roomCode: string): string {

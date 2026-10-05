@@ -3,7 +3,7 @@ import { requireOrgContext } from "@/lib/auth";
 import { createServerClient } from "@/lib/supabase/server";
 import { sendEmail } from "@/lib/email";
 import { writeDashboardAudit } from "@/lib/dashboard/audit";
-import { buildMeetingInviteUrl } from "@/lib/meetings/service";
+import { meetingJoinUrl } from "@/lib/meetings/share";
 import { formatSlotFull } from "@/lib/meetings/scheduling";
 import { SITE_URL } from "@/lib/site";
 import {
@@ -110,9 +110,10 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       );
     }
 
-    const joinUrl =
-      meeting.meeting_url?.trim() ||
-      (meeting.room_code ? buildMeetingInviteUrl(SITE_URL, meeting.room_code) : null);
+    // An external conferencing link only when it is one an email can render;
+    // a stored value with no scheme used to win here and then be dropped by
+    // the template, leaving the reminder with no "Join" button at all.
+    const joinUrl = meetingJoinUrl(SITE_URL, meeting.room_code, meeting.meeting_url) || null;
 
     const { subject, html } = buildReminderEmail({
       title: meeting.title ?? "",

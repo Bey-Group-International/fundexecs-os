@@ -12,7 +12,8 @@
 //      an unconnected mailbox must never surface as a failed save.
 import { sendEmail, type SendEmailCredentials } from "@/lib/email";
 import { buildInviteIcs, meetingInviteUid } from "@/lib/calendar/invite";
-import { buildMeetingCalendarUrl, canInviteToCalendar, inviteEndIso } from "@/lib/meetings/scheduled-invite";
+import { buildMeetingCalendarUrl, canInviteToCalendar, inviteEndIso, meetingPlace } from "@/lib/meetings/scheduled-invite";
+import { meetingInviteUrl, meetingJoinUrl } from "@/lib/meetings/share";
 import { buildSchedulingEmailHtml } from "@/lib/meetings/scheduling-email";
 import { formatSlotFull } from "@/lib/meetings/scheduling";
 import { buildSeriesInviteUrl } from "@/lib/meetings/invite";
@@ -161,7 +162,11 @@ export function buildMeetingUpdateEmail(
   kind: MeetingUpdateKind,
   ctx: MeetingUpdateContext,
 ): { subject: string; html: string } {
-  const joinUrl = `${(ctx.origin || "").replace(/\/$/, "")}/meeting-invite/${ctx.roomCode}`;
+  const joinUrl = meetingInviteUrl(ctx.origin, ctx.roomCode);
+  // Where the button goes: the meeting's own conferencing link when it has
+  // one, else the room. One rule for every notice, so a guest who gets a
+  // reschedule and then a reminder is not sent to two different rooms.
+  const pressUrl = meetingJoinUrl(ctx.origin, ctx.roomCode, ctx.meetingUrl);
   const now = whenIn(ctx.startIso, ctx.timezone, ctx.durationMinutes);
   const previous = whenIn(ctx.previousStartIso, ctx.timezone);
   // A one-tap correction for the entry the recipient already holds. Offered on
@@ -219,7 +224,7 @@ export function buildMeetingUpdateEmail(
           // is the meeting they already hold, rather than a second one.
           ["Previously", wasWhere],
         ],
-        cta: { label: "Join meeting", url: link && /^https?:\/\//i.test(link) ? link : joinUrl },
+        cta: { label: "Join meeting", url: pressUrl },
         secondary: calendarUrl ? { ...calendarUrl, label: "Save the new details to your calendar" } : null,
         footnote: "The time has not moved — replace the joining details on the entry you already have.",
       }),
@@ -236,7 +241,7 @@ export function buildMeetingUpdateEmail(
         ["New time", now],
         ["Previously", previous],
       ],
-      cta: { label: "Join meeting", url: joinUrl },
+      cta: { label: "Join meeting", url: pressUrl },
       secondary: calendarUrl,
       footnote: "Use the same link as before — only the time changed.",
     }),
@@ -296,14 +301,11 @@ function buildUpdateInvite(
     return undefined;
   }
 
-  const origin = (ctx.origin || "").replace(/\/$/, "");
-  const joinUrl = `${origin}/meeting-invite/${ctx.roomCode}`;
-  // What the calendar entry should say about where to go. The room link is the
-  // fallback, not the answer: a meeting with its own place or its own joining
-  // link has to carry that, or a relocation rewrites the entry with the very
-  // detail that just went stale.
-  const place = (ctx.location ?? "").trim() || (ctx.meetingUrl ?? "").trim() || joinUrl;
-  const description = place === joinUrl ? `Join: ${joinUrl}` : `${place}\n\nMeeting room: ${joinUrl}`;
+  const origin = (ctx.origin || "").trim().replace(/\/+$/, "");
+  const joinUrl = meetingInviteUrl(origin, ctx.roomCode);
+  // What the calendar entry should say about where to go — the same rule the
+  // invitation applied, so this rewrites the entry rather than contradicting it.
+  const { place, description } = meetingPlace({ location: ctx.location, meetingUrl: ctx.meetingUrl, joinUrl });
 
   try {
     return {
