@@ -9,6 +9,7 @@ import { loadOrgDirectory } from "@/lib/meetings/directory.server";
 import { normalizeNoteList, normalizeNoteText } from "@/lib/meetings/live-notes";
 import { EMPTY_REPORT, clampTranscript, generateMeetingReport } from "@/lib/meetings/report-analysis";
 import { mergeTranscripts, restoreTranscript, type StoredLine } from "@/lib/meetings/transcript-restore";
+import { meanRowConfidence, qualityPreamble, transcriptForModel, transcriptQuality } from "@/lib/meetings/transcript-quality";
 import { readAllTranscriptRows } from "@/lib/meetings/transcript-read";
 import { inferStartedAt } from "@/lib/meetings/meeting-span";
 import { ONE_WAY_KIND } from "@/lib/meetings/one-way";
@@ -194,6 +195,7 @@ export async function POST(req: Request) {
       );
 
     let stored = "";
+    let storedRows: StoredLine[] = [];
     try {
       const rows = await readAllTranscriptRows((from, to) =>
         supabase
@@ -204,13 +206,37 @@ export async function POST(req: Request) {
           .order("id", { ascending: true })
           .range(from, to),
       );
-      if (rows.length) stored = restoreTranscript(rows as unknown as StoredLine[]);
+      storedRows = rows as unknown as StoredLine[];
+      if (rows.length) stored = restoreTranscript(storedRows);
     } catch (err) {
       console.warn("[/api/meetings/report] stored transcript unavailable", err);
     }
 
     // Cap transcript to stay within model context / cost budget.
     const transcript = clampTranscript(mergeTranscripts(body.transcript, stored));
+
+    // What the model reads, which is not the same thing as what is stored.
+    //
+    // The record keeps every line the room heard, including the ones the speech
+    // engine scored as noise and the ones that were a smart speaker in the room
+    // being woken. That is right for a record and wrong for a summariser: handed
+    // an hour of recognised noise, a model either apologises — which is the best
+    // case, and is luck — or confidently summarises decisions nobody made.
+    //
+    // So the model's copy has those lines withheld, and is told how many and why,
+    // from the engine's own scores on the stored rows. `full_transcript` below is
+    // the untouched record.
+    const quality = transcriptQuality(transcript, { meanConfidence: meanRowConfidence(storedRows) });
+    const note = qualityPreamble(quality);
+    const readable = transcriptForModel(transcript);
+    const modelTranscript = note ? `${note}\n${readable}` : readable;
+    if (quality.verdict === "unusable" || quality.verdict === "silent") {
+      console.warn(
+        `[/api/meetings/report] meeting ${body.meetingId} transcript is ${quality.verdict}:`
+        + ` ${quality.usable} of ${quality.heard} lines usable`
+        + ` (${quality.withheldNoise} noise, ${quality.withheldAssistant} assistant)`,
+      );
+    }
 
     // The prompt and schema live in lib/meetings/report-analysis so the
     // regenerate path produces the identical shape — the log reads
@@ -244,7 +270,7 @@ export async function POST(req: Request) {
       analysis = await generateMeetingReport(client, MODEL, {
         title: body.title ?? "Untitled",
         participants: body.participants ?? [],
-        transcript,
+        transcript: modelTranscript,
         durationSeconds: body.duration ?? null,
         host: roles.host,
         recipients: roles.recipients,

@@ -34,10 +34,20 @@ describe("restoreTranscript", () => {
   });
 
   it("marks a doubtful line, and says when two people were talking", () => {
-    expect(restoreTranscript([row({ confidence: 0.2 })]))
+    expect(restoreTranscript([row({ confidence: 0.4 })]))
       .toBe("Alina (uncertain): we should hold the close");
-    expect(restoreTranscript([row({ confidence: 0.2, overlapped: true })]))
+    expect(restoreTranscript([row({ confidence: 0.4, overlapped: true })]))
       .toBe("Alina (uncertain — people speaking over each other): we should hold the close");
+  });
+
+  it("says outright when the engine scored a line as noise rather than doubt", () => {
+    // Below MODEL_CONFIDENCE_FLOOR the honest word is not "uncertain". An engine
+    // scoring its own output this low was not hearing speech, and a line marked
+    // merely doubtful is one a summariser will still try to use — which is how an
+    // hour of a microphone listening to a room became a meeting's minutes. The
+    // line stays in the record; the note is what keeps it from the model.
+    expect(restoreTranscript([row({ confidence: 0.2 })]))
+      .toBe("Alina (not recognised reliably): we should hold the close");
   });
 
   // Rows predating attribution carry no confidence. Reading that as doubt would

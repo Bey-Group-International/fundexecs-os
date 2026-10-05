@@ -6,6 +6,7 @@ import { CONVERSATIONAL_COST, gateConversationalSpend } from "@/lib/conversation
 import { generateMeetingReport } from "@/lib/meetings/report-analysis";
 import { meetingDurationSeconds } from "@/lib/meetings/meeting-span";
 import { mergeTranscripts, restoreTranscript, type StoredLine } from "@/lib/meetings/transcript-restore";
+import { meanRowConfidence, qualityPreamble, transcriptForModel, transcriptQuality } from "@/lib/meetings/transcript-quality";
 import { readAllTranscriptRows } from "@/lib/meetings/transcript-read";
 import { normalizeNoteList, normalizeNoteText } from "@/lib/meetings/live-notes";
 import { toLogEntry } from "@/lib/meetings/meeting-log";
@@ -112,10 +113,10 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       .order("id", { ascending: true })
       .range(from, to),
   )
-    .then((rows) => (rows.length ? restoreTranscript(rows as unknown as StoredLine[]) : ""))
+    .then((rows) => rows as unknown as StoredLine[])
     .catch((err) => {
       console.warn("[regenerate] stored transcript unavailable", err);
-      return "";
+      return [] as StoredLine[];
     });
   // Who the follow-up is from and to. The attendee list alone left the host
   // out entirely, so the model was writing an email with no idea who sent it.
@@ -125,7 +126,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     hostEmail: auth.ctx.email || null,
     invited: meeting.attendees,
   });
-  const [{ data: existing }, stored, roles] = await Promise.all([existingRead, storedRead, rolesRead]);
+  const [{ data: existing }, storedRows, roles] = await Promise.all([existingRead, storedRead, rolesRead]);
+  const stored = storedRows.length ? restoreTranscript(storedRows) : "";
 
   const transcript = mergeTranscripts((existing?.full_transcript ?? "").trim(), stored).trim();
   if (!transcript) {
@@ -159,13 +161,26 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     participants.unshift(hostName);
   }
 
+  // The model's copy, which is not the record. Lines the speech engine scored as
+  // noise and lines that were a voice assistant being woken are withheld from it,
+  // and it is told how many and why. The transcript stored below is untouched.
+  //
+  // A regenerate cannot rescue a transcript recorded before the engine's score
+  // was kept: there is no note on any of those lines to withhold them by, and no
+  // way to tell a hallucinated sentence from a real one after the fact. Wake
+  // words still go, because text alone establishes those.
+  const quality = transcriptQuality(transcript, { meanConfidence: meanRowConfidence(storedRows) });
+  const note = qualityPreamble(quality);
+  const readable = transcriptForModel(transcript);
+  const modelTranscript = note ? `${note}\n${readable}` : readable;
+
   const previousAnalysis = (existing?.analysis ?? null) as Record<string, unknown> | null;
   let analysis: Record<string, unknown>;
   try {
     analysis = await generateMeetingReport(client, MODEL, {
       title: meeting.title ?? "Untitled",
       participants,
-      transcript,
+      transcript: modelTranscript,
       // The span the meeting actually ran, or nothing. `duration_minutes` is
       // the BOOKED length: handing it over as the duration had the model
       // reasoning about a 30-minute call that had in fact run for an hour.
