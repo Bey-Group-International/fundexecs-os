@@ -64,6 +64,15 @@ describe("buildFollowupPrompt", () => {
     expect(prompt).toContain("Confirm before sending");
   });
 
+  it("asks the host questions where the context cannot confirm something, rather than saying so", () => {
+    const prompt = buildFollowupPrompt({ meeting: { title: "Quick sync" } });
+    expect(prompt).toContain("do not fill a section with a statement that nothing could be confirmed");
+    expect(prompt).toContain("ask me one specific question");
+    expect(prompt).toContain("never mentions the recording, the transcript or audio quality");
+    // The questions are gathered where the host will act on them.
+    expect(prompt).toContain("'Confirm before sending' list: every question you asked above");
+  });
+
   it("still returns a structured prompt with only a title (no empty headers)", () => {
     const prompt = buildFollowupPrompt({ meeting: { title: "Quick sync" } });
     expect(prompt).toContain("Quick sync");

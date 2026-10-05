@@ -5,6 +5,7 @@ import { createServerClient } from "@/lib/supabase/server";
 import { AttendeeHistoryPanel } from "./AttendeeHistory";
 import { FollowUpPanel } from "./FollowUpPanel";
 import { ReportRevisions } from "./ReportRevisions";
+import { OpenQuestions } from "./OpenQuestions";
 import { ActionItemsList } from "./ActionItemsList";
 import { FollowUpStatusChip } from "./FollowUpPanel";
 import { ExportMenu } from "./ExportMenu";
@@ -270,6 +271,13 @@ export default async function MeetingReportPage({
                     follow-up draft — may be incomplete. Regenerating it will try again.
                   </p>
                 </div>
+              )}
+
+              {/* What the transcript could not settle, put to the host before
+                  anything that depends on the answer. The host answers here and
+                  the report is regenerated; nobody else can, and the card says so. */}
+              {content.openQuestions.length > 0 && (
+                <OpenQuestions meetingId={meeting.id} questions={content.openQuestions} isHost={data.isHost} />
               )}
 
               {/* Summary */}

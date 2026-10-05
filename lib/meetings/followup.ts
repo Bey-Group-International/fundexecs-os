@@ -248,7 +248,9 @@ export function buildFollowupPrompt(input: {
         : "7. Follow-up email — a ready-to-send draft from the meeting host to the other attendees, never addressed to the host (greeting, brief recap, decisions, numbered action items with owners and dates, and a professional sign-off).",
       "8. Proposed next meeting — a recommended purpose, timing, and required attendees.",
       "",
-      "End with a short 'Confirm before sending' list of anything ambiguous in the context above that I should verify before acting.",
+      "If the captured notes or transcript are incomplete — poor audio, inaudible passages, a recording that cut out, or simply too little context to confirm a decision, an owner, a figure or a date — do not fill a section with a statement that nothing could be confirmed, and do not describe the recording's quality anywhere in the pack. State only what the context supports, and in place of each thing you cannot confirm ask me one specific question (e.g. 'Did Jane commit to the $10M re-up, or only to reviewing the terms?'). The follow-up email never mentions the recording, the transcript or audio quality and never says nothing was decided: it covers what is clear, and I will complete it once I have answered your questions.",
+      "",
+      "End with a short 'Confirm before sending' list: every question you asked above, plus anything ambiguous in the context that I should verify before acting.",
     ].join("\n"),
   );
 

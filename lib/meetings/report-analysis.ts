@@ -13,6 +13,7 @@ import { normalizeNoteList, normalizeNoteText } from "@/lib/meetings/live-notes"
 import { FIRST_NAME_TOKEN } from "@/lib/meetings/follow-up-greeting";
 import { cleanCorrection } from "@/lib/meetings/report-versions";
 import { ensureActionItems } from "@/lib/meetings/action-item-source";
+import { OPEN_QUESTIONS_KEY, reportGaps } from "@/lib/meetings/report-gaps";
 
 /**
  * Model context / cost budget, in characters. The tail is kept: a meeting ends
@@ -115,7 +116,18 @@ export const MEETING_REPORT_SCHEMA = {
       description:
         "Every commitment from the meeting, one per item, as 'Owner: task (by deadline if stated)', e.g. 'Sarah: Send the deck by Friday'. Never empty: when nothing was explicitly assigned, list the clear next steps the discussion implies, owned by whoever is best placed (the host by default). These are the same items, in the same order, as the follow-up email's numbered action items.",
     },
-    decisions: { type: "array", items: { type: "string" }, description: "Key decisions reached" },
+    decisions: {
+      type: "array",
+      items: { type: "string" },
+      description:
+        "Key decisions the transcript actually supports, stated as decisions. Never a sentence about what could not be confirmed, heard or determined: when the transcript is too incomplete, garbled or inaudible to confirm a decision, leave it out of this list and ask about it in open_questions instead. Empty when nothing was decided.",
+    },
+    [OPEN_QUESTIONS_KEY]: {
+      type: "array",
+      items: { type: "string" },
+      description:
+        "Questions only the host can answer, asked when the transcript is too incomplete, inaudible, cut short or ambiguous to confirm a decision, an owner, a figure or a date — one specific question per item, tied to what was being discussed (e.g. 'Did Jane commit to the $10M re-up, or only to reviewing the terms?'), never a generic request for 'more context'. Empty when the transcript is clear.",
+    },
     sentiment: { type: "string", enum: ["positive", "neutral", "negative", "mixed"] },
     next_meeting_suggestion: {
       type: "string",
@@ -127,7 +139,7 @@ export const MEETING_REPORT_SCHEMA = {
         `Complete follow-up email written BY the host TO the recipients, opening with the line "Hi ${FIRST_NAME_TOKEN},", then: 1-paragraph summary, bullet list of decisions made, numbered action items with owners, next meeting proposal (if applicable), and a sign-off with the host's name. Use plain text, no markdown.`,
     },
   },
-  required: ["summary", "key_points", "action_items", "decisions", "sentiment", "next_meeting_suggestion", "follow_up_draft"],
+  required: ["summary", "key_points", "action_items", "decisions", OPEN_QUESTIONS_KEY, "sentiment", "next_meeting_suggestion", "follow_up_draft"],
 };
 
 /**
@@ -150,7 +162,8 @@ For the follow_up_draft, write a ready-to-send professional email covering: (1) 
 The follow_up_draft is written BY the host and sent FROM the host's mailbox TO the recipients — the other people in the meeting. Write it in the host's voice ("Thanks for your time today", "I will send…"). Never address it to the host, never thank the host as though they were the reader, and sign it off with the host's name.
 Begin the follow_up_draft with exactly the line "Hi ${FIRST_NAME_TOKEN}," — that placeholder is replaced with each recipient's first name when the email is sent. Do not put anybody's name in the greeting.
 action_items is the authoritative list of commitments and is never empty — every meeting leaves somebody something to do. The follow_up_draft's numbered action items are exactly the action_items, same items, same owners, same order: do not put a commitment in the email that is missing from action_items.
-When the host gives corrections, they are authoritative: they override anything you would otherwise infer from the transcript, and they apply to the whole report, not only the follow-up.`;
+When the host gives corrections, they are authoritative: they override anything you would otherwise infer from the transcript, and they apply to the whole report, not only the follow-up. A correction written as "Q: … / A: …" pairs is the host answering this report's earlier open questions: treat each answer as fact and ask that question no more.
+When the transcript is incomplete — poor audio, inaudible or garbled passages, a recording that starts late or cuts out, speakers you cannot tell apart — do not describe the problem anywhere in the report and never write that something "could not be confirmed". Report only what the transcript supports, and for each thing you could not confirm (a decision, an owner, a figure, a date) ask the host one specific question in open_questions. The follow_up_draft never mentions the recording, the transcript or audio quality, and never says that nothing was decided: it covers what is clear, and the host completes it after answering the questions.`;
 
 /**
  * What a report holds before it is written. Empty is a valid answer.
@@ -166,6 +179,7 @@ export const EMPTY_REPORT: Record<string, unknown> = {
   key_points: [],
   action_items: [],
   decisions: [],
+  [OPEN_QUESTIONS_KEY]: [],
   sentiment: "neutral",
   next_meeting_suggestion: "",
   follow_up_draft: "",
@@ -300,6 +314,9 @@ export async function generateMeetingReport(
 
   const raw = toolUse.input as Record<string, unknown>;
   const summary = normalizeNoteText(raw.summary);
+  // A "none could be confirmed" line is not a decision; it becomes a question
+  // to the host. See report-gaps.ts.
+  const gaps = reportGaps({ decisions: raw.decisions, open_questions: raw[OPEN_QUESTIONS_KEY] });
   return {
     ...raw,
     summary,
@@ -308,7 +325,8 @@ export async function generateMeetingReport(
     // follow-up email's, else a closing step for the host. See
     // action-item-source.ts for why the email and the list disagreed.
     action_items: ensureActionItems({ ...raw, summary }, input.host?.name ?? null),
-    decisions: normalizeNoteList(raw.decisions),
+    decisions: gaps.decisions,
+    [OPEN_QUESTIONS_KEY]: gaps.openQuestions,
     [TRUNCATED_KEY]: truncated,
   };
 }
