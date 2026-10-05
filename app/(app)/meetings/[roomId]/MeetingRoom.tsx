@@ -5640,6 +5640,7 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
       <MeetingGreenRoom
         roomCode={roomCode}
         isHost={isHost}
+        isGuest={isGuest}
         joining={joining}
         admission={admissionUi}
         onCancelAdmission={cancelAdmission}
