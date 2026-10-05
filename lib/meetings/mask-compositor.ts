@@ -180,6 +180,9 @@ export class MaskCompositor {
   private structure: StructureScratch | null = null;
   /** The last two frames' coverage, so a one-frame excursion cannot reach anyone. */
   private steadyWindow: TemporalWindow | null = null;
+  /** The previous frame's coverage as it left the chain, which is what lets the
+   *  hole fill tell a dropout inside somebody from a gap that was never them. */
+  private lastCoverage: Uint8ClampedArray | null = null;
 
   private gridSpec: MaskGrid;
   private dilateRadii: DilateRadii = { up: 1, down: 0, side: 1 };
@@ -304,6 +307,11 @@ export class MaskCompositor {
     // back against two frames from before the pause — which for somebody who
     // turned the effect off and on again is their own face arriving late.
     this.steadyWindow = null;
+    // And the hole fill's memory: what was covered before the pause says nothing
+    // about what is a dropout after it, and a hold count carried across would
+    // refuse to bridge the first real one.
+    this.lastCoverage = null;
+    this.structure?.held.fill(0);
   }
 
   /**
@@ -438,7 +446,15 @@ export class MaskCompositor {
     // Both are inert on the category path in different ways: a 0-or-255 mask has
     // no uncertainty band for `keepTouchingStructures` to work in, but it can
     // certainly have holes, so the fill runs on both.
-    fillEnclosedHoles(target, grid.width, grid.height, this.structureReach.hole, this.structure);
+    //
+    // The previous frame's coverage goes in with it. A patch of a dark jacket the
+    // model drops for a frame or three is wider than the fill's span cap, and the
+    // cap is right to refuse it on size alone -- a slot between two people is the
+    // same shape. What tells them apart is that the jacket was covered a frame
+    // ago, so the fill bridges it for a bounded few frames and leaves the slot,
+    // which never was, alone. See `HOLE_HOLD_FRAMES`.
+    const previous = this.lastCoverage && this.lastCoverage.length === target.length ? this.lastCoverage : null;
+    fillEnclosedHoles(target, grid.width, grid.height, this.structureReach.hole, this.structure, previous);
     keepTouchingStructures(target, grid.width, grid.height, this.structureReach, this.structure);
 
     // Grow it, upward mostly, and only into pixels the model was unsure about.
@@ -480,6 +496,14 @@ export class MaskCompositor {
       this.steadyWindow = createTemporalWindow(target.length);
     }
     steadyCoverage(target, this.steadyWindow);
+
+    // Remembered as it leaves the chain -- after the median, so what the next
+    // frame's hole fill compares against is what this frame actually settled on.
+    if (!this.lastCoverage || this.lastCoverage.length !== target.length) {
+      this.lastCoverage = new Uint8ClampedArray(target);
+    } else {
+      this.lastCoverage.set(target);
+    }
 
     const ctx = this.output.ctx;
     ctx.save();
@@ -555,6 +579,7 @@ export class MaskCompositor {
     this.maskEdge = null;
     this.structure = null;
     this.steadyWindow = null;
+    this.lastCoverage = null;
   }
 
   /**
@@ -601,6 +626,7 @@ export class MaskCompositor {
     this.maskEdge = null;
     this.structure = null;
     this.steadyWindow = null;
+    this.lastCoverage = null;
   }
 
   private paintBackground(frame: CompositorFrame, width: number, height: number): void {

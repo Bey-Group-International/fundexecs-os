@@ -750,6 +750,53 @@ describe("a mask with no spots in it", () => {
   });
 
   /**
+   * The dropout the previous two could not reach: a patch too wide for the hole
+   * fill's cap, gone for THREE frames. The three-frame median passes anything
+   * that lasts two; the cap refuses the patch on size. Only the hold, reading
+   * that the patch was covered a frame ago, keeps it on screen.
+   *
+   * A 20x20 patch against this grid's cap of 2 cells, and three frames rather
+   * than one, so that neither the median nor the despeckle can be what passes it.
+   */
+  it("bridges a patch too wide for the hole cap that drops out for a few frames", () => {
+    const rec = recorder();
+    const c = MaskCompositor.create(rec.factory, WIDTH, HEIGHT)!;
+    c.setEffect({ kind: "blur", strength: "heavy" });
+    const solid = confidenceAt(WIDTH, HEIGHT, () => SOLID);
+    const dropped = confidenceAt(WIDTH, HEIGHT, (x, y) =>
+      x >= 20 && x < 40 && y >= 12 && y < 32 ? 0.1 : SOLID);
+
+    c.compose(frame(WIDTH, HEIGHT), solid);
+    c.compose(frame(WIDTH, HEIGHT), solid);
+    for (let i = 0; i < 3; i++) c.compose(frame(WIDTH, HEIGHT), dropped);
+    c.compose(frame(WIDTH, HEIGHT), solid);
+
+    for (const mask of rec.masks) expect(mask[22 * WIDTH + 30]).toBe(255);
+  });
+
+  /**
+   * And its bound. The same patch, gone for good -- an arm lifting off a torso
+   * opens exactly this shape -- must show through within a handful of frames,
+   * or the hold is a reveal that renews itself.
+   */
+  it("still lets an enclosed change that lasts through, after the hold", () => {
+    const rec = recorder();
+    const c = MaskCompositor.create(rec.factory, WIDTH, HEIGHT)!;
+    c.setEffect({ kind: "blur", strength: "heavy" });
+    const solid = confidenceAt(WIDTH, HEIGHT, () => SOLID);
+    const opened = confidenceAt(WIDTH, HEIGHT, (x, y) =>
+      x >= 20 && x < 40 && y >= 12 && y < 32 ? 0 : SOLID);
+
+    c.compose(frame(WIDTH, HEIGHT), solid);
+    c.compose(frame(WIDTH, HEIGHT), solid);
+    for (let i = 0; i < 10; i++) c.compose(frame(WIDTH, HEIGHT), opened);
+
+    const last = rec.masks[rec.masks.length - 1];
+    expect(last[22 * WIDTH + 30]).toBeLessThan(40);
+    expect(last[22 * WIDTH + 5]).toBe(255);
+  });
+
+  /**
    * Turning the effect off and on again starts clean. Holding two frames from
    * before the pause would make somebody's own face arrive late.
    */

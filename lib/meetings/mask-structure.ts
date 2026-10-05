@@ -193,6 +193,49 @@ const STRUCTURE_QUIET_CEILING = 128;
 const HOLE_SPAN_FRACTION = 0.025;
 
 /**
+ * How many frames a dropout inside a person may be bridged, when it is too big
+ * for the span cap above.
+ *
+ * The cap keeps the fill safe, and it also leaves the one fault people actually
+ * report: a patch of a dark jacket, a hand across a chest, a stretch of beard
+ * that the model gives up on for a frame or three, wider than 32px, and
+ * therefore left as a window onto the room blinking inside somebody's body.
+ * Nothing before this could touch it -- the spatial median only removes lone
+ * cells, the three-frame median passes anything that lasts two frames, and the
+ * fill refused it on size.
+ *
+ * What separates that dropout from the enclosed regions the cap exists to
+ * refuse is HISTORY, not size. The slot between two colleagues and the triangle
+ * under a raised arm were never covered; a dropout was covered a frame ago. So
+ * an enclosed region beyond the cap is still filled while nearly all of it was
+ * solidly covered in the previous frame -- but only for this many consecutive
+ * frames, because the previous frame may itself have been filled by this rule,
+ * and an unbounded version would hold a triangle open under an arm for as long
+ * as the arm stayed up.
+ *
+ * MEASURED, sixty frames of a person leaning across a 1280x720 frame, with
+ * dropouts of 5-13 cells' radius lasting one to four frames inside the torso,
+ * plus the silhouette noise the previous instrument used:
+ *
+ *   hold (frames)    hole regions / frame   hole cells / frame   reveal delay
+ *   0 (as shipped)            4.62                 186.3             2 frames
+ *   2                         2.47                  59.9             4
+ *   3                         1.76                  34.6             5
+ *   4                         0.09                   7.8             6
+ *   6                         0.07                   5.7             8
+ *
+ *   reveal delay   frames until an enclosed region that genuinely BECOMES room
+ *                  (an arm lifting off a torso) shows through; the two frames
+ *                  as shipped are the blend's own settling
+ *
+ * Four. It is where the holes stop, and it adds 167ms at 24fps before room
+ * newly opened INSIDE a silhouette shows -- a far narrower case than the
+ * person-moves-away exposure the blend's rate protects, which is untouched: a
+ * region that reaches the edge of frame is not enclosed and this never sees it.
+ */
+export const HOLE_HOLD_FRAMES = 4;
+
+/**
  * Take out the single cells that disagree with everything around them.
  *
  * MEASURED FIRST, because this is the one complaint that had no instrument. Sixty
@@ -411,6 +454,9 @@ export interface StructureScratch {
   across: Uint8ClampedArray;
   /** And along each column. */
   down: Uint8ClampedArray;
+  /** How many consecutive frames each cell has been filled by the hold in
+   *  `fillEnclosedHoles`, which is what bounds that rule. */
+  held: Uint8Array;
 }
 
 export function createStructureScratch(length: number): StructureScratch {
@@ -422,6 +468,7 @@ export function createStructureScratch(length: number): StructureScratch {
     stack: new Int32Array(n),
     across: new Uint8ClampedArray(n),
     down: new Uint8ClampedArray(n),
+    held: new Uint8Array(n),
   };
 }
 
@@ -582,12 +629,15 @@ export function keepTouchingStructures(
 
 /** What hole filling changed. */
 export interface HoleReport {
-  /** Enclosed regions filled. */
+  /** Enclosed regions filled because they were small enough to be holes. */
   filled: number;
-  /** Cells raised. */
+  /** Cells raised, by either rule. */
   cells: number;
   /** Enclosed regions left alone because they were too big to be holes. */
   skipped: number;
+  /** Enclosed regions too big to be holes, filled anyway because they were
+   *  covered a frame ago -- see `HOLE_HOLD_FRAMES`. */
+  held: number;
 }
 
 /**
@@ -614,6 +664,15 @@ export interface HoleReport {
  * refuses the first. A region that fails the cap is left exactly as the model left
  * it, which for the two-person slot means zero.
  *
+ * THE ONE EXCEPTION TO THE CAP is a region that was covered a frame ago. With
+ * `previous` -- the previous frame's coverage, as it left the chain -- a region
+ * beyond the cap is still filled while at least four fifths of its cells were
+ * solid in that frame and none of them has been filled this way for
+ * `maxHold` consecutive frames already. The fraction is what keeps a region
+ * that merely OVERLAPS where the person was from qualifying; the count is what
+ * stops the rule feeding itself through `previous` forever. Without `previous`
+ * the cap is the whole rule, as before.
+ *
  * Two flood fills over the same `visited` marks: one from the border to find
  * everything outside, then one per remaining region to measure it before deciding.
  * Linear in cells, and the stack is bounded by the grid.
@@ -624,10 +683,12 @@ export function fillEnclosedHoles(
   height: number,
   maxSpan: number,
   scratch: StructureScratch,
+  previous: Uint8ClampedArray | null = null,
+  maxHold: number = HOLE_HOLD_FRAMES,
 ): HoleReport {
   const w = Math.max(0, Math.floor(width));
   const h = Math.max(0, Math.floor(height));
-  const report: HoleReport = { filled: 0, cells: 0, skipped: 0 };
+  const report: HoleReport = { filled: 0, cells: 0, skipped: 0, held: 0 };
   const n = w * h;
   const span = Math.max(1, Math.floor(maxSpan));
   if (n <= 0 || coverage.length < n || scratch.visited.length < n) return report;
@@ -635,6 +696,18 @@ export function fillEnclosedHoles(
   const visited = scratch.visited;
   const stack = scratch.stack;
   visited.fill(0, 0, n);
+
+  // The hold needs a previous frame the same size and somewhere to count; short
+  // of either it is simply off, and the cap decides everything as it always did.
+  const held = scratch.held;
+  const hold = Math.max(0, Math.floor(maxHold));
+  const memory = previous !== null && previous.length >= n && held.length >= n && hold > 0 ? previous : null;
+  if (memory) {
+    // A cell the model itself covers this frame has nothing held about it. Reset
+    // here, before the fill raises anything, so a cell raised BY the hold keeps
+    // its count -- that count is the bound.
+    for (let i = 0; i < n; i++) if (coverage[i] >= STRUCTURE_SOLID) held[i] = 0;
+  }
 
   // Everything the frame's edge can reach without crossing the person. A person
   // standing against the edge of frame — which is most people, who are cut off at
@@ -672,6 +745,10 @@ export function fillEnclosedHoles(
     if (visited[start] !== 0 || coverage[start] >= STRUCTURE_SOLID) continue;
 
     let x0 = w, x1 = -1, y0 = h, y1 = -1;
+    // For the hold: how much of this region was solid a frame ago, and the most
+    // frames any cell of it has already been held.
+    let wasSolid = 0;
+    let longestHeld = 0;
     const head = top;
     visited[start] = 2;
     stack[top++] = start;
@@ -685,16 +762,33 @@ export function fillEnclosedHoles(
       if (x > x1) x1 = x;
       if (y < y0) y0 = y;
       if (y > y1) y1 = y;
+      if (memory) {
+        if (memory[i] >= STRUCTURE_SOLID) wasSolid++;
+        if (held[i] > longestHeld) longestHeld = held[i];
+      }
       if (x > 0) { const k = i - 1; if (visited[k] === 0 && coverage[k] < STRUCTURE_SOLID) { visited[k] = 2; stack[top++] = k; } }
       if (x < w - 1) { const k = i + 1; if (visited[k] === 0 && coverage[k] < STRUCTURE_SOLID) { visited[k] = 2; stack[top++] = k; } }
       if (i >= w) { const k = i - w; if (visited[k] === 0 && coverage[k] < STRUCTURE_SOLID) { visited[k] = 2; stack[top++] = k; } }
       if (i < n - w) { const k = i + w; if (visited[k] === 0 && coverage[k] < STRUCTURE_SOLID) { visited[k] = 2; stack[top++] = k; } }
     }
 
+    const size = top - head;
     if (x1 - x0 + 1 <= span && y1 - y0 + 1 <= span) {
       for (let read = head; read < top; read++) coverage[stack[read]] = 255;
       report.filled++;
-      report.cells += top - head;
+      report.cells += size;
+    } else if (memory && wasSolid * 5 >= size * 4 && longestHeld < hold) {
+      // Too big to be a hole, and covered a frame ago: a dropout, bridged. The
+      // count is per cell rather than per region because regions have no
+      // identity between frames -- a dropout that grows or splits is still the
+      // same dropout, and its oldest cell carries the bound.
+      for (let read = head; read < top; read++) {
+        const i = stack[read];
+        coverage[i] = 255;
+        held[i]++;
+      }
+      report.held++;
+      report.cells += size;
     } else {
       report.skipped++;
     }

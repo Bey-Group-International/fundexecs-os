@@ -19,6 +19,7 @@ import {
   sampleCoverageFromConfidence,
 } from "@/lib/meetings/backgrounds";
 import {
+  HOLE_HOLD_FRAMES,
   STRUCTURE_SOLID,
   createStructureScratch,
   createTemporalWindow,
@@ -241,7 +242,7 @@ describe("fillEnclosedHoles", () => {
     ]);
     const report = fillEnclosedHoles(g.coverage, g.width, g.height, 3, scratch);
     expect(at(g, 2, 2)).toBe(255);
-    expect(report).toEqual({ filled: 1, cells: 1, skipped: 0 });
+    expect(report).toEqual({ filled: 1, cells: 1, skipped: 0, held: 0 });
   });
 
   /**
@@ -330,6 +331,133 @@ describe("fillEnclosedHoles", () => {
     expect(report.filled).toBe(2);
     expect(at(g, 2, 2)).toBe(255);
     expect(at(g, 4, 2)).toBe(255);
+  });
+});
+
+/**
+ * The hold: a dropout wider than the cap, bridged because it was covered a frame
+ * ago, and let go of before it can become a reveal.
+ *
+ * The scene is a 12x12 person with a 6x6 patch inside them, against a cap of 3,
+ * so the patch is refused on size alone and only the hold can fill it. That is
+ * the complaint: a stretch of dark jacket, a hand across a chest, gone from the
+ * mask for a frame or three and showing the room through somebody.
+ */
+describe("fillEnclosedHoles, holding a dropout", () => {
+  const W = 14, H = 14, CAP = 3;
+
+  /** A person filling the grid but for a one-cell border, with a 6x6 patch at `patch`. */
+  function person(patch: number): Uint8ClampedArray {
+    const g = new Uint8ClampedArray(W * H);
+    for (let y = 1; y < H - 1; y++) for (let x = 1; x < W - 1; x++) g[y * W + x] = 255;
+    for (let y = 4; y < 10; y++) for (let x = 4; x < 10; x++) g[y * W + x] = patch;
+    return g;
+  }
+  const centre = 7 * W + 7;
+
+  it("bridges a dropout too wide for the cap, because it was covered a frame ago", () => {
+    const scratch = createStructureScratch(W * H);
+    const previous = person(255);
+    const now = person(40);
+    const report = fillEnclosedHoles(now, W, H, CAP, scratch, previous);
+    expect(now[centre]).toBe(255);
+    expect(report).toEqual({ filled: 0, cells: 36, skipped: 0, held: 1 });
+  });
+
+  it("is the cap alone without a previous frame, exactly as before", () => {
+    const scratch = createStructureScratch(W * H);
+    const now = person(40);
+    const report = fillEnclosedHoles(now, W, H, CAP, scratch);
+    expect(now[centre]).toBe(40);
+    expect(report.skipped).toBe(1);
+    expect(report.held).toBe(0);
+  });
+
+  /**
+   * The bound. Each frame's output is the next frame's `previous`, which is how
+   * the rule would feed itself forever: the hold fills the patch, so the patch
+   * was "covered a frame ago", so the hold fills it again. The per-cell count
+   * is what ends that, and this pins the number of frames it ends after.
+   */
+  it("lets go after HOLE_HOLD_FRAMES frames of holding", () => {
+    const scratch = createStructureScratch(W * H);
+    let previous = person(255);
+    const heldFor: boolean[] = [];
+    for (let f = 0; f < HOLE_HOLD_FRAMES + 2; f++) {
+      const now = person(40);
+      fillEnclosedHoles(now, W, H, CAP, scratch, previous);
+      heldFor.push(now[centre] === 255);
+      previous = now;
+    }
+    expect(heldFor).toEqual([
+      ...new Array<boolean>(HOLE_HOLD_FRAMES).fill(true),
+      false,
+      false,
+    ]);
+  });
+
+  it("never holds a region that was never covered -- the slot between two people", () => {
+    const scratch = createStructureScratch(W * H);
+    // The slot was room a frame ago, and still is.
+    const previous = person(0);
+    const now = person(0);
+    const report = fillEnclosedHoles(now, W, H, CAP, scratch, previous);
+    expect(now[centre]).toBe(0);
+    expect(report).toEqual({ filled: 0, cells: 0, skipped: 1, held: 0 });
+  });
+
+  /**
+   * A region that merely overlaps where the person was is not a dropout. Half
+   * of this patch was person a frame ago and half was always room: an arm has
+   * moved and opened something. Four fifths is the line, and half is under it.
+   */
+  it("requires nearly all of the region to have been covered", () => {
+    const scratch = createStructureScratch(W * H);
+    const previous = person(255);
+    for (let y = 4; y < 10; y++) for (let x = 7; x < 10; x++) previous[y * W + x] = 0;
+    const now = person(40);
+    const report = fillEnclosedHoles(now, W, H, CAP, scratch, previous);
+    expect(now[centre]).toBe(40);
+    expect(report.held).toBe(0);
+    expect(report.skipped).toBe(1);
+  });
+
+  it("starts the count again once the model covers the cell itself", () => {
+    const scratch = createStructureScratch(W * H);
+    let previous = person(255);
+    // Spend the whole hold.
+    for (let f = 0; f < HOLE_HOLD_FRAMES; f++) {
+      const now = person(40);
+      fillEnclosedHoles(now, W, H, CAP, scratch, previous);
+      previous = now;
+    }
+    const spent = person(40);
+    fillEnclosedHoles(spent, W, H, CAP, scratch, previous);
+    expect(spent[centre]).toBe(40);
+
+    // The model finds the jacket again for one frame, then loses it again.
+    const back = person(255);
+    fillEnclosedHoles(back, W, H, CAP, scratch, spent);
+    const again = person(40);
+    const report = fillEnclosedHoles(again, W, H, CAP, scratch, back);
+    expect(again[centre]).toBe(255);
+    expect(report.held).toBe(1);
+  });
+
+  it("is off, not wrong, when the previous frame is the wrong size", () => {
+    const scratch = createStructureScratch(W * H);
+    const now = person(40);
+    const report = fillEnclosedHoles(now, W, H, CAP, scratch, new Uint8ClampedArray(10));
+    expect(now[centre]).toBe(40);
+    expect(report.held).toBe(0);
+  });
+
+  it("is off when asked to hold for no frames", () => {
+    const scratch = createStructureScratch(W * H);
+    const now = person(40);
+    const report = fillEnclosedHoles(now, W, H, CAP, scratch, person(255), 0);
+    expect(now[centre]).toBe(40);
+    expect(report.held).toBe(0);
   });
 });
 
