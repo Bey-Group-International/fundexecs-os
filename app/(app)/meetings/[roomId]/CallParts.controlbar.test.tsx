@@ -36,7 +36,11 @@ type Props = React.ComponentProps<typeof ControlBar>;
  * Controls inside an open menu are left out, because a `position: fixed` menu
  * takes no room in the row it hangs off.
  */
+/** The row's width right now, so a test can narrow it between measurements. */
+let rowWidthNow = 0;
+
 function measureBarAs(rowWidth: number, itemWidth = 48, wide: Record<string, number> = {}) {
+  rowWidthNow = rowWidth;
   const controlsIn = (el: HTMLElement) =>
     [...el.querySelectorAll("button")].filter((b) => !b.closest('[role="menu"]'));
   // `wide` makes one named control a multiple of the others' width, which is what
@@ -66,9 +70,20 @@ function measureBarAs(rowWidth: number, itemWidth = 48, wide: Record<string, num
   Object.defineProperty(HTMLElement.prototype, "clientWidth", {
     configurable: true,
     get(this: HTMLElement) {
-      return this.querySelector("[data-bar-feature]") ? rowWidth : itemWidth;
+      return this.querySelector("[data-bar-feature]") ? rowWidthNow : itemWidth;
     },
   });
+}
+
+/** Narrow the row without re-rendering, for a test about re-measuring. */
+function narrowRowTo(width: number) {
+  rowWidthNow = width;
+}
+
+/** Resize the window, which is how the share breakpoint is crossed. */
+function viewportWidth(width: number) {
+  Object.defineProperty(window, "innerWidth", { configurable: true, value: width });
+  act(() => { window.dispatchEvent(new Event("resize")); });
 }
 
 afterEach(() => {
@@ -76,6 +91,8 @@ afterEach(() => {
     Object.defineProperty(HTMLElement.prototype, prop, { configurable: true, value: 0 });
   }
   delete (globalThis as Record<string, unknown>).ResizeObserver;
+  // jsdom's default, which `wideEnough` reads when there is no matchMedia.
+  Object.defineProperty(window, "innerWidth", { configurable: true, value: 1024 });
 });
 
 function setup(over: Partial<Props> = {}) {
@@ -315,6 +332,41 @@ describe("a bar too narrow for its controls", () => {
     expect(screen.getByRole("button", { name: /mute|unmute/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /camera off|camera on|stop video|start video/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /leave/i })).toBeInTheDocument();
+  });
+
+  /**
+   * Crossing the share breakpoint has to re-measure, not just re-render.
+   *
+   * CodeRabbit's finding on this PR, and it was right. At `sm` three things move
+   * at once: screen share is offered or withdrawn, every button goes from 42px to
+   * 40px, and the mic and camera chevrons appear — so both the width of one
+   * control and the width of the part that cannot fold change. The measurement is
+   * kept up to date by a ResizeObserver on the row, which only fires when the
+   * ROW's own box changes; the row sits between two columns whose contents also
+   * change at `sm`, so there are widths where everything inside it resizes and
+   * its box does not. The capacity measured on the wide side then keeps more
+   * controls than the narrow bar can hold, which is the fault this whole change
+   * exists to fix.
+   *
+   * The stub observer only answers when `observe` is called, so the only way a
+   * second measurement happens here is the effect re-running — which is exactly
+   * what the dependency controls.
+   */
+  it("re-measures when the screen crosses the share breakpoint", () => {
+    measureBarAs(4000);
+    setup();
+    expect(screen.getByRole("button", { name: /^Share$/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^Chat$/ })).toBeInTheDocument();
+
+    narrowRowTo(120);
+    viewportWidth(420);
+
+    // Share is gone because a phone cannot share...
+    expect(screen.queryByRole("button", { name: /^Share$/ })).not.toBeInTheDocument();
+    // ...and the fold measured the narrow row rather than keeping a capacity
+    // worked out on a 4000px one.
+    expect(screen.queryByRole("button", { name: /^Chat$/ })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "More options" })).toBeInTheDocument();
   });
 
   /**

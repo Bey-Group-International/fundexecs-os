@@ -599,6 +599,14 @@ function ControlBarImpl({
    * the last one seen is a sound unit to keep using.
    */
   const itemWidthRef = useRef(0);
+  /**
+   * Whether this screen is wide enough to offer a screen share.
+   *
+   * Declared here, above the measurement, because the measurement depends on it —
+   * see the effect below for why screen size is the test and the comment on the
+   * dependency array for what crossing it changes.
+   */
+  const [wideEnoughToShare, setWideEnoughToShare] = useState(wideEnough);
 
   useLayoutEffect(() => {
     const row = rowRef.current;
@@ -653,7 +661,18 @@ function ControlBarImpl({
     // Re-measured when the composition of the bar changes, because the reserved
     // width does: a recording pill appears, a bandwidth notice comes and goes,
     // and a host's exit is wider than a guest's.
-  }, [isHost, recordingState, bwMode, canShareDocs, leaving]);
+    //
+    // `wideEnoughToShare` is in here because the `sm` breakpoint moves three
+    // things at once: screen share is offered or withdrawn, every button goes
+    // from 42px to 40px, and the mic and camera chevrons appear. Two of those
+    // change the width of one control and the width of the part that cannot fold,
+    // and the ResizeObserver below cannot be relied on to notice — it fires when
+    // the ROW's own box changes, and the row sits between two columns whose
+    // contents also change at `sm`, so there are widths where everything inside
+    // it resizes and its box does not. A capacity measured on the wide side then
+    // keeps more controls than the narrow bar can hold, which is the fault this
+    // whole change exists to fix. (CodeRabbit's finding on #1296.)
+  }, [isHost, recordingState, bwMode, canShareDocs, leaving, wideEnoughToShare]);
 
   /**
    * Mirrors the `sm` breakpoint the screen-share button was gated on.
@@ -664,7 +683,6 @@ function ControlBarImpl({
    * `getDisplayMedia` and then refuses it, so the API's presence is not the test
    * (see lib/meetings/audio-capture.ts).
    */
-  const [wideEnoughToShare, setWideEnoughToShare] = useState(wideEnough);
   useEffect(() => {
     // `matchMedia` where it exists, a resize listener where it does not. Feature
     // detected rather than assumed: this runs inside the control bar of a live
