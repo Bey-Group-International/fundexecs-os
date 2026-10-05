@@ -138,6 +138,14 @@ describe("what the model is allowed to read", () => {
     expect(writes.reports[0]).toMatchObject({ full_transcript: BAD });
   });
 
+  // `BAD` is 2 usable of 5, which is "degraded" — bad audio, still summarisable.
+  // The log line only fires on "unusable", so the two tests about it need a
+  // transcript where recognised noise genuinely outnumbers what survived.
+  const UNUSABLE = [
+    "Gary: so where did we land on the close",
+    ...Array.from({ length: 6 }, (_, i) => `Gary (${NOISE_NOTE}): garble ${i}`),
+  ].join("\n");
+
   it("cannot have a forged line written into the operator's log", async () => {
     // CodeQL found this: the warning interpolated `body.meetingId` straight from
     // the request. A sender who puts a newline in it writes a second entry of
@@ -147,7 +155,7 @@ describe("what the model is allowed to read", () => {
     const warn = jest.spyOn(console, "warn").mockImplementation(() => {});
     try {
       wire({ meeting: { ...MEETING, id: "m1\n[/api/meetings/report] meeting m9 transcript is usable" } });
-      await POST(req(BAD));
+      await POST(req(UNUSABLE));
       const lines = warn.mock.calls.map((c) => String(c[0]));
       const ours = lines.filter((l) => l.includes("transcript is"));
       // One entry, not two, and nothing of the sender's text inside it: an
@@ -167,7 +175,7 @@ describe("what the model is allowed to read", () => {
     const warn = jest.spyOn(console, "warn").mockImplementation(() => {});
     try {
       wire({ meeting: { ...MEETING, id: "0f9b1c2d-3e4f-5a6b-7c8d-9e0f1a2b3c4d" } });
-      await POST(req(BAD));
+      await POST(req(UNUSABLE));
       const ours = warn.mock.calls.map((c) => String(c[0])).filter((l) => l.includes("transcript is"));
       expect(ours[0]).toContain("meeting 0f9b1c2d-3e4f-5a6b-7c8d-9e0f1a2b3c4d");
     } finally {

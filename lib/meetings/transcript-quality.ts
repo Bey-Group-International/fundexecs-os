@@ -174,8 +174,8 @@ export type WithheldReason = "noise" | "assistant";
 
 /**
  * How little usable speech makes a transcript not worth summarising — but ONLY
- * where there is evidence of an audio problem. A short meeting is short; it is
- * not broken, and nothing here may call it broken.
+ * where recognised noise outnumbers it. A short meeting is short; it is not
+ * broken, and nothing here may call it broken.
  */
 export const MIN_USABLE_LINES = 6;
 /** Below this share of what was heard, the audio was a problem, not a meeting. */
@@ -253,7 +253,17 @@ export function transcriptQuality(
   let verdict: TranscriptVerdict;
   if (heard === 0) verdict = "silent";
   else if (withheld === 0) verdict = "usable";
-  else if (usable < MIN_USABLE_LINES) verdict = "unusable";
+  // The floor needs evidence that NOISE ate the meeting, not merely that
+  // something was withheld. A five-sentence stand-up with one "Alexa, stop" in it
+  // is a short meeting with a speaker in the room; counting that as unusable told
+  // the model to disregard a perfectly good record and recommend holding the
+  // meeting again — the exact thing the comment above says must not happen, and a
+  // case the first version of this got wrong because every test of a short
+  // transcript used a clean one.
+  //
+  // Assistant chatter is deliberately not evidence: a device answering its wake
+  // word says nothing about whether the microphone could hear the people.
+  else if (usable < MIN_USABLE_LINES && withheldNoise > usable) verdict = "unusable";
   else if (heard >= MIN_SHARE_SAMPLE && share < UNUSABLE_SHARE) verdict = "unusable";
   else if (share < DEGRADED_SHARE) verdict = "degraded";
   else verdict = "usable";

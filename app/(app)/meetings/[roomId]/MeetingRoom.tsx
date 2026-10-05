@@ -1376,6 +1376,11 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     const audit = inboundAuditRef.current.get(peerId);
     if (audit) { clearTimeout(audit); inboundAuditRef.current.delete(peerId); }
     repairInFlightRef.current.delete(peerId);
+    // The same for audio. Left behind, a repair that was in flight when the
+    // connection was replaced would block the replacement's repair for the rest
+    // of the call — the silent microphone this exists to fix, locked in by the
+    // flag meant to stop two repairs racing.
+    audioRepairInFlightRef.current.delete(peerId);
     requestedTierRef.current.delete(peerId);
     sentRequestRef.current.delete(peerId);
     lastHighAtRef.current.delete(peerId);
@@ -2008,6 +2013,15 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
         // relay candidates and fail the same way, so widen the policy first and
         // let the restart below have a direct path to find.
         considerAbandoningRelayRef.current({ gatheringComplete: false, failed: true });
+        // Widening may have REPLACED this connection, and the replacement is
+        // already offering. Recovering it as well would put a second offer on a
+        // connection seconds old: both would share one `makingOfferRef` flag, so
+        // whichever finished first would clear it while the other was still in
+        // flight — and an ICE restart is meaningless on a connection that has
+        // never gathered a candidate in its life. Identity is the test because
+        // `forgetPeerState` wipes the recovery state on the way past, so the new
+        // connection looks like a first attempt and would be treated as one.
+        if (peersRef.current.get(peerId) !== pc) return;
         recoverPeerRef.current(peerId);
         return;
       }

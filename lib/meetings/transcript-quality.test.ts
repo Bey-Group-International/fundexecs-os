@@ -104,9 +104,44 @@ describe("transcriptQuality", () => {
     expect(qualityPreamble(q)).toBeNull();
   });
 
-  it("calls a transcript with too few surviving lines unusable", () => {
-    const q = transcriptQuality(record(clean(MIN_USABLE_LINES - 1), noisy(2)));
+  it("calls a transcript unusable when noise outnumbers what survived", () => {
+    // The floor needs evidence that noise ATE the meeting. Two bad lines beside
+    // five good ones is not that; six bad lines beside two good ones is.
+    const q = transcriptQuality(record(clean(2), noisy(6)));
     expect(q.verdict).toBe("unusable");
+  });
+
+  it("does not condemn a short meeting over a single withheld line", () => {
+    // A five-sentence stand-up with one "Alexa, stop" in it. This read as
+    // "unusable" and told the model to disregard the record and recommend holding
+    // the meeting again — a real bug, and one every earlier test of a short
+    // transcript missed by using a CLEAN one, which takes a different branch.
+    const q = transcriptQuality(record(clean(5), ["Gary: Alexa, stop"]));
+    expect(q.withheldAssistant).toBe(1);
+    expect(q.verdict).toBe("usable");
+    expect(qualityPreamble(q)).not.toContain("too poor to transcribe reliably");
+  });
+
+  it("does not condemn a short meeting over one badly-heard line either", () => {
+    const q = transcriptQuality(record(clean(5), noisy(1)));
+    expect(q.verdict).toBe("usable");
+  });
+
+  it("still says what was withheld from a short meeting it does not condemn", () => {
+    // Not condemning it is not the same as saying nothing: the model is still
+    // told a line was held back, so it does not treat the record as complete.
+    const note = qualityPreamble(transcriptQuality(record(clean(5), ["Gary: Alexa, stop"])));
+    expect(note).toContain("commands to a voice assistant");
+  });
+
+  it("counts a chatty speaker as chatter, never as bad audio", () => {
+    // Six wake words beside five sentences is a device in the room, not a
+    // microphone that could not hear the people — so the floor must not fire on
+    // it however many there are.
+    const q = transcriptQuality(record(clean(5), Array.from({ length: 6 }, () => "Gary: Alexa, stop")));
+    expect(q.withheldAssistant).toBe(6);
+    expect(q.withheldNoise).toBe(0);
+    expect(q.verdict).not.toBe("unusable");
   });
 
   it("calls a partly-bad meeting degraded and still summarises it", () => {

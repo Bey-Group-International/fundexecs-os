@@ -85,6 +85,9 @@ import { RELAY_PROBE_MS } from "@/lib/meetings/connection";
 
 const ROOM = "abc-defg-hi";
 
+/** Makes `replaceTrack` never settle, so a repair can still be in flight. */
+let hangReplaceTrack = false;
+
 /** What the endpoint says this deployment has. Mutable per test. */
 let relayAnswer: { iceServers?: unknown[]; relay?: boolean; reason?: string } = {};
 
@@ -134,6 +137,7 @@ class FakePC {
   remoteDescription = null;
   closed = false;
   restarts = 0;
+  offers = 0;
   senders: FakeSender[] = [];
   ontrack: unknown = null;
   onicecandidate: ((ev: { candidate: unknown }) => void) | null = null;
@@ -157,9 +161,11 @@ class FakePC {
    */
   addTransceiver() {
     const sender: FakeSender = { track: null, replaced: [] };
-    (sender as unknown as Record<string, unknown>).replaceTrack = async (t: FakeTrack | null) => {
+    (sender as unknown as Record<string, unknown>).replaceTrack = (t: FakeTrack | null) => {
+      if (hangReplaceTrack) return new Promise<void>(() => { /* never settles */ });
       sender.replaced.push(t);
       sender.track = t;
+      return Promise.resolve();
     };
     (sender as unknown as Record<string, unknown>).setParameters = async () => {};
     (sender as unknown as Record<string, unknown>).getParameters = () => ({ encodings: [{}] });
@@ -170,7 +176,7 @@ class FakePC {
   getSenders() { return this.senders; }
   getReceivers() { return []; }
   getTransceivers() { return []; }
-  async createOffer() { return { type: "offer", sdp: "v=0" }; }
+  async createOffer() { this.offers += 1; return { type: "offer", sdp: "v=0" }; }
   async createAnswer() { return { type: "answer", sdp: "v=0" }; }
   async setLocalDescription() {}
   async setRemoteDescription() {}
@@ -202,6 +208,7 @@ beforeEach(() => {
   jest.clearAllMocks();
   realtime.reset();
   FakePC.all = [];
+  hangReplaceTrack = false;
   joinChoice.cameraEnabled = false;
   joinChoice.micEnabled = false;
   relayAnswer = {
@@ -408,6 +415,42 @@ describe("a guest whose relay allocates and still cannot carry the call", () => 
     expect(relayOnly(rebuilt)).toBe(false);
   });
 
+  it("offers ONCE on the replacement, and does not restart ICE on it", async () => {
+    // The failed handler widens the policy and then recovers the peer. Widening
+    // replaces the connection, so recovering it as well put a second offer on a
+    // connection seconds old — two offers sharing one `makingOfferRef` flag,
+    // either of which could clear it while the other was in flight — plus an ICE
+    // restart on a connection that had never gathered a candidate.
+    await enterAsGuest();
+    const first = await peerJoins();
+    await act(async () => { first.offerCandidate(RELAY_CANDIDATE); await Promise.resolve(); });
+
+    await act(async () => { first.moveTo("failed"); await Promise.resolve(); });
+    await flush(300, 8);
+
+    const rebuilt = FakePC.all[FakePC.all.length - 1];
+    expect(rebuilt).not.toBe(first);
+    expect(rebuilt.offers).toBe(1);
+    expect(rebuilt.restarts).toBe(0);
+  });
+
+  it("still recovers a failed peer when nothing was replaced", async () => {
+    // The guard must not swallow ordinary recovery. With relay-only already
+    // withdrawn there is nothing to widen, so the failure is the recovery path's
+    // and the connection it fails on is the one that gets restarted.
+    relayAnswer = { iceServers: [{ urls: ["stun:stun.example.net:3478"] }], relay: false, reason: "unconfigured" };
+    await enterAsGuest();
+    const pc = await peerJoins();
+    expect(relayOnly(pc)).toBe(false);
+    const before = FakePC.all.length;
+
+    await act(async () => { pc.moveTo("failed"); await Promise.resolve(); });
+    await flush(300, 8);
+
+    expect(FakePC.all).toHaveLength(before);
+    expect(pc.restarts).toBeGreaterThanOrEqual(1);
+  });
+
   it("leaves a peer the relay is already carrying alone", async () => {
     await enterAsGuest();
     const carried = await peerJoins("peer-1");
@@ -445,6 +488,39 @@ describe("a member, who was never put on the relay", () => {
 
     // Only what the recovery path did: no rebuild from this file's code.
     expect(FakePC.all).toHaveLength(1);
+  });
+});
+
+describe("a microphone repair still in flight when the connection is replaced", () => {
+  it("does not leave the replacement's repair blocked for the rest of the call", async () => {
+    // The in-flight flag stops two repairs racing on one sender. It was not
+    // cleared when a peer's state was forgotten, so a repair still outstanding
+    // when relay abandonment replaced the connection left the flag set for good —
+    // and the replacement's microphone was never attached. The silent guest this
+    // whole repair exists for, locked in by the guard meant to protect it.
+    joinChoice.micEnabled = true;
+    await enterAsGuest();
+    const first = await peerJoins();
+    await act(async () => { first.offerCandidate(RELAY_CANDIDATE); await Promise.resolve(); });
+
+    // Connect, with the repair made to hang: the flag goes on and never comes off
+    // by itself.
+    hangReplaceTrack = true;
+    await act(async () => { first.moveTo("connected"); await Promise.resolve(); });
+    await flush(100, 4);
+    hangReplaceTrack = false;
+
+    // Now the relay path fails and the connection is replaced underneath it.
+    await act(async () => { first.moveTo("failed"); await Promise.resolve(); });
+    await flush(200, 6);
+    const rebuilt = FakePC.all[FakePC.all.length - 1];
+    expect(rebuilt).not.toBe(first);
+
+    await act(async () => { rebuilt.moveTo("connected"); await Promise.resolve(); });
+    await flush(200, 6);
+
+    const attached = rebuilt.senders.flatMap((snd) => snd.replaced).filter(Boolean) as FakeTrack[];
+    expect(attached.map((t) => t.kind)).toContain("audio");
   });
 });
 
