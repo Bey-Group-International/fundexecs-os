@@ -88,6 +88,9 @@ import {
   speakerNames,
   transcriptRows,
 } from "@/lib/meetings/transcript-buffer";
+import {
+  engineConfidence, isNoisy, lineConfidence, pushEngineScore, recognitionLang, restartDelay,
+} from "@/lib/meetings/recognition-quality";
 import { recordingNotice, type RecordingState } from "@/lib/meetings/recording-policy";
 import {
   NO_ELAPSED,
@@ -729,6 +732,15 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
   // whole room to draw nothing.
   const transcriptRef = useRef<TranscriptLine[]>([]);
   const recognitionRef = useRef<any>(null);
+  // The microphone track the recogniser was started on, so a switch to another
+  // microphone is noticed; whether it is waiting for a live track to appear;
+  // and how to start it, for the effect that follows the microphone.
+  const recognitionTrackRef = useRef<MediaStreamTrack | null>(null);
+  const awaitingTrackRef = useRef(false);
+  const startRecognitionRef = useRef<(() => void) | null>(null);
+  // The engine's last few scores, for the "unclear audio" warning.
+  const engineScoresRef = useRef<number[]>([]);
+  const srNoisyRef = useRef(false);
   const interimIdRef = useRef<string>(crypto.randomUUID());
   // Which of our own lines the database has confirmed. A SET of line ids, not a
   // position: remote lines splice into the middle of the transcript by when
@@ -784,6 +796,13 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
   // more, so this lamp in the copilot header is the only sign that the meeting
   // is being recorded for its report — which makes it worth more, not less.
   const [srStatus, setSrStatus] = useState<"idle" | "active" | "error" | "unsupported">("idle");
+  // Read by the recogniser's restart path, which must not decide inside a state
+  // updater: updaters have to stay pure, and this one was starting the engine.
+  const srStatusRef = useRef<"idle" | "active" | "error" | "unsupported">("idle");
+  // Whether the recogniser has been hearing mostly noise -- a phone on a desk,
+  // a headset on the wrong input, a loudspeaker feeding back. Shown while the
+  // meeting is still going, which is the only time it can be fixed.
+  const [srNoisy, setSrNoisy] = useState(false);
 
   // Chat
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
@@ -3228,24 +3247,52 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
   // muted (mute disables the outgoing WebRTC track, not the browser's own tap on
   // the device). So a finalized sentence is not published until the voice
   // activity recorded over the seconds it was spoken says it was really ours.
+  //
+  // And what the ENGINE thinks of the words is kept too. It was not: the
+  // confidence stored on a line was the attribution's alone (who said it), so
+  // an hour of noise recognised as words at engine confidence 0.2 reached the
+  // report model stamped 1.0, as fact. See recognition-quality.ts.
   useEffect(() => {
     if (!sessionLive) return;
     const w = window as any;
     const SR = (w.SpeechRecognition ?? w.webkitSpeechRecognition) as (new () => any) | undefined;
-    if (!SR) { setSrStatus("unsupported"); return; }
+    if (!SR) { setSrStatus("unsupported"); srStatusRef.current = "unsupported"; return; }
     const recognition = new SR();
-    recognition.continuous = true; recognition.interimResults = true; recognition.lang = "en-US";
-    recognition.onstart = () => setSrStatus("active");
+    recognition.continuous = true; recognition.interimResults = true;
+    // The browser's language, not en-US for everyone: an engine told the wrong
+    // language does not fail, it produces fluent nonsense in the one it was told.
+    recognition.lang = recognitionLang(typeof navigator !== "undefined" ? navigator.language : null);
+
+    // The restart bookkeeping: when this run started, how many runs in a row
+    // died at once, and the timer for a delayed restart.
+    let startedAt: number | null = null;
+    let shortRuns = 0;
+    let restartTimer: ReturnType<typeof setTimeout> | null = null;
+    let stopped = false;
+
+    recognition.onstart = () => {
+      startedAt = Date.now();
+      setSrStatus("active");
+      srStatusRef.current = "active";
+    };
     // Some engines fire speechstart; where they don't, the first interim result
     // opens the window instead.
     recognition.onspeechstart = () => { utteranceStartRef.current = Date.now(); };
 
     recognition.onresult = (ev: any) => {
       let interim = ""; let finalText = "";
+      // The engine's score for what settled in this event: the lowest of the
+      // finals it holds, because one garbled clause makes the sentence unsure.
+      let engine: number | null = null;
       for (let i = ev.resultIndex; i < ev.results.length; i++) {
         const r = ev.results[i];
-        if (r.isFinal) finalText += r[0].transcript + " ";
-        else interim += r[0].transcript;
+        if (r.isFinal) {
+          finalText += r[0].transcript + " ";
+          const score = engineConfidence(r[0]);
+          if (score !== null) engine = engine === null ? score : Math.min(engine, score);
+        } else {
+          interim += r[0].transcript;
+        }
       }
       const now = Date.now();
       if (utteranceStartRef.current === null && (interim || finalText)) utteranceStartRef.current = now;
@@ -3269,6 +3316,17 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
           { localMicOn: micOnRef.current },
         );
         utteranceStartRef.current = null;
+
+        // The gauge sees every scored final, published or not: a microphone
+        // hearing noise is a microphone problem whoever the words are given to.
+        if (engine !== null) {
+          engineScoresRef.current = pushEngineScore(engineScoresRef.current, engine);
+          const noisy = isNoisy(engineScoresRef.current);
+          if (noisy !== srNoisyRef.current) {
+            srNoisyRef.current = noisy;
+            setSrNoisy(noisy);
+          }
+        }
       }
 
       // Words we decided were somebody else's are dropped, not relabelled: the
@@ -3284,6 +3342,8 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
         const next = transcriptRef.current.filter((l) => l.final);
         if (settled && attribution) {
           const ts = now;
+          // The weaker of who-said-it and what-was-said; see lineConfidence.
+          const confidence = lineConfidence(attribution.confidence, engine);
           next.push({
             id: crypto.randomUUID(),
             speakerId: LOCAL_SPEAKER_ID,
@@ -3293,7 +3353,7 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
             ts,
             final: true,
             isLocal: true,
-            confidence: attribution.confidence,
+            confidence,
             overlapped: attribution.overlapped,
           });
           interimIdRef.current = crypto.randomUUID();
@@ -3304,7 +3364,7 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
             userId: localUserIdRef.current,
             text: settled,
             ts,
-            confidence: attribution.confidence,
+            confidence,
             overlapped: attribution.overlapped,
           });
         }
@@ -3329,8 +3389,12 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     };
 
     recognition.onerror = (ev: any) => {
-      if (ev.error === "not-allowed" || ev.error === "service-not-allowed") setSrStatus("error");
-      else if (ev.error !== "no-speech") console.warn("[SR]", ev.error);
+      if (ev.error === "not-allowed" || ev.error === "service-not-allowed") {
+        setSrStatus("error");
+        srStatusRef.current = "error";
+      } else if (ev.error !== "no-speech") {
+        console.warn("[SR]", ev.error);
+      }
     };
     // Listen to the call's own microphone track, not the device.
     //
@@ -3346,28 +3410,79 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     // Engines that accept a track (`start(track)`) get the echo-cancelled one,
     // and only hear what this member says. Engines that do not ignore the
     // argument, and one that rejects it outright gets the old call.
+    //
+    // With NO live track there is nothing to start on, and the old code fell
+    // through to the bare call anyway: a raw capture of whatever the operating
+    // system's default input is — on a Mac with an iPhone nearby, the phone —
+    // transcribed under this member's name while the call itself had no
+    // microphone at all. Now it waits; the effect below starts it when a
+    // microphone arrives.
     const startRecognition = () => {
-      const track = localStreamRef.current?.getAudioTracks()[0];
-      if (track && track.readyState === "live") {
-        try { recognition.start(track); return; } catch (err) {
-          // Already running is not a reason to retry without the track.
-          if ((err as { name?: string })?.name === "InvalidStateError") return;
-        }
+      if (stopped) return;
+      const track = localStreamRef.current?.getAudioTracks()[0] ?? null;
+      recognitionTrackRef.current = track;
+      if (!track || track.readyState !== "live") {
+        awaitingTrackRef.current = true;
+        return;
+      }
+      awaitingTrackRef.current = false;
+      try { recognition.start(track); return; } catch (err) {
+        // Already running is not a reason to retry without the track.
+        if ((err as { name?: string })?.name === "InvalidStateError") return;
       }
       try { recognition.start(); } catch { /* already started */ }
     };
+    startRecognitionRef.current = startRecognition;
+
     recognition.onend = () => {
       utteranceStartRef.current = null;
-      setSrStatus((prev) => {
-        if (prev === "error" || prev === "unsupported") return prev;
-        startRecognition();
-        return "active";
-      });
+      if (stopped) return;
+      const status = srStatusRef.current;
+      if (status === "error" || status === "unsupported") return;
+      // Continuous recognition ends on its own every minute or so and is
+      // restarted at once. A run that died as soon as it started is the engine
+      // refusing the audio, and restarting that at once was a loop.
+      const next = restartDelay({ startedAt, endedAt: Date.now(), shortRuns });
+      shortRuns = next.shortRuns;
+      startedAt = null;
+      if (next.delayMs === 0) startRecognition();
+      else restartTimer = setTimeout(startRecognition, next.delayMs);
     };
     startRecognition();
     recognitionRef.current = recognition;
-    return () => { recognition.onend = null; recognition.stop(); };
+    return () => {
+      stopped = true;
+      startRecognitionRef.current = null;
+      awaitingTrackRef.current = false;
+      recognitionTrackRef.current = null;
+      if (restartTimer) clearTimeout(restartTimer);
+      recognition.onend = null;
+      try { recognition.stop(); } catch { /* never started */ }
+      engineScoresRef.current = [];
+      srNoisyRef.current = false;
+      setSrNoisy(false);
+    };
   }, [sessionLive]);
+
+  // Follow the microphone.
+  //
+  // The recogniser is started on one track. When the member switches
+  // microphones, or one is recovered after a join without, the call moves to a
+  // new track and the recogniser does not: it goes on listening to the one that
+  // was stopped (silence), or -- had it fallen through to a bare start -- to a
+  // raw capture of the OS default. A recogniser on the wrong track is stopped
+  // here, and its own `onend` restarts it on the current one; one that was
+  // waiting for a microphone is started the moment there is one.
+  useEffect(() => {
+    if (!sessionLive) return;
+    const track = localStream?.getAudioTracks()[0] ?? null;
+    if (track === recognitionTrackRef.current) return;
+    if (awaitingTrackRef.current) {
+      if (track && track.readyState === "live") startRecognitionRef.current?.();
+      return;
+    }
+    try { recognitionRef.current?.stop(); } catch { /* not running */ }
+  }, [sessionLive, localStream]);
 
 
   // ── Voice activity ────────────────────────────────────────────────────────
@@ -5983,7 +6098,7 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
                 change is worth giving a failed render another try. */}
             <CopilotErrorBoundary resetKey={participantList.length}>
             <CopilotSidebar
-              srStatus={srStatus} participants={participantList} roomCode={roomCode} meetingTitle={meetingTitle}
+              srStatus={srStatus} srNoisy={srNoisy} participants={participantList} roomCode={roomCode} meetingTitle={meetingTitle}
               chatMessages={chatMessages} chatUnread={chatUnread}
               onSendChat={(t) => void sendChat(t)} onRetryChat={(id) => void retryChat(id)} isHost={isHost}
               raisedHands={raisedHands} onKick={(id) => void kickPeer(id)} onAdmit={admitPeer} onDeny={denyPeer} onAdmitAll={admitAll}
