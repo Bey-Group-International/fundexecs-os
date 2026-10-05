@@ -5,7 +5,13 @@
 // still in the green room rather than before it can be drawn.
 
 import { FloatingMenu, useSpeaking, useStableHandlers, type RemovedPerson } from "./room-shared";
-import React, { memo, useEffect, useMemo, useReducer, useRef, useState, useCallback } from "react";
+import {
+  barCapacity,
+  fitBar,
+  foldedBadgeTotal,
+  type BarFeature,
+} from "@/lib/meetings/control-bar-fit";
+import React, { memo, useEffect, useLayoutEffect, useMemo, useReducer, useRef, useState, useCallback } from "react";
 import { handsFirst } from "@/lib/meetings/hands";
 import { mirrorSelfView } from "@/lib/meetings/stage";
 import { REACTIONS, reactionLabel, type ActiveReaction } from "@/lib/meetings/reactions";
@@ -443,6 +449,22 @@ export function HostExitControl({
 /** The bar re-renders only when one of its own props changes. */
 export const ControlBar = React.memo(ControlBarImpl);
 
+/** The `sm` breakpoint, as a query and as a number, so one value drives both. */
+const SHARE_MIN_WIDTH = "(min-width: 640px)";
+
+/**
+ * Whether the screen is wide enough to be offered a screen share.
+ *
+ * Reads `matchMedia` when the browser has it and falls back to the width, so a
+ * host without it — jsdom in these tests, an old embedded view — gets an answer
+ * rather than an exception thrown from inside a live call's control bar.
+ */
+function wideEnough(): boolean {
+  if (typeof window === "undefined") return true;
+  if (typeof window.matchMedia === "function") return window.matchMedia(SHARE_MIN_WIDTH).matches;
+  return window.innerWidth >= 640;
+}
+
 function ControlBarImpl({
   micOn, camOn, micTitle, camTitle, shareOn, shareStarting, panel, canShareDocs = false, participantCount = 1, isHost, handRaised, handsUp, handsUpNote, layout, layoutForced, chatUnread, waitingCount, elapsed, roomCode, bwMode,
   onToggleMic, onToggleCam, onToggleScreen, onOpenPanel, onLeave, onEndForAll,
@@ -544,6 +566,172 @@ function ControlBarImpl({
   // The full wording, which the buttons are named by; their visible word is a
   // shortened form of it, and "Retry" when there is no device to unmute.
   const micAction = micTitle ?? (micOn ? "Mute" : "Unmute");
+  // ── How much of the bar actually fits ───────────────────────────────────
+  //
+  // Measured, because a breakpoint cannot know. The row gets whatever is left
+  // after the recording pill, the degraded-link notice and the exit — and those
+  // come and go during a call, so a width that fitted a minute ago does not fit
+  // now. At `xl` every button also gains a label and a wider minimum at the same
+  // width that reveals more of them.
+  //
+  // What a browser actually showed, before any of this: on a 320px phone the exit
+  // hangs 14px off the right for a guest and 30px for a host, and no breakpoint
+  // can fix it because the exit never folds. See lib/meetings/control-bar-fit.ts
+  // for the measurements and for what folds first.
+  const rowRef = useRef<HTMLDivElement>(null);
+  const [capacity, setCapacity] = useState<number | null>(null);
+  /** Controls a breakpoint is hiding right now, from the same measurement. */
+  const [hiddenByWidth, setHiddenByWidth] = useState<BarFeature[]>([]);
+  /**
+   * The width of one foldable control, remembered.
+   *
+   * Needed because the measurement eats itself at the narrow end. Once every
+   * foldable control has gone into More there is nothing left on the bar to
+   * measure one by, and the first version answered "I cannot tell" — which folds
+   * nothing, so every control came back, and the row overflowed again. Chromium
+   * at 320px: the first measurement folded all of them, the ResizeObserver's own
+   * opening callback then measured a bar with no foldable control in it, and the
+   * bar ended up exactly as wide as it had been before any of this existed. None
+   * of the jsdom tests could see it, because their observer answers before React
+   * has committed the fold.
+   *
+   * A control's width does not depend on whether it is currently on the bar, so
+   * the last one seen is a sound unit to keep using.
+   */
+  const itemWidthRef = useRef(0);
+  /**
+   * Whether this screen is wide enough to offer a screen share.
+   *
+   * Declared here, above the measurement, because the measurement depends on it —
+   * see the effect below for why screen size is the test and the comment on the
+   * dependency array for what crossing it changes.
+   */
+  const [wideEnoughToShare, setWideEnoughToShare] = useState(wideEnough);
+
+  useLayoutEffect(() => {
+    const row = rowRef.current;
+    if (!row || typeof ResizeObserver === "undefined") return;
+
+    const measure = () => {
+      const available = row.clientWidth;
+      // Every optional control is tagged, so the ones that can never fold — the
+      // mic and camera with their chevrons, More itself, the exit — are simply
+      // "everything else" and need no second list to drift out of step.
+      const optional = [...row.querySelectorAll<HTMLElement>("[data-bar-feature]")];
+      // Computed as "everything, minus the controls that may fold", because the
+      // foldable ones are nested inside groups rather than sitting directly in the
+      // row — summing the row's own children would count a whole group as
+      // unfoldable. Subtracting instead works at any depth, and stays correct as
+      // controls fold: the total shrinks by exactly what left.
+      let total = 0;
+      for (const child of [...row.children]) total += (child as HTMLElement).offsetWidth;
+      const optionalWidth = optional.reduce((w, el) => w + el.offsetWidth, 0);
+      const reserved = Math.max(0, total - optionalWidth);
+      // The WIDEST optional control, not the average. Fitting to the average
+      // over-fills by however much the widest exceeds it, which puts a control
+      // back off the edge — and erring toward one control too few in the bar
+      // costs a press, while erring the other way costs reachability.
+      const widest = optional.reduce((w, el) => Math.max(w, el.offsetWidth), 0);
+      // A control a breakpoint has hidden measures zero, which is how the fold
+      // learns which ones CSS has already taken off the bar. It matters for the
+      // badge: a hidden control is as quiet as a folded one, and the number it
+      // was carrying has to move onto More either way.
+      const unseen = optional.filter((el) => el.offsetWidth === 0).map((el) => el.dataset.barFeature as BarFeature);
+      setHiddenByWidth((prev) =>
+        prev.length === unseen.length && prev.every((f, i) => f === unseen[i]) ? prev : unseen,
+      );
+      // The row's gap at every breakpoint it uses (gap-1 / sm:gap-1.5).
+      const gap = 6;
+      if (widest > 0) itemWidthRef.current = widest;
+      // The remembered width when there is nothing left on the bar to measure.
+      // Null only before anything has ever been measured, which is the one
+      // honest "not yet" — see itemWidthRef.
+      const unit = widest > 0 ? widest : itemWidthRef.current;
+      setCapacity(
+        unit > 0
+          ? barCapacity({ available, itemWidth: unit + gap, reserved: reserved + gap * (row.children.length - 1) })
+          : null,
+      );
+    };
+
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(row);
+    return () => observer.disconnect();
+    // Re-measured when the composition of the bar changes, because the reserved
+    // width does: a recording pill appears, a bandwidth notice comes and goes,
+    // and a host's exit is wider than a guest's.
+    //
+    // `wideEnoughToShare` is in here because the `sm` breakpoint moves three
+    // things at once: screen share is offered or withdrawn, every button goes
+    // from 42px to 40px, and the mic and camera chevrons appear. Two of those
+    // change the width of one control and the width of the part that cannot fold,
+    // and the ResizeObserver below cannot be relied on to notice — it fires when
+    // the ROW's own box changes, and the row sits between two columns whose
+    // contents also change at `sm`, so there are widths where everything inside
+    // it resizes and its box does not. A capacity measured on the wide side then
+    // keeps more controls than the narrow bar can hold, which is the fault this
+    // whole change exists to fix. (CodeRabbit's finding on #1296.)
+  }, [isHost, recordingState, bwMode, canShareDocs, leaving, wideEnoughToShare]);
+
+  /**
+   * Mirrors the `sm` breakpoint the screen-share button was gated on.
+   *
+   * Carried as data rather than a CSS class so the fold can see it — a control
+   * the fold cannot see is a control it will happily leave hanging off the edge.
+   * Screen size remains the proxy: every mobile browser exposes
+   * `getDisplayMedia` and then refuses it, so the API's presence is not the test
+   * (see lib/meetings/audio-capture.ts).
+   */
+  useEffect(() => {
+    // `matchMedia` where it exists, a resize listener where it does not. Feature
+    // detected rather than assumed: this runs inside the control bar of a live
+    // call, and a throw here takes the whole bar down — which is a worse fault
+    // than the one this is here to fix.
+    const read = () => setWideEnoughToShare(wideEnough());
+    read();
+    const mq = typeof window.matchMedia === "function" ? window.matchMedia(SHARE_MIN_WIDTH) : null;
+    if (mq?.addEventListener) {
+      mq.addEventListener("change", read);
+      return () => mq.removeEventListener("change", read);
+    }
+    window.addEventListener("resize", read);
+    return () => window.removeEventListener("resize", read);
+  }, []);
+
+  const offered: BarFeature[] = [
+    "background",
+    ...(wideEnoughToShare ? (["share"] as const) : []),
+    "hand",
+    "react",
+    "layout",
+    ...(isHost ? (["record"] as const) : []),
+    "chat",
+    "people",
+    ...(canShareDocs ? (["docs"] as const) : []),
+  ];
+  const fit = fitBar({ offered, capacity });
+  const onBar = (f: BarFeature) => fit.inBar.includes(f);
+  /**
+   * More carries a twin of everything the call offers, folded or not — the class
+   * decides which widths it shows at, so that the breakpoint floor still works
+   * before the measurement has run. A control the call does not offer at all (a
+   * guest's documents, a member's recording, a phone's screen share) has no twin.
+   */
+  const inMore = (f: BarFeature) => offered.includes(f);
+  const barClass = (f: BarFeature) => BAR_AT_WIDTH[f].bar;
+  /** Unconditional once the fold has taken the button away; the mirror until then. */
+  const moreClass = (f: BarFeature) => (onBar(f) ? BAR_AT_WIDTH[f].more : "");
+  const foldState = (f: BarFeature) => (onBar(f) ? "mirror" : "folded");
+  // Folding a control must not fold the number it was carrying — and nor must a
+  // breakpoint hiding it, which is why both are counted.
+  const quiet = [...new Set([...fit.folded, ...hiddenByWidth])];
+  const moreBadge = foldedBadgeTotal(quiet, {
+    chat: chatUnread > 0 && panel !== "chat" ? chatUnread : 0,
+    people: waitingCount,
+    hand: handsUp,
+  });
+
   const camAction = camTitle ?? (camOn ? "Camera off" : "Camera on");
   const handLabel = handRaised ? "Lower hand" : "Raise hand";
   const layoutLabel = layout === "grid" ? "Speaker view" : "Grid view";
@@ -582,7 +770,7 @@ function ControlBarImpl({
           the host's tools, and the way out. Labelled on a wide screen; below it the
           icons carry aria-labels, and what does not fit a phone moves into
           More rather than off the screen. */}
-      <div className="flex items-center gap-1 sm:gap-1.5 flex-1 justify-center min-w-0">
+      <div ref={rowRef} className="flex items-center gap-1 sm:gap-1.5 flex-1 justify-center min-w-0">
         <BarGroup>
           <div className="flex items-center">
             {/* The caption is decided by `participation.ts` and passed in, not
@@ -602,38 +790,48 @@ function ControlBarImpl({
           {/* Backgrounds — next to the camera, because that is what it changes.
               Below `md` it is in More, where the anchor for its picker is the
               More button. */}
-          <BarBtn btnRef={bgOwnRef} className="hidden md:flex" tone={backgroundActive ? "on" : "default"}
-            onClick={() => openBackgroundsFrom(bgOwnRef)} label="Background" title="Background effects" icon={<BackgroundIcon />} />
+          {onBar("background") && (
+            <BarBtn dataFeature="background" btnRef={bgOwnRef} className={barClass("background")} tone={backgroundActive ? "on" : "default"}
+              onClick={() => openBackgroundsFrom(bgOwnRef)} label="Background" title="Background effects" icon={<BackgroundIcon />} />
+          )}
           {/* Screen share — not offered on a phone, which cannot. */}
-          <BarBtn className="hidden sm:flex" tone={shareOn ? "on" : "default"} onClick={onToggleScreen} busy={shareStarting}
-            label={shareOn ? "Stop share" : "Share"} title={shareOn ? "Stop sharing" : "Share screen"} pressed={shareOn}
-            icon={<ScreenShareIcon />} />
+          {onBar("share") && (
+            <BarBtn dataFeature="share" className={barClass("share")} tone={shareOn ? "on" : "default"} onClick={onToggleScreen} busy={shareStarting}
+              label={shareOn ? "Stop share" : "Share"} title={shareOn ? "Stop sharing" : "Share screen"} pressed={shareOn}
+              icon={<ScreenShareIcon />} />
+          )}
         </BarGroup>
 
         <BarGroup>
           {/* Raise hand — and the badge that says somebody else has. In More on a
               phone, where the badge moves onto the More button. */}
-          <BarBtn className="hidden sm:flex" tone={handRaised ? "on" : "default"} onClick={onRaiseHand} pressed={handRaised}
-            label={handRaised ? "Lower" : "Raise"} title={handsUpNote || handLabel}
-            ariaLabel={handsUpNote ? `${handLabel}. ${handsUpNote}.` : handLabel}
-            icon={<span className="text-base leading-none">✋</span>} badge={handsUp > 0 ? handsUp : null} />
-          <BarBtn btnRef={reactionBtnRef} className="hidden md:flex" onClick={() => setReactionOpen((v: boolean) => !v)}
-            label="React" title="Send reaction" haspopup expanded={reactionOpen}
-            icon={<span className="text-base leading-none">😊</span>} />
+          {onBar("hand") && (
+            <BarBtn dataFeature="hand" className={barClass("hand")} tone={handRaised ? "on" : "default"} onClick={onRaiseHand} pressed={handRaised}
+              label={handRaised ? "Lower" : "Raise"} title={handsUpNote || handLabel}
+              ariaLabel={handsUpNote ? `${handLabel}. ${handsUpNote}.` : handLabel}
+              icon={<span className="text-base leading-none">✋</span>} badge={handsUp > 0 ? handsUp : null} />
+          )}
+          {onBar("react") && (
+            <BarBtn dataFeature="react" btnRef={reactionBtnRef} className={barClass("react")} onClick={() => setReactionOpen((v: boolean) => !v)}
+              label="React" title="Send reaction" haspopup expanded={reactionOpen}
+              icon={<span className="text-base leading-none">😊</span>} />
+          )}
           <FloatingMenu open={reactionOpen} anchorRef={reactionBtnRef} onClose={() => setReactionOpen(false)} minWidth={0}>
             <ReactionRow onReaction={(emoji) => { onReaction(emoji); setReactionOpen(false); }} />
           </FloatingMenu>
-          <BarBtn className="hidden lg:flex" onClick={onToggleLayout} label={layout === "grid" ? "Speaker" : "Grid"}
+          {onBar("layout") && (
+          <BarBtn dataFeature="layout" className={barClass("layout")} onClick={onToggleLayout} label={layout === "grid" ? "Speaker" : "Grid"}
             ariaLabel={layoutLabel}
             title={layoutForced ? "Someone is sharing their screen — grid view resumes when they stop" : layoutLabel}
             icon={layout === "grid" ? <SpeakerViewIcon /> : <GridViewIcon />} />
+          )}
         </BarGroup>
 
         {/* Record — host only. On a phone too: a host running the meeting from
             a phone is exactly the host most likely to want a recording. */}
-        {isHost && (
-          <BarGroup className="hidden sm:flex">
-            <BarBtn tone={recording ? "recording" : "default"} onClick={onToggleRecording}
+        {isHost && onBar("record") && (
+          <BarGroup className={barClass("record")}>
+            <BarBtn dataFeature="record" tone={recording ? "recording" : "default"} onClick={onToggleRecording}
               disabled={recordingState === "starting" || recordingState === "stopping"} pressed={recording}
               label={recording && recordingStartedAt !== null ? <RecordingClock startedAt={recordingStartedAt} /> : recordLabel}
               ariaLabel={recording ? "Stop recording" : recordLabel === "Record" ? "Record this meeting" : recordLabel}
@@ -645,11 +843,14 @@ function ControlBarImpl({
         {/* Chat, People and Documents. A button each, so each has its own
             badge: unread chat no longer hides behind people at the door. */}
         <BarGroup>
-          <BarBtn tone={panel === "chat" ? "on" : "default"} onClick={() => onOpenPanel("chat")} pressed={panel === "chat"}
+          {onBar("chat") && (
+          <BarBtn dataFeature="chat" className={barClass("chat")} tone={panel === "chat" ? "on" : "default"} onClick={() => onOpenPanel("chat")} pressed={panel === "chat"}
             label="Chat" ariaLabel={chatUnread > 0 && panel !== "chat" ? `Chat, ${chatUnread} unread` : "Chat"}
             title={chatUnread > 0 && panel !== "chat" ? `${chatUnread} unread` : "Chat"}
             icon={<ChatIcon />} badge={chatUnread > 0 && panel !== "chat" ? chatUnread : null} />
-          <BarBtn tone={panel === "people" ? "on" : "default"} onClick={() => onOpenPanel("people")} pressed={panel === "people"}
+          )}
+          {onBar("people") && (
+          <BarBtn dataFeature="people" className={barClass("people")} tone={panel === "people" ? "on" : "default"} onClick={() => onOpenPanel("people")} pressed={panel === "people"}
             label="People"
             ariaLabel={waitingCount > 0 ? `People, ${waitingCount} waiting to join` : `People, ${participantCount} in the call`}
             title={waitingCount > 0 ? `${waitingCount} waiting to join` : `${participantCount} in the call`}
@@ -657,8 +858,9 @@ function ControlBarImpl({
             // Someone at the door is the badge; otherwise the headcount, quietly.
             badge={waitingCount > 0 ? waitingCount : null} badgeTone="success"
             hint={waitingCount > 0 ? null : participantCount} />
-          {canShareDocs && (
-            <BarBtn className="hidden md:flex" tone={panel === "docs" ? "on" : "default"} onClick={() => onOpenPanel("docs")}
+          )}
+          {canShareDocs && onBar("docs") && (
+            <BarBtn dataFeature="docs" className={barClass("docs")} tone={panel === "docs" ? "on" : "default"} onClick={() => onOpenPanel("docs")}
               pressed={panel === "docs"} label="Docs" ariaLabel="Documents" title="Share from the data room" icon={<DocsIcon />} />
           )}
         </BarGroup>
@@ -669,26 +871,70 @@ function ControlBarImpl({
               never offered twice on one screen. */}
           <BarBtn btnRef={moreBtnRef} onClick={() => setMoreOpen((v: boolean) => !v)} label="More" ariaLabel="More options"
             title="More options" haspopup expanded={moreOpen} icon={<MoreIcon />}
-            badge={handsUp > 0 ? handsUp : null} badgeClassName="sm:hidden" />
+            badge={moreBadge} />
           <FloatingMenu open={moreOpen} anchorRef={moreBtnRef} onClose={() => setMoreOpen(false)} minWidth={220}>
-            <div className="md:hidden px-1 pt-1 pb-1.5 border-b border-[var(--line)] mb-1">
-              <ReactionRow onReaction={(emoji) => { onReaction(emoji); setMoreOpen(false); }} />
-            </div>
-            <MenuItem className="sm:hidden" onClick={fromMore(onRaiseHand)}>
-              ✋ {handLabel}{handsUpNote ? <span className="ml-auto text-xs text-[var(--fg-muted)]">{handsUpNote}</span> : null}
-            </MenuItem>
-            <MenuItem className="md:hidden" onClick={fromMore(() => openBackgroundsFrom(moreBtnRef))}>
-              <BackgroundIcon /> Background effects{backgroundActive ? " · on" : ""}
-            </MenuItem>
-            <MenuItem className="sm:hidden" onClick={fromMore(onFlipCamera)}>🔄 Flip camera</MenuItem>
-            {canShareDocs && (
-              <MenuItem className="md:hidden" onClick={fromMore(() => onOpenPanel("docs"))}><DocsIcon /> Documents</MenuItem>
+            {/* Each item appears exactly when its button did not, so no control is
+                ever offered twice on one screen — the same guarantee the mirrored
+                breakpoint classes used to give, now from one decision instead of
+                two that could disagree. */}
+            {inMore("react") && (
+              <div data-bar-feature="react" data-fold={foldState("react")}
+                className={`${moreClass("react")} px-1 pt-1 pb-1.5 border-b border-[var(--line)] mb-1`}>
+                <ReactionRow onReaction={(emoji) => { onReaction(emoji); setMoreOpen(false); }} />
+              </div>
             )}
-            <MenuItem className="lg:hidden" onClick={fromMore(onToggleLayout)}>
-              {layout === "grid" ? <SpeakerViewIcon /> : <GridViewIcon />} {layoutLabel}
-            </MenuItem>
-            {isHost && (
-              <MenuItem className="sm:hidden" onClick={fromMore(onToggleRecording)}
+            {inMore("chat") && (
+              <MenuItem dataFeature="chat" dataFold={foldState("chat")} className={moreClass("chat")}
+                onClick={fromMore(() => onOpenPanel("chat"))}>
+                <ChatIcon /> Chat
+                {chatUnread > 0 && panel !== "chat"
+                  ? <span className="ml-auto text-xs font-semibold text-[var(--gold-400)]">{chatUnread} unread</span>
+                  : null}
+              </MenuItem>
+            )}
+            {inMore("people") && (
+              <MenuItem dataFeature="people" dataFold={foldState("people")} className={moreClass("people")}
+                onClick={fromMore(() => onOpenPanel("people"))}>
+                <PeopleIcon /> People
+                <span className="ml-auto text-xs text-[var(--fg-muted)]">
+                  {waitingCount > 0 ? `${waitingCount} waiting` : participantCount}
+                </span>
+              </MenuItem>
+            )}
+            {inMore("share") && (
+              <MenuItem dataFeature="share" dataFold={foldState("share")} className={moreClass("share")}
+                onClick={fromMore(onToggleScreen)}>
+                <ScreenShareIcon /> {shareOn ? "Stop sharing" : "Share screen"}
+              </MenuItem>
+            )}
+            {inMore("hand") && (
+              <MenuItem dataFeature="hand" dataFold={foldState("hand")} className={moreClass("hand")}
+                onClick={fromMore(onRaiseHand)}>
+                ✋ {handLabel}{handsUpNote ? <span className="ml-auto text-xs text-[var(--fg-muted)]">{handsUpNote}</span> : null}
+              </MenuItem>
+            )}
+            {inMore("background") && (
+              <MenuItem dataFeature="background" dataFold={foldState("background")} className={moreClass("background")}
+                onClick={fromMore(() => openBackgroundsFrom(moreBtnRef))}>
+                <BackgroundIcon /> Background effects{backgroundActive ? " · on" : ""}
+              </MenuItem>
+            )}
+            {/* Flip camera is a phone's control and has never had a bar button,
+                so it stays gated on screen size rather than on the fold. */}
+            <MenuItem className="sm:hidden" onClick={fromMore(onFlipCamera)}>🔄 Flip camera</MenuItem>
+            {inMore("docs") && (
+              <MenuItem dataFeature="docs" dataFold={foldState("docs")} className={moreClass("docs")}
+                onClick={fromMore(() => onOpenPanel("docs"))}><DocsIcon /> Documents</MenuItem>
+            )}
+            {inMore("layout") && (
+              <MenuItem dataFeature="layout" dataFold={foldState("layout")} className={moreClass("layout")}
+                onClick={fromMore(onToggleLayout)}>
+                {layout === "grid" ? <SpeakerViewIcon /> : <GridViewIcon />} {layoutLabel}
+              </MenuItem>
+            )}
+            {inMore("record") && (
+              <MenuItem dataFeature="record" dataFold={foldState("record")} className={moreClass("record")}
+                onClick={fromMore(onToggleRecording)}
                 disabled={recordingState === "starting" || recordingState === "stopping"}>
                 <span className={`w-2.5 h-2.5 rounded-full ${recording ? "bg-[var(--status-danger)]" : "bg-current"}`} />
                 {recording ? "Stop recording" : recordLabel === "Record" ? "Record this meeting" : recordLabel}
@@ -734,6 +980,39 @@ function ControlBarImpl({
 }
 
 /** A run of related controls, set apart from the next run by a hairline. */
+/**
+ * What a breakpoint alone does with each foldable control, and its mirror inside
+ * More. This is the FLOOR under the measured fold, not a leftover of it.
+ *
+ * The measurement runs in a layout effect, so it has not happened for markup
+ * rendered on the server, and it never happens at all with JavaScript disabled.
+ * With these classes gone the server's bar offered everything, and a real browser
+ * said so: Chromium puts seven of a host's controls past the right edge of a
+ * 360px window, mic and camera off the left, and the page scrolling sideways —
+ * for as long as it takes the bundle to arrive. The breakpoints answer at the
+ * first paint and need nothing to run; the measurement refines them a frame later
+ * with the one thing they cannot know, which is how much room is actually left.
+ *
+ * `bar` is the class on the control's own button, `more` the mirror on its twin
+ * inside the menu, and they are exact opposites — so at any width exactly one of
+ * the two is showing, which is the same guarantee the pair gave before, now with
+ * the fold able to take the button away at a width CSS would have kept it.
+ *
+ * `chat` and `people` were never gated by width and still are not: their mirror is
+ * `hidden`, which shows only when the fold has taken their button away.
+ */
+const BAR_AT_WIDTH: Record<BarFeature, { bar: string; more: string }> = {
+  background: { bar: "hidden md:flex", more: "md:hidden" },
+  share: { bar: "hidden sm:flex", more: "sm:hidden" },
+  hand: { bar: "hidden sm:flex", more: "sm:hidden" },
+  react: { bar: "hidden md:flex", more: "md:hidden" },
+  layout: { bar: "hidden lg:flex", more: "lg:hidden" },
+  record: { bar: "hidden sm:flex", more: "sm:hidden" },
+  chat: { bar: "flex", more: "hidden" },
+  people: { bar: "flex", more: "hidden" },
+  docs: { bar: "hidden md:flex", more: "md:hidden" },
+};
+
 function BarGroup({ children, className = "flex" }: { children: React.ReactNode; className?: string }) {
   return (
     <div className={`${className} items-center gap-1 sm:gap-1.5 xl:pl-1.5 xl:border-l xl:border-[var(--line)] xl:first:border-l-0 xl:first:pl-0`}>
@@ -762,6 +1041,7 @@ const BAR_TONE = {
 function BarBtn({
   icon, label, onClick, title, ariaLabel, tone = "default", badge = null, badgeTone = "gold", badgeClassName = "", hint = null,
   pressed, busy = false, disabled = false, btnRef, className = "flex", haspopup = false, expanded,
+  dataFeature,
 }: {
   icon: React.ReactNode;
   label: React.ReactNode;
@@ -785,11 +1065,14 @@ function BarBtn({
   className?: string;
   haspopup?: boolean;
   expanded?: boolean;
+  /** Marks a control the bar is allowed to fold. Read by the measurement. */
+  dataFeature?: string;
 }) {
   return (
     <button
       ref={btnRef}
       type="button"
+      data-bar-feature={dataFeature}
       onClick={onClick}
       title={busy ? "Starting…" : title}
       aria-label={ariaLabel ?? (typeof label === "string" ? label : title)}
@@ -821,11 +1104,16 @@ function BarBtn({
   );
 }
 
-function MenuItem({ children, onClick, className = "", disabled = false }: {
+function MenuItem({ children, onClick, className = "", disabled = false, dataFeature, dataFold }: {
   children: React.ReactNode; onClick: () => void; className?: string; disabled?: boolean;
+  /** Which foldable control this is a twin of, for the measurement and for tests. */
+  dataFeature?: string;
+  /** "folded" when the bar gave this control up, "mirror" when the bar still has it. */
+  dataFold?: string;
 }) {
   return (
     <button role="menuitem" type="button" onClick={onClick} disabled={disabled}
+      data-bar-feature={dataFeature} data-fold={dataFold}
       className={`${className} w-full flex items-center gap-2.5 text-left px-2.5 min-h-11 sm:min-h-9 rounded-lg text-sm text-[var(--fg-primary)] hover:bg-[var(--surface-3)] disabled:opacity-60 disabled:cursor-wait transition-colors`}>
       {children}
     </button>

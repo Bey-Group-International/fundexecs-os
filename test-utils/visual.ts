@@ -284,3 +284,95 @@ export function report(name: string, width: number, issues: VisualIssue[]): stri
     ...issues.map((i) => `  [${i.kind}] ${i.detail}`),
   ].join("\n");
 }
+
+// ─── Components that only work once they are running ─────────────────────────
+
+/**
+ * Bundle a snippet of client code, with the app's own module resolution.
+ *
+ * `inspect` above renders markup and looks at it, which is enough for anything
+ * laid out by CSS. It is not enough for a component that measures itself: the
+ * control bar decides what fits by reading its own width in a layout effect and
+ * a ResizeObserver, and server-rendered markup has run neither. Checking that
+ * kind of component means actually running it in the browser.
+ *
+ * The gap was not hypothetical. The bar's fold shipped past 32 jsdom tests and a
+ * mutation sweep with a defect only a real engine showed: once every foldable
+ * control had gone into More there was nothing left to measure a control's width
+ * by, the next measurement answered "unknown", and "unknown" folds nothing — so
+ * at 320px the whole row came back and hung off both edges, which is the fault
+ * the fold exists to fix. jsdom cannot see it, because a stub ResizeObserver
+ * answers before React has committed the first fold.
+ *
+ * `next/navigation` and the Supabase client are replaced with inert stubs: this
+ * is a layout check, and a component reaching for a router or a database is not
+ * the subject. Anything else resolves exactly as the app resolves it, through the
+ * project's own tsconfig paths.
+ */
+export async function clientBundle(source: string): Promise<string> {
+  const esbuild = require("esbuild") as typeof import("esbuild");
+  const STUBS: Record<string, string> = {
+    "next/navigation": `
+      export const useRouter = () => ({ push() {}, replace() {}, refresh() {}, back() {} });
+      export const useParams = () => ({ roomId: "abc-defg-hij" });
+      export const useSearchParams = () => new URLSearchParams();
+      export const usePathname = () => "/";
+    `,
+    "@/lib/supabase/client": "export const createClient = () => ({});",
+  };
+  const filter = new RegExp(`^(${Object.keys(STUBS).map((k) => k.replace(/[/\\.$^*+?()[\]{}|]/g, "\\$&")).join("|")})$`);
+  const built = await esbuild.build({
+    stdin: { contents: source, resolveDir: process.cwd(), sourcefile: "visual-entry.tsx", loader: "tsx" },
+    bundle: true,
+    write: false,
+    format: "iife",
+    platform: "browser",
+    jsx: "automatic",
+    target: ["chrome120"],
+    logLevel: "silent",
+    define: { "process.env.NODE_ENV": '"production"' },
+    tsconfig: "tsconfig.json",
+    absWorkingDir: process.cwd(),
+    plugins: [
+      {
+        name: "inert-stubs",
+        setup(build) {
+          build.onResolve({ filter }, (args) => ({ path: args.path, namespace: "inert-stub" }));
+          build.onLoad({ filter: /.*/, namespace: "inert-stub" }, (args) => ({
+            contents: STUBS[args.path],
+            loader: "ts",
+          }));
+        },
+      },
+    ],
+  });
+  return built.outputFiles[0].text;
+}
+
+/**
+ * A page with the app's stylesheet and one running component in it.
+ *
+ * `globals` are written before the bundle runs, so one bundle can be rendered in
+ * several states without rebuilding it.
+ */
+export async function runningPage(
+  browser: Browser,
+  opts: { bundle: string; width: number; height?: number; globals?: Record<string, unknown> },
+): Promise<import("playwright-core").Page> {
+  const css = await appCss();
+  const page = await browser.newPage({ viewport: { width: opts.width, height: opts.height ?? 800 } });
+  const errors: string[] = [];
+  page.on("pageerror", (e) => errors.push(String(e)));
+  await page.setContent(
+    `<!doctype html><html><head><meta charset="utf-8"><style>${css}</style><style>${FONT_VARS}</style></head>` +
+      `<body><div id="root"></div>` +
+      `<script>Object.assign(window, ${JSON.stringify(opts.globals ?? {})})</script>` +
+      `<script>${opts.bundle}</script></body></html>`,
+    { waitUntil: "load" },
+  );
+  // The component's own signal that it has rendered and had a frame to measure
+  // itself in. Without it every assertion races the first layout effect.
+  await page.waitForFunction("window.__painted === true", null, { timeout: 15_000 });
+  if (errors.length) throw new Error(`the page threw while rendering:\n  ${errors.join("\n  ")}`);
+  return page;
+}

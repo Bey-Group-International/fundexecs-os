@@ -107,6 +107,8 @@ export function FloatingMenu({
 }) {
   const panelRef = useRef<HTMLDivElement>(null);
   const [style, setStyle] = useState<React.CSSProperties>({ position: "fixed", top: 0, left: 0, visibility: "hidden" });
+  /** The widest the window can hold, once measured. Null until then. */
+  const [cap, setCap] = useState<number | null>(null);
 
   useLayoutEffect(() => {
     if (!open) return;
@@ -119,7 +121,15 @@ export function FloatingMenu({
       const vh = window.innerHeight;
       const margin = 8;
       const gap = 8;
-      const pw = panel.offsetWidth;
+      // Clamped before it is positioned. Position alone cannot rescue a panel
+      // that is WIDER than the window: the clamp below pins its left edge at the
+      // margin and the rest hangs off the right, which is how a long device name
+      // ("Logitech BRIO 4K Stream Edition (046d:085e)") put half a camera list
+      // off-screen. `minWidth` could do it on its own — the background picker
+      // asks for 330px, which does not fit a 320px phone.
+      const maxWidth = Math.max(0, vw - margin * 2);
+      setCap(maxWidth);
+      const pw = Math.min(panel.offsetWidth, maxWidth);
       const ph = panel.scrollHeight;
       // Horizontal: center over the anchor, then clamp within the viewport.
       let left = a.left + a.width / 2 - pw / 2;
@@ -141,6 +151,7 @@ export function FloatingMenu({
         position: "fixed",
         left,
         top: Math.max(margin, top),
+        maxWidth,
         maxHeight: Math.max(120, maxHeight),
         visibility: "visible",
       });
@@ -174,7 +185,12 @@ export function FloatingMenu({
   return createPortal(
     <div
       ref={panelRef}
-      style={{ minWidth, ...style }}
+      // The minimum is REDUCED to the measured maximum rather than declared
+      // alongside it. Ordering the two in the style object proves nothing: in CSS
+      // `min-width` outranks `max-width` whenever they disagree, so a 330px
+      // minimum on a 320px screen would still win and still bleed. The caller's
+      // minimum is a preference; the window is not.
+      style={{ ...style, minWidth: Math.min(minWidth, cap ?? minWidth) }}
       className="z-[9999] overflow-y-auto overscroll-contain rounded-xl border border-[var(--line)] bg-[var(--surface-2)] shadow-xl p-1"
       role="menu"
     >
