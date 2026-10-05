@@ -49,7 +49,10 @@ const writes: { reports: Record<string, unknown>[]; meetingUpdate?: Record<strin
   reports: [],
 };
 
-function wire({ meeting = MEETING as unknown } = {}) {
+function wire({
+  meeting = MEETING as unknown,
+  participants = [] as Array<{ joined_at: string }>,
+} = {}) {
   from.mockImplementation((table: string) => {
     const b: Record<string, unknown> = {
       select: () => b,
@@ -59,8 +62,9 @@ function wire({ meeting = MEETING as unknown } = {}) {
       // that answers nothing means "everything stays with the host".
       range: async () => ({ data: [], error: null }),
       in: async () => ({ data: [], error: null }),
-      // The "what has this meeting already raised?" read.
-      limit: async () => ({ data: [], error: null }),
+      // The "what has this meeting already raised?" read, and the earliest
+      // attendance row the route infers started_at from.
+      limit: async () => ({ data: table === "live_meeting_participants" ? participants : [], error: null }),
       insert: (row: Record<string, unknown>) => {
         if (table === "live_meeting_reports") writes.reports.push(row);
         return b;
@@ -116,6 +120,32 @@ describe("when the model succeeds", () => {
       full_transcript: TRANSCRIPT,
     });
     expect(writes.meetingUpdate).toMatchObject({ status: "ended" });
+  });
+});
+
+describe("when the meeting ran", () => {
+  // The room never wrote started_at (its write was never sent), so the route
+  // fills it in from the first attendance row when it closes the meeting.
+  it("records when the room opened, from the first attendance row", async () => {
+    wire({ participants: [{ joined_at: "2026-10-05T14:59:50.497Z" }] });
+    await POST(req());
+    expect(writes.meetingUpdate).toMatchObject({ status: "ended", started_at: "2026-10-05T14:59:50.497Z" });
+  });
+
+  it("counts back from the end by the browser's clock when nobody's join was recorded", async () => {
+    wire();
+    await POST(req());
+    const update = writes.meetingUpdate as { ended_at: string; started_at: string };
+    expect(Date.parse(update.ended_at) - Date.parse(update.started_at)).toBe(3600_000);
+  });
+
+  it("never overwrites a start the room did record", async () => {
+    wire({
+      meeting: { ...MEETING, started_at: "2026-10-05T14:30:00.000Z" },
+      participants: [{ joined_at: "2026-10-05T14:59:50.497Z" }],
+    });
+    await POST(req());
+    expect(writes.meetingUpdate).not.toHaveProperty("started_at");
   });
 });
 

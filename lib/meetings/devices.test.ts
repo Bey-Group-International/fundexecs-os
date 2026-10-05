@@ -106,6 +106,43 @@ describe("pickDevice", () => {
     const cams = [d({ deviceId: "iphone", kind: "videoinput", label: "iPhone Camera" })];
     expect(pickDevice(cams, "videoinput", null)?.deviceId).toBe("iphone");
   });
+
+  // The same Mac makes the iPhone the default MICROPHONE too, and the browser's
+  // "default" entry carries its label. A phone on a desk is a microphone that
+  // hears rustle; the transcript it produces is noise recognised as words.
+  it("starts a desktop member on a real microphone when the default is a phone", () => {
+    const mics = [
+      d({ deviceId: "default", label: "Default - iPhone Microphone" }),
+      d({ deviceId: "iphone-mic", label: "iPhone Microphone" }),
+      d({ deviceId: "laptop-mic", label: "MacBook Pro Microphone" }),
+    ];
+    expect(pickDevice(mics, "audioinput", null)?.deviceId).toBe("laptop-mic");
+  });
+
+  it("keeps the system default microphone when it is not a phone", () => {
+    const mics = [
+      d({ deviceId: "default", label: "Default - MacBook Pro Microphone" }),
+      d({ deviceId: "iphone-mic", label: "iPhone Microphone" }),
+    ];
+    expect(pickDevice(mics, "audioinput", null)?.deviceId).toBe("default");
+  });
+
+  it("skips a phone microphone listed first when there is no default entry", () => {
+    const mics = [
+      d({ deviceId: "iphone-mic", label: "iPhone Microphone" }),
+      d({ deviceId: "laptop-mic", label: "MacBook Pro Microphone" }),
+    ];
+    expect(pickDevice(mics, "audioinput", null)?.deviceId).toBe("laptop-mic");
+  });
+
+  it("still honours a phone microphone the member chose, and takes one when it is all there is", () => {
+    const mics = [
+      d({ deviceId: "default", label: "Default - iPhone Microphone" }),
+      d({ deviceId: "iphone-mic", label: "iPhone Microphone" }),
+    ];
+    expect(pickDevice(mics, "audioinput", "iphone-mic")?.deviceId).toBe("iphone-mic");
+    expect(pickDevice(mics, "audioinput", null)?.deviceId).toBe("default");
+  });
 });
 
 describe("settleCamera", () => {

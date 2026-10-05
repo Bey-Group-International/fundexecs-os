@@ -2278,11 +2278,24 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     const icePromise = loadIceServersRef.current();
 
     if (mId) {
-      void (supabase.from("live_meetings") as any)
+      // Awaited, and the error read. This was a `void` on the query builder,
+      // and a supabase-js builder only sends its request when it is awaited:
+      // `then` is what runs the fetch. So for the whole life of the product
+      // this statement built a request and never sent it, and every meeting's
+      // started_at stayed NULL -- no length on the report page, no duration in
+      // the log, the booked length handed to the model as the real one. Only
+      // the host's write passes RLS; everyone else's is a no-op the policy
+      // filters to zero rows, which is fine. Started alongside the identity
+      // read so the host does not pay for it as a third round trip.
+      const startWrite = (supabase.from("live_meetings") as any)
         .update({ started_at: new Date().toISOString() })
         .eq("id", mId)
-        .is("started_at", null);
-      const { data: { user } } = await supabase.auth.getUser();
+        .is("started_at", null) as PromiseLike<{ error: { message?: string } | null }>;
+      const [{ data: { user } }, { error: startError }] = await Promise.all([
+        supabase.auth.getUser(),
+        Promise.resolve(startWrite).catch((err: unknown) => ({ error: { message: String(err) } })),
+      ]);
+      if (startError) console.error("[meeting] start time not recorded", startError.message ?? startError);
       const joiningKey = guestKeyRef.current;
       // One of two identities, and until now only the first was ever recorded.
       // `if (user)` with no else meant an invite-link guest wrote no attendance

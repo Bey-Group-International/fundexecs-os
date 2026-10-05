@@ -53,7 +53,7 @@ export function devicesOfKind(devices: Device[], kind: DeviceKind): Device[] {
 }
 
 /**
- * Whether a camera is a phone standing in for one.
+ * Whether a camera -- or a microphone -- is a phone standing in for one.
  *
  * A desktop enumerates more cameras than it has: an iPhone within reach of a
  * Mac appears as a Continuity Camera and macOS will quietly make it the system
@@ -95,9 +95,20 @@ export function pickDevice(devices: Device[], kind: DeviceKind, remembered: stri
     if (match) return match;
   }
 
+  const notPhone = (d: Device) => !isPhoneCamera(d.label);
   const systemDefault = candidates.find((d) => d.deviceId === "default");
-  if (systemDefault) return systemDefault;
-  if (kind === "videoinput") return candidates.find((d) => !isPhoneCamera(d.label)) ?? candidates[0];
+  if (systemDefault) {
+    // "Default - iPhone Microphone": the browser's default entry carries the
+    // label of whatever the OS chose, and a Mac with an iPhone nearby chooses
+    // the phone for sound as well as for pictures. A phone lying face-down on a
+    // desk is a microphone that hears rustle and room tone, and a transcript
+    // made from it is sibilant noise recognised as words. Take a real
+    // microphone when there is one; the phone is still there to pick by hand.
+    if (kind !== "audioinput" || notPhone(systemDefault)) return systemDefault;
+    return candidates.find((d) => d.deviceId !== "default" && d.deviceId !== "communications" && notPhone(d))
+      ?? systemDefault;
+  }
+  if (kind === "videoinput" || kind === "audioinput") return candidates.find(notPhone) ?? candidates[0];
   return candidates[0];
 }
 
