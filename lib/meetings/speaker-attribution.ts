@@ -15,6 +15,8 @@
 // Pure: no DOM, no Web Audio, no timers. The component measures levels and
 // broadcasts mic state; the decisions live here so they can be tested.
 
+import { MODEL_CONFIDENCE_FLOOR, NOISE_NOTE } from "@/lib/meetings/transcript-quality";
+
 /** The local participant is always keyed "local" — peers by their signaling id. */
 export const LOCAL_SPEAKER_ID = "local";
 
@@ -299,7 +301,15 @@ export function formatTranscriptLine(line: AttributedLine): string {
   const confidence = line.confidence ?? 1;
   const speaker = line.speaker || "Unknown speaker";
   if (confidence >= LOW_CONFIDENCE && !line.overlapped) return `${speaker}: ${line.text}`;
-  const note = line.overlapped ? "uncertain — people speaking over each other" : "uncertain";
+  // Below the floor the honest word is not "uncertain" but "noise". An engine
+  // that scores its own output this low was not hearing speech, and a line
+  // marked merely doubtful is one a summariser will still try to use — which is
+  // how an hour of a microphone listening to a room became a meeting's minutes.
+  // The note stays in the record, where a reader is better served by it than by
+  // a gap; `transcriptForModel` is what keeps it away from the model.
+  const note = confidence < MODEL_CONFIDENCE_FLOOR
+    ? NOISE_NOTE
+    : line.overlapped ? "uncertain — people speaking over each other" : "uncertain";
   return `${speaker} (${note}): ${line.text}`;
 }
 

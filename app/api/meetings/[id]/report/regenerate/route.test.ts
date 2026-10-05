@@ -32,6 +32,7 @@ jest.mock("@/lib/meetings/action-items.server", () => ({
 jest.mock("@/lib/meetings/directory.server", () => ({ loadOrgDirectory: async () => [] }));
 
 import { POST } from "./route";
+import { NOISE_NOTE } from "@/lib/meetings/transcript-quality";
 
 const params = { params: Promise.resolve({ id: "m1" }) };
 const req = () => new Request("http://localhost/api/meetings/m1/report/regenerate", { method: "POST" });
@@ -112,6 +113,52 @@ describe("permission", () => {
 });
 
 describe("the transcript it works from", () => {
+  // The Gary Jinks meeting: 64 minutes whose transcript is a noisy room and a
+  // smart speaker recognised as fluent English. Every one of those lines used to
+  // reach the summariser, which is why the only honest report it could produce
+  // was an apology — and why on another day it might instead have summarised
+  // decisions nobody made.
+  const NOISE = NOISE_NOTE;
+  const BAD = [
+    "Gary: so where did we land on the close",
+    `Gary (${NOISE}): Shah Rukh Khan`,
+    `Astin (${NOISE}): Rusher Rashad`,
+    "Astin: Alexa, search the shopping list",
+    "Astin: the week after next works",
+  ].join("\n");
+
+  it("withholds recognised noise and voice-assistant orders from the model", async () => {
+    wire({ report: { id: "r1", full_transcript: BAD } });
+    await POST(req(), params);
+    const sent = generateMeetingReport.mock.calls[0][2] as { transcript: string };
+    expect(sent.transcript).toContain("so where did we land on the close");
+    expect(sent.transcript).toContain("the week after next works");
+    expect(sent.transcript).not.toContain("Shah Rukh Khan");
+    expect(sent.transcript).not.toContain("Rusher Rashad");
+    expect(sent.transcript).not.toContain("shopping list");
+  });
+
+  it("tells the model how much was withheld and why", async () => {
+    wire({ report: { id: "r1", full_transcript: BAD } });
+    await POST(req(), params);
+    const sent = generateMeetingReport.mock.calls[0][2] as { transcript: string };
+    // So the summary reports an audio problem as a fact rather than inferring one
+    // from gibberish — and so a floor set in the wrong place shows up in the
+    // output instead of silently eating a meeting.
+    expect(sent.transcript).toContain("[audio quality]");
+    expect(sent.transcript).toContain("hearing noise rather than words");
+    expect(sent.transcript).toContain("commands to a voice assistant");
+  });
+
+  it("stores the whole record, unfiltered and with no note of its own", async () => {
+    // The transcript is the record of what the room heard and is not ours to
+    // edit. Only the model's copy is filtered — and baking the note into the
+    // stored text would re-prepend it on every later regenerate.
+    wire({ report: { id: "r1", full_transcript: BAD } });
+    await POST(req(), params);
+    expect(writes.inserted).toMatchObject({ full_transcript: BAD });
+  });
+
   it("uses the stored transcript — the caller never supplies one", async () => {
     wire();
     await POST(req(), params);

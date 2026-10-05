@@ -9,9 +9,10 @@
  */
 import {
   formatTransceivers,
+  looksLikeMissingAudio,
   looksLikeMissingVideo,
   summarizeTransceivers,
-  videoSenderNeedsRepair,
+  senderNeedsRepair,
   type MediaStreamTrackLike,
 } from "./media-repair";
 
@@ -75,30 +76,30 @@ describe("formatTransceivers", () => {
   });
 });
 
-describe("videoSenderNeedsRepair", () => {
+describe("senderNeedsRepair", () => {
   it("repairs a sender holding nothing while the camera is live", () => {
-    expect(videoSenderNeedsRepair(null, track())).toBe(true);
+    expect(senderNeedsRepair(null, track())).toBe(true);
   });
 
   it("repairs a sender holding a track that has ended", () => {
-    expect(videoSenderNeedsRepair(track({ readyState: "ended" }), track())).toBe(true);
+    expect(senderNeedsRepair(track({ readyState: "ended" }), track())).toBe(true);
   });
 
   it("leaves a sender that already holds the live local track", () => {
     const live = track();
-    expect(videoSenderNeedsRepair(live, live)).toBe(false);
+    expect(senderNeedsRepair(live, live)).toBe(false);
   });
 
   it("leaves a camera that is switched off alone", () => {
     // A disabled track is a person's choice, not a fault. Replacing it would
     // turn their camera back on for the whole room.
     const off = track({ enabled: false });
-    expect(videoSenderNeedsRepair(off, off)).toBe(false);
+    expect(senderNeedsRepair(off, off)).toBe(false);
   });
 
   it("does nothing when there is no local camera to attach", () => {
-    expect(videoSenderNeedsRepair(null, null)).toBe(false);
-    expect(videoSenderNeedsRepair(null, track({ readyState: "ended" }))).toBe(false);
+    expect(senderNeedsRepair(null, null)).toBe(false);
+    expect(senderNeedsRepair(null, track({ readyState: "ended" }))).toBe(false);
   });
 });
 
@@ -127,5 +128,58 @@ describe("looksLikeMissingVideo", () => {
     // A failed or connecting peer has its own reporting; this is only for the
     // case that looks healthy and is not.
     expect(looksLikeMissingVideo({ ...base, connectionState: "connecting" })).toBe(false);
+  });
+});
+
+describe("looksLikeMissingAudio", () => {
+  const input = (over: Partial<Parameters<typeof looksLikeMissingAudio>[0]> = {}) => ({
+    connectionState: "connected", connectedForMs: 10_000, hasInboundAudioTrack: true, ...over,
+  });
+
+  it("reports a connected peer with no inbound audio track at all", () => {
+    // There is no innocent version of this. Muting disables a track, it does not
+    // remove one, so a negotiated audio section always delivers a track. None
+    // means audio was never negotiated and nothing this peer says will arrive,
+    // however many times they unmute.
+    expect(looksLikeMissingAudio(input({ hasInboundAudioTrack: false }))).toBe(true);
+  });
+
+  it("says nothing about a peer who is merely muted", () => {
+    expect(looksLikeMissingAudio(input())).toBe(false);
+  });
+
+  it("waits for the connection to settle before complaining", () => {
+    // `connected` can beat the tracks negotiated with it by a few hundred
+    // milliseconds; complaining then would cry wolf on every call.
+    expect(looksLikeMissingAudio(input({ hasInboundAudioTrack: false, connectedForMs: 1_000 }))).toBe(false);
+  });
+
+  it("says nothing about a connection that is not up", () => {
+    // A connection still checking has no audio yet because it has no transport
+    // yet; that is the recovery path's business, not this one's.
+    for (const state of ["new", "connecting", "disconnected", "failed", "closed"]) {
+      expect(looksLikeMissingAudio(input({ connectionState: state, hasInboundAudioTrack: false }))).toBe(false);
+    }
+  });
+});
+
+describe("senderNeedsRepair on a microphone", () => {
+  const mic = (over: Partial<MediaStreamTrackLike> = {}): MediaStreamTrackLike =>
+    track({ kind: "audio", ...over });
+
+  it("repairs a sender holding nothing while the mic is muted", () => {
+    // The case a camera-shaped rule would get wrong. A muted member's track is
+    // disabled, not absent; leaving the sender empty because they are muted is
+    // how somebody unmutes into a connection that can never carry them.
+    expect(senderNeedsRepair(null, mic({ enabled: false }))).toBe(true);
+  });
+
+  it("repairs a sender whose mic track has ended", () => {
+    expect(senderNeedsRepair(mic({ readyState: "ended" }), mic())).toBe(true);
+  });
+
+  it("leaves a sender already holding the live mic alone", () => {
+    const live = mic();
+    expect(senderNeedsRepair(live, live)).toBe(false);
   });
 });

@@ -10,6 +10,9 @@ import {
   connectionStateFromIce,
   peerConfig,
   shouldForceRelay,
+  RELAY_PROBE_MS,
+  isRelayCandidate,
+  shouldAbandonRelayOnly,
   contentHintFor,
   isPolite,
   linkNotice,
@@ -753,5 +756,80 @@ describe("peerConfig", () => {
     expect(config.iceTransportPolicy).toBe("relay");
     expect(config.bundlePolicy).toBe("max-bundle");
     expect(config.rtcpMuxPolicy).toBe("require");
+  });
+});
+
+describe("isRelayCandidate", () => {
+  it("reads the engine's own type when it has one", () => {
+    expect(isRelayCandidate({ type: "relay" })).toBe(true);
+    expect(isRelayCandidate({ type: "srflx" })).toBe(false);
+    expect(isRelayCandidate({ type: "host" })).toBe(false);
+  });
+
+  it("parses the candidate line when the engine gives no type", () => {
+    // How a candidate that arrived as JSON looks — a buffered one, or anything
+    // that has been through toJSON(). There is no `type` field at all there,
+    // and the line is the only place the answer exists.
+    expect(isRelayCandidate({
+      candidate: "candidate:3 1 udp 41820159 198.51.100.7 51234 typ relay raddr 203.0.113.9 rport 60001",
+    })).toBe(true);
+    expect(isRelayCandidate({
+      candidate: "candidate:1 1 udp 2122260223 192.168.1.8 51234 typ host generation 0",
+    })).toBe(false);
+  });
+
+  it("does not mistake a type the line merely mentions for a relay", () => {
+    // `raddr`/`ufrag` values are attacker-free but arbitrary text; the match has
+    // to be the typ token, not the word anywhere in the line.
+    expect(isRelayCandidate({
+      candidate: "candidate:1 1 udp 2122260223 192.168.1.8 51234 typ host ufrag relay",
+    })).toBe(false);
+  });
+
+  it("is false for the end-of-candidates signal and for nothing at all", () => {
+    // An empty candidate is how gathering says it has finished. Counting it as a
+    // relay would make every connection look like it had one.
+    expect(isRelayCandidate({ candidate: "" })).toBe(false);
+    expect(isRelayCandidate(null)).toBe(false);
+    expect(isRelayCandidate(undefined)).toBe(false);
+  });
+});
+
+describe("shouldAbandonRelayOnly", () => {
+  const probe = (over: Partial<Parameters<typeof shouldAbandonRelayOnly>[0]> = {}) => ({
+    relayOnly: true, sawRelay: false, gatheringComplete: false, elapsedMs: 0, failed: false, ...over,
+  });
+
+  it("gives up on relay-only when gathering finished and produced no relay candidate", () => {
+    // The conclusive case: the allocation was refused — a secret that no longer
+    // matches, a quota that is spent — and this connection now holds no
+    // candidates of any kind. Nothing will change by waiting.
+    expect(shouldAbandonRelayOnly(probe({ gatheringComplete: true }))).toBe(true);
+  });
+
+  it("gives up when the deadline passes with no relay candidate", () => {
+    // A TURN server that neither answers nor refuses: gathering can sit in
+    // "gathering" indefinitely, so completion is not something to wait for.
+    expect(shouldAbandonRelayOnly(probe({ elapsedMs: RELAY_PROBE_MS }))).toBe(true);
+    expect(shouldAbandonRelayOnly(probe({ elapsedMs: RELAY_PROBE_MS - 1 }))).toBe(false);
+  });
+
+  it("keeps relay-only while a relay candidate exists and the connection has not failed", () => {
+    expect(shouldAbandonRelayOnly(probe({ sawRelay: true, gatheringComplete: true }))).toBe(false);
+    expect(shouldAbandonRelayOnly(probe({ sawRelay: true, elapsedMs: 60_000 }))).toBe(false);
+  });
+
+  it("gives up when a relay candidate was gathered and the connection failed anyway", () => {
+    // The relay allocated but cannot carry this call. "all" is a superset of
+    // "relay", so trying a direct path gives nothing up.
+    expect(shouldAbandonRelayOnly(probe({ sawRelay: true, failed: true }))).toBe(true);
+  });
+
+  it("has nothing to abandon when relay-only was never forced", () => {
+    // Everybody who is not an invite-link guest. This must never fire for them:
+    // their configuration is already "all" and rebuilding it would drop working
+    // connections for no reason.
+    expect(shouldAbandonRelayOnly(probe({ relayOnly: false, gatheringComplete: true }))).toBe(false);
+    expect(shouldAbandonRelayOnly(probe({ relayOnly: false, failed: true, elapsedMs: 60_000 }))).toBe(false);
   });
 });

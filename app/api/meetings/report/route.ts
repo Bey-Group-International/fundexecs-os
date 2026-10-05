@@ -9,6 +9,7 @@ import { loadOrgDirectory } from "@/lib/meetings/directory.server";
 import { normalizeNoteList, normalizeNoteText } from "@/lib/meetings/live-notes";
 import { EMPTY_REPORT, clampTranscript, generateMeetingReport } from "@/lib/meetings/report-analysis";
 import { mergeTranscripts, restoreTranscript, type StoredLine } from "@/lib/meetings/transcript-restore";
+import { meanRowConfidence, qualityPreamble, transcriptForModel, transcriptQuality } from "@/lib/meetings/transcript-quality";
 import { readAllTranscriptRows } from "@/lib/meetings/transcript-read";
 import { inferStartedAt } from "@/lib/meetings/meeting-span";
 import { ONE_WAY_KIND } from "@/lib/meetings/one-way";
@@ -194,6 +195,7 @@ export async function POST(req: Request) {
       );
 
     let stored = "";
+    let storedRows: StoredLine[] = [];
     try {
       const rows = await readAllTranscriptRows((from, to) =>
         supabase
@@ -204,13 +206,56 @@ export async function POST(req: Request) {
           .order("id", { ascending: true })
           .range(from, to),
       );
-      if (rows.length) stored = restoreTranscript(rows as unknown as StoredLine[]);
+      storedRows = rows as unknown as StoredLine[];
+      if (rows.length) stored = restoreTranscript(storedRows);
     } catch (err) {
       console.warn("[/api/meetings/report] stored transcript unavailable", err);
     }
 
     // Cap transcript to stay within model context / cost budget.
     const transcript = clampTranscript(mergeTranscripts(body.transcript, stored));
+
+    // What the model reads, which is not the same thing as what is stored.
+    //
+    // The record keeps every line the room heard, including the ones the speech
+    // engine scored as noise and the ones that were a smart speaker in the room
+    // being woken. That is right for a record and wrong for a summariser: handed
+    // an hour of recognised noise, a model either apologises — which is the best
+    // case, and is luck — or confidently summarises decisions nobody made.
+    //
+    // So the model's copy has those lines withheld, and is told how many and why,
+    // from the engine's own scores on the stored rows. `full_transcript` below is
+    // the untouched record.
+    const quality = transcriptQuality(transcript, { meanConfidence: meanRowConfidence(storedRows) });
+    const note = qualityPreamble(quality);
+    const readable = transcriptForModel(transcript);
+    const modelTranscript = note ? `${note}\n${readable}` : readable;
+    if (quality.verdict === "unusable" || quality.verdict === "silent") {
+      // The id the DATABASE returned, and only when it looks like an id.
+      //
+      // `body.meetingId` is request text, and a log line built from request text
+      // is forgeable: a value carrying a newline writes a second entry of the
+      // sender's choosing into the operator's log, which is the one place they go
+      // to find out what happened. Reaching this line does imply Postgres matched
+      // the id to a row on a uuid column, so a malformed one would already have
+      // been refused — but that is a property of the column's type rather than of
+      // this code, and a log line is not worth resting on it.
+      //
+      // Checked rather than stripped, deliberately. Stripping the control
+      // characters stops the forged SECOND entry and still leaves whatever
+      // printable text came with it sitting inside the line, reading as though it
+      // were ours. Rejecting the whole value instead means an operator sees
+      // either a real id or the plain fact that it was not one, and never a
+      // doctored one — and an id this refuses is never silently mangled into a
+      // different meeting's, which would send them looking at the wrong call.
+      const rawId = String(meeting.id);
+      const loggedId = /^[0-9a-fA-F-]{1,64}$/.test(rawId) ? rawId : "(id not loggable)";
+      console.warn(
+        `[/api/meetings/report] meeting ${loggedId} transcript is ${quality.verdict}:`
+        + ` ${quality.usable} of ${quality.heard} lines usable`
+        + ` (${quality.withheldNoise} noise, ${quality.withheldAssistant} assistant)`,
+      );
+    }
 
     // The prompt and schema live in lib/meetings/report-analysis so the
     // regenerate path produces the identical shape — the log reads
@@ -244,7 +289,7 @@ export async function POST(req: Request) {
       analysis = await generateMeetingReport(client, MODEL, {
         title: body.title ?? "Untitled",
         participants: body.participants ?? [],
-        transcript,
+        transcript: modelTranscript,
         durationSeconds: body.duration ?? null,
         host: roles.host,
         recipients: roles.recipients,

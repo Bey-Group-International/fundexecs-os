@@ -30,6 +30,7 @@ jest.mock("@/lib/meetings/report-analysis", () => ({
 }));
 
 import { POST } from "./route";
+import { NOISE_NOTE } from "@/lib/meetings/transcript-quality";
 
 const MEETING = {
   id: "m1", host_id: "host-1", organization_id: "org1", deal_id: null, title: "LP Update",
@@ -37,11 +38,11 @@ const MEETING = {
 
 const TRANSCRIPT = "Ana: we agreed to wire on Friday.";
 
-const req = () =>
+const req = (transcript: string = TRANSCRIPT) =>
   new Request("http://localhost/api/meetings/report", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ meetingId: "m1", transcript: TRANSCRIPT, duration: 3600 }),
+    body: JSON.stringify({ meetingId: "m1", transcript, duration: 3600 }),
   });
 
 /** What the route did to each table. */
@@ -91,6 +92,101 @@ beforeEach(() => {
     key_points: ["Timing"],
     action_items: [],
     decisions: ["Wire on Friday"],
+  });
+});
+
+describe("what the model is allowed to read", () => {
+  // The Gary Jinks meeting: 64 minutes whose transcript is a noisy room and a
+  // smart speaker recognised as fluent English. Every one of those lines used to
+  // reach the summariser, which is why the only honest report it could produce
+  // was an apology — and why on another day it might instead have summarised
+  // decisions nobody made.
+  const BAD = [
+    "Gary: so where did we land on the close",
+    `Gary (${NOISE_NOTE}): Shah Rukh Khan`,
+    `Astin (${NOISE_NOTE}): Rusher Rashad`,
+    "Astin: Alexa, search the shopping list",
+    "Astin: the week after next works",
+  ].join("\n");
+
+  it("withholds recognised noise and voice-assistant orders", async () => {
+    wire();
+    await POST(req(BAD));
+    const sent = generateMeetingReport.mock.calls[0][2] as { transcript: string };
+    expect(sent.transcript).toContain("so where did we land on the close");
+    expect(sent.transcript).toContain("the week after next works");
+    expect(sent.transcript).not.toContain("Shah Rukh Khan");
+    expect(sent.transcript).not.toContain("Rusher Rashad");
+    expect(sent.transcript).not.toContain("shopping list");
+  });
+
+  it("says how much was withheld and why", async () => {
+    wire();
+    await POST(req(BAD));
+    const sent = generateMeetingReport.mock.calls[0][2] as { transcript: string };
+    expect(sent.transcript).toContain("[audio quality]");
+    expect(sent.transcript).toContain("hearing noise rather than words");
+    expect(sent.transcript).toContain("commands to a voice assistant");
+  });
+
+  it("stores the whole record, unfiltered and with no note of its own", async () => {
+    // The transcript is the record of what the room heard and is not ours to
+    // edit; only the model's copy is filtered. Storing the note would also
+    // re-prepend it on every later regenerate.
+    wire();
+    await POST(req(BAD));
+    expect(writes.reports[0]).toMatchObject({ full_transcript: BAD });
+  });
+
+  // `BAD` is 2 usable of 5, which is "degraded" — bad audio, still summarisable.
+  // The log line only fires on "unusable", so the two tests about it need a
+  // transcript where recognised noise genuinely outnumbers what survived.
+  const UNUSABLE = [
+    "Gary: so where did we land on the close",
+    ...Array.from({ length: 6 }, (_, i) => `Gary (${NOISE_NOTE}): garble ${i}`),
+  ].join("\n");
+
+  it("cannot have a forged line written into the operator's log", async () => {
+    // CodeQL found this: the warning interpolated `body.meetingId` straight from
+    // the request. A sender who puts a newline in it writes a second entry of
+    // their own choosing into the log an operator reads to find out what
+    // happened. The id now comes from the row, and whatever it holds is stripped
+    // of anything unprintable.
+    const warn = jest.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      wire({ meeting: { ...MEETING, id: "m1\n[/api/meetings/report] meeting m9 transcript is usable" } });
+      await POST(req(UNUSABLE));
+      const lines = warn.mock.calls.map((c) => String(c[0]));
+      const ours = lines.filter((l) => l.includes("transcript is"));
+      // One entry, not two, and nothing of the sender's text inside it: an
+      // operator sees that the id was not loggable rather than a fabrication
+      // dressed up as ours.
+      expect(ours).toHaveLength(1);
+      expect(ours[0]).not.toContain("\n");
+      expect(ours[0]).not.toContain("meeting m9");
+      expect(ours[0]).toContain("(id not loggable)");
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it("names the meeting when the id is an ordinary one", async () => {
+    // The whole point of the line: an operator has to know which call it was.
+    const warn = jest.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      wire({ meeting: { ...MEETING, id: "0f9b1c2d-3e4f-5a6b-7c8d-9e0f1a2b3c4d" } });
+      await POST(req(UNUSABLE));
+      const ours = warn.mock.calls.map((c) => String(c[0])).filter((l) => l.includes("transcript is"));
+      expect(ours[0]).toContain("meeting 0f9b1c2d-3e4f-5a6b-7c8d-9e0f1a2b3c4d");
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it("leaves a clean transcript exactly as it is", async () => {
+    wire();
+    await POST(req());
+    expect(generateMeetingReport.mock.calls[0][2]).toMatchObject({ transcript: TRANSCRIPT });
   });
 });
 

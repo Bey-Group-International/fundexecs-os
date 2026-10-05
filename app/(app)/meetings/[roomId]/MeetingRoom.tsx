@@ -135,6 +135,9 @@ import {
   offerCollision,
   peerConfig,
   shouldForceRelay,
+  isRelayCandidate,
+  shouldAbandonRelayOnly,
+  RELAY_PROBE_MS,
   peerLinkStatus,
   recordAttempt,
   recoveryExhausted,
@@ -154,9 +157,10 @@ import {
 } from "@/lib/meetings/connection";
 import {
   formatTransceivers,
+  looksLikeMissingAudio,
   looksLikeMissingVideo,
   summarizeTransceivers,
-  videoSenderNeedsRepair,
+  senderNeedsRepair,
   type TransceiverState,
 } from "@/lib/meetings/media-repair";
 import {
@@ -638,6 +642,8 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
   const inboundAuditRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
   /** Peers with a camera re-attach already in flight, so two never race. */
   const repairInFlightRef = useRef<Set<string>>(new Set());
+  /** The same for the microphone, kept separate so one never blocks the other. */
+  const audioRepairInFlightRef = useRef<Set<string>>(new Set());
   /** What each peer has asked US to send them. Absent means "not yet said". */
   const requestedTierRef = useRef<Map<string, VideoTier>>(new Map());
   /** What we last asked each peer for, so only changes go on the wire. */
@@ -650,6 +656,25 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
   // fails to connect, so the logs distinguish "this network needed a relay and
   // had none" from an ordinary blip.
   const relayAvailableRef = useRef(false);
+  /** The servers themselves, so the policy over them can be rebuilt. */
+  const iceServersRef = useRef<RTCIceServer[]>([]);
+  // ── The relay-only escape hatch ───────────────────────────────────────────
+  //
+  // Invite-link guests are sent straight to the relay, because the direct path
+  // they would try first is the one that fails on the networks they are on. That
+  // decision is made from whether a relay was CONFIGURED — the only thing the
+  // endpoint minting credentials can know — and `iceTransportPolicy: "relay"`
+  // removes every other candidate, so if the allocation then fails the
+  // connection has nothing at all and cannot fail over to the direct path it was
+  // told not to have. These four say whether that has happened, so the policy can
+  // be withdrawn instead of leaving a guest who never appears for anybody.
+  const relayOnlyRef = useRef(false);
+  /** Whether any connection has ever gathered a candidate on the relay. */
+  const relaySeenRef = useRef(false);
+  /** The deadline, for a relay that neither answers nor refuses. */
+  const relayProbeRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /** When gathering began, so the deadline is measured and not assumed. */
+  const relayGatherAtRef = useRef(0);
 
   // Peers
   const peersRef = useRef<Map<string, RTCPeerConnection>>(new Map());
@@ -1351,6 +1376,11 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     const audit = inboundAuditRef.current.get(peerId);
     if (audit) { clearTimeout(audit); inboundAuditRef.current.delete(peerId); }
     repairInFlightRef.current.delete(peerId);
+    // The same for audio. Left behind, a repair that was in flight when the
+    // connection was replaced would block the replacement's repair for the rest
+    // of the call — the silent microphone this exists to fix, locked in by the
+    // flag meant to stop two repairs racing.
+    audioRepairInFlightRef.current.delete(peerId);
     requestedTierRef.current.delete(peerId);
     sentRequestRef.current.delete(peerId);
     lastHighAtRef.current.delete(peerId);
@@ -1723,7 +1753,7 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     const sender = videoSenderRef.current.get(peerId);
     if (!sender) return;
     const local = localStreamRef.current?.getVideoTracks()[0] ?? null;
-    if (!local || !videoSenderNeedsRepair(sender.track, local)) return;
+    if (!local || !senderNeedsRepair(sender.track, local)) return;
     repairInFlightRef.current.add(peerId);
     console.warn(`[meeting] peer ${peerId} had no live outgoing video track — re-attaching the camera`);
     void sender
@@ -1733,6 +1763,39 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
   }, []);
   const repairOutgoingVideoRef = useRef(repairOutgoingVideo);
   useEffect(() => { repairOutgoingVideoRef.current = repairOutgoingVideo; }, [repairOutgoingVideo]);
+
+  /**
+   * Make sure this peer's audio sender is actually holding the microphone.
+   *
+   * The same fault as the video one and a worse one to have: a sender holding no
+   * track, or a track that has ended, on a connection that is up and negotiated
+   * and showing the far end's picture. Nothing reports it, because from the
+   * connection's point of view nothing is wrong — and what it looks like from the
+   * other side is a person who is present, visibly there, and silent for the
+   * whole meeting however many times they check their microphone.
+   *
+   * Video had this repair and audio did not, which is the asymmetry this closes.
+   *
+   * Muting is deliberately not a reason to skip it. A muted member's track is
+   * disabled, not absent, and attaching a disabled track sends silence rather
+   * than turning their microphone on — while leaving the sender empty is what
+   * makes their later un-mute reach nobody.
+   */
+  const repairOutgoingAudio = useCallback((peerId: string) => {
+    if (audioRepairInFlightRef.current.has(peerId)) return;
+    const sender = audioSenderRef.current.get(peerId);
+    if (!sender) return;
+    const local = localStreamRef.current?.getAudioTracks()[0] ?? null;
+    if (!local || !senderNeedsRepair(sender.track, local)) return;
+    audioRepairInFlightRef.current.add(peerId);
+    console.warn(`[meeting] peer ${peerId} had no live outgoing audio track — re-attaching the microphone`);
+    void sender
+      .replaceTrack(local)
+      .catch(() => { /* peer closed mid-repair */ })
+      .finally(() => { audioRepairInFlightRef.current.delete(peerId); });
+  }, []);
+  const repairOutgoingAudioRef = useRef(repairOutgoingAudio);
+  useEffect(() => { repairOutgoingAudioRef.current = repairOutgoingAudio; }, [repairOutgoingAudio]);
 
   /**
    * Say what a connection is carrying when it claims to be healthy and isn't.
@@ -1745,7 +1808,7 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
    * an otherwise perfect connection with one dark direction, and which are
    * impossible to tell apart after the call has ended.
    */
-  const auditInboundVideo = useCallback((peerId: string) => {
+  const auditInboundMedia = useCallback((peerId: string) => {
     const existing = inboundAuditRef.current.get(peerId);
     if (existing) clearTimeout(existing);
     const timer = setTimeout(() => {
@@ -1754,28 +1817,43 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
       if (!pc) return;
       const stream = remoteStreamsRef.current.get(peerId);
       const said = peerVideoRef.current.get(peerId);
-      const stale = looksLikeMissingVideo({
-        connectionState: pc.connectionState ?? "connected",
-        connectedForMs: Date.now() - (connChangedAtRef.current.get(peerId) ?? Date.now()),
+      const connectionState = pc.connectionState ?? "connected";
+      const connectedForMs = Date.now() - (connChangedAtRef.current.get(peerId) ?? Date.now());
+      const noVideo = looksLikeMissingVideo({
+        connectionState,
+        connectedForMs,
         // Missing means "has not said otherwise", which the tiles already read
         // as camera-on; keep the two agreeing.
         peerSaysCameraOn: said ? said.camOn && !said.paused : true,
         hasInboundVideoTrack: (stream?.getVideoTracks().length ?? 0) > 0,
       });
-      if (!stale) return;
+      // Asked without reference to anything they have said about themselves,
+      // because there is nothing they could say that would explain it. Muting
+      // disables an audio track, it does not remove one, so a peer who has
+      // negotiated audio always delivers a track — and one who has not will
+      // never be heard whatever they do with their microphone. That is the half
+      // of this failure nobody was watching for: the whole audit was about
+      // video, and "the host cannot HEAR the guest" produced no line at all.
+      const noAudio = looksLikeMissingAudio({
+        connectionState,
+        connectedForMs,
+        hasInboundAudioTrack: (stream?.getAudioTracks().length ?? 0) > 0,
+      });
+      if (!noVideo && !noAudio) return;
       // OUR side of the connection. Necessary but not sufficient: this shows
       // our receiver (empty, which is the symptom) and our sender (fine, which
       // is not in question). Whether the far end ever attached a track to send
       // is not knowable from here, so ask — the reply is logged beside this.
+      const missing = noVideo && noAudio ? "no video and no audio" : noVideo ? "no video" : "no audio";
       console.warn(
-        `[meeting] peer ${peerId} is connected and says its camera is on, but no video is arriving. Our side: ${formatTransceivers(summarizeTransceivers(pc.getTransceivers()))}`,
+        `[meeting] peer ${peerId} is connected and ${missing} is arriving. Our side: ${formatTransceivers(summarizeTransceivers(pc.getTransceivers()))}`,
       );
       sendSignalRef.current({ type: "media_probe", from: myIdRef.current, to: peerId });
     }, INBOUND_VIDEO_AUDIT_MS);
     inboundAuditRef.current.set(peerId, timer);
   }, []);
-  const auditInboundVideoRef = useRef(auditInboundVideo);
-  useEffect(() => { auditInboundVideoRef.current = auditInboundVideo; }, [auditInboundVideo]);
+  const auditInboundMediaRef = useRef(auditInboundMedia);
+  useEffect(() => { auditInboundMediaRef.current = auditInboundMedia; }, [auditInboundMedia]);
 
   const createPeerConnection = useCallback((peerId: string): RTCPeerConnection => {
     // Close any prior connection for this peer first — a duplicate `join`
@@ -1843,7 +1921,43 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     };
 
     pc.onicecandidate = (ev) => {
-      if (ev.candidate) sendSignalRef.current({ type: "ice", from: myIdRef.current, to: peerId, candidate: ev.candidate.toJSON() });
+      if (!ev.candidate) return;
+      // A candidate on the relay is the only proof that the TURN allocation
+      // actually succeeded. Credentials prove nothing: they are minted from a
+      // secret, or issued by a provider, without anyone allocating anything. One
+      // of these is what keeps a guest on the relay-only path they were put on.
+      if (relayOnlyRef.current && !relaySeenRef.current && isRelayCandidate(ev.candidate)) {
+        relaySeenRef.current = true;
+        if (relayProbeRef.current) { clearTimeout(relayProbeRef.current); relayProbeRef.current = null; }
+      }
+      sendSignalRef.current({ type: "ice", from: myIdRef.current, to: peerId, candidate: ev.candidate.toJSON() });
+    };
+
+    // Gathering, which on a relay-only connection is the whole story. There are
+    // no host or server-reflexive candidates to fall back on, so either a relay
+    // candidate arrives or this connection has none at all — and nothing else in
+    // the room can tell the difference between that and a peer still joining.
+    pc.onicegatheringstatechange = () => {
+      if (!relayOnlyRef.current) return;
+      if (pc.iceGatheringState === "gathering") {
+        // Measured from the first connection that starts gathering, not assumed:
+        // the deadline is about the relay, which is the same relay for all of them.
+        if (relayGatherAtRef.current === 0) relayGatherAtRef.current = Date.now();
+        // A server that refuses answers, and gathering then completes by itself.
+        // A server that is simply unreachable answers nothing, and gathering can
+        // sit here for as long as the call lasts; this is the only thing that
+        // ends that.
+        if (!relayProbeRef.current && !relaySeenRef.current) {
+          relayProbeRef.current = setTimeout(() => {
+            relayProbeRef.current = null;
+            considerAbandoningRelayRef.current({ gatheringComplete: false, failed: false });
+          }, RELAY_PROBE_MS);
+        }
+        return;
+      }
+      if (pc.iceGatheringState === "complete") {
+        considerAbandoningRelayRef.current({ gatheringComplete: true, failed: false });
+      }
     };
 
     // Renegotiation, which is what actually carries an ICE restart or a newly
@@ -1881,7 +1995,8 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
         // A connected peer is the moment to check that this connection is
         // carrying what it agreed to — see repairOutgoingVideo.
         repairOutgoingVideoRef.current(peerId);
-        auditInboundVideoRef.current(peerId);
+        repairOutgoingAudioRef.current(peerId);
+        auditInboundMediaRef.current(peerId);
         return;
       }
 
@@ -1893,6 +2008,20 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
         if (!relayAvailableRef.current) {
           console.warn(`[meeting] peer ${peerId} failed with no TURN relay configured — a restrictive network cannot connect without one`);
         }
+        // A relay-only connection that fails has exhausted the only kind of path
+        // it was allowed to have. Restarting ICE on it would gather the same
+        // relay candidates and fail the same way, so widen the policy first and
+        // let the restart below have a direct path to find.
+        considerAbandoningRelayRef.current({ gatheringComplete: false, failed: true });
+        // Widening may have REPLACED this connection, and the replacement is
+        // already offering. Recovering it as well would put a second offer on a
+        // connection seconds old: both would share one `makingOfferRef` flag, so
+        // whichever finished first would clear it while the other was still in
+        // flight — and an ICE restart is meaningless on a connection that has
+        // never gathered a candidate in its life. Identity is the test because
+        // `forgetPeerState` wipes the recovery state on the way past, so the new
+        // connection looks like a first attempt and would be treated as one.
+        if (peersRef.current.get(peerId) !== pc) return;
         recoverPeerRef.current(peerId);
         return;
       }
@@ -1918,6 +2047,92 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     applySendCapsRef.current();
     return pc;
   }, [forgetPeerState]);
+
+  /**
+   * Stop insisting on the relay when the relay turns out not to work.
+   *
+   * `shouldForceRelay` can only ask whether a relay was CONFIGURED, because that
+   * is all the endpoint handing out credentials knows: they are computed from a
+   * shared secret, or issued by a provider, and nothing allocates anything on the
+   * way. So a TURN server that is down, whose secret no longer matches, whose
+   * quota is spent, or that this particular network cannot reach is
+   * indistinguishable from a working one at the moment a guest is put on it.
+   *
+   * On a relay-only connection that gap is the whole call. There are no host or
+   * server-reflexive candidates left to try, so a failed allocation leaves a
+   * connection with nothing: no path, no failure to recover from, no state change
+   * to react to, and nothing on screen to separate it from somebody still
+   * joining. A guest on an ordinary home network — who never needed the relay at
+   * all — simply never arrives, for anybody, and the host spends the meeting
+   * looking at an empty tile. That is a call that worked before the relay was
+   * forced and does not work after, which makes withdrawing it the fix and not a
+   * fallback.
+   *
+   * Withdrawing is a widening: "all" permits every candidate "relay" permitted.
+   * Peers already connected are left exactly as they are — their relay works, and
+   * a working call is never worth rebuilding — so this only ever touches
+   * connections that have nothing to lose.
+   */
+  const considerAbandoningRelay = useCallback((signal: { gatheringComplete: boolean; failed: boolean }) => {
+    const sawRelay = relaySeenRef.current;
+    const abandon = shouldAbandonRelayOnly({
+      relayOnly: relayOnlyRef.current,
+      sawRelay,
+      gatheringComplete: signal.gatheringComplete,
+      elapsedMs: relayGatherAtRef.current === 0 ? 0 : Date.now() - relayGatherAtRef.current,
+      failed: signal.failed,
+    });
+    if (!abandon) return;
+
+    // Once for the whole client, not once per connection: it is one relay and one
+    // configuration, and flipping this first is what stops the rebuilds below
+    // re-entering here.
+    relayOnlyRef.current = false;
+    if (relayProbeRef.current) { clearTimeout(relayProbeRef.current); relayProbeRef.current = null; }
+
+    const servers = iceServersRef.current.length > 0
+      ? iceServersRef.current
+      : (FALLBACK_ICE.iceServers ?? []);
+    iceConfigRef.current = peerConfig(servers, { relayOnly: false });
+
+    // Said out loud and said precisely, because the two causes have different
+    // owners: a relay that never allocated is an operator's problem with TURN
+    // credentials or quota, and a relay that allocated and still could not carry
+    // the call is a network one.
+    console.warn(
+      sawRelay
+        ? "[meeting] the relay allocated but could not carry this call — allowing direct paths as well, and rebuilding the connections that have not formed"
+        : "[meeting] TURN credentials were issued but no relay candidate could be gathered: the relay is unreachable, refusing the credential, or out of quota. Allowing direct paths as well, and rebuilding the connections that have not formed.",
+    );
+
+    for (const [peerId, pc] of [...peersRef.current.entries()]) {
+      // A connected peer is being carried by the relay successfully. Rebuilding
+      // it would drop a working call to prove a point.
+      if (pc.connectionState === "connected" || pc.signalingState === "closed") continue;
+      // Rebuilt rather than reconfigured. `setConfiguration` can change the
+      // transport policy on some engines and refuses on others, and a guess that
+      // silently does nothing leaves exactly the guest this exists for stuck;
+      // these connections have no path by definition, so there is nothing a
+      // rebuild costs. createPeerConnection closes and forgets the old one.
+      //
+      // KNOWN GAP, written down because it is not fixed here. If this fires while
+      // we are halfway through answering that peer's offer, they never get our
+      // answer, and an IMPOLITE peer still holding their own unanswered offer
+      // will ignore the replacement's offer under `offerCollision` — leaving both
+      // sides in `have-local-offer` until something says hello again. The answer
+      // path above stops driving the closed connection and says so, which is as
+      // far as this change goes. Closing it properly means either completing the
+      // exchange before discarding (and that connection is still relay-only
+      // afterwards, so it has gained nothing) or reworking the offer/answer path,
+      // whose blast radius is every call rather than only guests whose relay is
+      // already broken. Reachable only when the relay has already failed, which
+      // without this whole mechanism is a guest who connects to nobody at all.
+      createPeerConnection(peerId);
+      void renegotiateRef.current(peerId);
+    }
+  }, [createPeerConnection]);
+  const considerAbandoningRelayRef = useRef(considerAbandoningRelay);
+  useEffect(() => { considerAbandoningRelayRef.current = considerAbandoningRelay; }, [considerAbandoningRelay]);
 
   // ── handleSignal ─────────────────────────────────────────────────────────
 
@@ -2028,6 +2243,20 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
       });
       if (action === "ignore") return;
 
+      // Every await below is a point where this connection can be replaced
+      // underneath us. The known way is the relay deadline expiring mid-answer:
+      // `considerAbandoningRelay` closes this connection and builds a
+      // replacement, and the rest of this block would then drive a corpse —
+      // setLocalDescription on a closed connection throws, and the throw is
+      // swallowed by the catch at the end as though it were an ordinary
+      // negotiation hiccup. Checking is better than finding out, and the line it
+      // prints is the only trace this ever leaves.
+      const stillOurs = () => {
+        if (peersRef.current.get(msg.from) === pc) return true;
+        console.warn(`[meeting] stopped answering ${msg.from} on a connection that was replaced mid-exchange`);
+        return false;
+      };
+
       try {
         if (action === "rollback_then_accept" && pc.signalingState === "have-local-offer") {
           // Discard our own offer; theirs is the one that survives. Only when
@@ -2039,10 +2268,13 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
         }
         makingOfferRef.current.set(msg.from, false);
         await pc.setRemoteDescription(msg.sdp);
+        if (!stillOurs()) return;
         await flushPendingIce(msg.from, pc);
+        if (!stillOurs()) return;
         const answer = await pc.createAnswer();
         answer.sdp = withOpusResilience(answer.sdp ?? "");
         await pc.setLocalDescription(answer);
+        if (!stillOurs()) return;
         sendSignalRef.current({ type: "answer", from: myId, to: msg.from, sdp: answer, displayName: localNameRef.current });
         // From here a `negotiationneeded` is a real renegotiation rather than
         // the echo of the transceivers we set up above.
@@ -2627,8 +2859,12 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
               relayAvailable: relay === true,
             });
             iceConfigRef.current = peerConfig(iceServers, { relayOnly });
+            // Kept so the policy over them can be rebuilt without re-fetching:
+            // withdrawing relay-only is a change of policy, not of servers.
+            iceServersRef.current = iceServers;
+            relayOnlyRef.current = relayOnly;
             if (relayOnly) {
-              console.info("[meeting] guest media will be relayed — direct paths are not attempted");
+              console.info("[meeting] guest media will be relayed — direct paths are not attempted unless the relay turns out not to work");
             }
             if (relay !== true) {
               // Worth a line even though the call may still work: it explains
@@ -5445,6 +5681,9 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     // fired after teardown would report on a call that no longer exists.
     inboundAuditRef.current.forEach((t) => clearTimeout(t));
     inboundAuditRef.current.clear();
+    // The relay deadline would otherwise fire into a torn-down call and rebuild
+    // peer connections for a meeting nobody is in.
+    if (relayProbeRef.current) { clearTimeout(relayProbeRef.current); relayProbeRef.current = null; }
     // The held-demotion re-check has no peers left to re-evaluate, and would
     // signal into a channel that is about to be unsubscribed.
     if (demoteTimerRef.current) { clearTimeout(demoteTimerRef.current); demoteTimerRef.current = null; }
