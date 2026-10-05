@@ -396,6 +396,8 @@ export async function PATCH(request: NextRequest, { params }: { params: Params }
           title,
           senderName,
           emails: newEmails,
+          location: nextLocation,
+          meetingUrl: nextMeetingUrl,
           // The same invitation the create path sends. Without these a guest
           // added later got a "join" link and no idea when to use it — no time
           // in the email, and nothing that reached their calendar.

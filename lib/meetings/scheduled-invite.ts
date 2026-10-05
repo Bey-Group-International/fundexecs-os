@@ -106,5 +106,28 @@ export function inviteEndIso(startIso: string, durationMinutes: number | null | 
  * grants nothing they were not already holding.
  */
 export function buildMeetingCalendarUrl(origin: string, roomCode: string): string {
-  return `${(origin || "").replace(/\/$/, "")}/api/meetings/public/${roomCode}/calendar.ics`;
+  // Encoded the same way the invite link encodes it, so the two URLs in one
+  // email can never name two different rooms.
+  return `${(origin || "").trim().replace(/\/+$/, "")}/api/meetings/public/${encodeURIComponent(roomCode.trim())}/calendar.ics`;
+}
+
+/**
+ * Where a calendar entry should say the meeting is, and the matching
+ * description — one rule for the first invitation and for every update after
+ * it.
+ *
+ * The room link is the fallback, not the answer: a meeting with its own place
+ * or its own joining link has to carry that, or the invitation sends guests to
+ * the FundExecs room while the meeting happens in the Zoom room the host is
+ * really in — and a later relocation then "corrects" an entry that was wrong
+ * from the start.
+ */
+export function meetingPlace(args: {
+  location?: string | null;
+  meetingUrl?: string | null;
+  joinUrl: string;
+}): { place: string; description: string } {
+  const place = (args.location ?? "").trim() || (args.meetingUrl ?? "").trim() || args.joinUrl;
+  const description = place === args.joinUrl ? `Join: ${args.joinUrl}` : `${place}\n\nMeeting room: ${args.joinUrl}`;
+  return { place, description };
 }

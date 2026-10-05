@@ -10,9 +10,11 @@ import {
   buildMeetingCalendarUrl,
   canInviteToCalendar,
   inviteEndIso,
+  meetingPlace,
   scheduledRecipients,
   type ScheduledRecipient,
 } from "@/lib/meetings/scheduled-invite";
+import { meetingInviteUrl, meetingJoinUrl } from "@/lib/meetings/share";
 
 export function buildMeetingInviteHtml({
   inviteUrl,
@@ -140,6 +142,15 @@ export async function sendMeetingInvites(args: {
    * guest's own calendar.
    */
   series?: { seriesId: string; rrule: string; timezone: string } | null;
+  /**
+   * Where the meeting happens, when that is not the FundExecs room: a place,
+   * or the conferencing link a synced calendar event came with. The "Join"
+   * button and the calendar entry then point there, with the room as the
+   * fallback — the same rule a reschedule or relocation notice applies, so
+   * the first invitation and every update after it agree on where to go.
+   */
+  location?: string | null;
+  meetingUrl?: string | null;
 }): Promise<InviteSendOutcome> {
   const guests = [...new Set(args.emails.map((e) => e.trim().toLowerCase()).filter(Boolean))];
   // Everyone on the meeting — the organizer and the attendee list the calendar
@@ -148,10 +159,15 @@ export async function sendMeetingInvites(args: {
   const mailTo = args.notifyHost === false ? recipients.filter((r) => r.role !== "host") : recipients;
   if (mailTo.length === 0) return { sent: 0, total: 0, attempted: 0, failed: [], reasons: [] };
 
-  const origin = (args.origin || "").replace(/\/$/, "");
+  const origin = (args.origin || "").trim().replace(/\/+$/, "");
+  // The room, as the calendar entry names it: a series link opens whichever
+  // meeting is next, a single meeting's link opens that meeting.
   const inviteUrl = args.series
     ? buildSeriesInviteUrl(origin, args.series.seriesId)
-    : `${origin}/meeting-invite/${args.roomCode}`;
+    : meetingInviteUrl(origin, args.roomCode);
+  // What the button does. An external conferencing link wins over the room;
+  // a series keeps its own link, which has to serve every meeting in it.
+  const joinUrl = args.series ? inviteUrl : meetingJoinUrl(origin, args.roomCode, args.meetingUrl);
 
   // A real calendar invitation rather than a link somebody has to notice and
   // act on. Same iTIP builder the booking flow uses, so a meeting scheduled in
@@ -169,7 +185,7 @@ export async function sendMeetingInvites(args: {
             ? `Scheduled: "${args.title}"`
             : `You're invited to join "${args.title}" on FundExecs OS`,
         htmlBody: buildMeetingInviteHtml({
-          inviteUrl,
+          inviteUrl: joinUrl,
           title: args.title,
           senderName: args.senderName,
           whenLabel: args.whenLabel,
@@ -213,6 +229,8 @@ function buildScheduledInvite(args: {
   sequence?: number | null;
   recipients: ScheduledRecipient[];
   series?: { seriesId: string; rrule: string; timezone: string } | null;
+  location?: string | null;
+  meetingUrl?: string | null;
 }): { content: string; method: "REQUEST"; filename: string } | undefined {
   if (
     !canInviteToCalendar({
@@ -224,6 +242,14 @@ function buildScheduledInvite(args: {
     return undefined;
   }
 
+  // Same rule as every later update to this entry (meeting-updates.ts), so a
+  // relocation never has to "correct" a place the invitation got wrong.
+  const { place, description } = meetingPlace({
+    location: args.location,
+    meetingUrl: args.meetingUrl,
+    joinUrl: args.inviteUrl,
+  });
+
   try {
     return {
       content: buildInviteIcs({
@@ -233,8 +259,8 @@ function buildScheduledInvite(args: {
         title: args.title || "Meeting",
         startIso: args.startIso!,
         endIso: inviteEndIso(args.startIso!, args.durationMinutes),
-        description: `Join: ${args.inviteUrl}`,
-        location: args.inviteUrl,
+        description,
+        location: place,
         url: args.inviteUrl,
         organizer: { name: args.senderName, email: args.hostEmail! },
         attendees: args.recipients.map((r) => ({ name: r.name, email: r.email })),
@@ -267,5 +293,5 @@ export function guestEmails(attendees: MeetingAttendeeInput[] | null | undefined
  * series is on now or next, since one link has to serve every week.
  */
 export function buildSeriesInviteUrl(origin: string, seriesId: string): string {
-  return `${(origin || "").replace(/\/$/, "")}/meeting-invite/series/${seriesId}`;
+  return `${(origin || "").trim().replace(/\/+$/, "")}/meeting-invite/series/${encodeURIComponent(seriesId.trim())}`;
 }

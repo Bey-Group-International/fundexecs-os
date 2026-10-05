@@ -13,7 +13,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/supabase/database.types";
 import { sendEmail } from "@/lib/email";
 import { SITE_URL } from "@/lib/site";
-import { buildMeetingInviteUrl } from "@/lib/meetings/service";
+import { meetingJoinUrl } from "@/lib/meetings/share";
 import { buildMeetingCalendarUrl } from "@/lib/meetings/scheduled-invite";
 import { buildBookingManageUrl, formatSlotFull } from "@/lib/meetings/scheduling";
 import { hostCredentials } from "@/lib/meetings/mailbox.server";
@@ -225,9 +225,11 @@ async function remind(supabase: ServiceClient, meeting: SweepableMeeting, now: D
     hostCredentials(supabase, meeting.host_id, orgId),
     bookedBy(supabase, meeting.id),
   ]);
-  const joinUrl = meeting.room_code
-    ? buildMeetingInviteUrl(SITE_URL, meeting.room_code)
-    : meeting.meeting_url ?? null;
+  // The meeting's own conferencing link first, else the room — the rule the
+  // host-triggered reminder and every other notice apply. This sweep used to
+  // prefer the room, so a guest reminded twice about one meeting could be sent
+  // to two different places.
+  const joinUrl = meetingJoinUrl(SITE_URL, meeting.room_code, meeting.meeting_url) || null;
 
   const email = (forInvitee: boolean) =>
     buildReminderEmail({

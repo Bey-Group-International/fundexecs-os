@@ -1,5 +1,6 @@
 import {
   meetingInviteUrl,
+  meetingJoinUrl,
   formatMeetingWhen,
   shareTargetFor,
   canNativeShare,
@@ -188,5 +189,28 @@ describe("inviteTextFor", () => {
       timeZone: "America/New_York",
     });
     expect(text).toContain("10:00 AM EST");
+  });
+});
+
+describe("meetingJoinUrl", () => {
+  it("is the room link for a meeting held in the FundExecs room", () => {
+    expect(meetingJoinUrl("https://app.test", "abc", null)).toBe("https://app.test/meeting-invite/abc");
+    expect(meetingJoinUrl("https://app.test", "abc")).toBe("https://app.test/meeting-invite/abc");
+  });
+
+  it("is the meeting's own conferencing link when it has one", () => {
+    expect(meetingJoinUrl("https://app.test", "abc", "https://zoom.us/j/123")).toBe("https://zoom.us/j/123");
+    expect(meetingJoinUrl("https://app.test", "abc", "  http://meet.test/x  ")).toBe("http://meet.test/x");
+  });
+
+  it("falls back to the room when the external link is not something an email can render", () => {
+    expect(meetingJoinUrl("https://app.test", "abc", "zoom.us/j/123")).toBe("https://app.test/meeting-invite/abc");
+    expect(meetingJoinUrl("https://app.test", "abc", "javascript:alert(1)")).toBe("https://app.test/meeting-invite/abc");
+    expect(meetingJoinUrl("https://app.test", "abc", "   ")).toBe("https://app.test/meeting-invite/abc");
+  });
+
+  it("is empty when there is neither a usable link nor a room", () => {
+    expect(meetingJoinUrl("https://app.test", null, "zoom.us/j/123")).toBe("");
+    expect(meetingJoinUrl("https://app.test", "", null)).toBe("");
   });
 });

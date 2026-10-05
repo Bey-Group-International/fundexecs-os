@@ -227,3 +227,65 @@ describe("sendMeetingInvites — the host and the calendar", () => {
     expect(subjects[1]).toMatch(/invited to join/);
   });
 });
+
+describe("sendMeetingInvites — where the meeting happens", () => {
+  const BASE = {
+    origin: "https://app.test/",
+    roomCode: "abc-def",
+    title: "Quarterly review",
+    senderName: "rae@fund.test",
+    emails: ["ada@example.com"],
+    orgId: "org1",
+    hostEmail: "rae@fund.test",
+    meetingId: "m1",
+    startIso: "2026-09-10T15:00:00.000Z",
+    durationMinutes: 30,
+  };
+  const guestMail = () =>
+    sendEmailMock.mock.calls
+      .map(([a]) => a as { to: { email: string }; htmlBody: string; calendarInvite?: { content: string } })
+      .find((a) => a.to.email === "ada@example.com")!;
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    sendEmailMock.mockResolvedValue({ ok: true, channel: "gmail", detail: "sent" });
+  });
+
+  it("points the button and the calendar entry at the room by default", async () => {
+    await sendMeetingInvites(BASE);
+    const mail = guestMail();
+    expect(mail.htmlBody).toContain('href="https://app.test/meeting-invite/abc-def"');
+    expect(mail.calendarInvite!.content).toContain("LOCATION:https://app.test/meeting-invite/abc-def");
+    expect(mail.calendarInvite!.content).toContain("DESCRIPTION:Join: https://app.test/meeting-invite/abc-def");
+  });
+
+  it("sends guests to the meeting's own conferencing link when it has one", async () => {
+    await sendMeetingInvites({ ...BASE, meetingUrl: "https://zoom.us/j/123" });
+    const mail = guestMail();
+    expect(mail.htmlBody).toContain('href="https://zoom.us/j/123"');
+    expect(mail.htmlBody).not.toContain('href="https://app.test/meeting-invite/abc-def"');
+    // The calendar entry agrees with the button, and still names the room.
+    // Unfolded first: RFC 5545 wraps long lines, and this one is long.
+    const ics = mail.calendarInvite!.content.replace(/\r\n[ \t]/g, "");
+    expect(ics).toContain("LOCATION:https://zoom.us/j/123");
+    expect(ics).toContain("Meeting room: https://app.test/meeting-invite/abc-def");
+  });
+
+  it("keeps the room as the button when the external link could not be rendered", async () => {
+    await sendMeetingInvites({ ...BASE, meetingUrl: "zoom.us/j/123" });
+    expect(guestMail().htmlBody).toContain('href="https://app.test/meeting-invite/abc-def"');
+    expect(guestMail().htmlBody).not.toContain('href="#"');
+  });
+
+  it("names a physical place on the calendar entry ahead of any link", async () => {
+    await sendMeetingInvites({ ...BASE, location: "Boardroom 2", meetingUrl: "https://zoom.us/j/123" });
+    expect(guestMail().calendarInvite!.content).toContain("LOCATION:Boardroom 2");
+  });
+
+  it("never emits a dead button: a scheme-less origin still yields an http link", async () => {
+    // SITE_URL is normalised before it gets here, but the builder is defensive
+    // about trailing slashes and padding on its own.
+    await sendMeetingInvites({ ...BASE, origin: "  https://app.test///  " });
+    expect(guestMail().htmlBody).toContain('href="https://app.test/meeting-invite/abc-def"');
+  });
+});

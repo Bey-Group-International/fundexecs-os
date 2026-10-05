@@ -518,3 +518,29 @@ describe("findEventByMarker still flattens, for the write path", () => {
     await expect(findEventByMarker("tok", "primary@example.com", "mtg-1")).resolves.toBeNull();
   });
 });
+
+describe("pushMeetingToGoogle — the join link", () => {
+  it("writes a way to join into the event of a meeting held in the FundExecs room", async () => {
+    // The description used to name only `meeting_url`, so a native meeting's
+    // Google event — the one its guests get — carried no link at all.
+    fetchMock.mockImplementation(routeFetch({ existing: null, write: respond(200, { id: "gcal-new" }) }));
+    const { api } = client();
+    await pushMeetingToGoogle(api, meeting({ room_code: "abc-def" }), "u1");
+    const body = JSON.parse(String((writeCall()![1] as { body?: string }).body)) as {
+      description: string;
+      location: string;
+    };
+    expect(body.description).toContain("Join: https://");
+    expect(body.description).toContain("/meeting-invite/abc-def");
+    expect(body.location).toContain("/meeting-invite/abc-def");
+  });
+
+  it("keeps the meeting's own conferencing link ahead of the room", async () => {
+    fetchMock.mockImplementation(routeFetch({ existing: null, write: respond(200, { id: "gcal-new" }) }));
+    const { api } = client();
+    await pushMeetingToGoogle(api, meeting({ room_code: "abc-def", meeting_url: "https://zoom.us/j/123" }), "u1");
+    const body = JSON.parse(String((writeCall()![1] as { body?: string }).body)) as { description: string; location: string };
+    expect(body.location).toBe("https://zoom.us/j/123");
+    expect(body.description).toContain("Join: https://zoom.us/j/123");
+  });
+});
