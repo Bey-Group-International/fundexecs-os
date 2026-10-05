@@ -11,6 +11,7 @@ import {
   levelFromSamples,
   pickDevice,
   readinessProblems,
+  settleCamera,
   smoothLevel,
   displayConstraints,
   SCREEN_SHARE_FPS,
@@ -104,6 +105,31 @@ describe("pickDevice", () => {
   it("takes a phone camera when it is the only camera", () => {
     const cams = [d({ deviceId: "iphone", kind: "videoinput", label: "iPhone Camera" })];
     expect(pickDevice(cams, "videoinput", null)?.deviceId).toBe("iphone");
+  });
+});
+
+describe("settleCamera", () => {
+  const cams = [
+    d({ deviceId: "iphone", kind: "videoinput", label: "iPhone Camera" }),
+    d({ deviceId: "webcam", kind: "videoinput", label: "FaceTime HD Camera" }),
+  ];
+
+  // The browser, asked for "a camera", handed back the iPhone. The labels
+  // arrived afterwards and say there is a real camera: that is the choice.
+  it("trades a phone the browser picked for a desktop camera", () => {
+    expect(settleCamera(cams, "iphone")).toBe("webcam");
+  });
+
+  it("keeps a desktop camera the browser picked", () => {
+    expect(settleCamera(cams, "webcam")).toBe("webcam");
+  });
+
+  it("keeps a phone that is the only camera", () => {
+    expect(settleCamera([cams[0]], "iphone")).toBe("iphone");
+  });
+
+  it("keeps an id it cannot find in the list", () => {
+    expect(settleCamera(cams, "mystery")).toBe("mystery");
   });
 });
 

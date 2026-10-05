@@ -102,6 +102,27 @@ export function pickDevice(devices: Device[], kind: DeviceKind, remembered: stri
 }
 
 /**
+ * The camera to settle on after the browser chose one for us.
+ *
+ * The green room's first open is unconstrained on purpose -- it is also the
+ * permission prompt, and before permission the device list has no labels to
+ * choose by. So the browser picks, and on a Mac with an iPhone nearby the
+ * browser picks the iPhone, and the screen then recorded THAT as the member's
+ * camera. Every later decision honoured it, because it looked chosen.
+ *
+ * Once the labels are in, a camera the browser chose that turns out to be a
+ * phone is traded for a camera that is not, when there is one. A phone that is
+ * the only camera stays: a picture from the phone beats no picture.
+ */
+export function settleCamera(devices: Device[], opened: string): string {
+  const cameras = devicesOfKind(devices, "videoinput");
+  const current = cameras.find((d) => d.deviceId === opened);
+  if (!current || !isPhoneCamera(current.label)) return opened;
+  const desktop = cameras.find((d) => d.deviceId && !isPhoneCamera(d.label));
+  return desktop?.deviceId ?? opened;
+}
+
+/**
  * What to ask getDisplayMedia for.
  *
  * The request used to be a bare `{ video: true }`, which means "whatever this
