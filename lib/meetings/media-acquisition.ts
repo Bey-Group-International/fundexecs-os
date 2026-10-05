@@ -174,13 +174,28 @@ export function deviceAttemptOrder(input: {
   };
 
   const camera = input.kind === "videoinput";
-  const rest = camera ? camerasPhonesLast(input.available) : input.available;
+  const microphone = input.kind === "audioinput";
+  const rest = camera || microphone ? phonesLast(input.available) : input.available;
 
   if (input.requested) push(input.requested);
   if (input.remembered) push(input.remembered);
   if (camera && !input.requested && !input.remembered) {
     const desktop = rest.find((d) => d.deviceId && !isPhoneCamera(d.label));
     if (desktop) push(desktop.deviceId);
+  }
+  // A microphone gets the same treatment only when the browser's default IS a
+  // phone ("Default - iPhone Microphone", or a list that opens on one): the
+  // laptop's own microphone is otherwise the right default and is left to the
+  // unconstrained attempt. A phone on a desk hears rustle, not the member, and
+  // the transcript it produces is noise recognised as words.
+  if (microphone && !input.requested && !input.remembered) {
+    const systemDefault = input.available.find((d) => d.deviceId === "default") ?? input.available[0];
+    if (systemDefault && isPhoneCamera(systemDefault.label)) {
+      const real = rest.find(
+        (d) => d.deviceId && d.deviceId !== "default" && d.deviceId !== "communications" && !isPhoneCamera(d.label),
+      );
+      if (real) push(real.deviceId);
+    }
   }
   // The system default, expressed as "no constraint" rather than as the id
   // "default": some browsers do not enumerate a device by that name, and an
@@ -192,8 +207,8 @@ export function deviceAttemptOrder(input: {
   return order.slice(0, MAX_DEVICE_ATTEMPTS);
 }
 
-/** The cameras, in the order given, with the phones moved to the back. */
-function camerasPhonesLast(available: readonly Device[]): Device[] {
+/** The devices, in the order given, with the phones moved to the back. */
+function phonesLast(available: readonly Device[]): Device[] {
   const desktop: Device[] = [];
   const phones: Device[] = [];
   for (const d of available) (isPhoneCamera(d.label) ? phones : desktop).push(d);

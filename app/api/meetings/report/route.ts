@@ -10,6 +10,7 @@ import { normalizeNoteList, normalizeNoteText } from "@/lib/meetings/live-notes"
 import { EMPTY_REPORT, clampTranscript, generateMeetingReport } from "@/lib/meetings/report-analysis";
 import { mergeTranscripts, restoreTranscript, type StoredLine } from "@/lib/meetings/transcript-restore";
 import { readAllTranscriptRows } from "@/lib/meetings/transcript-read";
+import { inferStartedAt } from "@/lib/meetings/meeting-span";
 import { ONE_WAY_KIND } from "@/lib/meetings/one-way";
 import { loadReportRoles } from "@/lib/meetings/report-roles.server";
 import {
@@ -174,6 +175,24 @@ export async function POST(req: Request) {
       invited: (meeting as { attendees?: unknown }).attendees ?? null,
     });
 
+    // When the room opened. `started_at` was never written by the room (its
+    // write was a query builder that was never awaited, so never sent), so the
+    // earliest attendance row stands in: without it the report page shows no
+    // length for a meeting with no recording, and the regenerate route hands
+    // the model the scheduled length as if it had been measured. Read in
+    // parallel with the transcript; a failure here costs the column, not the
+    // report.
+    const firstJoinRead = supabase
+      .from("live_meeting_participants")
+      .select("joined_at")
+      .eq("meeting_id", body.meetingId)
+      .order("joined_at", { ascending: true })
+      .limit(1)
+      .then(
+        (res) => (res.data as Array<{ joined_at: string | null }> | null)?.[0]?.joined_at ?? null,
+        () => null,
+      );
+
     let stored = "";
     try {
       const rows = await readAllTranscriptRows((from, to) =>
@@ -207,7 +226,19 @@ export async function POST(req: Request) {
     //
     // A missing API key is NOT a failure and still takes the success path:
     // generateMeetingReport returns the empty report rather than throwing.
-    const roles = await rolesLookup;
+    const [roles, firstJoinedAt] = await Promise.all([rolesLookup, firstJoinRead]);
+    // The end is now; the start is whatever the evidence says. Decided once,
+    // here, so the meeting row, the CRM timeline and the institutional record
+    // all carry the same span.
+    const endedAt = new Date().toISOString();
+    const startedAt = inferStartedAt({
+      startedAt: meeting.started_at,
+      firstJoinedAt,
+      endedAt,
+      durationSeconds: body.duration ?? null,
+    });
+    crm.meeting.startedAt = startedAt;
+
     let analysis: Record<string, unknown>;
     try {
       analysis = await generateMeetingReport(client, MODEL, {
@@ -246,11 +277,16 @@ export async function POST(req: Request) {
     // through on the "Generating report…" screen after the model had already
     // answered. Now they overlap and the wait is the slowest of them.
     const actionItems = normalizeNoteList(analysis.action_items);
-    const endedAt = new Date().toISOString();
     const [, , tasks] = await Promise.all([
       supabase
         .from("live_meetings")
-        .update({ status: "ended", ended_at: endedAt })
+        // started_at only when the room never recorded one, and only when
+        // there is evidence to record: a recorded start is never overwritten.
+        .update({
+          status: "ended",
+          ended_at: endedAt,
+          ...(!meeting.started_at && startedAt ? { started_at: startedAt } : {}),
+        })
         .eq("id", body.meetingId),
 
       persistInstitutionalMeetingRecord(supabase, {
@@ -263,7 +299,7 @@ export async function POST(req: Request) {
         // apart; an hour or more apart whenever this is reached by the room's
         // retry, and a different day whenever a host ends a meeting the next
         // morning.
-        occurredAt: meeting.started_at ?? meeting.scheduled_at ?? null,
+        occurredAt: startedAt ?? meeting.scheduled_at ?? null,
       }),
 
       // A task for each action item, on the list of whoever the item names.

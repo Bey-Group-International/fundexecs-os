@@ -124,6 +124,20 @@ describe("the transcript it works from", () => {
     });
   });
 
+  // `duration_minutes` is the BOOKED length. Handing it to the model as the
+  // duration had a 64-minute call summarised as a 30-minute one.
+  it("tells the model how long the meeting actually ran, never how long it was booked for", async () => {
+    wire({ meeting: { ...MEETING, started_at: "2026-03-01T10:00:00Z", ended_at: "2026-03-01T11:04:13Z" } });
+    await POST(req(), params);
+    expect(generateMeetingReport.mock.calls[0][2]).toMatchObject({ durationSeconds: 3853 });
+  });
+
+  it("tells the model nothing about duration when the span was never measured", async () => {
+    wire();
+    await POST(req(), params);
+    expect(generateMeetingReport.mock.calls[0][2]).toMatchObject({ durationSeconds: null });
+  });
+
   it("passes the meeting's own attendees as participants", async () => {
     wire();
     await POST(req(), params);

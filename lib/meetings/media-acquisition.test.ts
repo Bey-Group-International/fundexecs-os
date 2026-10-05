@@ -183,15 +183,61 @@ describe("deviceAttemptOrder", () => {
     });
   });
 
-  it("leaves a microphone walk alone", () => {
+  describe("for a microphone", () => {
     const mic = (id: string, label: string): Device => ({ deviceId: id, kind: "audioinput", label, groupId: "g" });
-    const order = deviceAttemptOrder({
-      requested: null,
-      remembered: null,
-      kind: "audioinput",
-      available: [mic("phone-mic", "iPhone Microphone"), mic("laptop", "MacBook Pro Microphone")],
+
+    // macOS hands Chrome the iPhone as the default input when Continuity is
+    // active, and the browser lists it first. A phone on a desk hears rustle,
+    // and the transcript it produces is noise recognised as words.
+    it("names a real microphone before the unconstrained attempt when the default is a phone", () => {
+      const order = deviceAttemptOrder({
+        requested: null,
+        remembered: null,
+        kind: "audioinput",
+        available: [
+          mic("default", "Default - iPhone Microphone"),
+          mic("phone-mic", "iPhone Microphone"),
+          mic("laptop", "MacBook Pro Microphone"),
+        ],
+      });
+      expect(order).toEqual(["laptop", "", "default", "phone-mic"]);
     });
-    expect(order).toEqual(["", "phone-mic", "laptop"]);
+
+    it("does the same when the list simply opens on a phone", () => {
+      const order = deviceAttemptOrder({
+        requested: null,
+        remembered: null,
+        kind: "audioinput",
+        available: [mic("phone-mic", "iPhone Microphone"), mic("laptop", "MacBook Pro Microphone")],
+      });
+      expect(order).toEqual(["laptop", "", "phone-mic"]);
+    });
+
+    // The laptop's own microphone is the right default, and the unconstrained
+    // attempt is how it is asked for. Nothing is pushed ahead of it.
+    it("leaves a laptop default to the unconstrained attempt", () => {
+      const order = deviceAttemptOrder({
+        requested: null,
+        remembered: null,
+        kind: "audioinput",
+        available: [
+          mic("default", "Default - MacBook Pro Microphone"),
+          mic("laptop", "MacBook Pro Microphone"),
+          mic("phone-mic", "iPhone Microphone"),
+        ],
+      });
+      expect(order).toEqual(["", "default", "laptop", "phone-mic"]);
+    });
+
+    it("honours a chosen phone microphone", () => {
+      const order = deviceAttemptOrder({
+        requested: "phone-mic",
+        remembered: null,
+        kind: "audioinput",
+        available: [mic("phone-mic", "iPhone Microphone"), mic("laptop", "MacBook Pro Microphone")],
+      });
+      expect(order).toEqual(["phone-mic", "", "laptop"]);
+    });
   });
 });
 

@@ -4,6 +4,7 @@ import { createServerClient } from "@/lib/supabase/server";
 import { anthropicClient, LONG_RUN_TIMEOUT_MS } from "@/lib/anthropic-client";
 import { CONVERSATIONAL_COST, gateConversationalSpend } from "@/lib/conversational-gate";
 import { generateMeetingReport } from "@/lib/meetings/report-analysis";
+import { meetingDurationSeconds } from "@/lib/meetings/meeting-span";
 import { mergeTranscripts, restoreTranscript, type StoredLine } from "@/lib/meetings/transcript-restore";
 import { readAllTranscriptRows } from "@/lib/meetings/transcript-read";
 import { normalizeNoteList, normalizeNoteText } from "@/lib/meetings/live-notes";
@@ -165,7 +166,10 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       title: meeting.title ?? "Untitled",
       participants,
       transcript,
-      durationSeconds: meeting.duration_minutes ? meeting.duration_minutes * 60 : null,
+      // The span the meeting actually ran, or nothing. `duration_minutes` is
+      // the BOOKED length: handing it over as the duration had the model
+      // reasoning about a 30-minute call that had in fact run for an hour.
+      durationSeconds: meetingDurationSeconds({ startedAt: meeting.started_at, endedAt: meeting.ended_at }),
       host: roles.host,
       recipients: roles.recipients,
       correction: correction || null,
