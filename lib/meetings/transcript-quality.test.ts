@@ -21,6 +21,7 @@ import {
   transcriptQuality,
   meanRowConfidence,
 } from "./transcript-quality";
+import { parseTranscript } from "./transcript-view";
 
 describe("isAssistantWakeLine", () => {
   it("catches a bare wake word", () => {
@@ -174,6 +175,49 @@ describe("qualityPreamble", () => {
 
   it("says nothing at all about a meeting with nothing wrong with it", () => {
     expect(qualityPreamble(transcriptQuality(record(clean(30))))).toBeNull();
+  });
+});
+
+describe("the noise note as the transcript VIEWER reads it", () => {
+  // Across two modules on purpose. Neither one's own tests can see this: the
+  // formatter's tests assert a string, the viewer's assert its parsing, and the
+  // bug lives exactly in the gap between them. It was real — "Alina (not
+  // recognised reliably)" parsed as a SPEAKER, with uncertain false — and no
+  // existing test failed.
+  const rendered = `Alina (${NOISE_NOTE}): we should hold the close`;
+
+  it("keeps the note out of the speaker's name", () => {
+    // `readSpeaker` caps a name at four words and sixty characters, and a note
+    // worded without "uncertain" slips under both. Alina's noise lines would be
+    // filed under a second person, splitting her turns, her colour and her
+    // initials for the whole transcript.
+    const [turn] = parseTranscript(rendered);
+    expect(turn.speaker).toBe("Alina");
+  });
+
+  it("is read as doubt, which is the whole point of writing it down", () => {
+    const [turn] = parseTranscript(rendered);
+    expect(turn.uncertain).toBe(true);
+    // Not this kind of doubt: nobody was talking over anybody.
+    expect(turn.overlapped).toBe(false);
+  });
+
+  it("does not split one speaker's run across the note", () => {
+    const turns = parseTranscript([
+      "Alina: so where did we land",
+      `Alina (${NOISE_NOTE}): Shah Rukh Khan`,
+      "Alina: the week after next then",
+    ].join("\n"));
+    // Three turns by one person, not two people: the marked line is its own turn
+    // because its confidence differs, and all three are hers.
+    expect(turns.map((t) => t.speaker)).toEqual(["Alina", "Alina", "Alina"]);
+  });
+
+  it("still leaves a parenthetical that is part of a name alone", () => {
+    // The rule this note has to live with, from the change that introduced it.
+    const [turn] = parseTranscript("Rae (Acme): agreed");
+    expect(turn.speaker).toBe("Rae (Acme)");
+    expect(turn.uncertain).toBe(false);
   });
 });
 

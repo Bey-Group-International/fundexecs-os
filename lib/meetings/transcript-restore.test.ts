@@ -46,8 +46,13 @@ describe("restoreTranscript", () => {
     // merely doubtful is one a summariser will still try to use — which is how an
     // hour of a microphone listening to a room became a meeting's minutes. The
     // line stays in the record; the note is what keeps it from the model.
+    //
+    // It opens with "uncertain" because `parseTranscript` reads a parenthetical
+    // as a confidence note only then, and as part of the NAME otherwise — so a
+    // note worded any other way turns every noise line of Alina's into a second
+    // speaker called "Alina (…)". See transcript-quality.test.ts.
     expect(restoreTranscript([row({ confidence: 0.2 })]))
-      .toBe("Alina (not recognised reliably): we should hold the close");
+      .toBe("Alina (uncertain — not recognised reliably): we should hold the close");
   });
 
   // Rows predating attribution carry no confidence. Reading that as doubt would

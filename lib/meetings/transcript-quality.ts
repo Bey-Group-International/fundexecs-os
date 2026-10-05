@@ -4,12 +4,21 @@
  *
  * Written into the record rather than used to delete from it. A reader of the
  * transcript is better served by "this was not recognised reliably" than by a
- * silent gap, `parseTranscript` already renders any note as doubt, and it is
- * what lets the model's copy be taken from the merged text — which is the only
- * text that has every line, since neither the room's copy nor the stored rows
- * are a superset of the other.
+ * silent gap, and it is what lets the model's copy be taken from the merged
+ * text — the only text that has every line, since neither the room's copy nor
+ * the stored rows are a superset of the other.
+ *
+ * It MUST begin with "uncertain". `parseTranscript` reads a parenthetical as a
+ * confidence note only when it does, and treats any other parenthetical as part
+ * of the speaker's name — so "Rae (Acme)", a name a guest typed at the door,
+ * stays their name. A note worded otherwise slips under that rule's word and
+ * length limits and becomes a SPEAKER: every noise line of Alina's would be
+ * filed under a second person called "Alina (not recognised reliably)",
+ * splitting her turns, her colour and her initials, and marked not doubtful at
+ * all. Verified by running it, not assumed; see transcript-quality.test.ts,
+ * which crosses the two modules because neither one's own tests can see this.
  */
-export const NOISE_NOTE = "not recognised reliably";
+export const NOISE_NOTE = "uncertain — not recognised reliably";
 
 /**
  * Why a rendered line is kept out of the model's reading, or null.
