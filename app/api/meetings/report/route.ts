@@ -231,8 +231,27 @@ export async function POST(req: Request) {
     const readable = transcriptForModel(transcript);
     const modelTranscript = note ? `${note}\n${readable}` : readable;
     if (quality.verdict === "unusable" || quality.verdict === "silent") {
+      // The id the DATABASE returned, and only when it looks like an id.
+      //
+      // `body.meetingId` is request text, and a log line built from request text
+      // is forgeable: a value carrying a newline writes a second entry of the
+      // sender's choosing into the operator's log, which is the one place they go
+      // to find out what happened. Reaching this line does imply Postgres matched
+      // the id to a row on a uuid column, so a malformed one would already have
+      // been refused — but that is a property of the column's type rather than of
+      // this code, and a log line is not worth resting on it.
+      //
+      // Checked rather than stripped, deliberately. Stripping the control
+      // characters stops the forged SECOND entry and still leaves whatever
+      // printable text came with it sitting inside the line, reading as though it
+      // were ours. Rejecting the whole value instead means an operator sees
+      // either a real id or the plain fact that it was not one, and never a
+      // doctored one — and an id this refuses is never silently mangled into a
+      // different meeting's, which would send them looking at the wrong call.
+      const rawId = String(meeting.id);
+      const loggedId = /^[0-9a-fA-F-]{1,64}$/.test(rawId) ? rawId : "(id not loggable)";
       console.warn(
-        `[/api/meetings/report] meeting ${body.meetingId} transcript is ${quality.verdict}:`
+        `[/api/meetings/report] meeting ${loggedId} transcript is ${quality.verdict}:`
         + ` ${quality.usable} of ${quality.heard} lines usable`
         + ` (${quality.withheldNoise} noise, ${quality.withheldAssistant} assistant)`,
       );

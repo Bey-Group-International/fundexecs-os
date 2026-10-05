@@ -138,6 +138,43 @@ describe("what the model is allowed to read", () => {
     expect(writes.reports[0]).toMatchObject({ full_transcript: BAD });
   });
 
+  it("cannot have a forged line written into the operator's log", async () => {
+    // CodeQL found this: the warning interpolated `body.meetingId` straight from
+    // the request. A sender who puts a newline in it writes a second entry of
+    // their own choosing into the log an operator reads to find out what
+    // happened. The id now comes from the row, and whatever it holds is stripped
+    // of anything unprintable.
+    const warn = jest.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      wire({ meeting: { ...MEETING, id: "m1\n[/api/meetings/report] meeting m9 transcript is usable" } });
+      await POST(req(BAD));
+      const lines = warn.mock.calls.map((c) => String(c[0]));
+      const ours = lines.filter((l) => l.includes("transcript is"));
+      // One entry, not two, and nothing of the sender's text inside it: an
+      // operator sees that the id was not loggable rather than a fabrication
+      // dressed up as ours.
+      expect(ours).toHaveLength(1);
+      expect(ours[0]).not.toContain("\n");
+      expect(ours[0]).not.toContain("meeting m9");
+      expect(ours[0]).toContain("(id not loggable)");
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it("names the meeting when the id is an ordinary one", async () => {
+    // The whole point of the line: an operator has to know which call it was.
+    const warn = jest.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      wire({ meeting: { ...MEETING, id: "0f9b1c2d-3e4f-5a6b-7c8d-9e0f1a2b3c4d" } });
+      await POST(req(BAD));
+      const ours = warn.mock.calls.map((c) => String(c[0])).filter((l) => l.includes("transcript is"));
+      expect(ours[0]).toContain("meeting 0f9b1c2d-3e4f-5a6b-7c8d-9e0f1a2b3c4d");
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
   it("leaves a clean transcript exactly as it is", async () => {
     wire();
     await POST(req());
