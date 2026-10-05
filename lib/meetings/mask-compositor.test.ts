@@ -218,15 +218,92 @@ describe("the composite keeps the frame where the mask covers", () => {
     expect(blur?.args[0]).toBe(`blur(${5 / grid.scale}px)`);
   });
 
-  it("draws only the camera when there is no mask yet", () => {
+  /**
+   * With an effect on and no mask to apply it with, the room goes out of focus
+   * rather than sharp.
+   *
+   * This test used to assert the opposite, and the comment it was asserting said
+   * why: a black frame is video nobody can see, so the unprocessed camera is the
+   * honest thing to show. The first half of that still holds; the second half was
+   * answering the wrong question. For the few seconds the 12MB runtime takes to
+   * arrive, and on every frame the model returns nothing for, what went out was
+   * the sharp room — which is the one thing somebody who turned a background on
+   * asked not to send. Out of focus keeps a moving person on screen and makes
+   * what is behind them unreadable, and needs neither a model nor artwork.
+   */
+  it("veils the room when there is no mask yet", () => {
     const rec = recorder();
     const c = MaskCompositor.create(rec.factory, 64, 48)!;
     c.setEffect({ kind: "blur", strength: "heavy" });
     c.passThrough(frame(64, 48));
 
+    // No person is composited -- there is no mask to do it with.
     expect(rec.ops("scratch")).toEqual([]);
+    const backdrop = rec.calls.filter((call) => call.surface === "backdrop");
+    expect(backdrop.some((call) => call.op === "filter" && String(call.args[0]).startsWith("blur("))).toBe(true);
+    // And what reaches the output is that surface, not the camera.
+    expect(rec.calls.filter((call) => call.surface === "output" && call.op === "drawImage"))
+      .toEqual([{ surface: "output", op: "drawImage", args: ["backdrop", 0, 0, 64, 48] }]);
+  });
+
+  /**
+   * And with no effect on, nothing is veiled. Somebody who has not asked for a
+   * background gets their camera, which is also what the waiting-room preview and
+   * every unprocessed path depends on.
+   */
+  it("draws the plain camera when no effect is on", () => {
+    const rec = recorder();
+    const c = MaskCompositor.create(rec.factory, 64, 48)!;
+    c.passThrough(frame(64, 48));
+
     expect(rec.calls.filter((call) => call.surface === "output"))
       .toEqual([{ surface: "output", op: "drawImage", args: ["camera", 0, 0, 64, 48] }]);
+    expect(rec.calls.filter((call) => call.surface === "backdrop")).toEqual([]);
+  });
+});
+
+/**
+ * The two shape passes, through the real chain.
+ *
+ * mask-structure.test.ts proves the rules; this proves the compositor runs them,
+ * in the order that keeps them honest, and that what comes out the far end of the
+ * blend and the edge tightening still has the hole closed and the chair kept.
+ */
+describe("what the person is touching, and what is inside them", () => {
+  const WIDTH = 160;
+  const HEIGHT = 120;
+  const CHAIR = 0.16;   // the confidence backgrounds.ts measured for a chair edge
+
+  /** Somebody in a chair, with a hole in their chest and a shelf across the room. */
+  const seated = () => confidenceAt(WIDTH, HEIGHT, (x, y) => {
+    if (x >= 78 && x <= 80 && y >= 70 && y <= 72) return 0.03;      // the hole
+    if (x >= 60 && x <= 100 && y >= 40 && y <= 110) return SOLID;   // torso
+    if (x >= 46 && x <= 59 && y >= 50 && y <= 110) return CHAIR;    // chair back
+    if (x >= 5 && x <= 20 && y >= 5 && y <= 25) return CHAIR;       // a shelf, far off
+    return 0;
+  });
+
+  const alphaAt = (mask: Uint8ClampedArray, x: number, y: number) => mask[y * WIDTH + x];
+
+  it("is measuring a mask that really had a hole and a chair in it", () => {
+    // Otherwise everything below passes on a frame with nothing to find.
+    expect(coverageFromConfidence(0.03)).toBe(0);
+    expect(coverageFromConfidence(CHAIR)).toBeGreaterThan(0);
+    expect(coverageFromConfidence(CHAIR)).toBeLessThan(200);
+  });
+
+  it("closes the hole, keeps the chair, and leaves the far shelf hidden", () => {
+    const rec = recorder();
+    const c = MaskCompositor.create(rec.factory, WIDTH, HEIGHT)!;
+    expect(c.grid).toEqual({ width: WIDTH, height: HEIGHT, scale: 1 });
+    c.setEffect({ kind: "blur", strength: "heavy" });
+    c.compose(frame(WIDTH, HEIGHT), seated());
+
+    const mask = rec.masks[0];
+    expect(alphaAt(mask, 79, 71)).toBe(255);          // the hole, filled
+    expect(alphaAt(mask, 52, 80)).toBeGreaterThan(200); // the chair, kept
+    expect(alphaAt(mask, 12, 15)).toBe(0);            // the shelf, hidden
+    expect(alphaAt(mask, 140, 10)).toBe(0);           // and the wall
   });
 });
 
@@ -549,14 +626,23 @@ describe("what is painted behind the person", () => {
     expect(Number(draw?.args[2])).toBeLessThan(0);
   });
 
-  it("falls back to the camera when a custom image has not arrived", () => {
+  /**
+   * An effect whose artwork has not arrived, or has gone. Never a blank rectangle
+   * where a person was — and no longer the sharp room either, which was what this
+   * test used to pin. The uploaded image may be seconds away or may have failed
+   * for good, and in both cases the person is still composited over something
+   * that is not a readable picture of their room.
+   */
+  it("veils the room when a custom image has not arrived", () => {
     const rec = recorder();
     const c = MaskCompositor.create(rec.factory, 64, 48)!;
     c.setEffect({ kind: "custom", id: "u1" }, null);
     c.compose(frame(64, 48), confidenceAt(64, 48, () => SOLID));
 
     const background = rec.calls.find((call) => call.surface === "output" && call.op === "drawImage");
-    expect(background?.args[0]).toBe("camera");
+    expect(background?.args[0]).toBe("backdrop");
+    const backdrop = rec.calls.filter((call) => call.surface === "backdrop");
+    expect(backdrop.some((call) => call.op === "filter" && String(call.args[0]).startsWith("blur("))).toBe(true);
   });
 
   it("paints a template once per frame size", () => {
