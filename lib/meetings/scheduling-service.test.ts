@@ -187,6 +187,49 @@ describe("busyIntervals", () => {
     );
     expect(busy).toEqual([]);
   });
+
+  // Blocks run up to 24 hours where meetings cap at 8, and hostConflicts passes
+  // the bare slot window through here. A reach-back sized to meetings filtered
+  // an out-of-office block that began the previous afternoon out of the QUERY,
+  // so the host approved a request into their own blocked time with no warning.
+  // The filter lives in the database, so what the fake can prove is the bound
+  // the query is sent with.
+  it("reaches a full block length back when reading blocks", async () => {
+    const lowerBounds: Record<string, string[]> = {};
+    const client = {
+      async rpc() {
+        return { data: [], error: null };
+      },
+      from(table: string) {
+        const b: Record<string, unknown> = new Proxy(
+          {
+            gte(_col: string, value: string) {
+              (lowerBounds[table] ??= []).push(value);
+              return b;
+            },
+            then: (res: (v: unknown) => unknown, rej: (e: unknown) => unknown) =>
+              Promise.resolve({ data: [], error: null }).then(res, rej),
+          },
+          {
+            get(target: Record<string, unknown>, prop: string) {
+              if (prop in target) return target[prop];
+              return () => b;
+            },
+          },
+        ) as Record<string, unknown>;
+        return b;
+      },
+    };
+
+    await busyIntervals(client as never, WINDOW);
+
+    const dayBefore = new Date(new Date(WINDOW.fromIso).getTime() - 24 * 3600_000).toISOString();
+    expect(lowerBounds.scheduling_blocks).toEqual([dayBefore]);
+    // The meeting and booking scans stay tight: both are capped at 8 hours.
+    const eightHoursBefore = new Date(new Date(WINDOW.fromIso).getTime() - 8 * 3600_000).toISOString();
+    expect(lowerBounds.live_meetings).toEqual([eightHoursBefore]);
+    expect(lowerBounds.scheduling_bookings).toEqual([eightHoursBefore]);
+  });
 });
 
 describe("openSlots daily booking limit", () => {
