@@ -2114,6 +2114,19 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
       // silently does nothing leaves exactly the guest this exists for stuck;
       // these connections have no path by definition, so there is nothing a
       // rebuild costs. createPeerConnection closes and forgets the old one.
+      //
+      // KNOWN GAP, written down because it is not fixed here. If this fires while
+      // we are halfway through answering that peer's offer, they never get our
+      // answer, and an IMPOLITE peer still holding their own unanswered offer
+      // will ignore the replacement's offer under `offerCollision` — leaving both
+      // sides in `have-local-offer` until something says hello again. The answer
+      // path above stops driving the closed connection and says so, which is as
+      // far as this change goes. Closing it properly means either completing the
+      // exchange before discarding (and that connection is still relay-only
+      // afterwards, so it has gained nothing) or reworking the offer/answer path,
+      // whose blast radius is every call rather than only guests whose relay is
+      // already broken. Reachable only when the relay has already failed, which
+      // without this whole mechanism is a guest who connects to nobody at all.
       createPeerConnection(peerId);
       void renegotiateRef.current(peerId);
     }
@@ -2230,6 +2243,20 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
       });
       if (action === "ignore") return;
 
+      // Every await below is a point where this connection can be replaced
+      // underneath us. The known way is the relay deadline expiring mid-answer:
+      // `considerAbandoningRelay` closes this connection and builds a
+      // replacement, and the rest of this block would then drive a corpse —
+      // setLocalDescription on a closed connection throws, and the throw is
+      // swallowed by the catch at the end as though it were an ordinary
+      // negotiation hiccup. Checking is better than finding out, and the line it
+      // prints is the only trace this ever leaves.
+      const stillOurs = () => {
+        if (peersRef.current.get(msg.from) === pc) return true;
+        console.warn(`[meeting] stopped answering ${msg.from} on a connection that was replaced mid-exchange`);
+        return false;
+      };
+
       try {
         if (action === "rollback_then_accept" && pc.signalingState === "have-local-offer") {
           // Discard our own offer; theirs is the one that survives. Only when
@@ -2241,10 +2268,13 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
         }
         makingOfferRef.current.set(msg.from, false);
         await pc.setRemoteDescription(msg.sdp);
+        if (!stillOurs()) return;
         await flushPendingIce(msg.from, pc);
+        if (!stillOurs()) return;
         const answer = await pc.createAnswer();
         answer.sdp = withOpusResilience(answer.sdp ?? "");
         await pc.setLocalDescription(answer);
+        if (!stillOurs()) return;
         sendSignalRef.current({ type: "answer", from: myId, to: msg.from, sdp: answer, displayName: localNameRef.current });
         // From here a `negotiationneeded` is a real renegotiation rather than
         // the echo of the transceivers we set up above.

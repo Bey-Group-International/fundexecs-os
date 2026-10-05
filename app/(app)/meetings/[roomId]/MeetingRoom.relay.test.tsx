@@ -37,6 +37,9 @@ jest.mock("./MeetingGreenRoom", () => ({
   ),
 }));
 
+/** Everything the room broadcast about itself, newest last. */
+const sent: Array<Record<string, unknown>> = [];
+
 const realtime = {
   channels: [] as Array<{ name: string; handlers: Record<string, (m: unknown) => void>; removed: boolean }>,
   reset() { this.channels = []; },
@@ -71,7 +74,12 @@ const supabaseStub = {
         return api;
       },
       subscribe: (cb?: (s: string) => void) => { cb?.("SUBSCRIBED"); return entry; },
-      send: async () => "ok",
+      // The room sends a broadcast envelope; the signal itself is its payload.
+      send: async (m: unknown) => {
+        const env = m as { payload?: Record<string, unknown> };
+        sent.push(env?.payload ?? (m as Record<string, unknown>));
+        return "ok";
+      },
       unsubscribe: async () => "ok",
     };
     return api;
@@ -87,6 +95,10 @@ const ROOM = "abc-defg-hi";
 
 /** Makes `replaceTrack` never settle, so a repair can still be in flight. */
 let hangReplaceTrack = false;
+
+/** Releases a held `setRemoteDescription`, so an answer can be mid-flight. */
+let releaseRemote: (() => void) | null = null;
+let hangRemoteDescription = false;
 
 /** What the endpoint says this deployment has. Mutable per test. */
 let relayAnswer: { iceServers?: unknown[]; relay?: boolean; reason?: string } = {};
@@ -179,7 +191,10 @@ class FakePC {
   async createOffer() { this.offers += 1; return { type: "offer", sdp: "v=0" }; }
   async createAnswer() { return { type: "answer", sdp: "v=0" }; }
   async setLocalDescription() {}
-  async setRemoteDescription() {}
+  setRemoteDescription() {
+    if (!hangRemoteDescription) return Promise.resolve();
+    return new Promise<void>((resolve) => { releaseRemote = resolve; });
+  }
   async addIceCandidate() {}
   async getStats() { return new Map(); }
   restartIce() { this.restarts++; }
@@ -208,7 +223,10 @@ beforeEach(() => {
   jest.clearAllMocks();
   realtime.reset();
   FakePC.all = [];
+  sent.length = 0;
   hangReplaceTrack = false;
+  hangRemoteDescription = false;
+  releaseRemote = null;
   joinChoice.cameraEnabled = false;
   joinChoice.micEnabled = false;
   relayAnswer = {
@@ -488,6 +506,56 @@ describe("a member, who was never put on the relay", () => {
 
     // Only what the recovery path did: no rebuild from this file's code.
     expect(FakePC.all).toHaveLength(1);
+  });
+});
+
+describe("an answer still in flight when the connection is replaced", () => {
+  it("stops driving the closed connection instead of throwing into a swallowed catch", async () => {
+    // The sequence a reviewer put to me: the relay deadline expires while we are
+    // halfway through answering a peer's offer, so the connection we are
+    // answering ON is closed and replaced underneath us. Everything after that
+    // await was driving a corpse, and `setLocalDescription` on a closed
+    // connection throws into a catch that logs it as an ordinary negotiation
+    // hiccup. Nothing is sent, and nothing says why.
+    const warn = jest.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      await enterAsGuest();
+      // The room's own peer id, read from the hello it broadcast — the offer has
+      // to be addressed to it or the room ignores it.
+      const hello = sent.find((m) => m.type === "join");
+      const myId = String(hello?.from ?? "");
+      expect(myId).not.toBe("");
+
+      const first = await peerJoins("peer-1");
+      await act(async () => { first.gather("gathering"); await Promise.resolve(); });
+
+      // Their offer arrives and we start answering it; setRemoteDescription hangs.
+      hangRemoteDescription = true;
+      await act(async () => {
+        realtime.signal({ type: "offer", from: "peer-1", to: myId, sdp: { type: "offer", sdp: "v=0" }, displayName: "Bea" });
+        await Promise.resolve();
+      });
+
+      // The deadline expires with no relay candidate: the connection we are
+      // answering on is closed and replaced.
+      await flush(RELAY_PROBE_MS + 300, 10);
+      const rebuilt = FakePC.all[FakePC.all.length - 1];
+      expect(rebuilt).not.toBe(first);
+      expect(first.closed).toBe(true);
+
+      // Now let the held call finish, which is where the old code carried on.
+      hangRemoteDescription = false;
+      await act(async () => { releaseRemote?.(); await Promise.resolve(); });
+      await flush(200, 6);
+
+      // No answer went out for the connection that no longer exists, and the
+      // reason is on the record rather than inferred from a blank tile.
+      expect(sent.filter((m) => m.type === "answer")).toHaveLength(0);
+      expect(warn.mock.calls.map((c) => String(c[0])).join(" "))
+        .toContain("replaced mid-exchange");
+    } finally {
+      warn.mockRestore();
+    }
   });
 });
 
