@@ -21,6 +21,9 @@ import {
 import {
   STRUCTURE_SOLID,
   createStructureScratch,
+  createTemporalWindow,
+  despeckleCoverage,
+  steadyCoverage,
   fillEnclosedHoles,
   keepTouchingStructures,
   maskStructureReach,
@@ -444,5 +447,180 @@ describe("somebody sitting in a chair", () => {
     // a hole's wall.
     expect(STRUCTURE_SOLID).toBeGreaterThan(128);
     expect(STRUCTURE_SOLID).toBeLessThan(255);
+  });
+});
+
+// ── Firmness ─────────────────────────────────────────────────────────────────
+//
+// "No spots and no flicker when people move" is two faults with one shape: a cell
+// that disagrees with its neighbours, and a cell that disagrees with its own
+// recent past. One median each.
+
+describe("despeckleCoverage", () => {
+  const scratch = createStructureScratch(32 * 32);
+
+  const run = (rows: number[][]) => {
+    const g = gridOf(rows);
+    despeckleCoverage(g.coverage, g.width, g.height, scratch);
+    return g;
+  };
+
+  it("deletes a lone covered cell in the middle of the room", () => {
+    const g = run([
+      [0, 0, 0, 0, 0],
+      [0, 0, 0, 0, 0],
+      [0, 0, 255, 0, 0],
+      [0, 0, 0, 0, 0],
+      [0, 0, 0, 0, 0],
+    ]);
+    expect(at(g, 2, 2)).toBe(0);
+  });
+
+  it("closes a lone pinhole in the middle of a person", () => {
+    // Ninety of these a frame, measured — a pixel of room blinking inside
+    // somebody's chest.
+    const g = run([
+      [255, 255, 255, 255, 255],
+      [255, 255, 255, 255, 255],
+      [255, 255, 0, 255, 255],
+      [255, 255, 255, 255, 255],
+      [255, 255, 255, 255, 255],
+    ]);
+    expect(at(g, 2, 2)).toBe(255);
+  });
+
+  /**
+   * The reason this is a cross and not a plain separable median. A line one cell
+   * wide is a thin braid, a lanyard, a microphone boom — at this grid a cell is
+   * about 2.7px of a 720p frame. A median taken across the line alone deletes it;
+   * the median OF the two axis medians keeps it, because it wins along its own
+   * axis.
+   */
+  it("keeps a line one cell wide, in either direction", () => {
+    const down = run([
+      [0, 0, 255, 0, 0],
+      [0, 0, 255, 0, 0],
+      [0, 0, 255, 0, 0],
+      [0, 0, 255, 0, 0],
+      [0, 0, 255, 0, 0],
+    ]);
+    expect(at(down, 2, 2)).toBe(255);
+
+    const across = run([
+      [0, 0, 0, 0, 0],
+      [0, 0, 0, 0, 0],
+      [255, 255, 255, 255, 255],
+      [0, 0, 0, 0, 0],
+      [0, 0, 0, 0, 0],
+    ]);
+    expect(at(across, 2, 2)).toBe(255);
+  });
+
+  it("leaves a straight edge exactly where it was", () => {
+    const g = run([
+      [0, 0, 255, 255, 255],
+      [0, 0, 255, 255, 255],
+      [0, 0, 255, 255, 255],
+      [0, 0, 255, 255, 255],
+      [0, 0, 255, 255, 255],
+    ]);
+    for (let y = 1; y < 4; y++) {
+      expect(at(g, 1, y)).toBe(0);
+      expect(at(g, 2, y)).toBe(255);
+    }
+  });
+
+  /**
+   * And leaves a RAMP alone, which is the property the compositor's feathering
+   * depends on: the median of three points on a slope is the middle one, so the
+   * soft edge that makes hair read as hair survives this pass untouched.
+   */
+  it("leaves a graded ramp alone", () => {
+    const g = run([
+      [0, 40, 90, 140, 190],
+      [0, 40, 90, 140, 190],
+      [0, 40, 90, 140, 190],
+      [0, 40, 90, 140, 190],
+      [0, 40, 90, 140, 190],
+    ]);
+    expect([at(g, 1, 2), at(g, 2, 2), at(g, 3, 2)]).toEqual([40, 90, 140]);
+  });
+
+  it("refuses a grid too small to have a middle", () => {
+    const g = gridOf([[255, 0], [0, 255]]);
+    despeckleCoverage(g.coverage, g.width, g.height, scratch);
+    expect([...g.coverage]).toEqual([255, 0, 0, 255]);
+  });
+});
+
+describe("steadyCoverage", () => {
+  const frame = (v: number[]) => new Uint8ClampedArray(v);
+
+  it("passes the first two frames through, rather than fading a person in", () => {
+    const w = createTemporalWindow(3);
+    expect([...steadyCoverage(frame([255, 255, 255]), w)]).toEqual([255, 255, 255]);
+    expect([...steadyCoverage(frame([255, 255, 255]), w)]).toEqual([255, 255, 255]);
+  });
+
+  /**
+   * The fault, exactly: one frame in which the model changed its mind about a cell
+   * and changed it back. The blend cannot catch this — the first significant change
+   * on a pixel is treated as movement by design, because treating it as noise is
+   * how a mask starts lagging a person.
+   */
+  /**
+   * TWO frames pass through, not one. With only the first exempt, the second
+   * frame's median is taken against a buffer of zeros — which for a graded cell
+   * returns the frame BEFORE it rather than the frame itself, so the opening of
+   * every call carries one frame of somebody's edge from the frame before.
+   */
+  it("passes the second frame through as itself, not as a median against nothing", () => {
+    const w = createTemporalWindow(1);
+    expect([...steadyCoverage(frame([100]), w)]).toEqual([100]);
+    expect([...steadyCoverage(frame([200]), w)]).toEqual([200]);
+  });
+
+  it("deletes a one-frame excursion", () => {
+    const w = createTemporalWindow(1);
+    steadyCoverage(frame([255]), w);
+    steadyCoverage(frame([255]), w);
+    expect([...steadyCoverage(frame([0]), w)]).toEqual([255]);
+    // And the frame after it, when the model has gone back to agreeing.
+    expect([...steadyCoverage(frame([255]), w)]).toEqual([255]);
+  });
+
+  it("lets a change that lasts through, on its second frame", () => {
+    const w = createTemporalWindow(1);
+    steadyCoverage(frame([255]), w);
+    steadyCoverage(frame([255]), w);
+    // First frame of a real move: held back, which is the one frame this costs.
+    expect([...steadyCoverage(frame([0]), w)]).toEqual([255]);
+    // Second frame: through.
+    expect([...steadyCoverage(frame([0]), w)]).toEqual([0]);
+  });
+
+  /**
+   * The window records what the model SAID, not what this rule decided. Keeping
+   * medians of medians would compound frame on frame into a mask that stopped
+   * moving at all — the same trap `sharpenEdge` avoids by not writing back into
+   * the blend's history.
+   */
+  it("remembers the raw frames, not its own answers", () => {
+    const w = createTemporalWindow(1);
+    steadyCoverage(frame([0]), w);
+    steadyCoverage(frame([0]), w);
+    steadyCoverage(frame([255]), w);   // held: median(0, 0, 255) = 0
+    steadyCoverage(frame([255]), w);   // median(0, 255, 255) = 255
+    expect([...steadyCoverage(frame([255]), w)]).toEqual([255]);
+  });
+
+  it("holds a cell that keeps changing its mind at the value it mostly has", () => {
+    const w = createTemporalWindow(1);
+    steadyCoverage(frame([255]), w);
+    steadyCoverage(frame([255]), w);
+    const seen: number[] = [];
+    for (const v of [0, 255, 0, 255, 0]) seen.push(steadyCoverage(frame([v]), w)[0]);
+    // Alternating input, and nothing alternating comes out of the median.
+    expect(seen.filter((v) => v === 255).length).toBeGreaterThanOrEqual(3);
   });
 });

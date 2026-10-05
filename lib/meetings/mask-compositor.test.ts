@@ -659,3 +659,113 @@ describe("what is painted behind the person", () => {
     expect(afterSecond).toBe(afterFirst);
   });
 });
+
+/**
+ * The two medians, through the real chain.
+ *
+ * mask-structure.test.ts proves each one; this proves the compositor runs them in
+ * the order that makes them work, and that what reaches the mask is firm.
+ */
+describe("a mask with no spots in it", () => {
+  const WIDTH = 64;
+  const HEIGHT = 48;
+
+  /** A solid person with single-cell pinholes in them, and specks of room about. */
+  const spotty = () => confidenceAt(WIDTH, HEIGHT, (x, y) => {
+    const inside = x >= 20 && x <= 44 && y >= 10 && y <= 38;
+    // Pinholes on a lattice inside the person, one cell each.
+    if (inside && x % 6 === 2 && y % 6 === 2) return 0;
+    if (inside) return SOLID;
+    // Specks of room the model half-believes, one cell each.
+    if (!inside && x % 7 === 3 && y % 7 === 3) return SOLID;
+    return 0;
+  });
+
+  it("hands over a person with no holes and a room with no specks", () => {
+    const rec = recorder();
+    const c = MaskCompositor.create(rec.factory, WIDTH, HEIGHT)!;
+    expect(c.grid).toEqual({ width: WIDTH, height: HEIGHT, scale: 1 });
+    c.setEffect({ kind: "blur", strength: "heavy" });
+    c.compose(frame(WIDTH, HEIGHT), spotty());
+
+    const mask = rec.masks[0];
+    const at = (x: number, y: number) => mask[y * WIDTH + x];
+    // A pinhole at (26,16) and a speck at (3,3) and (10,10), by the lattices above.
+    expect(at(26, 16)).toBe(255);
+    expect(at(3, 3)).toBe(0);
+    expect(at(10, 10)).toBe(0);
+    // And the person and the room are still where they were.
+    expect(at(32, 24)).toBe(255);
+    expect(at(60, 44)).toBe(0);
+  });
+
+  /**
+   * The flicker half, and it has to be a PATCH rather than a cell.
+   *
+   * The first version of this test dropped a single cell for one frame and passed
+   * with the temporal median deleted — because the spatial median removes a lone
+   * cell on its own, so the test proved the despeckle twice and the window not at
+   * all. A twelve-cell square is far too big for a neighbour median to argue with,
+   * so only the three-frame window can save it.
+   */
+  it("does not pass on a patch that changed its mind for one frame", () => {
+    const rec = recorder();
+    const c = MaskCompositor.create(rec.factory, WIDTH, HEIGHT)!;
+    c.setEffect({ kind: "blur", strength: "heavy" });
+    const solid = confidenceAt(WIDTH, HEIGHT, () => SOLID);
+    const blink = confidenceAt(WIDTH, HEIGHT, (x, y) =>
+      x >= 24 && x < 36 && y >= 14 && y < 26 ? 0 : SOLID);
+
+    c.compose(frame(WIDTH, HEIGHT), solid);
+    c.compose(frame(WIDTH, HEIGHT), solid);
+    c.compose(frame(WIDTH, HEIGHT), blink);
+    c.compose(frame(WIDTH, HEIGHT), solid);
+
+    // Every frame handed over keeps the middle of that patch covered, including
+    // the one the model dropped it on.
+    for (const mask of rec.masks) expect(mask[20 * WIDTH + 30]).toBe(255);
+  });
+
+  /**
+   * And the other side of it: a change that LASTS must still get through, or the
+   * mask is firm in the wrong way — a person who moves and leaves a shadow.
+   */
+  it("still follows a change that lasts", () => {
+    const rec = recorder();
+    const c = MaskCompositor.create(rec.factory, WIDTH, HEIGHT)!;
+    c.setEffect({ kind: "blur", strength: "heavy" });
+    const solid = confidenceAt(WIDTH, HEIGHT, () => SOLID);
+    // They leave: a whole corner of the frame stops being them, and stays that way.
+    const gone = confidenceAt(WIDTH, HEIGHT, (x) => (x > 40 ? 0 : SOLID));
+    // A patch, not a cell, for the reason above.
+
+    c.compose(frame(WIDTH, HEIGHT), solid);
+    c.compose(frame(WIDTH, HEIGHT), solid);
+    for (let i = 0; i < 6; i++) c.compose(frame(WIDTH, HEIGHT), gone);
+
+    const last = rec.masks[rec.masks.length - 1];
+    expect(last[24 * WIDTH + 50]).toBeLessThan(40);
+    // And where they still are, they are still solid.
+    expect(last[24 * WIDTH + 20]).toBe(255);
+  });
+
+  /**
+   * Turning the effect off and on again starts clean. Holding two frames from
+   * before the pause would make somebody's own face arrive late.
+   */
+  it("forgets the window when the effect pauses", () => {
+    const rec = recorder();
+    const c = MaskCompositor.create(rec.factory, WIDTH, HEIGHT)!;
+    c.setEffect({ kind: "blur", strength: "heavy" });
+    const solid = confidenceAt(WIDTH, HEIGHT, () => SOLID);
+    c.compose(frame(WIDTH, HEIGHT), solid);
+    c.compose(frame(WIDTH, HEIGHT), solid);
+    c.reset();
+
+    const empty = confidenceAt(WIDTH, HEIGHT, () => 0);
+    c.compose(frame(WIDTH, HEIGHT), empty);
+    // Straight through on the first frame back, with no memory of being covered.
+    const mask = rec.masks[rec.masks.length - 1];
+    expect(mask[24 * WIDTH + 32]).toBe(0);
+  });
+});

@@ -58,16 +58,44 @@
 // the answer is unclear is the conservative choice in both directions — it neither
 // reveals nor erases.
 //
+// FIRMNESS is the fourth and fifth rules here, and the reason the file grew: a
+// mask with spots in it, or one that twitches while somebody moves, is not firm
+// however well it finds a chair. Both are medians — `despeckleCoverage` deletes a
+// cell that disagrees with its neighbours, `steadyCoverage` one that disagrees
+// with its own recent past — and both were measured over sixty frames of a person
+// leaning across the frame rather than on a still:
+//
+//   per frame                      spots  holes  flicker   jumpy   lag
+//   the chain as it ships today      15.4   96.1     1.22   10.82   1.2
+//   + the two shape passes above      8.8   60.6     1.19   10.12   1.3
+//   + despeckleCoverage               2.8   19.9     1.13    9.62   1.2
+//   + steadyCoverage                  0.4    4.1     0.88    8.19   0.4
+//   (a five-frame window instead)     0.5    4.3     0.97    8.69   1.4
+//
+//   spots   covered islands that are not the person
+//   holes   uncovered regions enclosed by cover — room inside somebody's chest
+//   flicker mean frame-to-frame change, of 255, in cells whose truth did NOT move
+//   jumpy   of every 1000 such cells, how many moved 32 or more
+//   lag     cells between the mask's edge and the person's, through the chest
+//
+// The last row is why the window is three frames and not five: the wider window
+// was worse on both counts that matter, because two frames of latency is a person
+// arriving late in their own mask. And the lag COLUMN is the happy surprise — the
+// edge ended up closer to the person than before any of this, because the temporal
+// blend is no longer spending its slow rate damping noise.
+//
 // WHAT IT COSTS, same frame, the 481x270 grid, 100 frames, next to the two passes
 // already in the chain so the comparison is on one machine:
 //
-//   dilateCeiling + dilateCoverage   1.02 ms per frame
-//   blendCoverageByAgreement         0.81 ms
-//   fillEnclosedHoles                1.03 ms
-//   keepTouchingStructures           1.30 ms
-//   both of the new passes           2.40 ms
+//   dilateCeiling + dilateCoverage   1.17 ms per frame
+//   blendCoverageByAgreement         0.93 ms
+//   despeckleCoverage                1.13 ms
+//   steadyCoverage                   0.50 ms
+//   fillEnclosedHoles                1.13 ms
+//   keepTouchingStructures           1.49 ms
+//   all four of the new passes       3.87 ms
 //
-// That is real: it roughly doubles the mask arithmetic. It is affordable because
+// That is real: it roughly triples the mask arithmetic. It is affordable because
 // `shouldSuspendEffect` already exists — a sustained run of slow frames turns the
 // effect off rather than letting a face freeze — and because the alternative was
 // the complaint. If it proves too much on real hardware the next move is to run
@@ -164,6 +192,173 @@ const STRUCTURE_QUIET_CEILING = 128;
  */
 const HOLE_SPAN_FRACTION = 0.025;
 
+/**
+ * Take out the single cells that disagree with everything around them.
+ *
+ * MEASURED FIRST, because this is the one complaint that had no instrument. Sixty
+ * frames of a person leaning across a 1280x720 frame, with the noise a real
+ * segmenter has at a silhouette (a confidence anywhere in the uncertainty band,
+ * re-rolled every frame), through the whole shipped chain:
+ *
+ *   per frame            before   after
+ *   stray islands          15.4      0.8   covered specks that are not the person
+ *   pinholes               96.1      5.7   uncovered regions enclosed by cover
+ *   edge lag                1.2      1.0   cells behind the person's real edge
+ *
+ * Those pinholes are the "spots": a pixel of room blinking inside somebody's
+ * chest, ninety of them a frame. Neither the temporal blend nor the hole fill
+ * removes them — the blend damps a cell that REVERSES, and single-frame noise in a
+ * band that is re-rolled every frame is not a reversal of anything; the hole fill
+ * only closes regions fully enclosed by the person, and most of this speckle sits
+ * on the silhouette, where it is not enclosed.
+ *
+ * A median is the right instrument and a blur is not: a blur spreads a speck over
+ * its neighbours, trading a hard spot for a soft smudge and softening the edge
+ * with it. A median DELETES a value nothing around it agrees with, and leaves an
+ * edge where it was, because along an edge the majority still wins. It also leaves
+ * a RAMP alone, which matters here — the median of three points on a slope is the
+ * middle one — so the graded edge the compositor feathers survives intact.
+ *
+ * A CROSS, not a 3x3 square, and not a plain separable median either. The cheap
+ * separable version (median across, then median down) deletes an isolated cell
+ * correctly but also deletes any line one cell wide, because the pass along the
+ * line's thin axis sees a lone value between two zeros. At this grid a cell is
+ * about 2.7px of a 720p frame, so that is a thin braid, a lanyard, a microphone
+ * boom. Taking the median OF the two axis medians and the original keeps them: an
+ * isolated cell loses on both axes and goes, while a one-cell line wins on the
+ * axis it runs along and stays.
+ *
+ * Writes into `coverage`, using two scratch buffers. Allocates nothing.
+ *
+ * NOT GUARDED, and named rather than counted as covered: the border cells keeping
+ * their own value. Breaking it on one axis changes nothing a test can see, because
+ * the cross median then outvotes the wrong axis with the right one — which is the
+ * clamp being belt and braces rather than load-bearing. It stays because it is
+ * correct and free, not because anything is watching it.
+ */
+export function despeckleCoverage(
+  coverage: Uint8ClampedArray,
+  width: number,
+  height: number,
+  scratch: StructureScratch,
+): Uint8ClampedArray {
+  const w = Math.max(0, Math.floor(width));
+  const h = Math.max(0, Math.floor(height));
+  const n = w * h;
+  if (n <= 0 || coverage.length < n || scratch.across.length < n || scratch.down.length < n) return coverage;
+  if (w < 3 || h < 3) return coverage;
+  const across = scratch.across;
+  const down = scratch.down;
+
+  for (let y = 0; y < h; y++) {
+    const row = y * w;
+    // A border cell keeps its own value rather than being compared against a
+    // fabricated neighbour: inventing one is how a mask grows a line along its own
+    // edge.
+    across[row] = coverage[row];
+    across[row + w - 1] = coverage[row + w - 1];
+    for (let x = 1; x < w - 1; x++) {
+      const i = row + x;
+      across[i] = med3(coverage[i - 1], coverage[i], coverage[i + 1]);
+    }
+  }
+
+  for (let x = 0; x < w; x++) {
+    down[x] = coverage[x];
+    down[(h - 1) * w + x] = coverage[(h - 1) * w + x];
+  }
+  for (let y = 1; y < h - 1; y++) {
+    const row = y * w;
+    for (let x = 0; x < w; x++) {
+      const i = row + x;
+      down[i] = med3(coverage[i - w], coverage[i], coverage[i + w]);
+    }
+  }
+
+  for (let i = 0; i < n; i++) coverage[i] = med3(across[i], down[i], coverage[i]);
+  return coverage;
+}
+
+/** The median of three, written out: two comparisons, no sorting. */
+function med3(a: number, b: number, c: number): number {
+  return a > b ? (b > c ? b : a > c ? c : a) : (a > c ? a : b > c ? c : b);
+}
+
+/**
+ * A cell's value over the last three frames, so a one-frame excursion cannot
+ * reach the screen.
+ *
+ * The spatial median above removes a cell that disagrees with its NEIGHBOURS.
+ * This removes a cell that disagrees with its own RECENT PAST, which is the other
+ * half of the complaint and the half the existing machinery does not cover:
+ *
+ *   `blendCoverageByAgreement` damps a pixel that keeps REVERSING, and it is good
+ *   at a sustained oscillation. A single frame's excursion is not a reversal yet —
+ *   the first significant change on a pixel is a movement, by design, because
+ *   treating it as noise is how a mask starts lagging a person's actual movement.
+ *   So a one-frame spike goes through at the fast rate, and `EDGE_CONTRAST`
+ *   doubles its distance from the midpoint on the way out.
+ *
+ * A median of three frames passes anything that lasts two frames at full speed
+ * and deletes anything that lasts one. That is the exact shape of the fault: the
+ * segmenter re-rolls its opinion of an uncertain cell every frame, and a person
+ * moving does not change their mind back.
+ *
+ * The cost is a frame of latency on a change that arrives in a single frame, and
+ * nothing on a change that lasts. At 24fps that is 42ms, against a blend whose own
+ * time constant is already about three frames.
+ */
+export interface TemporalWindow {
+  /** The frame before last. */
+  older: Uint8ClampedArray;
+  /** Last frame. */
+  recent: Uint8ClampedArray;
+  /** How many frames have been recorded, capped at 2 — before that, no median. */
+  filled: number;
+}
+
+export function createTemporalWindow(length: number): TemporalWindow {
+  const n = Math.max(0, Math.floor(length));
+  return { older: new Uint8ClampedArray(n), recent: new Uint8ClampedArray(n), filled: 0 };
+}
+
+/**
+ * Replace each cell with the median of this frame and the two before it.
+ *
+ * Writes into `coverage` and rolls the window. The first two frames pass through
+ * untouched: a median against frames that never happened would fade the person in
+ * over the opening of every call, which is the fault the blend's own seeding
+ * avoids for the same reason.
+ */
+export function steadyCoverage(
+  coverage: Uint8ClampedArray,
+  window: TemporalWindow,
+): Uint8ClampedArray {
+  const n = Math.min(coverage.length, window.older.length, window.recent.length);
+  if (n <= 0) return coverage;
+
+  if (window.filled < 2) {
+    window.older.set(window.recent.subarray(0, n), 0);
+    window.recent.set(coverage.subarray(0, n), 0);
+    window.filled++;
+    return coverage;
+  }
+
+  const older = window.older;
+  const recent = window.recent;
+  for (let i = 0; i < n; i++) {
+    const a = older[i];
+    const b = recent[i];
+    const c = coverage[i];
+    // The median of three, and the window rolls on the RAW value, not the median:
+    // keeping medians of medians would compound into a mask that stopped moving.
+    older[i] = b;
+    recent[i] = c;
+    coverage[i] = a > b ? (b > c ? b : a > c ? c : a) : (a > c ? a : b > c ? c : b);
+  }
+  return coverage;
+}
+
 /** The four reaches, in GRID cells, for one frame size. */
 export interface StructureReach {
   /** Uncertainty at least this thick is a structure rather than an edge. */
@@ -212,6 +407,10 @@ export interface StructureScratch {
   visited: Uint8Array;
   /** The flood's stack of cell indices. Never deeper than the grid. */
   stack: Int32Array;
+  /** The despeckle's median along each row, which cannot be computed in place. */
+  across: Uint8ClampedArray;
+  /** And along each column. */
+  down: Uint8ClampedArray;
 }
 
 export function createStructureScratch(length: number): StructureScratch {
@@ -221,6 +420,8 @@ export function createStructureScratch(length: number): StructureScratch {
     toPerson: new Uint16Array(n),
     visited: new Uint8Array(n),
     stack: new Int32Array(n),
+    across: new Uint8ClampedArray(n),
+    down: new Uint8ClampedArray(n),
   };
 }
 
