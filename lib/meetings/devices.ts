@@ -53,11 +53,38 @@ export function devicesOfKind(devices: Device[], kind: DeviceKind): Device[] {
 }
 
 /**
+ * Whether a camera is a phone standing in for one.
+ *
+ * A desktop enumerates more cameras than it has: an iPhone within reach of a
+ * Mac appears as a Continuity Camera and macOS will quietly make it the system
+ * default; Windows lists a paired phone through Phone Link; and DroidCam, Camo,
+ * Iriun, EpocCam and iVCam each install a virtual camera that is a phone on the
+ * other end. None of them is wrong to offer. All of them are wrong to LAND
+ * somebody on who sat down at a laptop and picked its webcam -- which is what
+ * happened whenever the walk below let the browser choose, because the browser
+ * chose the phone.
+ *
+ * By label, because that is all a browser says about a device. Unlabelled
+ * (before permission) reads as not a phone: there is nothing to go on, and
+ * guessing "phone" would hide a real camera.
+ */
+export function isPhoneCamera(label: string | null | undefined): boolean {
+  const l = (label ?? "").toLowerCase();
+  if (!l) return false;
+  return /\b(iphone|ipad|continuity|droidcam|camo|iriun|epoccam|ivcam|reincubate|phone link|android|mobile)\b/.test(l);
+}
+
+/**
  * Which device to start with.
  *
  * Order matters: a remembered choice beats the system default, because a member
  * who picked their headset last time meant it. A remembered device that is no
  * longer plugged in is ignored rather than honoured into a black preview.
+ *
+ * With nothing remembered, a camera that is not a phone beats one that is: the
+ * first camera in the list is whichever the OS ranks first, and a Mac with an
+ * iPhone nearby ranks the iPhone first. A remembered phone camera is still
+ * honoured -- somebody who chose it meant it.
  */
 export function pickDevice(devices: Device[], kind: DeviceKind, remembered: string | null): Device | null {
   const candidates = devicesOfKind(devices, kind);
@@ -69,7 +96,9 @@ export function pickDevice(devices: Device[], kind: DeviceKind, remembered: stri
   }
 
   const systemDefault = candidates.find((d) => d.deviceId === "default");
-  return systemDefault ?? candidates[0];
+  if (systemDefault) return systemDefault;
+  if (kind === "videoinput") return candidates.find((d) => !isPhoneCamera(d.label)) ?? candidates[0];
+  return candidates[0];
 }
 
 /**

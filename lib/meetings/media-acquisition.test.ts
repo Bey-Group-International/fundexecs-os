@@ -2,6 +2,7 @@ import {
   MAX_DEVICE_ATTEMPTS,
   acquisitionMessage,
   canRetrySameDevice,
+  canTryAnotherCamera,
   canTryAnotherDevice,
   classifyMediaError,
   deviceAttemptOrder,
@@ -61,6 +62,32 @@ describe("canTryAnotherDevice", () => {
   });
 });
 
+describe("canTryAnotherCamera", () => {
+  // A chosen camera that is busy is not replaced: the next camera on a desktop
+  // is too often a phone, and the member did not choose that.
+  it("stays on a chosen camera that is busy, interrupted or unexplained", () => {
+    for (const f of ["in_use", "aborted", "unknown"] as const) {
+      expect(canTryAnotherCamera(f, true)).toBe(false);
+    }
+  });
+
+  it("moves on from a chosen camera only when it is gone or cannot do what was asked", () => {
+    expect(canTryAnotherCamera("missing", true)).toBe(true);
+    expect(canTryAnotherCamera("overconstrained", true)).toBe(true);
+  });
+
+  it("is never true behind a refused permission", () => {
+    expect(canTryAnotherCamera("denied", true)).toBe(false);
+    expect(canTryAnotherCamera("denied", false)).toBe(false);
+  });
+
+  it("follows the ordinary rule when no camera was chosen", () => {
+    for (const f of ["in_use", "missing", "overconstrained", "aborted", "unknown"] as const) {
+      expect(canTryAnotherCamera(f, false)).toBe(canTryAnotherDevice(f));
+    }
+  });
+});
+
 describe("canRetrySameDevice", () => {
   it("retries only the failures that are about timing", () => {
     expect(canRetrySameDevice("in_use")).toBe(true);
@@ -106,6 +133,65 @@ describe("deviceAttemptOrder", () => {
     const order = deviceAttemptOrder({ requested: "z", remembered: "y", available: many });
     expect(order).toHaveLength(MAX_DEVICE_ATTEMPTS);
     expect(order.slice(0, 3)).toEqual(["z", "y", ""]);
+  });
+
+  describe("for a camera", () => {
+    const phone = (id: string, label: string): Device => ({ deviceId: id, kind: "videoinput", label, groupId: "g" });
+
+    // A Mac lists the iPhone first when it is nearby. It is the last thing a
+    // desktop member should be moved onto without asking.
+    it("puts phones standing in for cameras last", () => {
+      const order = deviceAttemptOrder({
+        requested: "chosen",
+        remembered: null,
+        kind: "videoinput",
+        available: [phone("iphone", "iPhone Camera"), phone("droid", "DroidCam Source 3"), cam("webcam")],
+      });
+      expect(order).toEqual(["chosen", "", "webcam", "iphone"]);
+    });
+
+    // "Let the browser choose" is the step that chose the phone.
+    it("names a desktop camera before the unconstrained attempt when nothing was chosen", () => {
+      const order = deviceAttemptOrder({
+        requested: null,
+        remembered: null,
+        kind: "videoinput",
+        available: [phone("iphone", "iPhone Camera"), phone("webcam", "FaceTime HD Camera")],
+      });
+      expect(order).toEqual(["webcam", "", "iphone"]);
+    });
+
+    it("still lets the browser choose when the only cameras are phones", () => {
+      const order = deviceAttemptOrder({
+        requested: null,
+        remembered: null,
+        kind: "videoinput",
+        available: [phone("iphone", "iPhone Camera")],
+      });
+      expect(order).toEqual(["", "iphone"]);
+    });
+
+    // A phone the member chose is a choice like any other.
+    it("honours a chosen phone camera", () => {
+      const order = deviceAttemptOrder({
+        requested: "iphone",
+        remembered: null,
+        kind: "videoinput",
+        available: [phone("iphone", "iPhone Camera"), cam("webcam")],
+      });
+      expect(order[0]).toBe("iphone");
+    });
+  });
+
+  it("leaves a microphone walk alone", () => {
+    const mic = (id: string, label: string): Device => ({ deviceId: id, kind: "audioinput", label, groupId: "g" });
+    const order = deviceAttemptOrder({
+      requested: null,
+      remembered: null,
+      kind: "audioinput",
+      available: [mic("phone-mic", "iPhone Microphone"), mic("laptop", "MacBook Pro Microphone")],
+    });
+    expect(order).toEqual(["", "phone-mic", "laptop"]);
   });
 });
 

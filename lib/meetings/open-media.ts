@@ -26,6 +26,7 @@ import { constraintsFor, devicesOfKind, type Device, type DeviceKind } from "./d
 import {
   RETRY_SAME_DEVICE_MS,
   canRetrySameDevice,
+  canTryAnotherCamera,
   canTryAnotherDevice,
   classifyMediaError,
   deviceAttemptOrder,
@@ -91,7 +92,11 @@ async function openOne(
   available: readonly Device[],
   gateway: MediaGateway,
 ): Promise<{ track: MediaStreamTrack | null; outcome: DeviceOutcome }> {
-  const order = deviceAttemptOrder({ requested: requested || null, remembered, available });
+  const order = deviceAttemptOrder({ requested: requested || null, remembered, available, kind });
+  // A camera somebody picked -- now, or last time -- is one the walk stays on
+  // unless it is gone. See canTryAnotherCamera: the next camera along on a
+  // desktop is too often a phone, and nobody chose that.
+  const chosen = Boolean(requested || remembered);
   // Why the FIRST attempt failed, which is the one worth reporting: a member
   // whose chosen camera is held by another app wants to hear that, not that
   // the fourth camera on the list is missing.
@@ -129,13 +134,16 @@ async function openOne(
       } catch (err) {
         const failure = classifyMediaError(err);
         if (firstFailure === null) firstFailure = failure;
-        if (!canTryAnotherDevice(failure)) return { track: null, outcome: { ...NOTHING, failure } };
         // One more go at the same device before moving on, but only for the
         // failures that are about timing rather than about the device.
         if (attempt === 0 && canRetrySameDevice(failure)) {
           await gateway.wait(RETRY_SAME_DEVICE_MS);
           continue;
         }
+        const moveOn = kind === "videoinput"
+          ? canTryAnotherCamera(failure, chosen)
+          : canTryAnotherDevice(failure);
+        if (!moveOn) return { track: null, outcome: { ...NOTHING, failure } };
         break;
       }
     }
