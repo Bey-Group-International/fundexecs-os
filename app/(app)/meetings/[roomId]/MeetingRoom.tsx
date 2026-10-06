@@ -1970,20 +1970,11 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
       void renegotiateRef.current(peerId);
     };
 
-    // The same signal one level down, for engines where `connectionState` is
-    // absent or lags. Both handlers funnel into the same idempotent work.
-    pc.oniceconnectionstatechange = () => {
-      if (pc.connectionState !== undefined) return;
-      connChangedAtRef.current.set(peerId, Date.now());
-      refreshPeerStatusRef.current(peerId);
-      if (pc.iceConnectionState === "failed") recoverPeerRef.current(peerId);
-    };
-
-    pc.onconnectionstatechange = () => {
+    const onLinkState = (state: RTCPeerConnectionState) => {
       connChangedAtRef.current.set(peerId, Date.now());
       refreshPeerStatusRef.current(peerId);
 
-      if (pc.connectionState === "connected") {
+      if (state === "connected") {
         // A connection that came back has spent none of its retries.
         recoveryRef.current.delete(peerId);
         peerLostRef.current.delete(peerId);
@@ -2000,7 +1991,7 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
         return;
       }
 
-      if (pc.connectionState === "failed") {
+      if (state === "failed") {
         // Name the most likely cause while the evidence is still here. A
         // connection that fails outright with no relay in the config is the
         // signature of a network that needed one — which is precisely how
@@ -2026,7 +2017,7 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
         return;
       }
 
-      if (pc.connectionState === "disconnected") {
+      if (state === "disconnected") {
         // Most of these repair themselves within a second or two — a Wi-Fi roam,
         // a phone changing cell. Look again after the grace period rather than
         // tearing down a connection that was about to come back, and rather than
@@ -2036,9 +2027,28 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
         recoveryTimerRef.current.set(peerId, setTimeout(() => {
           recoveryTimerRef.current.delete(peerId);
           refreshPeerStatusRef.current(peerId);
-          if (peersRef.current.get(peerId)?.connectionState === "disconnected") recoverPeerRef.current(peerId);
+          // The same fallback read as everywhere else, so an engine that only
+          // reports the ICE state still recovers a connection that stayed down.
+          const held = peersRef.current.get(peerId);
+          const now = held ? held.connectionState ?? connectionStateFromIce(held.iceConnectionState) : null;
+          if (now === "disconnected") recoverPeerRef.current(peerId);
         }, DISCONNECT_GRACE_MS));
       }
+    };
+
+    pc.onconnectionstatechange = () => onLinkState(pc.connectionState);
+
+    // The same signal one level down, for engines where `connectionState` is
+    // absent. It has to funnel into the SAME body, and it used to funnel into
+    // almost none of it: only the badge refresh and the failed-state restart
+    // ran here, so on those engines a connection that reached `connected`
+    // never got its sender repairs, its send caps, its video-state
+    // announcement or its inbound audit — the exact machinery that notices a
+    // newcomer whose connection is up and carrying nothing — and one that sat
+    // in `disconnected` never armed the grace-period recovery at all.
+    pc.oniceconnectionstatechange = () => {
+      if (pc.connectionState !== undefined) return;
+      onLinkState(connectionStateFromIce(pc.iceConnectionState));
     };
 
     peersRef.current.set(peerId, pc);

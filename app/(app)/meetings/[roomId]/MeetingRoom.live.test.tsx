@@ -718,6 +718,37 @@ describe("a member who simply muted themselves", () => {
   });
 });
 
+describe("an engine that reports only the ICE state", () => {
+  // `pc.connectionState` is not universal. The ICE fallback handler claimed to
+  // funnel into the same work as `onconnectionstatechange` and funnelled into
+  // almost none of it: on these engines a connection that reached `connected`
+  // skipped the sender repairs, the send caps, the video-state announcement
+  // and the inbound audit — the machinery that notices a newcomer whose
+  // connection is up and carrying nothing.
+  it("runs the connected-time work from the ICE state alone", async () => {
+    await enterCall();
+    await peerArrives("peer-1", "Brett");
+
+    const pc = pcs[0] as Record<string, unknown>;
+    pc.connectionState = undefined;
+    pc.iceConnectionState = "connected";
+    sent.length = 0;
+
+    await act(async () => {
+      (pc.oniceconnectionstatechange as () => void)();
+      await Promise.resolve();
+    });
+    await flush(20, 3);
+
+    // The video-state announcement is the observable half of that work: it is
+    // sent on every connect so the far end knows what to expect from us.
+    const announced = sent.filter(
+      (m) => (m as { payload?: { type?: string } }).payload?.type === "video",
+    );
+    expect(announced.length).toBeGreaterThan(0);
+  });
+});
+
 /**
  * The failure this covers is the one a host reports as "I admitted them and I
  * can't see or hear them".
