@@ -278,8 +278,18 @@ function blendRates(hi: number, lo: number, cap: number): Float64Array {
 }
 
 
-/** Feather radius as a fraction of frame width. */
-const FEATHER_FRACTION = 0.004;
+/**
+ * Feather radius as a fraction of frame width.
+ *
+ * Was 0.004, 5px at 1280. A CSS blur's radius is its sigma, so the alpha ramp
+ * it leaves spans about three times that either side of the edge: fifteen
+ * pixels over which the room shows through the person at partial strength, on
+ * top of the two to three pixels of softness the grid upscale already adds.
+ * With the halo itself removed (see STRUCTURE_THICKNESS_FRACTION) that ramp
+ * was the widest soft thing left on the edge. 0.0025 is 3px at 1280, a ramp
+ * of about nine; the upscale keeps hair from going to a staircase.
+ */
+const FEATHER_FRACTION = 0.0025;
 
 /** How far to soften the mask edge, in pixels, at a given frame width. */
 export function maskFeatherPx(frameWidth: number): number {

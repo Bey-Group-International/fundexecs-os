@@ -122,19 +122,43 @@ export const STRUCTURE_SOLID = 200;
  *
  * This is what separates a chair from a silhouette's own soft edge, and it is the
  * number that makes the rest safe. Every person arrives wearing a ramp: the
- * confidence falls from certainly-them to certainly-not over a pixel or two, so
- * the mask has a one- to two-cell band of partial coverage all the way around
- * them. That band is the feathering the compositor relies on — hardening it would
- * cut hair off in a staircase, which is the fault `coverageFromConfidence` exists
- * to avoid.
+ * confidence falls from certainly-them to certainly-not over a few pixels, so
+ * the mask has a band of partial coverage all the way around them. That band is
+ * the feathering the compositor relies on — hardening it would cut hair off in a
+ * staircase, which is the fault `coverageFromConfidence` exists to avoid.
  *
- * A chair back, a headrest, an armrest, the crown of a headwrap are not one cell
- * thick. So thickness is the test, and the edge ramp fails it by construction.
+ * A chair back, a headrest, an armrest, the crown of a headwrap are not a few
+ * cells thick. So thickness is the test, and the edge ramp fails it.
  *
- * As a fraction of frame width: 0.006 is 8px at 1280, which the grid carries as
- * about three cells.
+ * THIS WAS 0.006 -- 8px at 1280, three cells -- AND THAT WAS THE HALO. The
+ * paragraph above said the ramp is "a pixel or two", and at this grid the
+ * model's real boundary is two to five cells. A three-cell test called the
+ * ramp a chair, filled it to full all the way round the person, and the sharpen
+ * after the blend made a hard band of sharp room of it: the finger-wide ring
+ * that was reported, present with every effect and when nobody moved. Measured
+ * through the whole chain on a 1280x720 frame, room kept outside the person as
+ * a hard edge, with the model's soft boundary modelled at three and at five
+ * cells:
+ *
+ *   thickness (cells)    3-cell ramp: above / beside    5-cell ramp: above / beside
+ *   3 (was)                  6.0px / 5.6px                 11.3px / 10.9px
+ *   5                        1.6px / 1.5px                  6.1px /  5.9px
+ *   7                        1.6px / 1.5px                  1.9px /  1.6px
+ *   8 (now)                  1.6px / 1.5px                  1.9px /  1.6px
+ *   the pass switched off    1.6px / 1.5px                  1.9px /  1.6px
+ *
+ * with headwear kept at 92% throughout -- a crown at 0.20 to 0.34 confidence is
+ * solid by itself and never needed this pass -- and the person's own edge
+ * bitten by under a cell. So the number has to clear the ramp with margin, and
+ * eight cells does, at every ramp a camera has shown. What it costs: a
+ * structure under 21px wide at 1280 is no longer kept. The chair back and the
+ * armrests in the scene below are 4x and 1.3x that; the thing it gives up is a
+ * chair edge seen end-on, which was a sliver.
+ *
+ * As a fraction of frame width: 0.016 is 20.5px at 1280, which the grid carries
+ * as eight cells.
  */
-const STRUCTURE_THICKNESS_FRACTION = 0.006;
+const STRUCTURE_THICKNESS_FRACTION = 0.016;
 
 /**
  * How far from the person a structure may reach and still be kept.

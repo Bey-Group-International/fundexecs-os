@@ -169,6 +169,32 @@ describe("keepTouchingStructures", () => {
     expect(at(g, 14, 2)).toBe(u);
   });
 
+  /**
+   * The halo. At the production reaches, the model's own soft boundary -- two to
+   * five cells of partial coverage all the way round a person -- must not be read
+   * as a structure and hardened to full, or the sharpen downstream makes a
+   * finger-wide band of sharp room of it. Five cells here, against the eight the
+   * production thickness asks for; the old three-cell thickness kept this band.
+   */
+  it("does not harden a silhouette's own soft boundary at production reaches", () => {
+    const grid = maskGrid(1280, 720);
+    const production = maskStructureReach(1280, grid);
+    const w = 40, h = 40;
+    const scratch = createStructureScratch(w * h);
+    const coverage = new Uint8ClampedArray(w * h);
+    // A 10x10 person in the middle, wearing a five-cell ramp of faint coverage.
+    for (let y = 10; y < 30; y++) for (let x = 10; x < 30; x++) {
+      const inside = x >= 15 && x < 25 && y >= 15 && y < 25;
+      coverage[y * w + x] = inside ? 255 : 60;
+    }
+    const report = keepTouchingStructures(coverage, w, h, production, scratch);
+    expect(report.kept).toBe(0);
+    // The ramp keeps the value the model gave it, right up against the person.
+    expect(coverage[20 * w + 14]).toBe(60);
+    expect(coverage[20 * w + 10]).toBe(60);
+    expect(production.thickness).toBeGreaterThan(5);
+  });
+
   it("does nothing to a frame with nobody in it", () => {
     const g = gridOf([
       [0, 0, 0, 0],

@@ -20,7 +20,7 @@ import {
   type Drawable,
   type SurfaceFactory,
 } from "./mask-compositor";
-import { PERSON_LABEL, coverageFromConfidence, maskGrid } from "./backgrounds";
+import { PERSON_LABEL, coverageFromConfidence, maskFeatherPx, maskGrid } from "./backgrounds";
 
 /** One recorded context call, tagged with which surface it was made on. */
 interface Call {
@@ -218,8 +218,9 @@ describe("the composite keeps the frame where the mask covers", () => {
     c.compose(frame(1280, 720), confidenceAt(grid.width, grid.height, () => SOLID));
 
     const blur = rec.calls.find((call) => call.surface === "feathered" && call.op === "filter");
-    // maskFeatherPx(1280) = 5 frame pixels, over a grid 2.66 frame pixels across.
-    expect(blur?.args[0]).toBe(`blur(${5 / grid.scale}px)`);
+    // maskFeatherPx(1280) frame pixels, over a grid 2.66 frame pixels across.
+    expect(maskFeatherPx(1280)).toBe(3);
+    expect(blur?.args[0]).toBe(`blur(${maskFeatherPx(1280) / grid.scale}px)`);
   });
 
   /**
@@ -428,7 +429,42 @@ describe("nothing raises coverage inside an enclosed gap", () => {
 });
 
 describe("growth over headwear", () => {
+  /**
+   * The bottom of the band headwear measures in: a cap, a headwrap or a helmet
+   * scores 0.20 to 0.34 (see MASK_SMOOTHING_UNCERTAIN and CONFIDENCE_PERSON in
+   * backgrounds.ts). FAINT, 0.13, was chosen above for the gap-quieting tests'
+   * arithmetic and is not a headwear value.
+   */
+  const HEADWEAR = 0.20;
+
   it("fills an uncertain band above a solid body", () => {
+    const rec = recorder();
+    const c = MaskCompositor.create(rec.factory, 1280, 720)!;
+    const grid = c.grid;
+    const band = [40, 44] as const;
+    const body = 45;
+    const column = 200;
+    c.compose(frame(1280, 720), confidenceAt(grid.width, grid.height, (x, y) => {
+      if (x < column || x > column + 40) return 0;
+      if (y >= body && y <= body + 40) return SOLID;
+      if (y >= band[0] && y <= band[1]) return HEADWEAR;
+      return 0;
+    }));
+
+    const alpha = rec.masks.at(-1)!;
+    expect(alpha[band[1] * grid.width + column + 20]).toBe(255);
+  });
+
+  /**
+   * And a band fainter than headwear ever measures is raised, not filled. This
+   * used to come out at full, and not because of growth: the five-cell band was
+   * thick enough for the structure pass to call it a chair, and the same pass
+   * was hardening the model's soft boundary into the finger-wide halo. Growth
+   * alone may take a cell to twice what the model gave it (GROWTH_HEADROOM),
+   * which at 0.13 is well above the midpoint after the sharpen and well short
+   * of solid -- faint stays faint, as the room beside a shoulder must.
+   */
+  it("raises a band fainter than headwear without filling it", () => {
     const rec = recorder();
     const c = MaskCompositor.create(rec.factory, 1280, 720)!;
     const grid = c.grid;
@@ -443,7 +479,11 @@ describe("growth over headwear", () => {
     }));
 
     const alpha = rec.masks.at(-1)!;
-    expect(alpha[band[1] * grid.width + column + 20]).toBe(255);
+    const cell = alpha[band[1] * grid.width + column + 20];
+    // What the ramp alone would leave after the sharpen, and what growth adds.
+    const unaided = (coverageFromConfidence(FAINT) - 127.5) * 2 + 127.5;
+    expect(cell).toBeGreaterThan(unaided);
+    expect(cell).toBeLessThan(255);
   });
 
   /**
