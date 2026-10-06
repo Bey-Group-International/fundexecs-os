@@ -1348,7 +1348,7 @@ export function CopilotSidebar({
   const chatBottomRef = useRef<HTMLDivElement>(null);
   const [emailInput, setEmailInput] = useState("");
   const [emailSending, setEmailSending] = useState(false);
-  const [emailSent, setEmailSent] = useState(false);
+  const [emailNote, setEmailNote] = useState<"sent" | "failed" | null>(null);
 
   useEffect(() => { if (tab === "chat") chatBottomRef.current?.scrollIntoView({ behavior: "smooth" }); }, [chatMessages, tab]);
   // Reported both ways round. Reporting only "the chat is open" is what let
@@ -1388,17 +1388,33 @@ export function CopilotSidebar({
     const emails = emailInput.split(/[\s,;]+/).map((e) => e.trim()).filter((e) => e.includes("@"));
     if (emails.length === 0) return;
     setEmailSending(true);
-    const res = await fetch("/api/meetings/invite", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ roomCode, emails, meetingTitle }),
-    });
-    setEmailSending(false);
-    if (res.ok) {
-      setEmailSent(true);
-      setEmailInput("");
+    setEmailNote(null);
+    // The fetch must not be allowed to throw out of here: the callers are
+    // `void sendEmailInvites()`, so a rejected request — offline, connection
+    // dropped mid-call — skipped everything below and left the button stuck
+    // on "…" for the rest of the meeting.
+    let ok = false;
+    try {
+      const res = await fetch("/api/meetings/invite", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ roomCode, emails, meetingTitle }),
+      });
+      ok = res.ok;
+    } catch {
+      // Reported below with the HTTP failures; there is nothing else in `res`
+      // this box would say differently.
     }
-    setTimeout(() => setEmailSent(false), 3000);
+    setEmailSending(false);
+    setEmailNote(ok ? "sent" : "failed");
+    if (ok) {
+      // Success clears the field and is a receipt, so it withdraws itself. A
+      // failure keeps the addresses — they are what to try again with — and
+      // stays up until the next attempt: a button that quietly went back to
+      // "Send" read as sent.
+      setEmailInput("");
+      setTimeout(() => setEmailNote(null), 3000);
+    }
   };
 
   return (
@@ -1532,9 +1548,14 @@ export function CopilotSidebar({
                   disabled={!emailInput.trim() || emailSending}
                   className="rounded-lg bg-[var(--surface-2)] border border-[var(--line)] text-[var(--fg-secondary)] hover:text-[var(--fg-primary)] text-xs px-2.5 py-1.5 transition-colors disabled:opacity-40"
                 >
-                  {emailSent ? "Sent!" : emailSending ? "…" : "Send"}
+                  {emailNote === "sent" ? "Sent!" : emailSending ? "…" : emailNote === "failed" ? "Retry" : "Send"}
                 </button>
               </div>
+              {emailNote === "failed" && (
+                <p role="alert" className="text-[11px] text-[var(--status-danger)]">
+                  Couldn&apos;t send the invites — check your connection and try again.
+                </p>
+              )}
               <p className="text-[11px] text-[var(--fg-muted)]">Guests can join without an account</p>
             </div>
 

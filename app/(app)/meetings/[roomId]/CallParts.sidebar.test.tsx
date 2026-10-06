@@ -313,3 +313,49 @@ describe("the data-room tab", () => {
     expect(fetchMock).toHaveBeenCalledWith("/api/meetings/m1/documents", { cache: "no-store" });
   });
 });
+
+describe("the email invite box", () => {
+  // A network failure is the case that mattered: the send is `void`ed by its
+  // callers, so a rejected fetch used to escape as an unhandled rejection
+  // after skipping the state reset — the button then showed "…" , disabled,
+  // for the rest of the call. The HTTP-error case rode along: it reset the
+  // button but said nothing, and a Send that quietly comes back reads as sent.
+  const realFetch = global.fetch;
+  afterEach(() => { global.fetch = realFetch; });
+
+  async function typeAndSend() {
+    render(<CopilotSidebar {...props()} />);
+    await userEvent.click(screen.getByRole("button", { name: /People/ }));
+    await userEvent.type(screen.getByPlaceholderText("Email addresses, comma separated"), "a@fund.example");
+    await userEvent.click(screen.getByRole("button", { name: "Send" }));
+  }
+
+  it("comes back from a request the network refused, and says so", async () => {
+    global.fetch = jest.fn(async () => { throw new TypeError("Failed to fetch"); }) as unknown as typeof fetch;
+
+    await typeAndSend();
+
+    // The failure is said, the button is pressable again, and the addresses
+    // are kept for the retry.
+    expect(await screen.findByRole("alert")).toHaveTextContent(/try again/i);
+    const retry = screen.getByRole("button", { name: "Retry" });
+    expect(retry).toBeEnabled();
+    expect(screen.getByPlaceholderText("Email addresses, comma separated")).toHaveValue("a@fund.example");
+
+    // And the retry can still succeed.
+    global.fetch = jest.fn(async () => ({ ok: true }) as Response) as unknown as typeof fetch;
+    await userEvent.click(retry);
+    expect(await screen.findByRole("button", { name: "Sent!" })).toBeInTheDocument();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(screen.getByPlaceholderText("Email addresses, comma separated")).toHaveValue("");
+  });
+
+  it("reports a send the server refused", async () => {
+    global.fetch = jest.fn(async () => ({ ok: false, status: 429 }) as Response) as unknown as typeof fetch;
+
+    await typeAndSend();
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(/couldn.t send/i);
+    expect(screen.getByRole("button", { name: "Retry" })).toBeEnabled();
+  });
+});
