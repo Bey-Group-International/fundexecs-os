@@ -138,19 +138,32 @@ export function FloatingMenu({
       // flip below when there isn't room, and cap height so it always fits.
       const spaceAbove = a.top - gap - margin;
       const spaceBelow = vh - a.bottom - gap - margin;
-      let top: number;
+      // Anchored by the edge that touches the anchor, not by `top` in both
+      // directions. A menu above the bar is pinned by its BOTTOM, so whatever
+      // arrives in it later grows upward, away from the bar.
+      //
+      // That is not a nicety. The background picker's body lands after the menu
+      // opens — its chunk is loaded dynamically and its saved images come from
+      // IndexedDB — so the panel measured here is nearly empty. Pinning `top`
+      // from that height put the panel's top 106px above the bar and let the real
+      // content grow DOWNWARDS from it: measured in Chromium at 900x700, the
+      // panel's bottom went from 650 to 1162, eight of nine options ended up
+      // below the bar and seven of them off the screen entirely. Pinned by the
+      // bottom edge there is no height to get wrong.
+      let top: number | undefined;
+      let bottom: number | undefined;
       let maxHeight: number;
       if (ph <= spaceAbove || spaceAbove >= spaceBelow) {
         maxHeight = spaceAbove;
-        top = a.top - gap - Math.min(ph, maxHeight);
+        bottom = Math.max(margin, vh - a.top + gap);
       } else {
         maxHeight = spaceBelow;
-        top = a.bottom + gap;
+        top = Math.max(margin, a.bottom + gap);
       }
       setStyle({
         position: "fixed",
         left,
-        top: Math.max(margin, top),
+        ...(bottom === undefined ? { top } : { bottom }),
         maxWidth,
         maxHeight: Math.max(120, maxHeight),
         visibility: "visible",
@@ -159,9 +172,18 @@ export function FloatingMenu({
     reposition();
     window.addEventListener("resize", reposition);
     window.addEventListener("scroll", reposition, true);
+    // The panel's own size is the other thing that moves, and the window tells us
+    // nothing about it. Content that lands after the menu opens changes which
+    // side it should be on and how tall it may be — a menu that opened downward
+    // because it was empty at the time has to flip once it is full. Guarded
+    // because jsdom has no ResizeObserver: the decision above still holds without
+    // one, this only keeps it current.
+    const ro = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(reposition);
+    if (ro && panelRef.current) ro.observe(panelRef.current);
     return () => {
       window.removeEventListener("resize", reposition);
       window.removeEventListener("scroll", reposition, true);
+      ro?.disconnect();
     };
   }, [open, anchorRef]);
 
