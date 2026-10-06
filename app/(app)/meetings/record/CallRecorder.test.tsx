@@ -103,7 +103,8 @@ function setup(opts: { routeTitle?: string | undefined } = {}) {
  */
 function installSpeechRecognition() {
   let onresult: ((ev: unknown) => void) | null = null;
-  const settled: string[] = [];
+  const settled: Array<{ text: string; confidence: number }> = [];
+  const instances: Array<{ lang: string }> = [];
 
   class FakeRecognition {
     continuous = false;
@@ -111,6 +112,7 @@ function installSpeechRecognition() {
     lang = "";
     onend: (() => void) | null = null;
     onerror: ((ev: unknown) => void) | null = null;
+    constructor() { instances.push(this); }
     set onresult(fn: (ev: unknown) => void) { onresult = fn; }
     get onresult() { return onresult as (ev: unknown) => void; }
     start() {}
@@ -121,16 +123,18 @@ function installSpeechRecognition() {
   /** Emit a results list the way the browser does: everything so far, growing. */
   const emit = (interim: string | null) => {
     const results: Array<{ isFinal: boolean; 0: { transcript: string; confidence: number } }> =
-      settled.map((text) => ({ isFinal: true, 0: { transcript: text, confidence: 0.9 } }));
+      settled.map((s) => ({ isFinal: true, 0: { transcript: s.text, confidence: s.confidence } }));
     if (interim !== null) results.push({ isFinal: false, 0: { transcript: interim, confidence: 0 } });
     onresult?.({ resultIndex: results.length - 1, results });
   };
 
   return {
-    /** A sentence the recogniser has settled on. */
-    say(text: string) { settled.push(text); emit(null); },
+    /** A sentence the recogniser has settled on, with the engine's score for it. */
+    say(text: string, confidence = 0.9) { settled.push({ text, confidence }); emit(null); },
     /** Words still being revised. */
     hear(text: string) { emit(text); },
+    /** Every recogniser the screen constructed, for asserting what it was told. */
+    instances,
   };
 }
 
@@ -301,5 +305,48 @@ describe("the transcript", () => {
     expect(flush).toHaveLength(1);
     const lines = flush[0].body.lines as Array<{ text: string }>;
     expect(lines.map((l) => l.text)).toEqual(["First sentence."]);
+  });
+
+  // The engine's score is read the way the room reads it (recognition-quality):
+  // 0 and absent both mean "not scored", not "certainly noise". Stored raw, an
+  // unscoring engine's 0 sat below MODEL_CONFIDENCE_FLOOR on every row, so the
+  // archive rendered the whole call as "uncertain — not recognised reliably"
+  // and the regenerated report was told to read none of it.
+  it("stores an unscored final as unknown confidence, and a scored one as its score", async () => {
+    setup({ routeTitle: ROUTE_TITLE });
+    const speech = installSpeechRecognition();
+    await startRecording();
+    await act(async () => { speech.say("The valuation came in at forty.", 0); });
+    await act(async () => { speech.say("We agreed to revisit it in March.", 0.72); });
+
+    await act(async () => {
+      jest.advanceTimersByTime(FLUSH_INTERVAL_MS);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    const flush = calls.filter((c) => c.url.endsWith("/transcript"));
+    expect(flush).toHaveLength(1);
+    const lines = flush[0].body.lines as Array<{ text: string; confidence: number }>;
+    expect(lines.map((l) => l.confidence)).toEqual([1, 0.72]);
+  });
+
+  // The language the engine is told decides whether it hears speech or produces
+  // fluent nonsense in the wrong tongue. en-US was hard-coded here after the
+  // meeting room had already moved to the browser's own language.
+  it("tells the recogniser the browser's language, not en-US for everyone", async () => {
+    const realLanguage = Object.getOwnPropertyDescriptor(Navigator.prototype, "language");
+    Object.defineProperty(navigator, "language", { value: "es-ES", configurable: true });
+    try {
+      setup({ routeTitle: ROUTE_TITLE });
+      const speech = installSpeechRecognition();
+      await startRecording();
+      expect(speech.instances.length).toBeGreaterThan(0);
+      expect(speech.instances[0].lang).toBe("es-ES");
+    } finally {
+      // jsdom defines language on the prototype; the instance override is ours.
+      delete (navigator as unknown as Record<string, unknown>).language;
+      if (realLanguage) Object.defineProperty(Navigator.prototype, "language", realLanguage);
+    }
   });
 });
