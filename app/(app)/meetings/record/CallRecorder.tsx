@@ -31,6 +31,7 @@ import {
   transcriptRows,
   type BufferableLine,
 } from "@/lib/meetings/transcript-buffer";
+import { engineConfidence, recognitionLang } from "@/lib/meetings/recognition-quality";
 
 // Recording a phone call.
 //
@@ -216,7 +217,11 @@ export function CallRecorder({
     const recognition = new SR();
     recognition.continuous = true;
     recognition.interimResults = true;
-    recognition.lang = "en-US";
+    // The browser's language, exactly as the meeting room asks for it. This
+    // was hard-coded to en-US — the fault recognition-quality.ts exists to
+    // prevent — so a call taken in Spanish was transcribed as fluent English
+    // nonsense, and the report was a summary of words nobody said.
+    recognition.lang = recognitionLang(typeof navigator !== "undefined" ? navigator.language : null);
     let stopped = false;
     let startedAt = 0;
     let restartTimer: ReturnType<typeof setTimeout> | null = null;
@@ -255,7 +260,12 @@ export function CallRecorder({
           ts: Date.now(),
           final: true,
           isLocal: true,
-          confidence: typeof result[0]?.confidence === "number" ? result[0].confidence : 1,
+          // Through the same reading the room gives the engine's score: 0 and
+          // absent both mean "not scored", not "certainly noise". Stored raw,
+          // an unscoring engine's 0 put every line of a real call under the
+          // model floor — the archive marked the whole transcript "uncertain —
+          // not recognised reliably" and the regenerated report read none of it.
+          confidence: engineConfidence(result[0]) ?? 1,
           // Nobody to speak over. A one-way call has one microphone.
           overlapped: false,
         }];
