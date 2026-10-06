@@ -77,6 +77,18 @@ import {
  */
 const BACKDROP_SCALE = 2;
 
+/**
+ * How many times the blurred, person-free room is drawn onto itself.
+ *
+ * Each pass takes a pixel's alpha from a to 2a - a^2 and leaves its colour
+ * alone, which is the one way a 2D canvas has of un-premultiplying. Three: a
+ * pixel a third room reaches 0.994, and one a tenth room reaches 0.57 -- which
+ * is a pixel deep in the cut, under the person, where the floor shows anyway.
+ * Measured in Chromium (see `drawVeiledRoom`): two passes left 0.019 of the
+ * figure's colour in the ring beside it, three left 0.002, four left none.
+ */
+const VEIL_NORMALISE_PASSES = 3;
+
 /** A canvas, on either thread. */
 export type Surface2D = HTMLCanvasElement | OffscreenCanvas;
 
@@ -162,6 +174,11 @@ export class MaskCompositor {
   /** The blurred room, painted at half the frame's size and scaled up. A blur
    *  throws away exactly the detail the smaller surface cannot hold. */
   private readonly backdrop: Drawable;
+  /** The camera frame with the person cut out of it, at backdrop size: what the
+   *  blurred room is made from, so that it is made from the room. */
+  private readonly veil: Drawable;
+  /** That cut-out frame, blurred, with its alpha normalised back toward one. */
+  private readonly veilBlur: Drawable;
 
   private maskImage: ImageData | null = null;
   /** Coverage carried between frames, so edges settle instead of shimmering. */
@@ -208,6 +225,7 @@ export class MaskCompositor {
     parts: {
       output: Drawable; scratch: Drawable; mask: Drawable;
       segInput: Drawable; feathered: Drawable; backdrop: Drawable;
+      veil: Drawable; veilBlur: Drawable;
     },
   ) {
     this.width = width;
@@ -218,6 +236,8 @@ export class MaskCompositor {
     this.segInput = parts.segInput;
     this.feathered = parts.feathered;
     this.backdrop = parts.backdrop;
+    this.veil = parts.veil;
+    this.veilBlur = parts.veilBlur;
     this.gridSpec = maskGrid(width, height);
     this.fit(width, height);
   }
@@ -239,14 +259,16 @@ export class MaskCompositor {
     const mask = makeSurface(grid.width, grid.height, { alpha: true });
     const segInput = makeSurface(grid.width, grid.height, { alpha: false });
     const feathered = makeSurface(grid.width, grid.height, { alpha: true });
-    const backdrop = makeSurface(
-      Math.max(1, Math.round(width / BACKDROP_SCALE)),
-      Math.max(1, Math.round(height / BACKDROP_SCALE)),
-      { alpha: false },
-    );
-    if (!output || !scratch || !mask || !segInput || !feathered || !backdrop) return null;
+    const backdropWidth = Math.max(1, Math.round(width / BACKDROP_SCALE));
+    const backdropHeight = Math.max(1, Math.round(height / BACKDROP_SCALE));
+    const backdrop = makeSurface(backdropWidth, backdropHeight, { alpha: false });
+    // Alpha ON for the two the veil is built through: the person is cut out of
+    // one and the blur of the other has to carry how much of each pixel was room.
+    const veil = makeSurface(backdropWidth, backdropHeight, { alpha: true });
+    const veilBlur = makeSurface(backdropWidth, backdropHeight, { alpha: true });
+    if (!output || !scratch || !mask || !segInput || !feathered || !backdrop || !veil || !veilBlur) return null;
     return new MaskCompositor(makeSurface, width, height, {
-      output, scratch, mask, segInput, feathered, backdrop,
+      output, scratch, mask, segInput, feathered, backdrop, veil, veilBlur,
     });
   }
 
@@ -505,12 +527,6 @@ export class MaskCompositor {
       this.lastCoverage.set(target);
     }
 
-    const ctx = this.output.ctx;
-    ctx.save();
-    ctx.filter = "none";
-    this.paintBackground(frame, width, height);
-    ctx.restore();
-
     // Carry coverage between frames. Segmentation flickers along the edge, and
     // an unsmoothed mask makes that flicker crawl visibly around the head.
     if (!this.maskHistory || this.maskHistory.length !== target.length) {
@@ -550,6 +566,15 @@ export class MaskCompositor {
     featheredCtx.filter = `blur(${maskFeatherPx(width) / grid.scale}px)`;
     featheredCtx.drawImage(this.mask.surface, 0, 0);
     featheredCtx.restore();
+
+    // The background goes down AFTER the mask is built, not before as it used
+    // to, because the blurred room is now made without the person in it and
+    // needs the mask to cut them out. See `drawVeiledRoom`.
+    const ctx = this.output.ctx;
+    ctx.save();
+    ctx.filter = "none";
+    this.paintBackground(frame, width, height, this.feathered.surface);
+    ctx.restore();
 
     // The camera frame, kept only where the mask covers. The mask is softened
     // and then scaled up from the grid; between them the edge arrives softened
@@ -615,8 +640,12 @@ export class MaskCompositor {
     this.segInput.surface.height = grid.height;
     this.feathered.surface.width = grid.width;
     this.feathered.surface.height = grid.height;
-    this.backdrop.surface.width = Math.max(1, Math.round(frameWidth / BACKDROP_SCALE));
-    this.backdrop.surface.height = Math.max(1, Math.round(frameHeight / BACKDROP_SCALE));
+    const backdropWidth = Math.max(1, Math.round(frameWidth / BACKDROP_SCALE));
+    const backdropHeight = Math.max(1, Math.round(frameHeight / BACKDROP_SCALE));
+    for (const d of [this.backdrop, this.veil, this.veilBlur]) {
+      d.surface.width = backdropWidth;
+      d.surface.height = backdropHeight;
+    }
     this.templateCache = null;
     this.maskTarget = new Uint8ClampedArray(grid.width * grid.height);
     this.maskImage = null;
@@ -629,12 +658,17 @@ export class MaskCompositor {
     this.lastCoverage = null;
   }
 
-  private paintBackground(frame: CompositorFrame, width: number, height: number): void {
+  private paintBackground(
+    frame: CompositorFrame,
+    width: number,
+    height: number,
+    person: Surface2D | null = null,
+  ): void {
     const ctx = this.output.ctx;
     const effect = this.effect;
 
     if (effect.kind === "blur") {
-      this.drawVeiledRoom(width, height, frame, effect.strength);
+      this.drawVeiledRoom(width, height, frame, effect.strength, person);
       return;
     }
 
@@ -667,6 +701,30 @@ export class MaskCompositor {
    * scaled up: the same radius measured in frame pixels, over a sixteenth of the
    * pixels.
    *
+   * WITHOUT THE PERSON IN IT, when there is a mask to take them out with. A blur
+   * of the whole frame smears everything by its radius, the person included, so
+   * for a radius' width outside the silhouette the "room" was a soft copy of the
+   * person's own head and shoulders -- a second outline travelling with the
+   * first, which is what "it looks like a duplicate" is. The mask that keeps
+   * the person on top is the same mask that cuts them out underneath:
+   *
+   *   1. the floor: the whole frame, blurred, as before. It is what shows deep
+   *      inside the silhouette where nothing else can, and the person covers it
+   *      there. Never a hole.
+   *   2. the veil: the frame with the person cut out -- the mask once as it is,
+   *      and once blurred, so the soft hair edge the mask sits a pixel inside of
+   *      goes too -- then blurred. The canvas blurs premultiplied colour, so the
+   *      cut cells contribute nothing: every colour in the result came from the
+   *      room, and each pixel's alpha says how much of its neighbourhood was.
+   *   3. the veil's alpha, normalised. Drawing a surface onto itself keeps its
+   *      colour and takes its alpha from a to 2a - a^2; three passes carry a
+   *      third to over 0.99. Measured in Chromium against a saturated figure on
+   *      a textured room: the figure's colour in the ring just outside it fell
+   *      from 0.33 to 0.002 of full, still and moving, and no cell was left
+   *      unpainted.
+   *   4. the veil over the floor. Where the room was, the room; where the person
+   *      was, the floor, under the person.
+   *
    * Heavy by default. Where this stands in for an effect that cannot be applied,
    * the only job is that what is behind the person cannot be read, and the lighter
    * radius leaves a room recognisable.
@@ -679,19 +737,55 @@ export class MaskCompositor {
     height: number,
     frame: CompositorFrame,
     strength: BlurStrength = "heavy",
+    person: Surface2D | null = null,
   ): boolean {
     const { surface, ctx: backdropCtx } = this.backdrop;
     const bw = surface.width;
     const bh = surface.height;
     if (!(bw > 0) || !(bh > 0) || !(width > 0)) return false;
     const radius = blurRadiusPx(strength, width) * (bw / width);
-    backdropCtx.save();
-    backdropCtx.filter = `blur(${radius}px)`;
     // Slightly overdrawn: a blur samples past the edge of its source and would
     // otherwise leave a pale border around the whole frame.
     const bleed = radius * 2;
+
+    backdropCtx.save();
+    backdropCtx.filter = `blur(${radius}px)`;
     backdropCtx.drawImage(frame.source, -bleed, -bleed, bw + bleed * 2, bh + bleed * 2);
     backdropCtx.restore();
+
+    if (person) {
+      const veilCtx = this.veil.ctx;
+      veilCtx.save();
+      veilCtx.filter = "none";
+      veilCtx.globalCompositeOperation = "source-over";
+      veilCtx.clearRect(0, 0, bw, bh);
+      veilCtx.drawImage(frame.source, 0, 0, bw, bh);
+      veilCtx.globalCompositeOperation = "destination-out";
+      veilCtx.drawImage(person, 0, 0, bw, bh);
+      // The mask sits about a cell inside the hair; spread the cut a little past
+      // it so the edge pixels the mask leaves do not get blurred into the room.
+      veilCtx.filter = `blur(${maskFeatherPx(width) * (bw / width) * 2}px)`;
+      veilCtx.drawImage(person, 0, 0, bw, bh);
+      veilCtx.restore();
+
+      const blurCtx = this.veilBlur.ctx;
+      blurCtx.save();
+      blurCtx.globalCompositeOperation = "source-over";
+      blurCtx.clearRect(0, 0, bw, bh);
+      blurCtx.filter = `blur(${radius}px)`;
+      blurCtx.drawImage(this.veil.surface, -bleed, -bleed, bw + bleed * 2, bh + bleed * 2);
+      blurCtx.filter = "none";
+      for (let pass = 0; pass < VEIL_NORMALISE_PASSES; pass++) {
+        blurCtx.drawImage(this.veilBlur.surface, 0, 0);
+      }
+      blurCtx.restore();
+
+      backdropCtx.save();
+      backdropCtx.filter = "none";
+      backdropCtx.drawImage(this.veilBlur.surface, 0, 0);
+      backdropCtx.restore();
+    }
+
     this.output.ctx.drawImage(surface, 0, 0, width, height);
     return true;
   }

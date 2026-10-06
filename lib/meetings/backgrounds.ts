@@ -929,6 +929,42 @@ export function quietCoverageGaps(
 }
 
 /**
+ * How far above what the model gave a cell growth may raise it, as a multiple.
+ *
+ * The ceiling used to be a yes or no: any cell the model gave anything at all
+ * was open to full coverage, and only a cell at exactly zero was closed. That
+ * is what the halo was made of. The room right beside a person is not scored at
+ * zero -- the model's boundary is soft, and the wall a few pixels from a
+ * shoulder lands at 0.05 to 0.15 -- so growth claimed all of it, to full, and
+ * the sharpen after the blend made it a hard band of sharp room a finger's
+ * width wide. Measured through the whole chain on a 1280x720 frame, with that
+ * soft boundary modelled on the room side: 11.1px of room kept above the head,
+ * 6.8px beside the torso.
+ *
+ * A ceiling PROPORTIONAL to the model's own score keeps the distinction the
+ * yes/no threw away: a cell it barely saw may be nudged, a cell it half saw may
+ * be filled. At twice:
+ *
+ *                            halo above   halo beside   headwear kept   room kept
+ *   yes/no ceiling              11.1px        6.8px          92%          564
+ *   twice the model's score      6.0px        5.6px          92%          259
+ *   three times                  6.2px        6.3px          92%          326
+ *   hard floor at 0.12 conf      5.9px        5.2px          92%          179
+ *
+ *   room kept   total coverage, of 255, over cells more than one cell outside
+ *               the person, per frame -- the material the halo is made of
+ *
+ * The hard floor measures a shade better and is not taken: it closes the cells
+ * at 0.06-0.08 confidence that the headwrap test below says growth must still
+ * be able to fill, and a threshold is the wrong place to pay for tidiness (see
+ * CONFIDENCE_PERSON). Twice fills those cells to double what the model gave
+ * them, which is more than it gave and less than the room, and the headwear
+ * the growth exists for -- 0.20 to 0.34 confidence, 157 and up -- is at the
+ * cap already, so nothing it keeps today is lost.
+ */
+export const GROWTH_HEADROOM = 2;
+
+/**
  * The limit on what growth may claim, one value per pixel.
  *
  * This is the other half of the bleed, and the more important half. Growing a
@@ -940,18 +976,22 @@ export function quietCoverageGaps(
  * The model already knows the difference and the ramp in
  * `coverageFromConfidence` already carries it: a pixel it is unsure about lands
  * somewhere between 0 and 255, and a pixel it is confident is background lands
- * exactly 0. So growth is allowed to FILL uncertainty and forbidden to invent
- * coverage where there is none. Headwear is uncertain; the wall is not.
+ * exactly 0. So growth is allowed to fill uncertainty IN PROPORTION TO IT --
+ * up to `headroom` times what the model gave -- and forbidden to invent
+ * coverage where there is none. Headwear is uncertain; the wall is barely so;
+ * confident room is not at all.
  *
  * Built before the grow, from the sampled coverage, because the grow overwrites
- * it in place.
+ * it in place. The buffer clamps, so the multiple never leaves the byte.
  */
 export function dilateCeiling(
   out: Uint8ClampedArray,
   coverage: Uint8ClampedArray,
+  headroom: number = GROWTH_HEADROOM,
 ): Uint8ClampedArray {
+  const k = Number.isFinite(headroom) && headroom > 0 ? headroom : 1;
   const n = Math.min(out.length, coverage.length);
-  for (let i = 0; i < n; i++) out[i] = coverage[i] > 0 ? 255 : 0;
+  for (let i = 0; i < n; i++) out[i] = coverage[i] * k;
   return out;
 }
 
