@@ -807,3 +807,71 @@ describe("a hello that nobody answered", () => {
     expect(joinsSent()).toBe(settled);
   });
 });
+
+describe("a recogniser deaf to the call's microphone", () => {
+  /**
+   * The host this is for: an external mic or conference device carries the
+   * call, and the browser's speech engine ignored `start(track)` and is
+   * capturing the computer's DEFAULT microphone instead — a different, often
+   * silent device. The call, the meter and every peer hear the real mic, so
+   * nothing else on screen says why the transcript is empty or wrong.
+   */
+  function installDeafRecognition() {
+    const instances: Array<{
+      onstart: (() => void) | null;
+      onresult: ((ev: unknown) => void) | null;
+    }> = [];
+    class DeafRecognition {
+      continuous = false; interimResults = false; lang = "";
+      onstart: (() => void) | null = null;
+      onresult: ((ev: unknown) => void) | null = null;
+      onerror = null; onend = null; onspeechstart = null;
+      constructor() { instances.push(this); }
+      start() { this.onstart?.(); }
+      stop() {}
+    }
+    const w = window as unknown as { SpeechRecognition?: unknown };
+    const previous = w.SpeechRecognition;
+    w.SpeechRecognition = DeafRecognition;
+    return { instances, restore: () => { w.SpeechRecognition = previous; } };
+  }
+
+  const notice = () => screen.queryByText(/Transcription can.t hear you/);
+
+  it("says so after seconds of audible speech the engine never answered, and stands down when it does", async () => {
+    joinChoice.micEnabled = true;
+    const sr = installDeafRecognition();
+    try {
+      await enterCall();
+      expect(sr.instances.length).toBeGreaterThan(0);
+
+      // The member talks on the call's own microphone; the engine says nothing.
+      await talkFor(14_000, "audio-local");
+      expect(notice()).toBeInTheDocument();
+
+      // Anything back from the engine — even an empty event — is proof it
+      // hears the microphone, and the notice withdraws itself.
+      await act(async () => {
+        sr.instances[0].onresult?.({ resultIndex: 0, results: [] });
+        await Promise.resolve();
+      });
+      expect(notice()).not.toBeInTheDocument();
+    } finally { sr.restore(); }
+  });
+
+  it("stays quiet for an engine that keeps answering", async () => {
+    joinChoice.micEnabled = true;
+    const sr = installDeafRecognition();
+    try {
+      await enterCall();
+      for (let i = 0; i < 5; i++) {
+        await talkFor(3_000, "audio-local");
+        await act(async () => {
+          sr.instances[0].onresult?.({ resultIndex: 0, results: [] });
+          await Promise.resolve();
+        });
+      }
+      expect(notice()).not.toBeInTheDocument();
+    } finally { sr.restore(); }
+  });
+});

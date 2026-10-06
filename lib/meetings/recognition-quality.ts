@@ -90,6 +90,78 @@ export function isNoisy(window: readonly number[]): boolean {
   return mean < NOISE_THRESHOLD;
 }
 
+/** Accumulated speech, with nothing back from the engine, before the alarm. */
+export const DEAF_SPEECH_MS = 12_000;
+
+/**
+ * The deaf-recogniser watch: is transcription hearing a different microphone?
+ *
+ * The Web Speech API has no way to be pointed at a device on most engines. The
+ * room passes the call's own track to `start(track)`, but an engine that does
+ * not take the argument ignores it without a word and captures the COMPUTER'S
+ * DEFAULT microphone instead. A host on an external mic or conference device —
+ * exactly the host who cares about the transcript — then has the whole call
+ * transcribed from a laptop mic across the room (wrong words) or from a silent
+ * endpoint (no words at all), and nothing anywhere said why: the room, the
+ * meter and the other participants all hear the real microphone.
+ *
+ * The one signal the client does have is the disagreement itself: the voice
+ * meter runs on the call's track, so when it has seen the member audibly
+ * speaking for many seconds while an active recogniser has produced nothing —
+ * not a final, not an interim, not a speechstart — the engine is not hearing
+ * that microphone. Twelve seconds of actual speech is decisive: an engine on
+ * the right device answers with an interim within a second or two.
+ *
+ * Mutating, like the echo and voice-return watches: one object per call,
+ * touched on every meter tick.
+ */
+export interface DeafWatch {
+  /** Milliseconds of the member audibly speaking since the engine last answered. */
+  spokenMs: number;
+  /** The alarm is up. It re-raises only after the engine is heard from again. */
+  raised: boolean;
+}
+
+export function createDeafWatch(): DeafWatch {
+  return { spokenMs: 0, raised: false };
+}
+
+/**
+ * One meter tick. Returns true exactly once, on the tick that raises the alarm.
+ *
+ * `speaking` must already account for mute: a muted member's silence is not
+ * evidence about the engine, and nor is an ordinary pause — only time spent
+ * audibly talking counts toward the threshold.
+ */
+export function observeDeafTick(
+  watch: DeafWatch,
+  tick: { active: boolean; speaking: boolean; tickMs: number },
+): boolean {
+  if (!tick.active) {
+    // Not listening (unsupported, errored, torn down): nothing to accuse.
+    watch.spokenMs = 0;
+    return false;
+  }
+  if (!tick.speaking) return false;
+  watch.spokenMs += tick.tickMs;
+  if (!watch.raised && watch.spokenMs >= DEAF_SPEECH_MS) {
+    watch.raised = true;
+    return true;
+  }
+  return false;
+}
+
+/**
+ * The engine produced something — a result event or a speechstart. Returns
+ * true when this clears a raised alarm, so the notice can withdraw itself.
+ */
+export function recognizerHeard(watch: DeafWatch): boolean {
+  watch.spokenMs = 0;
+  if (!watch.raised) return false;
+  watch.raised = false;
+  return true;
+}
+
 /** A run shorter than this ended before it could have heard anything. */
 export const SHORT_RUN_MS = 1_000;
 /** The first pause after a short run; doubles each time, up to the cap. */

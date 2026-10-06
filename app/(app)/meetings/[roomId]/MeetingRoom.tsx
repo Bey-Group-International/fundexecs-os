@@ -89,7 +89,8 @@ import {
   transcriptRows,
 } from "@/lib/meetings/transcript-buffer";
 import {
-  engineConfidence, isNoisy, lineConfidence, pushEngineScore, recognitionLang, restartDelay,
+  createDeafWatch, engineConfidence, isNoisy, lineConfidence, observeDeafTick, pushEngineScore,
+  recognitionLang, recognizerHeard, restartDelay,
 } from "@/lib/meetings/recognition-quality";
 import { recordingNotice, type RecordingState } from "@/lib/meetings/recording-policy";
 import {
@@ -828,6 +829,11 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
   // a headset on the wrong input, a loudspeaker feeding back. Shown while the
   // meeting is still going, which is the only time it can be fixed.
   const [srNoisy, setSrNoisy] = useState(false);
+  // Whether an active recogniser has heard NOTHING through many seconds of the
+  // member audibly speaking -- an engine that ignored `start(track)` and is
+  // capturing a different microphone than the call's. See DeafWatch.
+  const deafWatchRef = useRef(createDeafWatch());
+  const [srDeaf, setSrDeaf] = useState(false);
 
   // Chat
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
@@ -3532,9 +3538,15 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     };
     // Some engines fire speechstart; where they don't, the first interim result
     // opens the window instead.
-    recognition.onspeechstart = () => { utteranceStartRef.current = Date.now(); };
+    recognition.onspeechstart = () => {
+      utteranceStartRef.current = Date.now();
+      if (recognizerHeard(deafWatchRef.current)) setSrDeaf(false);
+    };
 
     recognition.onresult = (ev: any) => {
+      // Anything back from the engine — a final, an interim, even an empty
+      // event — is proof it hears the microphone; the deaf alarm stands down.
+      if (recognizerHeard(deafWatchRef.current)) setSrDeaf(false);
       let interim = ""; let finalText = "";
       // The engine's score for what settled in this event: the lowest of the
       // finals it holds, because one garbled clause makes the sentence unsure.
@@ -3716,6 +3728,8 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
       engineScoresRef.current = [];
       srNoisyRef.current = false;
       setSrNoisy(false);
+      deafWatchRef.current = createDeafWatch();
+      setSrDeaf(false);
     };
   }, [sessionLive]);
 
@@ -3804,6 +3818,16 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
         voiceLogRef.current.record(tap.id, level, now);
         if (level >= SPEAKING_LEVEL) lastAudibleRef.current.set(tap.id, now);
         if (level > loudest) { loudest = level; loudestId = tap.id; }
+
+        // The deaf-recogniser watch: the member audibly speaking on the CALL'S
+        // track, against whether the engine has answered at all. `level` is the
+        // right input — forced to zero under mute, so a muted member's room
+        // noise never accuses an engine of not hearing them.
+        if (tap.id === LOCAL_SPEAKER_ID && observeDeafTick(deafWatchRef.current, {
+          active: srStatusRef.current === "active",
+          speaking: level >= SPEAKING_LEVEL,
+          tickMs: VOICE_SAMPLE_MS,
+        })) setSrDeaf(true);
 
         // Echo detection rides along on the levels this loop already has. The
         // local tap's RAW smoothed level, not `level`: `level` is forced to
@@ -6151,6 +6175,21 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
         <span className="text-amber-500 mt-0.5 shrink-0">⚠</span>
         <p className="flex-1 text-sm text-amber-600 dark:text-amber-400">{mediaError}</p>
         <button onClick={() => setMediaError(null)} className="shrink-0 text-amber-500 hover:text-amber-600 text-xs font-medium underline">Dismiss</button>
+      </div>
+  ) });
+  // Transcription deaf to a live microphone. The one person this hits — a host
+  // on an external mic or conference device — is told the actual remedy: some
+  // engines ignore the track they are handed and transcribe the computer's
+  // DEFAULT microphone, so switching mics inside the call changes nothing.
+  if (srDeaf) stageNotices.push({ id: "sr-deaf", priority: 58, node: (
+      <div role="status" className="flex items-start gap-3 px-4 py-3 bg-amber-500/10 border-b border-amber-500/30 shrink-0">
+        <span className="text-amber-500 mt-0.5 shrink-0">⚠</span>
+        <p className="flex-1 text-sm text-amber-600 dark:text-amber-400">
+          Transcription can&apos;t hear you, though the call can. This browser transcribes from the computer&apos;s
+          default microphone — in your system&apos;s sound settings, make the microphone you&apos;re using the
+          default, and the transcript will pick you up.
+        </p>
+        <button onClick={() => setSrDeaf(false)} className="shrink-0 text-amber-500 hover:text-amber-600 text-xs font-medium underline">Dismiss</button>
       </div>
   ) });
   // Echo. Its own banner, not `mediaError`: see `echoNotice`.

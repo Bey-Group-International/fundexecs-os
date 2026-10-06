@@ -1,14 +1,19 @@
 import {
+  DEAF_SPEECH_MS,
   DEFAULT_RECOGNITION_LANG,
   NOISE_MIN_SAMPLES,
   NOISE_WINDOW,
   RESTART_MAX_MS,
+  createDeafWatch,
   engineConfidence,
   isNoisy,
   lineConfidence,
+  observeDeafTick,
   pushEngineScore,
   recognitionLang,
+  recognizerHeard,
   restartDelay,
+  type DeafWatch,
 } from "./recognition-quality";
 
 describe("recognitionLang", () => {
@@ -98,5 +103,66 @@ describe("restartDelay", () => {
 
   it("treats a run that never started as one that lasted", () => {
     expect(restartDelay({ startedAt: null, endedAt: 5, shortRuns: 2 })).toEqual({ delayMs: 0, shortRuns: 0 });
+  });
+});
+
+describe("the deaf-recogniser watch", () => {
+  const tick = (over: Partial<{ active: boolean; speaking: boolean; tickMs: number }> = {}) =>
+    ({ active: true, speaking: true, tickMs: 120, ...over });
+
+  /** Accumulate `ms` of audible speech against an active, silent engine. */
+  function speakFor(watch: DeafWatch, ms: number): boolean {
+    let raised = false;
+    for (let spent = 0; spent < ms; spent += 120) {
+      if (observeDeafTick(watch, tick())) raised = true;
+    }
+    return raised;
+  }
+
+  it("raises once after enough audible speech the engine never answered", () => {
+    const watch = createDeafWatch();
+    expect(speakFor(watch, DEAF_SPEECH_MS - 240)).toBe(false);
+    expect(speakFor(watch, 480)).toBe(true);
+    // Once. The notice must not re-post itself on every later tick.
+    expect(speakFor(watch, 5_000)).toBe(false);
+  });
+
+  it("counts only audible speech — pauses and mute are not evidence", () => {
+    const watch = createDeafWatch();
+    for (let i = 0; i < 1_000; i++) observeDeafTick(watch, tick({ speaking: false }));
+    expect(watch.spokenMs).toBe(0);
+    // Interleaved speech still accumulates across the pauses.
+    expect(speakFor(watch, DEAF_SPEECH_MS)).toBe(true);
+  });
+
+  it("accuses nothing while the recogniser is not active", () => {
+    const watch = createDeafWatch();
+    for (let i = 0; i < 200; i++) expect(observeDeafTick(watch, tick({ active: false }))).toBe(false);
+    // And an inactive stretch resets what speech had accumulated.
+    speakFor(watch, DEAF_SPEECH_MS - 120);
+    observeDeafTick(watch, tick({ active: false }));
+    expect(speakFor(watch, 240)).toBe(false);
+  });
+
+  it("stands down when the engine is heard from, and can raise again", () => {
+    const watch = createDeafWatch();
+    speakFor(watch, DEAF_SPEECH_MS);
+    expect(watch.raised).toBe(true);
+    expect(recognizerHeard(watch)).toBe(true);
+    expect(watch.raised).toBe(false);
+    // Hearing from it while nothing is raised clears nothing.
+    expect(recognizerHeard(watch)).toBe(false);
+    // A later silent stretch is a fresh episode.
+    expect(speakFor(watch, DEAF_SPEECH_MS)).toBe(true);
+  });
+
+  it("never raises while the engine keeps answering", () => {
+    const watch = createDeafWatch();
+    for (let i = 0; i < 500; i++) {
+      expect(observeDeafTick(watch, tick())).toBe(false);
+      // An interim arrives at least every few seconds while someone talks.
+      if (i % 20 === 19) recognizerHeard(watch);
+    }
+    expect(watch.raised).toBe(false);
   });
 });
