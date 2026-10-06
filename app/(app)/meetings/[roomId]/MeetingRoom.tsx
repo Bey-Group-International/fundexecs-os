@@ -2440,6 +2440,15 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
       localStreamRef.current?.getAudioTracks().forEach((t) => { t.enabled = false; });
       setMicOn(false);
       micOnRef.current = false;
+      // The standing intent too, exactly as toggleMic records it. reacquireMic
+      // puts a recovered microphone on the wire in whatever state this ref
+      // holds — so without this, the one participant whose device was flaky at
+      // join came back LIVE after the host had muted the room: their mic was
+      // recovered seconds later, read the intent they joined with, and
+      // broadcast micOn: true over a mute nobody had lifted. The member can
+      // still unmute themselves; that is toggleMic's decision to make, not a
+      // device's.
+      micIntentRef.current = false;
       sendSignalRef.current({ type: "mic", from: myId, micOn: false, displayName: localNameRef.current });
     }
 

@@ -665,6 +665,45 @@ describe("a member with no microphone", () => {
     await waitFor(() => expect(screen.queryByText(/Nobody can hear you/)).not.toBeInTheDocument());
     expect(micButton().getAttribute("title")).not.toBe("No microphone — retry");
   });
+
+  // A mute_all arriving while this member's microphone is still being looked
+  // for must also update the standing intent, because reacquireMic applies the
+  // intent to whatever device it recovers. Without that, the automatic
+  // recovery read the intent recorded at join and announced micOn: true a few
+  // seconds after the room had been told everyone was muted.
+  it("keeps a mute_all in force when the microphone is recovered later", async () => {
+    await enterCall();
+    expect(screen.getByText(/Nobody can hear you/)).toBeInTheDocument();
+
+    await act(async () => {
+      realtime.signal({ type: "mute_all", from: "peer-1" });
+      await Promise.resolve();
+    });
+
+    // The device comes back, and the automatic watcher (not a press) finds it.
+    const recovered = fakeTrack("audio");
+    Object.defineProperty(navigator, "mediaDevices", {
+      configurable: true,
+      value: {
+        getUserMedia: async () => fakeStream([recovered]),
+        getDisplayMedia: async () => fakeStream([fakeTrack("video")]),
+        enumerateDevices: async () => [],
+        addEventListener: () => {}, removeEventListener: () => {},
+      },
+    });
+    // Past the watcher's first few delays, so the recovery has happened.
+    await flush(10_000, 10);
+    await waitFor(() => expect(screen.queryByText(/Nobody can hear you/)).not.toBeInTheDocument());
+
+    // The recovered track is attached but held back, and nothing announced
+    // this member as audible after the mute.
+    expect(recovered.enabled).toBe(false);
+    const claims = sent.filter((m) => {
+      const payload = (m as { payload?: { type?: string; micOn?: boolean } }).payload;
+      return payload?.type === "mic" && payload.micOn === true;
+    });
+    expect(claims).toEqual([]);
+  });
 });
 
 describe("a member who simply muted themselves", () => {
