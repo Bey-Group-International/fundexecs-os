@@ -105,9 +105,46 @@ describe("a menu on a screen narrower than it wants to be", () => {
     render(<Harness minWidth={220} label="More" />);
 
     const panel = screen.getByRole("menu");
-    // The anchor's top is 584; a 200px panel opens above it and stays clear of
-    // the top margin.
-    expect(px(panel.style.top)).toBeGreaterThanOrEqual(8);
-    expect(px(panel.style.top)).toBeLessThan(584);
+    // Pinned by its BOTTOM edge, just above the anchor whose top is 584: 640 -
+    // 584 + 8 = 64 from the bottom of the window.
+    expect(px(panel.style.bottom)).toBe(64);
+    expect(panel.style.top).toBe("");
+  });
+
+  it("is anchored by the edge that touches the bar, so later content grows upward", () => {
+    // The whole point, and the thing a `top` could not give. The panel's body
+    // arrives after it opens — the background picker's chunk loads dynamically
+    // and its saved images come from IndexedDB — so the height measured at open
+    // is nearly nothing. Pinned by `top` from that height, everything that
+    // arrived afterwards grew DOWNWARD over the bar and off the screen; pinned by
+    // `bottom` there is no height to get wrong.
+    phone(320, 640);
+    panelWidth = 220;
+    render(<Harness minWidth={220} label="Background" />);
+
+    const panel = screen.getByRole("menu");
+    const pinned = px(panel.style.bottom);
+    // Ten times taller, same pin. jsdom runs no ResizeObserver, so this is the
+    // attachment itself being asserted rather than a re-measure rescuing it.
+    Object.defineProperty(HTMLElement.prototype, "scrollHeight", { configurable: true, get() { return 2000; } });
+    window.dispatchEvent(new Event("resize"));
+    expect(px(panel.style.bottom)).toBe(pinned);
+    expect(panel.style.top).toBe("");
+  });
+
+  it("opens downward from a bar at the TOP of the window, pinned by its top", () => {
+    // The other direction has to keep working: a menu whose anchor is at the top
+    // has no room above it, and pinning its bottom there would put it off-screen.
+    Object.defineProperty(window, "innerWidth", { configurable: true, value: 320 });
+    Object.defineProperty(window, "innerHeight", { configurable: true, value: 640 });
+    Element.prototype.getBoundingClientRect = function () {
+      return { left: 20, top: 16, right: 60, bottom: 56, width: 40, height: 40, x: 20, y: 16, toJSON: () => ({}) } as DOMRect;
+    };
+    panelWidth = 220;
+    render(<Harness minWidth={220} label="More" />);
+
+    const panel = screen.getByRole("menu");
+    expect(px(panel.style.top)).toBe(64);
+    expect(panel.style.bottom).toBe("");
   });
 });
