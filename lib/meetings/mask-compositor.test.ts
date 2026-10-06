@@ -20,7 +20,7 @@ import {
   type Drawable,
   type SurfaceFactory,
 } from "./mask-compositor";
-import { PERSON_LABEL, coverageFromConfidence, maskGrid } from "./backgrounds";
+import { PERSON_LABEL, coverageFromConfidence, maskFeatherPx, maskGrid } from "./backgrounds";
 
 /** One recorded context call, tagged with which surface it was made on. */
 interface Call {
@@ -41,14 +41,14 @@ interface Recorder {
 }
 
 /**
- * The six surfaces `create` builds, in the order it builds them.
+ * The eight surfaces `create` builds, in the order it builds them.
  *
  * Named here so the assertions below can say "the scratch surface" instead of
  * "s1", and pinned by its own test, so a reordering inside `create` fails loudly
  * rather than quietly re-pointing every other test in this file at the wrong
  * canvas.
  */
-const SURFACES = ["output", "scratch", "mask", "segInput", "feathered", "backdrop"] as const;
+const SURFACES = ["output", "scratch", "mask", "segInput", "feathered", "backdrop", "veil", "veilBlur"] as const;
 
 function recorder(): Recorder {
   const calls: Call[] = [];
@@ -166,6 +166,10 @@ describe("the surfaces the chain builds", () => {
     expect(rec.sizes.segInput).toEqual({ width: grid.width, height: grid.height, alpha: false });
     expect(rec.sizes.feathered).toEqual({ width: grid.width, height: grid.height, alpha: true });
     expect(rec.sizes.backdrop).toEqual({ width: 32, height: 24, alpha: false });
+    // The veil is built through alpha: the person is cut out of one surface and
+    // the other's blur has to carry how much of each pixel was room.
+    expect(rec.sizes.veil).toEqual({ width: 32, height: 24, alpha: true });
+    expect(rec.sizes.veilBlur).toEqual({ width: 32, height: 24, alpha: true });
   });
 
   /**
@@ -204,7 +208,7 @@ describe("the composite keeps the frame where the mask covers", () => {
 
     // And on the output: something that is not the camera, then the scratch.
     const output = rec.calls.filter((call) => call.surface === "output" && call.op === "drawImage");
-    expect(output.map((call) => call.args[0])).toEqual(["extra6", "scratch"]);
+    expect(output.map((call) => call.args[0])).toEqual(["extra8", "scratch"]);
   });
 
   it("softens the mask at grid size, by a distance measured in frame pixels", () => {
@@ -214,8 +218,9 @@ describe("the composite keeps the frame where the mask covers", () => {
     c.compose(frame(1280, 720), confidenceAt(grid.width, grid.height, () => SOLID));
 
     const blur = rec.calls.find((call) => call.surface === "feathered" && call.op === "filter");
-    // maskFeatherPx(1280) = 5 frame pixels, over a grid 2.66 frame pixels across.
-    expect(blur?.args[0]).toBe(`blur(${5 / grid.scale}px)`);
+    // maskFeatherPx(1280) frame pixels, over a grid 2.66 frame pixels across.
+    expect(maskFeatherPx(1280)).toBe(3);
+    expect(blur?.args[0]).toBe(`blur(${maskFeatherPx(1280) / grid.scale}px)`);
   });
 
   /**
@@ -237,8 +242,11 @@ describe("the composite keeps the frame where the mask covers", () => {
     c.setEffect({ kind: "blur", strength: "heavy" });
     c.passThrough(frame(64, 48));
 
-    // No person is composited -- there is no mask to do it with.
+    // No person is composited -- there is no mask to do it with -- and for the
+    // same reason nobody is cut out of the room: it is the whole frame, blurred.
     expect(rec.ops("scratch")).toEqual([]);
+    expect(rec.ops("veil")).toEqual([]);
+    expect(rec.ops("veilBlur")).toEqual([]);
     const backdrop = rec.calls.filter((call) => call.surface === "backdrop");
     expect(backdrop.some((call) => call.op === "filter" && String(call.args[0]).startsWith("blur("))).toBe(true);
     // And what reaches the output is that surface, not the camera.
@@ -421,7 +429,42 @@ describe("nothing raises coverage inside an enclosed gap", () => {
 });
 
 describe("growth over headwear", () => {
+  /**
+   * The bottom of the band headwear measures in: a cap, a headwrap or a helmet
+   * scores 0.20 to 0.34 (see MASK_SMOOTHING_UNCERTAIN and CONFIDENCE_PERSON in
+   * backgrounds.ts). FAINT, 0.13, was chosen above for the gap-quieting tests'
+   * arithmetic and is not a headwear value.
+   */
+  const HEADWEAR = 0.20;
+
   it("fills an uncertain band above a solid body", () => {
+    const rec = recorder();
+    const c = MaskCompositor.create(rec.factory, 1280, 720)!;
+    const grid = c.grid;
+    const band = [40, 44] as const;
+    const body = 45;
+    const column = 200;
+    c.compose(frame(1280, 720), confidenceAt(grid.width, grid.height, (x, y) => {
+      if (x < column || x > column + 40) return 0;
+      if (y >= body && y <= body + 40) return SOLID;
+      if (y >= band[0] && y <= band[1]) return HEADWEAR;
+      return 0;
+    }));
+
+    const alpha = rec.masks.at(-1)!;
+    expect(alpha[band[1] * grid.width + column + 20]).toBe(255);
+  });
+
+  /**
+   * And a band fainter than headwear ever measures is raised, not filled. This
+   * used to come out at full, and not because of growth: the five-cell band was
+   * thick enough for the structure pass to call it a chair, and the same pass
+   * was hardening the model's soft boundary into the finger-wide halo. Growth
+   * alone may take a cell to twice what the model gave it (GROWTH_HEADROOM),
+   * which at 0.13 is well above the midpoint after the sharpen and well short
+   * of solid -- faint stays faint, as the room beside a shoulder must.
+   */
+  it("raises a band fainter than headwear without filling it", () => {
     const rec = recorder();
     const c = MaskCompositor.create(rec.factory, 1280, 720)!;
     const grid = c.grid;
@@ -436,7 +479,11 @@ describe("growth over headwear", () => {
     }));
 
     const alpha = rec.masks.at(-1)!;
-    expect(alpha[band[1] * grid.width + column + 20]).toBe(255);
+    const cell = alpha[band[1] * grid.width + column + 20];
+    // What the ramp alone would leave after the sharpen, and what growth adds.
+    const unaided = (coverageFromConfidence(FAINT) - 127.5) * 2 + 127.5;
+    expect(cell).toBeGreaterThan(unaided);
+    expect(cell).toBeLessThan(255);
   });
 
   /**
@@ -627,6 +674,67 @@ describe("what is painted behind the person", () => {
   });
 
   /**
+   * The duplicate. A blur of the whole frame smears the person outward by its
+   * radius, so the "room" for that width outside the silhouette was a soft copy
+   * of their own head and shoulders. The room is now blurred with the person cut
+   * out of it, by the same mask that keeps them on top.
+   */
+  it("blurs the room with the person cut out of it", () => {
+    const rec = recorder();
+    const c = MaskCompositor.create(rec.factory, 1280, 720)!;
+    const grid = c.grid;
+    c.setEffect({ kind: "blur", strength: "heavy" });
+    c.compose(frame(1280, 720), confidenceAt(grid.width, grid.height, () => SOLID));
+
+    // The veil: the camera, then the person taken out of it -- with the mask as
+    // it is and with the mask spread a little, so the hair edge goes too.
+    const veil = rec.calls.filter((call) => call.surface === "veil");
+    const camera = veil.findIndex((call) => call.op === "drawImage" && call.args[0] === "camera");
+    const cut = veil.findIndex((call) => call.op === "composite" && call.args[0] === "destination-out");
+    const masks = veil.filter((call) => call.op === "drawImage" && call.args[0] === "feathered");
+    expect(camera).toBeGreaterThanOrEqual(0);
+    expect(cut).toBeGreaterThan(camera);
+    expect(masks).toHaveLength(2);
+    expect(veil.some((call) => call.op === "filter" && String(call.args[0]).startsWith("blur("))).toBe(true);
+
+    // Its blur, then drawn onto itself to bring the alpha back up.
+    const blurred = rec.calls.filter((call) => call.surface === "veilBlur");
+    const draws = blurred.filter((call) => call.op === "drawImage").map((call) => call.args[0]);
+    expect(draws[0]).toBe("veil");
+    expect(draws.slice(1)).toEqual(["veilBlur", "veilBlur", "veilBlur"]);
+
+    // And over the floor: the backdrop draws the whole frame blurred, then the
+    // person-free room on top.
+    const backdrop = rec.calls.filter((call) => call.surface === "backdrop" && call.op === "drawImage");
+    expect(backdrop.map((call) => call.args[0])).toEqual(["camera", "veilBlur"]);
+  });
+
+  /**
+   * Which means the mask has to exist before the background is painted. It used
+   * to be the other way round, and a test that only read the output's draw order
+   * would not notice the cut being made with last frame's mask.
+   */
+  it("cuts the person out with this frame's mask, not last frame's", () => {
+    const rec = recorder();
+    const c = MaskCompositor.create(rec.factory, 64, 48)!;
+    c.setEffect({ kind: "blur", strength: "heavy" });
+    c.compose(frame(64, 48), confidenceAt(64, 48, () => SOLID));
+
+    const maskReady = rec.calls.findIndex((call) => call.surface === "feathered" && call.op === "drawImage");
+    const cut = rec.calls.findIndex((call) => call.surface === "veil" && call.op === "drawImage" && call.args[0] === "feathered");
+    expect(maskReady).toBeGreaterThanOrEqual(0);
+    expect(cut).toBeGreaterThan(maskReady);
+  });
+
+  it("does not build a veil for a template, which has no room in it", () => {
+    const rec = recorder();
+    const c = MaskCompositor.create(rec.factory, 64, 48)!;
+    c.setEffect({ kind: "template", id: "neural" });
+    c.compose(frame(64, 48), confidenceAt(64, 48, () => SOLID));
+    expect(rec.ops("veil")).toEqual([]);
+  });
+
+  /**
    * An effect whose artwork has not arrived, or has gone. Never a blank rectangle
    * where a person was — and no longer the sharp room either, which was what this
    * test used to pin. The uploaded image may be seconds away or may have failed
@@ -651,9 +759,9 @@ describe("what is painted behind the person", () => {
     c.setEffect({ kind: "template", id: "neural" });
     const mask = confidenceAt(64, 48, () => SOLID);
     c.compose(frame(64, 48), mask);
-    const afterFirst = rec.calls.filter((call) => call.surface === "extra6" && call.op === "fillRect").length;
+    const afterFirst = rec.calls.filter((call) => call.surface === "extra8" && call.op === "fillRect").length;
     c.compose(frame(64, 48), mask);
-    const afterSecond = rec.calls.filter((call) => call.surface === "extra6" && call.op === "fillRect").length;
+    const afterSecond = rec.calls.filter((call) => call.surface === "extra8" && call.op === "fillRect").length;
 
     expect(afterFirst).toBeGreaterThan(0);
     expect(afterSecond).toBe(afterFirst);

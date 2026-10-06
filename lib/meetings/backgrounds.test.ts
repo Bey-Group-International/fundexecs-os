@@ -34,6 +34,7 @@ import {
   templateById,
   validateBackgroundUpload,
   dilateCeiling,
+  GROWTH_HEADROOM,
   quietCoverageGaps,
   maskGapSpanPx,
   sharpenEdge,
@@ -772,10 +773,37 @@ describe("maskGapSpanPx", () => {
 });
 
 describe("dilateCeiling", () => {
-  it("permits growth wherever the model is unsure and nowhere else", () => {
-    const coverage = new Uint8ClampedArray([0, 1, 128, 254, 255]);
+  it("permits growth in proportion to how unsure the model was, and none where it was sure", () => {
+    const coverage = new Uint8ClampedArray([0, 1, 40, 128, 254, 255]);
     const ceiling = dilateCeiling(new Uint8ClampedArray(coverage.length), coverage);
-    expect([...ceiling]).toEqual([0, 255, 255, 255, 255]);
+    // Twice the model's score, clamped: a cell it barely saw may barely be
+    // raised, a cell it half saw may be filled, and confident room stays shut.
+    expect([...ceiling]).toEqual([0, 2, 80, 255, 255, 255]);
+    expect(GROWTH_HEADROOM).toBe(2);
+  });
+
+  /**
+   * The halo, as it was actually made. The room a few pixels from a shoulder is
+   * not scored at zero -- the model's boundary is soft -- and a yes/no ceiling
+   * opened every such cell to full coverage. Faint room beside a solid edge must
+   * end up faint, not solid.
+   */
+  it("keeps growth into barely-seen room faint rather than filling it", () => {
+    const w = 6, h = 1;
+    const coverage = new Uint8ClampedArray([255, 20, 20, 20, 0, 0]);
+    const ceiling = dilateCeiling(new Uint8ClampedArray(w), coverage);
+    dilateCoverage(coverage, w, h, { up: 0, down: 0, side: 4 }, ceiling);
+    for (let x = 1; x <= 3; x++) {
+      expect(coverage[x]).toBeGreaterThan(20);
+      expect(coverage[x]).toBeLessThanOrEqual(40);
+    }
+    expect(coverage[4]).toBe(0);
+  });
+
+  it("falls back to no headroom at all for a nonsense multiple", () => {
+    const coverage = new Uint8ClampedArray([0, 40, 255]);
+    expect([...dilateCeiling(new Uint8ClampedArray(3), coverage, Number.NaN)]).toEqual([0, 40, 255]);
+    expect([...dilateCeiling(new Uint8ClampedArray(3), coverage, -1)]).toEqual([0, 40, 255]);
   });
 
   it("stops growth inventing coverage in confident background", () => {
