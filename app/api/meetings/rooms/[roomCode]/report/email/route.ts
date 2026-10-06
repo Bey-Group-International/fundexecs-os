@@ -17,6 +17,9 @@ import {
   hasReportSummary,
 } from "@/lib/meetings/report-export";
 import { loadReportForExport } from "@/lib/meetings/report-export.server";
+import { reportShareUrl } from "@/lib/meetings/report-share.server";
+import { recordFollowUpThreads } from "@/lib/meetings/follow-up-threads.server";
+import { createServiceClient, hasSupabaseServiceEnv } from "@/lib/supabase/server";
 
 // POST /api/meetings/rooms/[roomCode]/report/email  { includeTranscript?: boolean }
 //
@@ -105,20 +108,22 @@ export async function POST(
   }
 
   const title = (loaded.title ?? "").trim() || UNTITLED_MEETING;
-  // The link is appended for the email only. A downloaded file is a copy
-  // somebody keeps; a message is something they act on, and the report is
-  // where the transcript and any later regeneration live.
-  const reportUrl = `${SITE_URL.replace(/\/$/, "")}/meetings/${loaded.roomCode}/report`;
-  const markdown =
-    buildReportMarkdown(loaded, { includeTranscript }) +
-    `\n---\n\n[View the full report](${reportUrl})\n`;
-
-  const html = renderMarkdownToHtml(markdown, title);
+  const subject = `Summary: ${title}`;
+  const document = buildReportMarkdown(loaded, { includeTranscript });
+  // The in-app report opens only for signed-in members who were in the meeting.
+  // Each recipient's copy links to a private, expiring read-only summary of
+  // their own instead (lib/meetings/report-share.server.ts), so an external
+  // invitee is not met by a login wall. The in-app link is the fallback where
+  // links cannot be signed.
+  const appUrl = `${SITE_URL.replace(/\/$/, "")}/meetings/${loaded.roomCode}/report`;
+  const markdownFor = (email: string) =>
+    document + `\n---\n\n[View the full report](${reportShareUrl(loaded.roomCode, email) ?? appUrl})\n`;
+  const bodies = recipients.map((r) => markdownFor(r.email));
 
   // Settled, not raced: one bad address must not withhold the summary from
   // everybody else who was invited or in the room.
   const results = await Promise.allSettled(
-    recipients.map((recipient) =>
+    recipients.map((recipient, i) =>
       sendEmail({
         orgId: auth.ctx.orgId,
         credentials: { gmailAccessToken: mailbox.token },
@@ -128,11 +133,29 @@ export async function POST(
         // one. Two paths through one meeting's data disagreed about what to call
         // the people in it.
         to: { name: recipient.name, email: recipient.email },
-        subject: `Summary: ${title}`,
-        htmlBody: html,
+        subject,
+        htmlBody: renderMarkdownToHtml(bodies[i], title),
       }),
     ),
   );
+
+  // Each delivered copy is an inbox thread with that person, linked to this
+  // meeting — so their reply lands beside it, counts as a reply on the meeting,
+  // and (from the sender's own mailbox) is read back. Service role, as for the
+  // follow-up: the ingest ledger and tracking table are not member-writable.
+  // Never throws.
+  if (hasSupabaseServiceEnv()) {
+    await recordFollowUpThreads(createServiceClient(), {
+      orgId: auth.ctx.orgId,
+      meetingId: loaded.meetingId,
+      hostId: auth.ctx.userId,
+      hostName: null,
+      subject,
+      kind: "summary",
+      mailbox: { source: mailbox.source, email: mailbox.email },
+      sends: recipients.map((recipient, i) => ({ recipient, body: bodies[i], result: results[i] })),
+    });
+  }
 
   const { sent, failed } = deliveryOutcome(recipients, results);
 

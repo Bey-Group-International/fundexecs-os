@@ -33,6 +33,14 @@ jest.mock("@/lib/mandates", () => ({ getActiveMandate: async () => null }));
 jest.mock("@/lib/integrations", () => ({ dispatchAction: (...a: unknown[]) => dispatchAction(...a) }));
 jest.mock("@/lib/integrations/gateway", () => ({ orgConnectedChannels: async () => new Set(["gmail"]) }));
 jest.mock("@/lib/integrations/log", () => ({ recordDispatch: async () => {} }));
+// Delivery itself is tested in lib/inbox/deliver-reply.server.test.ts; here it is
+// the dispatcher stub, so a failed send is still one switch away.
+jest.mock("@/lib/inbox/deliver-reply.server", () => ({
+  checkSendingMailbox: async () => ({ ok: true }),
+  isEmailThread: (t: { channel: string; counterparty_email: string | null }) =>
+    t.channel === "gmail" && Boolean(t.counterparty_email),
+  deliverThreadAction: (_c: unknown, input: unknown) => dispatchAction(input),
+}));
 jest.mock("@/lib/engine", () => ({ decideApproval: async () => ({ ok: true }) }));
 jest.mock("@/lib/team-tasks", () => ({ recordOperatorFeedback: async () => {} }));
 jest.mock("@/lib/inbox/intelligence", () => ({

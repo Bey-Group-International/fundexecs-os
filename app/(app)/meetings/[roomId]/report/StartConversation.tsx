@@ -16,7 +16,7 @@ import { draftConversation, startConversation } from "./conversation-actions";
 
 type Status =
   | { kind: "idle" }
-  | { kind: "error"; message: string }
+  | { kind: "error"; message: string; needsMailbox?: boolean }
   | { kind: "sent"; message: string; gated: boolean; subject: string };
 
 export function StartConversation({
@@ -81,7 +81,7 @@ export function StartConversation({
       fd.set("body", body);
       const r = await startConversation(fd);
       if (!r.ok) {
-        setStatus({ kind: "error", message: r.error });
+        setStatus({ kind: "error", message: r.error, needsMailbox: r.needsMailbox });
         return;
       }
       setStatus({ kind: "sent", message: r.message, gated: r.gated, subject });
@@ -144,7 +144,19 @@ export function StartConversation({
         rows={6}
         className="resize-y rounded-md border border-[var(--line)] bg-[var(--surface-0)] px-2 py-1.5 text-sm text-[var(--fg-primary)] outline-none focus:border-[var(--gold-400)]"
       />
-      {status.kind === "error" && <p className="text-xs text-[var(--status-danger)]">{status.message}</p>}
+      {status.kind === "error" && (
+        <p className="text-xs text-[var(--status-danger)]">
+          {status.message}
+          {status.needsMailbox && (
+            <>
+              {" "}
+              <Link href="/settings/integrations" className="underline underline-offset-2">
+                Connect Gmail to send →
+              </Link>
+            </>
+          )}
+        </p>
+      )}
       {note && <p className="text-[11px] text-[var(--fg-muted)]">{note}</p>}
       <div className="flex flex-wrap items-center justify-between gap-2">
         <span className="text-[11px] text-[var(--fg-muted)]">Goes through your inbox · approvals if required</span>

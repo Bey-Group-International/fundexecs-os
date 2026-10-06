@@ -36,6 +36,7 @@ export function MessageEveryoneNew({
   const [subject, setSubject] = useState("");
   const [body, setBody] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [needsMailbox, setNeedsMailbox] = useState(false);
   const [sending, setSending] = useState(false);
   const [outcomes, setOutcomes] = useState<Outcome[] | null>(null);
 
@@ -57,6 +58,7 @@ export function MessageEveryoneNew({
       return;
     }
     setError(null);
+    setNeedsMailbox(false);
     setSending(true);
     try {
       const r = await startConversations({
@@ -67,6 +69,7 @@ export function MessageEveryoneNew({
       });
       if (!r.ok) {
         setError(r.error);
+        setNeedsMailbox(Boolean(r.needsMailbox));
         return;
       }
       // The server knows names from the attendee list; fall back to ours.
@@ -138,7 +141,19 @@ export function MessageEveryoneNew({
       <p className="text-[11px] text-[var(--fg-muted)]">
         {FIRST_NAME_TOKEN} becomes each person&apos;s first name.
       </p>
-      {error && <p className="text-xs text-[var(--status-danger)]">{error}</p>}
+      {error && (
+        <p className="text-xs text-[var(--status-danger)]">
+          {error}
+          {needsMailbox && (
+            <>
+              {" "}
+              <Link href="/settings/integrations" className="underline underline-offset-2">
+                Connect Gmail to send →
+              </Link>
+            </>
+          )}
+        </p>
+      )}
       <div className="flex items-center justify-end gap-2">
         <button
           type="button"

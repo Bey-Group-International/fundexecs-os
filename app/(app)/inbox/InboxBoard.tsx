@@ -780,6 +780,14 @@ const ThreadCard = memo(function ThreadCard({
       {result && active ? (
         <p className={`mt-2 text-xs ${result.ok ? "text-status-success" : "text-status-danger"}`}>
           {result.ok ? result.message : result.error}
+          {!result.ok && result.needsMailbox ? (
+            <>
+              {" "}
+              <Link href="/settings/integrations" className="underline underline-offset-2">
+                Connect Gmail to send →
+              </Link>
+            </>
+          ) : null}
         </p>
       ) : null}
       {deleteError ? (

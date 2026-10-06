@@ -36,6 +36,7 @@ import { executePlannedSkill } from "@/lib/skills/engine-run";
 import { SKILL_AUTOINVOKE_ENABLED } from "@/lib/skills/config";
 import { observeOutput } from "@/lib/observe";
 import { extractApiWriteRequest, executeApiWrite } from "@/lib/api-write-requests";
+import { deliverApprovedReply, extractInboxReply, legacyInboxReply } from "@/lib/inbox/deliver-reply.server";
 
 type Client = Awaited<ReturnType<typeof createServerClient>>;
 
@@ -1484,6 +1485,34 @@ export async function decideApproval(
       // recommendation to accept; anything but an approval discards the write.
       await ctx.supabase.from("tasks").update({ status: "cancelled" }).eq("id", wf.id);
     }
+    return { workflowId: wf.id, decision: args.decision };
+  }
+
+  // An inbox reply held for approval carries the reply itself on the task. There
+  // is no plan to run: approving SENDS it — that message, on its thread, from its
+  // author's mailbox — and anything else withdraws it. Handled before the
+  // workflow branches, which would mark it complete without sending anything
+  // and save the reply text as an auto-approving automation.
+  const inboxReply =
+    extractInboxReply(wf.result) ??
+    (await legacyInboxReply(ctx.supabase, {
+      id: wf.id,
+      description: wf.description,
+      created_by: (wf as { created_by?: string | null }).created_by ?? null,
+    }));
+  if (inboxReply) {
+    if (args.decision === "approved") {
+      const delivered = await deliverApprovedReply(ctx.supabase, {
+        orgId: ctx.orgId,
+        approverId: ctx.actorId,
+        taskId: wf.id,
+        agent: (wf.assigned_agent as AgentKey | null) ?? null,
+        hub: (wf.hub as string | null) ?? null,
+        reply: inboxReply,
+      });
+      return { workflowId: wf.id, decision: args.decision, ...(delivered.ok ? {} : { error: delivered.error }) };
+    }
+    await ctx.supabase.from("tasks").update({ status: "cancelled" }).eq("id", wf.id);
     return { workflowId: wf.id, decision: args.decision };
   }
 

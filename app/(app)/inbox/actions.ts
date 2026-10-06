@@ -6,9 +6,13 @@ import { requireOrgContext } from "@/lib/auth";
 import { gateDecision, type ActionKind } from "@/lib/gates";
 import { isVerifiable } from "@/lib/grounding";
 import { getActiveMandate } from "@/lib/mandates";
-import { dispatchAction } from "@/lib/integrations";
-import { orgConnectedChannels } from "@/lib/integrations/gateway";
 import { recordDispatch } from "@/lib/integrations/log";
+import {
+  checkSendingMailbox,
+  deliverThreadAction,
+  isEmailThread,
+  type PendingInboxReply,
+} from "@/lib/inbox/deliver-reply.server";
 import { decideApproval } from "@/lib/engine";
 import { recordOperatorFeedback } from "@/lib/team-tasks";
 import { computePriority, fallbackSummary, draftReply, smartReplies } from "@/lib/inbox/intelligence";
@@ -57,6 +61,8 @@ export interface ThreadActionResult {
   tier?: 1 | 2 | 3;
   message?: string;
   error?: string;
+  /** No mailbox can send this: the caller should offer to connect one. */
+  needsMailbox?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -124,9 +130,26 @@ async function performThreadAction(
     ? `Unified-inbox reply on the ${t.channel} thread "${t.subject}":\n\n${opts.replyBody}`
     : `Unified-inbox action on the ${t.channel} thread "${t.subject}".`;
 
+  // An email reply nobody could send is refused now, with the reason, while its
+  // author still has it in front of them — not queued for an approver to clear
+  // into nothing, and not saved as a draft and reported as sent.
+  const emailReply = action === "send_reply" && isEmailThread(t) && Boolean(opts.replyBody);
+  if (emailReply) {
+    const mailbox = await checkSendingMailbox(supabase, auth.ctx.userId, orgId);
+    if (!mailbox.ok) return { ok: false, gated: false, tier: decision.tier, error: mailbox.error, needsMailbox: true };
+  }
+
+  // What approval sends: this exact reply, from its author's mailbox. Without it
+  // an approved reply ran the generic workflow engine and was never sent.
+  const pendingReply: PendingInboxReply | null =
+    decision.requiresApproval && action === "send_reply"
+      ? { threadId, action, body: opts.replyBody ?? null, senderId: auth.ctx.userId }
+      : null;
+
   const { data: task, error } = await supabase
     .from("tasks")
     .insert({
+      ...(pendingReply ? { result: { inboxReply: pendingReply } as unknown as Json } : {}),
       organization_id: orgId,
       title,
       description,
@@ -214,23 +237,15 @@ async function performThreadAction(
     };
   }
 
-  // Free to run: dispatch now, pinned to the thread's own channel. Resolve the
-  // org's connection state for that channel so the adapter reflects whether THIS
-  // org has connected it (queued) or not (prepared/draft) — not just an env var.
-  const connectedChannels = await orgConnectedChannels(supabase, orgId);
-  const result = await dispatchAction({
+  // Free to run: send now, pinned to the thread's own channel. An email reply
+  // goes from the composer's own mailbox (else the org's) under "Re: <subject>";
+  // every other action keeps its adapter. See lib/inbox/deliver-reply.server.ts.
+  const result = await deliverThreadAction(supabase, {
     orgId,
-    actorId: auth.ctx.userId,
+    senderId: auth.ctx.userId,
+    thread: t,
     action,
-    channel: t.channel,
-    connected: connectedChannels.has(t.channel),
-    target: { name: t.counterparty_name ?? undefined, email: t.counterparty_email ?? undefined },
-    // The operator's composed reply text, when this is an inline reply — a live
-    // adapter sends exactly this; a mock adapter ignores it and returns its
-    // prepared status. Undefined for suggested/share actions.
     body: opts.replyBody,
-    // Pre-flight trust guard: an unverifiable backing artifact is refused here
-    // before it reaches the counterparty (no-op when none was supplied).
     backingArtifact: opts.backingArtifact,
   });
 
@@ -251,15 +266,20 @@ async function performThreadAction(
     : opts.sharePreface
       ? `${opts.sharePreface}\n\n${result.detail}`
       : result.detail;
-  await supabase.from("inbox_messages").insert({
-    organization_id: orgId,
-    thread_id: threadId,
-    direction: "outbound",
-    author: "Earn",
-    body,
-    occurred_at: now,
-    metadata: { action, channel: result.channel, reference: result.reference ?? null, dispatch_detail: result.detail } as Json,
-  });
+  // Only what actually went out is an outbound message. A failed send recorded
+  // here read as sent everywhere downstream — the thread, the meeting's
+  // follow-up status, the reply matching that looks for a sent message.
+  if (result.ok) {
+    await supabase.from("inbox_messages").insert({
+      organization_id: orgId,
+      thread_id: threadId,
+      direction: "outbound",
+      author: "Earn",
+      body,
+      occurred_at: now,
+      metadata: { action, channel: result.channel, reference: result.reference ?? null, dispatch_detail: result.detail } as Json,
+    });
+  }
 
   // Reflect the outcome back onto the thread: it's been actioned (read), its
   // activity bumps, and any meeting link the booking/video dispatch produced is
@@ -313,7 +333,14 @@ async function performThreadAction(
 
   revalidatePath("/inbox");
   revalidatePath("/dashboard");
-  return { ok: result.ok, gated: false, tier: decision.tier, message: result.detail, error: result.ok ? undefined : result.error };
+  return {
+    ok: result.ok,
+    gated: false,
+    tier: decision.tier,
+    message: result.detail,
+    error: result.ok ? undefined : (result.error ?? result.detail),
+    needsMailbox: result.needsMailbox,
+  };
 }
 
 
@@ -1176,8 +1203,10 @@ export async function decideInboxApproval(
     return { ok: true };
   }
 
+  let deliveryError: string | undefined;
   try {
-    await decideApproval({ supabase, orgId, actorId: auth.ctx.userId }, { approvalId, decision, note });
+    const decided = await decideApproval({ supabase, orgId, actorId: auth.ctx.userId }, { approvalId, decision, note });
+    deliveryError = (decided as { error?: string }).error;
   } catch (e) {
     console.error("[decideInboxApproval]", e instanceof Error ? e.message : e);
     return { ok: false, error: "Couldn't record that decision. Try again." };
@@ -1203,5 +1232,8 @@ export async function decideInboxApproval(
 
   revalidatePath("/inbox");
   revalidatePath("/dashboard");
+  // Approved, and the send itself failed: say so, rather than clearing the row
+  // as though the message had gone.
+  if (deliveryError) return { ok: false, error: `Approved, but it was not sent: ${deliveryError}` };
   return { ok: true };
 }
