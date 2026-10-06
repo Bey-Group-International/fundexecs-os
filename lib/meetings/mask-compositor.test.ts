@@ -20,7 +20,7 @@ import {
   type Drawable,
   type SurfaceFactory,
 } from "./mask-compositor";
-import { PERSON_LABEL, coverageFromConfidence, maskFeatherPx, maskGrid } from "./backgrounds";
+import { PERSON_LABEL, coverageFromConfidence, maskFeatherPx, maskGrid, sharpenEdge } from "./backgrounds";
 
 /** One recorded context call, tagged with which surface it was made on. */
 interface Call {
@@ -144,13 +144,15 @@ function confidenceAt(
 /**
  * Confidence in the uncertainty band, chosen so the tests are not vacuous.
  *
- * 0.13 ramps to coverage 88: under `GAP_QUIET_CEILING` (96), so quieting applies
- * to it, and far enough above the midpoint that `sharpenEdge` leaves 48 rather
- * than clamping it to zero. A fainter value -- 0.05, which was the first choice
- * here -- reaches the mask as 0 whether it was quieted or not, and every
- * assertion about the gap then passes on a chain that never quieted anything.
+ * 0.17 ramps to coverage 89: under `GAP_QUIET_CEILING` (96), so quieting applies
+ * to it, and close enough to the midpoint that `sharpenEdge` at EDGE_CONTRAST 3
+ * leaves 12 rather than clamping it to zero. A fainter value reaches the mask
+ * as 0 whether it was quieted or not, and every assertion about the gap then
+ * passes on a chain that never quieted anything. (It was 0.13 when the ramp
+ * started at 0.04 and the contrast was 2; both moved, and this with them. The
+ * assertions below pin the two properties rather than the number.)
  */
-const FAINT = 0.13;
+const FAINT = 0.17;
 const SOLID = 1;
 
 describe("the surfaces the chain builds", () => {
@@ -344,6 +346,10 @@ describe("nothing raises coverage inside an enclosed gap", () => {
     // Otherwise the test below passes on a mask that never leaked.
     expect(coverageFromConfidence(FAINT)).toBeGreaterThan(0);
     expect(coverageFromConfidence(FAINT)).toBeLessThan(96);
+    // And it would survive the sharpen, so a gap this chain failed to quiet
+    // would show. Computed through the real function so the contrast cannot
+    // drift away from this check.
+    expect(sharpenEdge(new Uint8ClampedArray(1), Uint8ClampedArray.of(coverageFromConfidence(FAINT)))[0]).toBeGreaterThan(0);
   });
 
   it("hands the compositor's mask zero alpha across the gap", () => {
@@ -432,10 +438,11 @@ describe("growth over headwear", () => {
   /**
    * The bottom of the band headwear measures in: a cap, a headwrap or a helmet
    * scores 0.20 to 0.34 (see MASK_SMOOTHING_UNCERTAIN and CONFIDENCE_PERSON in
-   * backgrounds.ts). FAINT, 0.13, was chosen above for the gap-quieting tests'
-   * arithmetic and is not a headwear value.
+   * backgrounds.ts). Below it, a value the model gives the room beside a
+   * shoulder, which the ramp lets in and nothing may fill.
    */
   const HEADWEAR = 0.20;
+  const FAINTER_THAN_HEADWEAR = 0.15;
 
   it("fills an uncertain band above a solid body", () => {
     const rec = recorder();
@@ -474,14 +481,14 @@ describe("growth over headwear", () => {
     c.compose(frame(1280, 720), confidenceAt(grid.width, grid.height, (x, y) => {
       if (x < column || x > column + 40) return 0;
       if (y >= body && y <= body + 40) return SOLID;
-      if (y >= band[0] && y <= band[1]) return FAINT;
+      if (y >= band[0] && y <= band[1]) return FAINTER_THAN_HEADWEAR;
       return 0;
     }));
 
     const alpha = rec.masks.at(-1)!;
     const cell = alpha[band[1] * grid.width + column + 20];
     // What the ramp alone would leave after the sharpen, and what growth adds.
-    const unaided = (coverageFromConfidence(FAINT) - 127.5) * 2 + 127.5;
+    const unaided = sharpenEdge(new Uint8ClampedArray(1), Uint8ClampedArray.of(coverageFromConfidence(FAINTER_THAN_HEADWEAR)))[0];
     expect(cell).toBeGreaterThan(unaided);
     expect(cell).toBeLessThan(255);
   });

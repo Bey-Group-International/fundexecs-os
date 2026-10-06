@@ -366,8 +366,14 @@ export function blendCoverage(
  * It helps both faults at once, which is the reason to believe it. Headwear the
  * model put at 0.28 confidence sits high in the band and is pushed to fully
  * opaque; a halo pixel the model barely saw sits low and is pushed to nothing.
+ *
+ * Three rather than two, measured alongside the ramp floor above: with the floor
+ * at 0.10 it takes room visibility within 11px of the edge from 3.1% to 2.9%,
+ * costs no headwear and no body, and leaves the undecided middle -- coverage
+ * 85 to 170 -- still crossing gradually. Four bought 0.2% more and was not
+ * worth the staircase it starts to make of hair.
  */
-export const EDGE_CONTRAST = 2;
+export const EDGE_CONTRAST = 3;
 
 /**
  * Tighten the ramp, writing into `out`.
@@ -436,16 +442,40 @@ export const CONFIDENCE_PERSON = 0.30;
 /**
  * At or below this confidence a pixel is fully background.
  *
- * Lowered alongside the raise above, which widens the uncertainty band from both
- * ends. That is deliberate: the band is what growth is allowed to fill, so faint
- * headwear needs to be IN it rather than clamped to nothing.
+ * THIS WAS 0.04, AND IT WAS THE LAST OF THE HALO. The model's boundary is soft
+ * on the room side too: the wall a few pixels from a shoulder scores 0.05 to
+ * 0.15, not zero, and a ramp that starts at 0.04 paints every one of those
+ * pixels as a faint person. Each pass downstream then treats them as somebody
+ * -- growth may raise them, the blend carries them, the sharpen pushes the
+ * upper half of them toward solid -- and what reaches the screen is a ring of
+ * the real room, a few pixels wide, all the way round the silhouette.
  *
- * At 0.04 a pixel reaching the band at all is under a twentieth of full
- * coverage, so nothing becomes visible that was not; what changes is that
- * constrained growth now has a foothold there, and faint headwear can be filled
- * rather than clamped to nothing before growth ever sees it.
+ * Measured through the whole chain, forty frames of a person on a 1280x720
+ * frame with that soft boundary modelled on the room side, after the structure
+ * pass and the growth ceiling had already been taken out of the ring:
+ *
+ *   floor     room visible within 11px of edge   hard ring above / beside   headwear kept
+ *   0.04 (was)            10.4%                      1.6px / 1.5px             92%
+ *   0.08                   4.4%                      0.7px / 1.1px             92%
+ *   0.10 (now)             3.1%                      0.7px / 1.0px             91%
+ *   0.12                   2.4%                      0.6px / 0.8px             91%
+ *   0.15                   2.1%                      0.6px / 0.7px             91%
+ *
+ *   with headwear measuring at the bottom of its range (0.15 to 0.34):
+ *   0.04                   --                            --                    91%
+ *   0.10                   --                            --                    89%
+ *   0.12                   --                            --                    84% (with other tightening)
+ *
+ * 0.10. Below it the ring keeps shrinking by less and less; above it the
+ * fainter headwear starts to go, and the headwear tests below say where that
+ * line is. Headwear at 0.20 to 0.34 -- the range backgrounds.ts measured for a
+ * cap, a headwrap, a helmet -- is at or above half coverage from the ramp
+ * alone, and growth and the sharpen take it to solid as before. The person's
+ * own edge is bitten by under a cell. The gain over the whole chain is what
+ * the old comment here promised and did not deliver: nothing becomes visible
+ * that was not -- the room beside the person is no longer a faint person.
  */
-export const CONFIDENCE_BACKGROUND = 0.04;
+export const CONFIDENCE_BACKGROUND = 0.10;
 
 /**
  * Coverage for one pixel of the segmenter's confidence mask.
@@ -964,13 +994,14 @@ export function quietCoverageGaps(
  *   room kept   total coverage, of 255, over cells more than one cell outside
  *               the person, per frame -- the material the halo is made of
  *
- * The hard floor measures a shade better and is not taken: it closes the cells
- * at 0.06-0.08 confidence that the headwrap test below says growth must still
- * be able to fill, and a threshold is the wrong place to pay for tidiness (see
- * CONFIDENCE_PERSON). Twice fills those cells to double what the model gave
- * them, which is more than it gave and less than the room, and the headwear
- * the growth exists for -- 0.20 to 0.34 confidence, 157 and up -- is at the
- * cap already, so nothing it keeps today is lost.
+ * The hard floor measured a shade better and was not taken here: a threshold
+ * on the ceiling is the wrong place for it, because it would close cells the
+ * ramp had already let in. The floor that was needed turned out to belong on
+ * the ramp itself -- see CONFIDENCE_BACKGROUND, now 0.10 -- and with it there,
+ * this stays proportional for what is inside the band: a cell at the bottom of
+ * it may be nudged, a cell halfway up may be filled, and the headwear the growth
+ * exists for -- 0.20 to 0.34 confidence, half coverage and up -- reaches the
+ * cap, so nothing it keeps is lost.
  */
 export const GROWTH_HEADROOM = 2;
 

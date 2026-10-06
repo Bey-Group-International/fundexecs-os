@@ -364,7 +364,7 @@ function med3(a: number, b: number, c: number): number {
  *   the first significant change on a pixel is a movement, by design, because
  *   treating it as noise is how a mask starts lagging a person's actual movement.
  *   So a one-frame spike goes through at the fast rate, and `EDGE_CONTRAST`
- *   doubles its distance from the midpoint on the way out.
+ *   multiplies its distance from the midpoint on the way out.
  *
  * A median of three frames passes anything that lasts two frames at full speed
  * and deletes anything that lasts one. That is the exact shape of the fault: the
