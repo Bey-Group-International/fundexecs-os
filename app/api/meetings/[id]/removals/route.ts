@@ -65,13 +65,10 @@ async function subjectOfTile(
 /**
  * Remove one person from this meeting, durably.
  *
- * The subject comes from the body because the host's screen is the only place
- * that knows which peer tile was clicked — a signalling id means nothing to the
- * server, so the room announces a durable subject alongside it. That is a claim
- * by the peer about itself, exactly as its display name already is; what makes
- * the removal sound is the other end, where a returning caller is matched
- * against their OWN authenticated account rather than against anything they
- * send.
+ * The body carries only the signalling id of the tile the host clicked, and the
+ * durable subject is resolved server-side from the row the knock wrote — see
+ * subjectOfTile for why taking a claimed subject here was the vulnerability
+ * this route exists to close.
  */
 export async function POST(req: NextRequest, { params }: { params: Params }) {
   const auth = await requireOrgContext();
@@ -171,6 +168,25 @@ export async function POST(req: NextRequest, { params }: { params: Params }) {
 }
 
 /**
+ * The subject a DELETE body names, or null for anything else.
+ *
+ * Strict on shape: a removal row is matched by exactly these columns, and an
+ * unexpected value must read as "no subject" rather than as whatever it casts
+ * to.
+ */
+function subjectFromBody(value: unknown): RemovalSubject | null {
+  if (!value || typeof value !== "object") return null;
+  const v = value as { kind?: unknown; userId?: unknown; guestKey?: unknown };
+  if (v.kind === "member" && typeof v.userId === "string" && v.userId.trim()) {
+    return { kind: "member", userId: v.userId.trim() };
+  }
+  if (v.kind === "guest" && typeof v.guestKey === "string" && v.guestKey.trim()) {
+    return { kind: "guest", guestKey: v.guestKey.trim() };
+  }
+  return null;
+}
+
+/**
  * Let somebody back in.
  *
  * A removal that could not be undone would be a new trap, and one this change
@@ -183,16 +199,28 @@ export async function POST(req: NextRequest, { params }: { params: Params }) {
  * of that answer is one more place for the rule to be got wrong. The admission
  * row is left denied on purpose, so they knock again and the host decides at
  * the door, which is where they can see who it is.
+ *
+ * Addressed by SUBJECT, unlike the removal above, because that is what the
+ * caller actually holds: the removed-people panel is built from the removal
+ * rows, which carry the durable subject and no signalling id — the person's
+ * tile is long gone. This route required a signalId anyway, so the one caller
+ * it has 400'd on every press and "Allow back" never once worked. Taking a
+ * claimed subject is safe HERE in a way it is not on the removal: the caller is
+ * the authenticated host acting on their own meeting, and the worst a wrong
+ * subject can do is delete a removal row that does not exist. A signalId is
+ * still accepted and resolved server-side, so both spellings mean the same
+ * person.
  */
 export async function DELETE(req: NextRequest, { params }: { params: Params }) {
   const auth = await requireOrgContext();
   if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: auth.status });
   const { id } = await params;
 
-  const body = (await req.json().catch(() => ({}))) as { signalId?: unknown };
+  const body = (await req.json().catch(() => ({}))) as { signalId?: unknown; subject?: unknown };
+  const claimed = subjectFromBody(body.subject);
   const signalId = typeof body.signalId === "string" ? body.signalId.trim() : "";
-  if (!signalId) {
-    return NextResponse.json({ error: "signalId required" }, { status: 400 });
+  if (!claimed && !signalId) {
+    return NextResponse.json({ error: "subject or signalId required" }, { status: 400 });
   }
 
   const rls = await createServerClient();
@@ -212,9 +240,10 @@ export async function DELETE(req: NextRequest, { params }: { params: Params }) {
     ? (createServiceClient() as SupabaseLike)
     : (rls as SupabaseLike);
 
-  // Resolved the same way the removal was written, from the row the knock
-  // wrote — so undoing a removal cannot be aimed at somebody else either.
-  const { subject } = await subjectOfTile(write, meeting.id, signalId);
+  // A claimed subject is taken as given (see the doc comment above for why that
+  // is safe on an undo); a signalId is resolved the same way the removal was
+  // written, from the row the knock wrote.
+  const subject = claimed ?? (await subjectOfTile(write, meeting.id, signalId)).subject;
   if (!subject) {
     return NextResponse.json({ error: "That participant cannot be identified" }, { status: 404 });
   }

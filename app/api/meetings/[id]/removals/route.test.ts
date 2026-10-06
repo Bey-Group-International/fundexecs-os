@@ -293,6 +293,33 @@ describe("DELETE, letting somebody back in", () => {
     expect(writes.admissionPatches.at(-1)?.match).toEqual({ user_id: "u2" });
   });
 
+  // The body the panel actually sends. The removed-people list is built from
+  // the removal rows, which carry the durable subject and no signalling id —
+  // so a DELETE that required a signalId 400'd on every press and "Allow back"
+  // never once worked: the ban stayed, the admission stayed denied, and the
+  // person reappeared in the host's removed list a moment later.
+  it("lifts a removal named by subject, which is all the panel holds", async () => {
+    const res = await DELETE(req({ subject: { kind: "guest", guestKey: "g1" } }, "DELETE"), params);
+    expect(res.status).toBe(200);
+    expect(writes.deleted).toBe(true);
+    expect(writes.tables).toContain("live_meeting_removals");
+    expect(writes.admissionPatches.at(-1)?.match).toEqual({ guest_key: "g1" });
+  });
+
+  it("lifts a member's removal named by subject", async () => {
+    const res = await DELETE(req({ subject: { kind: "member", userId: "u2" } }, "DELETE"), params);
+    expect(res.status).toBe(200);
+    expect(writes.admissionPatches.at(-1)?.match).toEqual({ user_id: "u2" });
+  });
+
+  it("refuses a body that names nobody either way", async () => {
+    for (const body of [{}, { subject: { kind: "member" } }, { subject: { kind: "guest", guestKey: "" } }, { subject: "g1" }]) {
+      const res = await DELETE(req(body, "DELETE"), params);
+      expect(res.status).toBe(400);
+    }
+    expect(writes.deleted).toBe(false);
+  });
+
   // Undo is the same authority as the removal, so it answers to the same check.
   it("refuses anyone but the host", async () => {
     authMock.mockResolvedValue({ ok: true, ctx: { orgId: "org1", userId: "someone-else" } });
