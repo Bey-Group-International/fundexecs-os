@@ -1434,7 +1434,7 @@ export function CopilotSidebar({
           {srStatus === "active" && srNoisy && (
             <span
               className="text-xs text-[var(--status-warning,#f59e0b)]"
-              title="Speech recognition is hearing mostly noise. Check which microphone is selected (the arrow beside the mic button)."
+              title="Speech recognition is hearing mostly noise. Check which microphone is selected (the arrow beside the mic button) — and that it is also your computer's default microphone, which is the one some browsers transcribe from."
             >
               ⚠ Unclear audio
             </span>
