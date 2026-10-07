@@ -981,3 +981,77 @@ describe("the chosen speaker disappearing", () => {
     }
   });
 });
+
+describe("a camera that stalls without ending", () => {
+  /**
+   * The third camera failure, beside never starting and ending: Windows hands
+   * the device to another application, or a privacy shutter closes. The track
+   * stays `live` and fires `mute`, the encoder keeps the last frame, and every
+   * tile in the room freezes on it — including the member's own, so nothing
+   * told them the room was frozen too.
+   */
+  function eventedTrack(kind: string, id: string) {
+    const listeners = new Map<string, Set<() => void>>();
+    const track = {
+      kind, id, enabled: true, readyState: "live", muted: false,
+      getSettings: () => ({ deviceId: `${kind}-dev` }),
+      addEventListener(type: string, fn: () => void) {
+        if (!listeners.has(type)) listeners.set(type, new Set());
+        listeners.get(type)!.add(fn);
+      },
+      removeEventListener(type: string, fn: () => void) { listeners.get(type)?.delete(fn); },
+      fire(type: string) { [...(listeners.get(type) ?? [])].forEach((fn) => fn()); },
+      stop: () => {}, applyConstraints: async () => {},
+      clone() { return this; },
+    };
+    return track;
+  }
+
+  function withEventedCamera() {
+    const camera = eventedTrack("video", "video-local");
+    Object.defineProperty(navigator, "mediaDevices", {
+      configurable: true,
+      value: {
+        getUserMedia: async () => fakeStream([fakeTrack("audio"), camera as unknown as FakeTrack]),
+        getDisplayMedia: async () => fakeStream([fakeTrack("video")]),
+        enumerateDevices: async () => [],
+        addEventListener: () => {}, removeEventListener: () => {},
+      },
+    });
+    return camera;
+  }
+
+  const notice = () => screen.queryByText(/stopped sending video/i);
+
+  it("tells the member after frames stop for a sustained stretch, and stands down when they resume", async () => {
+    joinChoice.cameraEnabled = true;
+    const camera = withEventedCamera();
+    await enterCall();
+
+    // The device wedges: still live, no longer producing.
+    camera.muted = true;
+    await act(async () => { camera.fire("mute"); await Promise.resolve(); });
+    await flush(5_000, 10);
+    expect(notice()).toBeInTheDocument();
+
+    // Frames resume — the other app let go, the shutter opened.
+    camera.muted = false;
+    await act(async () => { camera.fire("unmute"); await Promise.resolve(); });
+    expect(notice()).not.toBeInTheDocument();
+  });
+
+  it("says nothing about a blip that resolves itself", async () => {
+    joinChoice.cameraEnabled = true;
+    const camera = withEventedCamera();
+    await enterCall();
+
+    camera.muted = true;
+    await act(async () => { camera.fire("mute"); await Promise.resolve(); });
+    await flush(1_000, 4);
+    camera.muted = false;
+    await act(async () => { camera.fire("unmute"); await Promise.resolve(); });
+    await flush(5_000, 10);
+
+    expect(notice()).not.toBeInTheDocument();
+  });
+});

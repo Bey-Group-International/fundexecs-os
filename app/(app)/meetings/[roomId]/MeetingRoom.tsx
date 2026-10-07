@@ -194,6 +194,8 @@ import {
 } from "@/lib/meetings/media-acquisition";
 import {
   CAMERA_CHECK_MS,
+  CAMERA_STALL_MS,
+  CAMERA_STALL_NOTICE,
   cameraVerdict,
   needsRepair,
   repairFor,
@@ -5072,6 +5074,43 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
       video?.removeEventListener("ended", onVideoEnded);
     };
   }, [ready, localStream, rawCameraTrack, switchMic, switchCam]);
+
+  // The third camera failure, beside never starting (the liveness check) and
+  // ending (the listener above): a STALL. Windows hands the device to another
+  // application, a privacy shutter closes, a driver wedges — the track stays
+  // `live` and fires `mute`, the encoder keeps the last frame it was given,
+  // and every tile in the room freezes on it. The person it happens to is
+  // looking at the same frozen frame, so without this nothing anywhere says
+  // the room is frozen too. Sustained before it is said — some hardware blips
+  // `mute` for a frame — and withdrawn by itself when frames resume.
+  useEffect(() => {
+    if (!ready) return;
+    const track = rawCameraTrack;
+    if (!track) return;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const onMute = () => {
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(() => {
+        // Still wedged, still claiming to be on. A camera the member switched
+        // off, or one that ended (the listener above owns that), says nothing.
+        if (!camOnRef.current || track.readyState !== "live" || !track.muted) return;
+        setMediaError(CAMERA_STALL_NOTICE);
+      }, CAMERA_STALL_MS);
+    };
+    const onUnmute = () => {
+      if (timer) { clearTimeout(timer); timer = null; }
+      // Only its own notice: this banner is shared, and frames resuming says
+      // nothing about whatever else may have been reported on it.
+      setMediaError((held) => (held === CAMERA_STALL_NOTICE ? null : held));
+    };
+    track.addEventListener("mute", onMute);
+    track.addEventListener("unmute", onUnmute);
+    return () => {
+      if (timer) clearTimeout(timer);
+      track.removeEventListener("mute", onMute);
+      track.removeEventListener("unmute", onUnmute);
+    };
+  }, [ready, rawCameraTrack]);
 
   // ── Going back for a device the meeting started without ───────────────────
   //
