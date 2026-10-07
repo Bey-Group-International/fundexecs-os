@@ -35,17 +35,29 @@ import { recordDispatch } from "@/lib/integrations/log";
 import type { DispatchContext, DispatchResult } from "@/lib/integrations/types";
 import type { ActionKind } from "@/lib/gates";
 import { isVerifiable } from "@/lib/grounding";
+import { INBOX_ACTION_LABEL } from "@/lib/inbox/action-labels";
 import type { AgentKey } from "@/lib/supabase/database.types";
 
 type Client = SupabaseClient<Database>;
 
-/** Where the inbox send would go, recorded on a gated task so approval can send it. */
+type BackingArtifact = { verification_status: string; grounding_score: number };
+
+/**
+ * An inbox action held for approval, recorded on its task so approving can carry
+ * it out exactly as an immediate run would: a reply, a proposed time, a booking
+ * confirmation, a meeting link, a Command Center share.
+ */
 export interface PendingInboxReply {
   threadId: string;
   action: ActionKind;
+  /** The composed text, for a reply. */
   body: string | null;
-  /** Who composed it: their mailbox sends it, not the approver's. */
+  /** Who asked for it: their mailbox sends an email reply, not the approver's. */
   senderId: string;
+  /** The line a Command Center share opens with. */
+  sharePreface?: string | null;
+  /** The work product a share carries, as it stood when it was queued. */
+  backingArtifact?: BackingArtifact | null;
   /** Set once delivered; the meeting's follow-up status reads it. */
   delivered?: boolean;
   error?: string;
@@ -58,33 +70,64 @@ export function extractInboxReply(result: unknown): PendingInboxReply | null {
   if (!r || typeof r !== "object") return null;
   const p = r as Partial<PendingInboxReply>;
   if (typeof p.threadId !== "string" || typeof p.senderId !== "string" || typeof p.action !== "string") return null;
+  const artifact = p.backingArtifact;
   return {
     threadId: p.threadId,
     action: p.action as ActionKind,
     body: typeof p.body === "string" ? p.body : null,
     senderId: p.senderId,
+    ...(typeof p.sharePreface === "string" ? { sharePreface: p.sharePreface } : {}),
+    ...(artifact && typeof artifact === "object" && typeof artifact.verification_status === "string"
+      ? { backingArtifact: { verification_status: artifact.verification_status, grounding_score: Number(artifact.grounding_score) || 0 } }
+      : {}),
     delivered: p.delivered === true,
   };
 }
 
-const LEGACY_PREFIX = "Unified-inbox reply on the ";
+const LEGACY_REPLY_PREFIX = "Unified-inbox reply on the ";
+const LEGACY_ACTION_PREFIX = "Unified-inbox action on the ";
+
+/** The action a task's title names ("Propose a time — Ana Diaz"), if it names one. */
+function actionFromTitle(title: string | null | undefined): ActionKind | null {
+  const head = (title ?? "").split(" — ")[0]?.trim();
+  if (!head) return null;
+  for (const [action, label] of Object.entries(INBOX_ACTION_LABEL)) {
+    if (label === head) return action as ActionKind;
+  }
+  return null;
+}
 
 /**
- * A reply queued before replies were parked on the task (inboxReply), rebuilt
- * from what that version did record: the composed text in the task description
- * and the thread on its task.created event. Without this, everything already
- * waiting in approvals when the fix shipped would still approve into nothing.
+ * An inbox action queued before actions were parked on the task (inboxReply),
+ * rebuilt from what that version did record: the composed text in a reply's
+ * description, the action in the task's title, and the thread on its
+ * task.created event. Without this, everything already waiting in approvals
+ * when the fix shipped would still approve into nothing.
  */
 export async function legacyInboxReply(
   client: Client,
-  task: { id: string; description?: string | null; created_by?: string | null },
+  task: { id: string; title?: string | null; description?: string | null; created_by?: string | null },
 ): Promise<PendingInboxReply | null> {
   const desc = task.description ?? "";
-  if (!desc.startsWith(LEGACY_PREFIX) || !task.created_by) return null;
-  const at = desc.indexOf('":\n\n');
-  if (at < 0) return null;
-  const body = desc.slice(at + 4).trim();
-  if (!body) return null;
+  if (!task.created_by) return null;
+
+  let action: ActionKind;
+  let body: string | null = null;
+  if (desc.startsWith(LEGACY_REPLY_PREFIX)) {
+    const at = desc.indexOf('":\n\n');
+    if (at < 0) return null;
+    body = desc.slice(at + 4).trim();
+    if (!body) return null;
+    action = "send_reply";
+  } else if (desc.startsWith(LEGACY_ACTION_PREFIX)) {
+    const named = actionFromTitle(task.title);
+    // A reply needs its text, and an action without one carries none.
+    if (!named || named === "send_reply") return null;
+    action = named;
+  } else {
+    return null;
+  }
+
   const { data } = await client
     .from("task_events")
     .select("payload")
@@ -94,7 +137,7 @@ export async function legacyInboxReply(
     .maybeSingle();
   const threadId = (data as { payload?: { inbox_thread_id?: unknown } } | null)?.payload?.inbox_thread_id;
   if (typeof threadId !== "string" || !threadId) return null;
-  return { threadId, action: "send_reply", body, senderId: task.created_by };
+  return { threadId, action, body, senderId: task.created_by };
 }
 
 /** An email thread: a reply to it is an email to its counterparty. */
@@ -272,6 +315,7 @@ export async function deliverApprovedReply(
       thread: t,
       action: reply.action,
       body: reply.body ?? undefined,
+      backingArtifact: reply.backingArtifact ?? undefined,
     });
   } catch (err) {
     return finish(false, {}, err instanceof Error ? err.message : "Delivery failed.");
@@ -288,12 +332,19 @@ export async function deliverApprovedReply(
   if (!result.ok) return finish(false, { dispatch: result }, result.error ?? result.detail);
 
   const at = now();
+  // What lands on the thread, as for an immediate run: the composed reply, else
+  // the (prefaced) dispatch outcome.
+  const recorded = reply.body
+    ? reply.body
+    : reply.sharePreface
+      ? `${reply.sharePreface}\n\n${result.detail}`
+      : result.detail;
   await client.from("inbox_messages").insert({
     organization_id: input.orgId,
     thread_id: t.id,
     direction: "outbound",
     author: "Earn",
-    body: reply.body ?? result.detail,
+    body: recorded,
     occurred_at: at,
     metadata: {
       action: reply.action,
@@ -303,10 +354,13 @@ export async function deliverApprovedReply(
       approved: true,
     } as Json,
   });
-  await client
-    .from("inbox_threads")
-    .update({ unread: false, last_message_at: at })
-    .eq("organization_id", input.orgId)
-    .eq("id", t.id);
+  // A booking or video link a live dispatch produced travels with the thread,
+  // exactly as performThreadAction keeps it — never a mock's placeholder.
+  const patch: Partial<InboxThread> = { unread: false, last_message_at: at };
+  if (result.live && result.reference && (reply.action === "create_video_meeting" || reply.action === "confirm_booking")) {
+    patch.meeting_url = result.reference;
+    if (reply.action === "confirm_booking" && !t.meeting_at) patch.meeting_at = at;
+  }
+  await client.from("inbox_threads").update(patch).eq("organization_id", input.orgId).eq("id", t.id);
   return finish(true, { dispatch: result });
 }

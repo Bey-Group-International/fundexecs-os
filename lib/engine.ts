@@ -1488,15 +1488,17 @@ export async function decideApproval(
     return { workflowId: wf.id, decision: args.decision };
   }
 
-  // An inbox reply held for approval carries the reply itself on the task. There
-  // is no plan to run: approving SENDS it — that message, on its thread, from its
-  // author's mailbox — and anything else withdraws it. Handled before the
+  // An inbox action held for approval carries the action itself on the task — a
+  // reply, a proposed time, a booking, a meeting link, a share. There is no plan
+  // to run: approving CARRIES IT OUT (a reply from its author's mailbox), and
+  // anything else withdraws it. Handled before the
   // workflow branches, which would mark it complete without sending anything
   // and save the reply text as an auto-approving automation.
   const inboxReply =
     extractInboxReply(wf.result) ??
     (await legacyInboxReply(ctx.supabase, {
       id: wf.id,
+      title: wf.title,
       description: wf.description,
       created_by: (wf as { created_by?: string | null }).created_by ?? null,
     }));
