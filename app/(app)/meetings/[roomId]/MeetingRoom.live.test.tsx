@@ -875,3 +875,109 @@ describe("a recogniser deaf to the call's microphone", () => {
     } finally { sr.restore(); }
   });
 });
+
+describe("the chosen speaker disappearing", () => {
+  /**
+   * Unplugging the chosen output — or a Bluetooth headset dropping — moves
+   * call audio nowhere: every element keeps the dead sinkId and renders
+   * silence, which to this member is a call where everybody suddenly stopped
+   * talking at once. The room must notice, route back to the system default,
+   * and say what happened.
+   */
+  it("routes call audio back to the default output and says so", async () => {
+    // jsdom has no setSinkId; stand up the slice the routing uses.
+    Object.defineProperty(HTMLMediaElement.prototype, "setSinkId", {
+      configurable: true,
+      value: async function (this: HTMLMediaElement & { sinkId?: string }, id: string) {
+        this.sinkId = id;
+      },
+    });
+    const deviceChange: Array<() => void> = [];
+    let machine = [
+      { kind: "audiooutput", deviceId: "headset-1", label: "Headset", groupId: "g1" },
+      { kind: "audiooutput", deviceId: "default", label: "Default", groupId: "g2" },
+    ];
+    Object.defineProperty(navigator, "mediaDevices", {
+      configurable: true,
+      value: {
+        getUserMedia: async () => fakeStream([fakeTrack("audio"), fakeTrack("video")]),
+        getDisplayMedia: async () => fakeStream([fakeTrack("video")]),
+        enumerateDevices: async () => machine,
+        addEventListener: (type: string, fn: () => void) => { if (type === "devicechange") deviceChange.push(fn); },
+        removeEventListener: () => {},
+      },
+    });
+    joinChoice.speakerId = "headset-1";
+
+    try {
+      await enterCall();
+      await peerArrives("peer-1", "Brett");
+
+      // The join routed the peer's voice to the chosen headset.
+      const voice = () => document.querySelector<HTMLAudioElement & { sinkId?: string }>("audio[data-peer-audio]")!;
+      expect(voice().sinkId).toBe("headset-1");
+
+      // The headset goes away.
+      machine = machine.filter((d) => d.deviceId !== "headset-1");
+      await act(async () => {
+        deviceChange.forEach((fn) => fn());
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+      await flush(60, 6);
+
+      // The voice is back on a speaker that exists, and the member was told.
+      expect(voice().sinkId).toBe("");
+      expect(screen.getByText(/speaker was disconnected/i)).toBeInTheDocument();
+    } finally {
+      joinChoice.speakerId = "";
+      delete (HTMLMediaElement.prototype as { setSinkId?: unknown }).setSinkId;
+    }
+  });
+
+  it("does nothing while the chosen speaker is still there", async () => {
+    Object.defineProperty(HTMLMediaElement.prototype, "setSinkId", {
+      configurable: true,
+      value: async function (this: HTMLMediaElement & { sinkId?: string }, id: string) {
+        this.sinkId = id;
+      },
+    });
+    const deviceChange: Array<() => void> = [];
+    const machine = [
+      { kind: "audiooutput", deviceId: "headset-1", label: "Headset", groupId: "g1" },
+      { kind: "audioinput", deviceId: "mic-1", label: "Mic", groupId: "g1" },
+    ];
+    Object.defineProperty(navigator, "mediaDevices", {
+      configurable: true,
+      value: {
+        getUserMedia: async () => fakeStream([fakeTrack("audio"), fakeTrack("video")]),
+        getDisplayMedia: async () => fakeStream([fakeTrack("video")]),
+        enumerateDevices: async () => machine,
+        addEventListener: (type: string, fn: () => void) => { if (type === "devicechange") deviceChange.push(fn); },
+        removeEventListener: () => {},
+      },
+    });
+    joinChoice.speakerId = "headset-1";
+
+    try {
+      await enterCall();
+      await peerArrives("peer-1", "Brett");
+      const voice = document.querySelector<HTMLAudioElement & { sinkId?: string }>("audio[data-peer-audio]")!;
+      expect(voice.sinkId).toBe("headset-1");
+
+      // A devicechange that is about something else — a mic unplugged.
+      await act(async () => {
+        deviceChange.forEach((fn) => fn());
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+      await flush(60, 6);
+
+      expect(voice.sinkId).toBe("headset-1");
+      expect(screen.queryByText(/speaker was disconnected/i)).not.toBeInTheDocument();
+    } finally {
+      joinChoice.speakerId = "";
+      delete (HTMLMediaElement.prototype as { setSinkId?: unknown }).setSinkId;
+    }
+  });
+});

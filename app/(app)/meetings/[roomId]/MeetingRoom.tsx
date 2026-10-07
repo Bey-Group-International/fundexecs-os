@@ -28,6 +28,7 @@ import {
   levelFromSamples,
   needsSinkChange,
   smoothLevel,
+  speakerSinkLost,
 } from "@/lib/meetings/devices";
 import {
   ECHO_DETECTED_NOTICE,
@@ -3464,7 +3465,10 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
    * `allSettled`, because one device disappearing must not abandon the rest.
    */
   const applySpeakerSink = useCallback(async (deviceId: string) => {
-    if (!deviceId) return;
+    // "" is a real request: route back to the SYSTEM DEFAULT, which is the
+    // spec's one universal spelling of it (Chromium's "default" pseudo-device
+    // does not exist everywhere setSinkId does). needsSinkChange makes it a
+    // no-op for an element that is already there, so nothing is rebuilt by it.
     type Sinkable = HTMLMediaElement & { sinkId?: string; setSinkId?: (id: string) => Promise<void> };
     const elements = Array.from(document.querySelectorAll<HTMLMediaElement>("video, audio")) as Sinkable[];
     await Promise.allSettled(
@@ -3486,6 +3490,33 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     // sameRoomPeers: an element that was muted skipped routing, and needs it
     // the moment it plays again.
   }, [ready, selectedSpeakerId, peers, applySpeakerSink, callParts, sameRoomPeers]);
+
+  // The output side of losing a device. Unplugging the chosen speaker — or a
+  // Bluetooth headset dropping — moves call audio NOWHERE: every element keeps
+  // the sinkId of the device that is gone and renders silence, which to this
+  // member is a call where everybody suddenly stopped talking at once. The
+  // microphone and camera have a reacquire loop for exactly this; an output
+  // has no capture to get back, so the remedy is to route to the system
+  // default now and say what happened. Deliberately not undone when the
+  // device returns: audio is coming out of a speaker again, and yanking it
+  // back without a press is how sound ends up somewhere unexpected.
+  useEffect(() => {
+    if (!sessionLive || !selectedSpeakerId) return;
+    const md = navigator.mediaDevices;
+    if (!md?.addEventListener) return;
+    const onChange = () => {
+      void (async () => {
+        let all: MediaDeviceInfo[];
+        try { all = await md.enumerateDevices(); } catch { return; }
+        if (!speakerSinkLost(selectedSpeakerId, all)) return;
+        setSelectedSpeakerId("");
+        await applySpeakerSink("");
+        setMediaError("Your speaker was disconnected — call audio has moved to this computer's default output.");
+      })();
+    };
+    md.addEventListener("devicechange", onChange);
+    return () => md.removeEventListener("devicechange", onChange);
+  }, [sessionLive, selectedSpeakerId, applySpeakerSink]);
 
   // ── How long the meeting has been live ────────────────────────────────────
 
