@@ -141,6 +141,16 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const subject = followUpSubject(meeting.title);
   const hostName = host?.full_name ?? null;
 
+  // Before the gate as well as the send: a follow-up held for approval with no
+  // mailbox to send it from would be approved into nothing.
+  const mailbox = await mailboxLookup;
+  if (!mailbox.ok) {
+    return NextResponse.json(
+      { error: mailboxProblemMessage(mailbox.problem), mailboxConnected: false },
+      { status: 409 },
+    );
+  }
+
   // The same gate every inbox reply passes. An organisation whose mandate does
   // not pre-authorise outbound replies gets the follow-up in approvals — one
   // per attendee, each on that attendee's thread for this meeting — instead of
@@ -183,14 +193,6 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       unreachable: audience.unreachable,
       failed,
     });
-  }
-
-  const mailbox = await mailboxLookup;
-  if (!mailbox.ok) {
-    return NextResponse.json(
-      { error: mailboxProblemMessage(mailbox.problem), mailboxConnected: false },
-      { status: 409 },
-    );
   }
 
   // Per recipient, and settled: one bad address must not stop the rest of the

@@ -19,6 +19,10 @@ jest.mock("@/lib/meetings/conversation-draft.server", () => ({
 }));
 jest.mock("@/lib/meetings/recipients.server", () => ({ loadPresentPeople: async () => present }));
 jest.mock("@/lib/rate-limit", () => ({ checkRateLimit: () => ({ ok: true }) }));
+const checkSendingMailbox = jest.fn();
+jest.mock("@/lib/inbox/deliver-reply.server", () => ({
+  checkSendingMailbox: (...a: unknown[]) => checkSendingMailbox(...a),
+}));
 
 type Row = Record<string, unknown> | null;
 const db: { meeting: Row; report: Row; cached: Row; upserts: unknown[]; deletes: string[] } = {
@@ -80,6 +84,7 @@ beforeEach(() => {
   requireOrgContext.mockResolvedValue({ ok: true, ctx: { orgId: "org-1", userId: "u1", email: "host@fund.com" } });
   ensureMeetingThread.mockResolvedValue({ ok: true, threadId: "thr-new", subject: "Next steps", continued: false });
   replyToThread.mockResolvedValue({ ok: true, gated: true, message: "Tier 2 — sent to your approvals before it goes out." });
+  checkSendingMailbox.mockResolvedValue({ ok: true });
 });
 
 describe("startConversation", () => {
@@ -175,6 +180,30 @@ describe("draftConversation", () => {
   it("refuses an outsider without drafting", async () => {
     expect((await draftConversation("m1", "stranger@else.com")).ok).toBe(false);
     expect(draftMeetingConversation).not.toHaveBeenCalled();
+  });
+});
+
+describe("with no mailbox to send from", () => {
+  const NO_MAILBOX = { ok: false, needsMailbox: true, error: "No Google account is connected." };
+
+  it("refuses one message before making a thread, and says how to fix it", async () => {
+    checkSendingMailbox.mockResolvedValue(NO_MAILBOX);
+    expect(await startConversation(form())).toEqual(NO_MAILBOX);
+    expect(ensureMeetingThread).not.toHaveBeenCalled();
+    expect(replyToThread).not.toHaveBeenCalled();
+  });
+
+  it("refuses a group message once, not person by person", async () => {
+    checkSendingMailbox.mockResolvedValue(NO_MAILBOX);
+    const r = await startConversations({ meetingId: "m1", subject: "S", body: "Hi", emails: ["ana@acme.com"] });
+    expect(r).toEqual(NO_MAILBOX);
+    expect(checkSendingMailbox).toHaveBeenCalledTimes(1);
+    expect(replyToThread).not.toHaveBeenCalled();
+  });
+
+  it("passes on a send refused for want of a mailbox", async () => {
+    replyToThread.mockResolvedValue({ ok: false, error: "Reconnect your Google account", needsMailbox: true });
+    expect(await startConversation(form())).toMatchObject({ ok: false, needsMailbox: true });
   });
 });
 

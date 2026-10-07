@@ -48,6 +48,11 @@ export interface RecordFollowUpInput {
   mailbox: { source: "member" | "organization"; email: string | null };
   sends: FollowUpSend[];
   now?: Date;
+  /**
+   * What was sent: the follow-up (default) or the meeting summary. Kept apart in
+   * the ingest ledger, so sending both to one person records both.
+   */
+  kind?: "follow_up" | "summary";
 }
 
 export interface RecordFollowUpResult {
@@ -66,6 +71,8 @@ export async function recordFollowUpThreads(
 ): Promise<RecordFollowUpResult> {
   const out: RecordFollowUpResult = { recorded: 0, tracked: 0 };
   const occurredAt = (input.now ?? new Date()).toISOString();
+  const kind = input.kind ?? "follow_up";
+  const via = kind === "summary" ? "meeting_summary" : "meeting_followup";
 
   for (const send of input.sends) {
     if (send.result.status !== "fulfilled" || !send.result.value.ok) continue;
@@ -75,9 +82,9 @@ export async function recordFollowUpThreads(
 
     try {
       const ingested = await ingestInboundEvent(client, input.orgId, FOLLOW_UP_CHANNEL, {
-        eventType: "meeting.follow_up_sent",
+        eventType: kind === "summary" ? "meeting.summary_sent" : "meeting.follow_up_sent",
         // Gmail's id when it gave one: unique, and the same id the sweep would see.
-        eventId: `followup:${input.meetingId}:${email}:${sent.gmailMessageId ?? occurredAt}`,
+        eventId: `${kind === "summary" ? "summary" : "followup"}:${input.meetingId}:${email}:${sent.gmailMessageId ?? occurredAt}`,
         thread: {
           channel: "gmail",
           category: "messaging",
@@ -93,7 +100,7 @@ export async function recordFollowUpThreads(
           occurredAt,
           direction: "outbound",
           metadata: {
-            via: "meeting_followup",
+            via,
             meeting_id: input.meetingId,
             gmail_message_id: sent.gmailMessageId ?? null,
             gmail_thread_id: sent.gmailThreadId ?? null,

@@ -28,6 +28,7 @@ import { conversationProblem, personalizeGroupBody, type ConversationDraft } fro
 import { draftMeetingConversation } from "@/lib/meetings/conversation-draft.server";
 import { ensureMeetingThread } from "@/lib/meetings/meeting-thread.server";
 import { replyToThread } from "@/app/(app)/inbox/actions";
+import { checkSendingMailbox } from "@/lib/inbox/deliver-reply.server";
 
 type ServerClient = Awaited<ReturnType<typeof createServerClient>>;
 
@@ -166,7 +167,7 @@ export async function draftConversation(meetingId: string, email: string): Promi
 
 export type StartConversationResult =
   | { ok: true; threadId: string; continued: boolean; subject: string; gated: boolean; message: string }
-  | { ok: false; error: string };
+  | { ok: false; error: string; needsMailbox?: boolean };
 
 export async function startConversation(formData: FormData): Promise<StartConversationResult> {
   const meetingId = String(formData.get("meeting_id") ?? "");
@@ -182,6 +183,10 @@ export async function startConversation(formData: FormData): Promise<StartConver
 
   const rl = checkRateLimit({ key: `org:${ctx.orgId}:meeting-conversation`, limit: 30, windowMs: 60_000 });
   if (!rl.ok) return { ok: false, error: "Too many messages at once — try again in a minute." };
+
+  // Before any thread is made: a message nobody can send is refused with the fix.
+  const mailbox = await checkSendingMailbox(ctx.supabase, ctx.userId, ctx.orgId);
+  if (!mailbox.ok) return mailbox;
 
   return sendOne(ctx, ctx.recipient, subject, body);
 }
@@ -211,7 +216,9 @@ async function sendOne(
   fd.set("thread_id", threadId);
   fd.set("body", body);
   const result = await replyToThread(fd);
-  if (!result.ok) return { ok: false, error: result.error ?? "The message could not be sent." };
+  if (!result.ok) {
+    return { ok: false, error: result.error ?? "The message could not be sent.", needsMailbox: result.needsMailbox };
+  }
 
   // The cached Earn draft has been used (or overridden); drop it.
   await ctx.supabase
@@ -246,7 +253,9 @@ export interface BatchOutcome {
   error?: string;
 }
 
-export type StartConversationsResult = { ok: true; results: BatchOutcome[] } | { ok: false; error: string };
+export type StartConversationsResult =
+  | { ok: true; results: BatchOutcome[] }
+  | { ok: false; error: string; needsMailbox?: boolean };
 
 /**
  * "Message everyone new" in one round trip: the meeting and its attendee list are
@@ -280,6 +289,10 @@ export async function startConversations(input: {
   // One batch is one act; the per-message limit would cut a large meeting off halfway.
   const rl = checkRateLimit({ key: `org:${ctx.orgId}:meeting-conversation-batch`, limit: 5, windowMs: 60_000 });
   if (!rl.ok) return { ok: false, error: "Too many group messages at once — try again in a minute." };
+
+  // Once for the batch: without a mailbox every one of them would fail the same way.
+  const mailbox = await checkSendingMailbox(ctx.supabase, ctx.userId, ctx.orgId);
+  if (!mailbox.ok) return mailbox;
 
   const results: BatchOutcome[] = new Array(emails.length);
   let next = 0;
