@@ -104,3 +104,26 @@ export function repairFor(verdict: CameraVerdict): "enable" | "reopen" | "none" 
  * enough that a member does not spend the opening of their meeting invisible.
  */
 export const CAMERA_CHECK_MS = 2_500;
+
+/**
+ * How long a camera may stop producing frames before the member is told.
+ *
+ * The third way a camera fails, beside never starting (the check above) and
+ * ending (the device-loss listener): it STALLS. Windows hands the device to
+ * another application, a privacy shutter closes, a driver wedges — the track
+ * stays `live` and fires `mute`, the encoder keeps the last frame it was
+ * given, and every tile in the room freezes on it. The person it happens to
+ * is looking at the same frozen frame and has no way to know the room is too.
+ *
+ * Sustained for a few seconds before anything is said: some hardware blips
+ * `mute` for a frame around focus and exposure changes, and a notice that
+ * flashes on every blip teaches people to dismiss it unread. It withdraws
+ * itself the moment frames resume.
+ */
+export const CAMERA_STALL_MS = 4_000;
+
+/** What the member is told. Names the causes they can actually act on. */
+export const CAMERA_STALL_NOTICE =
+  "Your camera has stopped sending video — another app may have taken it over, or a privacy "
+  + "shutter is closed. Everyone sees a frozen frame until it comes back. The arrow beside the "
+  + "camera button switches cameras.";
