@@ -17,6 +17,7 @@ import {
   SCREEN_SHARE_FPS,
   SCREEN_SHARE_MAX_HEIGHT,
   needsSinkChange,
+  speakerSinkLost,
   type SinkableElement,
 } from "./devices";
 
@@ -604,5 +605,29 @@ describe("needsSinkChange", () => {
 
   it("skips a browser with no setSinkId", () => {
     expect(needsSinkChange(el({ setSinkId: undefined }), "out-desk")).toBe(false);
+  });
+});
+
+describe("speakerSinkLost", () => {
+  const outs = (...ids: string[]) => ids.map((deviceId) => ({ deviceId, kind: "audiooutput" as const }));
+  const mic = { deviceId: "mic-1", kind: "audioinput" as const };
+
+  it("is lost when the chosen output is no longer enumerated", () => {
+    expect(speakerSinkLost("headset-1", [mic, ...outs("default", "out-desk")])).toBe(true);
+  });
+
+  it("is not lost while the chosen output is still there", () => {
+    expect(speakerSinkLost("headset-1", [mic, ...outs("default", "headset-1")])).toBe(false);
+  });
+
+  it("never loses the system default — it is whatever the system says now", () => {
+    expect(speakerSinkLost("", outs("out-desk"))).toBe(false);
+    expect(speakerSinkLost("default", outs("out-desk"))).toBe(false);
+  });
+
+  it("says nothing when the browser lists no outputs at all", () => {
+    // Absence of information, not absence of the device.
+    expect(speakerSinkLost("headset-1", [mic])).toBe(false);
+    expect(speakerSinkLost("headset-1", [])).toBe(false);
   });
 });

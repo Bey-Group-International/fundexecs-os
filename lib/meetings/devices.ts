@@ -467,3 +467,31 @@ export function needsSinkChange(el: SinkableElement, deviceId: string): boolean 
   if (isDefaultSink(el.sinkId) && isDefaultSink(deviceId)) return false;
   return el.sinkId !== deviceId;
 }
+
+/**
+ * Whether the chosen output device has disappeared from the machine.
+ *
+ * Unplugging the headset — or a Bluetooth speaker dropping — does not move
+ * call audio anywhere: every element keeps the sinkId of the device that is
+ * gone, and the spec's answer for a removed sink is SILENCE. The element plays
+ * on with nothing coming out, which to the person it happens to is a call
+ * where everybody suddenly stopped talking at once. The microphone and camera
+ * have a whole reacquire loop for exactly this (device-reacquire.ts); the
+ * output side has no capture to reacquire, so the remedy is to notice and
+ * route back to the system default.
+ *
+ * `devices` is a fresh enumeration, taken after a devicechange. One that lists
+ * no outputs at all is a browser that does not expose them, which says nothing
+ * about the chosen device — so it never triggers the fallback. A chosen id
+ * that IS the default cannot be lost: the default is whatever the system says
+ * it is now.
+ */
+export function speakerSinkLost(
+  chosenId: string,
+  devices: readonly Pick<Device, "deviceId" | "kind">[],
+): boolean {
+  if (!chosenId || isDefaultSink(chosenId)) return false;
+  const outs = devices.filter((d) => d.kind === "audiooutput");
+  if (outs.length === 0) return false;
+  return !outs.some((d) => d.deviceId === chosenId);
+}
