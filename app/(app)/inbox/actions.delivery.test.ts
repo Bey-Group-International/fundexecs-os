@@ -68,7 +68,7 @@ jest.mock("@/lib/supabase/server", () => ({
   }),
 }));
 
-import { replyToThread } from "./actions";
+import { actOnThread, replyToThread } from "./actions";
 
 function form(body = "Hi Ana,") {
   const f = new FormData();
@@ -130,3 +130,20 @@ it("records no outbound message when the send failed, and says why", async () =>
   expect(r).toMatchObject({ ok: false, error: "quota" });
   expect(inserts.some((i) => i.table === "inbox_messages")).toBe(false);
 });
+
+it.each(["propose_meeting", "confirm_booking", "create_video_meeting"])(
+  "held for approval, %s is parked on its task so approval carries it out",
+  async (action) => {
+    gateDecision.mockReturnValue({ tier: 2, requiresApproval: true });
+    const f = new FormData();
+    f.set("thread_id", "t1");
+    f.set("action", action);
+    const r = await actOnThread(f);
+    expect(r).toMatchObject({ ok: true, gated: true });
+    expect(inserts.find((i) => i.table === "tasks")?.row.result).toEqual({
+      inboxReply: { threadId: "t1", action, body: null, senderId: "p1" },
+    });
+    // No reply text, so no mailbox is needed to queue it.
+    expect(checkSendingMailbox).not.toHaveBeenCalled();
+  },
+);

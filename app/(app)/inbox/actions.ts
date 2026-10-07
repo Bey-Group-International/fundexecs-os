@@ -13,6 +13,7 @@ import {
   isEmailThread,
   type PendingInboxReply,
 } from "@/lib/inbox/deliver-reply.server";
+import { INBOX_ACTION_LABEL } from "@/lib/inbox/action-labels";
 import { decideApproval } from "@/lib/engine";
 import { recordOperatorFeedback } from "@/lib/team-tasks";
 import { computePriority, fallbackSummary, draftReply, smartReplies } from "@/lib/inbox/intelligence";
@@ -47,13 +48,9 @@ const THREAD_ACTIONS: ActionKind[] = [
   "create_video_meeting",
 ];
 
-const ACTION_LABEL: Partial<Record<ActionKind, string>> = {
-  send_reply: "Reply",
-  propose_meeting: "Propose a time",
-  confirm_booking: "Confirm booking",
-  create_video_meeting: "Create meeting link",
-  share_materials: "Share Command Center details",
-};
+// The words a task is titled with. One map, shared with the approval path, which
+// reads them back to recover the action of a task queued before it was parked.
+const ACTION_LABEL = INBOX_ACTION_LABEL;
 
 export interface ThreadActionResult {
   ok: boolean;
@@ -139,12 +136,19 @@ async function performThreadAction(
     if (!mailbox.ok) return { ok: false, gated: false, tier: decision.tier, error: mailbox.error, needsMailbox: true };
   }
 
-  // What approval sends: this exact reply, from its author's mailbox. Without it
-  // an approved reply ran the generic workflow engine and was never sent.
-  const pendingReply: PendingInboxReply | null =
-    decision.requiresApproval && action === "send_reply"
-      ? { threadId, action, body: opts.replyBody ?? null, senderId: auth.ctx.userId }
-      : null;
+  // What approval carries out: this exact action — the reply from its author's
+  // mailbox, the proposed time, the booking, the link, the share. Without it an
+  // approved inbox action ran the generic workflow engine and did nothing.
+  const pendingReply: PendingInboxReply | null = decision.requiresApproval
+    ? {
+        threadId,
+        action,
+        body: opts.replyBody ?? null,
+        senderId: auth.ctx.userId,
+        ...(opts.sharePreface ? { sharePreface: opts.sharePreface } : {}),
+        ...(opts.backingArtifact ? { backingArtifact: opts.backingArtifact } : {}),
+      }
+    : null;
 
   const { data: task, error } = await supabase
     .from("tasks")

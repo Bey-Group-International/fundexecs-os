@@ -238,3 +238,103 @@ describe("legacyInboxReply", () => {
     expect(await legacyInboxReply(c, task)).toBeNull();
   });
 });
+
+describe("legacyInboxReply for other actions", () => {
+  const base = { id: "task-0", created_by: "author-1", description: 'Unified-inbox action on the gmail thread "Pacing".' };
+
+  it.each([
+    ["Propose a time — Ana Diaz", "propose_meeting"],
+    ["Confirm booking — Ana Diaz", "confirm_booking"],
+    ["Create meeting link — Ana Diaz", "create_video_meeting"],
+    ["Share Command Center details — Ana Diaz", "share_materials"],
+  ])("recovers %s as %s", async (title, action) => {
+    eventRow = { payload: { inbox_thread_id: "t1" } };
+    const { c } = client(null);
+    expect(await legacyInboxReply(c, { ...base, title })).toEqual({
+      threadId: "t1",
+      action,
+      body: null,
+      senderId: "author-1",
+    });
+  });
+
+  it("does not invent a reply with no text, or an action it cannot name", async () => {
+    eventRow = { payload: { inbox_thread_id: "t1" } };
+    const { c } = client(null);
+    expect(await legacyInboxReply(c, { ...base, title: "Reply — Ana Diaz" })).toBeNull();
+    expect(await legacyInboxReply(c, { ...base, title: "Something else — Ana" })).toBeNull();
+  });
+});
+
+describe("deliverApprovedReply for other actions", () => {
+  it("carries out an approved meeting link and keeps the live link on the thread", async () => {
+    dispatchAction.mockResolvedValue({ ok: true, channel: "zoom", live: true, detail: "Meeting link created.", reference: "https://zoom.test/j/1" });
+    const { c, writes } = client({ ...THREAD, meeting_at: null });
+    const r = await deliverApprovedReply(c, {
+      orgId: "org-1",
+      approverId: "a",
+      taskId: "task-2",
+      agent: null,
+      hub: null,
+      reply: { threadId: "t1", action: "create_video_meeting", body: null, senderId: "author-1" },
+    });
+    expect(r.ok).toBe(true);
+    expect(dispatchAction).toHaveBeenCalledWith(expect.objectContaining({ action: "create_video_meeting", actorId: "author-1" }));
+    expect(sendEmail).not.toHaveBeenCalled();
+    expect(writes.find((w) => w.table === "inbox_messages")?.row.body).toBe("Meeting link created.");
+    expect(writes.find((w) => w.table === "inbox_threads")?.row).toMatchObject({ meeting_url: "https://zoom.test/j/1" });
+  });
+
+  it("does not keep a placeholder link from a dispatch that did not go live", async () => {
+    dispatchAction.mockResolvedValue({ ok: true, channel: "zoom", live: false, detail: "Prepared.", reference: "https://example/placeholder" });
+    const { c, writes } = client(THREAD);
+    await deliverApprovedReply(c, {
+      orgId: "org-1",
+      approverId: "a",
+      taskId: "task-2",
+      agent: null,
+      hub: null,
+      reply: { threadId: "t1", action: "confirm_booking", body: null, senderId: "author-1" },
+    });
+    expect(writes.find((w) => w.table === "inbox_threads")?.row).not.toHaveProperty("meeting_url");
+  });
+
+  it("opens an approved share with its preface and keeps its trust gate", async () => {
+    dispatchAction.mockResolvedValue({ ok: true, channel: "gmail", live: true, detail: "Shared." });
+    const { c, writes } = client(THREAD);
+    await deliverApprovedReply(c, {
+      orgId: "org-1",
+      approverId: "a",
+      taskId: "task-3",
+      agent: null,
+      hub: null,
+      reply: {
+        threadId: "t1",
+        action: "share_materials",
+        body: null,
+        senderId: "author-1",
+        sharePreface: "Command Center — Riverside: Diligence.",
+        backingArtifact: { verification_status: "verified", grounding_score: 0.9 },
+      },
+    });
+    expect(dispatchAction).toHaveBeenCalledWith(
+      expect.objectContaining({ backingArtifact: { verification_status: "verified", grounding_score: 0.9 } }),
+    );
+    expect(writes.find((w) => w.table === "inbox_messages")?.row.body).toBe("Command Center — Riverside: Diligence.\n\nShared.");
+  });
+
+  it("round-trips the share fields through the task", () => {
+    expect(
+      extractInboxReply({
+        inboxReply: {
+          threadId: "t1",
+          action: "share_materials",
+          body: null,
+          senderId: "u",
+          sharePreface: "P",
+          backingArtifact: { verification_status: "verified", grounding_score: 0.8 },
+        },
+      }),
+    ).toMatchObject({ sharePreface: "P", backingArtifact: { verification_status: "verified", grounding_score: 0.8 } });
+  });
+});
