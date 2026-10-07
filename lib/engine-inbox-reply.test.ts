@@ -8,6 +8,9 @@ jest.mock("@/lib/inbox/deliver-reply.server", () => {
   return { ...actual, deliverApprovedReply: (...a: unknown[]) => deliverApprovedReply(...a) };
 });
 
+const reviseInboxReply = jest.fn();
+jest.mock("@/lib/inbox/revise-reply.server", () => ({ reviseInboxReply: (...a: unknown[]) => reviseInboxReply(...a) }));
+
 import { decideApproval } from "@/lib/engine";
 
 interface Call {
@@ -90,10 +93,28 @@ it("approved but undeliverable: reports the reason", async () => {
   expect(r).toEqual({ workflowId: "task-1", decision: "approved", error: "Your Google connection was revoked." });
 });
 
-it.each(["rejected", "regenerate"] as const)("%s: withdraws it without sending", async (decision) => {
+it("rejected: withdraws it without sending", async () => {
   const { client, calls } = makeSupabase();
-  await decideApproval(ctx(client), { approvalId: "appr-1", decision });
+  await decideApproval(ctx(client), { approvalId: "appr-1", decision: "rejected" });
   expect(deliverApprovedReply).not.toHaveBeenCalled();
+  expect(reviseInboxReply).not.toHaveBeenCalled();
   expect(calls.find((c) => c.table === "tasks" && c.op === "update")?.values?.status).toBe("cancelled");
   expect(calls.some((c) => c.table === "automations")).toBe(false);
+});
+
+it("sent back: Earn revises the reply with the note and it returns to approvals", async () => {
+  reviseInboxReply.mockResolvedValue({ ok: true, revised: true, notice: "Earn revised it — it is back in approvals." });
+  const { client, calls } = makeSupabase();
+  const r = await decideApproval(ctx(client), { approvalId: "appr-1", decision: "regenerate", note: "Shorter" });
+  expect(r).toEqual({
+    workflowId: "task-1",
+    decision: "regenerate",
+    notice: "Earn revised it — it is back in approvals.",
+  });
+  expect(reviseInboxReply).toHaveBeenCalledWith(
+    client,
+    expect.objectContaining({ taskId: "task-1", note: "Shorter", reply: expect.objectContaining({ body: "Hi Ana" }) }),
+  );
+  expect(deliverApprovedReply).not.toHaveBeenCalled();
+  expect(calls.some((c) => c.table === "tasks" && c.values?.status === "cancelled")).toBe(false);
 });

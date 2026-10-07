@@ -9,8 +9,11 @@ import { getActiveMandate } from "@/lib/mandates";
 import { recordDispatch } from "@/lib/integrations/log";
 import {
   checkSendingMailbox,
+  deliverApprovedReply,
   deliverThreadAction,
+  extractInboxReply,
   isEmailThread,
+  legacyInboxReply,
   type PendingInboxReply,
 } from "@/lib/inbox/deliver-reply.server";
 import { INBOX_ACTION_LABEL } from "@/lib/inbox/action-labels";
@@ -1182,7 +1185,7 @@ export async function decideInboxApproval(
   approvalId: string,
   decision: InboxApprovalDecision,
   note?: string,
-): Promise<{ ok: boolean; error?: string }> {
+): Promise<{ ok: boolean; error?: string; notice?: string }> {
   if (!approvalId) return { ok: false, error: "Missing approval." };
   const auth = await requireOrgContext();
   if (!auth.ok) return { ok: false, error: "Not authorized." };
@@ -1208,9 +1211,11 @@ export async function decideInboxApproval(
   }
 
   let deliveryError: string | undefined;
+  let notice: string | undefined;
   try {
     const decided = await decideApproval({ supabase, orgId, actorId: auth.ctx.userId }, { approvalId, decision, note });
     deliveryError = (decided as { error?: string }).error;
+    notice = (decided as { notice?: string }).notice;
   } catch (e) {
     console.error("[decideInboxApproval]", e instanceof Error ? e.message : e);
     return { ok: false, error: "Couldn't record that decision. Try again." };
@@ -1238,6 +1243,138 @@ export async function decideInboxApproval(
   revalidatePath("/dashboard");
   // Approved, and the send itself failed: say so, rather than clearing the row
   // as though the message had gone.
-  if (deliveryError) return { ok: false, error: `Approved, but it was not sent: ${deliveryError}` };
-  return { ok: true };
+  if (deliveryError) {
+    return {
+      ok: false,
+      error: decision === "approved" ? `Approved, but it was not sent: ${deliveryError}` : deliveryError,
+    };
+  }
+  return { ok: true, ...(notice ? { notice } : {}) };
+}
+
+// ---------------------------------------------------------------------------
+// Inbox messages held for approval: edit-then-approve, a meeting's batch at
+// once, and a retry for one that was approved and did not go out.
+// ---------------------------------------------------------------------------
+
+/** The task behind a pending approval, when it holds an inbox reply this org owns. */
+async function heldReply(
+  supabase: Awaited<ReturnType<typeof createServerClient>>,
+  orgId: string,
+  approvalId: string,
+) {
+  const { data: approval } = await supabase
+    .from("approvals")
+    .select("task_id, decision")
+    .eq("organization_id", orgId)
+    .eq("id", approvalId)
+    .maybeSingle();
+  if (!approval || (approval as { decision: string }).decision !== "pending") return null;
+  const taskId = (approval as { task_id: string }).task_id;
+  const { data: task } = await supabase
+    .from("tasks")
+    .select("id, title, description, created_by, result")
+    .eq("organization_id", orgId)
+    .eq("id", taskId)
+    .maybeSingle();
+  if (!task) return null;
+  const t = task as { id: string; title: string; description: string | null; created_by: string | null; result: Json | null };
+  const reply = extractInboxReply(t.result) ?? (await legacyInboxReply(supabase, t));
+  return reply ? { task: t, reply } : null;
+}
+
+/**
+ * Approve a held reply with the approver's own edit. The edited text replaces
+ * the held one on the task — so the record says what was actually sent — and
+ * then goes out through the same approval as an unedited one.
+ */
+export async function approveEditedInboxMessage(
+  approvalId: string,
+  body: string,
+): Promise<{ ok: boolean; error?: string }> {
+  const text = String(body ?? "").trim();
+  if (!approvalId) return { ok: false, error: "Missing approval." };
+  if (!text) return { ok: false, error: "The message is empty." };
+  if (text.length > 20_000) return { ok: false, error: "That message is too long." };
+  const auth = await requireOrgContext();
+  if (!auth.ok) return { ok: false, error: "Not authorized." };
+  const supabase = await createServerClient();
+  const held = await heldReply(supabase, auth.ctx.orgId, approvalId);
+  if (!held || held.reply.action !== "send_reply") return { ok: false, error: "This message can no longer be edited." };
+
+  const prior = (held.task.result && typeof held.task.result === "object" ? held.task.result : {}) as Record<string, unknown>;
+  const at = held.task.description?.indexOf('":\n\n') ?? -1;
+  const { error } = await supabase
+    .from("tasks")
+    .update({
+      description: at >= 0 ? `${held.task.description!.slice(0, at + 4)}${text}` : held.task.description,
+      result: { ...prior, inboxReply: { ...held.reply, body: text }, edited: true } as unknown as Json,
+    })
+    .eq("organization_id", auth.ctx.orgId)
+    .eq("id", held.task.id);
+  if (error) return { ok: false, error: "Couldn't save the edit. Try again." };
+  return decideInboxApproval(approvalId, "approved");
+}
+
+/**
+ * Decide several approvals at once — a meeting's follow-up to every attendee.
+ * One at a time, so every message goes through the same idempotent decision as
+ * a single approval, and each comes back with its own outcome.
+ */
+export async function decideInboxApprovals(
+  approvalIds: string[],
+  decision: Exclude<InboxApprovalDecision, "regenerate">,
+): Promise<{ results: Array<{ approvalId: string; ok: boolean; error?: string }> }> {
+  const ids = [...new Set((approvalIds ?? []).filter(Boolean))].slice(0, 50);
+  const results: Array<{ approvalId: string; ok: boolean; error?: string }> = [];
+  for (const approvalId of ids) {
+    const r = await decideInboxApproval(approvalId, decision);
+    results.push({ approvalId, ok: r.ok, ...(r.error ? { error: r.error } : {}) });
+  }
+  return { results };
+}
+
+/** Send an approved message that failed to go out, once whatever stopped it is fixed. */
+export async function retryInboxMessage(taskId: string): Promise<{ ok: boolean; error?: string }> {
+  if (!taskId) return { ok: false, error: "Missing message." };
+  const auth = await requireOrgContext();
+  if (!auth.ok) return { ok: false, error: "Not authorized." };
+  const supabase = await createServerClient();
+  const { data: task } = await supabase
+    .from("tasks")
+    .select("id, status, result, assigned_agent, hub")
+    .eq("organization_id", auth.ctx.orgId)
+    .eq("id", taskId)
+    .maybeSingle();
+  const t = task as { id: string; status: string; result: Json | null; assigned_agent: AgentKey | null; hub: string | null } | null;
+  const reply = t ? extractInboxReply(t.result) : null;
+  if (!t || t.status !== "failed" || !reply || reply.delivered) {
+    return { ok: false, error: "This message is not waiting to be retried." };
+  }
+  const r = await deliverApprovedReply(supabase, {
+    orgId: auth.ctx.orgId,
+    approverId: auth.ctx.userId,
+    taskId: t.id,
+    agent: t.assigned_agent,
+    hub: t.hub,
+    reply,
+  });
+  revalidatePath("/inbox");
+  return r.ok ? { ok: true } : { ok: false, error: `Still not sent: ${r.error ?? "unknown error"}` };
+}
+
+/** Give up on an approved message that failed to go out. */
+export async function discardFailedInboxMessage(taskId: string): Promise<{ ok: boolean }> {
+  if (!taskId) return { ok: false };
+  const auth = await requireOrgContext();
+  if (!auth.ok) return { ok: false };
+  const supabase = await createServerClient();
+  const { error } = await supabase
+    .from("tasks")
+    .update({ status: "cancelled" })
+    .eq("organization_id", auth.ctx.orgId)
+    .eq("id", taskId)
+    .eq("status", "failed");
+  revalidatePath("/inbox");
+  return { ok: !error };
 }
