@@ -20,6 +20,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { Inbox, InboxItem, InboxTone } from "@/lib/inbox";
 import { relativeTime } from "@/components/mobile/format";
+import { MeetingApprovalGroup, MessageApprovalCard, groupByMeeting } from "@/components/inbox/MessageApproval";
 import {
   dismissApprovalTask,
   dismissAllApprovalTasks,
@@ -453,13 +454,28 @@ function Section({
         <p className="mb-2 text-xs text-status-danger">Failed to dismiss all. Try again.</p>
       ) : null}
       <div className="flex flex-col gap-2">
-        {items.map((item) =>
-          isApproval && onDecided ? (
-            <ApprovalRow key={item.id} item={item} onDecided={onDecided} onDismiss={onDismiss} />
-          ) : (
-            <LinkRow key={item.id} item={item} onDismiss={onDismiss} />
-          ),
-        )}
+        {isApproval && onDecided
+          ? groupByMeeting(items).map((entry) =>
+              "meeting" in entry ? (
+                <MeetingApprovalGroup
+                  key={`meeting:${entry.meeting.id}`}
+                  meeting={entry.meeting}
+                  items={entry.items}
+                  onDecided={onDecided}
+                  onCleared={(id) => onDismiss?.(id)}
+                />
+              ) : entry.message && (entry.approval || entry.message.failed) ? (
+                <MessageApprovalCard
+                  key={entry.id}
+                  item={entry}
+                  onDecided={onDecided}
+                  onCleared={(id) => onDismiss?.(id)}
+                />
+              ) : (
+                <ApprovalRow key={entry.id} item={entry} onDecided={onDecided} onDismiss={onDismiss} />
+              ),
+            )
+          : items.map((item) => <LinkRow key={item.id} item={item} onDismiss={onDismiss} />)}
       </div>
     </section>
   );

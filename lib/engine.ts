@@ -37,6 +37,7 @@ import { SKILL_AUTOINVOKE_ENABLED } from "@/lib/skills/config";
 import { observeOutput } from "@/lib/observe";
 import { extractApiWriteRequest, executeApiWrite } from "@/lib/api-write-requests";
 import { deliverApprovedReply, extractInboxReply, legacyInboxReply } from "@/lib/inbox/deliver-reply.server";
+import { reviseInboxReply } from "@/lib/inbox/revise-reply.server";
 
 type Client = Awaited<ReturnType<typeof createServerClient>>;
 
@@ -1513,6 +1514,24 @@ export async function decideApproval(
         reply: inboxReply,
       });
       return { workflowId: wf.id, decision: args.decision, ...(delivered.ok ? {} : { error: delivered.error }) };
+    }
+    // "Send back to Earn" on a reply: rewrite it with the note and put it back
+    // in approvals. Withdrawing it lost the reply and the note together.
+    if (args.decision === "regenerate" && inboxReply.action === "send_reply" && inboxReply.body) {
+      const revised = await reviseInboxReply(ctx.supabase, {
+        orgId: ctx.orgId,
+        taskId: wf.id,
+        title: wf.title,
+        agent: (wf.assigned_agent as string | null) ?? null,
+        reply: inboxReply,
+        note: args.note ?? "",
+      });
+      return {
+        workflowId: wf.id,
+        decision: args.decision,
+        ...(revised.error ? { error: revised.error } : {}),
+        ...(revised.notice ? { notice: revised.notice } : {}),
+      };
     }
     await ctx.supabase.from("tasks").update({ status: "cancelled" }).eq("id", wf.id);
     return { workflowId: wf.id, decision: args.decision };

@@ -125,6 +125,32 @@ describe("item shapers", () => {
     expect(item).toMatchObject({ id: "approval:t1", kind: "approval", tone: "approval", href: "/session/s1" });
     expect(item.title).toBe("Draft IC memo");
   });
+  it("workflowToApprovalItem sends an inbox message to its conversation and names its recipient", () => {
+    const message = {
+      taskId: "t9",
+      threadId: "th1",
+      action: "send_reply" as const,
+      actionLabel: "Reply",
+      body: "Hi",
+      sharePreface: null,
+      to: { name: "Ana Diaz", email: "ana@acme.com" },
+      subject: "Re: IC",
+      from: null,
+      threadHref: "/inbox?q=ana%40acme.com",
+      meeting: null,
+      contact: null,
+      lastInbound: null,
+      editable: true,
+      failed: null,
+    };
+    const item = workflowToApprovalItem({ ...task({ id: "t9", session_id: "s1" }), message });
+    expect(item.href).toBe("/inbox?q=ana%40acme.com");
+    expect(item.subtitle).toBe("Reply to Ana Diaz · awaiting your approval");
+    expect(item.message).toBe(message);
+    const failed = workflowToApprovalItem({ ...task({ id: "t9" }), message: { ...message, failed: { error: "Mailbox revoked" } } });
+    expect(failed.subtitle).toBe("Approved, not sent: Mailbox revoked");
+  });
+
   it("workflowToApprovalItem falls back to /workspace without a session", () => {
     expect(workflowToApprovalItem(task({ id: "t2", session_id: null })).href).toBe("/workspace");
   });

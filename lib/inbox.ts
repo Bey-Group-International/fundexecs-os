@@ -17,6 +17,7 @@
 // `isInboxOverdue`, …) so they unit-test without a DB or server-only imports.
 import * as React from "react";
 import { createServerClient } from "@/lib/supabase/server";
+import { fetchFailedInboxMessages, loadMessageApprovals } from "@/lib/inbox/message-approvals.server";
 import { ACTIVE_STAGES, scoreDeal } from "@/lib/run-conviction";
 import { getMandate, type Mandate } from "@/lib/build-readiness";
 import { isOverdue } from "@/lib/diligence-templates";
@@ -30,6 +31,11 @@ import type {
   Underwriting,
 } from "@/lib/supabase/database.types";
 import { AGENT_BY_KEY } from "@/lib/agents";
+import {
+  extractInboxReply,
+  legacyActionFromTask,
+  type InboxMessageApproval,
+} from "@/lib/inbox/pending-action";
 import { HUB_BY_KEY } from "@/lib/hubs";
 
 // React's per-request `cache` is provided by the Next.js runtime; fall back to
@@ -90,6 +96,12 @@ export interface InboxItem {
    * other tone, and on an approval row with no pending `approvals` record.
    */
   approval?: InboxApprovalMeta;
+  /**
+   * Set when the row is an inbox message — a reply, proposed time, booking,
+   * meeting link or share — held for approval or approved and not delivered:
+   * the email preview, conversation and recipient the card shows.
+   */
+  message?: InboxMessageApproval;
 }
 
 /** The inbox, grouped by the kind of action required. */
@@ -189,6 +201,9 @@ export interface ApprovalCandidate
   approvalId?: string | null;
   /** The meeting the workflow was started from (tasks.meeting_id), when known. */
   meeting_id?: string | null;
+  created_by?: string | null;
+  /** The inbox message this task holds, when it holds one (see message-approvals.server). */
+  message?: InboxMessageApproval;
 }
 
 /**
@@ -215,13 +230,20 @@ export function workflowToApprovalItem(task: ApprovalCandidate): InboxItem {
   // A description that is really a deep-link path is routing, not prose — it is
   // already consumed by `href`, so don't repeat it as the item's detail text.
   const detail = descPath && !descPath.startsWith("/") ? descPath : null;
+  const message = task.message;
   return {
     id: `approval:${task.id}`,
     kind: "approval",
     title: task.title,
-    subtitle,
-    href,
+    subtitle: message
+      ? message.failed
+        ? `Approved, not sent: ${message.failed.error}`
+        : `${message.actionLabel} to ${message.to.name ?? message.to.email ?? "the contact"} · awaiting your approval`
+      : subtitle,
+    // A message's place is its conversation, not a workflow page.
+    href: message ? message.threadHref : href,
     tone: "approval",
+    ...(message ? { message } : {}),
     ...(task.approvalId
       ? {
           approval: {
@@ -411,7 +433,7 @@ async function fetchAwaitingApproval(orgId: string): Promise<ApprovalCandidate[]
   const supabase = await createServerClient();
   const { data } = await supabase
     .from("tasks")
-    .select("id, title, session_id, assigned_agent, description, hub, result, created_at, meeting_id")
+    .select("id, title, session_id, assigned_agent, description, hub, result, created_at, meeting_id, created_by")
     .eq("organization_id", orgId)
     .is("parent_task_id", null)
     .eq("status", "awaiting_approval")
@@ -421,6 +443,9 @@ async function fetchAwaitingApproval(orgId: string): Promise<ApprovalCandidate[]
   // are the same logical action queued more than once. Keep the most recent.
   const seen = new Set<string>();
   return rows.filter((r) => {
+    // An inbox message is never a duplicate of another: two replies to one
+    // person share a title ("Reply — Ana Diaz") and are two messages.
+    if (extractInboxReply(r.result) || legacyActionFromTask(r)) return true;
     const key = (r.title ?? "").trim().toLowerCase();
     if (seen.has(key)) return false;
     seen.add(key);
@@ -567,14 +592,23 @@ export const getInbox = cache(async function getInbox(orgId: string): Promise<In
   try {
     const nowIso = new Date().toISOString();
     const todayIso = nowIso.slice(0, 10);
-    const [deals, awaitingApproval, meetings] = await Promise.all([
+    const client = await createServerClient();
+    const [deals, awaitingApproval, meetings, failedMessages] = await Promise.all([
       fetchInboxWorkingSet(orgId),
       fetchAwaitingApproval(orgId),
       fetchUnfinishedMeetings(orgId),
+      fetchFailedInboxMessages(client, orgId),
     ]);
+    // Approved messages that did not go out sit with the approvals: they need
+    // the operator just as much, and the card retries them.
+    const candidates = [
+      ...(await attachPendingApprovals(orgId, awaitingApproval)),
+      ...(failedMessages as ApprovalCandidate[]),
+    ];
+    const messages = await loadMessageApprovals(client, orgId, candidates);
     return buildInbox(
       deals,
-      await attachPendingApprovals(orgId, awaitingApproval),
+      candidates.map((c) => (messages.has(c.id) ? { ...c, message: messages.get(c.id) } : c)),
       todayIso,
       meetings,
       nowIso,
@@ -612,13 +646,16 @@ export async function getInboxCount(orgId: string): Promise<number> {
 export async function getApprovalsCount(orgId: string): Promise<number> {
   try {
     const nowIso = new Date().toISOString();
-    const [awaitingApproval, meetings] = await Promise.all([
+    const [awaitingApproval, meetings, failedMessages] = await Promise.all([
       fetchAwaitingApproval(orgId),
       fetchUnfinishedMeetings(orgId),
+      createServerClient().then((client) => fetchFailedInboxMessages(client, orgId)),
     ]);
-    return awaitingApproval.filter(
-      (t) => !isPrematureFollowupPack(t.title ?? "", meetings, nowIso, t.meeting_id),
-    ).length;
+    return (
+      awaitingApproval.filter(
+        (t) => !isPrematureFollowupPack(t.title ?? "", meetings, nowIso, t.meeting_id),
+      ).length + failedMessages.length
+    );
   } catch {
     return 0;
   }

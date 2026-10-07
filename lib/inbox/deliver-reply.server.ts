@@ -35,67 +35,18 @@ import { recordDispatch } from "@/lib/integrations/log";
 import type { DispatchContext, DispatchResult } from "@/lib/integrations/types";
 import type { ActionKind } from "@/lib/gates";
 import { isVerifiable } from "@/lib/grounding";
-import { INBOX_ACTION_LABEL } from "@/lib/inbox/action-labels";
+import {
+  extractInboxReply,
+  legacyActionFromTask,
+  replySubject,
+  type PendingInboxReply,
+} from "@/lib/inbox/pending-action";
 import type { AgentKey } from "@/lib/supabase/database.types";
 
 type Client = SupabaseClient<Database>;
 
-type BackingArtifact = { verification_status: string; grounding_score: number };
-
-/**
- * An inbox action held for approval, recorded on its task so approving can carry
- * it out exactly as an immediate run would: a reply, a proposed time, a booking
- * confirmation, a meeting link, a Command Center share.
- */
-export interface PendingInboxReply {
-  threadId: string;
-  action: ActionKind;
-  /** The composed text, for a reply. */
-  body: string | null;
-  /** Who asked for it: their mailbox sends an email reply, not the approver's. */
-  senderId: string;
-  /** The line a Command Center share opens with. */
-  sharePreface?: string | null;
-  /** The work product a share carries, as it stood when it was queued. */
-  backingArtifact?: BackingArtifact | null;
-  /** Set once delivered; the meeting's follow-up status reads it. */
-  delivered?: boolean;
-  error?: string;
-}
-
-/** The pending reply on a task's result, if this task is one. */
-export function extractInboxReply(result: unknown): PendingInboxReply | null {
-  if (!result || typeof result !== "object") return null;
-  const r = (result as { inboxReply?: unknown }).inboxReply;
-  if (!r || typeof r !== "object") return null;
-  const p = r as Partial<PendingInboxReply>;
-  if (typeof p.threadId !== "string" || typeof p.senderId !== "string" || typeof p.action !== "string") return null;
-  const artifact = p.backingArtifact;
-  return {
-    threadId: p.threadId,
-    action: p.action as ActionKind,
-    body: typeof p.body === "string" ? p.body : null,
-    senderId: p.senderId,
-    ...(typeof p.sharePreface === "string" ? { sharePreface: p.sharePreface } : {}),
-    ...(artifact && typeof artifact === "object" && typeof artifact.verification_status === "string"
-      ? { backingArtifact: { verification_status: artifact.verification_status, grounding_score: Number(artifact.grounding_score) || 0 } }
-      : {}),
-    delivered: p.delivered === true,
-  };
-}
-
-const LEGACY_REPLY_PREFIX = "Unified-inbox reply on the ";
-const LEGACY_ACTION_PREFIX = "Unified-inbox action on the ";
-
-/** The action a task's title names ("Propose a time — Ana Diaz"), if it names one. */
-function actionFromTitle(title: string | null | undefined): ActionKind | null {
-  const head = (title ?? "").split(" — ")[0]?.trim();
-  if (!head) return null;
-  for (const [action, label] of Object.entries(INBOX_ACTION_LABEL)) {
-    if (label === head) return action as ActionKind;
-  }
-  return null;
-}
+export type { PendingInboxReply } from "@/lib/inbox/pending-action";
+export { extractInboxReply, replySubject } from "@/lib/inbox/pending-action";
 
 /**
  * An inbox action queued before actions were parked on the task (inboxReply),
@@ -108,25 +59,8 @@ export async function legacyInboxReply(
   client: Client,
   task: { id: string; title?: string | null; description?: string | null; created_by?: string | null },
 ): Promise<PendingInboxReply | null> {
-  const desc = task.description ?? "";
-  if (!task.created_by) return null;
-
-  let action: ActionKind;
-  let body: string | null = null;
-  if (desc.startsWith(LEGACY_REPLY_PREFIX)) {
-    const at = desc.indexOf('":\n\n');
-    if (at < 0) return null;
-    body = desc.slice(at + 4).trim();
-    if (!body) return null;
-    action = "send_reply";
-  } else if (desc.startsWith(LEGACY_ACTION_PREFIX)) {
-    const named = actionFromTitle(task.title);
-    // A reply needs its text, and an action without one carries none.
-    if (!named || named === "send_reply") return null;
-    action = named;
-  } else {
-    return null;
-  }
+  const legacy = legacyActionFromTask(task);
+  if (!legacy) return null;
 
   const { data } = await client
     .from("task_events")
@@ -137,7 +71,7 @@ export async function legacyInboxReply(
     .maybeSingle();
   const threadId = (data as { payload?: { inbox_thread_id?: unknown } } | null)?.payload?.inbox_thread_id;
   if (typeof threadId !== "string" || !threadId) return null;
-  return { threadId, action, body, senderId: task.created_by };
+  return { threadId, ...legacy };
 }
 
 /** An email thread: a reply to it is an email to its counterparty. */
@@ -145,12 +79,6 @@ export function isEmailThread(t: Pick<InboxThread, "channel" | "counterparty_ema
   return t.channel === "gmail" && Boolean(t.counterparty_email);
 }
 
-/** "Re: <subject>", once — never "Re: Re:", never "(no subject)" when there is one. */
-export function replySubject(subject: string | null | undefined): string {
-  const s = (subject ?? "").trim();
-  if (!s) return "(no subject)";
-  return /^re\s*:/i.test(s) ? s : `Re: ${s}`;
-}
 
 export function replyHtml(body: string): string {
   const escaped = escapeHtml(body);
