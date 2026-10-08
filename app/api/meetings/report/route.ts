@@ -7,7 +7,7 @@ import { createActionItemTasks } from "@/lib/meetings/action-items.server";
 import { parseActionItem } from "@/lib/meetings/action-items";
 import { loadOrgDirectory } from "@/lib/meetings/directory.server";
 import { normalizeNoteList, normalizeNoteText } from "@/lib/meetings/live-notes";
-import { EMPTY_REPORT, clampTranscript, generateMeetingReport } from "@/lib/meetings/report-analysis";
+import { EMPTY_REPORT, generateMeetingReport } from "@/lib/meetings/report-analysis";
 import { mergeTranscripts, restoreTranscript, type StoredLine } from "@/lib/meetings/transcript-restore";
 import { meanRowConfidence, qualityPreamble, transcriptForModel, transcriptQuality } from "@/lib/meetings/transcript-quality";
 import { readAllTranscriptRows } from "@/lib/meetings/transcript-read";
@@ -212,8 +212,15 @@ export async function POST(req: Request) {
       console.warn("[/api/meetings/report] stored transcript unavailable", err);
     }
 
-    // Cap transcript to stay within model context / cost budget.
-    const transcript = clampTranscript(mergeTranscripts(body.transcript, stored));
+    // The whole record, NOT capped. The model-context clamp used to be applied
+    // here — before the store — so a meeting longer than the budget had the
+    // opening of its permanent record cut off: `full_transcript`, the
+    // institutional record and every later regenerate all read from what this
+    // writes, and none of them can get those words back. The clamp belongs to
+    // the model's copy alone, and generateMeetingReport applies it to its own
+    // input — which is also exactly how the regenerate route treats the same
+    // transcript.
+    const transcript = mergeTranscripts(body.transcript, stored);
 
     // What the model reads, which is not the same thing as what is stored.
     //
