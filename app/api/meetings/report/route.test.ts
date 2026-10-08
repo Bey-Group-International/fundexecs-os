@@ -14,6 +14,7 @@ const from = jest.fn();
 const generateMeetingReport = jest.fn();
 const persistInstitutionalMeetingRecord = jest.fn();
 const createTeamTask = jest.fn();
+const clampTranscript = jest.fn((t: string) => t);
 
 jest.mock("@/lib/supabase/server", () => ({
   createServerClient: async () => ({ auth: { getUser: () => getUser() }, from: (t: string) => from(t) }),
@@ -25,7 +26,7 @@ jest.mock("@/lib/meetings/service", () => ({
 }));
 jest.mock("@/lib/meetings/report-analysis", () => ({
   EMPTY_REPORT: { summary: "", key_points: [], action_items: [] },
-  clampTranscript: (t: string) => t,
+  clampTranscript: (t: string) => clampTranscript(t),
   generateMeetingReport: (...a: unknown[]) => generateMeetingReport(...a),
 }));
 
@@ -135,6 +136,18 @@ describe("what the model is allowed to read", () => {
     // re-prepend it on every later regenerate.
     wire();
     await POST(req(BAD));
+    expect(writes.reports[0]).toMatchObject({ full_transcript: BAD });
+  });
+
+  it("never trims the stored record to the model's budget", async () => {
+    // The model-context clamp used to run BEFORE the store, so a meeting longer
+    // than the budget had the opening of its permanent record cut off —
+    // full_transcript, the institutional record and every later regenerate all
+    // read from that one write. The route must not clamp at all: the model's
+    // copy is clamped inside generateMeetingReport, on its own input.
+    wire();
+    await POST(req(BAD));
+    expect(clampTranscript).not.toHaveBeenCalled();
     expect(writes.reports[0]).toMatchObject({ full_transcript: BAD });
   });
 

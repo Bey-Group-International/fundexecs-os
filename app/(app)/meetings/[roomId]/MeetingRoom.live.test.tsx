@@ -1055,3 +1055,74 @@ describe("a camera that stalls without ending", () => {
     expect(notice()).not.toBeInTheDocument();
   });
 });
+
+describe("a participant whose browser cannot transcribe", () => {
+  // The ownership rule means their words reach no transcript anywhere, and
+  // until the room was told, nobody — least of all the host reading the
+  // report — had any way to know. See transcription-coverage.ts.
+  const notice = () => screen.queryByText(/being transcribed/);
+
+  async function peerReports(id: string, transcribing: boolean, displayName?: string) {
+    await act(async () => {
+      realtime.signal({ type: "sr", from: id, transcribing, displayName });
+      await Promise.resolve();
+    });
+  }
+
+  it("names them to the room, and withdraws when their transcription recovers", async () => {
+    await enterCall();
+    await peerArrives("peer-1", "Maya");
+
+    await peerReports("peer-1", false, "Maya");
+    expect(notice()).toBeInTheDocument();
+    expect(notice()!.textContent).toContain("Maya isn't being transcribed");
+    expect(notice()!.textContent).toContain("not reaching the transcript or the report");
+
+    await peerReports("peer-1", true, "Maya");
+    expect(notice()).not.toBeInTheDocument();
+  });
+
+  it("stays dismissed for the problem it was dismissed for, and returns for a new one", async () => {
+    await enterCall();
+    await peerArrives("peer-1", "Maya");
+    await peerArrives("peer-2", "Li");
+
+    await peerReports("peer-1", false, "Maya");
+    await act(async () => {
+      screen.getByRole("button", { name: /dismiss/i }).click();
+      await Promise.resolve();
+    });
+    expect(notice()).not.toBeInTheDocument();
+
+    // The same fact repeated must not re-open it…
+    await peerReports("peer-1", false, "Maya");
+    expect(notice()).not.toBeInTheDocument();
+
+    // …but a second person losing coverage is new information.
+    await peerReports("peer-2", false, "Li");
+    expect(notice()).toBeInTheDocument();
+    expect(notice()!.textContent).toContain("Maya and Li aren't being transcribed");
+  });
+
+  it("tells the room about its own coverage, which in this browser is none", async () => {
+    // jsdom has no SpeechRecognition — exactly the Firefox case. The announce
+    // effect must have said so, or every peer would file this member's silence
+    // in the transcript as a person with nothing to say.
+    await enterCall();
+    const srClaims = sent
+      .map((m) => (m as { payload?: { type?: string; transcribing?: boolean } }).payload)
+      .filter((p) => p?.type === "sr");
+    expect(srClaims.length).toBeGreaterThan(0);
+    expect(srClaims[srClaims.length - 1]!.transcribing).toBe(false);
+  });
+
+  it("repeats its coverage to a newcomer, the way mic state is repeated", async () => {
+    await enterCall();
+    sent.length = 0;
+    await peerArrives("peer-1", "Maya");
+    const srClaims = sent
+      .map((m) => (m as { payload?: { type?: string } }).payload)
+      .filter((p) => p?.type === "sr");
+    expect(srClaims.length).toBeGreaterThan(0);
+  });
+});

@@ -93,6 +93,7 @@ import {
   createDeafWatch, engineConfidence, isNoisy, lineConfidence, observeDeafTick, pushEngineScore,
   recognitionLang, recognizerHeard, restartDelay,
 } from "@/lib/meetings/recognition-quality";
+import { coverageNotice, localTranscribing } from "@/lib/meetings/transcription-coverage";
 import { recordingNotice, type RecordingState } from "@/lib/meetings/recording-policy";
 import {
   NO_ELAPSED,
@@ -322,6 +323,13 @@ type SignalMsg =
   // Mic state has to be told, not measured: a muted track is simply silent, and
   // silence is indistinguishable from a listener who hasn't spoken yet.
   | { type: "mic"; from: string; micOn: boolean; displayName?: string }
+  // Transcription coverage has to be told for the same reason. Each device is
+  // the only one allowed to transcribe its own speaker (transcript-buffer's
+  // ownership rule), so a browser whose recognition is missing, refused, or
+  // deaf makes that person's words reach NO transcript anywhere — and to
+  // everyone else that is indistinguishable from a colleague who sat quietly.
+  // See transcription-coverage.ts.
+  | { type: "sr"; from: string; transcribing: boolean; displayName?: string }
   // Consent, not telemetry. Several US states require every party to a
   // conversation to know it is being recorded, and the host's own screen
   // knowing is not that — so the room is told, and every participant shows the
@@ -837,6 +845,17 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
   // capturing a different microphone than the call's. See DeafWatch.
   const deafWatchRef = useRef(createDeafWatch());
   const [srDeaf, setSrDeaf] = useState(false);
+  // Mirrors srDeaf for the join hello, which runs inside the signal handler
+  // and must not read stale state. Kept in step by the announce effect below.
+  const srDeafRef = useRef(false);
+  // Peers whose own transcription is not working (id → display name), told to
+  // us the way mic state is. Under the ownership rule their words reach no
+  // transcript at all, and nothing else in the room would ever say so.
+  const [peerSrOff, setPeerSrOff] = useState<Map<string, string>>(new Map());
+  const peerSrOffRef = useRef<Map<string, string>>(new Map());
+  // Dismissing the coverage banner holds until the facts change: a freshly
+  // uncovered participant re-opens it, and full coverage re-arms it.
+  const [srCoverageHidden, setSrCoverageHidden] = useState(false);
 
   // Chat
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
@@ -2210,6 +2229,15 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
       // would assume everyone already in the room is unmuted and on camera.
       // Tell them where we actually are.
       sendSignalRef.current({ type: "mic", from: myId, micOn: micOnRef.current, displayName: localNameRef.current });
+      // Transcription coverage is announced on change like the rest, so a
+      // newcomer — most importantly a host joining last — would otherwise
+      // assume everyone already here is being transcribed.
+      sendSignalRef.current({
+        type: "sr",
+        from: myId,
+        transcribing: localTranscribing(srStatusRef.current, srDeafRef.current),
+        displayName: localNameRef.current,
+      });
       announceVideoStateRef.current();
     }
 
@@ -2370,6 +2398,26 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
       // A mic that just went off is not "still speaking" — release the hold now
       // rather than letting it decay as if the voice merely paused.
       if (!msg.micOn) lastAudibleRef.current.delete(msg.from);
+    }
+
+    // Transcription coverage, told like mic state. `transcribing: false` means
+    // this peer's words are reaching no transcript anywhere: their browser is
+    // the only one allowed to record them, and it has said it cannot.
+    if (msg.type === "sr" && msg.from !== myId) {
+      if (msg.displayName) setPeerName(msg.from, msg.displayName);
+      const prev = peerSrOffRef.current;
+      const name = msg.displayName ?? peersDataRef.current.get(msg.from)?.displayName ?? "A participant";
+      const changed = msg.transcribing ? prev.has(msg.from) : prev.get(msg.from) !== name;
+      if (changed) {
+        const next = new Map(prev);
+        if (msg.transcribing) next.delete(msg.from);
+        else next.set(msg.from, name);
+        peerSrOffRef.current = next;
+        setPeerSrOff(next);
+        // A fresh problem re-opens a dismissed banner; a room back at full
+        // coverage re-arms it for the next one.
+        if ((!msg.transcribing && !prev.has(msg.from)) || next.size === 0) setSrCoverageHidden(false);
+      }
     }
 
     if (msg.type === "video_request" && msg.to === myId) {
@@ -3765,6 +3813,22 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
       setSrDeaf(false);
     };
   }, [sessionLive]);
+
+  // Tell the room whether this client's transcription is working — announced
+  // on change here and to each newcomer in the join hello, exactly like mic
+  // state. A browser whose recognition is missing, refused, or deaf produces
+  // no evidence of that on its own: everyone else just reads a transcript this
+  // member is mysteriously absent from. See transcription-coverage.ts.
+  useEffect(() => {
+    if (!sessionLive) return;
+    srDeafRef.current = srDeaf;
+    sendSignalRef.current({
+      type: "sr",
+      from: myIdRef.current,
+      transcribing: localTranscribing(srStatus, srDeaf),
+      displayName: localNameRef.current,
+    });
+  }, [sessionLive, srStatus, srDeaf]);
 
   // Follow the microphone.
   //
@@ -6260,6 +6324,21 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
           default, and the transcript will pick you up.
         </p>
         <button onClick={() => setSrDeaf(false)} className="shrink-0 text-amber-500 hover:text-amber-600 text-xs font-medium underline">Dismiss</button>
+      </div>
+  ) });
+  // Somebody ELSE in the room is not being transcribed at all. Everyone is
+  // told — above all the host, who would otherwise read a report a colleague
+  // is silently missing from — while the call is running, which is the only
+  // time it can be fixed. Filtered against `peers` so a departed participant
+  // takes their warning with them. See transcription-coverage.ts.
+  const srUncovered = srCoverageHidden
+    ? null
+    : coverageNotice([...peerSrOff].filter(([id]) => peers.has(id)).map(([, name]) => name));
+  if (srUncovered) stageNotices.push({ id: "sr-coverage", priority: 56, node: (
+      <div role="status" className="flex items-start gap-3 px-4 py-3 bg-amber-500/10 border-b border-amber-500/30 shrink-0">
+        <span className="text-amber-500 mt-0.5 shrink-0">⚠</span>
+        <p className="flex-1 text-sm text-amber-600 dark:text-amber-400">{srUncovered}</p>
+        <button onClick={() => setSrCoverageHidden(true)} className="shrink-0 text-amber-500 hover:text-amber-600 text-xs font-medium underline">Dismiss</button>
       </div>
   ) });
   // Echo. Its own banner, not `mediaError`: see `echoNotice`.
