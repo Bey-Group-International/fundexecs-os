@@ -297,3 +297,64 @@ describe("micLiveDuring", () => {
     expect(micLiveDuring({ startedAt: 10_000 }, false, null)).toBe(false);
   });
 });
+
+describe("two devices in one room", () => {
+  // Both microphones hear BOTH voices at speech level, so the share test that
+  // defends ownership everywhere else proves nothing here — before this rule,
+  // every sentence either person said entered the transcript twice, once under
+  // the wrong name flagged as cross-talk. Distance is what survives: a voice
+  // is clearly louder on its own microphone than on one across the room.
+  const window = { startedAt: T0, endedAt: T0 + 1500 };
+  const sameRoom = { localMicOn: true, sameRoomPeerIds: new Set(["peer-1"]) };
+
+  it("hands the neighbour's words back when their own track clearly carried them", () => {
+    const log = new VoiceActivityLog();
+    // Their close mic (via their track) at 0.6; our air pickup of them at 0.3.
+    fill(log, { [LOCAL_SPEAKER_ID]: 0.3, "peer-1": 0.6 }, window.startedAt, window.endedAt);
+
+    const a = attributeUtterance(window, log, PEOPLE, sameRoom);
+    expect(a.basis).toBe("same-room");
+    expect(a.publish).toBe(false);
+    expect(a.speakerId).toBe("peer-1");
+    expect(a.displayName).toBe("Grace");
+  });
+
+  it("never gives away the member's own words — their close mic is the stronger copy", () => {
+    const log = new VoiceActivityLog();
+    // We are the one talking: our mic at 0.6, their track carries only the
+    // attenuated air pickup of us at 0.3.
+    fill(log, { [LOCAL_SPEAKER_ID]: 0.6, "peer-1": 0.3 }, window.startedAt, window.endedAt);
+
+    const a = attributeUtterance(window, log, PEOPLE, sameRoom);
+    expect(a.publish).toBe(true);
+    expect(a.speakerId).toBe(LOCAL_SPEAKER_ID);
+  });
+
+  it("falls through to the ordinary rules when neither copy is clearly stronger", () => {
+    const log = new VoiceActivityLog();
+    // Auto-gain has pushed the two copies together. A duplicated line flagged
+    // as overlapped beats a dropped one, so nothing is suppressed on a guess.
+    fill(log, { [LOCAL_SPEAKER_ID]: 0.4, "peer-1": 0.5 }, window.startedAt, window.endedAt);
+
+    const a = attributeUtterance(window, log, PEOPLE, sameRoom);
+    expect(a.basis).toBe("cross-talk");
+    expect(a.publish).toBe(true);
+    expect(a.overlapped).toBe(true);
+  });
+
+  it("changes nothing for a peer who is not in the same room", () => {
+    const log = new VoiceActivityLog();
+    fill(log, { [LOCAL_SPEAKER_ID]: 0.3, "peer-2": 0.6 }, window.startedAt, window.endedAt);
+
+    // peer-2 is loud and stronger, but on their own connection far away — the
+    // local voice in our mic is really ours, and the line stays ours to publish.
+    const a = attributeUtterance(window, log, PEOPLE, sameRoom);
+    expect(a.publish).toBe(true);
+    expect(a.speakerId).toBe(LOCAL_SPEAKER_ID);
+  });
+
+  it("explains the suppression in the room's own words", () => {
+    expect(suppressionReason("same-room", "Grace"))
+      .toBe("Heard Grace from across the room — their own device is transcribing them");
+  });
+});

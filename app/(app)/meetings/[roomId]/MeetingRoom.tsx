@@ -832,6 +832,10 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
   // The last moment the voice meter saw the mic live, so a sentence finalized
   // just after a mute is judged by the mic it was spoken on. See micLiveDuring.
   const micLastOnTsRef = useRef<number | null>(null);
+  // Peers the voice-return watch currently places in this member's own room,
+  // unfiltered by the "Unmute" escape hatch — attribution needs the fact of
+  // the shared room even after the member takes the silencing back.
+  const sameRoomDetectedRef = useRef<Set<string>>(new Set());
 
   // Whether speech recognition is capturing. There is no transcript tab any
   // more, so this lamp in the copilot header is the only sign that the meeting
@@ -3671,7 +3675,10 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
           // "say your piece, hit mute" lands the click in that gap — judging by
           // the moment of delivery dropped the member's last sentence before
           // every mute as "heard while muted". See micLiveDuring.
-          { localMicOn: micLiveDuring(win, micOnRef.current, micLastOnTsRef.current) },
+          {
+            localMicOn: micLiveDuring(win, micOnRef.current, micLastOnTsRef.current),
+            sameRoomPeerIds: sameRoomDetectedRef.current,
+          },
         );
         utteranceStartRef.current = null;
 
@@ -3893,6 +3900,9 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
 
     const taps = new Map<string, VoiceTap>();
     meterRef.current = { ctx, taps };
+    // The one Set instance the ref ever holds, captured so the cleanup below
+    // clears the same object it was filled through.
+    const sameRoomDetected = sameRoomDetectedRef.current;
 
     // Who the stage is on, and who has been loudest since when while it is not.
     let shownSpeaker: string | null = null;
@@ -3963,6 +3973,12 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
       // Their playback is muted here, automatically; it comes back by itself
       // when the evidence goes, and never again for someone un-muted by hand.
       const returned = observeVoiceReturn(returnWatchRef.current, { local: localRaw, remotes: remoteRaw });
+      // The raw verdict, BEFORE the keep-audible filter below: pressing
+      // "Unmute" takes back the silencing, not the fact of the shared room,
+      // and attribution needs the fact. See the same-room rule in
+      // speaker-attribution.ts.
+      returned.started.forEach((id) => sameRoomDetected.add(id));
+      returned.cleared.forEach((id) => sameRoomDetected.delete(id));
       const add = returned.started.filter((id) => !keepAudibleRef.current.has(id));
       if (add.length || returned.cleared.length) {
         setSameRoomPeers((prev) => {
@@ -4005,6 +4021,9 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
       taps.forEach((t) => { try { t.source.disconnect(); } catch { /* context already gone */ } });
       taps.clear();
       meterRef.current = null;
+      // A verdict about this session's room, gone with the session — the next
+      // call must not inherit it.
+      sameRoomDetected.clear();
       void ctx.close().catch(() => {});
     };
     // `speakingStore` is a ref value, so its identity never changes and this

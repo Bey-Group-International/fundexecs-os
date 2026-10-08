@@ -38,6 +38,21 @@ const ECHO_PEER_SHARE = 0.35;
 /** And the local mic must have been this close to silent throughout. */
 const ECHO_LOCAL_SHARE = 0.15;
 
+/**
+ * How much louder a same-room peer's own track must be than the local mic
+ * before their voice heard HERE is handed back to them.
+ *
+ * In one room both microphones hear both voices at speech level, so the
+ * share test that defends ownership everywhere else proves nothing — the
+ * air defeats it. What survives is distance: a voice is far louder on its
+ * own microphone than on one across the room. The margin is deliberately
+ * wide because auto-gain pushes the two copies toward each other and the
+ * cost of a wrong drop is somebody's words; anything short of clearly
+ * stronger falls through to the ordinary rules, whose worst case is a
+ * duplicated line flagged as overlapped rather than a lost one.
+ */
+export const SAME_ROOM_PEAK_RATIO = 1.5;
+
 export interface ParticipantAudio {
   id: string;
   displayName: string;
@@ -72,6 +87,8 @@ export type AttributionBasis =
   | "echo"
   /** Local and a peer overlapped closely enough that neither clearly owns it. */
   | "cross-talk"
+  /** A peer in the same physical room, whose own track clearly carried it. */
+  | "same-room"
   /** Nobody was measurably audible — usually a tail-end recognizer flush. */
   | "unattributed";
 
@@ -218,7 +235,7 @@ export function attributeUtterance(
   window: { startedAt: number; endedAt: number },
   log: VoiceActivityLog,
   participants: ParticipantAudio[],
-  options: { localMicOn: boolean } = { localMicOn: true },
+  options: { localMicOn: boolean; sameRoomPeerIds?: ReadonlySet<string> } = { localMicOn: true },
 ): Attribution {
   const nameOf = (id: string) => participants.find((p) => p.id === id)?.displayName ?? null;
   const summaries = log.summarize(window.startedAt, window.endedAt);
@@ -240,7 +257,31 @@ export function attributeUtterance(
   const localShare = local?.share ?? 0;
   const peerShare = loudestPeer?.share ?? 0;
 
-  // 2. Nobody audible: a recognizer flush with no voice behind it in our log.
+  // 2. A peer in the same physical room. This mic hears their real voice at
+  //    full speech level through the air, so a high local share is exactly
+  //    what THEIR talking produces here — the share test cannot defend
+  //    ownership, and before this rule every sentence either of you said went
+  //    into the transcript twice, once under the wrong name flagged as
+  //    cross-talk. Distance still tells: when their own track is clearly the
+  //    stronger copy, the words are theirs and their device is transcribing
+  //    them. Anything short of clearly stronger falls through — a duplicated
+  //    line flagged overlapped beats a dropped one.
+  if (
+    loudestPeer
+    && options.sameRoomPeerIds?.has(loudestPeer.speakerId)
+    && peerShare >= ECHO_PEER_SHARE
+    && loudestPeer.peak >= SAME_ROOM_PEAK_RATIO * (local?.peak ?? 0)
+  ) {
+    return {
+      ...NOT_MINE,
+      speakerId: loudestPeer.speakerId,
+      displayName: nameOf(loudestPeer.speakerId),
+      confidence: Math.min(0.8, 0.5 + peerShare * 0.4),
+      basis: "same-room",
+    };
+  }
+
+  // 3. Nobody audible: a recognizer flush with no voice behind it in our log.
   //    Keep it — dropping real speech is worse than an unlabelled line — but
   //    say plainly that we could not place it.
   if (localShare === 0 && peerShare === 0) {
@@ -254,7 +295,7 @@ export function attributeUtterance(
     };
   }
 
-  // 3. Live mic, but the local voice was essentially absent while a peer held
+  // 4. Live mic, but the local voice was essentially absent while a peer held
   //    the floor: speaker bleed picked up by an open mic. The peer's own client
   //    is transcribing it.
   //
@@ -276,7 +317,7 @@ export function attributeUtterance(
 
   const overlapped = peerShare > 0 && peerShare >= localShare * 0.5;
 
-  // 4. Both talking at once. It is ours to publish — our mic heard our voice —
+  // 5. Both talking at once. It is ours to publish — our mic heard our voice —
   //    but the recognizer may well have merged two people's words, so the line
   //    goes out flagged rather than asserted.
   if (overlapped) {
@@ -290,7 +331,7 @@ export function attributeUtterance(
     };
   }
 
-  // 5. The ordinary case: live mic, local voice dominant.
+  // 6. The ordinary case: live mic, local voice dominant.
   return {
     speakerId: LOCAL_SPEAKER_ID,
     displayName: nameOf(LOCAL_SPEAKER_ID),
@@ -306,6 +347,7 @@ export function suppressionReason(basis: AttributionBasis, displayName: string |
   const who = displayName ?? "another participant";
   if (basis === "mic-muted") return `Heard while you were muted — not added to the transcript`;
   if (basis === "echo") return `Heard ${who} through your speakers — their device is transcribing it`;
+  if (basis === "same-room") return `Heard ${who} from across the room — their own device is transcribing them`;
   return "Not attributed to you";
 }
 
