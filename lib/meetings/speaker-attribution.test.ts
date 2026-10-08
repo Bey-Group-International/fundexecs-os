@@ -6,6 +6,7 @@ import {
   attributeUtterance,
   formatTranscriptLine,
   isSpeaking,
+  micLiveDuring,
   speakerColorIndex,
   speakingIds,
   suppressionReason,
@@ -270,5 +271,29 @@ describe("speakerColorIndex", () => {
 
   it("survives a zero palette instead of dividing by it", () => {
     expect(speakerColorIndex("peer-1", 0)).toBe(0);
+  });
+});
+
+describe("micLiveDuring", () => {
+  // The gap this rule exists for: the engine finalizes a sentence a second or
+  // two after it ends, and "say your piece, hit mute" lands the click inside
+  // that gap. The mic that matters is the one during the utterance.
+  it("counts a mic that went off after the utterance started as live for it", () => {
+    const spokeFrom = 10_000;
+    const mutedAt = 11_800; // mid-sentence or just after it
+    expect(micLiveDuring({ startedAt: spokeFrom }, false, mutedAt)).toBe(true);
+  });
+
+  it("does not revive a mic that was off before the words began", () => {
+    // Genuinely muted speech — the room through the speakers — stays dropped.
+    expect(micLiveDuring({ startedAt: 10_000 }, false, 9_000)).toBe(false);
+  });
+
+  it("is live whenever the mic is on right now", () => {
+    expect(micLiveDuring({ startedAt: 10_000 }, true, null)).toBe(true);
+  });
+
+  it("falls back to the mic's current state when no meter ever saw it", () => {
+    expect(micLiveDuring({ startedAt: 10_000 }, false, null)).toBe(false);
   });
 });

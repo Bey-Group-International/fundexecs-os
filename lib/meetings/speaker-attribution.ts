@@ -180,6 +180,33 @@ export function speakingIds(lastAudibleAt: Map<string, number>, now: number, hol
 const NOT_MINE = { publish: false, overlapped: false } as const;
 
 /**
+ * Whether the local mic was live while the words were being SPOKEN.
+ *
+ * The recognizer hands a sentence over after it ends — half a second to two
+ * seconds after. "Say your piece, hit mute" lands the click exactly in that
+ * gap, and judging the mic by the moment the result arrived threw away the
+ * host's last sentence before every mute as "heard while you were muted".
+ * The words were spoken on a live microphone; the mic that matters is the
+ * one during the utterance window, not the one at delivery.
+ *
+ * `lastOnTs` is the most recent moment the mic was observed live (the voice
+ * meter's tick, so it is at most one tick stale). A mic that went off DURING
+ * or after the utterance counts as live for it — the voice-activity shares
+ * still decide ownership, and any muted stretch inside the window records
+ * level zero, so the room's words under a mostly-muted mic still fall to the
+ * echo and cross-talk rules rather than being relabelled as the owner's.
+ * Null — no meter ever saw the mic on — falls back to the mic's state now.
+ */
+export function micLiveDuring(
+  window: { startedAt: number },
+  micOnNow: boolean,
+  lastOnTs: number | null,
+): boolean {
+  if (micOnNow) return true;
+  return lastOnTs !== null && lastOnTs >= window.startedAt;
+}
+
+/**
  * Decide who spoke an utterance the local recognizer just finalized.
  *
  * The order matters. A muted mic is decisive on its own: whatever was heard,
