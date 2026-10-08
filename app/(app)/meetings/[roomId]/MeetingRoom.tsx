@@ -50,6 +50,7 @@ import {
   VoiceActivityLog,
   attributeUtterance,
   formatTranscriptLine,
+  micLiveDuring,
   speakingIds,
   type ParticipantAudio,
 } from "@/lib/meetings/speaker-attribution";
@@ -828,6 +829,9 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
   // Utterance boundaries. The recognizer hands us a sentence after the fact, so
   // attribution needs the moment it started, not the moment it arrived.
   const utteranceStartRef = useRef<number | null>(null);
+  // The last moment the voice meter saw the mic live, so a sentence finalized
+  // just after a mute is judged by the mic it was spoken on. See micLiveDuring.
+  const micLastOnTsRef = useRef<number | null>(null);
 
   // Whether speech recognition is capturing. There is no transcript tab any
   // more, so this lamp in the copilot header is the only sign that the meeting
@@ -3657,11 +3661,17 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
             isLocal: false,
           })),
         ];
+        const win = { startedAt: utteranceStartRef.current ?? now - 1500, endedAt: now };
         attribution = attributeUtterance(
-          { startedAt: utteranceStartRef.current ?? now - 1500, endedAt: now },
+          win,
           voiceLogRef.current,
           roster,
-          { localMicOn: micOnRef.current },
+          // The mic as it was while the words were SPOKEN, not as it is now.
+          // The engine finalizes a sentence a second or two after it ends, and
+          // "say your piece, hit mute" lands the click in that gap — judging by
+          // the moment of delivery dropped the member's last sentence before
+          // every mute as "heard while muted". See micLiveDuring.
+          { localMicOn: micLiveDuring(win, micOnRef.current, micLastOnTsRef.current) },
         );
         utteranceStartRef.current = null;
 
@@ -3891,6 +3901,7 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     const interval = setInterval(() => {
       if (taps.size === 0) return;
       const now = Date.now();
+      if (micOnRef.current) micLastOnTsRef.current = now;
       let loudest = 0;
       let loudestId: string | null = null;
       let localLevel = 0;

@@ -1126,3 +1126,94 @@ describe("a participant whose browser cannot transcribe", () => {
     expect(srClaims.length).toBeGreaterThan(0);
   });
 });
+
+describe("the last sentence before a mute", () => {
+  /**
+   * The engine finalizes a sentence a second or two AFTER it ends, and "say
+   * your piece, hit mute" lands the click exactly in that gap. Judged by the
+   * mic's state at delivery, the member's final sentence of every topic they
+   * closed with a mute was dropped as "heard while you were muted" — spoken on
+   * a live microphone and in nobody's transcript.
+   */
+  function installSpeakingRecognition() {
+    const instances: Array<{
+      onstart: (() => void) | null;
+      onspeechstart: (() => void) | null;
+      onresult: ((ev: unknown) => void) | null;
+    }> = [];
+    class SpeakingRecognition {
+      continuous = false; interimResults = false; lang = "";
+      onstart: (() => void) | null = null;
+      onspeechstart: (() => void) | null = null;
+      onresult: ((ev: unknown) => void) | null = null;
+      onerror = null; onend = null;
+      constructor() { instances.push(this); }
+      start() { this.onstart?.(); }
+      stop() {}
+    }
+    const w = window as unknown as { SpeechRecognition?: unknown };
+    const previous = w.SpeechRecognition;
+    w.SpeechRecognition = SpeakingRecognition;
+    return { instances, restore: () => { w.SpeechRecognition = previous; } };
+  }
+
+  /** One settled engine result, in the Web Speech API's array-of-arrays shape. */
+  const finalResult = (text: string) => ({
+    resultIndex: 0,
+    results: [Object.assign([{ transcript: text, confidence: 0.92 }], { isFinal: true })],
+  });
+
+  const broadcastLines = () =>
+    sent
+      .map((m) => (m as { payload?: { type?: string; text?: string } }).payload)
+      .filter((p) => p?.type === "transcript")
+      .map((p) => p!.text);
+
+  it("keeps words spoken on a live mic even when the final lands after the mute", async () => {
+    joinChoice.micEnabled = true;
+    const sr = installSpeakingRecognition();
+    try {
+      await enterCall();
+
+      // The member talks, audibly, with the mic on…
+      await act(async () => { sr.instances[0]?.onspeechstart?.(); await Promise.resolve(); });
+      await talkFor(2_000, "audio-local");
+
+      // …mutes the moment they finish…
+      const mute = document.querySelector('button[title="Mute"]') as HTMLButtonElement;
+      expect(mute).not.toBeNull();
+      await act(async () => { mute.click(); await Promise.resolve(); });
+
+      // …and only then does the engine hand the sentence over.
+      await act(async () => {
+        sr.instances[0]?.onresult?.(finalResult("let's wire on Friday"));
+        await Promise.resolve();
+      });
+
+      expect(broadcastLines()).toContain("let's wire on Friday");
+    } finally {
+      sr.restore();
+    }
+  });
+
+  it("still drops what a mic heard while its owner was muted throughout", async () => {
+    // The other half of the rule: a member muted before the words began is not
+    // their speaker — the recognizer heard the room, and relabelling it would
+    // put someone else's words under their name.
+    joinChoice.micEnabled = false;
+    const sr = installSpeakingRecognition();
+    try {
+      await enterCall();
+      await flush(2_000, 8);
+
+      await act(async () => {
+        sr.instances[0]?.onresult?.(finalResult("words from the room"));
+        await Promise.resolve();
+      });
+
+      expect(broadcastLines()).toEqual([]);
+    } finally {
+      sr.restore();
+    }
+  });
+});
