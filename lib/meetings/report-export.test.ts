@@ -512,6 +512,9 @@ describe("the report's insight sections", () => {
   it("files open questions, risks, highlights and the next agenda", () => {
     const md = buildReportMarkdown({
       ...base,
+      // The record really contains the highlight's words: a quote the
+      // transcript cannot vouch for is dropped, not exported. See below.
+      fullTranscript: "Alina: We settled at forty pre.\n\nRay: Agreed.",
       analysis: {
         ...base.analysis,
         unresolved: ["Sam: Who signs the side letter?"],
@@ -524,6 +527,21 @@ describe("the report's insight sections", () => {
     expect(md).toContain("## Risks\n\n- Counsel may not clear the MFN clause");
     expect(md).toContain("## Highlights\n\n- Terms agreed — “forty pre”");
     expect(md).toContain("## Next Meeting Agenda\n\n1. Side letter status\n2. LPAC vote");
+  });
+
+  it("never exports a quote the transcript does not contain", () => {
+    // Rendered between quotation marks, a paraphrase is invented speech in a
+    // participant's mouth — in a document that gets emailed. The point stays;
+    // the claim of exact words goes.
+    const md = buildReportMarkdown({
+      ...base,
+      analysis: {
+        ...base.analysis,
+        highlights: [{ point: "Terms agreed", quote: "forty pre" }],
+      },
+    });
+    expect(md).toContain("## Highlights\n\n- Terms agreed");
+    expect(md).not.toContain("forty pre");
   });
 
   it("adds no empty headings for a report without them", () => {

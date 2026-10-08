@@ -75,6 +75,53 @@ export function normalizeHighlights(raw: unknown): Highlight[] {
   return out;
 }
 
+/** Text reduced to its words alone, padded so containment respects word edges. */
+function flatWords(text: string): string {
+  return ` ${(text ?? "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim()} `;
+}
+
+/**
+ * Whether a quote really appears in the record, word for word.
+ *
+ * Case, punctuation and spacing are set aside — a verbatim copy survives all
+ * three drifting — but the words and their order must match exactly. Anything
+ * looser would re-admit the thing this exists to stop.
+ */
+export function quoteInRecord(quote: string, record: string): boolean {
+  const q = flatWords(quote).trim();
+  if (!q) return false;
+  return flatWords(record).includes(` ${q} `);
+}
+
+/**
+ * Highlights with every quote checked against the transcript.
+ *
+ * A highlight's quote is rendered in quotation marks and used to find the
+ * moment on the recording — the report presents it as words somebody actually
+ * said. The model is asked to copy it exactly, and mostly does; when it
+ * paraphrases instead, the page was putting invented speech in a participant's
+ * mouth, in a document that gets exported and emailed. A quote the record does
+ * not contain is dropped — the point stays, only the claim of exact words
+ * goes. A quote that spans two transcript lines fails the check and is dropped
+ * too: losing a true italic line is the cheap side of this trade.
+ *
+ * No record at all proves nothing — a meeting stored before transcripts were
+ * kept must not lose its quotes to a check that had nothing to check against.
+ */
+export function verifyHighlightQuotes(
+  highlights: Highlight[],
+  record: string | null | undefined,
+): Highlight[] {
+  const text = (record ?? "").trim();
+  if (!text) return highlights;
+  const flat = flatWords(text);
+  return highlights.map((h) => {
+    if (!h.quote) return h;
+    const q = flatWords(h.quote).trim();
+    return q && flat.includes(` ${q} `) ? h : { ...h, quote: "" };
+  });
+}
+
 /** A line of the form "Owner: text", split; no owner when the line has none. */
 export interface OwnedLine {
   owner: string | null;
@@ -113,9 +160,13 @@ export interface ReportInsights {
   agenda: string[];
 }
 
-export function reportInsights(analysis: Record<string, unknown> | null | undefined): ReportInsights {
+export function reportInsights(
+  analysis: Record<string, unknown> | null | undefined,
+  /** The meeting's own transcript, when the caller has it: quotes are verified against it. */
+  record?: string | null,
+): ReportInsights {
   return {
-    highlights: normalizeHighlights(analysis?.[HIGHLIGHTS_KEY]),
+    highlights: verifyHighlightQuotes(normalizeHighlights(analysis?.[HIGHLIGHTS_KEY]), record),
     unresolved: normalizeNoteList(analysis?.[UNRESOLVED_KEY]).map(splitOwner),
     risks: normalizeNoteList(analysis?.[RISKS_KEY]),
     agenda: normalizeNoteList(analysis?.[AGENDA_KEY]),

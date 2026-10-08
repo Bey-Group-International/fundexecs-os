@@ -8,6 +8,8 @@ import {
   normalizeHighlights,
   reportInsights,
   splitOwner,
+  quoteInRecord,
+  verifyHighlightQuotes,
 } from "./report-insights";
 
 describe("normalizeHighlights", () => {
@@ -81,5 +83,59 @@ describe("commitmentsByPerson", () => {
       ["Alex", [2]],
       [null, [1]],
     ]);
+  });
+});
+
+describe("verifying highlight quotes against the record", () => {
+  const RECORD = [
+    "Maya: Send the deck by Friday, please.",
+    "Gary (uncertain): we agreed to wire on Monday",
+  ].join("\n");
+
+  it("keeps a verbatim quote through case, punctuation and spacing drift", () => {
+    const kept = verifyHighlightQuotes(
+      [{ point: "Deadline set", quote: "send the deck by friday" }],
+      RECORD,
+    );
+    expect(kept[0].quote).toBe("send the deck by friday");
+  });
+
+  it("drops a quote the record does not contain, and keeps the point", () => {
+    // The model paraphrased. Rendered in quotation marks, that is invented
+    // speech in a participant's mouth, in a document that gets exported.
+    const kept = verifyHighlightQuotes(
+      [{ point: "Deadline set", quote: "the deck will go out by end of week" }],
+      RECORD,
+    );
+    expect(kept[0]).toEqual({ point: "Deadline set", quote: "" });
+  });
+
+  it("never matches inside a word", () => {
+    // "send the deck" is in the record; "end the deck" is not — a substring
+    // check without word edges would say it was.
+    expect(quoteInRecord("end the deck", RECORD)).toBe(false);
+    expect(quoteInRecord("send the deck", RECORD)).toBe(true);
+  });
+
+  it("proves nothing from a missing record", () => {
+    // A meeting stored before transcripts were kept must not lose its quotes
+    // to a check that had nothing to check against.
+    const highlights = [{ point: "p", quote: "anything at all" }];
+    expect(verifyHighlightQuotes(highlights, "")).toBe(highlights);
+    expect(verifyHighlightQuotes(highlights, null)).toBe(highlights);
+  });
+
+  it("is applied by reportInsights when the caller hands it the record", () => {
+    const analysis = {
+      highlights: [
+        { point: "Real", quote: "we agreed to wire on Monday" },
+        { point: "Invented", quote: "the wire is cancelled" },
+      ],
+    };
+    const withRecord = reportInsights(analysis, RECORD);
+    expect(withRecord.highlights[0].quote).toBe("we agreed to wire on Monday");
+    expect(withRecord.highlights[1].quote).toBe("");
+    // Without a record, nothing is second-guessed.
+    expect(reportInsights(analysis).highlights[1].quote).toBe("the wire is cancelled");
   });
 });
