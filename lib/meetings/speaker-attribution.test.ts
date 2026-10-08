@@ -358,3 +358,21 @@ describe("two devices in one room", () => {
       .toBe("Heard Grace from across the room — their own device is transcribing them");
   });
 });
+
+describe("whether the window was measured", () => {
+  const window = { startedAt: T0, endedAt: T0 + 1500 };
+
+  it("is false when the meter never saw the window", () => {
+    const a = attributeUtterance(window, new VoiceActivityLog(), PEOPLE, { localMicOn: true });
+    expect(a.basis).toBe("unattributed");
+    expect(a.measured).toBe(false);
+  });
+
+  it("is true for measured silence — everyone quiet is still a measurement", () => {
+    const log = new VoiceActivityLog();
+    fill(log, { [LOCAL_SPEAKER_ID]: 0.0, "peer-1": 0.0 }, window.startedAt, window.endedAt);
+    const a = attributeUtterance(window, log, PEOPLE, { localMicOn: true });
+    expect(a.basis).toBe("unattributed");
+    expect(a.measured).toBe(true);
+  });
+});
