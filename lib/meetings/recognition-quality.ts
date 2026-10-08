@@ -62,6 +62,42 @@ export function lineConfidence(attribution: number, engine: number | null): numb
   return engine === null ? a : Math.min(a, engine);
 }
 
+/**
+ * What a line is worth when NOTHING vouches for it. Deliberately below
+ * `MODEL_CONFIDENCE_FLOOR` (0.35): the line stays in the record, marked as
+ * unreliable, and is withheld from the report model.
+ */
+export const UNVOUCHED_CONFIDENCE = 0.3;
+
+/**
+ * `lineConfidence`, with the hallucination case closed.
+ *
+ * A speech engine fed silence does not stay silent: it flushes short fluent
+ * phrases — a "thank you", a greeting — invented from room tone. Such a final
+ * arrives with two tells at once: the voice meter measured the window and
+ * found NOBODY audible (attribution "unattributed"), and the engine declined
+ * to score its own output. Separately each is forgivable — quiet real speech
+ * can sit under the meter's threshold but earns a high engine score; a
+ * scoreless engine on real speech has a voice in the meter behind it. Both
+ * tells together is a line no evidence supports, and it used to land at
+ * exactly the model floor, where the strict `<` comparison let every such
+ * phrase into the report as something the host said.
+ *
+ * The guard needs `measured`: on a device whose meter never ran, EVERY line
+ * is "unattributed", and an engine that never scores (older Safari) would
+ * have the whole meeting withheld. Absence of evidence convicts nobody.
+ */
+export function guardedLineConfidence(
+  attribution: { confidence: number; basis: string; measured: boolean },
+  engine: number | null,
+): number {
+  const c = lineConfidence(attribution.confidence, engine);
+  if (attribution.basis === "unattributed" && attribution.measured && engine === null) {
+    return Math.min(c, UNVOUCHED_CONFIDENCE);
+  }
+  return c;
+}
+
 /** How many recent engine scores the noise gauge looks at. */
 export const NOISE_WINDOW = 8;
 /** Fewer than this many scores is too little to call the audio noisy. */

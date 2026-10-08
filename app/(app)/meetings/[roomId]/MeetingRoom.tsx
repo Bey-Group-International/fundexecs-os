@@ -91,8 +91,8 @@ import {
   transcriptRows,
 } from "@/lib/meetings/transcript-buffer";
 import {
-  createDeafWatch, engineConfidence, isNoisy, lineConfidence, observeDeafTick, pushEngineScore,
-  recognitionLang, recognizerHeard, restartDelay,
+  createDeafWatch, engineConfidence, guardedLineConfidence, isNoisy, observeDeafTick,
+  pushEngineScore, recognitionLang, recognizerHeard, restartDelay,
 } from "@/lib/meetings/recognition-quality";
 import { coverageNotice, localTranscribing } from "@/lib/meetings/transcription-coverage";
 import { recordingNotice, type RecordingState } from "@/lib/meetings/recording-policy";
@@ -3707,8 +3707,12 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
         const next = transcriptRef.current.filter((l) => l.final);
         if (settled && attribution) {
           const ts = now;
-          // The weaker of who-said-it and what-was-said; see lineConfidence.
-          const confidence = lineConfidence(attribution.confidence, engine);
+          // The weaker of who-said-it and what-was-said — and below the model
+          // floor when NOTHING vouches for the line: nobody measurably audible
+          // and no engine score is the shape of a hallucinated phrase, which
+          // used to reach the report as something this member said. See
+          // guardedLineConfidence.
+          const confidence = guardedLineConfidence(attribution, engine);
           next.push({
             id: crypto.randomUUID(),
             speakerId: LOCAL_SPEAKER_ID,

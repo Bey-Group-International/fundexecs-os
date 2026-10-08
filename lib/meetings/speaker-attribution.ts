@@ -108,6 +108,18 @@ export interface Attribution {
    * too would duplicate the line — once correctly attributed, once not.
    */
   publish: boolean;
+  /**
+   * Whether the voice meter actually measured the utterance window.
+   *
+   * "Nobody was audible" means two different things depending on this flag.
+   * Measured silence — samples in the window, all of them quiet — is evidence:
+   * an engine final with no voice behind it is the shape of a hallucination,
+   * and guardedLineConfidence treats it as one when the engine would not vouch
+   * for the words either. An UNMEASURED window (no AudioContext, a meter that
+   * never started) is the absence of evidence, and must never count against
+   * the words — on a device with no meter every line looks "silent".
+   */
+  measured: boolean;
 }
 
 /** Below this, the transcript marks the line as uncertainly attributed. */
@@ -239,6 +251,9 @@ export function attributeUtterance(
 ): Attribution {
   const nameOf = (id: string) => participants.find((p) => p.id === id)?.displayName ?? null;
   const summaries = log.summarize(window.startedAt, window.endedAt);
+  // Whether the meter saw this window at all. Measured silence is evidence;
+  // an empty log is a meter that never ran, and proves nothing about anyone.
+  const measured = summaries.some((s) => s.samples > 0);
   const local = summaries.find((s) => s.speakerId === LOCAL_SPEAKER_ID);
   const peers = summaries.filter((s) => s.speakerId !== LOCAL_SPEAKER_ID && s.share > 0);
   const loudestPeer = peers[0] ?? null;
@@ -251,6 +266,7 @@ export function attributeUtterance(
       displayName: loudestPeer ? nameOf(loudestPeer.speakerId) : null,
       confidence: loudestPeer ? 0.5 : 0,
       basis: "mic-muted",
+      measured,
     };
   }
 
@@ -278,6 +294,7 @@ export function attributeUtterance(
       displayName: nameOf(loudestPeer.speakerId),
       confidence: Math.min(0.8, 0.5 + peerShare * 0.4),
       basis: "same-room",
+      measured,
     };
   }
 
@@ -292,6 +309,7 @@ export function attributeUtterance(
       basis: "unattributed",
       overlapped: false,
       publish: true,
+      measured,
     };
   }
 
@@ -312,6 +330,7 @@ export function attributeUtterance(
       displayName: nameOf(loudestPeer!.speakerId),
       confidence: Math.min(0.75, 0.4 + peerShare * 0.4),
       basis: "echo",
+      measured,
     };
   }
 
@@ -328,6 +347,7 @@ export function attributeUtterance(
       basis: "cross-talk",
       overlapped: true,
       publish: true,
+      measured,
     };
   }
 
@@ -339,6 +359,7 @@ export function attributeUtterance(
     basis: "local-voice",
     overlapped: false,
     publish: true,
+    measured,
   };
 }
 

@@ -1217,3 +1217,88 @@ describe("the last sentence before a mute", () => {
     }
   });
 });
+
+describe("a phrase the engine invented from silence", () => {
+  /**
+   * A speech engine fed room tone does not stay silent — it flushes short
+   * fluent phrases it made up, usually unscored. One of those used to land at
+   * exactly the model floor and reach the report as something the member said.
+   * The record keeps it either way; what changes is that nothing in the room
+   * now presents it to the model as speech.
+   */
+  function installRecognition() {
+    const instances: Array<{
+      onstart: (() => void) | null;
+      onspeechstart: (() => void) | null;
+      onresult: ((ev: unknown) => void) | null;
+    }> = [];
+    class Recognition {
+      continuous = false; interimResults = false; lang = "";
+      onstart: (() => void) | null = null;
+      onspeechstart: (() => void) | null = null;
+      onresult: ((ev: unknown) => void) | null = null;
+      onerror = null; onend = null;
+      constructor() { instances.push(this); }
+      start() { this.onstart?.(); }
+      stop() {}
+    }
+    const w = window as unknown as { SpeechRecognition?: unknown };
+    const previous = w.SpeechRecognition;
+    w.SpeechRecognition = Recognition;
+    return { instances, restore: () => { w.SpeechRecognition = previous; } };
+  }
+
+  const finalResult = (text: string, confidence: number) => ({
+    resultIndex: 0,
+    results: [Object.assign([{ transcript: text, confidence }], { isFinal: true })],
+  });
+
+  const broadcastConfidences = () =>
+    sent
+      .map((m) => (m as { payload?: { type?: string; confidence?: number } }).payload)
+      .filter((p) => p?.type === "transcript")
+      .map((p) => p!.confidence!);
+
+  it("is published below the model floor when nobody was audible and the engine never scored it", async () => {
+    joinChoice.micEnabled = true;
+    const sr = installRecognition();
+    try {
+      await enterCall();
+      // The meter runs over genuine silence — a measurement, not a missing meter.
+      await flush(2_000, 8);
+
+      await act(async () => {
+        // Confidence 0 is an engine that did not score, not one that scored zero.
+        sr.instances[0]?.onresult?.(finalResult("Thank you.", 0));
+        await Promise.resolve();
+      });
+
+      const sentConf = broadcastConfidences();
+      expect(sentConf.length).toBe(1);
+      expect(sentConf[0]).toBeLessThan(0.35);
+    } finally {
+      sr.restore();
+    }
+  });
+
+  it("leaves real speech alone, scored or spoken aloud", async () => {
+    joinChoice.micEnabled = true;
+    const sr = installRecognition();
+    try {
+      await enterCall();
+      await act(async () => { sr.instances[0]?.onspeechstart?.(); await Promise.resolve(); });
+      await talkFor(2_000, "audio-local");
+
+      await act(async () => {
+        sr.instances[0]?.onresult?.(finalResult("let's begin", 0.92));
+        await Promise.resolve();
+      });
+
+      const sentConf = broadcastConfidences();
+      expect(sentConf.length).toBe(1);
+      expect(sentConf[0]).toBeGreaterThan(0.6);
+    } finally {
+      sr.restore();
+    }
+  });
+});

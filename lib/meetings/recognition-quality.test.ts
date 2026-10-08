@@ -6,6 +6,7 @@ import {
   RESTART_MAX_MS,
   createDeafWatch,
   engineConfidence,
+  guardedLineConfidence,
   isNoisy,
   lineConfidence,
   observeDeafTick,
@@ -13,6 +14,7 @@ import {
   recognitionLang,
   recognizerHeard,
   restartDelay,
+  UNVOUCHED_CONFIDENCE,
   type DeafWatch,
 } from "./recognition-quality";
 
@@ -164,5 +166,38 @@ describe("the deaf-recogniser watch", () => {
       if (i % 20 === 19) recognizerHeard(watch);
     }
     expect(watch.raised).toBe(false);
+  });
+});
+
+describe("guardedLineConfidence", () => {
+  const { MODEL_CONFIDENCE_FLOOR } = jest.requireActual("./transcript-quality");
+  const att = (over: Partial<{ confidence: number; basis: string; measured: boolean }> = {}) =>
+    ({ confidence: 0.35, basis: "unattributed", measured: true, ...over });
+
+  it("pushes a line nothing vouches for below the model floor", () => {
+    // The meter measured the window and found nobody audible; the engine
+    // declined to score its own output. That is the shape of a hallucinated
+    // phrase, and at exactly 0.35 the strict `<` comparison used to let every
+    // one of them into the report as something the member said.
+    const c = guardedLineConfidence(att(), null);
+    expect(c).toBe(UNVOUCHED_CONFIDENCE);
+    expect(c).toBeLessThan(MODEL_CONFIDENCE_FLOOR);
+  });
+
+  it("keeps quiet real speech the engine vouched for", () => {
+    // A soft talker sits under the meter's speech threshold, but the engine
+    // scored the words highly — that is a voice, not a hallucination.
+    expect(guardedLineConfidence(att(), 0.9)).toBe(0.35);
+  });
+
+  it("never convicts on an unmeasured window", () => {
+    // No meter ran, so EVERY line looks silent — and an engine that never
+    // scores (older Safari) would have the whole meeting withheld.
+    expect(guardedLineConfidence(att({ measured: false }), null)).toBe(0.35);
+  });
+
+  it("is plain lineConfidence everywhere else", () => {
+    expect(guardedLineConfidence(att({ basis: "local-voice", confidence: 0.85 }), null)).toBe(0.85);
+    expect(guardedLineConfidence(att({ basis: "cross-talk", confidence: 0.5 }), 0.2)).toBe(0.2);
   });
 });
