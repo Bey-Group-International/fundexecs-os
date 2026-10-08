@@ -171,7 +171,9 @@ export function reportContent(report: ReportRow): ReportContent {
         : null,
     truncated: analysis?.[TRUNCATED_KEY] === true,
     transcript: report.full_transcript,
-    insights: reportInsights(analysis),
+    // With the record, so a quote the model paraphrased is never shown as
+    // words somebody actually said. See verifyHighlightQuotes.
+    insights: reportInsights(analysis, report.full_transcript),
   };
 }
 

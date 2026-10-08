@@ -346,7 +346,9 @@ export function buildReportMarkdown(
   const followUp = displayFollowUp(normalizeNoteText(analysis?.follow_up_draft));
   const nextMeeting = normalizeNoteText(analysis?.next_meeting_suggestion);
   const sentiment = normalizeNoteText(analysis?.sentiment);
-  const insights = reportInsights(analysis);
+  // With the record, so an exported document never asserts a quote the
+  // transcript does not contain. See verifyHighlightQuotes.
+  const insights = reportInsights(analysis, input.fullTranscript);
 
   const title = (input.title ?? "").trim() || UNTITLED_MEETING;
   const duration = meetingDurationMinutes(input.startedAt, input.endedAt);
