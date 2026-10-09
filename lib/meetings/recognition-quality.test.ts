@@ -1,6 +1,7 @@
 import {
   DEAF_SPEECH_MS,
   DEFAULT_RECOGNITION_LANG,
+  FAILING_SHORT_RUNS,
   NOISE_MIN_SAMPLES,
   NOISE_WINDOW,
   RESTART_MAX_MS,
@@ -12,7 +13,9 @@ import {
   observeDeafTick,
   pushEngineScore,
   recognitionLang,
+  recognizerFailureNotice,
   recognizerHeard,
+  recognizerStatusAfterEnd,
   restartDelay,
   UNVOUCHED_CONFIDENCE,
   type DeafWatch,
@@ -103,8 +106,39 @@ describe("restartDelay", () => {
     expect(restartDelay({ startedAt: 0, endedAt: 1, shortRuns: 20 }).delayMs).toBe(RESTART_MAX_MS);
   });
 
-  it("treats a run that never started as one that lasted", () => {
-    expect(restartDelay({ startedAt: null, endedAt: 5, shortRuns: 2 })).toEqual({ delayMs: 0, shortRuns: 0 });
+  // The engine went start → error → end without ever listening. Reading that
+  // as a run that lasted restarted it at once, forever: the exact tight loop
+  // the backoff exists to stop, on exactly the engines that produce it.
+  it("treats a run that never started as the shortest run there is", () => {
+    expect(restartDelay({ startedAt: null, endedAt: 5, shortRuns: 2 })).toEqual({ delayMs: 2000, shortRuns: 3 });
+    expect(restartDelay({ startedAt: null, endedAt: 5, shortRuns: 0 }).delayMs).toBeGreaterThan(0);
+  });
+});
+
+describe("what the status reads after a run ended", () => {
+  it("stays active after an ordinary end", () => {
+    // Continuous recognition ends on its own every minute or so.
+    expect(recognizerStatusAfterEnd({ shortRuns: 0, lastError: null })).toBe("active");
+    expect(recognizerStatusAfterEnd({ shortRuns: 0, lastError: "no-speech" })).toBe("active");
+    expect(recognizerStatusAfterEnd({ shortRuns: 1, lastError: "aborted" })).toBe("active");
+  });
+
+  // Brave, Chromium without keys, a blocked endpoint, being offline: every run
+  // dies with `network`, and the room used to say "active" for the whole call.
+  it("is failing at once on an error the next run will hit too", () => {
+    expect(recognizerStatusAfterEnd({ shortRuns: 0, lastError: "network" })).toBe("failing");
+    expect(recognizerStatusAfterEnd({ shortRuns: 0, lastError: "audio-capture" })).toBe("failing");
+  });
+
+  it("is failing once runs keep dying at once, whatever the error", () => {
+    expect(recognizerStatusAfterEnd({ shortRuns: FAILING_SHORT_RUNS - 1, lastError: null })).toBe("active");
+    expect(recognizerStatusAfterEnd({ shortRuns: FAILING_SHORT_RUNS, lastError: null })).toBe("failing");
+  });
+
+  it("names the cause the member can act on", () => {
+    expect(recognizerFailureNotice("network")).toMatch(/speech service/);
+    expect(recognizerFailureNotice("audio-capture")).toMatch(/microphone/);
+    expect(recognizerFailureNotice(null)).toMatch(/keeps stopping/);
   });
 });
 

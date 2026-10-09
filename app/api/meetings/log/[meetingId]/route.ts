@@ -38,7 +38,7 @@ export async function GET(
   }
 
   const detail = meetingLogDetail(
-    toLogEntry(row.meeting, row.report, row.attended, row.isHost),
+    toLogEntry(row.meeting, row.report, row.attended, row.isHost, row.transcribed),
   );
 
   return NextResponse.json({ detail }, { headers: { "Cache-Control": "no-store" } });

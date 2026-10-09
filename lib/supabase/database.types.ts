@@ -2746,6 +2746,11 @@ export type LiveMeeting = {
   preparation_status: string;
   followup_status: string;
   followup_sent_at: string | null;
+  /**
+   * When the summary email first went out (migration 20261009100000). A
+   * second send is refused unless the host asks to resend.
+   */
+  summary_sent_at: string | null;
   // Linked inbox threads, those with a reply since linking, and those unread
   // (trigger-maintained, migration 20261003151646).
   followup_threads: number;
@@ -3022,6 +3027,8 @@ export type LiveMeetingTranscript = {
   confidence: number | null;
   text: string;
   ts: string;
+  /** Somebody else was audible while this was said. Added by 20260915130000. */
+  overlapped: boolean;
 };
 
 /**
@@ -3457,6 +3464,13 @@ export type Database = {
     };
     Views: Record<string, never>;
     Functions: {
+      // Which of these meeting ids have any transcript rows, under the caller's
+      // own RLS (migration 20261009100100) — what lets the meeting log offer
+      // "Regenerate from transcript" for a meeting nobody ended.
+      live_meetings_with_transcript_rows: {
+        Args: { ids: string[] };
+        Returns: string[];
+      };
       // Spans of live meetings the host is invited to but does not host
       // (migration 20261002142640) — what busyIntervals adds so a booking link
       // never offers time the host already gave to a colleague's meeting.

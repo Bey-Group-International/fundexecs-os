@@ -74,9 +74,12 @@ export interface AttendanceRecord {
  * Takes a SUBJECT rather than a user id, because for most of a call's
  * participants there is no user id. This used to require one, and the `if
  * (user)` in the room's join path meant an invite-link guest wrote no row at
- * all -- so they were absent from the head-count, absent from the report, and
- * locked out of the report themselves, because `live_meeting_reports` is
- * readable by "the host OR a participant" and they were neither.
+ * all -- so they were absent from the head-count and absent from the report's
+ * attendance. A guest's row is written through the attendance route under
+ * their guest key. It does NOT open the report to them: the
+ * live_meeting_reports policy matches participants by `user_id = auth.uid()`,
+ * and a guest has neither. A guest reads the report through the tokenised
+ * link the thank-you screen mints for them (lib/meetings/guest-report-link.ts).
  */
 export function attendanceRecord(
   meetingId: string,
@@ -187,12 +190,18 @@ export function attendedButNotHosted(
 }
 
 /**
- * Whether the viewer is entitled to a meeting's report.
+ * Whether the viewer is entitled to a meeting's report IN THE APP.
  *
  * Reports are attendees-only, enforced in Postgres by the
- * live_meeting_reports_meeting policy (host OR a participant row). This mirrors
- * that rule in the client so the page can *say so*, because RLS on its own is
- * indistinguishable from "the report does not exist yet".
+ * live_meeting_reports_meeting policy: the host, or a participant row whose
+ * `user_id` is the viewer's. This mirrors that rule in the client so the page
+ * can *say so*, because RLS on its own is indistinguishable from "the report
+ * does not exist yet".
+ *
+ * A guest row carries a guest key and no `user_id`, so this is false for every
+ * guest — correctly, because a guest has no session for the page to ask about.
+ * Guests read the report through a signed link instead (app/r/report/[token]),
+ * minted for the key their browser holds; see guest-report-link.ts.
  */
 export function canViewReport(state: {
   hostId: string | null;
@@ -217,11 +226,12 @@ export type ReportViewState =
    * a summary.
    *
    * This is a real and reachable outcome, not an error — the report route
-   * writes a row with an empty summary when the model fails, and again when a
-   * one-way call had nothing to transcribe. Everything else the report holds
-   * (the recording, the transcript, the chat) is still there and still worth
-   * reading, which is why this is a state of its own rather than a variant of
-   * "generating".
+   * writes a row with an empty summary when the model fails, and files one on
+   * purpose, without asking the model, when the transcript was silence or
+   * noise (the reason rides on the analysis blob; see report-generation.ts).
+   * Everything else the report holds (the recording, the transcript, the chat)
+   * is still there and still worth reading, which is why this is a state of
+   * its own rather than a variant of "generating".
    */
   | "unsummarised"
   /**

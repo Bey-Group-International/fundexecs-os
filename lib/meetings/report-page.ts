@@ -17,6 +17,7 @@ import { REPORT_WAIT_LIMIT_MS } from "@/lib/meetings/attendance";
 import { normalizeNoteList, normalizeNoteText } from "@/lib/meetings/live-notes";
 import { TRUNCATED_KEY } from "@/lib/meetings/report-analysis";
 import { OPEN_QUESTIONS_KEY } from "@/lib/meetings/report-gaps";
+import { unsummarisedReason, type UnsummarisedReason } from "@/lib/meetings/report-generation";
 import { reportInsights, type ReportInsights } from "@/lib/meetings/report-insights";
 
 /** The meeting fields the page renders. */
@@ -148,6 +149,13 @@ export interface ReportContent {
   nextMeeting: string | null;
   /** The analysis ran out of room before it finished. */
   truncated: boolean;
+  /**
+   * Why the model was never asked, for a report filed without a summary on
+   * purpose: silence, or audio the engine scored as noise. Null for a report
+   * that has a summary and for one whose analysis failed — those two are told
+   * apart by the transcript, and only the second is worth regenerating.
+   */
+  unsummarised: UnsummarisedReason | null;
   transcript: string | null;
   /** Highlights, unresolved questions, risks and the next agenda. See report-insights.ts. */
   insights: ReportInsights;
@@ -170,6 +178,7 @@ export function reportContent(report: ReportRow): ReportContent {
         ? analysis.next_meeting_suggestion
         : null,
     truncated: analysis?.[TRUNCATED_KEY] === true,
+    unsummarised: unsummarisedReason(analysis),
     transcript: report.full_transcript,
     // With the record, so a quote the model paraphrased is never shown as
     // words somebody actually said. See verifyHighlightQuotes.
@@ -198,5 +207,21 @@ export function meetingMinutes(meeting: ReportMeeting): number | null {
  * Thursday before it was booked.
  */
 export function meetingHappenedAt(meeting: ReportMeeting): string {
-  return meeting.started_at ?? meeting.scheduled_at ?? meeting.created_at;
+  return meetingDateOf(meeting);
+}
+
+/**
+ * The same rule, for a caller that holds the three columns and nothing else.
+ *
+ * The export dated its documents by `created_at` — the day the row was made —
+ * while the page above it dated the same meeting by when it happened. A
+ * report filed as a PDF said Thursday about Tuesday's board call. One rule,
+ * stated once, so the page and the file cannot disagree about the date.
+ */
+export function meetingDateOf(meeting: {
+  started_at: string | null;
+  scheduled_at: string | null;
+  created_at: string | null;
+}): string {
+  return meeting.started_at ?? meeting.scheduled_at ?? meeting.created_at ?? "";
 }

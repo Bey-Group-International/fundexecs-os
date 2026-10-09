@@ -22,6 +22,7 @@ import {
 import { runBookingRequestExpiry, type RequestExpiryStats } from "@/lib/meetings/booking-expiry.server";
 import { runBookingRequestReminders, type RequestReminderStats } from "@/lib/meetings/booking-request-reminder.server";
 import { runRecordingSweep, type RecordingSweepStats } from "@/lib/meetings/recording-sweep.server";
+import { runStaleMeetingSweep, type StaleMeetingSweepStats } from "@/lib/meetings/stale-meeting-sweep.server";
 import { runEventIdRepair } from "@/lib/calendar/event-id-repair.server";
 import { NO_REPAIRS, summarize, worthReporting, type RepairStats } from "@/lib/calendar/event-id-repair";
 import {
@@ -398,6 +399,20 @@ export async function GET(request: Request) {
     console.error("recording_sweep failed", e);
   }
 
+  // Meetings nobody ended. A meeting is marked ended by one thing — End
+  // pressed in the room — so a host who shut the laptop left the row `active`
+  // forever, in "Upcoming", with its whole transcript in a table nothing
+  // read. Three hours after the last sign of life this writes the report
+  // through the regenerate route's own path (or closes the meeting with an
+  // empty one when nothing was transcribed). At most one model call a pass:
+  // that call alone can take most of this function's envelope.
+  let staleMeetings: StaleMeetingSweepStats = { candidates: 0, reported: 0, closed: 0, deferred: 0, failed: 0 };
+  try {
+    staleMeetings = await runStaleMeetingSweep(supabase, { now });
+  } catch (e) {
+    console.error("stale_meeting_sweep failed", e);
+  }
+
   // Reattach calendar events to the meetings that lost them. For as long as the
   // sync write named a provider the check constraint rejected, every push did
   // half its job: the event landed on the host's calendar and the UPDATE that
@@ -485,6 +500,10 @@ export async function GET(request: Request) {
         recordingsClosedOut: recordings.abandoned,
         recordingsOrphaned: recordings.orphaned,
         recordingObjectsDeleted: recordings.objectsDeleted,
+        staleMeetingsReported: staleMeetings.reported,
+        staleMeetingsClosed: staleMeetings.closed,
+        staleMeetingsDeferred: staleMeetings.deferred,
+        staleMeetingsFailed: staleMeetings.failed,
         calendarEventIdsReattached: calendarRepair.reattached,
         calendarEventIdsMissing: calendarRepair.noEvent,
         calendarEventIdRepairFailures: calendarRepair.failed,
@@ -509,5 +528,5 @@ export async function GET(request: Request) {
     // best-effort: never let health tracking break the cron response
   }
 
-  return NextResponse.json({ swept: due.length, results, radar, pulse, escalated, webhooks, proactive, reminders, bookingConfirmations, bookingRequestReminders, bookingRequestsExpired, calendarRepair, subscriptions, settledInvoices, nativeCollections, networkAutomations });
+  return NextResponse.json({ swept: due.length, results, radar, pulse, escalated, webhooks, proactive, reminders, bookingConfirmations, bookingRequestReminders, bookingRequestsExpired, recordings, staleMeetings, calendarRepair, subscriptions, settledInvoices, nativeCollections, networkAutomations });
 }

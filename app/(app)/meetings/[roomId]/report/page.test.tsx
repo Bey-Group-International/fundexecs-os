@@ -150,6 +150,13 @@ jest.mock("./FollowUpPanel", () => ({
     <div data-testid="follow-up" data-can-send={String(canSend)} />
   ),
 }));
+// The stalled page's one control: writes the first report from the stored
+// rows. A marker, so the test can see WHO it is shown to.
+jest.mock("./GenerateFromTranscript", () => ({
+  GenerateFromTranscript: ({ meetingId }: { meetingId: string }) => (
+    <div data-testid="generate-from-transcript" data-meeting={meetingId} />
+  ),
+}));
 // The only remaining client island with a timer. Rendered as a marker so a test
 // can assert whether the page is still waiting on anything.
 jest.mock("./ReportWaiting", () => ({
@@ -384,6 +391,44 @@ describe("a report that is never coming", () => {
     jest.setSystemTime(Date.parse("2026-09-30T00:00:00.000Z"));
     await renderPage();
     expect(screen.getByText(/has no report yet/i)).toBeInTheDocument();
+  });
+
+  // The copy used to send the host to a "regenerate" button on the meeting
+  // log that was gated on a report row — which a meeting with no report does
+  // not have. The button is on this page now, for the one person who can press it.
+  it("offers the host the button it points at", async () => {
+    db.report = null;
+    jest.setSystemTime(Date.parse("2026-09-30T00:00:00.000Z"));
+    await renderPage();
+    expect(screen.getByTestId("generate-from-transcript")).toHaveAttribute("data-meeting", "m1");
+    expect(screen.queryByText(/from the meeting log/i)).toBeNull();
+  });
+
+  it("tells an attendee who can press it, and shows them no button", async () => {
+    db.viewer = { id: "attendee-2" };
+    db.report = null;
+    jest.setSystemTime(Date.parse("2026-09-30T00:00:00.000Z"));
+    await renderPage();
+    expect(screen.queryByTestId("generate-from-transcript")).toBeNull();
+    expect(screen.getByText(/the host can write the report/i)).toBeInTheDocument();
+  });
+});
+
+describe("a report filed with nothing to summarise", () => {
+  // Written on purpose, without asking the model: the transcript was silence
+  // or noise. Not the failed-analysis advice, because regenerating this one
+  // changes nothing.
+  it("says so, in those words", async () => {
+    db.report = {
+      summary: "", key_points: [], action_items: [],
+      analysis: { unsummarised: "unusable" },
+      full_transcript: "Gary (uncertain — not recognised reliably): garble",
+    };
+    await renderPage();
+    expect(screen.getByText("Nothing to summarise")).toBeInTheDocument();
+    expect(screen.getByText(/no usable speech was captured/i)).toBeInTheDocument();
+    expect(screen.queryByText(/analysis could not be completed/i)).toBeNull();
+    expect(screen.queryByTestId("waiting")).toBeNull();
   });
 });
 

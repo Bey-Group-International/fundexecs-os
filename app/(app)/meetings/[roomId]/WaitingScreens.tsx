@@ -12,9 +12,13 @@
 // can be rendered and pressed in a test; inline, they were reachable only by
 // standing up a WebRTC stack and could only be checked by reading.
 //
-// They are deliberately dumb: no fetching, no timers, no navigation of their
-// own. Every decision stays in MeetingRoom, which is where the state that drives
-// them lives.
+// They are deliberately dumb: no timers, no navigation of their own. Every
+// decision stays in MeetingRoom, which is where the state that drives them
+// lives. The one request made here — the thank-you screen asking for the
+// guest's report link — is made here because this screen is the only moment
+// the guest can be handed it, and it changes nothing MeetingRoom decides.
+import { useEffect, useState } from "react";
+import { requestGuestReportLink, type GuestReportLink } from "@/lib/meetings/guest-report-link";
 
 /** A waiting person as the host's bar shows them. `id` is the admissions row id. */
 export interface WaitingPeer {
@@ -162,8 +166,40 @@ export function NotAdmittedScreen({
  *
  * Also the landing place when the host ends the meeting or removes them, for the
  * same reason as above: everywhere else this could send a guest is signed-in.
+ *
+ * Given the room and the guest's key, it asks for the one thing a guest could
+ * never reach: the summary of the meeting they were just in. The report page
+ * is behind the app's login and its RLS cannot match a guest, so the screen
+ * that showed them out used to offer "request access" and nothing about the
+ * conversation they had just had. The link is signed and expires; the page it
+ * opens holds the summary alone. Without the two props the screen is exactly
+ * what it was.
  */
-export function GuestThanksScreen({ onLeave }: { onLeave: () => void }) {
+export function GuestThanksScreen({
+  onLeave,
+  roomCode,
+  guestKey,
+  requestLink = requestGuestReportLink,
+}: {
+  onLeave: () => void;
+  /** The room just left. With `guestKey`, the screen offers the summary link. */
+  roomCode?: string;
+  /** The key this browser knocked with, as MeetingRoom holds it. */
+  guestKey?: string | null;
+  /** Injected for tests; the real one posts to the public route. */
+  requestLink?: typeof requestGuestReportLink;
+}) {
+  const [link, setLink] = useState<GuestReportLink | null | "asking">(roomCode && guestKey ? "asking" : null);
+
+  useEffect(() => {
+    if (!roomCode || !guestKey) return;
+    let cancelled = false;
+    void requestLink(roomCode, guestKey).then((result) => {
+      if (!cancelled) setLink(result);
+    });
+    return () => { cancelled = true; };
+  }, [roomCode, guestKey, requestLink]);
+
   return (
     <div className="fixed inset-0 z-50 bg-[var(--surface-0)] flex items-center justify-center px-4">
       <div className="w-full max-w-sm flex flex-col gap-6 text-center">
@@ -174,6 +210,25 @@ export function GuestThanksScreen({ onLeave }: { onLeave: () => void }) {
             Request access to get AI-generated meeting notes, transcripts, and action items — automatically.
           </p>
         </div>
+        {link && link !== "asking" && (
+          // The guest's own copy. Opened in a new tab so this screen — and the
+          // way back to the invitation — stays where it is.
+          <div className="rounded-lg border border-[var(--line)] bg-[var(--surface-1)] px-4 py-3 text-sm">
+            <p className="text-[var(--fg-secondary)]">
+              {link.ready
+                ? "The summary of this meeting is ready."
+                : "The summary of this meeting is being written. Your link will open it once it is."}
+            </p>
+            <a
+              href={link.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="mt-2 inline-block font-semibold text-[var(--gold-400)] hover:underline"
+            >
+              Open the meeting summary →
+            </a>
+          </div>
+        )}
         <div className="flex flex-col gap-3">
           <a
             href="/request-access"

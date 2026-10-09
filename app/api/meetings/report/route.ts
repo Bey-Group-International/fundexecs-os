@@ -14,12 +14,27 @@ import { readAllTranscriptRows } from "@/lib/meetings/transcript-read";
 import { inferStartedAt } from "@/lib/meetings/meeting-span";
 import { ONE_WAY_KIND } from "@/lib/meetings/one-way";
 import { loadReportRoles } from "@/lib/meetings/report-roles.server";
+import { loadPresentPeople } from "@/lib/meetings/recipients.server";
+import {
+  isFreshReport,
+  participantNamesForReport,
+  unsummarisedReasonFor,
+  type UnsummarisedReason,
+} from "@/lib/meetings/report-generation";
+import { closeMeeting, writeUnsummarisedReport } from "@/lib/meetings/report-generation.server";
 import {
   recordMeetingOnTimelines,
   type MeetingForCrm,
 } from "@/lib/meetings/crm-activity.server";
 
 export const runtime = "nodejs";
+// The model call runs on the long-run client: LONG_RUN_TIMEOUT_MS with one
+// retry, so up to 240s of upstream time, plus the writes after it. The
+// platform's default function envelope is shorter than that, and a run cut off
+// by the platform surfaced as an opaque 504 to a room that then retried the
+// whole thing. The report page's REPORT_WAIT_LIMIT_MS is derived from this
+// same 300s assumption, so the two must move together.
+export const maxDuration = 300;
 
 const MODEL = process.env.CLAUDE_MODEL ?? "claude-sonnet-4-6";
 
@@ -30,16 +45,23 @@ const client = process.env.ANTHROPIC_API_KEY
 type ReportSupabase = Awaited<ReturnType<typeof createServerClient>>;
 
 /**
- * Close a meeting out when the model could not summarise it.
+ * Close a meeting out without a summary.
  *
- * Two things here belong to the meeting, not to the model, so a failed
- * analysis must not skip them:
+ * Two things here belong to the meeting, not to the model, so a failed or
+ * skipped analysis must not skip them:
  *
  *  - the transcript is kept on a report row, which is where the regenerate
  *    route reads `full_transcript` from; and
- *  - the meeting is marked ended. This route is the ONLY place that ever
- *    marks one ended, and `/api/meetings/upcoming` lists anything that is
- *    not — so skipping it strands a finished meeting in "Upcoming" forever.
+ *  - the meeting is marked ended. Until the hourly sweep existed this route
+ *    was the ONLY place that ever marked one ended, and
+ *    `/api/meetings/upcoming` lists anything that is not — so skipping it
+ *    stranded a finished meeting in "Upcoming" forever.
+ *
+ * Two reasons arrive here and the row says which. `reason` set means the
+ * transcript was silent or noise and the model was never asked: a FINISHED
+ * report that says "nothing to summarise". `reason` null means the model was
+ * asked and failed: a row the regenerate button will try again from. The page
+ * and the export read the difference off the analysis blob.
  *
  * Deliberately not doing the rest of the success path: no institutional
  * record and no auto-created tasks. There is nothing to record and no action
@@ -47,23 +69,27 @@ type ReportSupabase = Awaited<ReturnType<typeof createServerClient>>;
  */
 async function endWithoutAnalysis(
   supabase: ReportSupabase,
-  meetingId: string,
+  meeting: { id: string; started_at: string | null },
   transcript: string,
+  reason: UnsummarisedReason | null,
   crm?: { meeting: MeetingForCrm; actorId: string | null },
+  firstJoinedAt: string | null = null,
 ): Promise<void> {
-  await supabase.from("live_meeting_reports").insert({
-    meeting_id: meetingId,
-    summary: "",
-    key_points: [] as import("@/lib/supabase/database.types").Json,
-    action_items: [] as import("@/lib/supabase/database.types").Json,
-    full_transcript: transcript,
-    analysis: { ...EMPTY_REPORT } as import("@/lib/supabase/database.types").Json,
-  });
+  const meetingId = meeting.id;
+  if (reason) {
+    await writeUnsummarisedReport(supabase, { meetingId, transcript, reason });
+  } else {
+    await supabase.from("live_meeting_reports").insert({
+      meeting_id: meetingId,
+      summary: "",
+      key_points: [] as import("@/lib/supabase/database.types").Json,
+      action_items: [] as import("@/lib/supabase/database.types").Json,
+      full_transcript: transcript,
+      analysis: { ...EMPTY_REPORT } as import("@/lib/supabase/database.types").Json,
+    });
+  }
   const endedAt = new Date().toISOString();
-  await supabase
-    .from("live_meetings")
-    .update({ status: "ended", ended_at: endedAt })
-    .eq("id", meetingId);
+  await closeMeeting(supabase, { meeting, endedAt, firstJoinedAt });
 
   // The CRM record of a meeting that happened, even though nothing was
   // summarised. Omitting it would make the contact's timeline quietly
@@ -105,12 +131,43 @@ export async function POST(req: Request) {
       .from("live_meetings")
       // room_code and attendees are for the CRM timeline entry (the report link
       // and the invite list); they cost nothing on a select that already runs.
-      .select("id, host_id, organization_id, deal_id, title, started_at, scheduled_at, kind, room_code, attendees")
+      .select("id, host_id, organization_id, deal_id, title, started_at, scheduled_at, kind, room_code, attendees, status")
       .eq("id", body.meetingId)
       .single();
 
     if (!meeting || meeting.host_id !== user.id) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+
+    // The same press of End, arriving twice.
+    //
+    // The room posts the transcript and waits on this response for as long as
+    // the model takes. A browser that gave up waiting, a reload, or the retry
+    // state pressed on a response that was in fact on its way posts the same
+    // transcript to a meeting that is already ended with a report already on
+    // file — and the second run cost a second model call, wrote a second
+    // report row, raised every action item again and re-dated the end. Within
+    // the window the existing report IS the answer; past it, a second post is
+    // a new version and is treated as one.
+    if ((meeting as { status?: string | null }).status === "ended") {
+      const latest = await supabase
+        .from("live_meeting_reports")
+        .select("id, created_at, analysis")
+        .eq("meeting_id", body.meetingId)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .then(
+          (res) => (res.data as Array<{ id: string; created_at: string; analysis: unknown }> | null)?.[0] ?? null,
+          () => null,
+        );
+      if (latest && isFreshReport(latest.created_at)) {
+        return NextResponse.json({
+          reportId: latest.id,
+          analysis: latest.analysis ?? { ...EMPTY_REPORT },
+          tasks: { created: 0, routed: 0, unrouted: [], skipped: 0 },
+          repeated: true,
+        });
+      }
     }
 
     // Everything the CRM write needs about this meeting, gathered once because
@@ -142,8 +199,8 @@ export async function POST(req: Request) {
       // is a meeting that did not happen or a bug, and either way writing an
       // empty report over it would bury the evidence.
       if ((meeting as { kind?: string | null }).kind === ONE_WAY_KIND) {
-        await endWithoutAnalysis(supabase, body.meetingId, "", crm);
-        return NextResponse.json({ ok: true, summarised: false });
+        await endWithoutAnalysis(supabase, meeting, "", "silent", crm);
+        return NextResponse.json({ ok: true, summarised: false, reason: "silent" });
       }
       return NextResponse.json({ error: "meetingId and transcript required" }, { status: 400 });
     }
@@ -175,6 +232,11 @@ export async function POST(req: Request) {
       hostEmail: user.email ?? null,
       invited: (meeting as { attendees?: unknown }).attendees ?? null,
     });
+    // Who was actually in the room, for the participant list. The same read
+    // the regenerate route makes, so the two reports of one meeting name the
+    // same people: this route used to pass the room's peer list and that one
+    // the invite list, and they disagreed about who had been there.
+    const presentLookup = loadPresentPeople(supabase, body.meetingId).catch(() => []);
 
     // When the room opened. `started_at` was never written by the room (its
     // write was a query builder that was never awaited, so never sent), so the
@@ -237,7 +299,8 @@ export async function POST(req: Request) {
     const note = qualityPreamble(quality);
     const readable = transcriptForModel(transcript);
     const modelTranscript = note ? `${note}\n${readable}` : readable;
-    if (quality.verdict === "unusable" || quality.verdict === "silent") {
+    const unsummarised = unsummarisedReasonFor(quality.verdict);
+    if (unsummarised) {
       // The id the DATABASE returned, and only when it looks like an id.
       //
       // `body.meetingId` is request text, and a log line built from request text
@@ -262,6 +325,14 @@ export async function POST(req: Request) {
         + ` ${quality.usable} of ${quality.heard} lines usable`
         + ` (${quality.withheldNoise} noise, ${quality.withheldAssistant} assistant)`,
       );
+
+      // Not asked. Handed an hour of recognised noise, the model either
+      // apologised — the best case, and luck — or confidently summarised
+      // decisions nobody made. The record is kept in full, the meeting is
+      // closed, and the report row says there was nothing to summarise, which
+      // the page and the export render as exactly that.
+      await endWithoutAnalysis(supabase, meeting, transcript, unsummarised, crm, await firstJoinRead);
+      return NextResponse.json({ ok: true, summarised: false, reason: unsummarised });
     }
 
     // The prompt and schema live in lib/meetings/report-analysis so the
@@ -278,7 +349,7 @@ export async function POST(req: Request) {
     //
     // A missing API key is NOT a failure and still takes the success path:
     // generateMeetingReport returns the empty report rather than throwing.
-    const [roles, firstJoinedAt] = await Promise.all([rolesLookup, firstJoinRead]);
+    const [roles, firstJoinedAt, present] = await Promise.all([rolesLookup, firstJoinRead, presentLookup]);
     // The end is now; the start is whatever the evidence says. Decided once,
     // here, so the meeting row, the CRM timeline and the institutional record
     // all carry the same span.
@@ -291,11 +362,21 @@ export async function POST(req: Request) {
     });
     crm.meeting.startedAt = startedAt;
 
+    // Attendance rows, the transcript's own speakers and the host — plus the
+    // room's peer list, which survives an attendance write that failed. Never
+    // the invite list: see participantNamesForReport.
+    const participants = participantNamesForReport({
+      host: roles.host,
+      present,
+      transcript,
+      extra: body.participants ?? [],
+    });
+
     let analysis: Record<string, unknown>;
     try {
       analysis = await generateMeetingReport(client, MODEL, {
         title: body.title ?? "Untitled",
-        participants: body.participants ?? [],
+        participants,
         transcript: modelTranscript,
         durationSeconds: body.duration ?? null,
         host: roles.host,
@@ -303,7 +384,7 @@ export async function POST(req: Request) {
       });
     } catch (err) {
       console.error("[/api/meetings/report] analysis failed", err);
-      await endWithoutAnalysis(supabase, body.meetingId, transcript, crm);
+      await endWithoutAnalysis(supabase, meeting, transcript, null, crm, firstJoinedAt);
       throw err;
     }
 
@@ -344,7 +425,7 @@ export async function POST(req: Request) {
       persistInstitutionalMeetingRecord(supabase, {
         meeting,
         actorId: user.id,
-        participants: body.participants ?? [],
+        participants,
         transcript,
         analysis,
         // When the meeting happened, not when the report ran. Usually moments

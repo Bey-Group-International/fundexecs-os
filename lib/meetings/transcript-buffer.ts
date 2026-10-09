@@ -46,6 +46,8 @@ export interface BufferableLine {
 }
 
 /** A row as `live_meeting_transcripts` stores it. */
+import { LOCAL_SPEAKER_ID } from "@/lib/meetings/speaker-attribution";
+
 export interface TranscriptRow {
   id: string;
   meeting_id: string;
@@ -141,12 +143,22 @@ export function nextBatch<T extends BufferableLine>(
 export function transcriptRows(
   lines: readonly BufferableLine[],
   meetingId: string,
+  /**
+   * The signaling id this client speaks as, written in place of the local
+   * placeholder. In memory a member's own lines carry `LOCAL_SPEAKER_ID`
+   * ("local"), which is what the meter and the tiles key on; stored, that
+   * made every row in the table say "local" — the column documented as "the
+   * signaling id of the speaker, stable across a rename" held one value for
+   * everybody, and two guests who both typed "Guest" became one person in
+   * the report. Null leaves the placeholder, for callers with no identity.
+   */
+  localSpeakerId: string | null = null,
 ): TranscriptRow[] {
   return lines.map((l) => ({
     id: l.id,
     meeting_id: meetingId,
     speaker: l.speaker,
-    speaker_id: l.speakerId,
+    speaker_id: l.speakerId === LOCAL_SPEAKER_ID && localSpeakerId ? localSpeakerId : l.speakerId,
     speaker_user_id: l.userId,
     confidence: l.confidence,
     text: l.text,

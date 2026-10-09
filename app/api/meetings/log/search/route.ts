@@ -77,7 +77,7 @@ export async function GET(req: NextRequest) {
   // same rule the page applies to the list, and it has to — it is the only place
   // that can see the rows it REJECTED, which is what `scanned` counts.
   const meetings: LoggedMeetingHit[] = found.rows.map((row) => ({
-    ...loggedMeeting(toLogEntry(row.meeting, row.report, row.attended, row.isHost)),
+    ...loggedMeeting(toLogEntry(row.meeting, row.report, row.attended, row.isHost, row.transcribed)),
     hit: row.hit ?? { reason: "metadata", matches: 0, snippet: null },
   }));
 
