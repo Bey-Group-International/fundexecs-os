@@ -34,6 +34,7 @@
 // effect costs more than it is worth — are in backgrounds.ts, where they can be
 // tested without a GPU.
 
+import { attachHiddenVideo, detachHiddenVideo } from "./hidden-video";
 import {
   FRAME_BUDGET_MS,
   NO_BACKGROUND,
@@ -240,9 +241,13 @@ export class BackgroundProcessor {
     video.playsInline = true;
     video.muted = true;
     video.srcObject = new MediaStream([source]);
+    // In the document, one transparent pixel: iOS WebKit does not reliably
+    // decode a detached element. See hidden-video.ts.
+    attachHiddenVideo(video);
     try {
       await video.play();
     } catch {
+      detachHiddenVideo(video);
       // Autoplay of a muted, srcObject-backed element is permitted everywhere
       // this app runs; if it is refused there is nothing to composite.
       compositor.destroy();
@@ -461,5 +466,6 @@ export class BackgroundProcessor {
     this.stream.getTracks().forEach((t) => { try { t.stop(); } catch { /* already stopped */ } });
     try { this.video.pause(); } catch { /* already paused */ }
     this.video.srcObject = null;
+    detachHiddenVideo(this.video);
   }
 }

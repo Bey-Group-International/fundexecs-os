@@ -12,7 +12,7 @@
  * need no DOM. What these pin is that the player actually CALLS them, and acts
  * on what they say. A correct eviction rule that nothing invokes bounds nothing.
  */
-import { render, act } from "@testing-library/react";
+import { render, act, screen } from "@testing-library/react";
 import { fireEvent } from "@testing-library/dom";
 import { createRef } from "react";
 import { RecordingPlayer, type RecordingPlayerHandle } from "./RecordingPlayer";
@@ -35,6 +35,24 @@ class FakeSourceBuffer extends EventTarget {
   remove(startSec: number, endSec: number) {
     this.removals.push([startSec * 1000, endSec * 1000]);
     setTimeout(() => this.dispatchEvent(new Event("updateend")), 0);
+  }
+}
+
+/** iPhone Safari's MediaSource (iOS 17.1+): the same API under another name. */
+class FakeManagedMediaSource extends EventTarget {
+  readyState = "open";
+  duration = 0;
+  buffer: FakeSourceBuffer | null = null;
+  static isTypeSupported() {
+    return true;
+  }
+  constructor() {
+    super();
+    sources.push(this as unknown as FakeMediaSource);
+  }
+  addSourceBuffer() {
+    this.buffer = new FakeSourceBuffer();
+    return this.buffer as unknown as SourceBuffer;
   }
 }
 
@@ -96,17 +114,28 @@ async function setup(
     markers?: Array<{ ms: number; label: string }>;
     /** Runs after render and before the source opens: the "not ready yet" window. */
     beforeOpen?: () => void;
+    /** `ManagedMediaSource` beside `MediaSource` ("also"), or instead of it ("only": an iPhone). */
+    managed?: "also" | "only";
   } = {},
 ): Promise<Harness> {
   sources = [];
   FakeMediaSource.supported = opts.supported ?? true;
+  const w = window as unknown as { ManagedMediaSource?: unknown; MediaSource?: unknown };
+  const g = globalThis as unknown as { MediaSource?: unknown };
+  if (opts.managed) w.ManagedMediaSource = FakeManagedMediaSource;
+  else delete w.ManagedMediaSource;
 
   const parts = timeline(partCount);
   const resident = new Set<number>();
   const fetched: number[][] = [];
 
-  (window as unknown as { MediaSource: unknown }).MediaSource = FakeMediaSource;
-  (globalThis as unknown as { MediaSource: unknown }).MediaSource = FakeMediaSource;
+  if (opts.managed === "only") {
+    delete w.MediaSource;
+    delete g.MediaSource;
+  } else {
+    w.MediaSource = FakeMediaSource;
+    g.MediaSource = FakeMediaSource;
+  }
   URL.createObjectURL = () => "blob:fake";
   URL.revokeObjectURL = () => {};
 
@@ -235,6 +264,26 @@ describe("filling the buffer", () => {
   it("fetches a run of parts in one request rather than one each", async () => {
     const h = await setup(20);
     expect(h.fetched[0].length).toBeGreaterThan(1);
+  });
+
+  /**
+   * The iPhone. It has no `MediaSource` at all, and used to take the native
+   * fallback — no scrubber, no seeking, "plays from the start" — on every
+   * phone. `ManagedMediaSource` is the same loop under WebKit's name for it.
+   */
+  it("seeks through ManagedMediaSource on a phone that has nothing else", async () => {
+    const h = await setup(4, { managed: "only" });
+    expect(sources).toHaveLength(1);
+    expect(sources[0]).toBeInstanceOf(FakeManagedMediaSource);
+    // WebKit refuses to open a managed source unless remote playback is off.
+    expect((h.video as HTMLVideoElement & { disableRemotePlayback?: boolean }).disableRemotePlayback).toBe(true);
+    expect(h.buffer().appended.length).toBeGreaterThan(0);
+    expect(screen.queryByText(/cannot seek/)).toBeNull();
+  });
+
+  it("prefers ManagedMediaSource where both exist, as WebKit asks on a battery", async () => {
+    await setup(4, { managed: "also" });
+    expect(sources[0]).toBeInstanceOf(FakeManagedMediaSource);
   });
 
   it("falls back to a plain element when MediaSource cannot play the recording", async () => {

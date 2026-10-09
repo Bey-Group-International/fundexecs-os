@@ -40,6 +40,22 @@ const BUFFER_AHEAD_MS = 30_000;
 /** Append more once the buffer ahead falls below this. */
 const REFILL_AT_MS = 12_000;
 
+/**
+ * The MediaSource this browser offers, or null.
+ *
+ * iPhone Safari has never shipped `MediaSource`; since iOS 17.1 it ships
+ * `ManagedMediaSource`, the same API with the buffering budget managed by the
+ * browser. Without this the iPhone always took the native fallback, which
+ * cannot seek inside a recording at all. Preferred where both exist: it is
+ * what WebKit recommends on any battery-powered device.
+ */
+function mediaSourceCtor(): typeof MediaSource | null {
+  if (typeof window === "undefined") return null;
+  const managed = (window as Window & { ManagedMediaSource?: typeof MediaSource }).ManagedMediaSource;
+  if (managed) return managed;
+  return typeof MediaSource !== "undefined" ? MediaSource : null;
+}
+
 interface PartsResponse {
   mimeType: string;
   status: string;
@@ -134,10 +150,8 @@ export function RecordingPlayer({
         if (!res.ok) throw new Error(String(res.status));
         const body = (await res.json()) as PartsResponse;
         if (cancelled) return;
-        const supported =
-          typeof window !== "undefined" &&
-          typeof window.MediaSource !== "undefined" &&
-          window.MediaSource.isTypeSupported(body.mimeType);
+        const Source = mediaSourceCtor();
+        const supported = Source !== null && Source.isTypeSupported(body.mimeType);
         setMeta(body);
         setNative(!supported);
       } catch {
@@ -209,7 +223,15 @@ export function RecordingPlayer({
     const video = videoRef.current;
     if (!video) return;
 
-    const source = new MediaSource();
+    const Source = mediaSourceCtor();
+    if (!Source) { setNative(true); return; }
+    const source = new Source();
+    // ManagedMediaSource refuses to open unless remote playback is off — it
+    // manages buffering for a battery-powered device and AirPlay would take
+    // that away from it.
+    if (typeof MediaSource === "undefined" || Source !== MediaSource) {
+      (video as HTMLVideoElement & { disableRemotePlayback?: boolean }).disableRemotePlayback = true;
+    }
     const s = state.current;
     s.source = source;
     s.parts = meta.parts;

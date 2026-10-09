@@ -521,6 +521,10 @@ async function postGuestAttendance(
   }
 }
 
+/** The banner while iOS (a phone call, Siri, another app) holds the microphone. */
+const MIC_INTERRUPTED_NOTICE =
+  "Your microphone was interrupted by another app or a call. Audio resumes when it is released.";
+
 export function MeetingRoom({ roomCode }: { roomCode: string }) {
   // Start fetching the call screen as soon as the room mounts: the member is
   // about to spend a few seconds in the green room checking their camera, and
@@ -1542,9 +1546,22 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
         enc.active = false;
       }
       // A shared screen should lose frames before it loses legibility; a face
-      // is the other way round.
-      params.degradationPreference = sharing ? "maintain-resolution" : "balanced";
-      void sender.setParameters(params).catch(() => { /* older engines reject some fields */ });
+      // is the other way round. Applied in its OWN call, after the encodings
+      // have landed: `setParameters` is all-or-nothing, and an engine that
+      // rejects `degradationPreference` (it has moved in the spec, and WebKit
+      // has not tracked every move) would otherwise throw away the bitrate
+      // cap, the scale-down and the `active: false` in the same call — every
+      // Safari sender ignoring every cap, silently.
+      const preference: RTCDegradationPreference = sharing ? "maintain-resolution" : "balanced";
+      delete params.degradationPreference;
+      void sender.setParameters(params)
+        .then(() => {
+          let again: RTCRtpSendParameters;
+          try { again = sender.getParameters(); } catch { return; }
+          again.degradationPreference = preference;
+          return sender.setParameters(again);
+        })
+        .catch(() => { /* older engines reject some fields */ });
     });
   }, [retuneCapture]);
   const applySendCapsRef = useRef(applySendCaps);
@@ -5076,12 +5093,39 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     }
   }, []);
 
+  /**
+   * True while a camera switch is in flight, so the "camera ended" listener
+   * does not treat the OLD camera ending as a disconnect. iOS ends it on
+   * purpose: one camera capture at a time, and opening the next closes the
+   * current. See `onVideoEnded`.
+   */
+  const cameraSwitchRef = useRef(false);
+
+  /**
+   * After a switch that did NOT hand over a camera: if the one the member had
+   * was ended underneath it (iOS, see above), they now have no camera at all,
+   * and the listener that would have said so was standing down for the switch.
+   * Say it here instead, and go back to the default — unless the default is
+   * what just failed, in which case there is nothing left to try.
+   */
+  const recoverCameraAfterSwitch = useCallback((attempted: string, reopen: (id: string) => Promise<void>) => {
+    const raw = rawCameraTrackRef.current;
+    if (!raw || raw.readyState !== "ended" || !camOnRef.current) return;
+    if (attempted === "") {
+      setMediaError("Your camera disconnected and could not be reopened.");
+      return;
+    }
+    setMediaError("Your camera disconnected. Switching to the system default…");
+    void reopen("");
+  }, []);
+
   /** The same, for the camera. `adoptCameraTrack` re-attaches any background effect. */
   const switchCam = useCallback(async (deviceId: string) => {
     let opened: MediaStream | null = null;
     // See `flipCamera`: the same hand-over, and the same reason the release has
     // to be conditional on it having happened.
     let adopted = false;
+    cameraSwitchRef.current = true;
     try {
       opened = await navigator.mediaDevices.getUserMedia({
         // Without these the new camera comes up at its own idea of a sensible
@@ -5106,8 +5150,14 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
       setMediaError("That camera could not be opened. Your previous one is still live.");
     } finally {
       if (!adopted) releaseStream(opened);
+      cameraSwitchRef.current = false;
+      if (!adopted) recoverCameraAfterSwitch(deviceId, switchCamRef.current);
     }
-  }, [adoptCameraTrack]);
+  }, [adoptCameraTrack, recoverCameraAfterSwitch]);
+  // `switchCam` cannot name itself inside its own initializer; the ref lets
+  // the recovery reopen the default through the same path.
+  const switchCamRef = useRef<(id: string) => Promise<void>>(async () => {});
+  useEffect(() => { switchCamRef.current = switchCam; }, [switchCam]);
 
   /**
    * Move call audio to another output device, and say so if that breaks echo
@@ -5189,6 +5239,12 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     };
     const onVideoEnded = () => {
       if (!camOnRef.current) return;
+      // iOS runs one camera capture at a time: opening the next camera ENDS
+      // the current one, which used to land here mid-switch and race the
+      // switch back to the system default — the member tapped "flip" and got
+      // the front camera and a "disconnected" banner. The switch owns its own
+      // recovery (see `recoverCameraAfterSwitch`).
+      if (cameraSwitchRef.current) return;
       setMediaError("Your camera disconnected. Switching to the system default…");
       void switchCam("");
     };
@@ -5237,6 +5293,54 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
       track.removeEventListener("unmute", onUnmute);
     };
   }, [ready, rawCameraTrack]);
+
+  // The microphone's version of the stall above. iOS takes the microphone
+  // for a phone call, Siri or another app and gives it back afterwards; the
+  // track stays `live`, fires `mute`, and the room hears nothing from this
+  // member with nothing on screen to say why. Sustained before it is said,
+  // as the camera's is, and withdrawn when audio resumes. If the track is
+  // still muted once the app is back in the foreground — iOS sometimes never
+  // unmutes a capture it interrupted — the microphone is reopened, which is
+  // what a native client does when it regains the audio session.
+  useEffect(() => {
+    if (!ready) return;
+    const track = localStreamRef.current?.getAudioTracks()[0] ?? null;
+    if (!track) return;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    let foreground: ReturnType<typeof setTimeout> | null = null;
+    const stillInterrupted = () => micOnRef.current && track.readyState === "live" && track.muted;
+    const onMute = () => {
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(() => {
+        if (!stillInterrupted()) return;
+        setMediaError(MIC_INTERRUPTED_NOTICE);
+      }, CAMERA_STALL_MS);
+    };
+    const onUnmute = () => {
+      if (timer) { clearTimeout(timer); timer = null; }
+      setMediaError((held) => (held === MIC_INTERRUPTED_NOTICE ? null : held));
+    };
+    const onVisible = () => {
+      if (document.visibilityState !== "visible") return;
+      // Give WebKit a moment to hand the capture back on its own first.
+      if (foreground) clearTimeout(foreground);
+      foreground = setTimeout(() => {
+        if (!stillInterrupted()) return;
+        setMediaError("Your microphone was interrupted. Reconnecting…");
+        void switchMic(selectedMicIdRef.current);
+      }, CAMERA_STALL_MS);
+    };
+    track.addEventListener("mute", onMute);
+    track.addEventListener("unmute", onUnmute);
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      if (timer) clearTimeout(timer);
+      if (foreground) clearTimeout(foreground);
+      track.removeEventListener("mute", onMute);
+      track.removeEventListener("unmute", onUnmute);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, [ready, localStream, switchMic]);
 
   // ── Going back for a device the meeting started without ───────────────────
   //
@@ -5623,6 +5727,7 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     // unconditional -- it has to cover a throw BEFORE adoption without
     // punishing anything that goes wrong after it.
     let adopted = false;
+    cameraSwitchRef.current = true;
     try {
       opened = await navigator.mediaDevices.getUserMedia({
         video: facingConstraints(next),
@@ -5654,8 +5759,12 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
       // no usable track, no local stream, or a throw out of `adoptCameraTrack`.
       // Each of those leaves a live capture and the hardware light on.
       if (!adopted) releaseStream(opened);
+      cameraSwitchRef.current = false;
+      // A flip is never a request for the default, so a failed one always has
+      // somewhere to go back to.
+      if (!adopted) recoverCameraAfterSwitch("flip", switchCam);
     }
-  }, [facingMode, adoptCameraTrack]);
+  }, [facingMode, adoptCameraTrack, recoverCameraAfterSwitch, switchCam]);
 
   /**
    * Leave, because we have been removed.
