@@ -3,6 +3,7 @@ import { createServerClient, createServiceClient, hasSupabaseServiceEnv } from "
 import { authorizeMeetingCaller } from "@/lib/meetings/meeting-access.server";
 import { checkRateLimit, clientIp, rateLimitHeaders } from "@/lib/rate-limit";
 import { MAX_BATCH, type TranscriptRow } from "@/lib/meetings/transcript-buffer";
+import { sanitizeDiagnostics } from "@/lib/meetings/recognizer-diagnostics";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -76,6 +77,9 @@ function sanitize(rows: unknown, meetingId: string, userId: string | null): Tran
       text,
       ts,
       overlapped: r.overlapped === true,
+      // The run that produced the line, kept only in the shape the client is
+      // allowed to write. See recognizer-diagnostics.ts.
+      recognizer: sanitizeDiagnostics(r.recognizer),
     });
   }
   return out;

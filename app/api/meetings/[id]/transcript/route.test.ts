@@ -150,6 +150,27 @@ describe("what it accepts", () => {
     expect((upserted?.rows as Record<string, unknown>[])[0].id).toBe("keep");
   });
 
+  // The run facts ride the line, in the shape the client is allowed to write.
+  it("keeps the recogniser's run facts, bounded to the keys it knows", async () => {
+    await POST(request({ lines: [line({
+      recognizer: {
+        brand: "Microsoft Edge", available: true, path: "track", run: 2, runAgeMs: 4_000,
+        engineConfidence: 0, trackLabel: "Jabra", lang: "en-US", sql: "drop table",
+      },
+    })] }), { params });
+    expect((upserted?.rows as Record<string, unknown>[])[0].recognizer).toEqual({
+      brand: "Microsoft Edge", available: true, path: "track", run: 2, runAgeMs: 4_000,
+      engineConfidence: 0, trackLabel: "Jabra", lang: "en-US",
+    });
+  });
+
+  it("stores no run facts for a line that carries none, or carries junk", async () => {
+    await POST(request({ lines: [line(), line({ id: "u2", recognizer: "track" })] }), { params });
+    const rows = upserted?.rows as Record<string, unknown>[];
+    expect(rows[0].recognizer).toBeNull();
+    expect(rows[1].recognizer).toBeNull();
+  });
+
   it("clamps confidence into range", async () => {
     await POST(request({ lines: [line({ confidence: 99 })] }), { params });
     expect((upserted?.rows as Record<string, unknown>[])[0].confidence).toBe(1);

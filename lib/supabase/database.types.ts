@@ -3029,6 +3029,12 @@ export type LiveMeetingTranscript = {
   ts: string;
   /** Somebody else was audible while this was said. Added by 20260915130000. */
   overlapped: boolean;
+  /**
+   * The recogniser run that produced the line: browser brand, how the run was
+   * started, the engine's raw score. Added by 20261009180000; null before it.
+   * See lib/meetings/recognizer-diagnostics.ts.
+   */
+  recognizer: Json | null;
 };
 
 /**

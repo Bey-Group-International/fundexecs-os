@@ -114,6 +114,15 @@ describe("transcriptRows", () => {
     expect(row.speaker_id).toBe("sig-42");
   });
 
+  it("carries what the line knows about the run that produced it, and null when it knows nothing", () => {
+    const recognizer = {
+      brand: "Microsoft Edge", available: true, path: "track" as const, run: 2,
+      runAgeMs: 4_000, engineConfidence: 0, trackLabel: "Jabra", lang: "en-US",
+    };
+    expect(transcriptRows([line({ recognizer })], "m1")[0].recognizer).toEqual(recognizer);
+    expect(transcriptRows([line()], "m1")[0].recognizer).toBeNull();
+  });
+
   it("leaves a remote speaker's id, and the placeholder when no id is given", () => {
     expect(transcriptRows([line({ speakerId: "peer-9" })], "m1", "sig-42")[0].speaker_id).toBe("peer-9");
     expect(transcriptRows([line({ speakerId: "local" })], "m1")[0].speaker_id).toBe("local");
