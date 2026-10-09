@@ -42,18 +42,20 @@ function invitedEmails(invited: unknown): Set<string> {
 
 /**
  * Who the transcript proves was in the room, for people the attendance table
- * structurally cannot hold.
+ * may not hold.
  *
- * `live_meeting_participants` has an RLS policy of `user_id = auth.uid()` and
- * the join path writes a row only `if (user)` -- so an unauthenticated guest
- * leaves NO attendance row at all. An invitee who opens the link without
- * signing in is therefore absent from every attendance read, and the report
- * told the host they did not join.
+ * `live_meeting_participants` has an RLS policy of `user_id = auth.uid()`, so
+ * a guest cannot write their own row; the attendance route writes it for them
+ * under their guest key (app/api/meetings/[id]/attendance). But that route is
+ * newer than the meetings, so every meeting held before it has no row for its
+ * guests, and a row still goes missing when the write fails. An invitee who
+ * opened the link without signing in was then absent from every attendance
+ * read, and the report told the host they did not join.
  *
- * Their lines in the transcript are the evidence that survives. They are
- * written through an API route rather than straight to the table, so a guest
- * CAN write them, and `speaker` is the name they chose at the door -- which is
- * the only identity this system has for them either way.
+ * Their lines in the transcript are the evidence that survives either way.
+ * They are written through an API route rather than straight to the table, so
+ * a guest CAN write them, and `speaker` is the name they chose at the door --
+ * which is the only identity this system has for them.
  *
  * Only guest rows. A member who spoke already has an attendance row with a
  * directory name and address against it, and `loadPresentPeople` prefers the
