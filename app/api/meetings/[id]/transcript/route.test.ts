@@ -9,6 +9,9 @@ let currentUser: { id: string } | null = null;
 let tables: Record<string, unknown[]> = {};
 let upserted: { rows: unknown[]; options: unknown } | null = null;
 let upsertError: unknown = null;
+/** Every upsert's rows, in order; `upsertSequence` answers each with an error or null. */
+let upsertCalls: Record<string, unknown>[][] = [];
+let upsertSequence: unknown[] | null = null;
 
 function builder(table: string) {
   const chain: Record<string, unknown> = {};
@@ -17,6 +20,8 @@ function builder(table: string) {
   chain.maybeSingle = async () => ({ data: (tables[table] ?? [])[0] ?? null });
   chain.upsert = async (rows: unknown[], options: unknown) => {
     upserted = { rows, options };
+    upsertCalls.push(rows as Record<string, unknown>[]);
+    if (upsertSequence) return { error: upsertSequence.shift() ?? null };
     return { error: upsertError };
   };
   return chain;
@@ -74,6 +79,8 @@ beforeEach(() => {
   tables = {};
   upserted = null;
   upsertError = null;
+  upsertCalls = [];
+  upsertSequence = null;
   allowed = true;
   jest.spyOn(console, "error").mockImplementation(() => {});
 });
@@ -187,6 +194,20 @@ describe("what it accepts", () => {
     const res = await POST(request({ lines: "not an array" }), { params });
     expect(res.status).toBe(200);
     expect(upserted).toBeNull();
+  });
+
+  // Code can reach production before its column does; the words must not pay.
+  it("saves the lines without the run facts when the column is not there yet", async () => {
+    jest.spyOn(console, "warn").mockImplementation(() => {});
+    upsertSequence = [{
+      code: "PGRST204",
+      message: "Could not find the 'recognizer' column of 'live_meeting_transcripts' in the schema cache",
+    }, null];
+    const res = await POST(request({ lines: [line({ recognizer: { path: "track" } })] }), { params });
+    expect(res.status).toBe(200);
+    expect(upsertCalls).toHaveLength(2);
+    expect(upsertCalls[0][0]).toHaveProperty("recognizer");
+    expect(upsertCalls[1][0]).not.toHaveProperty("recognizer");
   });
 
   // A 200 here would cost the words: the client retires a line only on success.
