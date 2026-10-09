@@ -38,6 +38,8 @@ import { observeOutput } from "@/lib/observe";
 import { extractApiWriteRequest, executeApiWrite } from "@/lib/api-write-requests";
 import { deliverApprovedReply, extractInboxReply, legacyInboxReply } from "@/lib/inbox/deliver-reply.server";
 import { reviseInboxReply } from "@/lib/inbox/revise-reply.server";
+import { selfApprovalRefusal } from "@/lib/inbox/approver.server";
+import { isFutureSend } from "@/lib/inbox/pending-action";
 
 type Client = Awaited<ReturnType<typeof createServerClient>>;
 
@@ -1413,6 +1415,14 @@ export async function decideApproval(
     .single();
   if (!approval) throw new Error("Approval not found");
 
+  // An inbox message may not be approved by the person who wrote it (owners
+  // and admins excepted). Checked before the decision is claimed, so a refused
+  // approval leaves the row pending for somebody else.
+  if (args.decision === "approved" || args.decision === "accepted") {
+    const refused = await selfApprovalRefusal(ctx.supabase, ctx.orgId, ctx.actorId, approval.task_id);
+    if (refused) return { workflowId: approval.task_id, decision: args.decision, refused };
+  }
+
   // Idempotency guard: record the decision with a compare-and-set on the
   // still-undecided row. A double-clicked or retried "approved" POST used to
   // re-run the entire workflow — re-billing credits, re-spending on Claude, and
@@ -1505,6 +1515,18 @@ export async function decideApproval(
     }));
   if (inboxReply) {
     if (args.decision === "approved") {
+      // Approved to go out later: held on the task until the cron sends it.
+      if (isFutureSend(inboxReply.scheduledAt)) {
+        const prior = (wf.result && typeof wf.result === "object" ? wf.result : {}) as Record<string, unknown>;
+        await ctx.supabase
+          .from("tasks")
+          .update({
+            status: "pending",
+            result: { ...prior, inboxReply: { ...inboxReply, approvedBy: ctx.actorId } } as unknown as Json,
+          })
+          .eq("id", wf.id);
+        return { workflowId: wf.id, decision: args.decision, scheduledAt: inboxReply.scheduledAt };
+      }
       const delivered = await deliverApprovedReply(ctx.supabase, {
         orgId: ctx.orgId,
         approverId: ctx.actorId,

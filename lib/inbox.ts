@@ -17,7 +17,11 @@
 // `isInboxOverdue`, …) so they unit-test without a DB or server-only imports.
 import * as React from "react";
 import { createServerClient } from "@/lib/supabase/server";
-import { fetchFailedInboxMessages, loadMessageApprovals } from "@/lib/inbox/message-approvals.server";
+import {
+  fetchFailedInboxMessages,
+  fetchScheduledInboxMessages,
+  loadMessageApprovals,
+} from "@/lib/inbox/message-approvals.server";
 import { ACTIVE_STAGES, scoreDeal } from "@/lib/run-conviction";
 import { getMandate, type Mandate } from "@/lib/build-readiness";
 import { isOverdue } from "@/lib/diligence-templates";
@@ -32,6 +36,7 @@ import type {
 } from "@/lib/supabase/database.types";
 import { AGENT_BY_KEY } from "@/lib/agents";
 import {
+  APPROVAL_ESCALATE_HOURS,
   extractInboxReply,
   legacyActionFromTask,
   type InboxMessageApproval,
@@ -202,8 +207,23 @@ export interface ApprovalCandidate
   /** The meeting the workflow was started from (tasks.meeting_id), when known. */
   meeting_id?: string | null;
   created_by?: string | null;
+  /** When its pending approval was opened. */
+  waiting_since?: string | null;
   /** The inbox message this task holds, when it holds one (see message-approvals.server). */
   message?: InboxMessageApproval;
+}
+
+/**
+ * Messages that have waited a day or more for approval go first (in their own
+ * order); everything else keeps its order. They are the ones going stale.
+ */
+export function sortStaleFirst(items: InboxItem[], nowIso: string): InboxItem[] {
+  const cutoff = Date.parse(nowIso) - APPROVAL_ESCALATE_HOURS * 3_600_000;
+  const stale = (i: InboxItem) => {
+    const since = i.message?.waitingSince ? Date.parse(i.message.waitingSince) : NaN;
+    return Number.isFinite(since) && since <= cutoff;
+  };
+  return [...items.filter(stale), ...items.filter((i) => !stale(i))];
 }
 
 /**
@@ -238,7 +258,9 @@ export function workflowToApprovalItem(task: ApprovalCandidate): InboxItem {
     subtitle: message
       ? message.failed
         ? `Approved, not sent: ${message.failed.error}`
-        : `${message.actionLabel} to ${message.to.name ?? message.to.email ?? "the contact"} · awaiting your approval`
+        : message.scheduledAt
+          ? `${message.actionLabel} to ${message.to.name ?? message.to.email ?? "the contact"} · scheduled`
+          : `${message.actionLabel} to ${message.to.name ?? message.to.email ?? "the contact"} · awaiting your approval`
       : subtitle,
     // A message's place is its conversation, not a workflow page.
     href: message ? message.threadHref : href,
@@ -394,9 +416,12 @@ export function buildInbox(
 
   // A follow-up pack for a meeting that hasn't happened yet is held back until
   // the meeting is over — the work isn't discarded, just time-gated.
-  const needsApproval = awaitingApproval
-    .filter((t) => !isPrematureFollowupPack(t.title ?? "", meetings, nowIso, t.meeting_id))
-    .map(workflowToApprovalItem);
+  const needsApproval = sortStaleFirst(
+    awaitingApproval
+      .filter((t) => !isPrematureFollowupPack(t.title ?? "", meetings, nowIso, t.meeting_id))
+      .map(workflowToApprovalItem),
+    nowIso,
+  );
 
   const overdueDiligence: InboxItem[] = [];
   for (const d of deals) {
@@ -475,15 +500,20 @@ async function attachPendingApprovals(
   // only ever be this org's.
   const { data } = await supabase
     .from("approvals")
-    .select("id, task_id")
+    .select("id, task_id, created_at")
     .eq("organization_id", orgId)
     .eq("decision", "pending")
     .in("task_id", rows.map((r) => r.id));
-  const approvalByTask = new Map<string, string>();
-  for (const a of (data ?? []) as { id: string; task_id: string }[]) {
-    if (!approvalByTask.has(a.task_id)) approvalByTask.set(a.task_id, a.id);
+  const approvalByTask = new Map<string, { id: string; created_at: string | null }>();
+  for (const a of (data ?? []) as { id: string; task_id: string; created_at?: string | null }[]) {
+    if (!approvalByTask.has(a.task_id)) approvalByTask.set(a.task_id, { id: a.id, created_at: a.created_at ?? null });
   }
-  return rows.map((r) => ({ ...r, approvalId: approvalByTask.get(r.id) ?? null }));
+  return rows.map((r) => ({
+    ...r,
+    approvalId: approvalByTask.get(r.id)?.id ?? null,
+    // How long it has actually waited: a revised message re-opens its approval.
+    waiting_since: approvalByTask.get(r.id)?.created_at ?? r.created_at ?? null,
+  }));
 }
 
 /**
@@ -593,17 +623,20 @@ export const getInbox = cache(async function getInbox(orgId: string): Promise<In
     const nowIso = new Date().toISOString();
     const todayIso = nowIso.slice(0, 10);
     const client = await createServerClient();
-    const [deals, awaitingApproval, meetings, failedMessages] = await Promise.all([
+    const [deals, awaitingApproval, meetings, failedMessages, scheduledMessages] = await Promise.all([
       fetchInboxWorkingSet(orgId),
       fetchAwaitingApproval(orgId),
       fetchUnfinishedMeetings(orgId),
       fetchFailedInboxMessages(client, orgId),
+      fetchScheduledInboxMessages(client, orgId),
     ]);
     // Approved messages that did not go out sit with the approvals: they need
-    // the operator just as much, and the card retries them.
+    // the operator just as much, and the card retries them. Scheduled ones sit
+    // there too, so they can still be sent now or cancelled.
     const candidates = [
       ...(await attachPendingApprovals(orgId, awaitingApproval)),
       ...(failedMessages as ApprovalCandidate[]),
+      ...(scheduledMessages as ApprovalCandidate[]),
     ];
     const messages = await loadMessageApprovals(client, orgId, candidates);
     return buildInbox(

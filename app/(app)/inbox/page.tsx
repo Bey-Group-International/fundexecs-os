@@ -218,7 +218,7 @@ export default async function InboxPage(
       {/* Lane 1 — the action queue: what the operator must act on. */}
       <section className="mb-8">
         <SectionHeading>Needs you</SectionHeading>
-        <InboxView inbox={inbox} />
+        <InboxView inbox={inbox} viewer={{ userId: ctx.userId, role: ctx.role }} />
       </section>
 
       {/* Lane 2 — unified communications: booking, messaging, video. */}

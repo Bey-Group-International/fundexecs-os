@@ -20,7 +20,12 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { Inbox, InboxItem, InboxTone } from "@/lib/inbox";
 import { relativeTime } from "@/components/mobile/format";
-import { MeetingApprovalGroup, MessageApprovalCard, groupByMeeting } from "@/components/inbox/MessageApproval";
+import {
+  MeetingApprovalGroup,
+  MessageApprovalCard,
+  groupByMeeting,
+  type Viewer,
+} from "@/components/inbox/MessageApproval";
 import {
   dismissApprovalTask,
   dismissAllApprovalTasks,
@@ -399,9 +404,11 @@ function Section({
   dismissAllError,
   confirmingAll,
   onConfirmingAllChange,
+  viewer,
 }: {
   title: string;
   items: InboxItem[];
+  viewer?: Viewer;
   onDecided?: (id: string, decision: InboxApprovalDecision) => void;
   onDismiss?: (id: string) => void;
   onDismissAll?: () => void;
@@ -463,13 +470,15 @@ function Section({
                   items={entry.items}
                   onDecided={onDecided}
                   onCleared={(id) => onDismiss?.(id)}
+                  viewer={viewer}
                 />
-              ) : entry.message && (entry.approval || entry.message.failed) ? (
+              ) : entry.message && (entry.approval || entry.message.failed || entry.message.scheduledAt) ? (
                 <MessageApprovalCard
                   key={entry.id}
                   item={entry}
                   onDecided={onDecided}
                   onCleared={(id) => onDismiss?.(id)}
+                  viewer={viewer}
                 />
               ) : (
                 <ApprovalRow key={entry.id} item={entry} onDecided={onDecided} onDismiss={onDismiss} />
@@ -481,7 +490,7 @@ function Section({
   );
 }
 
-export function InboxView({ inbox }: { inbox: Inbox }) {
+export function InboxView({ inbox, viewer }: { inbox: Inbox; viewer?: Viewer }) {
   const router = useRouter();
   const [cleared, setCleared] = useState<Set<string>>(new Set());
   const [dismissingAll, startDismissAll] = useTransition();
@@ -566,6 +575,7 @@ export function InboxView({ inbox }: { inbox: Inbox }) {
         dismissAllError={dismissAllError}
         confirmingAll={confirmingAll}
         onConfirmingAllChange={setConfirmingAll}
+        viewer={viewer}
       />
       <Section title="Overdue diligence" items={visible.overdueDiligence} />
       <Section title="IC-ready" items={visible.icReady} />

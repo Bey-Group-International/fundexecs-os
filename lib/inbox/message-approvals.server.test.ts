@@ -59,6 +59,9 @@ it("shows the recipient, reply subject, mailbox, meeting, contact and their last
     lastInbound: { body: "Can you send the deck?", at: "2026-10-05T10:00:00Z" },
     editable: true,
     failed: null,
+    authorId: "author-1",
+    scheduledAt: null,
+    waitingSince: null,
   });
 });
 

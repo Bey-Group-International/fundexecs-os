@@ -16,6 +16,7 @@
 const requireOrgContext = jest.fn();
 const from = jest.fn();
 const gateDecision = jest.fn();
+const isKnownContact = jest.fn(async (..._a: unknown[]) => false);
 const dispatchAction = jest.fn();
 const clearThreadDraft = jest.fn();
 
@@ -27,7 +28,9 @@ jest.mock("next/cache", () => ({ revalidatePath: () => {} }));
 jest.mock("@/lib/gates", () => ({
   gateDecision: (...a: unknown[]) => gateDecision(...a),
   tierForAction: () => 2,
+  blastRadiusBreach: () => null,
 }));
+jest.mock("@/lib/inbox/known-contact.server", () => ({ isKnownContact: (...a: unknown[]) => isKnownContact(...a) }));
 jest.mock("@/lib/grounding", () => ({ isVerifiable: () => true }));
 jest.mock("@/lib/mandates", () => ({ getActiveMandate: async () => null }));
 jest.mock("@/lib/integrations", () => ({ dispatchAction: (...a: unknown[]) => dispatchAction(...a) }));

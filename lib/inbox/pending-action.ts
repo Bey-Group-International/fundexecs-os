@@ -27,6 +27,10 @@ export interface PendingInboxReply {
   /** Set once delivered; the meeting's follow-up status reads it. */
   delivered?: boolean;
   error?: string;
+  /** Approved to go out at this time (ISO) rather than at once. */
+  scheduledAt?: string | null;
+  /** Who approved it — the scheduled send records them as its actor. */
+  approvedBy?: string | null;
 }
 
 /** The pending reply on a task's result, if this task is one. */
@@ -47,8 +51,22 @@ export function extractInboxReply(result: unknown): PendingInboxReply | null {
       ? { backingArtifact: { verification_status: artifact.verification_status, grounding_score: Number(artifact.grounding_score) || 0 } }
       : {}),
     delivered: p.delivered === true,
+    ...(typeof p.error === "string" ? { error: p.error } : {}),
+    ...(typeof p.scheduledAt === "string" ? { scheduledAt: p.scheduledAt } : {}),
+    ...(typeof p.approvedBy === "string" ? { approvedBy: p.approvedBy } : {}),
   };
 }
+
+/** A scheduled time far enough ahead to schedule, rather than send now. */
+export function isFutureSend(scheduledAt: string | null | undefined, now = Date.now()): boolean {
+  if (!scheduledAt) return false;
+  const at = Date.parse(scheduledAt);
+  return Number.isFinite(at) && at > now + 60_000;
+}
+
+/** Hours an approval may wait before approvers are reminded, and before owners are told. */
+export const APPROVAL_REMIND_HOURS = 4;
+export const APPROVAL_ESCALATE_HOURS = 24;
 
 /** "Re: <subject>", once — never "Re: Re:", never "(no subject)" when there is one. */
 export function replySubject(subject: string | null | undefined): string {
@@ -127,4 +145,10 @@ export interface InboxMessageApproval {
   editable: boolean;
   /** Approved but not delivered, with the reason; it can be retried. */
   failed: { error: string } | null;
+  /** Who wrote it: they may not approve it themselves (owners and admins may). */
+  authorId: string;
+  /** Approved and waiting to go out at this time (ISO). */
+  scheduledAt: string | null;
+  /** When it started waiting for approval (ISO), for the "waiting 1 day" flag. */
+  waitingSince: string | null;
 }

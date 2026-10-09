@@ -8,6 +8,7 @@ const decideApproval = jest.fn();
 const deliverApprovedReply = jest.fn();
 let rows: Record<string, Record<string, unknown> | null> = {};
 let updates: Array<{ table: string; row: Record<string, unknown>; filters: Array<[string, unknown]> }> = [];
+let inserts: Array<{ table: string; row: Record<string, unknown> }> = [];
 
 jest.mock("@/lib/auth", () => ({ requireOrgContext: () => requireOrgContext() }));
 jest.mock("next/cache", () => ({ revalidatePath: () => {} }));
@@ -45,6 +46,10 @@ jest.mock("@/lib/supabase/server", () => ({
           update = row;
           return b;
         },
+        insert: (row: Record<string, unknown>) => {
+          inserts.push({ table, row });
+          return Promise.resolve({ error: null });
+        },
         maybeSingle: async () => ({ data: rows[table] ?? null }),
       };
       b.then = (resolve: (v: unknown) => unknown) => {
@@ -61,6 +66,9 @@ import {
   decideInboxApprovals,
   discardFailedInboxMessage,
   retryInboxMessage,
+  scheduleInboxMessage,
+  sendScheduledInboxMessageNow,
+  unscheduleInboxMessage,
 } from "./actions";
 
 const REPLY = { threadId: "t1", action: "send_reply", body: "Original", senderId: "author-1" };
@@ -68,6 +76,7 @@ const REPLY = { threadId: "t1", action: "send_reply", body: "Original", senderId
 beforeEach(() => {
   jest.clearAllMocks();
   updates = [];
+  inserts = [];
   rows = {
     approvals: { task_id: "task-1", decision: "pending" },
     tasks: {
@@ -147,4 +156,74 @@ describe("discardFailedInboxMessage", () => {
     expect(u.row).toEqual({ status: "cancelled" });
     expect(u.filters).toContainEqual(["status", "failed"]);
   });
+});
+
+describe("scheduleInboxMessage", () => {
+  const tomorrow = () => new Date(Date.now() + 86_400_000).toISOString();
+
+  it("records the send time on the task, then approves it", async () => {
+    const at = tomorrow();
+    decideApproval.mockResolvedValue({ workflowId: "task-1", decision: "approved", scheduledAt: at });
+    const r = await scheduleInboxMessage("appr-1", at);
+    expect(r).toEqual({ ok: true, scheduledAt: at });
+    expect(updates[0].row).toMatchObject({ result: { inboxReply: { ...REPLY, scheduledAt: at } } });
+    expect(decideApproval).toHaveBeenCalledWith(expect.anything(), { approvalId: "appr-1", decision: "approved", note: undefined });
+  });
+
+  it("refuses a time in the past or too far ahead", async () => {
+    expect(await scheduleInboxMessage("appr-1", new Date(Date.now() - 1000).toISOString())).toMatchObject({ ok: false });
+    expect(await scheduleInboxMessage("appr-1", new Date(Date.now() + 90 * 86_400_000).toISOString())).toMatchObject({ ok: false });
+    expect(await scheduleInboxMessage("appr-1", "not a date")).toMatchObject({ ok: false });
+    expect(decideApproval).not.toHaveBeenCalled();
+  });
+
+  it("forgets the time when the approval is refused", async () => {
+    decideApproval.mockResolvedValue({ workflowId: "task-1", decision: "approved", refused: "You wrote this message." });
+    const r = await scheduleInboxMessage("appr-1", tomorrow());
+    expect(r).toEqual({ ok: false, error: "You wrote this message." });
+    expect(updates[updates.length - 1].row).toEqual({ result: { inboxReply: REPLY } });
+  });
+});
+
+describe("a scheduled message", () => {
+  beforeEach(() => {
+    rows.tasks = {
+      id: "task-1",
+      title: "Reply — Ana",
+      status: "pending",
+      result: { inboxReply: { ...REPLY, scheduledAt: "2026-10-10T09:00:00.000Z", approvedBy: "boss" } },
+      assigned_agent: null,
+      hub: "source",
+    };
+  });
+
+  it("can be sent now, as the person who approved it", async () => {
+    deliverApprovedReply.mockResolvedValue({ ok: true });
+    expect(await sendScheduledInboxMessageNow("task-1")).toEqual({ ok: true });
+    expect(deliverApprovedReply).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ approverId: "boss", reply: expect.objectContaining({ scheduledAt: null }) }),
+    );
+  });
+
+  it("can go back to approvals, unsent", async () => {
+    expect(await unscheduleInboxMessage("task-1")).toEqual({ ok: true });
+    expect(updates[0].row).toMatchObject({
+      status: "awaiting_approval",
+      result: { inboxReply: { scheduledAt: null, approvedBy: null } },
+    });
+    expect(inserts.find((i) => i.table === "approvals")?.row).toMatchObject({ task_id: "task-1" });
+  });
+
+  it("is left alone once it has gone", async () => {
+    rows.tasks = { ...rows.tasks!, status: "completed" };
+    expect(await sendScheduledInboxMessageNow("task-1")).toMatchObject({ ok: false });
+    expect(await unscheduleInboxMessage("task-1")).toMatchObject({ ok: false });
+  });
+});
+
+it("reports a refused approval as an error, not as a failed send", async () => {
+  decideApproval.mockResolvedValue({ workflowId: "task-1", decision: "approved", refused: "You wrote this message." });
+  const { results } = await decideInboxApprovals(["a1"], "approved");
+  expect(results).toEqual([{ approvalId: "a1", ok: false, error: "You wrote this message." }]);
 });

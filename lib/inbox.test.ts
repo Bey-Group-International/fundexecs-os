@@ -6,6 +6,7 @@ import {
   isInboxEmpty,
   isInboxOverdue,
   workflowToApprovalItem,
+  sortStaleFirst,
   approvalPreview,
   riskForHub,
   diligenceToOverdueItem,
@@ -142,6 +143,9 @@ describe("item shapers", () => {
       lastInbound: null,
       editable: true,
       failed: null,
+      authorId: "u1",
+      scheduledAt: null,
+      waitingSince: null,
     };
     const item = workflowToApprovalItem({ ...task({ id: "t9", session_id: "s1" }), message });
     expect(item.href).toBe("/inbox?q=ana%40acme.com");
@@ -530,5 +534,15 @@ describe("selectInboxWorkingSet", () => {
       TODAY,
     );
     expect(withTrack).toEqual(withoutTrack);
+  });
+});
+
+describe("sortStaleFirst", () => {
+  const now = "2026-10-09T12:00:00.000Z";
+  const row = (id: string, waitingSince: string | null) =>
+    ({ id, message: waitingSince ? { waitingSince } : undefined }) as unknown as import("@/lib/inbox").InboxItem;
+  it("puts messages waiting a day or more first, keeping order otherwise", () => {
+    const items = [row("a", "2026-10-09T10:00:00.000Z"), row("b", "2026-10-08T09:00:00.000Z"), row("c", null), row("d", "2026-10-07T09:00:00.000Z")];
+    expect(sortStaleFirst(items, now).map((i) => i.id)).toEqual(["b", "d", "a", "c"]);
   });
 });
