@@ -8,8 +8,9 @@
  * and through the device check, which then blamed a camera that would have
  * opened fine if asked.
  */
-import { act, render, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, waitFor } from "@testing-library/react";
 import { MeetingGreenRoom } from "./MeetingGreenRoom";
+import { PREVIEW_REOPEN_LIMIT, PREVIEW_STABLE_MS } from "@/lib/meetings/preview-recovery";
 
 jest.mock("./BackgroundPicker", () => ({ BackgroundPicker: () => null }));
 jest.mock("../MeetingShareLink", () => ({ MeetingShareLink: () => null }));
@@ -66,6 +67,8 @@ function requestedId(constraint: unknown): string {
 
 const DEVICES = [
   { deviceId: "cam-default", kind: "videoinput", label: "FaceTime HD", groupId: "g1" },
+  // A second camera, so a test can pick a different one.
+  { deviceId: "cam-other", kind: "videoinput", label: "Studio Display", groupId: "g2" },
   { deviceId: "mic-default", kind: "audioinput", label: "MacBook Mic", groupId: "g1" },
 ];
 
@@ -158,6 +161,77 @@ describe("a microphone that ends while waiting", () => {
     // The camera it was opened beside was not touched.
     expect(videoRequests()).toBe(1);
     await waitFor(() => expect(liveOf("audio")).toHaveLength(1));
+  });
+});
+
+describe("a camera that keeps ending", () => {
+  /**
+   * A device that opens and then ends on its own, over and over — a failing
+   * cable, a virtual-camera app crash-looping — was reopened once per cycle
+   * for as long as a guest sat waiting. See preview-recovery.ts.
+   */
+  let now: number;
+  beforeEach(() => {
+    now = 1_000_000;
+    jest.spyOn(Date, "now").mockImplementation(() => now);
+  });
+  afterEach(() => { jest.restoreAllMocks(); });
+
+  /** The newest camera ends, a moment after it opened. */
+  async function cameraDies(afterMs = 500) {
+    now += afterMs;
+    const cameras = opened.filter((t) => t.kind === "video");
+    await act(async () => { cameras[cameras.length - 1].end(); });
+    await act(async () => { await new Promise((r) => setTimeout(r, 10)); });
+  }
+
+  it("is reopened a few times, then left alone until the member asks", async () => {
+    await show();
+    for (let i = 1; i <= PREVIEW_REOPEN_LIMIT; i++) {
+      await cameraDies();
+      await waitFor(() => expect(videoRequests()).toBe(1 + i));
+    }
+
+    // One more short-lived replacement ends: nothing is asked for.
+    await cameraDies();
+    expect(videoRequests()).toBe(1 + PREVIEW_REOPEN_LIMIT);
+    // And the dead track was let go rather than left frozen on the preview.
+    expect(liveOf("video")).toHaveLength(0);
+
+    // The member picks another camera, which is them asking: a fresh budget.
+    const picker = document.querySelector("select") as HTMLSelectElement | null;
+    expect(picker).not.toBeNull();
+    await act(async () => {
+      fireEvent.change(picker!, { target: { value: "cam-other" } });
+      await Promise.resolve();
+    });
+    await waitFor(() => expect(videoRequests()).toBe(2 + PREVIEW_REOPEN_LIMIT));
+    await waitFor(() => expect(liveOf("video")).toHaveLength(1));
+  });
+
+  // A replacement that stayed up long enough to have plainly worked is a
+  // working device, and its ending is a new event rather than the next turn
+  // of the same cycle.
+  it("starts counting again once a replacement has stayed up a while", async () => {
+    await show();
+    for (let i = 1; i <= PREVIEW_REOPEN_LIMIT; i++) {
+      await cameraDies();
+      await waitFor(() => expect(videoRequests()).toBe(1 + i));
+    }
+
+    await cameraDies(PREVIEW_STABLE_MS);
+    await waitFor(() => expect(videoRequests()).toBe(2 + PREVIEW_REOPEN_LIMIT));
+  });
+
+  // The microphone was never the problem and keeps its own count.
+  it("does not spend the microphone's budget", async () => {
+    await show();
+    for (let i = 1; i <= PREVIEW_REOPEN_LIMIT + 1; i++) await cameraDies();
+    expect(audioRequests()).toBe(1);
+
+    const mic = opened.find((t) => t.kind === "audio")!;
+    await act(async () => { mic.end(); });
+    await waitFor(() => expect(audioRequests()).toBe(2));
   });
 });
 

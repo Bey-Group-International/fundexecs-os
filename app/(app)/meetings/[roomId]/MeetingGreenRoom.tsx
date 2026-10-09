@@ -59,6 +59,7 @@ import {
   type BrowserFamily,
 } from "@/lib/meetings/green-room";
 import { useResumeOnReturn } from "./room-shared";
+import { FRESH_LEDGER, reopenAfterEnded, trackOpened, type ReopenLedger } from "@/lib/meetings/preview-recovery";
 import nextDynamic from "next/dynamic";
 
 // Loaded when someone picks a background, not with the room: the picker and
@@ -870,15 +871,38 @@ export function MeetingGreenRoom({
   // Not a track the call has taken (it is the call's to recover, and two
   // repairs racing for one camera is the race openCallMedia exists to avoid),
   // and not while a join is in flight, for the same reason.
+  //
+  // And not for ever. A device that opens and then ends on its own, over and
+  // over — a camera on a failing cable, a virtual-camera app crash-looping —
+  // would be reopened once per cycle for as long as a guest sat waiting. The
+  // ledger (preview-recovery.ts) allows a few short-lived replacements, then
+  // stops; a replacement that stayed up long enough to have plainly worked
+  // starts the count over, and so does a deliberate retry or a different
+  // device, because both are the member asking.
+  //
+  // Not keyed on `retryKey`: the automatic reopen bumps it too, and a ledger
+  // reset by the very thing it counts never gets past one. The press itself
+  // resets it, in `retryDevices`.
+  const camLedgerRef = useRef<ReopenLedger>(FRESH_LEDGER);
+  const micLedgerRef = useRef<ReopenLedger>(FRESH_LEDGER);
+  useEffect(() => { camLedgerRef.current = FRESH_LEDGER; }, [camId]);
+  useEffect(() => { micLedgerRef.current = FRESH_LEDGER; }, [micId]);
+
   useEffect(() => {
     const track = videoTrack;
     if (!track) return;
+    camLedgerRef.current = trackOpened(camLedgerRef.current, Date.now());
     const onEnded = () => {
       if (relinquishedRef.current.has(track) || joiningRef.current) return;
       if (videoTrackRef.current !== track) return;
+      const verdict = reopenAfterEnded(camLedgerRef.current, Date.now());
+      camLedgerRef.current = verdict.ledger;
+      // Over the limit the dead track is still let go — a preview frozen on a
+      // track that ended is not a preview — but nothing asks for it again
+      // until the member does, with Try again or another camera.
       adoptVideo(null);
       openedCamRef.current = null;
-      setRetryKey((k) => k + 1);
+      if (verdict.reopen) setRetryKey((k) => k + 1);
     };
     track.addEventListener("ended", onEnded);
     return () => track.removeEventListener("ended", onEnded);
@@ -887,12 +911,15 @@ export function MeetingGreenRoom({
   useEffect(() => {
     const track = audioTrack;
     if (!track) return;
+    micLedgerRef.current = trackOpened(micLedgerRef.current, Date.now());
     const onEnded = () => {
       if (relinquishedRef.current.has(track) || joiningRef.current) return;
       if (audioTrackRef.current !== track) return;
+      const verdict = reopenAfterEnded(micLedgerRef.current, Date.now());
+      micLedgerRef.current = verdict.ledger;
       adoptAudio(null);
       openedMicRef.current = null;
-      setRetryKey((k) => k + 1);
+      if (verdict.reopen) setRetryKey((k) => k + 1);
     };
     track.addEventListener("ended", onEnded);
     return () => track.removeEventListener("ended", onEnded);
@@ -1191,6 +1218,10 @@ export function MeetingGreenRoom({
     setMicDenied(false);
     setCameraBusy(false);
     setMicBusy(false);
+    // A deliberate press is the member asking, which is a fresh budget for
+    // the ended-track reopens above.
+    camLedgerRef.current = FRESH_LEDGER;
+    micLedgerRef.current = FRESH_LEDGER;
     setRetryKey((k) => k + 1);
   };
 

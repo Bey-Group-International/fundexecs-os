@@ -5446,6 +5446,18 @@ Deployed, monitoring               →  live, observability active
              |  five mic-stall cases plus the camera-off banner in the live
              |  room test; each DOM suite shown failing against the unfixed
              |  component first. Typecheck and eslint clean.
+             |  REVIEW FOLLOW-UP, same day: the ended-track reopen had no
+             |  cumulative bound, so hardware that opens and then ends on its
+             |  own (a failing cable, a virtual camera crash-looping) was
+             |  reopened once per cycle for as long as a guest waited. Added
+             |  a per-device ledger (preview-recovery.ts): three short-lived
+             |  replacements, then stop; a replacement that stayed up thirty
+             |  seconds starts the count over, as does a Try again press or a
+             |  different device. The first draft reset the ledger on the
+             |  retry key - which the automatic reopen itself bumps - so the
+             |  count never passed one. The test written for the cap caught
+             |  it on the first run. The reset now belongs to the member's
+             |  own actions only.
 ```
 
 ---
