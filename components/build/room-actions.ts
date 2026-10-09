@@ -103,43 +103,18 @@ export async function archiveRoom(formData: FormData): Promise<void> {
 // --- Publishing ------------------------------------------------------------
 
 /**
- * Next free position in a room. New publications used to copy
- * `documents.sort_order`, but nothing writes that column any more, so every
- * manifest row landed on 0 — leaving the reorder arrows swapping whichever tied
- * row the database happened to return. Appending at the end gives each document
- * its own position instead.
+ * Publish a document into a room, at the end. Both rows are re-checked against
+ * the caller's org before anything is written, so a stray id can't pull
+ * another firm's document into a room. Idempotent — re-publishing is a no-op.
  *
- * This is a read then a write, not an atomic allocation: two publications
- * racing in the same instant can both read the same maximum and land on the
- * same position, since the manifest's unique constraint is on
- * (room_id, document_id) rather than (room_id, sort_order). Order stays
- * deterministic regardless — every reader breaks ties by name
- * (groupRoomDocuments, buildViewerPayload, and moveRoomDocument below) — so the
- * two documents sort alphabetically against each other rather than by
- * insertion. Making positions strictly distinct would need a unique index and
- * a transactional allocation; that is a schema change, not a fix.
- */
-async function nextSortOrder(
-  supabase: Awaited<ReturnType<typeof createServerClient>>,
-  orgId: string,
-  roomId: string,
-): Promise<number> {
-  const { data } = await supabase
-    .from("data_room_documents")
-    .select("sort_order")
-    .eq("organization_id", orgId)
-    .eq("room_id", roomId)
-    .order("sort_order", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-  const top = (data as { sort_order: number } | null)?.sort_order;
-  return typeof top === "number" ? top + 1 : 0;
-}
-
-/**
- * Publish a document into a room. Both rows are re-checked against the caller's
- * org before the manifest row is written, so a stray id can't pull another
- * firm's document into a room. Idempotent — re-publishing is a no-op.
+ * The position is allocated inside publish_room_document (migration
+ * 20261009171326), which takes a per-room lock, computes max+1 and inserts in
+ * one transaction. The read-then-write this replaces let two publications
+ * racing in the same room land on the same position; the manifest now holds a
+ * unique (room_id, sort_order), so insertion order is authoritative. A failed
+ * write throws rather than returning as though it published — the caller's
+ * transition surfaces it through the error boundary instead of the document
+ * silently never appearing.
  */
 export async function publishDocument(formData: FormData): Promise<void> {
   const ctx = await getSessionContext();
@@ -152,24 +127,17 @@ export async function publishDocument(formData: FormData): Promise<void> {
   const supabase = await createServerClient();
   const [{ data: room }, { data: doc }] = await Promise.all([
     supabase.from("data_rooms").select("id").eq("id", roomId).eq("organization_id", orgId).maybeSingle(),
-    supabase.from("documents").select("id, sort_order").eq("id", documentId).eq("organization_id", orgId).maybeSingle(),
+    supabase.from("documents").select("id").eq("id", documentId).eq("organization_id", orgId).maybeSingle(),
   ]);
   if (!room || !doc) return;
 
-  // Upsert, not insert: the table has unique (room_id, document_id), and a
-  // plain insert on an already-published document raises a duplicate-key error
-  // that this action would discard — making a re-publish a silent failure
-  // rather than the no-op it reads as.
-  await supabase.from("data_room_documents").upsert(
-    {
-      organization_id: orgId,
-      room_id: roomId,
-      document_id: documentId,
-      sort_order: await nextSortOrder(supabase, orgId, roomId),
-      added_by: ctx.userId,
-    },
-    { onConflict: "room_id,document_id", ignoreDuplicates: true },
-  );
+  const { error } = await supabase.rpc("publish_room_document", {
+    p_organization_id: orgId,
+    p_room_id: roomId,
+    p_document_id: documentId,
+    p_added_by: ctx.userId,
+  });
+  if (error) throw new Error(`Couldn't publish the document: ${error.message}`);
   revalidatePath(ROOMS);
   revalidatePath(LIBRARY);
 }
@@ -246,16 +214,24 @@ export async function moveRoomDocument(formData: FormData): Promise<void> {
   const swapWith = dir === "up" ? idx - 1 : idx + 1;
   if (idx < 0 || swapWith < 0 || swapWith >= peers.length) return;
 
-  const reordered = [...peers];
-  [reordered[idx], reordered[swapWith]] = [reordered[swapWith], reordered[idx]];
-  await Promise.all(
-    reordered.map((r, i) =>
-      supabase
-        .from("data_room_documents")
-        .update({ sort_order: i })
-        .eq("id", r.id)
-        .eq("organization_id", orgId),
-    ),
-  );
+  // Exchange the two rows' positions in one transaction
+  // (swap_room_document_positions, migration 20261009171326). Positions are
+  // unique per room now, so a swap of adjacent peers is exactly the move the
+  // operator sees — no section member can sit between them — and it never
+  // renumbers across sections the way the old 0..n-1 rewrite did, which a
+  // room-wide unique constraint could not admit. The deferred constraint
+  // checks the final state, so the in-flight duplicate inside the swap is
+  // fine. A row vanishing mid-move (rpc returns false) is a no-op, same as
+  // the stale-form cases above; a failed write throws so the operator sees
+  // the move didn't happen.
+  const other = peers[swapWith];
+  const { data: swapped, error } = await supabase.rpc("swap_room_document_positions", {
+    p_organization_id: orgId,
+    p_room_id: roomId,
+    p_document_id: documentId,
+    p_other_document_id: other.document_id,
+  });
+  if (error) throw new Error(`Couldn't reorder the document: ${error.message}`);
+  if (!swapped) return;
   revalidatePath(ROOMS);
 }

@@ -3471,6 +3471,30 @@ export type Database = {
         Args: { ids: string[] };
         Returns: string[];
       };
+      // Publish a document into a data room at the next free position,
+      // allocated under a per-room lock (migration 20261009171326) — what
+      // keeps two racing publications from landing on the same sort_order.
+      // Returns false for a re-publish or a room/document outside the org.
+      publish_room_document: {
+        Args: {
+          p_organization_id: string;
+          p_room_id: string;
+          p_document_id: string;
+          p_added_by: string | null;
+        };
+        Returns: boolean;
+      };
+      // Exchange two documents' positions in a data room in one transaction
+      // (migration 20261009171326). Returns false when either row is gone.
+      swap_room_document_positions: {
+        Args: {
+          p_organization_id: string;
+          p_room_id: string;
+          p_document_id: string;
+          p_other_document_id: string;
+        };
+        Returns: boolean;
+      };
       // Spans of live meetings the host is invited to but does not host
       // (migration 20261002142640) — what busyIntervals adds so a booking link
       // never offers time the host already gave to a colleague's meeting.
