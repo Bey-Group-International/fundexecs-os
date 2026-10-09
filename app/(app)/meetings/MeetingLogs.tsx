@@ -475,14 +475,15 @@ const LogRow = memo(function LogRow({
             ) : null
           ) : row.attended ? (
             // Two different silences. A meeting with a transcript and no
-            // summary was transcribed and then failed to be analysed — telling
-            // its host "no report is generated until you end from inside the
-            // room" would be describing something they already did, next to a
-            // button offering to finish the job.
+            // summary was transcribed and then not analysed — the model failed,
+            // or nobody pressed End — and telling its host "no report is
+            // generated until you end from inside the room" would be describing
+            // something they cannot do now, next to a button offering to finish
+            // the job.
             <p className="text-sm text-fg-muted">
               {row.canRegenerate
-                ? "The transcript is on file, but no summary was written from it — the analysis didn’t finish."
-                : "This meeting has no report. One is generated when a meeting is ended from inside the room."}
+                ? "The transcript is on file, but no report was written from it. Generate one from the transcript below."
+                : "This meeting has no report and nothing was transcribed, so there is nothing to write one from."}
             </p>
           ) : (
             // Not the same sentence as "no report", and the difference matters:

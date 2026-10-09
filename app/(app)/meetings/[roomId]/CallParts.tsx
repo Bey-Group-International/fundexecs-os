@@ -1325,7 +1325,7 @@ export function CopilotSidebar({
    */
   tab?: PanelTab;
   onTabChange?: (tab: PanelTab) => void;
-  srStatus: "idle" | "active" | "error" | "unsupported";
+  srStatus: "idle" | "active" | "failing" | "error" | "unsupported";
   /**
    * The recogniser has been hearing mostly noise: the engine itself scores a
    * run of what it heard below even odds. Nearly always the wrong microphone --
@@ -1476,6 +1476,13 @@ export function CopilotSidebar({
             </span>
           )}
           {srStatus === "error" && <span className="text-xs text-[var(--status-danger)]">⚠ Mic</span>}
+          {/* Still being restarted, transcribing nobody. The lamp used to say
+              "Live" through this for a whole call. */}
+          {srStatus === "failing" && (
+            <span className="text-xs text-[var(--status-warning,#f59e0b)]" title="Speech recognition keeps stopping; see the notice over the stage.">
+              ⚠ Not transcribing
+            </span>
+          )}
           {srStatus === "unsupported" && <span className="text-xs text-[var(--fg-muted)]">No STT</span>}
           <button
             onClick={onCollapse}

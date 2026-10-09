@@ -106,6 +106,18 @@ describe("transcriptRows", () => {
     const [row] = transcriptRows([line({ ts: 1_700_000_000_000 })], "m1");
     expect(row.ts).toBe(new Date(1_700_000_000_000).toISOString());
   });
+
+  // In memory a member's own lines carry the "local" placeholder. Stored, that
+  // made every row say "local" and two guests both called "Guest" one person.
+  it("writes the client's signaling id in place of the local placeholder", () => {
+    const [row] = transcriptRows([line({ speakerId: "local" })], "m1", "sig-42");
+    expect(row.speaker_id).toBe("sig-42");
+  });
+
+  it("leaves a remote speaker's id, and the placeholder when no id is given", () => {
+    expect(transcriptRows([line({ speakerId: "peer-9" })], "m1", "sig-42")[0].speaker_id).toBe("peer-9");
+    expect(transcriptRows([line({ speakerId: "local" })], "m1")[0].speaker_id).toBe("local");
+  });
 });
 
 describe("nextFlushDelay", () => {

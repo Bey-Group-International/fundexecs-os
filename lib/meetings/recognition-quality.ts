@@ -220,8 +220,72 @@ export function restartDelay(input: {
   endedAt: number;
   shortRuns: number;
 }): { delayMs: number; shortRuns: number } {
-  const ran = input.startedAt === null ? Number.POSITIVE_INFINITY : input.endedAt - input.startedAt;
+  // A run that never reported starting is the shortest run there is: the
+  // engine went start → error → end without ever listening. This used to read
+  // as a run that lasted, which restarted it at once, forever — the exact
+  // tight loop the backoff exists to stop, on exactly the engines (no network,
+  // no service) that produce it.
+  const ran = input.startedAt === null ? 0 : input.endedAt - input.startedAt;
   if (ran >= SHORT_RUN_MS) return { delayMs: 0, shortRuns: 0 };
   const shortRuns = input.shortRuns + 1;
   return { delayMs: Math.min(RESTART_MAX_MS, RESTART_BASE_MS * 2 ** (shortRuns - 1)), shortRuns };
+}
+
+/**
+ * How many runs in a row may die at once before the engine is called failing.
+ *
+ * The first short run is a blip; the third is a pattern, and by then the
+ * backoff has the loop down to one attempt every couple of seconds. The room
+ * keeps trying past this — the engine may come back when the network does —
+ * but it stops claiming to be transcribing while it does.
+ */
+export const FAILING_SHORT_RUNS = 3;
+
+/**
+ * Errors after which the engine is not going to hear the next run either.
+ *
+ * `network` is the big one: Brave, Chromium builds without API keys, a proxy
+ * that blocks the speech endpoint, or simply being offline — every run goes
+ * start → network → end, and before this the room reported "active" for the
+ * whole call. `audio-capture` is a microphone the engine could not open.
+ * `not-allowed` and `service-not-allowed` are terminal and handled on the
+ * error itself; `no-speech` and `aborted` are ordinary.
+ */
+export const FAILING_ERRORS: ReadonlySet<string> = new Set(["network", "audio-capture"]);
+
+/**
+ * What the recogniser's status should read after a run ended.
+ *
+ * "failing" is the honest state for an engine that keeps dying: it is still
+ * being restarted, so it is not "error", but it is not transcribing anybody
+ * either, and the room — the host reading the report in particular — needs to
+ * know that. `lastError` is the error reported during the run that just
+ * ended, or null. A run that lasted clears everything: the engine is working.
+ */
+export function recognizerStatusAfterEnd(input: {
+  shortRuns: number;
+  lastError: string | null;
+}): "active" | "failing" {
+  if (input.lastError !== null && FAILING_ERRORS.has(input.lastError)) return "failing";
+  if (input.shortRuns >= FAILING_SHORT_RUNS) return "failing";
+  return "active";
+}
+
+/**
+ * What to tell the member whose engine is failing. Names the cause they can
+ * act on; a generic "transcription failed" sends them to the wrong settings.
+ */
+export function recognizerFailureNotice(lastError: string | null): string {
+  switch (lastError) {
+    case "network":
+      return "Transcription can't reach its speech service, so your words aren't being transcribed. "
+        + "This browser may block it (Brave, or a network that blocks Google's speech endpoint); "
+        + "Chrome or Edge with an open connection fixes it. The call itself is fine.";
+    case "audio-capture":
+      return "Transcription can't open your microphone, so your words aren't being transcribed. "
+        + "Pick another microphone from the arrow beside the mic button. The call itself is fine.";
+    default:
+      return "Transcription keeps stopping, so your words aren't being transcribed. "
+        + "The room keeps retrying; if this stays up, your side of the meeting won't reach the report.";
+  }
 }

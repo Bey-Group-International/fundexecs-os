@@ -365,5 +365,25 @@ describe("when the organisation gates outbound replies", () => {
     wire();
     const res = await POST(req(), { params });
     expect(res.status).toBe(502);
+    expect(updates).toEqual([]);
+  });
+
+  // The page's chip reads followup_status. Left at "draft", a follow-up
+  // sitting in approvals read "Not sent", and the host queued it again.
+  it("marks the meeting as awaiting approval, so the page's chip says so", async () => {
+    wire();
+    await POST(req(), { params });
+    expect(updates).toContainEqual({ followup_status: "pending_approval" });
+    expect(updates).not.toContainEqual({ followup_status: "done" });
+  });
+
+  it("still reports the queue when the badge could not be written", async () => {
+    const spy = jest.spyOn(console, "error").mockImplementation(() => undefined);
+    wire({ updateError: { message: "denied" } });
+    const res = await POST(req(), { params });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ gated: true, queued: 1 });
+    expect(spy).toHaveBeenCalled();
+    spy.mockRestore();
   });
 });

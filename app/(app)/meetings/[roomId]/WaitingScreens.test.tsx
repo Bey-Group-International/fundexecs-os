@@ -73,6 +73,43 @@ describe("GuestThanksScreen", () => {
     await userEvent.click(screen.getByRole("button", { name: /no thanks, leave/i }));
     expect(onLeave).toHaveBeenCalledTimes(1);
   });
+
+  // The summary of the meeting they were just in: the one thing a guest could
+  // never reach, because the report page is behind the login and its RLS
+  // cannot match somebody with no account.
+  describe("the guest's own copy of the summary", () => {
+    it("asks for the link with the room and the key, and offers it when ready", async () => {
+      const requestLink = jest.fn().mockResolvedValue({ url: "https://app.test/r/report/tok", ready: true });
+      render(<GuestThanksScreen onLeave={jest.fn()} roomCode="abc-defg-hi" guestKey="guest-key-1" requestLink={requestLink} />);
+      expect(requestLink).toHaveBeenCalledWith("abc-defg-hi", "guest-key-1");
+      const link = await screen.findByRole("link", { name: /open the meeting summary/i });
+      expect(link).toHaveAttribute("href", "https://app.test/r/report/tok");
+      expect(link).toHaveAttribute("target", "_blank");
+      expect(screen.getByText(/is ready/i)).toBeInTheDocument();
+    });
+
+    it("says the summary is still being written when it is, and still offers the link", async () => {
+      const requestLink = jest.fn().mockResolvedValue({ url: "https://app.test/r/report/tok", ready: false });
+      render(<GuestThanksScreen onLeave={jest.fn()} roomCode="abc-defg-hi" guestKey="guest-key-1" requestLink={requestLink} />);
+      expect(await screen.findByText(/is being written/i)).toBeInTheDocument();
+      expect(screen.getByRole("link", { name: /open the meeting summary/i })).toHaveAttribute("href", "https://app.test/r/report/tok");
+    });
+
+    it("shows nothing about it when there is no link to give", async () => {
+      const requestLink = jest.fn().mockResolvedValue(null);
+      render(<GuestThanksScreen onLeave={jest.fn()} roomCode="abc-defg-hi" guestKey="guest-key-1" requestLink={requestLink} />);
+      await screen.findByRole("heading", { name: /thanks for joining/i });
+      expect(requestLink).toHaveBeenCalled();
+      expect(screen.queryByRole("link", { name: /open the meeting summary/i })).toBeNull();
+    });
+
+    it("asks for nothing without both the room and the key", () => {
+      const requestLink = jest.fn();
+      render(<GuestThanksScreen onLeave={jest.fn()} roomCode="abc-defg-hi" requestLink={requestLink} />);
+      expect(requestLink).not.toHaveBeenCalled();
+      expect(screen.queryByRole("link", { name: /open the meeting summary/i })).toBeNull();
+    });
+  });
 });
 
 describe("WaitingRoomBar", () => {

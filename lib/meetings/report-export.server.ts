@@ -28,9 +28,9 @@ type SupabaseClient = Awaited<ReturnType<typeof createServerClient>>;
 // meant fetching all of that and discarding it on almost every call.
 //
 // The only difference between these two is that column, which a test pins.
-const SELECT_SUMMARY = "id, room_code, title, created_at, started_at, ended_at, organization_id, host_id, attendees, kind, recording_consent, live_meeting_reports(summary, key_points, action_items, analysis, created_at)";
+const SELECT_SUMMARY = "id, room_code, title, created_at, started_at, ended_at, scheduled_at, summary_sent_at, organization_id, host_id, attendees, kind, recording_consent, live_meeting_reports(summary, key_points, action_items, analysis, created_at)";
 
-const SELECT_WITH_TRANSCRIPT = "id, room_code, title, created_at, started_at, ended_at, organization_id, host_id, attendees, kind, recording_consent, live_meeting_reports(summary, key_points, action_items, analysis, created_at, full_transcript)";
+const SELECT_WITH_TRANSCRIPT = "id, room_code, title, created_at, started_at, ended_at, scheduled_at, summary_sent_at, organization_id, host_id, attendees, kind, recording_consent, live_meeting_reports(summary, key_points, action_items, analysis, created_at, full_transcript)";
 
 /** Exposed so a test can hold the two in the same place they are written. */
 export const REPORT_SELECTS = {
@@ -76,6 +76,12 @@ export interface LoadedReport extends ReportExportInput {
   hasReport: boolean;
   /** 'meeting' or 'one_way'. What kind of session the document describes. */
   kind: string | null;
+  /**
+   * When the summary was first emailed, or null. Read here because the email
+   * route already has this row in hand and a second read of it would be a
+   * second chance to read a different meeting's.
+   */
+  summarySentAt: string | null;
 }
 
 /**
@@ -160,6 +166,8 @@ export async function loadReportForExport(
     createdAt: (meeting.created_at as string | null) ?? null,
     startedAt: (meeting.started_at as string | null) ?? null,
     endedAt: (meeting.ended_at as string | null) ?? null,
+    scheduledAt: ((meeting as { scheduled_at?: string | null }).scheduled_at as string | null) ?? null,
+    summarySentAt: ((meeting as { summary_sent_at?: string | null }).summary_sent_at as string | null) ?? null,
     summary: (report?.summary as string | null) ?? null,
     keyPoints: report?.key_points ?? null,
     actionItems: report?.action_items ?? null,

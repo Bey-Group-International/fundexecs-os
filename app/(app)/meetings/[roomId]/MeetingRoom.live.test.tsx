@@ -1637,3 +1637,303 @@ describe("a background the room suspends", () => {
     expect(window.localStorage.getItem(BACKGROUND_PREF_KEY)).toBe("blur:heavy");
   });
 });
+
+describe("when the host ends the meeting", () => {
+  /**
+   * The exit most people take, and until now the only one that saved nothing
+   * on the way out: the handler for the `end` signal tore the call down at
+   * once, with no settling of the sentence in flight and no drain. A guest
+   * whose closing sentence was still interim when the host pressed End lost
+   * it everywhere — under the ownership rule nobody else had a copy.
+   */
+  function installRecognition() {
+    const instances: Array<{
+      onstart: (() => void) | null;
+      onspeechstart: (() => void) | null;
+      onresult: ((ev: unknown) => void) | null;
+    }> = [];
+    class Recognition {
+      continuous = false; interimResults = false; lang = "";
+      onstart: (() => void) | null = null;
+      onspeechstart: (() => void) | null = null;
+      onresult: ((ev: unknown) => void) | null = null;
+      onerror = null; onend = null;
+      constructor() { instances.push(this); }
+      start() { this.onstart?.(); }
+      stop() {}
+    }
+    const w = window as unknown as { SpeechRecognition?: unknown };
+    const previous = w.SpeechRecognition;
+    w.SpeechRecognition = Recognition;
+    return { instances, restore: () => { w.SpeechRecognition = previous; } };
+  }
+
+  const result = (text: string, isFinal: boolean) => ({
+    resultIndex: 0,
+    results: [Object.assign([{ transcript: text, confidence: isFinal ? 0.92 : 0 }], { isFinal })],
+  });
+
+  const savedRows = () =>
+    (global.fetch as jest.Mock).mock.calls
+      .filter(([u]) => String(u).includes("/transcript"))
+      .flatMap(([, init]) =>
+        (JSON.parse(String((init as RequestInit).body)) as { lines: Array<{ text: string; speaker_id: string }> }).lines,
+      );
+
+  it("settles and saves a non-host's last sentence before the room goes away", async () => {
+    joinChoice.micEnabled = true;
+    const sr = installRecognition();
+    try {
+      await enterCall();
+      await act(async () => { sr.instances[0]?.onspeechstart?.(); await Promise.resolve(); });
+      await talkFor(2_000, "audio-local");
+      await act(async () => {
+        sr.instances[0]?.onresult?.(result("we're a yes on the Series B", false));
+        await Promise.resolve();
+      });
+
+      await act(async () => {
+        realtime.signal({ type: "end", from: "host-1" });
+        await Promise.resolve();
+      });
+      // The settle wait, then the drain.
+      await flush(3_000, 12);
+
+      const rows = savedRows();
+      expect(rows.map((r) => r.text)).toContain("we're a yes on the Series B");
+      // Under this client's signaling id, not the in-memory placeholder that
+      // used to make every row in the table say "local".
+      const hello = sent.map((m) => (m as { payload?: { type?: string; from?: string } }).payload)
+        .find((p) => p?.type === "join");
+      expect(hello?.from).toBeTruthy();
+      for (const row of rows) expect(row.speaker_id).toBe(hello!.from);
+    } finally {
+      sr.restore();
+    }
+  });
+
+  it("retries a save that fails once on the way out", async () => {
+    joinChoice.micEnabled = true;
+    const sr = installRecognition();
+    const base = global.fetch as jest.Mock;
+    let transcriptPosts = 0;
+    global.fetch = jest.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input).includes("/transcript")) {
+        transcriptPosts += 1;
+        // The first attempt collides with the teardown; the second lands.
+        if (transcriptPosts === 1) return { ok: false, status: 503, headers: new Headers(), json: async () => ({}) } as Response;
+      }
+      return base(input, init);
+    }) as unknown as typeof fetch;
+    try {
+      await enterCall();
+      await act(async () => { sr.instances[0]?.onspeechstart?.(); await Promise.resolve(); });
+      await talkFor(2_000, "audio-local");
+      await act(async () => {
+        sr.instances[0]?.onresult?.(result("closing on the fifteenth", true));
+        await Promise.resolve();
+      });
+
+      await act(async () => {
+        realtime.signal({ type: "end", from: "host-1" });
+        await Promise.resolve();
+      });
+      await flush(4_000, 16);
+
+      expect(transcriptPosts).toBeGreaterThanOrEqual(2);
+    } finally {
+      sr.restore();
+    }
+  });
+});
+
+describe("a recogniser that keeps dying", () => {
+  /**
+   * Brave, Chromium without API keys, a network that blocks the speech
+   * endpoint: every run goes start → `network` → end. The status used to stay
+   * "active" from the first onstart, the lamp said Live, and the room was told
+   * this member was transcribed, for the whole call.
+   */
+  function installDyingRecognition(error: string) {
+    const instances: Array<{ starts: number }> = [];
+    class Recognition {
+      continuous = false; interimResults = false; lang = "";
+      onstart: (() => void) | null = null;
+      onspeechstart: (() => void) | null = null;
+      onresult: ((ev: unknown) => void) | null = null;
+      onerror: ((ev: unknown) => void) | null = null;
+      onend: (() => void) | null = null;
+      starts = 0;
+      constructor() { instances.push(this); }
+      start() {
+        this.starts += 1;
+        this.onstart?.();
+        this.onerror?.({ error });
+        this.onend?.();
+      }
+      stop() {}
+    }
+    const w = window as unknown as { SpeechRecognition?: unknown };
+    const previous = w.SpeechRecognition;
+    w.SpeechRecognition = Recognition;
+    return { instances, restore: () => { w.SpeechRecognition = previous; } };
+  }
+
+  const lastCoverage = () => {
+    const srs = sent
+      .map((m) => (m as { payload?: { type?: string; transcribing?: boolean } }).payload)
+      .filter((p) => p?.type === "sr");
+    return srs[srs.length - 1]?.transcribing;
+  };
+
+  it("stops claiming to transcribe, tells the room, and names the cause", async () => {
+    joinChoice.micEnabled = true;
+    const sr = installDyingRecognition("network");
+    try {
+      await enterCall();
+      await flush(1_000, 4);
+
+      expect(lastCoverage()).toBe(false);
+      expect(screen.getByText(/can't reach its speech service/)).toBeInTheDocument();
+      // The panel lamp (CallParts) reads "Not transcribing" from the same status;
+      // the panel is closed here, so the signal and the notice are the assertions.
+    } finally {
+      sr.restore();
+    }
+  });
+
+  it("keeps retrying, with a pause, rather than looping at once", async () => {
+    joinChoice.micEnabled = true;
+    const sr = installDyingRecognition("network");
+    try {
+      await enterCall();
+      const after1s = sr.instances[0]!.starts;
+      await flush(10_000, 20);
+      const after11s = sr.instances[0]!.starts;
+      // A handful of attempts over ten seconds, not hundreds.
+      expect(after11s).toBeGreaterThan(after1s);
+      expect(after11s - after1s).toBeLessThan(10);
+    } finally {
+      sr.restore();
+    }
+  });
+});
+
+describe("dismissing the deaf-microphone notice", () => {
+  // Dismiss used to clear the fact itself, which re-announced "transcribing"
+  // to every peer and cleared their coverage banner: a notice closed on one
+  // screen told the whole room the problem was fixed.
+  function installDeafRecognition() {
+    class Recognition {
+      continuous = false; interimResults = false; lang = "";
+      onstart: (() => void) | null = null;
+      onspeechstart = null; onresult = null; onerror = null; onend = null;
+      start() { this.onstart?.(); }
+      stop() {}
+    }
+    const w = window as unknown as { SpeechRecognition?: unknown };
+    const previous = w.SpeechRecognition;
+    w.SpeechRecognition = Recognition;
+    return { restore: () => { w.SpeechRecognition = previous; } };
+  }
+
+  const coverageSignals = () => sent
+    .map((m) => (m as { payload?: { type?: string; transcribing?: boolean } }).payload)
+    .filter((p) => p?.type === "sr")
+    .map((p) => p!.transcribing);
+
+  it("hides the notice without telling the room transcription recovered", async () => {
+    joinChoice.micEnabled = true;
+    const sr = installDeafRecognition();
+    try {
+      await enterCall();
+      // The member audibly talks for long enough that an engine on the right
+      // microphone would have answered.
+      await talkFor(13_000, "audio-local");
+      expect(screen.getByText(/Transcription can't hear you/)).toBeInTheDocument();
+      expect(coverageSignals().slice(-1)).toEqual([false]);
+      const before = coverageSignals().length;
+
+      const dismiss = screen.getByText(/Transcription can't hear you/).parentElement!.querySelector("button")!;
+      await act(async () => { dismiss.click(); await Promise.resolve(); });
+
+      expect(screen.queryByText(/Transcription can't hear you/)).not.toBeInTheDocument();
+      // Nothing new was announced, and what stands is still "not transcribing".
+      expect(coverageSignals().length).toBe(before);
+      expect(coverageSignals().slice(-1)).toEqual([false]);
+    } finally {
+      sr.restore();
+    }
+  });
+});
+
+describe("saves that keep being refused", () => {
+  /**
+   * A 403 — the attendance row never got written, or the session expired —
+   * was retried every thirty seconds for the rest of the call, silently,
+   * while the room was told this member was covered.
+   */
+  function installRecognition() {
+    const instances: Array<{
+      onstart: (() => void) | null;
+      onspeechstart: (() => void) | null;
+      onresult: ((ev: unknown) => void) | null;
+    }> = [];
+    class Recognition {
+      continuous = false; interimResults = false; lang = "";
+      onstart: (() => void) | null = null;
+      onspeechstart: (() => void) | null = null;
+      onresult: ((ev: unknown) => void) | null = null;
+      onerror = null; onend = null;
+      constructor() { instances.push(this); }
+      start() { this.onstart?.(); }
+      stop() {}
+    }
+    const w = window as unknown as { SpeechRecognition?: unknown };
+    const previous = w.SpeechRecognition;
+    w.SpeechRecognition = Recognition;
+    return { instances, restore: () => { w.SpeechRecognition = previous; } };
+  }
+
+  const finalResult = (text: string) => ({
+    resultIndex: 0,
+    results: [Object.assign([{ transcript: text, confidence: 0.92 }], { isFinal: true })],
+  });
+
+  const lastCoverage = () => {
+    const srs = sent
+      .map((m) => (m as { payload?: { type?: string; transcribing?: boolean } }).payload)
+      .filter((p) => p?.type === "sr");
+    return srs[srs.length - 1]?.transcribing;
+  };
+
+  it("tells the member to rejoin and the room that they are not covered", async () => {
+    joinChoice.micEnabled = true;
+    const sr = installRecognition();
+    const base = global.fetch as jest.Mock;
+    global.fetch = jest.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input).includes("/transcript")) {
+        return { ok: false, status: 403, headers: new Headers(), json: async () => ({}) } as Response;
+      }
+      return base(input, init);
+    }) as unknown as typeof fetch;
+    try {
+      await enterCall();
+      await act(async () => { sr.instances[0]?.onspeechstart?.(); await Promise.resolve(); });
+      await talkFor(2_000, "audio-local");
+      await act(async () => {
+        sr.instances[0]?.onresult?.(finalResult("the first thing nobody will read"));
+        await Promise.resolve();
+      });
+      expect(lastCoverage()).toBe(true);
+
+      // Three flushes, with the backoff between them.
+      await flush(240_000, 48);
+
+      expect(screen.getByText(/Leave and rejoin/)).toBeInTheDocument();
+      expect(lastCoverage()).toBe(false);
+    } finally {
+      sr.restore();
+    }
+  });
+});

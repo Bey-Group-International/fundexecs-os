@@ -32,6 +32,9 @@ describe("REPORT_SELECTS", () => {
   it("asks for every meeting field the export puts in the document", () => {
     for (const column of [
       "room_code", "title", "created_at", "started_at", "ended_at",
+      // The document's date falls back to the booked time; the email route
+      // reads whether the summary already went out.
+      "scheduled_at", "summary_sent_at",
       "organization_id", "host_id", "attendees", "kind", "recording_consent",
     ]) {
       expect(REPORT_SELECTS.summary).toContain(column);

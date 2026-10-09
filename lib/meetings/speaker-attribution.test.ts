@@ -375,4 +375,40 @@ describe("whether the window was measured", () => {
     expect(a.basis).toBe("unattributed");
     expect(a.measured).toBe(true);
   });
+
+  // Peer samples alone say nothing about this member: their own tap failed to
+  // build, or their track was mid-replacement. Counting that as measured
+  // marked their real speech a hallucination.
+  it("is false when only the peers were measured", () => {
+    const log = new VoiceActivityLog();
+    fill(log, { "peer-1": 0.0 }, window.startedAt, window.endedAt);
+    const a = attributeUtterance(window, log, PEOPLE, { localMicOn: true });
+    expect(a.measured).toBe(false);
+  });
+});
+
+describe("a mute pressed mid-sentence", () => {
+  // Engines that ignore the call's track keep listening to the device, so the
+  // words after the press are heard too. A sentence cannot be cut at a
+  // timestamp, so it is judged by where the press fell.
+  const window = { startedAt: 10_000, endedAt: 14_000 };
+
+  it("keeps a sentence that was mostly said before the press", () => {
+    expect(micLiveDuring(window, false, 13_000, 13_000)).toBe(true);
+  });
+
+  it("drops a sentence that was mostly said after the press", () => {
+    expect(micLiveDuring(window, false, 10_500, 10_500)).toBe(false);
+  });
+
+  it("keeps a sentence whose press came after it ended", () => {
+    // "Say your piece, hit mute": the press lands in the gap before the
+    // engine finalises, which is after the window closes.
+    expect(micLiveDuring(window, false, 14_500, 14_500)).toBe(true);
+    expect(micLiveDuring({ startedAt: 10_000 }, false, 14_500, 14_500)).toBe(true);
+  });
+
+  it("still drops words begun under a mute that predates them", () => {
+    expect(micLiveDuring(window, false, 9_000, 9_000)).toBe(false);
+  });
 });

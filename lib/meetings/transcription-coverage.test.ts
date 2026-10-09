@@ -1,4 +1,4 @@
-import { coverageNotice, localTranscribing } from "./transcription-coverage";
+import { coverageNotice, localTranscribing, transcriptionMicNotice } from "./transcription-coverage";
 
 describe("what a client reports about its own transcription", () => {
   it("is not transcribing when the browser has no recognition at all", () => {
@@ -23,6 +23,37 @@ describe("what a client reports about its own transcription", () => {
     // A member with no live microphone has no words to miss. Reporting them
     // uncovered would raise the banner against everyone who joined muted.
     expect(localTranscribing("idle", false)).toBe(true);
+  });
+
+  // An engine that keeps dying is still being restarted, so it is not an
+  // error — and it is transcribing nobody, so it is not covered.
+  it("is not transcribing while the engine keeps failing", () => {
+    expect(localTranscribing("failing", false)).toBe(false);
+  });
+
+  // Transcribing into a buffer whose every flush is refused reaches the
+  // member's own screen and nobody else's record.
+  it("is not transcribing while its saves keep failing", () => {
+    expect(localTranscribing("active", false, false)).toBe(false);
+    expect(localTranscribing("idle", false, false)).toBe(false);
+    expect(localTranscribing("active", false, true)).toBe(true);
+  });
+});
+
+describe("a microphone the engine will not follow", () => {
+  it("warns a Safari member who picked a non-default microphone", () => {
+    expect(transcriptionMicNotice("safari", "usb-conference-mic")).toMatch(/default microphone/);
+  });
+
+  it("says nothing when the chosen microphone is the default anyway", () => {
+    expect(transcriptionMicNotice("safari", "")).toBeNull();
+    expect(transcriptionMicNotice("safari", "default")).toBeNull();
+  });
+
+  it("says nothing on an engine that follows the track", () => {
+    expect(transcriptionMicNotice("chrome", "usb-conference-mic")).toBeNull();
+    expect(transcriptionMicNotice("edge", "usb-conference-mic")).toBeNull();
+    expect(transcriptionMicNotice("firefox", "usb-conference-mic")).toBeNull();
   });
 });
 

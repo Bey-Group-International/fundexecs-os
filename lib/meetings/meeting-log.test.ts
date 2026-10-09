@@ -157,6 +157,23 @@ describe("toLogEntry", () => {
       expect(toLogEntry(meeting, { ...report, has_transcript: undefined }).canRegenerate).toBe(false);
       expect(toLogEntry(meeting, { ...report, has_transcript: null }).canRegenerate).toBe(false);
     });
+
+    // A meeting nobody ended: no report row at all, and the call's own
+    // transcript rows sitting in the table. The regenerate route writes the
+    // first report from those, so the button belongs on this row too.
+    it("is true with no report row when the call's own transcript rows exist", () => {
+      const entry = toLogEntry(meeting, null, true, true, true);
+      expect(entry.hasReport).toBe(false);
+      expect(entry.canRegenerate).toBe(true);
+    });
+
+    it("is true for a report without a transcript when the rows have one", () => {
+      expect(toLogEntry(meeting, { ...report, has_transcript: false }, true, true, true).canRegenerate).toBe(true);
+    });
+
+    it("is still false when neither place has a transcript", () => {
+      expect(toLogEntry(meeting, null, true, true, false).canRegenerate).toBe(false);
+    });
   });
 });
 

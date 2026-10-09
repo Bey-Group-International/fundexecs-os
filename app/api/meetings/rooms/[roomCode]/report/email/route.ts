@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createServerClient } from "@/lib/supabase/server";
 import { requireOrgContext } from "@/lib/auth";
+import { logId } from "@/lib/log-safe";
 import { mailboxFor } from "@/lib/meetings/mailbox.server";
 import { mailboxProblemMessage } from "@/lib/meetings/mailbox";
 import { sendEmail } from "@/lib/email";
@@ -19,13 +20,30 @@ import {
 import { loadReportForExport } from "@/lib/meetings/report-export.server";
 import { reportShareUrl } from "@/lib/meetings/report-share.server";
 import { recordFollowUpThreads } from "@/lib/meetings/follow-up-threads.server";
+import { summaryAlreadySent } from "@/lib/meetings/report-generation";
 import { createServiceClient, hasSupabaseServiceEnv } from "@/lib/supabase/server";
 
-// POST /api/meetings/rooms/[roomCode]/report/email  { includeTranscript?: boolean }
+// POST /api/meetings/rooms/[roomCode]/report/email  { includeTranscript?: boolean, resend?: boolean }
 //
-// Send the meeting summary to the meeting's attendees, from the org's
-// connected mailbox. The body is the same document the HTML export produces,
-// so what lands in an inbox and what downloads to a disk cannot diverge.
+// Send the meeting summary to the people who were in the meeting, from the
+// host's connected mailbox. The body is the same document the HTML export
+// produces, so what lands in an inbox and what downloads to a disk cannot
+// diverge.
+//
+// Three rules, each the answer to something that went wrong:
+//
+//   HOST ONLY. Any attendee could mail the summary of the host's meeting to
+//   everyone in it, from their own mailbox, over the host's record. Sending is
+//   the host's act, as the follow-up already was.
+//
+//   THE ROOM, NOT THE INVITATION. The invite list names people who may never
+//   have joined, and a summary of a meeting you were not in — "here is what we
+//   decided" — is the wrong first thing to hear about it. The attendance rows
+//   are who was there.
+//
+//   ONCE. The button had no memory: a second press mailed everyone again and
+//   doubled the inbox threads. The meeting row now records the first send, and
+//   a second press is told when it went unless it says `resend`.
 export async function POST(
   request: Request,
   { params }: { params: Promise<{ roomCode: string }> },
@@ -36,11 +54,13 @@ export async function POST(
   if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: auth.status });
 
   let includeTranscript = false;
+  let resend = false;
   try {
     const body = await request.json();
     includeTranscript = body?.includeTranscript === true;
+    resend = body?.resend === true;
   } catch {
-    // No body is a valid request: summary only.
+    // No body is a valid request: summary only, once.
   }
 
   const supabase = await createServerClient();
@@ -52,13 +72,12 @@ export async function POST(
     origin: SITE_URL,
   });
   if (!loaded) return NextResponse.json({ error: "Meeting not found" }, { status: 404 });
-  // Sending is a stronger act than downloading, and the same rule governs it:
-  // somebody who was not in the meeting does not get to mail its summary to
-  // its attendees. Checked ahead of "not ready" for the same reason as the
-  // export route — to a non-attendee the two are indistinguishable.
-  if (!loaded.attended) {
+  // Checked ahead of "not ready" for the same reason as the export route: to
+  // somebody who may not send it, the two are indistinguishable, and 409 would
+  // invite them to keep trying.
+  if (loaded.hostId !== auth.ctx.userId) {
     return NextResponse.json(
-      { error: "This report is limited to the people who were in the meeting" },
+      { error: "Only the meeting host can email the summary." },
       { status: 403 },
     );
   }
@@ -78,24 +97,34 @@ export async function POST(
     );
   }
 
-  // The invitation AND the room. Addressing only the invitation meant an instant
-  // meeting — created with an empty attendee list, and the commonest kind there
-  // is — could never email its own summary to the people who were in it.
+  if (summaryAlreadySent({ sentAt: loaded.summarySentAt, resend })) {
+    return NextResponse.json({
+      alreadySent: true,
+      sentAt: loaded.summarySentAt,
+      sent: 0,
+      total: 0,
+      unreachable: [],
+      failed: [],
+    });
+  }
+
+  // The room and only the room. `loaded.present` is the attendance table with
+  // addresses filled in from the directory where there are any; invitees who
+  // never joined are not in it and are not written to.
   const audience = meetingRecipients({
-    invited: loaded.attendees,
     present: loaded.present,
     senderEmail: auth.ctx.email,
   });
   const recipients = audience.recipients;
   if (recipients.length === 0) {
     // Which of the two things has happened, because the answer to each is
-    // different: invite somebody, or send it yourself to the people you know.
+    // different: somebody was there without an address, or nobody was there.
     const notice = unreachableNotice(audience.unreachable);
     return NextResponse.json(
       {
         error: notice
           ? `There is nobody to send this to. ${notice}`
-          : "This meeting has no attendees with email addresses.",
+          : "Nobody who was in this meeting has an email address here.",
         unreachable: audience.unreachable,
       },
       { status: 400 },
@@ -121,7 +150,7 @@ export async function POST(
   const bodies = recipients.map((r) => markdownFor(r.email));
 
   // Settled, not raced: one bad address must not withhold the summary from
-  // everybody else who was invited or in the room.
+  // everybody else who was in the room.
   const results = await Promise.allSettled(
     recipients.map((recipient, i) =>
       sendEmail({
@@ -139,14 +168,21 @@ export async function POST(
     ),
   );
 
+  const { sent, failed } = deliveryOutcome(recipients, results);
+
   // Each delivered copy is an inbox thread with that person, linked to this
   // meeting — so their reply lands beside it, counts as a reply on the meeting,
   // and (from the sender's own mailbox) is read back. Service role, as for the
   // follow-up: the ingest ledger and tracking table are not member-writable.
   // Never throws.
+  //
+  // Under the MEETING's organisation, not the caller's. A host whose active
+  // organisation was switched to another of theirs filed the threads — and
+  // the replies that followed — in the wrong organisation's inbox, beside a
+  // meeting that organisation cannot see.
   if (hasSupabaseServiceEnv()) {
     await recordFollowUpThreads(createServiceClient(), {
-      orgId: auth.ctx.orgId,
+      orgId: loaded.organizationId ?? auth.ctx.orgId,
       meetingId: loaded.meetingId,
       hostId: auth.ctx.userId,
       hostName: null,
@@ -157,7 +193,24 @@ export async function POST(
     });
   }
 
-  const { sent, failed } = deliveryOutcome(recipients, results);
+  // Remembered once anybody was reached, so the next press is a question
+  // rather than a repeat. A send that reached nobody leaves it unset: there
+  // is nothing to repeat, and the host should be able to try again.
+  if (sent > 0) {
+    const { error } = await supabase
+      .from("live_meetings")
+      .update({ summary_sent_at: new Date().toISOString() } as never)
+      .eq("id", loaded.meetingId);
+    if (error) {
+      // Not worth failing the response over: the mail went. But the guard is
+      // now missing for this meeting, and nothing else would ever say so.
+      console.error(
+        "[/api/meetings/rooms/:roomCode/report/email] send not recorded",
+        { meetingId: logId(loaded.meetingId) },
+        error.message,
+      );
+    }
+  }
 
   return NextResponse.json({
     sent,

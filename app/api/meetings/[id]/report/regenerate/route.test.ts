@@ -24,6 +24,7 @@ jest.mock("@/lib/conversational-gate", () => ({
   gateConversationalSpend: (...a: unknown[]) => gateConversationalSpend(...a),
 }));
 jest.mock("@/lib/meetings/report-analysis", () => ({
+  EMPTY_REPORT: { summary: "", key_points: [], action_items: [], decisions: [] },
   generateMeetingReport: (...a: unknown[]) => generateMeetingReport(...a),
 }));
 jest.mock("@/lib/meetings/action-items.server", () => ({
@@ -31,8 +32,9 @@ jest.mock("@/lib/meetings/action-items.server", () => ({
 }));
 jest.mock("@/lib/meetings/directory.server", () => ({ loadOrgDirectory: async () => [] }));
 
-import { POST } from "./route";
+import { POST, maxDuration } from "./route";
 import { NOISE_NOTE } from "@/lib/meetings/transcript-quality";
+import { UNSUMMARISED_KEY } from "@/lib/meetings/report-generation";
 
 const params = { params: Promise.resolve({ id: "m1" }) };
 const req = () => new Request("http://localhost/api/meetings/m1/report/regenerate", { method: "POST" });
@@ -58,11 +60,23 @@ function wire({
   meeting = MEETING as unknown,
   report = { id: "r1", full_transcript: "Ana: we agreed to wire on Friday." } as unknown,
   insertResult = { data: { summary: "s", key_points: [], action_items: [], analysis: {} }, error: null },
-}: { meeting?: unknown; report?: unknown; insertResult?: unknown } = {}) {
+  present = [] as Array<Record<string, unknown>>,
+  rows = [] as Array<Record<string, unknown>>,
+}: {
+  meeting?: unknown;
+  report?: unknown;
+  insertResult?: unknown;
+  /** Attendance rows, as loadPresentPeople reads them. */
+  present?: Array<Record<string, unknown>>;
+  /** The rows the call itself wrote to live_meeting_transcripts. */
+  rows?: Array<Record<string, unknown>>;
+} = {}) {
   from.mockImplementation((table: string) => {
     const b: Record<string, unknown> = {
       select: () => b, eq: () => b, is: () => b, order: () => b, limit: () => b,
       maybeSingle: async () => ({ data: table === "live_meetings" ? meeting : report, error: null }),
+      // The paged transcript read. One page, short, so it is also the last.
+      range: async () => ({ data: table === "live_meeting_transcripts" ? rows : [], error: null }),
       insert: (row: Record<string, unknown>) => { writes.inserted = row; return b; },
       update: (row: unknown) => {
         (updatesByTable[table] ??= []).push(row);
@@ -70,6 +84,9 @@ function wire({
         return b;
       },
       single: async () => insertResult,
+      // Awaited as the builder itself: the attendance read, and every update.
+      then: (resolve: (v: unknown) => unknown) =>
+        Promise.resolve({ data: table === "live_meeting_participants" ? present : [], error: null }).then(resolve),
     };
     return b;
   });
@@ -185,10 +202,25 @@ describe("the transcript it works from", () => {
     expect(generateMeetingReport.mock.calls[0][2]).toMatchObject({ durationSeconds: null });
   });
 
-  it("passes the meeting's own attendees as participants", async () => {
-    wire();
+  it("names who was in the room and who spoke — never the invite list", async () => {
+    // The end-of-meeting route builds this list the same way, so the two
+    // reports of one meeting agree about who had it. The invite list names
+    // people who may never have joined.
+    wire({
+      meeting: { ...MEETING, attendees: [{ name: "Never Joined", email: "nj@f.test" }] },
+      present: [{ user_id: null, guest_key: "g1", display_name: "Dana" }],
+      report: { id: "r1", full_transcript: "Ana: we agreed to wire on Friday.\nBo: fine." },
+    });
     await POST(req(), params);
-    expect(generateMeetingReport.mock.calls[0][2]).toMatchObject({ participants: ["Ana"] });
+    const sent = generateMeetingReport.mock.calls[0][2] as { participants: string[] };
+    expect(sent.participants).toEqual(["Dana", "Ana", "Bo"]);
+  });
+
+  it("reads the rows the call wrote even when there is no report row at all", async () => {
+    wire({ report: null, rows: [{ speaker: "Ana", text: "wire on Friday", ts: "2026-03-01T10:05:00Z", confidence: 0.9, overlapped: false }] });
+    const res = await POST(req(), params);
+    expect(res.status).toBe(200);
+    expect(generateMeetingReport.mock.calls[0][2]).toMatchObject({ transcript: "Ana: wire on Friday" });
   });
 
   it("409s when there is no transcript on file, rather than failing silently", async () => {
@@ -260,6 +292,73 @@ describe("what it writes", () => {
     // canRegenerate. The row just written holds the same transcript this route
     // read to write it, so the button has to survive its own use here too.
     expect(json.entry.canRegenerate).toBe(true);
+  });
+});
+
+describe("a meeting nobody ended", () => {
+  // A host who shut the laptop instead of pressing End left the meeting
+  // `active`, its transcript in the table, and no route that could write the
+  // report without the room. This is now the first report as well as the next.
+  const OPEN = { ...MEETING, status: "active", ended_at: null, started_at: null };
+  const ROWS = [
+    { speaker: "Ana", text: "we agreed to wire on Friday", ts: "2026-03-01T10:05:00Z", confidence: 0.9, overlapped: false },
+    { speaker: "Bo", text: "fine", ts: "2026-03-01T10:40:00Z", confidence: 0.9, overlapped: false },
+  ];
+
+  it("writes the first report and marks the meeting ended", async () => {
+    wire({ meeting: OPEN, report: null, rows: ROWS });
+    const res = await POST(req(), params);
+    expect(res.status).toBe(200);
+    expect(writes.inserted).toMatchObject({ meeting_id: "m1", summary: "They agreed to wire on Friday." });
+    const close = updatesByTable["live_meetings"]!.find((u) => (u as { status?: string }).status === "ended") as Record<string, unknown>;
+    expect(close).toMatchObject({ status: "ended" });
+    expect(typeof close.ended_at).toBe("string");
+    // The start the room never wrote, from the first thing anyone said.
+    expect(close.started_at).toBe("2026-03-01T10:05:00.000Z");
+  });
+
+  it("hands back an entry dated by the end it just recorded, so it lands in the log", async () => {
+    wire({ meeting: OPEN, report: null, rows: ROWS });
+    const json = (await (await POST(req(), params)).json()) as { entry: { occurredAt: string } };
+    expect(Number.isFinite(Date.parse(json.entry.occurredAt))).toBe(true);
+    expect(Date.parse(json.entry.occurredAt)).toBeGreaterThan(Date.parse("2026-03-01T10:40:00Z"));
+  });
+
+  it("leaves an ended meeting's end alone", async () => {
+    wire();
+    await POST(req(), params);
+    expect(updatesByTable["live_meetings"]!.some((u) => (u as { status?: string }).status === "ended")).toBe(false);
+  });
+});
+
+describe("a transcript that is noise and nothing else", () => {
+  const UNUSABLE = [
+    "Gary: so where did we land on the close",
+    ...Array.from({ length: 6 }, (_, i) => `Gary (${NOISE_NOTE}): garble ${i}`),
+  ].join("\n");
+
+  it("is filed as a finished, empty report without asking the model or charging for it", async () => {
+    wire({ report: { id: "r1", full_transcript: UNUSABLE, summary: "" } });
+    const res = await POST(req(), params);
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ unsummarised: true, reason: "unusable" });
+    expect(generateMeetingReport).not.toHaveBeenCalled();
+    expect(gateConversationalSpend).not.toHaveBeenCalled();
+    expect(writes.inserted).toMatchObject({ summary: "", full_transcript: UNUSABLE });
+    expect((writes.inserted!.analysis as Record<string, unknown>)[UNSUMMARISED_KEY]).toBe("unusable");
+  });
+
+  it("never replaces a real report with an empty one", async () => {
+    wire({ report: { id: "r1", full_transcript: UNUSABLE, summary: "A real summary from before." } });
+    const res = await POST(req(), params);
+    expect(res.status).toBe(409);
+    expect(writes.inserted).toBeUndefined();
+  });
+});
+
+describe("the function envelope", () => {
+  it("is declared, matching the end-of-meeting route", () => {
+    expect(maxDuration).toBe(300);
   });
 });
 
