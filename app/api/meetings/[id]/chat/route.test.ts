@@ -122,6 +122,14 @@ describe("what it stores", () => {
     expect(writes[0].author_name).toBe("Guest");
   });
 
+  // The body was cleaned on its way into the record; the name beside it was
+  // not, and it lands in the same report page and the same exported document.
+  it("cleans the display name the way it cleans the body", async () => {
+    wire();
+    await POST(post({ id: "c1", text: "hi", displayName: "  Ana\nVidal\u0007 " }), params);
+    expect(writes[0].author_name).toBe("Ana Vidal");
+  });
+
   // A post that timed out is retried with the same id. That has to be safe.
   it("upserts on the sender's own id", async () => {
     wire();
@@ -156,10 +164,32 @@ describe("the conversation so far", () => {
     ]);
   });
 
-  it("gives a guest's message a stable sender, since they have no account", async () => {
-    wire({ rows: [{ id: "c9", author_id: null, author_name: "Sam", body: "hi", ts: "2026-09-18T10:00:00.000Z" }] });
+  // The SAME sender for all of a guest's messages — the rule storedChatMessages
+  // owns, and the report page already applies. Keyed per message instead, a
+  // latecomer saw a guest's consecutive lines as separate turns while everyone
+  // live saw them grouped as one person talking.
+  it("keeps one guest one sender, so their lines group as they did live", async () => {
+    wire({
+      rows: [
+        { id: "c9", author_id: null, author_name: "Sam", body: "hi", ts: "2026-09-18T10:00:00.000Z" },
+        { id: "ca", author_id: null, author_name: "Sam", body: "again", ts: "2026-09-18T10:00:05.000Z" },
+      ],
+    });
     const body = await (await GET(get(), params)).json();
-    expect(body.messages[0].from).toBe("c9");
+    expect(body.messages.map((m: { from: string }) => m.from)).toEqual(["guest:Sam", "guest:Sam"]);
+  });
+
+  // Filed at zero instead, the merge in the panel sorted it above the whole
+  // conversation, dated 1970.
+  it("drops a row whose timestamp cannot be read rather than filing it at the epoch", async () => {
+    wire({
+      rows: [
+        { id: "c1", author_id: "u1", author_name: "Ana", body: "hello", ts: "not a date" },
+        { id: "c2", author_id: "u1", author_name: "Ana", body: "still here", ts: "2026-09-18T10:00:00.000Z" },
+      ],
+    });
+    const body = await (await GET(get(), params)).json();
+    expect(body.messages.map((m: { id: string }) => m.id)).toEqual(["c2"]);
   });
 
   // Losing the history costs a latecomer the conversation so far, not their

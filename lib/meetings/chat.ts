@@ -102,6 +102,33 @@ export function normalizeChatText(raw: unknown): string {
   return (last >= 0xd800 && last <= 0xdbff ? clipped.slice(0, -1) : clipped).trimEnd();
 }
 
+/** The longest a display name may be on its way into the record. */
+export const CHAT_NAME_MAX = 80;
+
+/**
+ * A display name on its way into the record: one line, printable, bounded.
+ *
+ * The body already goes through normalizeChatText before it is stored, but the
+ * name beside it went in as sent — trimmed and sliced, nothing more. A name is
+ * rendered on the report page and written into exported documents just as the
+ * body is, and it has one property the body does not: it is a LABEL, so a
+ * newline inside it breaks the layout of every line it labels. Control
+ * characters are stripped the way the body strips them, and whatever
+ * whitespace remains collapses to single spaces — a name is one line by
+ * definition. The clip never leaves half a surrogate pair, for the reason
+ * normalizeChatText gives.
+ */
+export function normalizeChatName(raw: unknown): string {
+  if (typeof raw !== "string") return "";
+  const clean = raw
+    .replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  const clipped = clean.slice(0, CHAT_NAME_MAX);
+  const last = clipped.charCodeAt(clipped.length - 1);
+  return (last >= 0xd800 && last <= 0xdbff ? clipped.slice(0, -1) : clipped).trimEnd();
+}
+
 /**
  * Read a Realtime send result.
  *

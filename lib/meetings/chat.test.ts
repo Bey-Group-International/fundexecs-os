@@ -9,7 +9,9 @@
 import {
   CHAT_CLOCK_TOLERANCE_MS,
   CHAT_MAX_LENGTH,
+  CHAT_NAME_MAX,
   GROUP_WINDOW_MS,
+  normalizeChatName,
   storedChatMessages,
   type StoredChatRow,
   chatClock,
@@ -202,6 +204,39 @@ describe("normalizeChatText, once a message is going into a table", () => {
   // put in an exported document.
   it("strips control characters a paste can carry", () => {
     expect(normalizeChatText("he\u0000llo\u0007")).toBe("hello");
+  });
+});
+
+describe("normalizeChatName", () => {
+  it("passes an ordinary name through, trimmed", () => {
+    expect(normalizeChatName("  Ana Vidal ")).toBe("Ana Vidal");
+  });
+
+  // A name is a LABEL: a newline inside it breaks the layout of every line it
+  // labels, on the report page and in the exported document.
+  it("keeps a name to one line", () => {
+    expect(normalizeChatName("Ana\nVidal")).toBe("Ana Vidal");
+    expect(normalizeChatName("Ana\t \tVidal")).toBe("Ana Vidal");
+  });
+
+  it("strips the control characters the body strips", () => {
+    expect(normalizeChatName("A\u0000na\u0007")).toBe("Ana");
+  });
+
+  it("bounds a name that is not one", () => {
+    expect(normalizeChatName("x".repeat(CHAT_NAME_MAX + 40))).toHaveLength(CHAT_NAME_MAX);
+  });
+
+  it("does not cut a surrogate pair in half", () => {
+    const out = normalizeChatName("a".repeat(CHAT_NAME_MAX - 1) + "😀");
+    expect(out).toHaveLength(CHAT_NAME_MAX - 1);
+    expect(out.endsWith("\uD83D")).toBe(false);
+  });
+
+  it("returns nothing for whitespace or a non-string", () => {
+    expect(normalizeChatName("   ")).toBe("");
+    expect(normalizeChatName(undefined)).toBe("");
+    expect(normalizeChatName(42)).toBe("");
   });
 });
 

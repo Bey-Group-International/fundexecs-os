@@ -14,7 +14,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createServerClient, createServiceClient, hasSupabaseServiceEnv } from "@/lib/supabase/server";
 import { checkRateLimit, clientIp, rateLimitHeaders } from "@/lib/rate-limit";
 import { authorizeMeetingCaller } from "@/lib/meetings/meeting-access.server";
-import { normalizeChatText, type ChatMessage } from "@/lib/meetings/chat";
+import { normalizeChatName, normalizeChatText, storedChatMessages, type StoredChatRow } from "@/lib/meetings/chat";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -25,9 +25,6 @@ const RATE_WINDOW_MS = 60_000;
 
 /** Most messages ever handed back as history. A chat is not a mailing list. */
 const MAX_HISTORY = 500;
-
-/** The longest a display name may be on its way into the record. */
-const MAX_NAME = 80;
 
 type Params = Promise<{ id: string }>;
 type SupabaseLike = { from: (table: string) => any };
@@ -65,25 +62,16 @@ export async function GET(req: NextRequest, { params }: { params: Params }) {
     return NextResponse.json({ messages: [] });
   }
 
-  const rows = (data ?? []) as Array<{
-    id: string;
-    author_id: string | null;
-    author_name: string;
-    body: string;
-    ts: string;
-  }>;
-
-  const messages: ChatMessage[] = rows.map((row) => ({
-    id: row.id,
-    // The room keys tiles by peer id, which a stored row has no idea about.
-    // The account is what survives, and a guest has none.
-    from: row.author_id ?? row.id,
-    displayName: row.author_name,
-    text: row.body,
-    ts: Date.parse(row.ts) || 0,
-  }));
-
-  return NextResponse.json({ messages });
+  // Read through the ONE rule for stored rows — the same one the report page
+  // applies — rather than a copy of it. The copy this replaces had drifted in
+  // both of the ways that rule exists to prevent: it gave every guest message
+  // its own sender (`author_id ?? row.id`), so a latecomer saw a guest's
+  // consecutive lines ungrouped while everyone live — and the report after —
+  // saw them as one person talking; and it filed an unreadable timestamp at
+  // zero, which after the panel's merge sorted that message above the whole
+  // conversation, dated 1970. See storedChatMessages.
+  const rows = (data ?? []) as StoredChatRow[];
+  return NextResponse.json({ messages: storedChatMessages(rows) });
 }
 
 /**
@@ -119,7 +107,10 @@ export async function POST(req: NextRequest, { params }: { params: Params }) {
 
   const messageId = typeof body.id === "string" && body.id.length > 0 && body.id.length <= 64 ? body.id : "";
   const text = normalizeChatText(typeof body.text === "string" ? body.text : "");
-  const name = (typeof body.displayName === "string" ? body.displayName : "").trim().slice(0, MAX_NAME);
+  // Cleaned the way the body is cleaned, because it lands in the same places:
+  // the stored row, the report page, and the exported document. A name is a
+  // label, so it is additionally one line. See normalizeChatName.
+  const name = normalizeChatName(body.displayName);
   if (!messageId || !text) {
     return NextResponse.json({ error: "A message needs an id and something to say." }, { status: 422 });
   }
