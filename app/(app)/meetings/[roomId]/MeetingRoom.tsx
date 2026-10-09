@@ -98,11 +98,10 @@ import {
   recognizerStatusAfterEnd, restartDelay,
 } from "@/lib/meetings/recognition-quality";
 import {
-  coverageNotice, localTranscribing, transcriptionMicNotice, type SrStatus,
+  coverageNotice, engineFollowsTrack, localTranscribing, transcriptionMicNotice, type SrStatus,
 } from "@/lib/meetings/transcription-coverage";
 import { PEER_DRAIN_GRACE_MS, drainTranscript as drainLines } from "@/lib/meetings/transcript-drain";
 import { saveFailureNotice, savesCovered } from "@/lib/meetings/transcript-saving";
-import { browserFamily } from "@/lib/meetings/green-room";
 import { recordingNotice, type RecordingState } from "@/lib/meetings/recording-policy";
 import {
   NO_ELAPSED,
@@ -3975,13 +3974,46 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     });
   }, [sessionLive, srStatus, srDeaf, savingFailed]);
 
-  // Safari's engine transcribes the computer's default microphone whatever the
-  // call uses. Said when a different one is picked, which is when it can be
-  // acted on; withdrawn when the choice is the default again.
+  // An engine that ignores the handed track transcribes the computer's
+  // default microphone whatever the call uses — which until track support
+  // landed was every Chrome and Edge, not only Safari, and the old
+  // by-browser-brand rule here told exactly those members nothing. Judged
+  // from the engine's own capability and the devices' physical identity now:
+  // said when the chosen microphone is a different device from the default,
+  // withdrawn when the choice is the default again (by alias or by concrete
+  // id), and re-read when the device list changes underneath the call. See
+  // engineFollowsTrack / transcriptionMicNotice.
   useEffect(() => {
     if (!sessionLive) return;
-    setSrMicNotice(transcriptionMicNotice(browserFamily(navigator.userAgent), selectedMicId));
-  }, [sessionLive, selectedMicId]);
+    let cancelled = false;
+    const read = async () => {
+      const w = window as unknown as Record<string, unknown>;
+      const SR = (w.SpeechRecognition ?? w.webkitSpeechRecognition) as unknown;
+      const track = localStreamRef.current?.getAudioTracks()[0] ?? null;
+      let defaultGroupId: string | null = null;
+      try {
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        defaultGroupId =
+          devices.find((d) => d.kind === "audioinput" && d.deviceId === "default")?.groupId ?? null;
+      } catch { /* no device list — the group comparison stands down */ }
+      if (cancelled) return;
+      setSrMicNotice(transcriptionMicNotice({
+        status: srStatus,
+        followsTrack: engineFollowsTrack(SR),
+        micId: selectedMicId,
+        micLabel: track?.label ?? null,
+        micGroupId: track?.getSettings?.().groupId ?? null,
+        defaultGroupId,
+      }));
+    };
+    void read();
+    const onDeviceChange = () => { void read(); };
+    navigator.mediaDevices?.addEventListener?.("devicechange", onDeviceChange);
+    return () => {
+      cancelled = true;
+      navigator.mediaDevices?.removeEventListener?.("devicechange", onDeviceChange);
+    };
+  }, [sessionLive, selectedMicId, localStream, srStatus]);
 
   // Follow the microphone.
   //
