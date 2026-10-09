@@ -34,7 +34,7 @@ import {
   type WorkspaceTab,
 } from "@/lib/meetings/workspace";
 import type { LoggedMeeting } from "@/lib/meetings/meeting-log";
-import { meetingInviteUrl } from "@/lib/meetings/share";
+import { meetingJoinUrl } from "@/lib/meetings/share";
 import { CARD, EYEBROW, chip } from "./tone";
 import { MeetingLogs } from "./MeetingLogs";
 import { MeetingRow, type RowPerson } from "./MeetingRow";
@@ -185,7 +185,12 @@ export function MeetingsWorkspace({
     (id: string) => {
       const m = byId.get(id);
       if (!m) return;
-      void copyText(meetingInviteUrl(window.location.origin, m.room_code)).then((ok) => {
+      // The JOIN link, which for a synced meeting is its own conferencing
+      // link — the same rule the reminder emails apply. Copying the FundExecs
+      // room for a meeting that happens on Zoom handed a guest a link to an
+      // empty room while the email for the same meeting pointed at the right
+      // one.
+      void copyText(meetingJoinUrl(window.location.origin, m.room_code, m.meeting_url)).then((ok) => {
         if (ok) {
           setCopiedId(id);
           setTimeout(() => setCopiedId((c) => (c === id ? null : c)), 1500);
