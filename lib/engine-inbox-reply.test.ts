@@ -11,6 +11,8 @@ jest.mock("@/lib/inbox/deliver-reply.server", () => {
 const reviseInboxReply = jest.fn();
 jest.mock("@/lib/inbox/revise-reply.server", () => ({ reviseInboxReply: (...a: unknown[]) => reviseInboxReply(...a) }));
 
+const selfApprovalRefusal = jest.fn(async (..._a: unknown[]) => null as string | null);
+jest.mock("@/lib/inbox/approver.server", () => ({ selfApprovalRefusal: (...a: unknown[]) => selfApprovalRefusal(...a) }));
 import { decideApproval } from "@/lib/engine";
 
 interface Call {
@@ -19,7 +21,8 @@ interface Call {
   values?: Record<string, unknown>;
 }
 
-const TASK = {
+let TASK: Record<string, unknown> = {};
+const BASE_TASK = {
   id: "task-1",
   hub: "source",
   assigned_agent: "investor_relations",
@@ -67,7 +70,11 @@ function makeSupabase() {
 
 const ctx = (supabase: unknown) => ({ supabase, orgId: "org-1", actorId: "approver-1" }) as never;
 
-beforeEach(() => jest.clearAllMocks());
+beforeEach(() => {
+  jest.clearAllMocks();
+  TASK = { ...BASE_TASK };
+  selfApprovalRefusal.mockResolvedValue(null);
+});
 
 it("approved: sends the parked reply from its author's mailbox and runs no workflow", async () => {
   deliverApprovedReply.mockResolvedValue({ ok: true });
@@ -117,4 +124,28 @@ it("sent back: Earn revises the reply with the note and it returns to approvals"
   );
   expect(deliverApprovedReply).not.toHaveBeenCalled();
   expect(calls.some((c) => c.table === "tasks" && c.values?.status === "cancelled")).toBe(false);
+});
+
+it("refuses an author approving their own message before the decision is claimed", async () => {
+  selfApprovalRefusal.mockResolvedValue("You wrote this message, so someone else has to approve it.");
+  const { client, calls } = makeSupabase();
+  const r = await decideApproval(ctx(client), { approvalId: "appr-1", decision: "approved" });
+  expect(r).toMatchObject({ refused: "You wrote this message, so someone else has to approve it." });
+  expect(calls.some((c) => c.table === "approvals" && c.op === "update")).toBe(false);
+  expect(deliverApprovedReply).not.toHaveBeenCalled();
+});
+
+it("holds a message approved for later, recording who approved it", async () => {
+  const at = new Date(Date.now() + 86_400_000).toISOString();
+  TASK = { ...BASE_TASK, result: { inboxReply: { ...BASE_TASK.result.inboxReply, scheduledAt: at } } };
+  const { client, calls } = makeSupabase();
+  const r = await decideApproval(ctx(client), { approvalId: "appr-1", decision: "approved" });
+  expect(r).toEqual({ workflowId: "task-1", decision: "approved", scheduledAt: at });
+  expect(deliverApprovedReply).not.toHaveBeenCalled();
+  const update = calls.find((c) => c.table === "tasks" && c.op === "update")!.values as {
+    status: string;
+    result: { inboxReply: { approvedBy: string; scheduledAt: string } };
+  };
+  expect(update.status).toBe("pending");
+  expect(update.result.inboxReply).toMatchObject({ approvedBy: "approver-1", scheduledAt: at });
 });

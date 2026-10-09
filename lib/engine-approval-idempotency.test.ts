@@ -4,6 +4,7 @@
 // the conditional update claims zero rows, the function returns early and never
 // touches the `tasks` table (where executeWorkflow would load the workflow).
 
+jest.mock("@/lib/inbox/approver.server", () => ({ selfApprovalRefusal: async () => null }));
 import { decideApproval } from "@/lib/engine";
 
 type Approval = { id: string; task_id: string; decision: string | null };

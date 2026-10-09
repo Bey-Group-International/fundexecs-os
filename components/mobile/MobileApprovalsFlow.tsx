@@ -10,6 +10,8 @@ import { useOnline } from "./useOnline";
 import { useMobileToast } from "./MobileToast";
 import { enqueue } from "./offlineQueue";
 import { APPROVAL_DECISION_TYPE, type ApprovalDecisionPayload } from "./MobileSyncRegistrar";
+import type { InboxMessageApproval } from "@/lib/inbox/pending-action";
+import { approveEditedInboxMessage, decideInboxApprovals } from "@/app/(app)/inbox/actions";
 
 export interface ApprovalItem {
   approvalId: string;
@@ -21,6 +23,10 @@ export interface ApprovalItem {
   risk: "high" | "medium" | "low";
   hubLabel: string | null;
   requestedAt: string | null;
+  /** An inbox message: the email the card previews, as the desktop inbox shows it. */
+  message?: InboxMessageApproval | null;
+  /** The viewer wrote it and may not approve it (owners and admins may). */
+  selfAuthored?: boolean;
 }
 
 const RISK: Record<string, { label: string; cls: string }> = {
@@ -54,6 +60,11 @@ export function MobileApprovalsFlow({ items }: { items: ApprovalItem[] }) {
   const [reviseFor, setReviseFor] = useState<null | ApprovalItem>(null);
   const [note, setNote] = useState("");
   const [counts, setCounts] = useState({ approved: 0, rejected: 0, revised: 0 });
+  // Items cleared out of turn — a meeting's batch approved at once.
+  const [cleared, setCleared] = useState<Set<string>>(new Set());
+  const [editFor, setEditFor] = useState<null | ApprovalItem>(null);
+  const [draft, setDraft] = useState("");
+  const [busy, setBusy] = useState(false);
   // Screen-reader announcement for each decision + the cleared completion.
   const [announce, setAnnounce] = useState("");
 
@@ -62,9 +73,15 @@ export function MobileApprovalsFlow({ items }: { items: ApprovalItem[] }) {
   const online = useOnline();
   const { toast } = useMobileToast();
 
-  const current = items[index];
-  const next = items[index + 1];
-  const remaining = items.length - index;
+  const visible = items.filter((i) => !cleared.has(i.approvalId));
+  const current = visible[index];
+  const next = visible[index + 1];
+  const remaining = visible.length - index;
+  // The rest of this meeting's messages the viewer may approve, current included.
+  const meetingId = current?.message?.meeting?.id ?? null;
+  const batch = meetingId
+    ? visible.slice(index).filter((i) => i.message?.meeting?.id === meetingId && !i.selfAuthored)
+    : [];
 
   function advance(kind: "approved" | "rejected" | "revised") {
     setDx(0);
@@ -86,7 +103,7 @@ export function MobileApprovalsFlow({ items }: { items: ApprovalItem[] }) {
     // Announce the decision (and remaining count) to assistive tech.
     const decidedLabel = decision === "approved" ? "Approved" : decision === "rejected" ? "Rejected" : "Sent back to Earn";
     const left = remaining - 1;
-    setAnnounce(left > 0 ? `${decidedLabel}. ${left} of ${items.length} remaining.` : `${decidedLabel}. Cleared.`);
+    setAnnounce(left > 0 ? `${decidedLabel}. ${left} of ${visible.length} remaining.` : `${decidedLabel}. Cleared.`);
 
     toast(
       online
@@ -100,8 +117,61 @@ export function MobileApprovalsFlow({ items }: { items: ApprovalItem[] }) {
     advance(decision === "rejected" ? "rejected" : decision === "regenerate" ? "revised" : "approved");
   }
 
+  async function approveBatch() {
+    if (batch.length < 2 || busy) return;
+    if (!online) {
+      toast({ message: "Approving a whole meeting needs a connection.", tone: "neutral" });
+      return;
+    }
+    setBusy(true);
+    try {
+      const { results } = await decideInboxApprovals(batch.map((b) => b.approvalId), "approved");
+      const ok = new Set(results.filter((r) => r.ok).map((r) => r.approvalId));
+      const failed = results.length - ok.size;
+      haptic("success");
+      setCleared((prev) => new Set([...prev, ...ok]));
+      setCounts((c) => ({ ...c, approved: c.approved + ok.size }));
+      setAnnounce(`Approved ${ok.size} messages.`);
+      toast({
+        message: failed ? `Approved ${ok.size}; ${failed} not sent — check the inbox.` : `Approved all ${ok.size}.`,
+        tone: failed ? "neutral" : "success",
+      });
+    } catch {
+      toast({ message: "Couldn't approve them. Try again.", tone: "neutral" });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function approveEdit() {
+    const item = editFor;
+    const text = draft.trim();
+    if (!item || !text || busy) return;
+    setBusy(true);
+    try {
+      const r = await approveEditedInboxMessage(item.approvalId, text);
+      if (!r.ok) {
+        toast({ message: r.error ?? "Couldn't send the edit.", tone: "neutral" });
+        return;
+      }
+      setEditFor(null);
+      haptic("success");
+      toast({ message: "Approved — your edit is going out.", tone: "success" });
+      advance("approved");
+    } catch {
+      toast({ message: "Couldn't reach the server. Try again.", tone: "neutral" });
+    } finally {
+      setBusy(false);
+    }
+  }
+
   function onApprove(item: ApprovalItem) {
-    if (item.risk === "high") {
+    if (item.selfAuthored) {
+      setDx(0);
+      toast({ message: "You wrote this — someone else has to approve it.", tone: "neutral" });
+      return;
+    }
+    if (item.risk === "high" || item.message) {
       setDx(0);
       setConfirm(item);
       return;
@@ -111,7 +181,7 @@ export function MobileApprovalsFlow({ items }: { items: ApprovalItem[] }) {
 
   // ── Pointer drag (works for touch + mouse; Playwright can drive it) ──
   function onPointerDown(e: React.PointerEvent) {
-    if (confirm || reviseFor) return;
+    if (confirm || reviseFor || editFor) return;
     active.current = true;
     startX.current = e.clientX;
     setDragging(true);
@@ -181,7 +251,7 @@ export function MobileApprovalsFlow({ items }: { items: ApprovalItem[] }) {
             </h1>
           </div>
           <span className="font-mono text-[11px] text-fg-muted">
-            {index + 1} / {items.length}
+            {index + 1} / {visible.length}
           </span>
         </div>
         <div
@@ -189,10 +259,10 @@ export function MobileApprovalsFlow({ items }: { items: ApprovalItem[] }) {
           role="progressbar"
           aria-label="Approvals progress"
           aria-valuemin={0}
-          aria-valuemax={items.length}
+          aria-valuemax={visible.length}
           aria-valuenow={index}
         >
-          {items.map((_, i) => (
+          {visible.map((_, i) => (
             <span key={i} aria-hidden className={`h-1 flex-1 rounded-full ${i < index ? "bg-gold-500/70" : i === index ? "bg-gold-400" : "bg-surface-3"}`} />
           ))}
         </div>
@@ -242,9 +312,18 @@ export function MobileApprovalsFlow({ items }: { items: ApprovalItem[] }) {
             </div>
 
             <h2 className="mt-3 font-display text-[19px] font-semibold leading-snug text-fg-primary">{current.title}</h2>
-            {current.description && <p className="mt-2 text-[13.5px] leading-snug text-fg-secondary">{current.description}</p>}
+            {current.message ? (
+              <MobileMessagePreview m={current.message} />
+            ) : current.description ? (
+              <p className="mt-2 text-[13.5px] leading-snug text-fg-secondary">{current.description}</p>
+            ) : null}
+            {current.selfAuthored ? (
+              <p className="mt-3 rounded-xl border border-line bg-surface-0/60 p-2.5 text-[12.5px] text-fg-secondary">
+                You wrote this — someone else has to approve it. You can still reject it or send it back.
+              </p>
+            ) : null}
 
-            {current.preview && (
+            {!current.message && current.preview && (
               <div className="mt-3 rounded-2xl border border-line/70 bg-surface-0/60 p-3">
                 <p className="mb-1.5 flex items-center gap-1.5 font-mono text-[11px] uppercase tracking-wider text-fg-muted">
                   <EarnIcon width={12} height={12} className="text-gold-300" /> What Earn produced
@@ -259,6 +338,34 @@ export function MobileApprovalsFlow({ items }: { items: ApprovalItem[] }) {
           </div>
         </div>
       </div>
+
+      {(batch.length > 1 || (current.message?.editable && !current.selfAuthored)) && (
+        <div className="mt-4 flex gap-2">
+          {current.message?.editable && !current.selfAuthored ? (
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => {
+                setDraft(current.message?.body ?? "");
+                setEditFor(current);
+              }}
+              className="fx-tap flex-1 rounded-2xl border border-line bg-surface-1 py-2.5 text-[13px] font-semibold text-fg-secondary transition active:bg-surface-2 disabled:opacity-50"
+            >
+              Edit
+            </button>
+          ) : null}
+          {batch.length > 1 ? (
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => void approveBatch()}
+              className="fx-tap flex-[2] rounded-2xl border border-status-success/45 bg-status-success/[0.08] py-2.5 text-[13px] font-semibold text-status-success transition active:scale-[0.99] disabled:opacity-50"
+            >
+              {busy ? "Approving…" : `Approve all ${batch.length} · ${current.message?.meeting?.title ?? "meeting"}`}
+            </button>
+          ) : null}
+        </div>
+      )}
 
       {/* Decision buttons */}
       <div className="mt-5 grid grid-cols-[1fr_auto_1fr] items-center gap-2.5">
@@ -331,6 +438,41 @@ export function MobileApprovalsFlow({ items }: { items: ApprovalItem[] }) {
         )}
       </MobileSheet>
 
+      {/* Edit, then approve the edit */}
+      <MobileSheet
+        open={!!editFor}
+        onClose={() => setEditFor(null)}
+        title="Edit and approve"
+        subtitle={editFor?.message ? `To ${editFor.message.to.name ?? editFor.message.to.email ?? "them"}` : undefined}
+        labelledBy="fx-edit-title"
+      >
+        {editFor && (
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              void approveEdit();
+            }}
+            className="px-1 pb-2"
+          >
+            <textarea
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              rows={8}
+              autoFocus
+              aria-label="Edit the message"
+              className="w-full resize-none rounded-2xl border border-line bg-surface-0/70 p-3.5 text-[14px] text-fg-primary focus:border-gold-500/50 focus:outline-none focus:ring-2 focus:ring-gold-400/25"
+            />
+            <button
+              type="submit"
+              disabled={busy || !draft.trim()}
+              className="fx-tap mt-3 w-full rounded-2xl bg-gradient-to-br from-gold-300 to-gold-500 py-3 text-[14px] font-semibold text-surface-0 transition active:scale-[0.99] disabled:opacity-50"
+            >
+              {busy ? "Sending…" : "Approve & send edit"}
+            </button>
+          </form>
+        )}
+      </MobileSheet>
+
       {/* Request revision — capture a note back to Earn */}
       <MobileSheet
         open={!!reviseFor}
@@ -367,6 +509,42 @@ export function MobileApprovalsFlow({ items }: { items: ApprovalItem[] }) {
           </form>
         )}
       </MobileSheet>
+    </div>
+  );
+}
+
+/** The email a held inbox message will send, as the desktop card shows it. */
+function MobileMessagePreview({ m }: { m: InboxMessageApproval }) {
+  const to = m.to.name && m.to.email ? `${m.to.name} <${m.to.email}>` : (m.to.name ?? m.to.email ?? "—");
+  const who = [m.contact?.title, m.contact?.company].filter(Boolean).join(" · ");
+  return (
+    <div className="mt-3 flex flex-col gap-2">
+      <div className="rounded-2xl border border-line/70 bg-surface-0/60 p-3 text-[12.5px]">
+        <p className="text-fg-secondary">
+          <span className="text-fg-muted">To </span>
+          <span className="break-words text-fg-primary">{to}</span>
+        </p>
+        {m.subject ? (
+          <p className="mt-0.5 text-fg-secondary">
+            <span className="text-fg-muted">Subject </span>
+            {m.subject}
+          </p>
+        ) : null}
+        <p className="mt-0.5 text-fg-secondary">
+          <span className="text-fg-muted">From </span>
+          {m.from ?? "Your mailbox, or the organization's"}
+        </p>
+        <p className="mt-2 line-clamp-[10] whitespace-pre-wrap border-t border-line/60 pt-2 leading-snug text-fg-primary">
+          {m.body ?? m.sharePreface ?? `${m.actionLabel} — carried out on approval.`}
+        </p>
+      </div>
+      {who ? <p className="text-[12px] text-fg-muted">{who}</p> : null}
+      {m.lastInbound ? (
+        <p className="line-clamp-2 text-[12px] text-fg-muted">They wrote: “{m.lastInbound.body}”</p>
+      ) : null}
+      <Link href={m.threadHref} className="text-[12px] text-gold-300">
+        Open conversation ›
+      </Link>
     </div>
   );
 }

@@ -4,6 +4,7 @@
 // idempotency CAS to the real column contract: approvals.decision defaults to
 // 'pending' (not null), so the conditional update must match 'pending' — an
 // IS NULL match would claim zero rows and silently no-op every real decision.
+jest.mock("@/lib/inbox/approver.server", () => ({ selfApprovalRefusal: async () => null }));
 import { decideApproval } from "@/lib/engine";
 
 interface Call {

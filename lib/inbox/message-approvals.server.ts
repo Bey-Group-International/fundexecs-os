@@ -34,6 +34,9 @@ export interface MessageTask {
   created_by?: string | null;
   result?: unknown;
   status?: string | null;
+  created_at?: string | null;
+  /** When its pending approval was opened; falls back to created_at. */
+  waiting_since?: string | null;
 }
 
 const PREVIEW_MAX = 280;
@@ -160,7 +163,10 @@ export async function loadMessageApprovals(
         contact: email ? (contactByEmail.get(email) ?? null) : null,
         lastInbound: lastInbound.get(p.threadId) ?? null,
         editable: p.action === "send_reply" && Boolean(p.body),
-        failed: failed ? { error: (t.result as { inboxReply?: { error?: string } }).inboxReply?.error || "It could not be sent." } : null,
+        failed: failed ? { error: stored?.error || "It could not be sent." } : null,
+        authorId: p.senderId,
+        scheduledAt: t.status === "pending" && stored?.scheduledAt && !stored.delivered ? stored.scheduledAt : null,
+        waitingSince: t.status === "awaiting_approval" ? (t.waiting_since ?? t.created_at ?? null) : null,
       });
     }
   } catch (err) {
@@ -189,6 +195,27 @@ export async function fetchFailedInboxMessages(client: Client, orgId: string): P
     return ((data ?? []) as MessageTask[]).filter((t) => {
       const p = extractInboxReply(t.result);
       return Boolean(p && !p.delivered);
+    });
+  } catch {
+    return [];
+  }
+}
+
+/** Approved inbox messages waiting for their scheduled send time. */
+export async function fetchScheduledInboxMessages(client: Client, orgId: string): Promise<MessageTask[]> {
+  try {
+    const { data } = await client
+      .from("tasks")
+      .select("id, title, description, created_by, result, status, assigned_agent, hub, created_at, session_id, meeting_id")
+      .eq("organization_id", orgId)
+      .is("parent_task_id", null)
+      .eq("status", "pending")
+      .not("result->inboxReply->scheduledAt", "is", null)
+      .order("updated_at", { ascending: false })
+      .limit(25);
+    return ((data ?? []) as MessageTask[]).filter((t) => {
+      const p = extractInboxReply(t.result);
+      return Boolean(p?.scheduledAt && !p.delivered);
     });
   } catch {
     return [];

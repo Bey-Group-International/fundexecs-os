@@ -377,6 +377,17 @@ describe("when the organisation gates outbound replies", () => {
     expect(updates).not.toContainEqual({ followup_status: "done" });
   });
 
+  // Known contacts skip the hold (lib/inbox/known-contact.server.ts): those
+  // copies went out, and the meeting is not waiting on approvals for them.
+  it("counts copies that went straight to known contacts as sent, not queued", async () => {
+    replyToThread.mockResolvedValue({ ok: true, gated: false });
+    wire();
+    const res = await POST(req(), { params });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ gated: true, queued: 0, sent: 1, total: 1 });
+    expect(updates).not.toContainEqual({ followup_status: "pending_approval" });
+  });
+
   it("still reports the queue when the badge could not be written", async () => {
     const spy = jest.spyOn(console, "error").mockImplementation(() => undefined);
     wire({ updateError: { message: "denied" } });

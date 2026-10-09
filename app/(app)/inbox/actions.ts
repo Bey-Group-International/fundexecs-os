@@ -3,7 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { createServerClient } from "@/lib/supabase/server";
 import { requireOrgContext } from "@/lib/auth";
-import { gateDecision, type ActionKind } from "@/lib/gates";
+import { blastRadiusBreach, gateDecision, type ActionKind } from "@/lib/gates";
+import { isKnownContact } from "@/lib/inbox/known-contact.server";
 import { isVerifiable } from "@/lib/grounding";
 import { getActiveMandate } from "@/lib/mandates";
 import { recordDispatch } from "@/lib/integrations/log";
@@ -117,9 +118,25 @@ async function performThreadAction(
     : undefined;
   // Give the gate the counterparty this action would reach so a mandate's
   // do-not-contact blast-radius rule can revoke a pre-authorized auto-send.
-  const decision = gateDecision(action, mandate, backing, {
+  let decision = gateDecision(action, mandate, backing, {
     targetDomain: t.counterparty_email ?? undefined,
   });
+  // A reply on a conversation with a known contact the firm has written to
+  // before goes straight out (lib/inbox/known-contact.server.ts). Only a Tier-2
+  // hold, only a composed email reply, and never past the do-not-contact list.
+  let autoApproved: string | null = null;
+  if (
+    decision.requiresApproval &&
+    decision.tier === 2 &&
+    action === "send_reply" &&
+    opts.replyBody &&
+    isEmailThread(t) &&
+    !blastRadiusBreach(mandate?.blastRadius, { targetDomain: t.counterparty_email ?? undefined }) &&
+    (await isKnownContact(supabase, orgId, t.counterparty_email))
+  ) {
+    decision = { ...decision, requiresApproval: false, reason: "Known contact you have written to before." };
+    autoApproved = "known_contact";
+  }
   const agent = AGENT_FOR_INBOX_ACTION[action] ?? "investor_relations";
   const who = t.counterparty_name ?? t.counterparty_email ?? t.subject;
   const title = `${ACTION_LABEL[action] ?? action.replace(/_/g, " ")} — ${who}`;
@@ -179,7 +196,12 @@ async function performThreadAction(
     event_type: "task.created",
     agent,
     hub: "source",
-    payload: { title, gate_tier: decision.tier, inbox_thread_id: threadId } as Json,
+    payload: {
+      title,
+      gate_tier: decision.tier,
+      inbox_thread_id: threadId,
+      ...(autoApproved ? { auto_approved: autoApproved } : {}),
+    } as Json,
   });
 
   // Gated (Tier 2/3): nothing goes out now. Open an approval and stop — the
@@ -1185,7 +1207,7 @@ export async function decideInboxApproval(
   approvalId: string,
   decision: InboxApprovalDecision,
   note?: string,
-): Promise<{ ok: boolean; error?: string; notice?: string }> {
+): Promise<{ ok: boolean; error?: string; notice?: string; scheduledAt?: string }> {
   if (!approvalId) return { ok: false, error: "Missing approval." };
   const auth = await requireOrgContext();
   if (!auth.ok) return { ok: false, error: "Not authorized." };
@@ -1212,10 +1234,14 @@ export async function decideInboxApproval(
 
   let deliveryError: string | undefined;
   let notice: string | undefined;
+  let scheduledAt: string | undefined;
   try {
     const decided = await decideApproval({ supabase, orgId, actorId: auth.ctx.userId }, { approvalId, decision, note });
+    const refused = (decided as { refused?: string }).refused;
+    if (refused) return { ok: false, error: refused };
     deliveryError = (decided as { error?: string }).error;
     notice = (decided as { notice?: string }).notice;
+    scheduledAt = (decided as { scheduledAt?: string }).scheduledAt;
   } catch (e) {
     console.error("[decideInboxApproval]", e instanceof Error ? e.message : e);
     return { ok: false, error: "Couldn't record that decision. Try again." };
@@ -1249,7 +1275,7 @@ export async function decideInboxApproval(
       error: decision === "approved" ? `Approved, but it was not sent: ${deliveryError}` : deliveryError,
     };
   }
-  return { ok: true, ...(notice ? { notice } : {}) };
+  return { ok: true, ...(notice ? { notice } : {}), ...(scheduledAt ? { scheduledAt } : {}) };
 }
 
 // ---------------------------------------------------------------------------
@@ -1332,6 +1358,121 @@ export async function decideInboxApprovals(
     results.push({ approvalId, ok: r.ok, ...(r.error ? { error: r.error } : {}) });
   }
   return { results };
+}
+
+/** The longest a message may be scheduled ahead. */
+const MAX_SCHEDULE_DAYS = 60;
+
+/**
+ * Approve a held message to go out at a chosen time. The time (and an optional
+ * edit) is recorded on the task, then it is approved as usual; the engine holds
+ * it and the hourly cron sends it when it falls due.
+ */
+export async function scheduleInboxMessage(
+  approvalId: string,
+  sendAtIso: string,
+  body?: string,
+): Promise<{ ok: boolean; error?: string; scheduledAt?: string }> {
+  const at = Date.parse(String(sendAtIso ?? ""));
+  if (!approvalId) return { ok: false, error: "Missing approval." };
+  if (!Number.isFinite(at)) return { ok: false, error: "Pick a time to send it." };
+  if (at <= Date.now() + 60_000) return { ok: false, error: "Pick a time at least a minute from now." };
+  if (at > Date.now() + MAX_SCHEDULE_DAYS * 86_400_000) {
+    return { ok: false, error: `Schedule it within ${MAX_SCHEDULE_DAYS} days.` };
+  }
+  const text = typeof body === "string" ? body.trim() : null;
+  if (text !== null && !text) return { ok: false, error: "The message is empty." };
+  const auth = await requireOrgContext();
+  if (!auth.ok) return { ok: false, error: "Not authorized." };
+  const supabase = await createServerClient();
+  const held = await heldReply(supabase, auth.ctx.orgId, approvalId);
+  if (!held) return { ok: false, error: "This message can no longer be scheduled." };
+
+  const prior = (held.task.result && typeof held.task.result === "object" ? held.task.result : {}) as Record<string, unknown>;
+  const scheduledAt = new Date(at).toISOString();
+  const { error } = await supabase
+    .from("tasks")
+    .update({
+      result: {
+        ...prior,
+        inboxReply: { ...held.reply, ...(text ? { body: text } : {}), scheduledAt },
+        ...(text ? { edited: true } : {}),
+      } as unknown as Json,
+    })
+    .eq("organization_id", auth.ctx.orgId)
+    .eq("id", held.task.id);
+  if (error) return { ok: false, error: "Couldn't schedule it. Try again." };
+  const r = await decideInboxApproval(approvalId, "approved");
+  if (!r.ok) {
+    // Not approved after all (an author approving their own): forget the time.
+    await supabase
+      .from("tasks")
+      .update({ result: prior as unknown as Json })
+      .eq("organization_id", auth.ctx.orgId)
+      .eq("id", held.task.id);
+    return r;
+  }
+  return { ok: true, scheduledAt };
+}
+
+/** A scheduled message's task, when it is still waiting to go out. */
+async function scheduledTask(supabase: Awaited<ReturnType<typeof createServerClient>>, orgId: string, taskId: string) {
+  const { data } = await supabase
+    .from("tasks")
+    .select("id, title, status, result, assigned_agent, hub")
+    .eq("organization_id", orgId)
+    .eq("id", taskId)
+    .maybeSingle();
+  const t = data as { id: string; title: string; status: string; result: Json | null; assigned_agent: AgentKey | null; hub: string | null } | null;
+  const reply = t ? extractInboxReply(t.result) : null;
+  return t && t.status === "pending" && reply?.scheduledAt && !reply.delivered ? { task: t, reply } : null;
+}
+
+/** Send a scheduled message now instead of at its time. */
+export async function sendScheduledInboxMessageNow(taskId: string): Promise<{ ok: boolean; error?: string }> {
+  const auth = await requireOrgContext();
+  if (!auth.ok) return { ok: false, error: "Not authorized." };
+  const supabase = await createServerClient();
+  const held = await scheduledTask(supabase, auth.ctx.orgId, taskId);
+  if (!held) return { ok: false, error: "This message is no longer scheduled." };
+  const r = await deliverApprovedReply(supabase, {
+    orgId: auth.ctx.orgId,
+    approverId: held.reply.approvedBy ?? auth.ctx.userId,
+    taskId: held.task.id,
+    agent: held.task.assigned_agent,
+    hub: held.task.hub,
+    reply: { ...held.reply, scheduledAt: null },
+  });
+  revalidatePath("/inbox");
+  return r.ok ? { ok: true } : { ok: false, error: `Not sent: ${r.error ?? "unknown error"}` };
+}
+
+/** Take a scheduled message back to approvals, unsent. */
+export async function unscheduleInboxMessage(taskId: string): Promise<{ ok: boolean; error?: string }> {
+  const auth = await requireOrgContext();
+  if (!auth.ok) return { ok: false, error: "Not authorized." };
+  const supabase = await createServerClient();
+  const held = await scheduledTask(supabase, auth.ctx.orgId, taskId);
+  if (!held) return { ok: false, error: "This message is no longer scheduled." };
+  const prior = (held.task.result && typeof held.task.result === "object" ? held.task.result : {}) as Record<string, unknown>;
+  const { error } = await supabase
+    .from("tasks")
+    .update({
+      status: "awaiting_approval",
+      result: { ...prior, inboxReply: { ...held.reply, scheduledAt: null, approvedBy: null } } as unknown as Json,
+    })
+    .eq("organization_id", auth.ctx.orgId)
+    .eq("id", held.task.id)
+    .eq("status", "pending");
+  if (error) return { ok: false, error: "Couldn't unschedule it. Try again." };
+  await supabase.from("approvals").insert({
+    organization_id: auth.ctx.orgId,
+    task_id: held.task.id,
+    requested_by_agent: held.task.assigned_agent,
+    summary: `Unscheduled — ${held.task.title}`,
+  } as never);
+  revalidatePath("/inbox");
+  return { ok: true };
 }
 
 /** Send an approved message that failed to go out, once whatever stopped it is fixed. */

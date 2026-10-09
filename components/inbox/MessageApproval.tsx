@@ -28,10 +28,49 @@ import {
   decideInboxApprovals,
   discardFailedInboxMessage,
   retryInboxMessage,
+  scheduleInboxMessage,
+  sendScheduledInboxMessageNow,
+  unscheduleInboxMessage,
   type InboxApprovalDecision,
 } from "@/app/(app)/inbox/actions";
 
-type Mode = "idle" | "edit" | "revise" | "confirm";
+type Mode = "idle" | "edit" | "revise" | "confirm" | "schedule";
+
+/** Who is looking: an author may not approve their own message unless they are an owner or admin. */
+export interface Viewer {
+  userId: string;
+  role: string | null;
+}
+
+export function canApprove(m: Pick<InboxMessageApproval, "authorId">, viewer?: Viewer): boolean {
+  if (!viewer) return true;
+  return m.authorId !== viewer.userId || viewer.role === "owner" || viewer.role === "admin";
+}
+
+/** "Waiting 1 day" / "Waiting 6h" once a message has waited long enough to say so. */
+export function waitingLabel(waitingSince: string | null, now = Date.now()): string | null {
+  if (!waitingSince) return null;
+  const hours = Math.floor((now - Date.parse(waitingSince)) / 3_600_000);
+  if (!Number.isFinite(hours) || hours < 4) return null;
+  if (hours >= 24) {
+    const days = Math.floor(hours / 24);
+    return `Waiting ${days} ${days === 1 ? "day" : "days"}`;
+  }
+  return `Waiting ${hours}h`;
+}
+
+/** A datetime-local value: tomorrow at 9:00 in the viewer's own time. */
+export function defaultScheduleValue(now = new Date()): string {
+  const d = new Date(now);
+  d.setDate(d.getDate() + 1);
+  d.setHours(9, 0, 0, 0);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+function formatWhen(iso: string): string {
+  return new Date(iso).toLocaleString(undefined, { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+}
 
 const BTN = "rounded-md px-3 py-1 text-xs font-medium transition disabled:opacity-50";
 const APPROVE = `${BTN} border border-status-success/45 bg-status-success/10 text-status-success hover:bg-status-success/20`;
@@ -94,17 +133,22 @@ export function MessageApprovalCard({
   onDecided,
   onCleared,
   compact = false,
+  viewer,
 }: {
   item: InboxItem;
   onDecided: (id: string, decision: InboxApprovalDecision) => void;
-  /** A failed message retried into success, or discarded. */
+  /** A failed message retried into success, or discarded; a scheduled one sent or unscheduled. */
   onCleared: (id: string) => void;
   /** Inside a meeting group: the group already names the meeting. */
   compact?: boolean;
+  viewer?: Viewer;
 }) {
   const m = item.message!;
   const approval = item.approval;
+  const approvable = canApprove(m, viewer);
+  const waiting = waitingLabel(m.waitingSince);
   const [mode, setMode] = useState<Mode>("idle");
+  const [when, setWhen] = useState(defaultScheduleValue);
   const [draft, setDraft] = useState(m.body ?? "");
   const [note, setNote] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -143,8 +187,47 @@ export function MessageApprovalCard({
       {!compact && m.meeting ? (
         <span className="rounded-full border border-line px-2 py-0.5 text-[11px] text-fg-muted">{m.meeting.title}</span>
       ) : null}
+      {waiting && !m.failed && !m.scheduledAt ? (
+        <span
+          className={`rounded-full border px-2 py-0.5 text-[11px] ${
+            waiting.includes("day") ? "border-status-danger/45 text-status-danger" : "border-gold-500/40 text-gold-300"
+          }`}
+        >
+          {waiting}
+        </span>
+      ) : null}
     </div>
   );
+
+  if (m.scheduledAt) {
+    return (
+      <div className="flex flex-col gap-3 rounded-xl border border-line border-l-2 border-l-emerald-500/70 bg-surface-1 p-4">
+        {header}
+        <p className="text-xs text-fg-secondary">Approved — sends {formatWhen(m.scheduledAt)}.</p>
+        <Preview m={m} />
+        <Context m={m} />
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            disabled={busy}
+            className={APPROVE}
+            onClick={() => run(() => sendScheduledInboxMessageNow(m.taskId), () => onCleared(item.id))}
+          >
+            {busy ? "Sending…" : "Send now"}
+          </button>
+          <button
+            type="button"
+            disabled={busy}
+            className={QUIET}
+            onClick={() => run(() => unscheduleInboxMessage(m.taskId), () => onCleared(item.id))}
+          >
+            Unschedule
+          </button>
+        </div>
+        {error ? <p className="text-xs text-status-danger">{error}</p> : null}
+      </div>
+    );
+  }
 
   if (m.failed) {
     return (
@@ -208,6 +291,43 @@ export function MessageApprovalCard({
           >
             {busy ? "Sending…" : "Approve & send edit"}
           </button>
+          <button type="button" className={QUIET} disabled={busy || !draft.trim()} onClick={() => setMode("schedule")}>
+            Schedule edit…
+          </button>
+          <button type="button" className={QUIET} onClick={() => setMode("idle")} disabled={busy}>
+            Cancel
+          </button>
+        </div>
+      ) : mode === "schedule" ? (
+        <div className="flex flex-wrap items-center gap-2">
+          <label className="text-xs text-fg-secondary" htmlFor={`when-${item.id}`}>
+            Send at
+          </label>
+          <input
+            id={`when-${item.id}`}
+            type="datetime-local"
+            value={when}
+            onChange={(e) => setWhen(e.target.value)}
+            className="rounded-md border border-line bg-surface-0/70 px-2 py-1 text-xs text-fg-primary focus:border-gold-500/50 focus:outline-none"
+          />
+          <button
+            type="button"
+            disabled={busy || !when}
+            className={APPROVE}
+            onClick={() =>
+              run(
+                () =>
+                  scheduleInboxMessage(
+                    approval.approvalId,
+                    new Date(when).toISOString(),
+                    draft.trim() && draft !== (m.body ?? "") ? draft : undefined,
+                  ),
+                () => onDecided(item.id, "approved"),
+              )
+            }
+          >
+            {busy ? "Scheduling…" : "Approve & schedule"}
+          </button>
           <button type="button" className={QUIET} onClick={() => setMode("idle")} disabled={busy}>
             Cancel
           </button>
@@ -252,14 +372,23 @@ export function MessageApprovalCard({
         </div>
       ) : (
         <div className="flex flex-wrap items-center gap-2">
-          <button type="button" className={APPROVE} disabled={busy} onClick={() => setMode("confirm")}>
-            Approve
-          </button>
-          {m.editable ? (
-            <button type="button" className={QUIET} disabled={busy} onClick={() => setMode("edit")}>
-              Edit
-            </button>
-          ) : null}
+          {approvable ? (
+            <>
+              <button type="button" className={APPROVE} disabled={busy} onClick={() => setMode("confirm")}>
+                Approve
+              </button>
+              <button type="button" className={QUIET} disabled={busy} onClick={() => setMode("schedule")}>
+                Schedule…
+              </button>
+              {m.editable ? (
+                <button type="button" className={QUIET} disabled={busy} onClick={() => setMode("edit")}>
+                  Edit
+                </button>
+              ) : null}
+            </>
+          ) : (
+            <span className="text-xs text-fg-muted">You wrote this — someone else approves it.</span>
+          )}
           {m.editable ? (
             <button
               type="button"
@@ -288,13 +417,13 @@ export function MessageApprovalCard({
 export function groupByMeeting(items: readonly InboxItem[]): Array<InboxItem | { meeting: NonNullable<InboxMessageApproval["meeting"]>; items: InboxItem[] }> {
   const groups = new Map<string, InboxItem[]>();
   for (const item of items) {
-    const meeting = item.message && !item.message.failed && item.approval ? item.message.meeting : null;
+    const meeting = item.message && !item.message.failed && !item.message.scheduledAt && item.approval ? item.message.meeting : null;
     if (meeting) groups.set(meeting.id, [...(groups.get(meeting.id) ?? []), item]);
   }
   const placed = new Set<string>();
   const out: Array<InboxItem | { meeting: NonNullable<InboxMessageApproval["meeting"]>; items: InboxItem[] }> = [];
   for (const item of items) {
-    const meeting = item.message && !item.message.failed && item.approval ? item.message.meeting : null;
+    const meeting = item.message && !item.message.failed && !item.message.scheduledAt && item.approval ? item.message.meeting : null;
     const group = meeting ? groups.get(meeting.id) : undefined;
     if (meeting && group && group.length > 1) {
       if (!placed.has(meeting.id)) {
@@ -313,12 +442,16 @@ export function MeetingApprovalGroup({
   items,
   onDecided,
   onCleared,
+  viewer,
 }: {
   meeting: NonNullable<InboxMessageApproval["meeting"]>;
   items: InboxItem[];
   onDecided: (id: string, decision: InboxApprovalDecision) => void;
   onCleared: (id: string) => void;
+  viewer?: Viewer;
 }) {
+  // Approve all covers what this person may approve; their own messages wait for someone else.
+  const approvableItems = items.filter((i) => canApprove(i.message!, viewer));
   const [open, setOpen] = useState(false);
   const [confirming, setConfirming] = useState<"approved" | "rejected" | null>(null);
   const [failures, setFailures] = useState<string[]>([]);
@@ -329,7 +462,8 @@ export function MeetingApprovalGroup({
     setConfirming(null);
     setFailures([]);
     start(async () => {
-      const byApproval = new Map(items.map((i) => [i.approval!.approvalId, i]));
+      const targets = decision === "approved" ? approvableItems : items;
+      const byApproval = new Map(targets.map((i) => [i.approval!.approvalId, i]));
       try {
         const { results } = await decideInboxApprovals([...byApproval.keys()], decision);
         const failed: string[] = [];
@@ -358,7 +492,7 @@ export function MeetingApprovalGroup({
         {confirming ? (
           <div className="flex items-center gap-2">
             <span className="text-xs text-fg-secondary">
-              {confirming === "approved" ? `Send all ${items.length}?` : `Reject all ${items.length}?`}
+              {confirming === "approved" ? `Send all ${approvableItems.length}?` : `Reject all ${items.length}?`}
             </span>
             <button
               type="button"
@@ -374,9 +508,11 @@ export function MeetingApprovalGroup({
           </div>
         ) : (
           <div className="flex items-center gap-2">
-            <button type="button" disabled={busy} className={APPROVE} onClick={() => setConfirming("approved")}>
-              {busy ? "Working…" : "Approve all"}
-            </button>
+            {approvableItems.length > 0 ? (
+              <button type="button" disabled={busy} className={APPROVE} onClick={() => setConfirming("approved")}>
+                {busy ? "Working…" : approvableItems.length === items.length ? "Approve all" : `Approve ${approvableItems.length}`}
+              </button>
+            ) : null}
             <button type="button" disabled={busy} className={REJECT} onClick={() => setConfirming("rejected")}>
               Reject all
             </button>
@@ -392,7 +528,7 @@ export function MeetingApprovalGroup({
       {open ? (
         <div className="mt-1 flex flex-col gap-2">
           {items.map((item) => (
-            <MessageApprovalCard key={item.id} item={item} onDecided={onDecided} onCleared={onCleared} compact />
+            <MessageApprovalCard key={item.id} item={item} onDecided={onDecided} onCleared={onCleared} compact viewer={viewer} />
           ))}
         </div>
       ) : null}

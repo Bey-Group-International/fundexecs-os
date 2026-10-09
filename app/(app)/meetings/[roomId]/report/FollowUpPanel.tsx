@@ -32,7 +32,7 @@ type SendState =
   | { kind: "sending" }
   | { kind: "sent"; sent: number; total: number; unreachable: string[]; failed: string[] }
   // Gated by the organisation's mandate: waiting in approvals, nothing sent yet.
-  | { kind: "queued"; queued: number; total: number }
+  | { kind: "queued"; queued: number; sent: number; total: number }
   | { kind: "failed"; message: string }
   // Drafting is not a kind of sending, and sharing the state is what keeps the
   // two from being confused in the UI: "Drafted" must never read as "Sent".
@@ -198,7 +198,7 @@ export const FollowUpPanel = memo(function FollowUpPanel({
         return;
       }
       if (json.gated) {
-        setState({ kind: "queued", queued: json.queued ?? 0, total: json.total ?? 0 });
+        setState({ kind: "queued", queued: json.queued ?? 0, sent: json.sent ?? 0, total: json.total ?? 0 });
         return;
       }
       setState({
@@ -223,7 +223,9 @@ export const FollowUpPanel = memo(function FollowUpPanel({
       : state.kind === "drafted"
         ? { kind: "drafted", threads: status.kind === "drafted" ? status.threads : 1 }
         : state.kind === "queued" && status.kind !== "replied"
-          ? { kind: "awaiting_approval" }
+          ? state.queued > 0
+            ? { kind: "awaiting_approval" }
+            : { kind: "sent" }
           : status;
 
   return (
@@ -384,11 +386,17 @@ export const FollowUpPanel = memo(function FollowUpPanel({
           )}
           {state.kind === "queued" && (
             <p className="text-xs text-[var(--fg-muted)]">
-              Waiting in approvals for {state.queued} of {state.total}{" "}
-              {state.total === 1 ? "attendee" : "attendees"} — nothing has been sent yet.{" "}
-              <a href="/inbox" className="text-[var(--gold-400)] hover:underline">
-                Review approvals
-              </a>
+              {state.sent > 0 ? `Sent to ${state.sent} known ${state.sent === 1 ? "contact" : "contacts"}. ` : ""}
+              {state.queued > 0 ? (
+                <>
+                  Waiting in approvals for {state.queued} of {state.total}{" "}
+                  {state.total === 1 ? "attendee" : "attendees"}
+                  {state.sent > 0 ? "." : " — nothing has been sent yet."}{" "}
+                  <a href="/inbox" className="text-[var(--gold-400)] hover:underline">
+                    Review approvals
+                  </a>
+                </>
+              ) : null}
             </p>
           )}
           {state.kind === "drafted" && (
