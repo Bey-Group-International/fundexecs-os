@@ -44,7 +44,15 @@ describe("classifyMediaError", () => {
   it("does not throw on the things that are not Errors", () => {
     expect(classifyMediaError(undefined)).toBe("unknown");
     expect(classifyMediaError(null)).toBe("unknown");
-    expect(classifyMediaError({ name: "NotReadableError" })).toBe("unknown");
+    expect(classifyMediaError(42)).toBe("unknown");
+    expect(classifyMediaError({})).toBe("unknown");
+  });
+
+  // Older WebKit's OverconstrainedError is a plain object with a name: it
+  // inherits from neither Error nor DOMException. The name is what counts.
+  it("reads the name off an error-shaped object that is not an Error", () => {
+    expect(classifyMediaError({ name: "NotReadableError" })).toBe("in_use");
+    expect(classifyMediaError({ name: "OverconstrainedError", constraint: "deviceId" })).toBe("overconstrained");
   });
 });
 

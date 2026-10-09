@@ -265,17 +265,28 @@ function PeerAudioImpl({ stream, audioTrack, silenced = false }: {
     const source = audioTrack ? stream : null;
     if (el.srcObject !== source) el.srcObject = source;
     if (!source) return;
-    const play = () => { void el.play()?.catch(() => { /* retried below */ }); };
-    play();
     // Autoplay with sound can be refused until the page has been interacted
     // with. Joining is a click, so this is rare, but a voice that silently never
     // starts is the worst failure a call has: try again on the next gesture.
-    document.addEventListener("pointerdown", play, { once: true });
-    document.addEventListener("keydown", play, { once: true });
-    return () => {
-      document.removeEventListener("pointerdown", play);
-      document.removeEventListener("keydown", play);
+    //
+    // The retry listens for `click`, `touchend` and `keydown`, and stays armed
+    // until a play actually succeeds. It used to be a one-shot `pointerdown`:
+    // on iOS a touch's pointerdown is not a user activation (WebKit activates
+    // on touchend / click), so the single retry was spent on the one event
+    // that could not unlock audio, and a listen-only member on an iPhone —
+    // the case the autoplay exemption for capturing pages does not cover —
+    // never heard the call.
+    const GESTURES = ["click", "touchend", "keydown"] as const;
+    const disarm = () => { for (const type of GESTURES) document.removeEventListener(type, play); };
+    const play = () => {
+      const attempt = el.play();
+      if (attempt && typeof attempt.then === "function") {
+        attempt.then(disarm).catch(() => { /* still blocked — the next gesture retries */ });
+      }
     };
+    play();
+    for (const type of GESTURES) document.addEventListener(type, play);
+    return disarm;
   }, [stream, audioTrack]);
 
   // Release the device's playback on the way out rather than when the element
@@ -463,6 +474,20 @@ function wideEnough(): boolean {
   if (typeof window === "undefined") return true;
   if (typeof window.matchMedia === "function") return window.matchMedia(SHARE_MIN_WIDTH).matches;
   return window.innerWidth >= 640;
+}
+
+/**
+ * Whether this browser can capture a screen at all.
+ *
+ * Width is still the main test (see the note on `wideEnoughToShare`), but an
+ * iPad in Safari is wider than `sm` and has no `getDisplayMedia` whatsoever:
+ * the Share button was offered there and did nothing, because the TypeError
+ * from calling an undefined method landed in the same catch as a cancelled
+ * picker. A browser without the method cannot be asked, so it is not offered.
+ */
+function canCaptureDisplay(): boolean {
+  if (typeof navigator === "undefined") return true;
+  return typeof navigator.mediaDevices?.getDisplayMedia === "function";
 }
 
 function ControlBarImpl({
@@ -681,14 +706,15 @@ function ControlBarImpl({
    * the fold cannot see is a control it will happily leave hanging off the edge.
    * Screen size remains the proxy: every mobile browser exposes
    * `getDisplayMedia` and then refuses it, so the API's presence is not the test
-   * (see lib/meetings/audio-capture.ts).
+   * (see lib/meetings/audio-capture.ts). Its ABSENCE is, though — iPadOS Safari
+   * is the one wide screen with no method at all (see `canCaptureDisplay`).
    */
   useEffect(() => {
     // `matchMedia` where it exists, a resize listener where it does not. Feature
     // detected rather than assumed: this runs inside the control bar of a live
     // call, and a throw here takes the whole bar down — which is a worse fault
     // than the one this is here to fix.
-    const read = () => setWideEnoughToShare(wideEnough());
+    const read = () => setWideEnoughToShare(wideEnough() && canCaptureDisplay());
     read();
     const mq = typeof window.matchMedia === "function" ? window.matchMedia(SHARE_MIN_WIDTH) : null;
     if (mq?.addEventListener) {
@@ -737,7 +763,10 @@ function ControlBarImpl({
   const layoutLabel = layout === "grid" ? "Speaker view" : "Grid view";
 
   return (
-    <div className="flex items-center justify-between gap-1.5 sm:gap-2 px-1.5 sm:px-4 py-2 border-t border-[var(--line)] bg-[var(--surface-1)] shrink-0">
+    // The bottom padding grows by the safe-area inset: the call overlay is
+    // portalled to <body> under `viewport-fit=cover`, so without it the bar
+    // sat under the iPhone's home indicator.
+    <div className="flex items-center justify-between gap-1.5 sm:gap-2 px-1.5 sm:px-4 pt-2 pb-[max(0.5rem,env(safe-area-inset-bottom,0px))] border-t border-[var(--line)] bg-[var(--surface-1)] shrink-0">
       {/* Left: the clock, and the two things everybody must be able to see —
           that the call is recorded, and that their link is struggling. The
           recording badge is never hidden on a small screen: several US states

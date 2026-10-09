@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import nextDynamic from "next/dynamic";
 import { roomCodeFromInput } from "@/lib/meetings/lobby";
 import { meetingInviteUrl } from "@/lib/meetings/share";
-import { copyText } from "./MeetingShareLink";
+import { copyTextWhenReady } from "./MeetingShareLink";
 
 
 /**
@@ -86,10 +86,12 @@ export function MeetingLobby({
     function onKey(e: KeyboardEvent) {
       if (e.key === "Escape") setMenuOpen(false);
     }
-    window.addEventListener("mousedown", onClick);
+    // `pointerdown` rather than `mousedown`: iOS sends no mouse events for a
+    // tap on a non-clickable area, so the menu never closed on an iPhone.
+    window.addEventListener("pointerdown", onClick);
     window.addEventListener("keydown", onKey);
     return () => {
-      window.removeEventListener("mousedown", onClick);
+      window.removeEventListener("pointerdown", onClick);
       window.removeEventListener("keydown", onKey);
     };
   }, [menuOpen]);
@@ -99,21 +101,31 @@ export function MeetingLobby({
     setError(null);
     startTransition(async () => {
       try {
-        const res = await fetch("/api/meetings/create", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ title: "Meeting" }),
-        });
-        if (!res.ok) {
-          const err = (await res.json()) as { error?: string };
-          throw new Error(err.error ?? "Failed to create meeting");
-        }
-        const data = (await res.json()) as { id: string; roomCode: string };
+        const created = (async () => {
+          const res = await fetch("/api/meetings/create", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ title: "Meeting" }),
+          });
+          if (!res.ok) {
+            const err = (await res.json()) as { error?: string };
+            throw new Error(err.error ?? "Failed to create meeting");
+          }
+          return (await res.json()) as { id: string; roomCode: string };
+        })();
         // The link first, then the room. An instant meeting is almost always
         // one somebody is about to send to someone, and the moment the room
         // opens is the moment their hands are busy with a camera and a
         // microphone. A clipboard refusal is not a reason to stay here.
-        const copied = await copyText(meetingInviteUrl(window.location.origin, data.roomCode)).catch(() => false);
+        //
+        // The copy is STARTED here, before the first await, because Safari
+        // only accepts a clipboard write inside the click; it resolves once
+        // the room exists. See copyTextWhenReady.
+        const copying = copyTextWhenReady(
+          created.then((d) => meetingInviteUrl(window.location.origin, d.roomCode)),
+        ).catch(() => false);
+        const data = await created;
+        const copied = await copying;
         setInstantNote(copied ? "Invite link copied — opening the room…" : "Opening the room…");
         router.push(`/meetings/${data.roomCode}`);
       } catch (err) {

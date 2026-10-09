@@ -50,7 +50,7 @@ interface Recorder {
  */
 const SURFACES = ["output", "scratch", "mask", "segInput", "feathered", "backdrop", "veil", "veilBlur"] as const;
 
-function recorder(): Recorder {
+function recorder(mode: { filter?: boolean } = {}): Recorder {
   const calls: Call[] = [];
   const names: string[] = [];
   const sizes: Recorder["sizes"] = {};
@@ -94,14 +94,24 @@ function recorder(): Recorder {
       },
       createLinearGradient: () => ({ addColorStop: () => {} }),
       createRadialGradient: () => ({ addColorStop: () => {} }),
-      set filter(value: string) { log("filter", value); },
-      get filter() { return "none"; },
       set globalCompositeOperation(value: string) { log("composite", value); },
       get globalCompositeOperation() { return "source-over"; },
       fillStyle: "" as unknown,
       strokeStyle: "" as unknown,
       lineWidth: 1,
     };
+
+    // `filter` is an accessor the chain sets, except on a recorder standing in
+    // for Safari before 18, where the context has no such property at all --
+    // not on the prototype, so `"filter" in ctx` is false -- and an assignment
+    // would be an expando nothing reads.
+    if (mode.filter !== false) {
+      Object.defineProperty(ctx, "filter", {
+        configurable: true,
+        get: () => "none",
+        set: (value: string) => log("filter", value),
+      });
+    }
 
     const drawable = { surface, ctx } as unknown as Drawable;
     built.set(name, drawable.surface);
@@ -254,6 +264,37 @@ describe("the composite keeps the frame where the mask covers", () => {
     // And what reaches the output is that surface, not the camera.
     expect(rec.calls.filter((call) => call.surface === "output" && call.op === "drawImage"))
       .toEqual([{ surface: "output", op: "drawImage", args: ["backdrop", 0, 0, 64, 48] }]);
+  });
+
+  /**
+   * Where the context has no `filter` — Safari before 18 — the room is still
+   * veiled, by scaling through a small surface rather than by a filter that
+   * would have been silently ignored. The person who asked for a blur must not
+   * send a sharp room because of which browser they opened.
+   */
+  it("still veils the room on a context without filters", () => {
+    // A frame big enough for the heavy blur's radius to be several pixels
+    // once scaled to the backdrop; at 64px it rounds to one and is a plain draw.
+    const rec = recorder({ filter: false });
+    const c = MaskCompositor.create(rec.factory, 640, 480)!;
+    c.setEffect({ kind: "blur", strength: "heavy" });
+    c.passThrough(frame(640, 480));
+
+    // No filter was set anywhere -- there is nothing to set it on.
+    expect(rec.calls.some((call) => call.op === "filter")).toBe(false);
+    // The camera went DOWN into a small scratch surface, which came back up
+    // onto the backdrop scaled over the whole frame (the 9-argument draw).
+    const scratchName = rec.names.find((n) => n.startsWith("extra"))!;
+    expect(scratchName).toBeDefined();
+    expect(rec.sizes[scratchName].width).toBeLessThan(rec.sizes.backdrop.width);
+    expect(rec.ops(scratchName)).toEqual(["clearRect", "drawImage"]);
+    const backdropDraws = rec.calls.filter((call) => call.surface === "backdrop" && call.op === "drawImage");
+    expect(backdropDraws).toHaveLength(1);
+    expect(backdropDraws[0].args[0]).toBe(scratchName);
+    expect(backdropDraws[0].args).toHaveLength(9);
+    // And the output is the veiled backdrop, not the camera.
+    expect(rec.calls.filter((call) => call.surface === "output" && call.op === "drawImage"))
+      .toEqual([{ surface: "output", op: "drawImage", args: ["backdrop", 0, 0, 640, 480] }]);
   });
 
   /**
