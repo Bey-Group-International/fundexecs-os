@@ -26,8 +26,17 @@
 //
 // Pure: no React, no sockets. The room supplies the states and the names.
 
-/** The room's own recognition lifecycle, as MeetingRoom tracks it. */
-export type SrStatus = "idle" | "active" | "error" | "unsupported";
+import type { BrowserFamily } from "@/lib/meetings/green-room";
+
+/**
+ * The room's own recognition lifecycle, as MeetingRoom tracks it.
+ *
+ * "failing" is an engine that keeps dying and is still being restarted — a
+ * network error on every run, or runs that end as soon as they start. It is
+ * not "error" (the room has not given up) and it is not "active" (nobody is
+ * being transcribed). See recognizerStatusAfterEnd.
+ */
+export type SrStatus = "idle" | "active" | "failing" | "error" | "unsupported";
 
 /**
  * What this client should tell the room about its own transcription.
@@ -38,10 +47,38 @@ export type SrStatus = "idle" | "active" | "error" | "unsupported";
  * "active" counts only while the deaf watch is quiet: an engine that answers
  * nothing while its owner audibly talks is transcribing nobody, whatever its
  * status says.
+ *
+ * And only while the words it produces are being SAVED. Transcribing into a
+ * buffer whose every flush is refused is transcribing for nobody but the
+ * member's own screen; the report will not have it. `saving` is the room's
+ * save-failure state (transcript-saving.ts), true by default.
  */
-export function localTranscribing(status: SrStatus, deaf: boolean): boolean {
-  if (status === "unsupported" || status === "error") return false;
+export function localTranscribing(status: SrStatus, deaf: boolean, saving = true): boolean {
+  if (status === "unsupported" || status === "error" || status === "failing") return false;
+  if (!saving) return false;
   return !deaf;
+}
+
+/**
+ * What to tell a member who picked a microphone the engine will not follow.
+ *
+ * Safari's recogniser ignores the track it is handed and transcribes the
+ * computer's DEFAULT input, whatever the call is using. A host who picks a
+ * conference microphone there is heard by the room through it and transcribed
+ * from the laptop's own mic across the table — and until the deaf watch fires
+ * (which it does only when the default hears nothing at all) nobody says so.
+ * This says so at the moment of the choice, which is the moment they can
+ * change the default.
+ *
+ * `micId` is the chosen device; an empty id or "default" IS the default, and
+ * nothing need be said. Null when the browser is one whose engine follows the
+ * track.
+ */
+export function transcriptionMicNotice(browser: BrowserFamily, micId: string): string | null {
+  if (browser !== "safari" && browser !== "ios-safari") return null;
+  if (!micId || micId === "default") return null;
+  return "Safari transcribes from your computer's default microphone, not the one you picked for the call. "
+    + "To be transcribed from this microphone, make it the default in System Settings → Sound.";
 }
 
 /**

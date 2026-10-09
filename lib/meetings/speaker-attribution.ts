@@ -227,12 +227,26 @@ const NOT_MINE = { publish: false, overlapped: false } as const;
  * Null — no meter ever saw the mic on — falls back to the mic's state now.
  */
 export function micLiveDuring(
-  window: { startedAt: number },
+  window: { startedAt: number; endedAt?: number },
   micOnNow: boolean,
   lastOnTs: number | null,
+  micOffAt: number | null = null,
 ): boolean {
   if (micOnNow) return true;
-  return lastOnTs !== null && lastOnTs >= window.startedAt;
+  if (lastOnTs === null || lastOnTs < window.startedAt) return false;
+  // The mic went off during or after the words. On engines that honour the
+  // call's track the stretch after the press is silence and nothing more is
+  // heard; on engines that ignore it (Safari) the engine keeps listening to
+  // the device, and a member who muted mid-sentence to say something to the
+  // room beside them had the rest of that sentence published under their
+  // name. A sentence cannot be cut at a timestamp — the engine hands it over
+  // whole — so it is judged by where the press fell: past the midpoint of the
+  // utterance, most of it was said live and it is theirs; before it, most of
+  // it was said muted and it is dropped, as a mute asks.
+  if (micOffAt !== null && window.endedAt !== undefined && micOffAt >= window.startedAt && micOffAt < window.endedAt) {
+    return micOffAt - window.startedAt >= (window.endedAt - window.startedAt) / 2;
+  }
+  return true;
 }
 
 /**
@@ -251,10 +265,14 @@ export function attributeUtterance(
 ): Attribution {
   const nameOf = (id: string) => participants.find((p) => p.id === id)?.displayName ?? null;
   const summaries = log.summarize(window.startedAt, window.endedAt);
-  // Whether the meter saw this window at all. Measured silence is evidence;
-  // an empty log is a meter that never ran, and proves nothing about anyone.
-  const measured = summaries.some((s) => s.samples > 0);
   const local = summaries.find((s) => s.speakerId === LOCAL_SPEAKER_ID);
+  // Whether the meter saw THIS MEMBER over this window. Measured silence is
+  // evidence; an empty log is a meter that never ran, and proves nothing about
+  // anyone. It has to be the local tap specifically: a window with peer
+  // samples and none of the member's own — the local tap failed to build, or
+  // the member's track was mid-replacement — used to count as measured, and
+  // the member's real speech was then marked a hallucination.
+  const measured = (local?.samples ?? 0) > 0;
   const peers = summaries.filter((s) => s.speakerId !== LOCAL_SPEAKER_ID && s.share > 0);
   const loudestPeer = peers[0] ?? null;
 

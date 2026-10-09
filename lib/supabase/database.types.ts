@@ -3022,6 +3022,8 @@ export type LiveMeetingTranscript = {
   confidence: number | null;
   text: string;
   ts: string;
+  /** Somebody else was audible while this was said. Added by 20260915130000. */
+  overlapped: boolean;
 };
 
 /**

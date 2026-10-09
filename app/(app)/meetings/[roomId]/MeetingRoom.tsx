@@ -94,9 +94,15 @@ import {
 import { settleFinalWords } from "@/lib/meetings/transcript-finalize";
 import {
   createDeafWatch, engineConfidence, guardedLineConfidence, isNoisy, observeDeafTick,
-  pushEngineScore, recognitionLang, recognizerHeard, restartDelay,
+  pushEngineScore, recognitionLang, recognizerFailureNotice, recognizerHeard,
+  recognizerStatusAfterEnd, restartDelay,
 } from "@/lib/meetings/recognition-quality";
-import { coverageNotice, localTranscribing } from "@/lib/meetings/transcription-coverage";
+import {
+  coverageNotice, localTranscribing, transcriptionMicNotice, type SrStatus,
+} from "@/lib/meetings/transcription-coverage";
+import { PEER_DRAIN_GRACE_MS, drainTranscript as drainLines } from "@/lib/meetings/transcript-drain";
+import { saveFailureNotice, savesCovered } from "@/lib/meetings/transcript-saving";
+import { browserFamily } from "@/lib/meetings/green-room";
 import { recordingNotice, type RecordingState } from "@/lib/meetings/recording-policy";
 import {
   NO_ELAPSED,
@@ -852,10 +858,29 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
   // Whether speech recognition is capturing. There is no transcript tab any
   // more, so this lamp in the copilot header is the only sign that the meeting
   // is being recorded for its report — which makes it worth more, not less.
-  const [srStatus, setSrStatus] = useState<"idle" | "active" | "error" | "unsupported">("idle");
+  const [srStatus, setSrStatus] = useState<SrStatus>("idle");
   // Read by the recogniser's restart path, which must not decide inside a state
   // updater: updaters have to stay pure, and this one was starting the engine.
-  const srStatusRef = useRef<"idle" | "active" | "error" | "unsupported">("idle");
+  const srStatusRef = useRef<SrStatus>("idle");
+  // Why the engine is failing, for the notice. Null while it is not.
+  const [srFailure, setSrFailure] = useState<string | null>(null);
+  // Whether this client's saves have been refused enough times in a row to
+  // say so — to the member, and to the room through the coverage signal. See
+  // transcript-saving.ts. State rather than the failure counter itself, so
+  // the room re-renders only when the verdict changes, not on every flush.
+  const [savingFailed, setSavingFailed] = useState(false);
+  const savingFailedRef = useRef(false);
+  const lastSaveStatusRef = useRef<number | null>(null);
+  // Safari transcribes from the default microphone whatever the call uses;
+  // said at the moment a different one is picked. See transcriptionMicNotice.
+  const [srMicNotice, setSrMicNotice] = useState<string | null>(null);
+  // When the member last muted, for the attribution of a sentence the press
+  // landed inside. See micLiveDuring.
+  const micOffAtRef = useRef<number | null>(null);
+  // The exit sequence, reachable from the signal handler — which is created
+  // long before these are defined — when the HOST ends the meeting.
+  const settleLastWordsRef = useRef<() => Promise<void>>(async () => {});
+  const drainTranscriptRef = useRef<() => Promise<boolean>>(async () => true);
   // Whether the recogniser has been hearing mostly noise -- a phone on a desk,
   // a headset on the wrong input, a loudspeaker feeding back. Shown while the
   // meeting is still going, which is the only time it can be fixed.
@@ -865,6 +890,11 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
   // capturing a different microphone than the call's. See DeafWatch.
   const deafWatchRef = useRef(createDeafWatch());
   const [srDeaf, setSrDeaf] = useState(false);
+  // The member closed the deaf notice. Separate from `srDeaf` on purpose:
+  // Dismiss used to clear the fact itself, which re-announced "transcribing"
+  // to every peer and cleared their coverage banner — a notice dismissed on
+  // one screen told the whole room the problem was fixed.
+  const [srDeafDismissed, setSrDeafDismissed] = useState(false);
   // Mirrors srDeaf for the join hello, which runs inside the signal handler
   // and must not read stale state. Kept in step by the announce effect below.
   const srDeafRef = useRef(false);
@@ -2258,16 +2288,28 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
       sendSignalRef.current({
         type: "sr",
         from: myId,
-        transcribing: localTranscribing(srStatusRef.current, srDeafRef.current),
+        transcribing: localTranscribing(srStatusRef.current, srDeafRef.current, !savingFailedRef.current),
         displayName: localNameRef.current,
       });
       announceVideoStateRef.current();
     }
 
     if (msg.type === "end") {
+      if (endingRef.current) return;
       endingRef.current = true;
-      teardownCallRef.current();
       setCallPhase((prev) => nextPhase(prev, "remote_end"));
+      // The exit most people take, and until now the only one that saved
+      // nothing on the way out. The host's End and every Leave settle the
+      // sentence still in the recognizer and drain what is unsaved; this
+      // handler tore the call down at once, so a guest whose closing sentence
+      // was still interim when the host pressed End lost it everywhere — it was
+      // never broadcast, never promoted, never saved, and under the ownership
+      // rule nobody else had a copy. The host waits PEER_DRAIN_GRACE_MS after
+      // sending `end` before asking for the report, which is what makes this
+      // drain worth doing.
+      await settleLastWordsRef.current();
+      teardownCallRef.current();
+      await drainTranscriptRef.current();
       if (isGuestRef.current) { setShowGuestUpsell(true); return; }
       router.push("/meetings");
       return;
@@ -2530,6 +2572,7 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
       localStreamRef.current?.getAudioTracks().forEach((t) => { t.enabled = false; });
       setMicOn(false);
       micOnRef.current = false;
+      micOffAtRef.current = Date.now();
       // The standing intent too, exactly as toggleMic records it. reacquireMic
       // puts a recovered microphone on the wire in whatever state this ref
       // holds — so without this, the one participant whose device was flaky at
@@ -3644,10 +3687,17 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     let restartTimer: ReturnType<typeof setTimeout> | null = null;
     let stopped = false;
 
+    // The error reported during the current run, read when the run ends: it is
+    // the difference between an engine that ended because continuous
+    // recognition always does, and one that will die the same way next time.
+    let lastError: string | null = null;
+
     recognition.onstart = () => {
       startedAt = Date.now();
+      lastError = null;
       setSrStatus("active");
       srStatusRef.current = "active";
+      setSrFailure(null);
     };
     // Some engines fire speechstart; where they don't, the first interim result
     // opens the window instead.
@@ -3679,6 +3729,8 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
 
       const settled = finalText.trim();
       let attribution: ReturnType<typeof attributeUtterance> | null = null;
+      // When the settled words began; the window below is judged from there.
+      let spokenAt = now;
       if (settled) {
         const roster: ParticipantAudio[] = [
           { id: LOCAL_SPEAKER_ID, displayName: localNameRef.current, micOn: micOnRef.current, isLocal: true },
@@ -3690,6 +3742,7 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
           })),
         ];
         const win = { startedAt: utteranceStartRef.current ?? now - 1500, endedAt: now };
+        spokenAt = win.startedAt;
         attribution = attributeUtterance(
           win,
           voiceLogRef.current,
@@ -3700,7 +3753,7 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
           // the moment of delivery dropped the member's last sentence before
           // every mute as "heard while muted". See micLiveDuring.
           {
-            localMicOn: micLiveDuring(win, micOnRef.current, micLastOnTsRef.current),
+            localMicOn: micLiveDuring(win, micOnRef.current, micLastOnTsRef.current, micOffAtRef.current),
             sameRoomPeerIds: sameRoomDetectedRef.current,
           },
         );
@@ -3730,7 +3783,13 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
       {
         const next = transcriptRef.current.filter((l) => l.final);
         if (settled && attribution) {
-          const ts = now;
+          // When the words BEGAN, not when the engine handed them over. The
+          // engine settles a sentence a second or two after it ends, so a line
+          // stamped at delivery sat after the words on every cue and, across
+          // devices, after a reply that was actually spoken later. The window
+          // the attribution was judged on already starts where the first
+          // interim arrived; the stored line says the same.
+          const ts = spokenAt;
           // The weaker of who-said-it and what-was-said — and below the model
           // floor when NOTHING vouches for the line: nobody measurably audible
           // and no engine score is the shape of a hallucinated phrase, which
@@ -3786,6 +3845,11 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
         setSrStatus("error");
         srStatusRef.current = "error";
       } else if (ev.error !== "no-speech") {
+        // Remembered for onend, which decides what the status should read.
+        // This used to be the whole of the handling: a `network` error on
+        // every run — Brave, Chromium without keys, a blocked endpoint — was
+        // logged and the status stayed "active" for the entire call.
+        lastError = typeof ev.error === "string" ? ev.error : "unknown";
         console.warn("[SR]", ev.error);
       }
     };
@@ -3830,14 +3894,34 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     recognition.onend = () => {
       utteranceStartRef.current = null;
       if (stopped) return;
+      // The exit stopped it on purpose, to flush the sentence in flight (see
+      // settleFinalWords). Restarting here put a fresh run on the still-live
+      // track during the settle wait, so whatever was said after the click
+      // became a new interim and was promoted into the record.
+      if (endingRef.current) return;
       const status = srStatusRef.current;
       if (status === "error" || status === "unsupported") return;
+      // A new run is a new question for the deaf watch. Speech during the
+      // restart gaps used to keep counting against an engine that was not
+      // even listening, and raised the "wrong microphone" notice for an
+      // engine whose actual problem was the network.
+      deafWatchRef.current = createDeafWatch();
       // Continuous recognition ends on its own every minute or so and is
       // restarted at once. A run that died as soon as it started is the engine
       // refusing the audio, and restarting that at once was a loop.
       const next = restartDelay({ startedAt, endedAt: Date.now(), shortRuns });
       shortRuns = next.shortRuns;
       startedAt = null;
+      // And say what the engine is actually doing. An engine that keeps dying
+      // is still restarted, but it is transcribing nobody until a run lasts;
+      // the room is told so through the coverage signal, and the member
+      // through a notice naming the cause.
+      const verdict = recognizerStatusAfterEnd({ shortRuns, lastError });
+      if (verdict === "failing" && srStatusRef.current !== "failing") {
+        srStatusRef.current = "failing";
+        setSrStatus("failing");
+        setSrFailure(lastError);
+      }
       if (next.delayMs === 0) startRecognition();
       else restartTimer = setTimeout(startRecognition, next.delayMs);
     };
@@ -3870,10 +3954,20 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     sendSignalRef.current({
       type: "sr",
       from: myIdRef.current,
-      transcribing: localTranscribing(srStatus, srDeaf),
+      // Saving counts: words that reach this screen and nobody's record are
+      // not coverage. See transcript-saving.ts.
+      transcribing: localTranscribing(srStatus, srDeaf, !savingFailed),
       displayName: localNameRef.current,
     });
-  }, [sessionLive, srStatus, srDeaf]);
+  }, [sessionLive, srStatus, srDeaf, savingFailed]);
+
+  // Safari's engine transcribes the computer's default microphone whatever the
+  // call uses. Said when a different one is picked, which is when it can be
+  // acted on; withdrawn when the choice is the default again.
+  useEffect(() => {
+    if (!sessionLive) return;
+    setSrMicNotice(transcriptionMicNotice(browserFamily(navigator.userAgent), selectedMicId));
+  }, [sessionLive, selectedMicId]);
 
   // Follow the microphone.
   //
@@ -3950,6 +4044,12 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
 
     const interval = setInterval(() => {
       if (taps.size === 0) return;
+      // A context that is not running reads every level as zero — iOS parks it
+      // as "interrupted" for a phone call, every browser suspends it in the
+      // background — and zero recorded as a sample is "measured silence",
+      // which is evidence. It marked a member's real speech a hallucination
+      // and withheld it from the report. Not running is not a measurement.
+      if (ctx.state !== "running") return;
       const now = Date.now();
       if (micOnRef.current) micLastOnTsRef.current = now;
       let loudest = 0;
@@ -4282,6 +4382,23 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
    * ordinary fetch is cancelled with it. The browser caps a keepalive body at
    * 64KB; MAX_BATCH sits far inside that.
    */
+  /**
+   * One more refused save. The counter drives the backoff; the verdict —
+   * enough in a row to say so — drives a notice for the member and the
+   * coverage signal for the room (transcript-saving.ts). A refused save used
+   * to bump the counter and nothing else, so an expired session was retried
+   * every thirty seconds for the rest of the call while the room was told this
+   * member was covered.
+   */
+  const noteSaveFailure = useCallback(() => {
+    flushFailuresRef.current += 1;
+    const failed = !savesCovered(flushFailuresRef.current);
+    if (failed !== savingFailedRef.current) {
+      savingFailedRef.current = failed;
+      setSavingFailed(failed);
+    }
+  }, []);
+
   const flushTranscript = useCallback(async (opts: { keepalive?: boolean } = {}): Promise<boolean> => {
     const mId = meetingIdRef.current;
     if (!mId) return true;
@@ -4296,10 +4413,11 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
       const res = await fetch(`/api/meetings/${mId}/transcript${query}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ lines: transcriptRows(batch, mId) }),
+        // Under this client's signaling id, not the in-memory "local" placeholder.
+        body: JSON.stringify({ lines: transcriptRows(batch, mId, myIdRef.current) }),
         keepalive: opts.keepalive === true,
       });
-      if (!res.ok) { flushFailuresRef.current += 1; return false; }
+      if (!res.ok) { lastSaveStatusRef.current = res.status; noteSaveFailure(); return false; }
       // Marked saved from the batch we sent rather than from the response, so a
       // reply that is lost in transit still retires the lines the server has:
       // re-sending them would be harmless anyway, and the failure mode worth
@@ -4307,12 +4425,15 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
       // reaches the end of a long meeting.
       for (const line of batch) savedLineIdsRef.current.add(line.id);
       flushFailuresRef.current = 0;
+      lastSaveStatusRef.current = null;
+      if (savingFailedRef.current) { savingFailedRef.current = false; setSavingFailed(false); }
       return true;
     } catch {
-      flushFailuresRef.current += 1;
+      lastSaveStatusRef.current = null;
+      noteSaveFailure();
       return false;
     }
-  }, []);
+  }, [noteSaveFailure]);
 
   const flushTranscriptRef = useRef(flushTranscript);
   useEffect(() => { flushTranscriptRef.current = flushTranscript; }, [flushTranscript]);
@@ -4331,12 +4452,16 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
    * bite; both are here because this runs while somebody is waiting for a
    * report and an unbounded loop would hold them there.
    */
-  const drainTranscript = useCallback(async (): Promise<void> => {
-    for (let round = 0; round < 20; round++) {
-      if (!pendingLines(transcriptRef.current, savedLineIdsRef.current).length) return;
-      if (!(await flushTranscriptRef.current())) return;
-    }
+  const drainTranscript = useCallback(async (): Promise<boolean> => {
+    // The retry policy lives in transcript-drain.ts: this used to stop on the
+    // first failed request, so one timed-out POST on the way out abandoned
+    // every remaining line and navigated away.
+    return drainLines({
+      pending: () => pendingLines(transcriptRef.current, savedLineIdsRef.current).length,
+      flush: () => flushTranscriptRef.current(),
+    });
   }, []);
+  useEffect(() => { drainTranscriptRef.current = drainTranscript; }, [drainTranscript]);
 
   // A timer that reschedules itself rather than a fixed interval, so a failing
   // flush can back off instead of hammering a connection that is already gone —
@@ -4537,11 +4662,18 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     //
     // So the press means what it can deliver: go and ask for the device.
     if (next && !toggleCanDeliver(micStandingRef.current)) {
+      // The press is also an unmute. reacquireMic puts the device on the wire
+      // in whatever state this ref holds, and a member who joined muted, lost
+      // the device and pressed the button got it back muted and had to press
+      // again.
+      micIntentRef.current = true;
       void reacquireMicRef.current().catch(() => { /* reported by the banner */ });
       return;
     }
 
     micOnRef.current = next;
+    // When the mute landed, for a sentence it landed inside. See micLiveDuring.
+    if (!next) micOffAtRef.current = Date.now();
     // Their decision now, not the join's. Whatever the room was going back for
     // on their behalf stops here — a device that reappears must not undo a
     // member who has just chosen to be muted.
@@ -6114,6 +6246,7 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
       },
     });
   }, []);
+  useEffect(() => { settleLastWordsRef.current = settleLastWords; }, [settleLastWords]);
 
   const leaveMeeting = useCallback(async () => {
     // The ref, not the state, is the guard: a second click lands before React has
@@ -6167,6 +6300,10 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     // request can fail, time out, or be abandoned by a host who closes the tab
     // while it runs; the transcript should not depend on any of that.
     await drainTranscript();
+    // And give everyone else a moment to do the same. They settle and drain on
+    // receipt of `end`; the report route reads the stored rows once, and a row
+    // that lands after it has read is not in the report. See PEER_DRAIN_GRACE_MS.
+    await new Promise<void>((r) => setTimeout(r, PEER_DRAIN_GRACE_MS));
 
     const fullText = transcriptRef.current.filter((l) => l.final).map(formatTranscriptLine).join("\n");
     // The model was told "Meeting: Untitled" and "Participants: Unknown" on
@@ -6502,7 +6639,7 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
   // on an external mic or conference device — is told the actual remedy: some
   // engines ignore the track they are handed and transcribe the computer's
   // DEFAULT microphone, so switching mics inside the call changes nothing.
-  if (srDeaf) stageNotices.push({ id: "sr-deaf", priority: 58, node: (
+  if (srDeaf && !srDeafDismissed) stageNotices.push({ id: "sr-deaf", priority: 58, node: (
       <div role="status" className="flex items-start gap-3 px-4 py-3 bg-amber-500/10 border-b border-amber-500/30 shrink-0">
         <span className="text-amber-500 mt-0.5 shrink-0">⚠</span>
         <p className="flex-1 text-sm text-amber-600 dark:text-amber-400">
@@ -6510,7 +6647,35 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
           default microphone — in your system&apos;s sound settings, make the microphone you&apos;re using the
           default, and the transcript will pick you up.
         </p>
-        <button onClick={() => setSrDeaf(false)} className="shrink-0 text-amber-500 hover:text-amber-600 text-xs font-medium underline">Dismiss</button>
+        {/* Hides the notice; the fact stands, and so does what the room was told. */}
+        <button onClick={() => setSrDeafDismissed(true)} className="shrink-0 text-amber-500 hover:text-amber-600 text-xs font-medium underline">Dismiss</button>
+      </div>
+  ) });
+  // The engine keeps dying. Names the cause the member can act on, and says the
+  // call is fine, because "transcription failed" reads as a broken meeting.
+  if (srStatus === "failing") stageNotices.push({ id: "sr-failing", priority: 57, node: (
+      <div role="status" className="flex items-start gap-3 px-4 py-3 bg-amber-500/10 border-b border-amber-500/30 shrink-0">
+        <span className="text-amber-500 mt-0.5 shrink-0">⚠</span>
+        <p className="flex-1 text-sm text-amber-600 dark:text-amber-400">{recognizerFailureNotice(srFailure)}</p>
+      </div>
+  ) });
+  // Transcribed, and not saved. Derived from the failure count, so it cannot
+  // be dismissed while it is still true and withdraws itself when a save lands.
+  {
+    const unsaved = savingFailed ? saveFailureNotice(flushFailuresRef.current, lastSaveStatusRef.current) : null;
+    if (unsaved) stageNotices.push({ id: "transcript-unsaved", priority: 59, node: (
+      <div role="status" className="flex items-start gap-3 px-4 py-3 bg-amber-500/10 border-b border-amber-500/30 shrink-0">
+        <span className="text-amber-500 mt-0.5 shrink-0">⚠</span>
+        <p className="flex-1 text-sm text-amber-600 dark:text-amber-400">{unsaved}</p>
+      </div>
+    ) });
+  }
+  // A microphone the engine will not follow. See transcriptionMicNotice.
+  if (srMicNotice) stageNotices.push({ id: "sr-mic", priority: 55, node: (
+      <div role="status" className="flex items-start gap-3 px-4 py-3 bg-amber-500/10 border-b border-amber-500/30 shrink-0">
+        <span className="text-amber-500 mt-0.5 shrink-0">⚠</span>
+        <p className="flex-1 text-sm text-amber-600 dark:text-amber-400">{srMicNotice}</p>
+        <button onClick={() => setSrMicNotice(null)} className="shrink-0 text-amber-500 hover:text-amber-600 text-xs font-medium underline">Dismiss</button>
       </div>
   ) });
   // Somebody ELSE in the room is not being transcribed at all. Everyone is
