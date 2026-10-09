@@ -128,6 +128,21 @@ You are building a system that replaces 30+ point solutions for PE funds, real e
     a live stream attached, and the analyser context interrupted. Nothing in the
     room changed, so nothing re-ran `play()` or `resume()`. The page coming
     back is its own event, and it has to be listened for.
+  - Every exit has to save, not just the ones that are pressed. The host's End
+    and the Leave button both settled the sentence in flight and drained what
+    was unsaved; the handler that runs when the HOST ends the meeting — the exit
+    most people take — tore the call down at once. Under the ownership rule the
+    words it dropped had no other copy.
+  - A status that is only ever set on success is a lie waiting to happen. The
+    recognizer's status went "active" on start and nothing on end, so an engine
+    dying on every run with `network` was "Live" for the whole call. State has
+    to be written on the way down as well as the way up.
+  - A retry loop with no exit and no voice is the same as no retry: a refused
+    save retried every thirty seconds forever, silently, while the room was
+    told the member was covered. Three failures in a row is a fact worth saying.
+  - Zero is not a measurement when the meter is off. A suspended AudioContext
+    reads every level as zero, and zero recorded as a sample is "measured
+    silence", which is evidence — it marked real speech a hallucination.
 - ✅ Meeting recording — the host's browser composites the mesh to a canvas,
   mixes every participant's audio, and encodes one watchable file. Active
   speaker with a grid fallback; a shared screen takes the frame. Uploaded in
@@ -5458,6 +5473,42 @@ Deployed, monitoring               →  live, observability active
              |  count never passed one. The test written for the cap caught
              |  it on the first run. The reset now belongs to the member's
              |  own actions only.
+
+2026-10-09  |  The pipeline that lost its last sentence  |  Asked to inspect
+             |  microphone → live meeting → transcript → report for errors
+             |  and friction, and to ask before fixing where a decision was
+             |  needed. Three parallel audits, every high finding re-verified
+             |  by hand; nine decisions put to the owner one at a time.
+             |  THE CHAIN BROKE AT THE EXITS. The remote `end` handler — the
+             |  exit most non-hosts take — settled nothing and drained
+             |  nothing; a guest's closing sentence, interim when the host
+             |  pressed End, had no other copy. The drain gave up on its
+             |  first failed request. The report existed only if the host
+             |  pressed End; a closed tab stranded the meeting as "active"
+             |  with its transcript unreachable behind a Regenerate button
+             |  gated on a report row. A guest who attended could never open
+             |  the report, against three comments saying otherwise.
+             |  AND LIED IN BETWEEN. The recognizer's status was written on
+             |  start and never on end, so a `network` error on every run was
+             |  "Live" for the whole call; a run that never started restarted
+             |  at zero delay (the backoff's own test pinned the loop as
+             |  intended). A refused save retried every thirty seconds in
+             |  silence while the room was told the member was covered.
+             |  Dismissing the deaf notice re-announced "transcribing" to
+             |  every peer. A suspended AudioContext recorded zeros as
+             |  measured silence and marked real speech a hallucination.
+             |  speaker_id was "local" on every stored row.
+             |  Decisions, all on the recommendation: Generate-report button
+             |  now and an hourly sweep for meetings nobody ended; a signed
+             |  report link from the guest key; a mute mid-sentence judged by
+             |  where the press fell (a sentence cannot be cut at a
+             |  timestamp); summary email host-only, attended-only, with a
+             |  sent marker; a notice after three refused saves; signaling id
+             |  as speaker_id; utterance-start timestamps; a Safari notice at
+             |  pick time; an unsummarised state for empty transcripts.
+             |  Room side in this entry (transcript-drain, transcript-saving,
+             |  recognizer status, meter guard, attribution); report side in
+             |  the next.
 ```
 
 ---
