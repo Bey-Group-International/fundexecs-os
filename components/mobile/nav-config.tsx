@@ -25,6 +25,7 @@ import {
   CalendarIcon,
   BellIcon,
   UserIcon,
+  InstallIcon,
 } from "./icons";
 
 type Icon = ComponentType<SVGProps<SVGSVGElement>>;
@@ -111,6 +112,9 @@ export const MORE_GROUPS: MoreGroup[] = [
       { key: "invite", label: "Invite & Earn", href: "/invite", icon: UsersIcon, desc: "Your invite link & partner network" },
       { key: "settings", label: "Settings", href: "/settings", icon: SettingsIcon, desc: "Preferences & integrations" },
       { key: "help", label: "Help & Support", href: "/settings", icon: HelpIcon, desc: "Guides & assistance" },
+      // Safari never offers to install on its own, so the one guide that shows
+      // the Share › Add to Home Screen gesture needs a permanent way in.
+      { key: "install", label: "Install the app", href: "/install", icon: InstallIcon, desc: "Home Screen & Dock, no app store" },
     ],
   },
 ];

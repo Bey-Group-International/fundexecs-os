@@ -11,6 +11,7 @@ import {
 import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { handsUpLabel, raisedBy } from "@/lib/meetings/hands";
+import { useWakeLock } from "@/lib/meetings/use-wake-lock";
 import {
   REACTION_VISIBLE_MS,
   activeReactions,
@@ -90,6 +91,7 @@ import {
   speakerNames,
   transcriptRows,
 } from "@/lib/meetings/transcript-buffer";
+import { settleFinalWords } from "@/lib/meetings/transcript-finalize";
 import {
   createDeafWatch, engineConfidence, guardedLineConfidence, isNoisy, observeDeafTick,
   pushEngineScore, recognitionLang, recognizerHeard, restartDelay,
@@ -716,7 +718,10 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     guestKeyRef.current = resolveGuestKey(
       roomCode,
       crypto.randomUUID(),
-      typeof window === "undefined" ? null : window.localStorage,
+      // Reading the property is itself the throw in Safari with "Block all
+      // cookies" on — a SecurityError before resolveGuestKey's own guard could
+      // see it — so it is read under one here.
+      (() => { try { return typeof window === "undefined" ? null : window.localStorage; } catch { return null; } })(),
     );
   }
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
@@ -2602,9 +2607,14 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     setIsGuest(true);
     isGuestRef.current = true;
     // Recover name from URL param or sessionStorage fallback
-    const storedName = typeof sessionStorage !== "undefined"
-      ? sessionStorage.getItem(`guest_name_${roomCode}`) ?? ""
-      : "";
+    // Under a try: Safari throws on the storage object itself when all
+    // cookies are blocked, and a guest with that setting still has a name.
+    let storedName = "";
+    try {
+      storedName = typeof sessionStorage !== "undefined"
+        ? sessionStorage.getItem(`guest_name_${roomCode}`) ?? ""
+        : "";
+    } catch { /* storage unavailable — the URL param or an empty name */ }
     const guestName = nameParam ? decodeURIComponent(nameParam) : storedName;
     if (guestName) setDisplayName(guestName);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
@@ -3083,6 +3093,9 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     document.addEventListener("visibilitychange", onVisibility);
     return () => document.removeEventListener("visibilitychange", onVisibility);
   }, [ready]);
+
+  // A phone propped up for a call must not lock mid-call (see wake-lock.ts).
+  useWakeLock(sessionLive);
 
   // ── joinMeeting ──────────────────────────────────────────────────────────
   const joinMeeting = useCallback(async (choice?: GreenRoomChoice) => {
@@ -3912,20 +3925,18 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     // tab was in the background, reads every level as zero — which would look
     // like a room where nobody is talking. Nudge it back.
     if (ctx.state === "suspended") void ctx.resume().catch(() => {});
-    // And again whenever the page comes back. A phone call taken mid-meeting,
-    // or the screen locking, interrupts the context, and an interrupted context
-    // is not resumed by the browser on return: every level reads zero, nobody
-    // is "speaking", the stage never cuts, and the attribution that decides
-    // whose name goes on the transcript has nothing to go on. Compared against
-    // "running" rather than "suspended" because Safari reports the interrupted
-    // state under its own name; a closed context rejects the resume, which is
-    // caught, and this listener is gone by then anyway.
-    const onReturn = () => {
-      if (document.visibilityState === "hidden") return;
-      if (ctx.state !== "running") void ctx.resume().catch(() => {});
+    // ...and keep nudging it. iOS moves the context to "interrupted" for a
+    // phone call or Siri and suspends it when the tab leaves the foreground,
+    // and a context left there reads zero for the rest of the call — no
+    // speaking rings, no active speaker, and "measured silence" handed to
+    // transcript attribution. Resume on the state change itself and again on
+    // the next foregrounding or tap, which is where Safari allows it.
+    const nudge = () => {
+      if (ctx.state !== "running" && ctx.state !== "closed") void ctx.resume().catch(() => {});
     };
-    document.addEventListener("visibilitychange", onReturn);
-    window.addEventListener("pageshow", onReturn);
+    ctx.onstatechange = nudge;
+    document.addEventListener("visibilitychange", nudge);
+    document.addEventListener("pointerup", nudge);
 
     const taps = new Map<string, VoiceTap>();
     meterRef.current = { ctx, taps };
@@ -4047,14 +4058,15 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
 
     return () => {
       clearInterval(interval);
-      document.removeEventListener("visibilitychange", onReturn);
-      window.removeEventListener("pageshow", onReturn);
       taps.forEach((t) => { try { t.source.disconnect(); } catch { /* context already gone */ } });
       taps.clear();
       meterRef.current = null;
       // A verdict about this session's room, gone with the session — the next
       // call must not inherit it.
       sameRoomDetected.clear();
+      ctx.onstatechange = null;
+      document.removeEventListener("visibilitychange", nudge);
+      document.removeEventListener("pointerup", nudge);
       void ctx.close().catch(() => {});
     };
     // `speakingStore` is a ref value, so its identity never changes and this
@@ -6057,6 +6069,16 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     return () => window.removeEventListener("pagehide", onHide);
   }, [recordDeparture]);
 
+  // The mirror of that: Safari parks the page in the back-forward cache on
+  // the way out and brings it back, as it was, on the way back. For a call
+  // that is a snapshot of a room whose departure was recorded above and whose
+  // peer connections died with the tab. Reload into the green room instead.
+  useEffect(() => {
+    const onShow = (e: PageTransitionEvent) => { if (e.persisted) window.location.reload(); };
+    window.addEventListener("pageshow", onShow);
+    return () => window.removeEventListener("pageshow", onShow);
+  }, []);
+
   // Closing the tab is also by far the most common way of giving up on a WAIT,
   // and it left the host holding a name that was never coming — `recordDeparture`
   // above covers people who got in, not people still outside. Only while
@@ -6072,12 +6094,36 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     return () => window.removeEventListener("pagehide", onHide);
   }, [admissionUi, withdrawKnock]);
 
+  /**
+   * Settle the sentence in flight before anything stops the microphone.
+   *
+   * The engine hands a sentence over up to two seconds after it ends, and
+   * "say the decision, press Leave" lands the click inside that gap. Both
+   * exits filter on `final`, so the last sentence of the call — spoken by
+   * whoever is leaving, host or invitee, and under the ownership rule saved
+   * by nobody else — used to vanish. Stopping the recognizer makes it flush
+   * what it holds; an interim the engine never settles is kept as the words
+   * it printed, marked uncertain, rather than lost. See transcript-finalize.
+   */
+  const settleLastWords = useCallback(async () => {
+    await settleFinalWords({
+      read: () => transcriptRef.current,
+      write: (lines) => { transcriptRef.current = lines; },
+      stopRecognition: () => {
+        try { recognitionRef.current?.stop(); } catch { /* not running */ }
+      },
+    });
+  }, []);
+
   const leaveMeeting = useCallback(async () => {
     // The ref, not the state, is the guard: a second click lands before React has
     // committed the phase change from the first.
     if (endingRef.current || !canExit(callPhaseRef.current)) return;
     endingRef.current = true;
     callPhaseRef.current = nextPhase(callPhaseRef.current, "leave");
+    // Before the teardown stops the microphone: these are the only moments the
+    // sentence still in the engine can be settled or kept.
+    await settleLastWords();
     sendSignal({ type: "leave", from: myIdRef.current });
     teardownCall();
 
@@ -6098,7 +6144,7 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
 
     if (isGuest) { setShowGuestUpsell(true); return; }
     router.push("/meetings");
-  }, [sendSignal, teardownCall, drainTranscript, router, isGuest]);
+  }, [sendSignal, teardownCall, drainTranscript, router, isGuest, settleLastWords]);
 
   const endMeeting = useCallback(async () => {
     // A second press while the report is generating would tear down an already
@@ -6108,6 +6154,9 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     endingRef.current = true;
     callPhaseRef.current = nextPhase(callPhaseRef.current, "end");
     setCallPhase(callPhaseRef.current);
+    // Before the teardown stops the microphone — the host's closing sentence
+    // is usually the decision, and it is still interim when they press End.
+    await settleLastWords();
     sendSignal({ type: "end", from: myIdRef.current });
     teardownCall();
 
@@ -6155,7 +6204,7 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     endingRef.current = false;
     callPhaseRef.current = nextPhase(callPhaseRef.current, "report_failed");
     setCallPhase(callPhaseRef.current);
-  }, [sendSignal, teardownCall, meetingId, roomCode, router, drainTranscript]);
+  }, [sendSignal, teardownCall, meetingId, roomCode, router, drainTranscript, settleLastWords]);
 
   const endForAll = useCallback(async () => {
     await endMeeting();
@@ -6576,7 +6625,11 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
         than from props, which is what keeps a voice out of this component's
         render. See createSpeakingStore. */}
     <SpeakingProvider value={speakingStore}>
-    <div className="fixed inset-0 z-50 bg-[var(--surface-0)] flex flex-col">
+    {/* Padded by the safe-area insets: the overlay is portalled to <body>
+        under `viewport-fit=cover`, so without them the notch covered the
+        tiles in landscape on an iPhone (the bottom inset is the control
+        bar's own). */}
+    <div className="fixed inset-0 z-50 bg-[var(--surface-0)] flex flex-col pt-[env(safe-area-inset-top,0px)] pl-[env(safe-area-inset-left,0px)] pr-[env(safe-area-inset-right,0px)]">
       {/* `relative` so the mobile copilot sheet fills the video area rather than
           the viewport — see the sheet's own note below. */}
       <div className="relative flex flex-1 overflow-hidden min-h-0">

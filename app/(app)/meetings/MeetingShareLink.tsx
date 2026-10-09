@@ -34,6 +34,33 @@ function legacyCopy(text: string): boolean {
   }
 }
 
+/**
+ * Copy text that is not known yet.
+ *
+ * Safari only honours a clipboard write made inside the user's gesture; by the
+ * time an `await fetch` has returned, the gesture is over and `writeText` is
+ * refused. `ClipboardItem` takes a promise for its payload, so the write can be
+ * STARTED inside the gesture and resolved later — Safari (and Chromium) then
+ * wait for it. Where that shape is unsupported, this falls back to the plain
+ * copy once the text arrives, which is what every browser but Safari allows.
+ */
+export function copyTextWhenReady(text: Promise<string>): Promise<boolean> {
+  const clipboard = navigator.clipboard;
+  type ItemCtor = new (items: Record<string, Promise<Blob>>) => ClipboardItem;
+  const Item = (globalThis as { ClipboardItem?: ItemCtor }).ClipboardItem;
+  if (clipboard?.write && Item) {
+    try {
+      const item = new Item({
+        "text/plain": text.then((t) => new Blob([t], { type: "text/plain" })),
+      });
+      return clipboard.write([item]).then(() => true, () => text.then(copyText, () => false));
+    } catch {
+      /* a ClipboardItem that will not take a promise — fall through */
+    }
+  }
+  return text.then(copyText, () => false);
+}
+
 export async function copyText(text: string): Promise<boolean> {
   if (navigator.clipboard?.writeText) {
     try {

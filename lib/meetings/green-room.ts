@@ -12,11 +12,35 @@
 // Pure: no DOM. The user agent is passed in.
 import type { Device, ReadinessProblem } from "@/lib/meetings/devices";
 
-export type BrowserFamily = "chrome" | "edge" | "safari" | "firefox" | "other";
+export type BrowserFamily =
+  | "chrome"
+  | "edge"
+  | "safari"
+  | "firefox"
+  /** Safari on an iPhone or iPad: no menu bar, the permission lives behind
+   *  the "aA" button and in the Settings app. */
+  | "ios-safari"
+  /** Any other browser on an iPhone or iPad. They are all WebKit, and iOS
+   *  keeps their camera and microphone switches in the Settings app. */
+  | "ios-other"
+  | "other";
 
-/** Which browser's instructions to give. Order matters: Edge says "Chrome" too. */
-export function browserFamily(userAgent: string | null | undefined): BrowserFamily {
+/**
+ * Which browser's instructions to give. Order matters: Edge says "Chrome" too.
+ *
+ * `maxTouchPoints` tells an iPad apart from a Mac: iPadOS asks for the desktop
+ * site by default and reports a Macintosh user agent, and the Mac steps
+ * ("In the menu bar…") describe a menu bar an iPad does not have.
+ */
+export function browserFamily(userAgent: string | null | undefined, maxTouchPoints = 0): BrowserFamily {
   const ua = userAgent ?? "";
+  const ios = /iPhone|iPad|iPod/.test(ua) || (/Macintosh/.test(ua) && maxTouchPoints > 1);
+  if (ios) {
+    // Only Safari itself carries the bare `Safari/` token without a sibling
+    // browser's; CriOS, FxIOS, EdgiOS and the rest name themselves.
+    if (/CriOS\/|FxiOS\/|EdgiOS\/|OPiOS\/|OPT\//.test(ua) || !/Safari\//.test(ua)) return "ios-other";
+    return "ios-safari";
+  }
   if (/Edg\//.test(ua)) return "edge";
   if (/Firefox\/|FxiOS\//.test(ua)) return "firefox";
   if (/Chrome\/|CriOS\//.test(ua)) return "chrome";
@@ -63,6 +87,17 @@ function permissionSteps(device: "camera" | "microphone", browser: BrowserFamily
       return [
         `In the menu bar, choose Safari → Settings for This Website.`,
         `Set ${device === "camera" ? "Camera" : "Microphone"} to Allow.`,
+      ];
+    case "ios-safari":
+      return [
+        `Tap the "aA" button at the left of the address bar, then Website Settings.`,
+        `Set ${device === "camera" ? "Camera" : "Microphone"} to Allow.`,
+        `If it is greyed out, open the Settings app → Safari → ${device === "camera" ? "Camera" : "Microphone"} and allow it there.`,
+      ];
+    case "ios-other":
+      return [
+        `Open the Settings app and scroll to this browser's name.`,
+        `Switch ${device === "camera" ? "Camera" : "Microphone"} on, then come back and reload.`,
       ];
     case "firefox":
       return [

@@ -10,7 +10,13 @@ jest.mock("next/navigation", () => ({
   useRouter: () => ({ push, replace: jest.fn(), refresh: jest.fn() }),
 }));
 const copyText = jest.fn(async (_text: string) => true);
-jest.mock("./MeetingShareLink", () => ({ copyText: (text: string) => copyText(text) }));
+// The lobby starts the copy before the room exists (Safari only honours a
+// clipboard write begun inside the click); the stand-in resolves the link and
+// hands it to the same mock, so the assertions below still see what was copied.
+jest.mock("./MeetingShareLink", () => ({
+  copyText: (text: string) => copyText(text),
+  copyTextWhenReady: (text: Promise<string>) => text.then((t) => copyText(t), () => false),
+}));
 
 import { MeetingLobby } from "./MeetingLobby";
 

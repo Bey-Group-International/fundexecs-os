@@ -241,3 +241,15 @@ export function CalendarIcon(p: IconProps) {
 export function UserIcon(p: IconProps) {
   return <ContactIcon {...p} />;
 }
+
+// Install the app — a device outline with a plus, for the More menu's link to
+// the /install guide.
+export function InstallIcon(p: IconProps) {
+  return (
+    <svg {...base(p)}>
+      <rect x="6" y="2.5" width="12" height="19" rx="2.5" />
+      <path d="M10 18.5h4" />
+      <path d="M12 7.5v6M9 10.5h6" />
+    </svg>
+  );
+}

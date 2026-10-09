@@ -26,13 +26,25 @@ export function escapeFollowUpHtml(s: string): string {
 const BULLET = /^\s*[-•*]\s+(.*)$/;
 const NUMBERED = /^\s*\d+[.)]\s+(.*)$/;
 
+/**
+ * `**bold**` runs: non-empty, no star or line break inside, and not starting
+ * or ending on a space. Written without lookbehind on purpose: Safari before
+ * 16.4 rejects a lookbehind LITERAL with a SyntaxError while parsing the
+ * module, and this module ships in the report page's client chunk, so one
+ * regex took the whole page down on an older iPhone. The character classes
+ * say the same thing the lookarounds did: `[^*\s]` is "non-space and not a
+ * star" at either edge of the run.
+ */
+const BOLD = /\*\*([^*\s](?:[^*\n]*?[^*\s])?)\*\*/g;
+/** `_italic_` runs, only where the underscores stand at a word's edges, so an
+ *  address like first_last@fund.test is left exactly as it is. */
+const ITALIC = /(^|[\s(])_([^_\s](?:[^_\n]*?[^_\s])?)_(?=$|[\s.,;:!?)])/g;
+
 /** `**bold**` and `_italic_`, on text that is already escaped. */
 function inline(escaped: string): string {
   return escaped
-    .replace(/\*\*(?=\S)([^*\n]+?)(?<=\S)\*\*/g, "<strong>$1</strong>")
-    // Underscores only as marks when they stand at a word's edges, so an
-    // address like first_last@fund.test is left exactly as it is.
-    .replace(/(^|[\s(])_(?=\S)([^_\n]+?)(?<=\S)_(?=$|[\s.,;:!?)])/g, "$1<em>$2</em>");
+    .replace(BOLD, "<strong>$1</strong>")
+    .replace(ITALIC, "$1<em>$2</em>");
 }
 
 /** One rendered block, tagged with what kind it is so a caller can style it. */
@@ -103,8 +115,8 @@ export function followUpBodyHtml(body: string, style: { p: string; list: string;
  */
 export function plainFollowUp(body: string): string {
   return (body ?? "")
-    .replace(/\*\*(?=\S)([^*\n]+?)(?<=\S)\*\*/g, "$1")
-    .replace(/(^|[\s(])_(?=\S)([^_\n]+?)(?<=\S)_(?=$|[\s.,;:!?)])/g, "$1$2");
+    .replace(BOLD, "$1")
+    .replace(ITALIC, "$1$2");
 }
 
 /** What a toolbar press does to the text and where the selection lands after. */

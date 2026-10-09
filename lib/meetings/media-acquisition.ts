@@ -55,7 +55,13 @@ export type MediaFailure =
  * are still in the wild.
  */
 export function classifyMediaError(err: unknown): MediaFailure {
-  const name = err instanceof Error ? err.name : typeof err === "string" ? err : "";
+  // Duck-typed: older WebKit's OverconstrainedError inherits from neither
+  // Error nor DOMException, so `instanceof Error` filed a stale device id as
+  // "unknown" rather than "overconstrained" — and "unknown" is the one answer
+  // that stops the walk to another camera.
+  const name = typeof err === "string" ? err
+    : typeof (err as { name?: unknown } | null)?.name === "string" ? (err as { name: string }).name
+    : "";
   switch (name) {
     case "NotAllowedError":
     case "PermissionDeniedError":

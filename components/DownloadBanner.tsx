@@ -2,9 +2,12 @@
 
 // components/DownloadBanner.tsx
 // Post-login prompt to download FundExecs OS. Resurfaces every 30 days.
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import { DOWNLOAD_URLS, PLATFORM_META, type Platform } from "@/lib/download-urls";
 import { PlatformIcon } from "@/components/PlatformIcon";
+import { InstallSteps } from "@/components/pwa/InstallSteps";
+import { detectInstallPlatform, installGuide, type InstallGuide } from "@/lib/pwa/install-platform";
 
 const STORAGE_KEY = "fx:download-banner-dismissed-at";
 const RESURFACE_MS = 30 * 24 * 60 * 60 * 1000;
@@ -14,6 +17,22 @@ const PLATFORMS = Object.keys(DOWNLOAD_URLS) as Platform[];
 export function DownloadBanner() {
   const [open, setOpen] = useState(false);
   const [shown, setShown] = useState(false);
+  // Safari on a Mac or iPad: the one desktop-width browser that can install
+  // the app itself (Add to Dock / Add to Home Screen) but never announces it.
+  // The banner grows a row for it so a Safari user is not left with only a
+  // download they may not want.
+  const [safari, setSafari] = useState<InstallGuide | null>(null);
+  const [safariOpen, setSafariOpen] = useState(false);
+
+  useEffect(() => {
+    const platform = detectInstallPlatform({
+      userAgent: navigator.userAgent,
+      maxTouchPoints: navigator.maxTouchPoints,
+    });
+    if (platform === "macos-safari" || platform === "ipados-safari") {
+      setSafari(installGuide(platform));
+    }
+  }, []);
 
   useEffect(() => {
     try {
@@ -114,6 +133,41 @@ export function DownloadBanner() {
             })}
           </div>
         </div>
+
+        {/* Safari: install straight from the browser, no download needed. */}
+        {safari && (
+          <div className="border-t border-line/50 px-5 py-2.5">
+            <button
+              type="button"
+              aria-expanded={safariOpen}
+              aria-controls="fx-download-banner-safari"
+              onClick={() => setSafariOpen((o) => !o)}
+              className="flex w-full items-center gap-2 text-left text-[11.5px] text-fg-secondary transition hover:text-fg-primary"
+            >
+              <PlatformIcon platform="mac" className="h-3.5 w-3.5 shrink-0 text-gold-300" />
+              <span className="min-w-0 flex-1">
+                Using Safari?{" "}
+                <span className="font-medium text-fg-primary">
+                  {safari.platform === "macos-safari" ? "Add to your Dock" : "Add to your Home Screen"}
+                </span>{" "}
+                — nothing to download.
+              </span>
+              <span aria-hidden className={`text-fg-muted transition ${safariOpen ? "rotate-90" : ""}`}>
+                ›
+              </span>
+            </button>
+            {safariOpen && (
+              <div id="fx-download-banner-safari" className="mt-3">
+                <InstallSteps steps={safari.steps} />
+                <p className="mt-2.5 text-[11px] text-fg-muted">
+                  <Link href="/install" onClick={dismiss} className="text-gold-300 underline-offset-2 hover:underline">
+                    Full install guide
+                  </Link>
+                </p>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Footer */}
         <div className="border-t border-line/40 px-5 py-2">

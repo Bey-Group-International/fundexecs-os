@@ -111,16 +111,25 @@ function loadSegmenter(): Promise<Segmenter | null> {
     try {
       const vision = await import("@mediapipe/tasks-vision");
       const fileset = await vision.FilesetResolver.forVisionTasks(WASM_PATH);
-      const segmenter = await vision.ImageSegmenter.createFromOptions(fileset, {
-        baseOptions: { modelAssetPath: MODEL_PATH, delegate: "GPU" },
-        runningMode: "VIDEO",
-        // Confidence only. It is what keeps headwear — it says how sure the
-        // model is rather than what it decided, and a hat is exactly where it is
-        // unsure. A category mask as well was a second GPU pass every frame for
-        // a fallback the pinned build never takes; the compositor still reads
-        // one if a build ever returns it instead.
-        outputCategoryMask: false,
-        outputConfidenceMasks: true,
+      const build = (delegate: "GPU" | "CPU") =>
+        vision.ImageSegmenter.createFromOptions(fileset, {
+          baseOptions: { modelAssetPath: MODEL_PATH, delegate },
+          runningMode: "VIDEO",
+          // Confidence only. It is what keeps headwear — it says how sure the
+          // model is rather than what it decided, and a hat is exactly where it is
+          // unsure. A category mask as well was a second GPU pass every frame for
+          // a fallback the pinned build never takes; the compositor still reads
+          // one if a build ever returns it instead.
+          outputCategoryMask: false,
+          outputConfidenceMasks: true,
+        });
+      // GPU first; CPU when the WebGL path refuses. Safari is where that
+      // happens — an exhausted context pool, a WebGL build the runtime does
+      // not accept — and the answer used to be "Background effects couldn't
+      // load — your camera is off", for a member whose CPU could have run it.
+      const segmenter = await build("GPU").catch(async (err) => {
+        console.warn("[backgrounds] GPU segmenter unavailable, trying CPU", err);
+        return build("CPU");
       });
       return segmenter as unknown as Segmenter;
     } catch (err) {

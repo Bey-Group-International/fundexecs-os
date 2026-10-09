@@ -516,7 +516,7 @@ export function MeetingGreenRoom({
   // Which browser's permission steps to give. Read after mount: the server
   // has no user agent to render with, and guessing would hydrate-mismatch.
   const [browser, setBrowser] = useState<BrowserFamily>("other");
-  useEffect(() => { setBrowser(browserFamily(navigator.userAgent)); }, []);
+  useEffect(() => { setBrowser(browserFamily(navigator.userAgent, navigator.maxTouchPoints)); }, []);
   const micPeakRef = useRef(0);
   // Set the moment someone picks a background here, so the restoration below
   // knows it has been overtaken. Reading a custom image out of IndexedDB is an
@@ -727,7 +727,10 @@ export function MeetingGreenRoom({
         return;
       } catch (err) {
         if (cancelled) return;
-        const name = err instanceof Error ? err.name : "";
+        // By name rather than instanceof: older WebKit's OverconstrainedError
+        // is neither an Error nor a DOMException, and `instanceof` read it as
+        // nameless. See classifyMediaError.
+        const name = (err as { name?: unknown } | null)?.name;
         if (name === "NotAllowedError" || name === "PermissionDeniedError") {
           // The browser does not say which of the two was refused, and asking
           // separately would mean two prompts. Treat a blanket refusal as both.
@@ -1237,7 +1240,7 @@ export function MeetingGreenRoom({
     // Two columns from `md`: the preview large on the left, everything to decide
     // on the right. The old screen was one 384px column, so the preview — the
     // thing people actually check — was the size of a playing card on a laptop.
-    <div className="mx-auto flex min-h-[70vh] w-full max-w-5xl items-center px-4 py-6 md:px-6">
+    <div className="mx-auto flex min-h-[70dvh] w-full max-w-5xl items-center px-4 py-6 md:px-6">
       <div className="grid w-full gap-5 md:grid-cols-[minmax(0,1.55fr)_minmax(0,1fr)] md:items-center md:gap-8">
         <div className="flex flex-col gap-3">
           {/* Preview */}

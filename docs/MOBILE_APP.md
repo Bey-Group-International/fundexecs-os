@@ -149,6 +149,20 @@ respect `prefers-reduced-motion` and both light/dark themes.
   `viewport-fit=cover` for edge-to-edge safe-area rendering.
 - **Install prompt** (`MobileInstallPrompt`): uses `beforeinstallprompt`,
   hidden when already standalone, resurfaces every 21 days.
+- **Safari** (`lib/pwa/install-platform.ts`): Safari on iPhone, iPad and Mac
+  never fires `beforeinstallprompt`, so every install surface used to render
+  nothing for Apple users. The detector classifies the browser from its user
+  agent (iPhone Safari, iPad Safari — including the desktop-site UA, told apart
+  by touch points — other iOS browsers, in-app web views, macOS Safari 17+ and
+  older) and `installGuide()` returns the manual steps for it. The phone prompt
+  opens them in a sheet (Share › Add to Home Screen), the dashboard card and the
+  desktop `DownloadBanner` reveal them inline (File › Add to Dock), and the
+  public `/install` page (linked from the More menu) carries every platform's
+  steps with the visitor's own detected first. `components/pwa/InstallSteps`
+  renders the same numbered, glyph-led list everywhere.
+- **iOS focus zoom** (`app/globals.css`): iPhone Safari zooms the page when a
+  focused field's text is under 16px. Inputs are pinned to 16px on iPhone only,
+  via an `-webkit-touch-callout` `@supports` gate plus the `md` width gate.
 - **Offline**: app-shell service worker (`public/sw.js`) with a branded
   `/offline` fallback and stale-while-revalidate for static assets.
 

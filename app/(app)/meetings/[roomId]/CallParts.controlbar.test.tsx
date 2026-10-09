@@ -86,6 +86,16 @@ function viewportWidth(width: number) {
   act(() => { window.dispatchEvent(new Event("resize")); });
 }
 
+// jsdom has no `mediaDevices`. Share is offered only where `getDisplayMedia`
+// exists (iPadOS Safari is wide and has none), so these tests stand in a
+// browser that has it; the width is what they exercise.
+beforeAll(() => {
+  Object.defineProperty(navigator, "mediaDevices", {
+    configurable: true,
+    value: { getDisplayMedia: () => Promise.reject(new Error("not in a test")) },
+  });
+});
+
 afterEach(() => {
   for (const prop of ["offsetWidth", "clientWidth"]) {
     Object.defineProperty(HTMLElement.prototype, prop, { configurable: true, value: 0 });

@@ -43,7 +43,15 @@ export function requestHostNotifications(isHost: boolean): void {
 // Synthesize a short chime using Web Audio API (no audio files needed)
 export function playChime(type: "join" | "leave" | "knock") {
   try {
-    const ctx = new AudioContext();
+    type WebkitWindow = Window & { webkitAudioContext?: typeof AudioContext };
+    const Ctor = window.AudioContext ?? (window as WebkitWindow).webkitAudioContext;
+    if (!Ctor) return;
+    const ctx = new Ctor();
+    // Safari hands out a context already suspended when nothing has been
+    // played from a gesture yet; a chime fired from an effect — a knock, a
+    // join — is then scheduled on a clock that never runs. Resume is a no-op
+    // where it is not needed and the only way the chime sounds where it is.
+    if (ctx.state !== "running") void ctx.resume().catch(() => {});
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
     osc.connect(gain); gain.connect(ctx.destination);
@@ -239,10 +247,13 @@ export function FloatingMenu({
       onClose();
     };
     const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
-    document.addEventListener("mousedown", onDown);
+    // `pointerdown`, not `mousedown`: iOS sends no compatibility mouse events
+    // for a tap on something that is not clickable, which is exactly what a
+    // tap outside a menu lands on, so the menu stayed open on an iPhone.
+    document.addEventListener("pointerdown", onDown);
     document.addEventListener("keydown", onKey);
     return () => {
-      document.removeEventListener("mousedown", onDown);
+      document.removeEventListener("pointerdown", onDown);
       document.removeEventListener("keydown", onKey);
     };
   }, [open, onClose, anchorRef]);
