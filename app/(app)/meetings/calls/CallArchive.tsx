@@ -639,8 +639,17 @@ const CallRow = memo(function CallRow({
       {playing && streamUrl && (
         <div className="px-4 pb-3">
           <audio
+            // Started from the ref callback rather than `autoPlay`: the element
+            // mounts in the Play click's own synchronous commit, so `play()`
+            // here is still inside the gesture iOS requires for sound, where
+            // the autoplay attribute is processed later and refused — one tap
+            // to mount, a second to actually play.
+            ref={(el) => {
+              if (!el) return;
+              const started = el.play();
+              if (started && typeof started.catch === "function") started.catch(() => { /* controls remain */ });
+            }}
             controls
-            autoPlay
             preload="metadata"
             src={streamUrl}
             aria-label={`Recording of ${call.title}`}

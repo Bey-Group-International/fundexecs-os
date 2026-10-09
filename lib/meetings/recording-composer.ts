@@ -13,6 +13,7 @@
 // on disk trails the meeting by seconds instead of existing only in memory
 // until somebody presses Stop.
 
+import { attachHiddenVideo, detachHiddenVideo } from "./hidden-video";
 import {
   AUDIO_BITRATE,
   CHUNK_MS,
@@ -407,6 +408,9 @@ export class RecordingComposer {
     el.muted = true;
     el.playsInline = true;
     el.autoplay = true;
+    // In the document, one transparent pixel: iOS WebKit does not reliably
+    // decode a detached element (black frames, or a pause nothing asked for).
+    attachHiddenVideo(el);
     void el.play().catch(() => { /* retried implicitly on the next frame */ });
     this.surfaces.set(stream, el);
     return el;
@@ -417,6 +421,7 @@ export class RecordingComposer {
     for (const [stream, el] of this.surfaces) {
       if (live.has(stream)) continue;
       try { el.pause(); el.srcObject = null; } catch { /* already released */ }
+      detachHiddenVideo(el);
       this.surfaces.delete(stream);
     }
   }
@@ -443,6 +448,11 @@ export class RecordingComposer {
     this.recorder = null;
     this.ctx = null;
     this.canvas = null;
+    for (const el of this.surfaces.values()) {
+      try { el.pause(); el.srcObject = null; } catch { /* already released */ }
+      detachHiddenVideo(el);
+    }
+    this.surfaces.clear();
   }
 }
 
