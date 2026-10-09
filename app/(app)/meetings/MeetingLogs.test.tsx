@@ -187,13 +187,18 @@ describe("opening a row", () => {
     expect(calls).toEqual([]);
   });
 
-  it("says a report failed to be written, rather than that it is loading forever", async () => {
+  it("says a report was never written from the transcript, rather than that it is loading forever", async () => {
+    // Two rows reach this: a model that failed, and a meeting nobody ended.
+    // Both have a transcript and no report, and both are fixed by the button
+    // beneath the sentence — so the sentence points at it rather than at
+    // "end the meeting from inside the room", which neither host can do now.
     const calls = mockFetch(async () => ({ body: { detail: DETAIL } }));
     render(<MeetingLogs meetings={[row({ hasReport: false, canRegenerate: true, isHost: true })]} />);
 
     await userEvent.click(screen.getByRole("button", { expanded: false }));
 
-    expect(await screen.findByText(/the analysis didn’t finish/)).toBeInTheDocument();
+    expect(await screen.findByText(/no report was written from it/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Regenerate from transcript/ })).toBeInTheDocument();
     expect(calls).toEqual([]);
   });
 

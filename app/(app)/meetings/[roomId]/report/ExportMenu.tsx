@@ -26,7 +26,23 @@ type EmailState =
   | { status: "idle" }
   | { status: "sending" }
   | { status: "done"; message: string }
+  /**
+   * The route refused to mail everyone twice. The host is told when it went
+   * and offered one deliberate way to send it again — the button that got
+   * them here pressed twice must never be that way.
+   */
+  | { status: "already_sent"; message: string }
   | { status: "error"; message: string };
+
+/** When a summary went, as the menu says it. */
+function sentOnLabel(iso: string | null): string {
+  const ms = iso ? Date.parse(iso) : NaN;
+  if (!Number.isFinite(ms)) return "The summary has already been sent to the people who were in the meeting.";
+  const when = new Date(ms).toLocaleString(undefined, {
+    month: "short", day: "numeric", hour: "numeric", minute: "2-digit",
+  });
+  return `The summary was already sent on ${when}.`;
+}
 
 /**
  * Memoised because the report page holds the recording's playhead in its own
@@ -65,13 +81,13 @@ export const ExportMenu = memo(function ExportMenu({ roomId }: { roomId: string 
     (withTranscript ? "&transcript=1" : "") +
     (withCorrespondence ? "&correspondence=1" : "");
 
-  async function sendToAttendees() {
+  async function sendToAttendees(resend = false) {
     setEmail({ status: "sending" });
     try {
       const res = await fetch(`/api/meetings/rooms/${encodeURIComponent(roomId)}/report/email`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ includeTranscript: withTranscript }),
+        body: JSON.stringify({ includeTranscript: withTranscript, resend }),
       });
       const body = await res.json().catch(() => ({}));
       if (!res.ok) {
@@ -83,7 +99,20 @@ export const ExportMenu = memo(function ExportMenu({ roomId }: { roomId: string 
         total = 0,
         unreachable = [],
         failed = [],
-      } = body as { sent?: number; total?: number; unreachable?: string[]; failed?: string[] };
+        alreadySent = false,
+        sentAt = null,
+      } = body as {
+        sent?: number;
+        total?: number;
+        unreachable?: string[];
+        failed?: string[];
+        alreadySent?: boolean;
+        sentAt?: string | null;
+      };
+      if (alreadySent) {
+        setEmail({ status: "already_sent", message: sentOnLabel(sentAt) });
+        return;
+      }
       setEmail({
         status: sent === 0 ? "error" : "done",
         message:
@@ -171,12 +200,25 @@ export const ExportMenu = memo(function ExportMenu({ roomId }: { roomId: string 
 
           <button
             role="menuitem"
-            onClick={sendToAttendees}
+            onClick={() => void sendToAttendees()}
             disabled={email.status === "sending"}
             className="w-full rounded-lg px-2 py-1.5 text-left text-sm text-[var(--fg-primary)] hover:bg-[var(--surface-2)] disabled:opacity-60 transition-colors"
           >
             {email.status === "sending" ? "Sending…" : "Email to attendees"}
           </button>
+
+          {email.status === "already_sent" && (
+            <div className="px-2 pb-1 pt-1.5">
+              <p className="text-[11px] text-[var(--fg-muted)]">{email.message}</p>
+              <button
+                type="button"
+                onClick={() => void sendToAttendees(true)}
+                className="mt-1 text-[11px] font-semibold text-[var(--gold-400)] hover:underline"
+              >
+                Send again
+              </button>
+            </div>
+          )}
 
           {(email.status === "done" || email.status === "error") && (
             <p

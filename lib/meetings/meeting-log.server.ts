@@ -65,6 +65,15 @@ export interface MeetingLogRow {
   /** Whether the caller hosted it — the gate on regenerating its report. */
   isHost: boolean;
   /**
+   * Whether the call's own transcript rows exist, under the caller's RLS.
+   *
+   * The other half of "is there something to regenerate from". The report
+   * row's `has_transcript` answers it for a meeting that was ended; a meeting
+   * nobody ended has no report row, and this is what lets the log offer to
+   * write its first one.
+   */
+  transcribed: boolean;
+  /**
    * Why this row matched a search, when it came from one.
    *
    * Absent on a plain list. Present on a search so a row can show the sentence
@@ -112,13 +121,13 @@ export async function loadMeetingLog(
   //
   // In batches, read together: an id list goes in the URL, and two hundred
   // UUIDs in one filter is close to what a proxy will accept in a request line.
-  const attendedIds = await attendanceFor(
-    supabase,
-    userId,
-    (data ?? []).map((row) => (row as { id: string }).id),
-  );
+  const ids = (data ?? []).map((row) => (row as { id: string }).id);
+  const [attendedIds, transcribedIds] = await Promise.all([
+    attendanceFor(supabase, userId, ids),
+    transcribedFor(supabase, ids),
+  ]);
 
-  return (data ?? []).map((row) => shapeLogRow(row as Record<string, unknown>, userId, attendedIds));
+  return (data ?? []).map((row) => shapeLogRow(row as Record<string, unknown>, userId, attendedIds, transcribedIds));
 }
 
 /**
@@ -133,6 +142,7 @@ function shapeLogRow(
   row: Record<string, unknown>,
   userId: string,
   attendedIds: Set<string>,
+  transcribedIds: Set<string>,
 ): MeetingLogRow {
 
     const embedded = (row as { live_meeting_reports?: unknown }).live_meeting_reports;
@@ -162,6 +172,7 @@ function shapeLogRow(
     },
     attended: attendedIds.has(row.id as string) || (row.host_id as string | null) === userId,
     isHost: (row.host_id as string | null) === userId,
+    transcribed: transcribedIds.has(row.id as string),
     report: report
       ? {
         summary: (report.summary as string | null) ?? null,
@@ -214,6 +225,48 @@ async function attendanceFor(
   return new Set(
     results.flatMap(({ data }) => (data ?? []).map((row: { meeting_id: string }) => row.meeting_id)),
   );
+}
+
+/**
+ * Which of these meetings have transcript rows at all.
+ *
+ * One function call per batch rather than a select on the transcripts table:
+ * that table answers with a row per utterance, thousands for a page of
+ * meetings, and PostgREST has no DISTINCT. The function
+ * (migration 20261009100100) runs under the caller's own RLS, so this learns
+ * nothing the caller could not read.
+ *
+ * Fails CLOSED. An error — the migration not yet applied, a transient
+ * failure — reads as "no transcript rows", which withholds a button rather
+ * than offering one that answers 409. The report row's own flag still covers
+ * every meeting that was ended properly.
+ */
+async function transcribedFor(
+  supabase: SupabaseClient,
+  ids: readonly string[],
+): Promise<Set<string>> {
+  if (ids.length === 0) return new Set();
+  const batches: string[][] = [];
+  for (let i = 0; i < ids.length; i += ATTENDANCE_BATCH) {
+    batches.push(ids.slice(i, i + ATTENDANCE_BATCH));
+  }
+  try {
+    const results = await Promise.all(
+      batches.map((batch) => supabase.rpc("live_meetings_with_transcript_rows", { ids: batch })),
+    );
+    const out = new Set<string>();
+    for (const { data, error } of results) {
+      if (error) {
+        console.warn("[meeting-log] transcript presence unavailable", error.message);
+        continue;
+      }
+      for (const id of (data ?? []) as unknown as string[]) out.add(id);
+    }
+    return out;
+  } catch (err) {
+    console.warn("[meeting-log] transcript presence unavailable", err);
+    return new Set();
+  }
 }
 
 /** What one log search found, and how far it looked. */
@@ -274,17 +327,17 @@ export async function searchMeetingLog(
   );
 
   const raw = data ?? [];
-  const attendedIds = await attendanceFor(
-    supabase,
-    userId,
-    raw.map((row) => (row as { id: string }).id),
-  );
+  const ids = raw.map((row) => (row as { id: string }).id);
+  const [attendedIds, transcribedIds] = await Promise.all([
+    attendanceFor(supabase, userId, ids),
+    transcribedFor(supabase, ids),
+  ]);
 
   const rows: MeetingLogRow[] = [];
   // Meetings that are actually in the log, which is what `scanned` reports.
   let considered = 0;
   for (const row of raw) {
-    const shaped = shapeLogRow(row as Record<string, unknown>, userId, attendedIds);
+    const shaped = shapeLogRow(row as Record<string, unknown>, userId, attendedIds, transcribedIds);
     // The same rule the page applies to the list — drafts, and meetings that
     // have not happened yet. A search that surfaced one would be the only place
     // in the product it appears, and it would be a record of something that has
@@ -292,7 +345,7 @@ export async function searchMeetingLog(
     if (!belongsInLog(shaped.meeting, now)) continue;
     considered += 1;
 
-    const entry = toLogEntry(shaped.meeting, shaped.report, shaped.attended, shaped.isHost);
+    const entry = toLogEntry(shaped.meeting, shaped.report, shaped.attended, shaped.isHost, shaped.transcribed);
     const meta: SessionMetadata = {
       title: entry.title,
       summary: entry.summary,
@@ -379,6 +432,10 @@ export async function loadLogDetail(
   const row = (data ?? [])[0];
   if (!row) return null;
 
-  const attendedIds = await attendanceFor(supabase, userId, [(row as { id: string }).id]);
-  return shapeLogRow(row as Record<string, unknown>, userId, attendedIds);
+  const id = (row as { id: string }).id;
+  const [attendedIds, transcribedIds] = await Promise.all([
+    attendanceFor(supabase, userId, [id]),
+    transcribedFor(supabase, [id]),
+  ]);
+  return shapeLogRow(row as Record<string, unknown>, userId, attendedIds, transcribedIds);
 }

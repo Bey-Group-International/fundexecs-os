@@ -29,7 +29,9 @@ import {
   reportOwedForMs,
 } from "@/lib/meetings/report-page";
 import { REPORT_WAIT_LIMIT_MS } from "@/lib/meetings/attendance";
+import { NOTHING_TO_SUMMARISE } from "@/lib/meetings/report-generation";
 import { callClock, isOneWay } from "@/lib/meetings/one-way";
+import { GenerateFromTranscript } from "./GenerateFromTranscript";
 import { AskEarnButton } from "@/components/AskEarnButton";
 
 export const metadata: Metadata = {
@@ -90,7 +92,9 @@ export default async function MeetingReportPage({
   const meeting = data.meeting!;
 
   if (data.state === "forbidden") return <NotAnAttendeeState title={meeting.title} />;
-  if (data.state === "stalled") return <StalledState title={meeting.title} />;
+  if (data.state === "stalled") {
+    return <StalledState title={meeting.title} meetingId={meeting.id} isHost={data.isHost} />;
+  }
 
   if (data.state === "loading" || data.state === "generating") {
     // The remaining patience, not a fresh allowance: somebody opening a
@@ -119,11 +123,11 @@ export default async function MeetingReportPage({
     hostId: meeting.host_id,
     invited: data.invited,
     hasFollowUp: Boolean(content.followUp),
-    // The attendance table cannot hold an unauthenticated guest -- its RLS is
-    // `user_id = auth.uid()` -- so an invitee who opened the link without
-    // signing in left no row and the page reported them absent. Their lines in
-    // the transcript are the evidence that survives, and the rows are already
-    // loaded above.
+    // A guest's attendance row is written through the attendance route under
+    // their guest key (the table's own RLS cannot take it), and meetings held
+    // before that route existed have no row for them at all. Their lines in
+    // the transcript are the evidence that survives either way, and the rows
+    // are already loaded above.
     spoke: presenceFromSpeech(data.cueRows),
   });
   const actionItems = linkActionItems(content.actionItems, side.tasks);
@@ -231,19 +235,26 @@ export default async function MeetingReportPage({
             <div className="flex flex-col gap-5">
               {data.state === "unsummarised" && (
                 <div className="rounded-xl border border-[var(--line)] bg-[var(--surface-2)] px-4 py-3">
-                  <p className="text-xs font-medium text-[var(--fg-primary)]">No summary was written</p>
+                  <p className="text-xs font-medium text-[var(--fg-primary)]">
+                    {content.unsummarised ? "Nothing to summarise" : "No summary was written"}
+                  </p>
                   <p className="mt-0.5 text-xs text-[var(--fg-muted)]">
-                    {/* Keyed on whether there are words, NOT on the kind of session.
-                        The route writes an empty summary down two paths: a call with
-                        nothing transcribed, and a model call that failed on a real
-                        transcript. Saying "nothing was transcribed" above a full
-                        transcript would be the page contradicting itself — and would
-                        withhold the regenerate advice that actually fixes the row. */}
-                    {content.transcript?.trim()
-                      ? "The analysis could not be completed, so there is no summary. Everything that was captured is below, and regenerating the report from the meeting log will try again."
-                      : oneWay
-                        ? "Nothing was transcribed on this call, so there was nothing to summarise. The recording is below."
-                        : "Nothing was transcribed in this meeting, so there was nothing to summarise."}
+                    {/* Three different silences, told apart in this order.
+                        A row the route filed WITHOUT asking the model — the
+                        transcript was silence or noise — says so by its reason,
+                        and regenerating it changes nothing. Otherwise, keyed on
+                        whether there are words, NOT on the kind of session: a
+                        model call that failed on a real transcript is the row
+                        the regenerate advice fixes, and saying "nothing was
+                        transcribed" above a full transcript would be the page
+                        contradicting itself. */}
+                    {content.unsummarised
+                      ? `${NOTHING_TO_SUMMARISE}${content.transcript?.trim() ? " Everything that was heard is kept below." : oneWay ? " The recording is below." : ""}`
+                      : content.transcript?.trim()
+                        ? "The analysis could not be completed, so there is no summary. Everything that was captured is below, and regenerating the report from the meeting log will try again."
+                        : oneWay
+                          ? "Nothing was transcribed on this call, so there was nothing to summarise. The recording is below."
+                          : "Nothing was transcribed in this meeting, so there was nothing to summarise."}
                   </p>
                 </div>
               )}
@@ -647,8 +658,13 @@ function NotAnAttendeeState({ title }: { title: string | null }) {
  * bought another six minutes of spinner, and a report that failed last week
  * still promised to arrive. It is measured from the meeting now, which is the
  * thing that is actually late.
+ *
+ * It then pointed at a button that was not shown: "regenerate from the
+ * meeting log", where the button was gated on a report row this meeting does
+ * not have. The host gets the button here instead; everyone else is told who
+ * can press it.
  */
-function StalledState({ title }: { title: string | null }) {
+function StalledState({ title, meetingId, isHost }: { title: string | null; meetingId: string; isHost: boolean }) {
   return (
     <div className="mx-auto flex min-h-[50vh] max-w-md flex-col items-center justify-center gap-3 px-4 text-center">
       <p className="text-sm font-medium text-[var(--fg-primary)]">
@@ -656,9 +672,11 @@ function StalledState({ title }: { title: string | null }) {
       </p>
       <p className="text-xs text-[var(--fg-muted)]">
         The summary has not arrived, and enough time has passed that it is probably not coming.
-        The recording and transcript, if there are any, are kept either way — regenerating the
-        report from the meeting log will try again.
+        {isHost
+          ? " If anything was transcribed, you can write the report from it now; the transcript and any recording are kept either way."
+          : " If anything was transcribed, the host can write the report from it — from this page, or from the meeting log. The transcript and any recording are kept either way."}
       </p>
+      {isHost && <GenerateFromTranscript meetingId={meetingId} />}
       <Link href="/meetings" className="text-sm text-[var(--gold-400)] hover:underline">
         Back to meetings
       </Link>

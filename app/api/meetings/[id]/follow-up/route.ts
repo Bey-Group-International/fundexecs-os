@@ -186,6 +186,24 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         { status: 502 },
       );
     }
+    // The page's chip reads followup_status, and this branch never wrote it:
+    // a follow-up sitting in approvals showed as "Not sent" — the same word
+    // as a follow-up nobody had pressed Send on — so the host pressed it
+    // again and queued every attendee's copy twice. The database's own sync
+    // (live_meeting_sync_followup) moves it on from here as the approvals are
+    // decided; this is the step it cannot take, because the approval rows it
+    // reads are written by the inbox action above and it is not told when.
+    const { error: pendingError } = await supabase
+      .from("live_meetings")
+      .update({ followup_status: "pending_approval" } as never)
+      .eq("id", id);
+    if (pendingError) {
+      console.error(
+        "[/api/meetings/:id/follow-up] status not marked pending_approval",
+        { meetingId: logId(id) },
+        pendingError.message,
+      );
+    }
     return NextResponse.json({
       gated: true,
       queued,

@@ -26,6 +26,18 @@ let notCalls: unknown[][] = [];
 /** Meetings the caller has an attendance row for, and the id lists asked about. */
 let attended: string[] = [];
 let attendanceAsked: string[][] = [];
+/** Meetings with transcript rows, as the database function answers. */
+let transcribed: string[] = [];
+let transcribedAsked: string[][] = [];
+let transcribedFails = false;
+
+/** The function call the transcript presence rides on; see transcribedFor. */
+const rpc = async (name: string, args: { ids: string[] }) => {
+  expect(name).toBe("live_meetings_with_transcript_rows");
+  transcribedAsked.push(args.ids);
+  if (transcribedFails) return { data: null, error: { message: "function does not exist" } };
+  return { data: transcribed.filter((id) => args.ids.includes(id)), error: null };
+};
 
 function wire(reports: unknown) {
   from.mockImplementation((table: string) => {
@@ -52,7 +64,7 @@ function wire(reports: unknown) {
     };
     return b;
   });
-  return { from: (t: string) => from(t) } as unknown as Parameters<typeof loadMeetingLog>[0];
+  return { from: (t: string) => from(t), rpc } as unknown as Parameters<typeof loadMeetingLog>[0];
 }
 
 beforeEach(() => {
@@ -61,6 +73,38 @@ beforeEach(() => {
   notCalls = [];
   attended = [];
   attendanceAsked = [];
+  transcribed = [];
+  transcribedAsked = [];
+  transcribedFails = false;
+});
+
+describe("transcript rows", () => {
+  // The report row's generated flag cannot speak for a meeting with no
+  // report row — a meeting nobody ended — so the rows are asked about in one
+  // call for the page.
+  it("asks once about the meetings in the log, and marks the ones with rows", async () => {
+    transcribed = ["m1", "elsewhere"];
+    const rows = await loadMeetingLog(wire([]), "org1", "host-1");
+    expect(transcribedAsked).toEqual([["m1"]]);
+    expect(rows[0].transcribed).toBe(true);
+    expect(rows[0].report).toBeNull();
+  });
+
+  it("is false when the rows are not there", async () => {
+    const rows = await loadMeetingLog(wire([]), "org1", "host-1");
+    expect(rows[0].transcribed).toBe(false);
+  });
+
+  it("fails closed when the function cannot be called", async () => {
+    // The migration not applied yet. Withholding a button is the cheap side
+    // of this mistake; offering one that answers 409 is the other.
+    const warn = jest.spyOn(console, "warn").mockImplementation(() => {});
+    transcribedFails = true;
+    transcribed = ["m1"];
+    const rows = await loadMeetingLog(wire([]), "org1", "host-1");
+    expect(rows[0].transcribed).toBe(false);
+    warn.mockRestore();
+  });
 });
 
 describe("attendance", () => {
