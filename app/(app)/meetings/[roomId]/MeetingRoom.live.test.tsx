@@ -716,6 +716,19 @@ describe("a member who simply muted themselves", () => {
     // The ordinary caption, on a control that can deliver what it says.
     expect(document.querySelector('button[title="Unmute"]')).not.toBeNull();
   });
+
+  it("is not told nobody can see them for a camera they left off", async () => {
+    // Joining with the camera off opens no camera at all — the hardware light
+    // staying dark is the point — so there is no video track, and "no track"
+    // was read as "could not be started". Every camera-off join sat under a
+    // red "Nobody can see you" that could not be dismissed, and every other
+    // media notice was hidden behind it.
+    joinChoice.micEnabled = true;
+    joinChoice.cameraEnabled = false;
+    await enterCall();
+    expect(screen.queryByText(/Nobody can see you/)).not.toBeInTheDocument();
+    expect(document.querySelector('button[title="Turn camera on"]')).not.toBeNull();
+  });
 });
 
 describe("an engine that reports only the ICE state", () => {
@@ -982,6 +995,24 @@ describe("the chosen speaker disappearing", () => {
   });
 });
 
+/** A track whose `mute` / `unmute` / `ended` can be fired, the way a device fires them. */
+function eventedTrack(kind: string, id: string) {
+  const listeners = new Map<string, Set<() => void>>();
+  const track = {
+    kind, id, enabled: true, readyState: "live", muted: false,
+    getSettings: () => ({ deviceId: `${kind}-dev` }),
+    addEventListener(type: string, fn: () => void) {
+      if (!listeners.has(type)) listeners.set(type, new Set());
+      listeners.get(type)!.add(fn);
+    },
+    removeEventListener(type: string, fn: () => void) { listeners.get(type)?.delete(fn); },
+    fire(type: string) { [...(listeners.get(type) ?? [])].forEach((fn) => fn()); },
+    stop: () => {}, applyConstraints: async () => {},
+    clone() { return this; },
+  };
+  return track;
+}
+
 describe("a camera that stalls without ending", () => {
   /**
    * The third camera failure, beside never starting and ending: Windows hands
@@ -990,23 +1021,6 @@ describe("a camera that stalls without ending", () => {
    * tile in the room freezes on it — including the member's own, so nothing
    * told them the room was frozen too.
    */
-  function eventedTrack(kind: string, id: string) {
-    const listeners = new Map<string, Set<() => void>>();
-    const track = {
-      kind, id, enabled: true, readyState: "live", muted: false,
-      getSettings: () => ({ deviceId: `${kind}-dev` }),
-      addEventListener(type: string, fn: () => void) {
-        if (!listeners.has(type)) listeners.set(type, new Set());
-        listeners.get(type)!.add(fn);
-      },
-      removeEventListener(type: string, fn: () => void) { listeners.get(type)?.delete(fn); },
-      fire(type: string) { [...(listeners.get(type) ?? [])].forEach((fn) => fn()); },
-      stop: () => {}, applyConstraints: async () => {},
-      clone() { return this; },
-    };
-    return track;
-  }
-
   function withEventedCamera() {
     const camera = eventedTrack("video", "video-local");
     Object.defineProperty(navigator, "mediaDevices", {
@@ -1053,6 +1067,152 @@ describe("a camera that stalls without ending", () => {
     await flush(5_000, 10);
 
     expect(notice()).not.toBeInTheDocument();
+  });
+});
+
+describe("a microphone that stalls without ending", () => {
+  /**
+   * The camera's stall, on the microphone, where it is worse: a frozen frame is
+   * at least visible to the person it happens to, and silence is what a
+   * listener who has not spoken yet also sends. Windows hands an exclusive
+   * input to another application, a Bluetooth headset drops its microphone
+   * profile, a phone takes a call — the track stays `live` and fires `mute`,
+   * and the member talks to a room that cannot hear them. The camera is only
+   * told about; being heard is the floor of a call, so the microphone is
+   * reopened first and told about only when that does not help.
+   */
+  let getUserMedia: jest.Mock;
+  /** Every microphone handed out, in order. The first is the one joined on. */
+  let mics: ReturnType<typeof eventedTrack>[];
+
+  function withEventedMic() {
+    mics = [];
+    getUserMedia = jest.fn(async (c: { audio?: unknown; video?: unknown }) => {
+      const tracks: FakeTrack[] = [];
+      if (c.audio) {
+        const mic = eventedTrack("audio", `audio-local-${mics.length}`);
+        mics.push(mic);
+        tracks.push(mic as unknown as FakeTrack);
+      }
+      if (c.video) tracks.push(fakeTrack("video"));
+      return fakeStream(tracks);
+    });
+    Object.defineProperty(navigator, "mediaDevices", {
+      configurable: true,
+      value: {
+        getUserMedia,
+        getDisplayMedia: async () => fakeStream([fakeTrack("video")]),
+        enumerateDevices: async () => [],
+        addEventListener: () => {}, removeEventListener: () => {},
+      },
+    });
+  }
+
+  /** The requests made after the join, which is the first. */
+  const reopens = () => getUserMedia.mock.calls.slice(1) as Array<[{ audio?: unknown; video?: unknown }]>;
+  const notice = () => screen.queryByText(/stopped picking up sound/i);
+  const stall = async (mic: ReturnType<typeof eventedTrack>) => {
+    mic.muted = true;
+    await act(async () => { mic.fire("mute"); await Promise.resolve(); });
+  };
+  const resume = async (mic: ReturnType<typeof eventedTrack>) => {
+    mic.muted = false;
+    await act(async () => { mic.fire("unmute"); await Promise.resolve(); });
+  };
+
+  beforeEach(() => { joinChoice.micEnabled = true; });
+
+  it("reopens the microphone after sound stops for a sustained stretch", async () => {
+    withEventedMic();
+    await enterCall();
+    expect(getUserMedia).toHaveBeenCalledTimes(1);
+
+    await stall(mics[0]);
+    await flush(5_000, 10);
+
+    // Asked for the microphone, and only the microphone: the camera was never
+    // the problem.
+    expect(reopens()).toHaveLength(1);
+    expect(reopens()[0][0].audio).toBeTruthy();
+    expect(reopens()[0][0].video).toBeFalsy();
+    // The replacement is live on the wire, in the state the member asked for.
+    expect(mics).toHaveLength(2);
+    expect(mics[1].enabled).toBe(true);
+    // A reopen that worked is not something to put a banner over.
+    expect(notice()).not.toBeInTheDocument();
+    // And the room is told again that this member can be heard, because the
+    // track arriving is invisible to everyone else.
+    const announced = sent.filter((m) => (m as { payload?: { type?: string; micOn?: boolean } }).payload?.type === "mic");
+    expect((announced[announced.length - 1] as { payload: { micOn: boolean } }).payload.micOn).toBe(true);
+  });
+
+  it("tells the member, rather than reopening again, when the replacement stalls too", async () => {
+    withEventedMic();
+    await enterCall();
+
+    await stall(mics[0]);
+    await flush(5_000, 10);
+    expect(reopens()).toHaveLength(1);
+
+    // The device that comes back muted every time: another application has it
+    // for good, or the headset's microphone is gone while its speakers remain.
+    await stall(mics[1]);
+    await flush(5_000, 10);
+
+    expect(reopens()).toHaveLength(1);
+    expect(notice()).toBeInTheDocument();
+
+    // Sound resumes — the other app let go — and the notice goes with it.
+    await resume(mics[1]);
+    expect(notice()).not.toBeInTheDocument();
+  });
+
+  it("says nothing about a blip that resolves itself", async () => {
+    withEventedMic();
+    await enterCall();
+
+    await stall(mics[0]);
+    await flush(1_000, 4);
+    await resume(mics[0]);
+    await flush(5_000, 10);
+
+    expect(reopens()).toHaveLength(0);
+    expect(notice()).not.toBeInTheDocument();
+  });
+
+  // A muted member's track is disabled, and the browser may mute it as well.
+  // They asked for silence; reopening would be a device opened for somebody
+  // who had just switched it off.
+  it("leaves a member who muted themselves alone", async () => {
+    joinChoice.micEnabled = false;
+    withEventedMic();
+    await enterCall();
+
+    await stall(mics[0]);
+    await flush(5_000, 10);
+
+    expect(reopens()).toHaveLength(0);
+    expect(notice()).not.toBeInTheDocument();
+  });
+
+  // A phone that is backgrounded mutes its capture and un-mutes it on return;
+  // a reopen while hidden is refused, or replaces a track about to recover by
+  // itself. The return is what the judgement waits for.
+  it("waits while the page is hidden, and acts once it is back", async () => {
+    withEventedMic();
+    await enterCall();
+
+    let visibility = "hidden";
+    Object.defineProperty(document, "visibilityState", { configurable: true, get: () => visibility });
+    await stall(mics[0]);
+    await flush(5_000, 10);
+    expect(reopens()).toHaveLength(0);
+    expect(notice()).not.toBeInTheDocument();
+
+    visibility = "visible";
+    await act(async () => { document.dispatchEvent(new Event("visibilitychange")); await Promise.resolve(); });
+    await flush(5_000, 10);
+    expect(reopens()).toHaveLength(1);
   });
 });
 

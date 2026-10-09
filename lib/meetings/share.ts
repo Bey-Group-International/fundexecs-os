@@ -13,6 +13,12 @@ export interface MeetingShareDetails {
   title?: string | null;
   scheduledAt?: string | null;
   timeZone?: string | null;
+  /**
+   * The meeting's own conferencing link, when a synced calendar imported one.
+   * When it is a real http(s) link, that is where the meeting happens and
+   * that is the link every share surface hands out — see meetingJoinUrl.
+   */
+  meetingUrl?: string | null;
 }
 
 export interface ShareTarget {
@@ -98,6 +104,11 @@ export function formatMeetingWhen(scheduledAt: string | null | undefined, timeZo
  * `text` deliberately omits the URL: most share targets append `url` themselves,
  * and the ones that don't get it from the `url` field anyway — including it in
  * both is how a shared message ends up with the link in it twice.
+ *
+ * Built on meetingJoinUrl, not meetingInviteUrl: the reminder emails already
+ * hand out the meeting's own conferencing link when a synced meeting carries
+ * one, and a share sheet that hands out the empty FundExecs room for the same
+ * meeting is how one guest ends up holding two links to two rooms.
  */
 export function shareTargetFor(details: MeetingShareDetails): ShareTarget {
   const title = details.title?.trim() || DEFAULT_TITLE;
@@ -105,7 +116,7 @@ export function shareTargetFor(details: MeetingShareDetails): ShareTarget {
   return {
     title,
     text: when ? `${title} — ${when}` : title,
-    url: meetingInviteUrl(details.origin, details.roomCode),
+    url: meetingJoinUrl(details.origin, details.roomCode, details.meetingUrl),
   };
 }
 
@@ -127,7 +138,10 @@ export function shareTargetFor(details: MeetingShareDetails): ShareTarget {
  * where the date should be.
  */
 export function inviteTextFor(details: MeetingShareDetails): string {
-  const url = meetingInviteUrl(details.origin, details.roomCode);
+  // The join link, which for a synced meeting is its own conferencing link —
+  // the same rule the reminder emails apply, so the invite somebody pastes
+  // and the email the app sends can never point at two different rooms.
+  const url = meetingJoinUrl(details.origin, details.roomCode, details.meetingUrl);
   if (!url) return "";
 
   const title = details.title?.trim() || DEFAULT_TITLE;

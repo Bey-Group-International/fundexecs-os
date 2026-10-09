@@ -154,6 +154,7 @@ export function MeetingDetails({ meeting }: { meeting: UpcomingMeeting }) {
             title={meeting.title}
             scheduledAt={meeting.scheduled_at}
             timeZone={meeting.timezone}
+            meetingUrl={meeting.meeting_url}
           />
         </dd>
       </div>

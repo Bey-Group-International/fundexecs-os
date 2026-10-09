@@ -103,6 +103,25 @@ describe("shareTargetFor", () => {
     expect(t.text).not.toContain("app.test");
     expect(t.text).not.toContain("meeting-invite");
   });
+
+  // The emails already hand out the meeting's own conferencing link; a share
+  // sheet handing out the empty FundExecs room for the same meeting is one
+  // guest holding two links to two rooms.
+  it("shares the meeting's own conferencing link when a synced meeting carries one", () => {
+    const t = shareTargetFor({
+      origin: "https://app.test",
+      roomCode: "abc",
+      title: "Q3 LP update",
+      meetingUrl: "https://zoom.us/j/123",
+    });
+    expect(t.url).toBe("https://zoom.us/j/123");
+  });
+
+  it("falls back to the room when the external link is not a real one", () => {
+    expect(
+      shareTargetFor({ origin: "https://app.test", roomCode: "abc", meetingUrl: "zoom.us/j/123" }).url,
+    ).toBe("https://app.test/meeting-invite/abc");
+  });
 });
 
 describe("canNativeShare", () => {
@@ -189,6 +208,20 @@ describe("inviteTextFor", () => {
       timeZone: "America/New_York",
     });
     expect(text).toContain("10:00 AM EST");
+  });
+
+  // The invite somebody pastes and the reminder email the app sends must not
+  // point at two different rooms for one meeting.
+  it("joins at the meeting's own conferencing link when a synced meeting has one", () => {
+    expect(inviteTextFor({ ...base, title: "Board", meetingUrl: "https://zoom.us/j/123" })).toBe(
+      "Board\nJoin: https://zoom.us/j/123",
+    );
+  });
+
+  it("ignores an external link an email could not render", () => {
+    expect(inviteTextFor({ ...base, title: "Board", meetingUrl: "zoommtg://zoom.us/join" })).toBe(
+      "Board\nJoin: https://app.test/meeting-invite/abc-def-12",
+    );
   });
 });
 

@@ -56,6 +56,29 @@ describe("standingOf", () => {
       failure: null,
     });
   });
+
+  it("reads a camera the member never asked for as off, not missing", () => {
+    // Joining with the camera off opens no camera, so there is no track — and
+    // that is the member's choice, not a fault to be solved at them. Read as
+    // unavailable, every camera-off join carried an undismissable "Nobody can
+    // see you" for the whole call, with every other media notice hidden
+    // behind it.
+    expect(standingOf({ present: false, enabled: false, failure: null, wanted: false })).toEqual({
+      standing: "muted",
+    });
+    expect(participationNotice(live, standingOf({ present: false, enabled: false, failure: null, wanted: false }))).toBeNull();
+    expect(camButtonTitle(standingOf({ present: false, enabled: false, failure: null, wanted: false }))).toBe("Turn camera on");
+  });
+
+  it("still reports a camera that was asked for later and refused", () => {
+    // Left off at join, turned on mid-call, and the device would not open: the
+    // member has asked for it now, and the failure says so.
+    expect(standingOf({ present: false, enabled: false, failure: "in_use", wanted: false })).toEqual({
+      standing: "unavailable",
+      failure: "in_use",
+    });
+    expect(standingOf({ present: false, enabled: false, failure: null, wanted: true }).standing).toBe("unavailable");
+  });
 });
 
 describe("toggleCanDeliver", () => {

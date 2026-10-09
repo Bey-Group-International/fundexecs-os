@@ -5,7 +5,7 @@ import {
   canNativeShare,
   displayUrl,
   inviteTextFor,
-  meetingInviteUrl,
+  meetingJoinUrl,
   shareTargetFor,
   type ShareCapableNavigator,
 } from "@/lib/meetings/share";
@@ -106,6 +106,17 @@ export interface MeetingShareLinkProps {
   title?: string | null;
   scheduledAt?: string | null;
   timeZone?: string | null;
+  /**
+   * The meeting's own conferencing link, for a meeting a synced calendar
+   * imported. When it is a real http(s) link that is where the meeting
+   * happens, and every button here hands IT out — the same rule the reminder
+   * emails apply. Handing out the FundExecs room instead sent a guest to an
+   * empty room while everybody else was elsewhere, with the email for the
+   * same meeting pointing at the right one. Omit it in contexts that ARE the
+   * FundExecs room — the green room, the call itself — where the room link is
+   * the meeting.
+   */
+  meetingUrl?: string | null;
   /** Drops the URL line and leaves just the two buttons, for tight rows. */
   compact?: boolean;
   className?: string;
@@ -122,6 +133,7 @@ export function MeetingShareLink({
   title,
   scheduledAt,
   timeZone,
+  meetingUrl,
   compact = false,
   className = "",
 }: MeetingShareLinkProps) {
@@ -136,10 +148,10 @@ export function MeetingShareLink({
 
   useEffect(() => setOrigin(window.location.origin), []);
 
-  const url = useMemo(() => meetingInviteUrl(origin, roomCode), [origin, roomCode]);
+  const url = useMemo(() => meetingJoinUrl(origin, roomCode, meetingUrl), [origin, roomCode, meetingUrl]);
   const target = useMemo(
-    () => shareTargetFor({ origin, roomCode, title, scheduledAt, timeZone }),
-    [origin, roomCode, title, scheduledAt, timeZone],
+    () => shareTargetFor({ origin, roomCode, title, scheduledAt, timeZone, meetingUrl }),
+    [origin, roomCode, title, scheduledAt, timeZone, meetingUrl],
   );
 
   const [shareable, setShareable] = useState(false);
@@ -148,8 +160,8 @@ export function MeetingShareLink({
   }, [target]);
 
   const invite = useMemo(
-    () => inviteTextFor({ origin, roomCode, title, scheduledAt, timeZone }),
-    [origin, roomCode, title, scheduledAt, timeZone],
+    () => inviteTextFor({ origin, roomCode, title, scheduledAt, timeZone, meetingUrl }),
+    [origin, roomCode, title, scheduledAt, timeZone, meetingUrl],
   );
 
   const copy = useCallback(async (what: "link" | "invite") => {
