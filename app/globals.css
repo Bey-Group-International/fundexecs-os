@@ -546,6 +546,23 @@ body {
     0 2px 8px rgb(0 0 0 / 0.4);
 }
 
+/* iOS Safari zooms the whole page in when a focused field's text is smaller
+   than 16px — and never zooms back out, so one tap into a 13px search box
+   leaves the operator panning a cropped screen. Phone-width forms across the
+   app set 12–14px inputs. Pin them to 16px on iPhone only: `-webkit-touch-
+   callout` exists solely in WebKit on iOS, so the @supports gate skips desktop
+   Safari and every other engine, and the width gate leaves iPad layouts (which
+   never auto-zoom) exactly as designed. `1em` keeps anything already larger. */
+@supports (-webkit-touch-callout: none) {
+  @media (max-width: 767px) {
+    input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):not([type="color"]),
+    select,
+    textarea {
+      font-size: max(16px, 1em);
+    }
+  }
+}
+
 /* Larger, thumb-friendly hit areas inside the app shell. */
 .fx-tap {
   -webkit-tap-highlight-color: transparent;
