@@ -45,6 +45,17 @@ export interface TrackFacts {
   enabled: boolean;
   /** Why there is no track, when that is known. */
   failure: MediaFailure | null;
+  /**
+   * The member asked for this device at all. Defaults to true.
+   *
+   * False for a camera deliberately left off at join: the room never opens
+   * one, so there is no track, and "no track" was read as "cannot" — a member
+   * who did the ordinary thing was told nobody could see them, for the whole
+   * call, by a banner that cannot be dismissed and that hides every other
+   * media notice behind it. The microphone is always opened, so this is only
+   * ever false for the camera.
+   */
+  wanted?: boolean;
 }
 
 /**
@@ -53,9 +64,17 @@ export interface TrackFacts {
  * `present` first, deliberately. A member who muted themselves and then had
  * their camera taken by another application is in the `unavailable` case, not
  * the `muted` one: what they chose stopped being the reason some time ago.
+ *
+ * A device that is absent because it was never WANTED is the member's own
+ * choice, the same as a track they disabled: the button offers to turn it on
+ * and nothing is said. A failure to open takes precedence over that, because
+ * the member who turned their camera on and was refused has asked for it now.
  */
 export function standingOf(facts: TrackFacts): Standing {
-  if (!facts.present) return { standing: "unavailable", failure: facts.failure };
+  if (!facts.present) {
+    if (facts.wanted === false && facts.failure === null) return { standing: "muted" };
+    return { standing: "unavailable", failure: facts.failure };
+  }
   return facts.enabled ? { standing: "live" } : { standing: "muted" };
 }
 

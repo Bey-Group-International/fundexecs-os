@@ -68,6 +68,51 @@ export function playChime(type: "join" | "leave" | "knock") {
   } catch { /* AudioContext not available */ }
 }
 
+// ─── useResumeOnReturn ────────────────────────────────────────────────────────
+
+/**
+ * Play a call media element again when the page comes back.
+ *
+ * A phone that is backgrounded — the member switches apps, takes a call,
+ * locks the screen — pauses every <video> and <audio> on the page, and on
+ * return they are allowed to stay paused. The peer connections are fine, the
+ * tracks are live, the tiles are mounted; the elements that render them are
+ * simply stopped. To the member it is a room of frozen faces and no voices
+ * after a glance at a text message, and nothing on screen says why, because
+ * from the room's point of view nothing changed.
+ *
+ * `play()` is otherwise called when the stream is attached and on `canplay`,
+ * neither of which fires again here. So this listens for the two events that
+ * mean "the page is back" — `visibilitychange` to visible, and `pageshow` for
+ * a page restored from the back-forward cache — and plays anything that has a
+ * stream and is paused. Playing an element that is already playing is a no-op,
+ * and an element with no stream is left alone: it is a tile with nothing to
+ * show, not one that stopped.
+ *
+ * Hidden is the one state that stands down. A page that is hidden draws
+ * nothing, and a `play()` while hidden can be refused on mobile, which would
+ * burn the one retry a user gesture is good for.
+ */
+export function useResumeOnReturn(ref: React.RefObject<HTMLMediaElement | null>): void {
+  useEffect(() => {
+    const resume = () => {
+      if (typeof document !== "undefined" && document.visibilityState === "hidden") return;
+      const el = ref.current;
+      if (!el || !el.srcObject || !el.paused) return;
+      // Optional chaining because jsdom's play() returns undefined, and so
+      // does a browser's for an element with no source — not this one, but
+      // the guard is free.
+      void el.play()?.catch(() => { /* retried on the next gesture */ });
+    };
+    document.addEventListener("visibilitychange", resume);
+    window.addEventListener("pageshow", resume);
+    return () => {
+      document.removeEventListener("visibilitychange", resume);
+      window.removeEventListener("pageshow", resume);
+    };
+  }, [ref]);
+}
+
 // ─── BodyPortal ───────────────────────────────────────────────────────────────
 
 // Renders children into <body>, escaping the app shell. The meeting page is

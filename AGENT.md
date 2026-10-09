@@ -112,6 +112,22 @@ You are building a system that replaces 30+ point solutions for PE funds, real e
     confidence mask plus a small dilation of the person region keeps caps, hats
     and headscarves, and is cheap enough to be free when the dilation runs on the
     downscaled mask grid rather than the full frame.
+  - A device can fail three ways and each needs its own watcher: never starting
+    (the liveness check), ending (the device-loss listener) and stalling — the
+    track stays live and goes `muted`. The camera had all three and the
+    microphone had two, and the missing one is the worse one: a frozen frame is
+    visible to the person it happens to, silence looks like listening. The
+    microphone stall is reopened first, once, and only told about if that does
+    not help (`mic-liveness.ts`).
+  - "No track" is not "cannot". Joining with the camera off opens no camera at
+    all, so the standing that reads absence as a fault told every camera-off
+    member nobody could see them, for the whole call, and hid every other media
+    notice behind it. A device that was never wanted is the member's choice;
+    `standingOf` has to be told which.
+  - A phone put down and picked up again leaves every media element paused with
+    a live stream attached, and the analyser context interrupted. Nothing in the
+    room changed, so nothing re-ran `play()` or `resume()`. The page coming
+    back is its own event, and it has to be listened for.
 - ✅ Meeting recording — the host's browser composites the mesh to a canvas,
   mixes every participant's audio, and encodes one watchable file. Active
   speaker with a grid fallback; a shared screen takes the frame. Uploaded in
@@ -5389,6 +5405,47 @@ Deployed, monitoring               →  live, observability active
              |  the noise. Said rather than skipped.
              |  Confidence: Jest 7851 across 552 suites, typecheck and eslint
              |  clean.
+
+2026-10-09  |  The microphone that went quiet and nobody noticed  |  Asked to
+             |  harden camera and microphone handling so both sides of a call
+             |  are seen and heard. Audited the whole media path first: join
+             |  (combined then split getUserMedia, device walk, preview
+             |  adoption), repair (sender re-attachment on connect, the
+             |  liveness check, the reacquire loop, the device-loss listener)
+             |  and rendering (always-mounted tiles, one audio element per
+             |  peer). Most of what the request names was already built, so
+             |  the work was the gaps between those pieces.
+             |  THREE GAPS. (1) A microphone that STALLS - track live, goes
+             |  `muted`, never ends - had no watcher. The camera had one, and
+             |  it only tells; the microphone's reopens first (being heard is
+             |  the floor), once per minute, then tells. Stands down while the
+             |  page is hidden, because a phone in a pocket mutes its capture
+             |  and un-mutes it on return. (2) A phone put down and picked up
+             |  again leaves every <video>/<audio> paused on a live stream and
+             |  the analyser context interrupted; `play()` only ran on attach
+             |  and `canplay`. One hook listens for the page coming back and
+             |  plays what is paused; the meter resumes its context the same
+             |  way. (3) A preview track that ENDS while a guest waits (iOS
+             |  stops capture in the background) was never reopened: the
+             |  preview went black, the meter flat, and the device check
+             |  blamed a working camera. Ended is now turned into missing and
+             |  the per-device effects run again - never for a track the call
+             |  has taken, never while a join is in flight.
+             |  AND ONE THE TESTS FOUND. Writing the stall test with the
+             |  camera off, the stall notice never appeared: a red "Nobody can
+             |  see you - your camera could not be started" was pinned over
+             |  it. Joining with the camera off opens no camera, `standingOf`
+             |  read no-track as cannot, and every camera-off member in every
+             |  meeting has sat under that banner - undismissable, hiding every
+             |  other media notice. The pure module's own test for "chose to
+             |  be off" used a present-but-disabled track, which is not what a
+             |  camera-off join produces. `standingOf` now takes `wanted`;
+             |  the room mirrors `camWantedRef` into state to supply it.
+             |  Confidence: new suites for mic-liveness (pure), the resume
+             |  hook (tile and peer audio), the green-room ended path, and
+             |  five mic-stall cases plus the camera-off banner in the live
+             |  room test; each DOM suite shown failing against the unfixed
+             |  component first. Typecheck and eslint clean.
 ```
 
 ---

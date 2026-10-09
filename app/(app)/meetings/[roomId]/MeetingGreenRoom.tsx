@@ -58,6 +58,7 @@ import {
   waitedLabel,
   type BrowserFamily,
 } from "@/lib/meetings/green-room";
+import { useResumeOnReturn } from "./room-shared";
 import nextDynamic from "next/dynamic";
 
 // Loaded when someone picks a background, not with the room: the picker and
@@ -278,6 +279,9 @@ function PreviewVideo({ stream }: { stream: MediaStream }) {
     el.srcObject = stream;
     void el.play().catch(() => { /* autoplay race — retried on canplay */ });
   }, [stream]);
+  // A guest waiting to be let in on a phone switches apps and comes back to a
+  // preview that is paused on its last frame. See useResumeOnReturn.
+  useResumeOnReturn(ref);
   return (
     <video
       ref={ref}
@@ -575,6 +579,10 @@ export function MeetingGreenRoom({
   const camIdRef = useRef(camId);
   const micIdRef = useRef(micId);
   const cameraEnabledRef = useRef(cameraEnabled);
+  // Read by the device-loss listeners below, which must not be re-attached to
+  // a live track every time the Join button changes state.
+  const joiningRef = useRef(joining);
+  useEffect(() => { joiningRef.current = joining; }, [joining]);
   useEffect(() => { camIdRef.current = camId; }, [camId]);
   useEffect(() => { micIdRef.current = micId; }, [micId]);
   useEffect(() => { cameraEnabledRef.current = cameraEnabled; }, [cameraEnabled]);
@@ -842,6 +850,53 @@ export function MeetingGreenRoom({
   }, [videoTrack, audioTrack]);
 
   useEffect(() => { onPreviewStreamRef.current?.(previewStream, release); }, [previewStream, release]);
+
+  // A device that ends while somebody sits here.
+  //
+  // A guest in the waiting room is the person most likely to be on a phone and
+  // the most likely to be kept waiting, and a phone that is put down stops its
+  // capture: on return the track has ENDED, not merely paused. A webcam whose
+  // cable is knocked, or a USB headset re-enumerated by a dock, does the same
+  // on a desk. Nothing here was listening, so the preview went black and the
+  // meter went flat and stayed that way — through the wait, and through the
+  // device check, which then told the guest their camera "isn't sending a
+  // picture" about a camera that would open fine if asked.
+  //
+  // The per-device effects above already know how to open whatever is missing,
+  // so an ended track is turned into a missing one and they are run again. The
+  // same device is asked for first; if it is gone, the ordinary failure path
+  // forgets it and falls back to the system default.
+  //
+  // Not a track the call has taken (it is the call's to recover, and two
+  // repairs racing for one camera is the race openCallMedia exists to avoid),
+  // and not while a join is in flight, for the same reason.
+  useEffect(() => {
+    const track = videoTrack;
+    if (!track) return;
+    const onEnded = () => {
+      if (relinquishedRef.current.has(track) || joiningRef.current) return;
+      if (videoTrackRef.current !== track) return;
+      adoptVideo(null);
+      openedCamRef.current = null;
+      setRetryKey((k) => k + 1);
+    };
+    track.addEventListener("ended", onEnded);
+    return () => track.removeEventListener("ended", onEnded);
+  }, [videoTrack, adoptVideo]);
+
+  useEffect(() => {
+    const track = audioTrack;
+    if (!track) return;
+    const onEnded = () => {
+      if (relinquishedRef.current.has(track) || joiningRef.current) return;
+      if (audioTrackRef.current !== track) return;
+      adoptAudio(null);
+      openedMicRef.current = null;
+      setRetryKey((k) => k + 1);
+    };
+    track.addEventListener("ended", onEnded);
+    return () => track.removeEventListener("ended", onEnded);
+  }, [audioTrack, adoptAudio]);
 
   // Release on unmount — unless the room took these over, in which case they are
   // live on the wire and stopping them here is exactly the bug this screen used
