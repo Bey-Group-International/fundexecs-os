@@ -218,6 +218,21 @@ export class MaskCompositor {
   private width: number;
   private height: number;
 
+  /**
+   * Whether this context has a `filter` property at all.
+   *
+   * Safari shipped canvas 2D filters only in version 18. Before that the
+   * property is absent from the prototype, and an assignment to it is a plain
+   * expando that nothing reads: every blur here — the room, the veil, the
+   * mask's feathered edge — was silently a sharp draw, and somebody who had
+   * chosen "blur my room" was sending their room. Presence on the context is
+   * the test; reading a value back is not, because an expando reads back fine.
+   */
+  private readonly hasFilter: boolean;
+
+  /** The small surface the no-`filter` blur scales through. Made on first use. */
+  private softScratch: Drawable | null = null;
+
   private constructor(
     private readonly makeSurface: SurfaceFactory,
     width: number,
@@ -230,6 +245,7 @@ export class MaskCompositor {
   ) {
     this.width = width;
     this.height = height;
+    this.hasFilter = "filter" in parts.output.ctx;
     this.output = parts.output;
     this.scratch = parts.scratch;
     this.mask = parts.mask;
@@ -563,8 +579,13 @@ export class MaskCompositor {
     const featheredCtx = this.feathered.ctx;
     featheredCtx.save();
     featheredCtx.clearRect(0, 0, grid.width, grid.height);
-    featheredCtx.filter = `blur(${maskFeatherPx(width) / grid.scale}px)`;
-    featheredCtx.drawImage(this.mask.surface, 0, 0);
+    const featherPx = maskFeatherPx(width) / grid.scale;
+    if (this.hasFilter) {
+      featheredCtx.filter = `blur(${featherPx}px)`;
+      featheredCtx.drawImage(this.mask.surface, 0, 0);
+    } else {
+      this.softDraw(featheredCtx, this.mask.surface, featherPx, 0, 0, grid.width, grid.height);
+    }
     featheredCtx.restore();
 
     // The background goes down AFTER the mask is built, not before as it used
@@ -749,8 +770,12 @@ export class MaskCompositor {
     const bleed = radius * 2;
 
     backdropCtx.save();
-    backdropCtx.filter = `blur(${radius}px)`;
-    backdropCtx.drawImage(frame.source, -bleed, -bleed, bw + bleed * 2, bh + bleed * 2);
+    if (this.hasFilter) {
+      backdropCtx.filter = `blur(${radius}px)`;
+      backdropCtx.drawImage(frame.source, -bleed, -bleed, bw + bleed * 2, bh + bleed * 2);
+    } else {
+      this.softDraw(backdropCtx, frame.source, radius, -bleed, -bleed, bw + bleed * 2, bh + bleed * 2);
+    }
     backdropCtx.restore();
 
     if (person) {
@@ -764,17 +789,26 @@ export class MaskCompositor {
       veilCtx.drawImage(person, 0, 0, bw, bh);
       // The mask sits about a cell inside the hair; spread the cut a little past
       // it so the edge pixels the mask leaves do not get blurred into the room.
-      veilCtx.filter = `blur(${maskFeatherPx(width) * (bw / width) * 2}px)`;
-      veilCtx.drawImage(person, 0, 0, bw, bh);
+      const spread = maskFeatherPx(width) * (bw / width) * 2;
+      if (this.hasFilter) {
+        veilCtx.filter = `blur(${spread}px)`;
+        veilCtx.drawImage(person, 0, 0, bw, bh);
+      } else {
+        this.softDraw(veilCtx, person, spread, 0, 0, bw, bh);
+      }
       veilCtx.restore();
 
       const blurCtx = this.veilBlur.ctx;
       blurCtx.save();
       blurCtx.globalCompositeOperation = "source-over";
       blurCtx.clearRect(0, 0, bw, bh);
-      blurCtx.filter = `blur(${radius}px)`;
-      blurCtx.drawImage(this.veil.surface, -bleed, -bleed, bw + bleed * 2, bh + bleed * 2);
-      blurCtx.filter = "none";
+      if (this.hasFilter) {
+        blurCtx.filter = `blur(${radius}px)`;
+        blurCtx.drawImage(this.veil.surface, -bleed, -bleed, bw + bleed * 2, bh + bleed * 2);
+        blurCtx.filter = "none";
+      } else {
+        this.softDraw(blurCtx, this.veil.surface, radius, -bleed, -bleed, bw + bleed * 2, bh + bleed * 2);
+      }
       for (let pass = 0; pass < VEIL_NORMALISE_PASSES; pass++) {
         blurCtx.drawImage(this.veilBlur.surface, 0, 0);
       }
@@ -788,6 +822,48 @@ export class MaskCompositor {
 
     this.output.ctx.drawImage(surface, 0, 0, width, height);
     return true;
+  }
+
+  /**
+   * Draw `source` blurred by about `radiusPx` on a context with no `filter`.
+   *
+   * The source is drawn into a surface `radiusPx` times smaller than the
+   * destination and scaled back up. Bilinear sampling averages that many
+   * pixels into one on the way down and spreads each back over the same
+   * distance on the way up, so the result is softened by about the radius
+   * asked for. Blockier than a Gaussian, and good enough for the one thing
+   * that matters where this runs: what is behind the person cannot be read.
+   * A radius under a pixel is a plain draw, which is what the filter would
+   * have done too.
+   */
+  private softDraw(
+    ctx: Context2D,
+    source: CanvasImageSource,
+    radiusPx: number,
+    dx: number,
+    dy: number,
+    dw: number,
+    dh: number,
+  ): void {
+    const shrink = Math.min(64, Math.round(radiusPx));
+    if (!(shrink > 1) || !(dw > 0) || !(dh > 0)) {
+      ctx.drawImage(source, dx, dy, dw, dh);
+      return;
+    }
+    const sw = Math.max(1, Math.round(dw / shrink));
+    const sh = Math.max(1, Math.round(dh / shrink));
+    const scratch = this.softScratch ?? (this.softScratch = this.makeSurface(sw, sh, { alpha: true }));
+    if (!scratch) {
+      ctx.drawImage(source, dx, dy, dw, dh);
+      return;
+    }
+    if (scratch.surface.width !== sw || scratch.surface.height !== sh) {
+      scratch.surface.width = sw;
+      scratch.surface.height = sh;
+    }
+    scratch.ctx.clearRect(0, 0, sw, sh);
+    scratch.ctx.drawImage(source, 0, 0, sw, sh);
+    ctx.drawImage(scratch.surface, 0, 0, sw, sh, dx, dy, dw, dh);
   }
 
   /** The template, painted once for this frame size and reused every frame. */

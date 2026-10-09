@@ -84,8 +84,12 @@ interface SpeechInputApi {
 function describeError(code: string): string {
   switch (code) {
     case "not-allowed":
-    case "service-not-allowed":
       return "Microphone permission denied";
+    case "service-not-allowed":
+      // Safari's wording for "Siri & Dictation is off": the microphone may be
+      // allowed and dictation still refused, so "permission denied" sent
+      // people to the wrong setting.
+      return "Dictation is off — enable Siri & Dictation in Settings";
     case "no-speech":
       return "Didn't catch that";
     default:
@@ -120,6 +124,11 @@ export function useSpeechInput(opts: SpeechInputOptions): SpeechInputApi {
     recognition.continuous = false;
     recognition.lang = lang ?? "en-US";
 
+    // The last interim text the engine offered and never finalised. Safari
+    // can end a session on silence without an `isFinal` result, which used to
+    // drop whatever was last on screen; it is committed on `end` instead.
+    let pendingInterim = "";
+
     recognition.onresult = (event) => {
       let finalText = "";
       let interimText = "";
@@ -134,15 +143,24 @@ export function useSpeechInput(opts: SpeechInputOptions): SpeechInputApi {
       }
       if (interimText) onInterimRef.current?.(interimText);
       const trimmed = finalText.trim();
-      if (trimmed) onFinalRef.current(trimmed);
+      if (trimmed) {
+        onFinalRef.current(trimmed);
+        pendingInterim = "";
+      } else {
+        pendingInterim = interimText;
+      }
     };
 
     recognition.onerror = (event) => {
+      pendingInterim = "";
       setError(describeError(event.error));
       setListening(false);
     };
 
     recognition.onend = () => {
+      const leftover = pendingInterim.trim();
+      pendingInterim = "";
+      if (leftover) onFinalRef.current(leftover);
       setListening(false);
     };
 

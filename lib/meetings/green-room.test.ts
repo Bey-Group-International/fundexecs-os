@@ -7,12 +7,21 @@ describe("browserFamily", () => {
   it.each([
     ["Mozilla/5.0 (Macintosh) AppleWebKit/537.36 Chrome/128.0 Safari/537.36 Edg/128.0", "edge"],
     ["Mozilla/5.0 (Macintosh) AppleWebKit/537.36 Chrome/128.0 Safari/537.36", "chrome"],
-    ["Mozilla/5.0 (iPhone) AppleWebKit/605.1.15 CriOS/128.0 Mobile/15E148 Safari/604.1", "chrome"],
+    ["Mozilla/5.0 (iPhone) AppleWebKit/605.1.15 CriOS/128.0 Mobile/15E148 Safari/604.1", "ios-other"],
+    ["Mozilla/5.0 (iPhone) AppleWebKit/605.1.15 FxiOS/128.0 Mobile/15E148 Safari/605.1.15", "ios-other"],
+    ["Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 Version/17.5 Mobile/15E148 Safari/604.1", "ios-safari"],
+    ["Mozilla/5.0 (iPad; CPU OS 17_5 like Mac OS X) AppleWebKit/605.1.15 Version/17.5 Mobile/15E148 Safari/604.1", "ios-safari"],
     ["Mozilla/5.0 (Macintosh) AppleWebKit/605.1.15 Version/17.5 Safari/605.1.15", "safari"],
     ["Mozilla/5.0 (X11; Linux) Gecko/20100101 Firefox/129.0", "firefox"],
     ["", "other"],
   ])("reads %s", (ua, family) => {
     expect(browserFamily(ua)).toBe(family);
+  });
+
+  it("tells an iPad on the desktop site from a Mac by its touch points", () => {
+    const ua = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 Version/17.5 Safari/605.1.15";
+    expect(browserFamily(ua, 5)).toBe("ios-safari");
+    expect(browserFamily(ua, 0)).toBe("safari");
   });
 });
 
@@ -36,6 +45,16 @@ describe("problemGuide", () => {
     const safari = problemGuide(p("mic_blocked"), "safari");
     expect(safari.steps.join(" ")).toMatch(/Settings for This Website/);
     expect(safari.steps.join(" ")).toMatch(/Microphone to Allow/);
+  });
+
+  it("gives an iPhone the aA menu and the Settings app, never a menu bar", () => {
+    const ios = problemGuide(p("camera_blocked"), "ios-safari");
+    expect(ios.steps.join(" ")).toMatch(/"aA"/);
+    expect(ios.steps.join(" ")).toMatch(/Settings app/);
+    expect(ios.steps.join(" ")).not.toMatch(/menu bar/);
+    const other = problemGuide(p("mic_blocked"), "ios-other");
+    expect(other.steps.join(" ")).toMatch(/Settings app/);
+    expect(other.steps.join(" ")).not.toMatch(/address bar/);
   });
 
   it("tells a busy device apart from a blocked one", () => {

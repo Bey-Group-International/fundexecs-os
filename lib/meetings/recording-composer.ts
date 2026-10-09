@@ -154,6 +154,11 @@ export class RecordingComposer {
       ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
     if (!AudioCtor) throw new Error("This browser cannot mix the call's audio.");
     this.audioContext = new AudioCtor();
+    // Built after the recording row's insert has returned, which is after the
+    // Record click as far as the browser is concerned. Safari then hands out a
+    // suspended context, and a suspended context's MediaStreamDestination
+    // records silence. Resume is a no-op where the context is already running.
+    if (this.audioContext.state !== "running") void this.audioContext.resume().catch(() => {});
     this.destination = this.audioContext.createMediaStreamDestination();
     this.syncAudioSources();
 

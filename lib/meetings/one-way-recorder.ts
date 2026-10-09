@@ -70,6 +70,9 @@ export class OneWayRecorder {
     if (!AudioCtor) throw new Error("This browser cannot mix the call's audio.");
 
     this.audioContext = new AudioCtor();
+    // See recording-composer.ts: Safari suspends a context made outside a
+    // gesture, and a suspended mix is a silent recording.
+    if (this.audioContext.state !== "running") void this.audioContext.resume().catch(() => {});
     this.destination = this.audioContext.createMediaStreamDestination();
 
     // Mixed rather than recorded as two tracks. One track is what makes the

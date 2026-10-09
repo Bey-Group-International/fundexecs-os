@@ -427,6 +427,7 @@ export function RecordingPlayer({
         <video
           ref={videoRef}
           controls
+          playsInline
           preload="metadata"
           className="w-full rounded-lg bg-black aspect-video"
           src={streamUrl}
