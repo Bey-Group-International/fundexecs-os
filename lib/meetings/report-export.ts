@@ -19,6 +19,10 @@ import { reportActionItems } from "@/lib/meetings/action-item-source";
 import { displayFollowUp } from "@/lib/meetings/follow-up-greeting";
 import { parseTranscript } from "@/lib/meetings/transcript-view";
 import { captureLabel, readAcknowledgement } from "@/lib/meetings/one-way";
+import { OPEN_QUESTIONS_KEY } from "@/lib/meetings/report-gaps";
+import { TRUNCATED_KEY } from "@/lib/meetings/report-analysis";
+import { NOTHING_TO_SUMMARISE, unsummarisedReason } from "@/lib/meetings/report-generation";
+import { meetingDateOf } from "@/lib/meetings/report-page";
 import type { ReportInboxHistory } from "@/lib/meetings/report-inbox";
 
 /** The report and its meeting, as the exporters need to see them. */
@@ -27,6 +31,16 @@ export interface ReportExportInput {
   createdAt: string | null;
   startedAt: string | null;
   endedAt: string | null;
+  /**
+   * When the meeting was booked for.
+   *
+   * The second fallback for the document's date (see `reportDate`): the page
+   * dates a meeting by when it started, else when it was scheduled, else when
+   * the row was made, and the export dated it by the row alone — so a report
+   * booked a week ahead carried the wrong day. Optional because older callers
+   * and tests do not hold it; without it the rule degrades to what it was.
+   */
+  scheduledAt?: string | null;
   summary: string | null;
   /** Model output, so `unknown` until normalized. */
   keyPoints: unknown;
@@ -186,6 +200,24 @@ export function hasExportableReport(input: ReportExportInput): boolean {
   return hasReportSummary(input) || input.hasReport === true;
 }
 
+/**
+ * The day the document is dated, by the page's own rule: when the meeting
+ * started, else when it was booked for, else when the row was made.
+ *
+ * Exported so the filename is built from the same day as the header — a file
+ * called `...-2026-09-04.pdf` whose first line says September 9th reads as a
+ * document that was generated wrong.
+ */
+export function reportDate(input: Pick<ReportExportInput, "startedAt" | "scheduledAt" | "createdAt">): string | null {
+  return (
+    meetingDateOf({
+      started_at: input.startedAt,
+      scheduled_at: input.scheduledAt ?? null,
+      created_at: input.createdAt,
+    }) || null
+  );
+}
+
 /** A date as the document header states it. Invalid or missing dates are omitted. */
 function headerDate(iso: string | null): string | null {
   if (!iso) return null;
@@ -341,6 +373,10 @@ export function buildReportMarkdown(
   const keyPoints = normalizeNoteList(input.keyPoints);
   const actionItems = reportActionItems(input.actionItems, analysis);
   const decisions = normalizeNoteList(analysis?.decisions);
+  // What the transcript could not settle, put to the host. The page shows
+  // these above the summary; the export dropped them, so a document printed
+  // for the host left out the one list that asks them to finish it.
+  const questionsForHost = normalizeNoteList(analysis?.[OPEN_QUESTIONS_KEY]);
   // The per-recipient greeting reads as a placeholder in a document nobody is
   // being greeted by.
   const followUp = displayFollowUp(normalizeNoteText(analysis?.follow_up_draft));
@@ -364,7 +400,7 @@ export function buildReportMarkdown(
   // Labelled facts rather than a table: the same markdown has to survive five
   // renderers, and a bulleted list is the richest structure all five agree on.
   const record = [
-    fact("Date", headerDate(input.createdAt)),
+    fact("Date", headerDate(reportDate(input))),
     fact("Time", headerTime(input.startedAt)),
     fact("Duration", duration ? `${duration} minutes` : null),
     fact("Reference", input.roomCode ? input.roomCode.toUpperCase() : null),
@@ -396,8 +432,16 @@ export function buildReportMarkdown(
   // Decisions first, then what they commit somebody to, then the discussion
   // that produced them. The old order opened on Key Points, which buries the
   // two sections anybody rereads this document for under the one they do not.
+  // Said before the summary, because it qualifies everything after it. The
+  // page shows the same banner; a file that did not carry it would be read as
+  // a complete report of a meeting that decided very little.
+  if (analysis?.[TRUNCATED_KEY] === true) {
+    lines.push(...section("Note", TRUNCATED_NOTE));
+  }
+
   lines.push(
     ...section("Summary", normalizeNoteText(input.summary) || missingSummaryNote(input)),
+    ...section("Questions For The Host", numbered(questionsForHost)),
     ...section("Decisions", numbered(decisions)),
     ...section("Action Items", numbered(actionItems)),
     ...section("Open Questions", bullets(insights.unresolved.map((q) => (q.owner ? `${q.owner}: ${q.text}` : q.text)))),
@@ -468,6 +512,10 @@ export function reportExportFilename(
   return `${base}${suffix}.${extension}`;
 }
 
+/** What the file says about a report the model ran out of room to finish. */
+export const TRUNCATED_NOTE =
+  "*This report was cut short: the analysis ran out of room before it finished, so the later sections — usually the follow-up draft — may be incomplete. Regenerating the report will try again.*";
+
 /**
  * What to say where the summary would have been.
  *
@@ -483,6 +531,10 @@ export function reportExportFilename(
  */
 function missingSummaryNote(input: ReportExportInput): string {
   if (input.hasReport !== true) return "";
+  // Filed without asking the model, on purpose: nothing was heard, or what
+  // was heard was noise. Distinct from the failure below, which a regenerate
+  // fixes and this does not.
+  if (unsummarisedReason(input.analysis)) return `*${NOTHING_TO_SUMMARISE}*`;
   return (input.fullTranscript ?? "").trim()
     ? "*No summary was written: the analysis did not complete. Everything that was captured is kept on the meeting report, and regenerating it will try again.*"
     : "*No summary was written: nothing was transcribed in this session.*";

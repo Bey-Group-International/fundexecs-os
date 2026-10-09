@@ -30,8 +30,10 @@ jest.mock("@/lib/meetings/report-analysis", () => ({
   generateMeetingReport: (...a: unknown[]) => generateMeetingReport(...a),
 }));
 
-import { POST } from "./route";
+import { POST, maxDuration } from "./route";
 import { NOISE_NOTE } from "@/lib/meetings/transcript-quality";
+import { REPORT_WAIT_LIMIT_MS } from "@/lib/meetings/attendance";
+import { REPORT_FRESH_MS, UNSUMMARISED_KEY } from "@/lib/meetings/report-generation";
 
 const MEETING = {
   id: "m1", host_id: "host-1", organization_id: "org1", deal_id: null, title: "LP Update",
@@ -53,7 +55,8 @@ const writes: { reports: Record<string, unknown>[]; meetingUpdate?: Record<strin
 
 function wire({
   meeting = MEETING as unknown,
-  participants = [] as Array<{ joined_at: string }>,
+  participants = [] as Array<{ joined_at: string; display_name?: string; guest_key?: string }>,
+  reports = [] as Array<{ id: string; created_at: string; analysis?: unknown }>,
 } = {}) {
   from.mockImplementation((table: string) => {
     const b: Record<string, unknown> = {
@@ -64,9 +67,16 @@ function wire({
       // that answers nothing means "everything stays with the host".
       range: async () => ({ data: [], error: null }),
       in: async () => ({ data: [], error: null }),
-      // The "what has this meeting already raised?" read, and the earliest
-      // attendance row the route infers started_at from.
-      limit: async () => ({ data: table === "live_meeting_participants" ? participants : [], error: null }),
+      // The "what has this meeting already raised?" read, the attendance rows
+      // (the earliest is where started_at comes from), and the newest report
+      // row the repeat check reads.
+      limit: async () => ({
+        data:
+          table === "live_meeting_participants" ? participants
+          : table === "live_meeting_reports" ? reports
+          : [],
+        error: null,
+      }),
       insert: (row: Record<string, unknown>) => {
         if (table === "live_meeting_reports") writes.reports.push(row);
         return b;
@@ -200,6 +210,104 @@ describe("what the model is allowed to read", () => {
     wire();
     await POST(req());
     expect(generateMeetingReport.mock.calls[0][2]).toMatchObject({ transcript: TRANSCRIPT });
+  });
+
+  describe("a transcript that is noise and nothing else", () => {
+    let warn: jest.SpyInstance;
+    beforeEach(() => { warn = jest.spyOn(console, "warn").mockImplementation(() => {}); });
+    afterEach(() => warn.mockRestore());
+
+    // Handed an hour of recognised noise, the model either apologised or
+    // confidently summarised decisions nobody made. It is no longer asked.
+    it("never reaches the model", async () => {
+      wire();
+      const res = await POST(req(UNUSABLE));
+      expect(res.status).toBe(200);
+      expect(await res.json()).toMatchObject({ ok: true, summarised: false, reason: "unusable" });
+      expect(generateMeetingReport).not.toHaveBeenCalled();
+    });
+
+    it("files a finished report that says so, with the whole record behind it", async () => {
+      wire();
+      await POST(req(UNUSABLE));
+      expect(writes.reports).toHaveLength(1);
+      expect(writes.reports[0]).toMatchObject({ summary: "", full_transcript: UNUSABLE });
+      expect((writes.reports[0].analysis as Record<string, unknown>)[UNSUMMARISED_KEY]).toBe("unusable");
+    });
+
+    it("still closes the meeting", async () => {
+      wire({ participants: [{ joined_at: "2026-10-05T14:59:50.497Z" }] });
+      await POST(req(UNUSABLE));
+      expect(writes.meetingUpdate).toMatchObject({ status: "ended", started_at: "2026-10-05T14:59:50.497Z" });
+      expect(persistInstitutionalMeetingRecord).not.toHaveBeenCalled();
+    });
+  });
+});
+
+describe("the function envelope", () => {
+  it("is declared, and the page's wait is at least as long as it", () => {
+    // The page gives up waiting at REPORT_WAIT_LIMIT_MS, derived from a 300s
+    // envelope. A route that could outlive the page's patience would have the
+    // page declare a report dead while the route was still writing it.
+    expect(maxDuration).toBe(300);
+    expect(maxDuration * 1000).toBeLessThanOrEqual(REPORT_WAIT_LIMIT_MS);
+  });
+});
+
+describe("the same press of End, arriving twice", () => {
+  const fresh = new Date(Date.now() - REPORT_FRESH_MS / 2).toISOString();
+  const stale = new Date(Date.now() - REPORT_FRESH_MS * 2).toISOString();
+
+  // A browser that gave up waiting, a reload, or the retry state pressed on a
+  // response that was on its way posts the same transcript again. The second
+  // run cost a second model call, a second report row, and every action item
+  // raised twice.
+  it("answers with the report just written rather than writing another", async () => {
+    wire({
+      meeting: { ...MEETING, status: "ended" },
+      reports: [{ id: "r-fresh", created_at: fresh, analysis: { summary: "Already done." } }],
+    });
+    const res = await POST(req());
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ reportId: "r-fresh", repeated: true });
+    expect(generateMeetingReport).not.toHaveBeenCalled();
+    expect(writes.reports).toHaveLength(0);
+    expect(writes.meetingUpdate).toBeUndefined();
+  });
+
+  it("still writes a new version once the window has passed", async () => {
+    wire({
+      meeting: { ...MEETING, status: "ended" },
+      reports: [{ id: "r-old", created_at: stale, analysis: { summary: "Old." } }],
+    });
+    expect((await POST(req())).status).toBe(200);
+    expect(generateMeetingReport).toHaveBeenCalledTimes(1);
+    expect(writes.reports).toHaveLength(1);
+  });
+
+  it("is not a repeat when the meeting was never ended", async () => {
+    wire({ reports: [{ id: "r-fresh", created_at: fresh }] });
+    await POST(req());
+    expect(generateMeetingReport).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("who the report names", () => {
+  it("names the room's attendance and the transcript's speakers, never the invite list", async () => {
+    wire({
+      meeting: { ...MEETING, attendees: [{ name: "Never Joined", email: "nj@x.test" }] },
+      participants: [{ joined_at: "2026-10-05T14:59:50.497Z", display_name: "Dana", guest_key: "g1" }],
+    });
+    await POST(new Request("http://localhost/api/meetings/report", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ meetingId: "m1", transcript: "Ana: we agreed.\nBo: yes.", participants: ["Rae"] }),
+    }));
+    const sent = generateMeetingReport.mock.calls[0][2] as { participants: string[] };
+    expect(sent.participants).toEqual(expect.arrayContaining(["Dana", "Ana", "Bo", "Rae"]));
+    expect(sent.participants).not.toContain("Never Joined");
+    // The institutional record names the same people.
+    expect(persistInstitutionalMeetingRecord.mock.calls[0][1]).toMatchObject({ participants: sent.participants });
   });
 });
 

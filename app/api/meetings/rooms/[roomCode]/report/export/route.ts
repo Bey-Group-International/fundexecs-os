@@ -14,6 +14,7 @@ import {
   buildReportMarkdown,
   hasExportableReport,
   rendererDrawsTitle,
+  reportDate,
   reportExportFilename,
 } from "@/lib/meetings/report-export";
 import { loadReportForExport } from "@/lib/meetings/report-export.server";
@@ -98,8 +99,10 @@ export async function GET(
     titleHeading: !rendererDrawsTitle(format),
   });
   const title = loaded.title ?? undefined;
+  // Dated the same day as the document's own header — when the meeting
+  // happened, not when its row was made.
   const filename = reportExportFilename(
-    loaded.title, loaded.createdAt, exportExtension(format), { includeTranscript },
+    loaded.title, reportDate(loaded), exportExtension(format), { includeTranscript },
   );
 
   const headers = {
