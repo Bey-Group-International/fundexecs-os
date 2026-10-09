@@ -1302,3 +1302,110 @@ describe("a phrase the engine invented from silence", () => {
     }
   });
 });
+
+describe("the last sentence before leaving", () => {
+  /**
+   * The engine settles a sentence up to two seconds after it ends, and every
+   * exit used to stop the microphone in the same tick as the click and then
+   * keep only FINAL lines — so "say the decision, press Leave" lost the
+   * decision. Under the ownership rule nobody else saves a participant's
+   * words: for the person leaving there was no other copy anywhere.
+   */
+  function installRecognition() {
+    const instances: Array<{
+      onstart: (() => void) | null;
+      onspeechstart: (() => void) | null;
+      onresult: ((ev: unknown) => void) | null;
+      stopped: number;
+    }> = [];
+    class Recognition {
+      continuous = false; interimResults = false; lang = "";
+      onstart: (() => void) | null = null;
+      onspeechstart: (() => void) | null = null;
+      onresult: ((ev: unknown) => void) | null = null;
+      onerror = null; onend = null;
+      stopped = 0;
+      constructor() { instances.push(this); }
+      start() { this.onstart?.(); }
+      stop() { this.stopped += 1; }
+    }
+    const w = window as unknown as { SpeechRecognition?: unknown };
+    const previous = w.SpeechRecognition;
+    w.SpeechRecognition = Recognition;
+    return { instances, restore: () => { w.SpeechRecognition = previous; } };
+  }
+
+  const result = (text: string, isFinal: boolean) => ({
+    resultIndex: 0,
+    results: [Object.assign([{ transcript: text, confidence: isFinal ? 0.92 : 0 }], { isFinal })],
+  });
+
+  /** Every line any flush posted to the transcript table. */
+  const savedLines = () =>
+    (global.fetch as jest.Mock).mock.calls
+      .filter(([u]) => String(u).includes("/transcript"))
+      .flatMap(([, init]) =>
+        (JSON.parse(String((init as RequestInit).body)) as { lines: Array<{ text: string; confidence: number }> }).lines,
+      );
+
+  it("waits for the engine's stop-flush, so the settled words are saved exactly", async () => {
+    joinChoice.micEnabled = true;
+    const sr = installRecognition();
+    try {
+      await enterCall();
+      await act(async () => { sr.instances[0]?.onspeechstart?.(); await Promise.resolve(); });
+      await talkFor(2_000, "audio-local");
+
+      // Mid-sentence: the engine has only an interim when Leave is pressed.
+      await act(async () => {
+        sr.instances[0]?.onresult?.(result("so let's wire on", false));
+        await Promise.resolve();
+      });
+      const leave = screen.getByRole("button", { name: "Leave" });
+      await act(async () => { leave.click(); await Promise.resolve(); });
+
+      // The exit stopped the recognizer rather than abandoning the sentence…
+      expect(sr.instances[0]?.stopped).toBeGreaterThan(0);
+
+      // …and the engine's flush lands while the exit is still waiting.
+      await act(async () => {
+        sr.instances[0]?.onresult?.(result("so let's wire on Friday", true));
+        await Promise.resolve();
+      });
+      await flush(1_000, 10);
+
+      const texts = savedLines().map((l) => l.text);
+      expect(texts).toContain("so let's wire on Friday");
+    } finally {
+      sr.restore();
+    }
+  });
+
+  it("keeps an interim the engine never settles, marked uncertain rather than lost", async () => {
+    joinChoice.micEnabled = true;
+    const sr = installRecognition();
+    try {
+      await enterCall();
+      await act(async () => { sr.instances[0]?.onspeechstart?.(); await Promise.resolve(); });
+      await talkFor(2_000, "audio-local");
+
+      await act(async () => {
+        sr.instances[0]?.onresult?.(result("book the follow-up for Monday", false));
+        await Promise.resolve();
+      });
+      const leave = screen.getByRole("button", { name: "Leave" });
+      await act(async () => { leave.click(); await Promise.resolve(); });
+
+      // The engine dies silently; the bounded wait runs out.
+      await flush(2_500, 10);
+
+      const saved = savedLines().find((l) => l.text === "book the follow-up for Monday");
+      expect(saved).toBeDefined();
+      // Readable by the report model, but never presented as certain.
+      expect(saved!.confidence).toBeLessThan(0.6);
+      expect(saved!.confidence).toBeGreaterThan(0.35);
+    } finally {
+      sr.restore();
+    }
+  });
+});

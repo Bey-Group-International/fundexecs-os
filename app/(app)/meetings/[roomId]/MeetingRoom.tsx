@@ -90,6 +90,7 @@ import {
   speakerNames,
   transcriptRows,
 } from "@/lib/meetings/transcript-buffer";
+import { settleFinalWords } from "@/lib/meetings/transcript-finalize";
 import {
   createDeafWatch, engineConfidence, guardedLineConfidence, isNoisy, observeDeafTick,
   pushEngineScore, recognitionLang, recognizerHeard, restartDelay,
@@ -5968,12 +5969,36 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     return () => window.removeEventListener("pagehide", onHide);
   }, [admissionUi, withdrawKnock]);
 
+  /**
+   * Settle the sentence in flight before anything stops the microphone.
+   *
+   * The engine hands a sentence over up to two seconds after it ends, and
+   * "say the decision, press Leave" lands the click inside that gap. Both
+   * exits filter on `final`, so the last sentence of the call — spoken by
+   * whoever is leaving, host or invitee, and under the ownership rule saved
+   * by nobody else — used to vanish. Stopping the recognizer makes it flush
+   * what it holds; an interim the engine never settles is kept as the words
+   * it printed, marked uncertain, rather than lost. See transcript-finalize.
+   */
+  const settleLastWords = useCallback(async () => {
+    await settleFinalWords({
+      read: () => transcriptRef.current,
+      write: (lines) => { transcriptRef.current = lines; },
+      stopRecognition: () => {
+        try { recognitionRef.current?.stop(); } catch { /* not running */ }
+      },
+    });
+  }, []);
+
   const leaveMeeting = useCallback(async () => {
     // The ref, not the state, is the guard: a second click lands before React has
     // committed the phase change from the first.
     if (endingRef.current || !canExit(callPhaseRef.current)) return;
     endingRef.current = true;
     callPhaseRef.current = nextPhase(callPhaseRef.current, "leave");
+    // Before the teardown stops the microphone: these are the only moments the
+    // sentence still in the engine can be settled or kept.
+    await settleLastWords();
     sendSignal({ type: "leave", from: myIdRef.current });
     teardownCall();
 
@@ -5994,7 +6019,7 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
 
     if (isGuest) { setShowGuestUpsell(true); return; }
     router.push("/meetings");
-  }, [sendSignal, teardownCall, drainTranscript, router, isGuest]);
+  }, [sendSignal, teardownCall, drainTranscript, router, isGuest, settleLastWords]);
 
   const endMeeting = useCallback(async () => {
     // A second press while the report is generating would tear down an already
@@ -6004,6 +6029,9 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     endingRef.current = true;
     callPhaseRef.current = nextPhase(callPhaseRef.current, "end");
     setCallPhase(callPhaseRef.current);
+    // Before the teardown stops the microphone — the host's closing sentence
+    // is usually the decision, and it is still interim when they press End.
+    await settleLastWords();
     sendSignal({ type: "end", from: myIdRef.current });
     teardownCall();
 
@@ -6051,7 +6079,7 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     endingRef.current = false;
     callPhaseRef.current = nextPhase(callPhaseRef.current, "report_failed");
     setCallPhase(callPhaseRef.current);
-  }, [sendSignal, teardownCall, meetingId, roomCode, router, drainTranscript]);
+  }, [sendSignal, teardownCall, meetingId, roomCode, router, drainTranscript, settleLastWords]);
 
   const endForAll = useCallback(async () => {
     await endMeeting();
