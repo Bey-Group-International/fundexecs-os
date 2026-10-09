@@ -204,6 +204,7 @@ import {
   needsRepair,
   repairFor,
 } from "@/lib/meetings/camera-liveness";
+import { MIC_STALL_MS, MIC_STALL_NOTICE, micStallAction } from "@/lib/meetings/mic-liveness";
 import { watchFor } from "@/lib/meetings/device-reacquire";
 import { startReacquire } from "@/lib/meetings/reacquire-loop";
 import { openCallMedia, openCameraOnly, type OpenedMedia } from "@/lib/meetings/open-media";
@@ -630,9 +631,15 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
   // comes back should come back the way they meant it to be, not switched on
   // because it happened to be recovered.
   const micIntentRef = useRef(true);
+  /** When the microphone stall watch last reopened the device. See mic-liveness. */
+  const micReopenAtRef = useRef<number | null>(null);
   // The same for the camera. Not `camOn`, which is false in exactly the broken
   // case this exists to catch — a camera that was wanted and did not open.
   const camWantedRef = useRef(true);
+  // The same fact as state, for the standing below: a camera that was never
+  // wanted has no track, and without this that read as a camera that could
+  // not be opened. Written wherever the ref is.
+  const [camWanted, setCamWanted] = useState(true);
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
   const [micOn, setMicOn] = useState(true);
   const [camOn, setCamOn] = useState(true);
@@ -1001,8 +1008,11 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
       present: (localStream?.getVideoTracks().length ?? 0) > 0,
       enabled: camOn,
       failure: cameraToRecover,
+      // Joining with the camera off opens no camera at all. That is a choice,
+      // not a fault, and standingOf needs telling which.
+      wanted: camWanted,
     }),
-    [localStream, camOn, cameraToRecover],
+    [localStream, camOn, cameraToRecover, camWanted],
   );
   const participation = useMemo(
     () => participationNotice(micStanding, camStanding),
@@ -2789,6 +2799,7 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     const micWanted = choice ? choice.micEnabled : true;
     micIntentRef.current = micWanted;
     camWantedRef.current = wantCam;
+    setCamWanted(wantCam);
     stream.getAudioTracks().forEach((t) => { t.enabled = micWanted; });
     const micLive = micWanted && stream.getAudioTracks().length > 0;
     setMicOn(micLive);
@@ -4581,6 +4592,7 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     }
     camOnRef.current = next;
     camWantedRef.current = next;
+    setCamWanted(next);
     setCameraToRecover(null);
     if (sharing) { if (camera) camera.enabled = next; }
     else localStreamRef.current?.getVideoTracks().forEach((t) => { t.enabled = next; });
@@ -4945,6 +4957,7 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
       // track on the wire.
       camOnRef.current = true;
       camWantedRef.current = true;
+      setCamWanted(true);
       setCamOn(true);
       setSelectedCamId(opened.outcome.deviceId ?? "");
       setCameraToRecover(null);
@@ -5237,6 +5250,81 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
       track.removeEventListener("unmute", onUnmute);
     };
   }, [ready, rawCameraTrack]);
+
+  // The same stall, on the microphone — and worse there. A frozen frame is at
+  // least visible to the person it happens to; a stalled microphone sends
+  // silence, which is also what a listener who has not spoken yet sends, so a
+  // member can talk to the room for ten minutes with nobody hearing a word and
+  // nothing on any screen saying so. See mic-liveness.ts for what mutes a live
+  // audio track without ending it.
+  //
+  // Unlike the camera this does more than say so. Being heard is the floor of
+  // a call, so the first stall reopens the microphone — the repair the member
+  // would reach for, through the same path the reacquire loop uses — and only a
+  // stall that survives that, or comes back soon after, is left to the notice.
+  // micStallAction bounds it so a device that comes back muted every time is
+  // reopened once and then reported, not reopened for the rest of the call.
+  useEffect(() => {
+    if (!ready) return;
+    const track = localStream?.getAudioTracks()[0] ?? null;
+    if (!track) return;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const disarm = () => { if (timer) { clearTimeout(timer); timer = null; } };
+
+    const judge = () => {
+      timer = null;
+      if (tornDownRef.current) return;
+      const action = micStallAction({
+        on: micOnRef.current,
+        readyState: track.readyState,
+        muted: track.muted,
+        visible: document.visibilityState !== "hidden",
+        lastReopenAt: micReopenAtRef.current,
+        now: Date.now(),
+      });
+      if (action === "ignore") return;
+      if (action === "notice") { setMediaError(MIC_STALL_NOTICE); return; }
+      micReopenAtRef.current = Date.now();
+      console.warn("[meeting] microphone stopped delivering sound — reopening it");
+      void reacquireMicRef.current()
+        .then((recovered) => {
+          // A new track is now on the wire and this effect re-runs for it; if
+          // that one is muted too, the cooldown turns the next verdict into
+          // the notice. Only a reopen that could not even produce a track is
+          // reported from here — and one that worked withdraws an earlier
+          // notice of its own, since the condition it described has ended.
+          if (!recovered) setMediaError(MIC_STALL_NOTICE);
+          else setMediaError((held) => (held === MIC_STALL_NOTICE ? null : held));
+        })
+        .catch(() => setMediaError(MIC_STALL_NOTICE));
+    };
+    const arm = () => { disarm(); timer = setTimeout(judge, MIC_STALL_MS); };
+
+    const onMute = () => arm();
+    const onUnmute = () => {
+      disarm();
+      // Only its own notice: this banner is shared, and sound resuming says
+      // nothing about whatever else may have been reported on it.
+      setMediaError((held) => (held === MIC_STALL_NOTICE ? null : held));
+    };
+    // A phone that is backgrounded mutes its capture and un-mutes it on
+    // return, so the judgement stands down while hidden. Coming back is what
+    // re-arms it, for the track that stayed muted after the page did.
+    const onVisibility = () => { if (document.visibilityState !== "hidden" && track.muted) arm(); };
+
+    // A track that arrives already muted — a preview adopted from a phone that
+    // was put down while its owner waited — fires no `mute` of its own.
+    if (track.muted) arm();
+    track.addEventListener("mute", onMute);
+    track.addEventListener("unmute", onUnmute);
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      disarm();
+      track.removeEventListener("mute", onMute);
+      track.removeEventListener("unmute", onUnmute);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
+  }, [ready, localStream]);
 
   // ── Going back for a device the meeting started without ───────────────────
   //

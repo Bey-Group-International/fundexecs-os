@@ -4,7 +4,7 @@
 // of MeetingRoom so they load as their own chunk, fetched while the member is
 // still in the green room rather than before it can be drawn.
 
-import { FloatingMenu, useSpeaking, useStableHandlers, type RemovedPerson } from "./room-shared";
+import { FloatingMenu, useResumeOnReturn, useSpeaking, useStableHandlers, type RemovedPerson } from "./room-shared";
 import {
   barCapacity,
   fitBar,
@@ -132,6 +132,9 @@ function VideoTileImpl({
     if (el.srcObject !== (stream ?? null)) el.srcObject = stream ?? null;
     if (stream) void el.play().catch(() => { /* autoplay race — retried on canplay */ });
   }, [stream]);
+  // A phone put down and picked up again leaves this element paused with a
+  // live stream attached. See useResumeOnReturn.
+  useResumeOnReturn(videoRef);
 
   useEffect(() => {
     if (!track) return;
@@ -288,6 +291,10 @@ function PeerAudioImpl({ stream, audioTrack, silenced = false }: {
     for (const type of GESTURES) document.addEventListener(type, play);
     return disarm;
   }, [stream, audioTrack]);
+  // The voice, too: a phone call taken mid-meeting pauses this element and
+  // leaves it paused, which is a peer who is visibly talking and silent. See
+  // useResumeOnReturn.
+  useResumeOnReturn(ref);
 
   // Release the device's playback on the way out rather than when the element
   // is collected.
