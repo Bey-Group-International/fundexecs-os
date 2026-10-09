@@ -108,7 +108,43 @@ const supabaseStub = {
 };
 jest.mock("@/lib/supabase/client", () => ({ createClient: () => supabaseStub }));
 
+/**
+ * The mask driver, captured. The real one needs a Worker, a GPU and a 12MB
+ * WASM runtime, none of which jsdom has — so without this mock a remembered
+ * background falls at the first canvas and the room abandons it before any of
+ * the suspension machinery can run. The fake records its callbacks so a test
+ * can speak as the pipeline: report slow frames, and watch what the room does
+ * about them.
+ */
+const mockMaskDriver = {
+  callbacks: null as null | { onSlowFrames: (consecutive: number) => void },
+  created: 0,
+  destroyed: 0,
+  reset() { this.callbacks = null; this.created = 0; this.destroyed = 0; },
+};
+jest.mock("@/lib/meetings/mask-driver", () => ({
+  MaskDriver: {
+    create: async (
+      _source: unknown,
+      _effect: unknown,
+      callbacks: { onSlowFrames: (consecutive: number) => void },
+    ) => {
+      mockMaskDriver.created += 1;
+      mockMaskDriver.callbacks = callbacks;
+      return {
+        track: null,
+        phase: { phase: "main", reason: "test" },
+        setEffect: () => {},
+        setPaused: () => {},
+        replaceSource: async () => true,
+        destroy: () => { mockMaskDriver.destroyed += 1; },
+      };
+    },
+  },
+}));
+
 import { MeetingRoom } from "./MeetingRoom";
+import { BACKGROUND_PREF_KEY, SLOW_FRAME_RUN } from "@/lib/meetings/backgrounds";
 import { REANNOUNCE_CADENCE_MS, REANNOUNCE_STEPS_MS } from "@/lib/meetings/connection";
 
 const ROOM = "abc-defg-hi";
@@ -1567,5 +1603,37 @@ describe("the last sentence before leaving", () => {
     } finally {
       sr.restore();
     }
+  });
+});
+
+describe("a background the room suspends", () => {
+  /**
+   * The suspension paths used to go through applyBackground like any pick and
+   * overwrite the stored choice with "none": one slow-machine moment, described
+   * to the member as the effect being "paused", silently erased their standing
+   * preference — and the member who always joins wearing a blur joined their
+   * next call broadcasting the room the blur exists to hide.
+   */
+  it("pauses the effect without erasing the remembered choice", async () => {
+    mockMaskDriver.reset();
+    window.localStorage.setItem(BACKGROUND_PREF_KEY, "blur:heavy");
+    await enterCall();
+    await flush(500, 5);
+
+    // The remembered blur was carried into the call.
+    expect(mockMaskDriver.created).toBe(1);
+
+    // The machine cannot keep up; the pipeline reports a sustained slow run
+    // and the room takes the effect down…
+    await act(async () => {
+      mockMaskDriver.callbacks?.onSlowFrames(SLOW_FRAME_RUN);
+      await Promise.resolve();
+    });
+    await flush(200, 3);
+    expect(mockMaskDriver.destroyed).toBe(1);
+
+    // …and the CHOICE survives for the next call. A suspension is the room
+    // protecting itself, not the member changing their mind.
+    expect(window.localStorage.getItem(BACKGROUND_PREF_KEY)).toBe("blur:heavy");
   });
 });

@@ -1362,7 +1362,8 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     if (!decision.suspend || !decision.reason) return;
     bgSuspendedRef.current = true;
     setBgNotice(suspensionMessage(decision.reason));
-    void applyBackgroundRef.current(NO_BACKGROUND);
+    // A suspension, not a choice: the stored preference survives for next call.
+    void applyBackgroundRef.current(NO_BACKGROUND, null, "suspension");
   }, [bwMode]);
   useEffect(() => { peerMicOnRef.current = peerMicOn; }, [peerMicOn]);
   useEffect(() => { peerVideoRef.current = peerVideo; }, [peerVideo]);
@@ -4732,10 +4733,25 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
    * through `onMaskTrack` above rather than being open-coded here, so there is
    * one place that knows how a changing output track reaches the wire.
    */
-  const applyBackground = useCallback(async (effect: BackgroundEffect, image?: Blob | null) => {
+  const applyBackground = useCallback(async (
+    effect: BackgroundEffect,
+    image?: Blob | null,
+    // Who is asking. "choice" is the member, in a picker; "suspension" is the
+    // room protecting itself (bandwidth, CPU). Only a choice is remembered.
+    cause: "choice" | "suspension" = "choice",
+  ) => {
     bgEffectRef.current = effect;
     setBgEffect(effect);
-    try { window.localStorage.setItem(BACKGROUND_PREF_KEY, encodeEffect(effect)); } catch { /* storage disabled */ }
+    // The remembered background is the member's CHOICE, and a suspension is not
+    // one. The suspension paths used to come through here like any pick and
+    // overwrite the stored choice with "none" — so one tight-bandwidth moment,
+    // described to the member as the effect being "paused", silently erased
+    // their standing preference, and the member who always joins wearing a blur
+    // joined their next call broadcasting the room the blur exists to hide.
+    // `abandonBackground` has never written the pref, for the same reason.
+    if (cause === "choice") {
+      try { window.localStorage.setItem(BACKGROUND_PREF_KEY, encodeEffect(effect)); } catch { /* storage disabled */ }
+    }
 
     const raw = rawCameraTrackRef.current;
 
@@ -4793,7 +4809,9 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
             if (!decision.suspend || !decision.reason) return;
             bgSuspendedRef.current = true;
             setBgNotice(suspensionMessage(decision.reason));
-            void applyBackgroundRef.current(NO_BACKGROUND);
+            // A suspension, not a choice — the member's stored preference
+            // survives for their next call. See applyBackground.
+            void applyBackgroundRef.current(NO_BACKGROUND, null, "suspension");
           },
           onUnavailable: () => {
             setBgUnavailable(true);
