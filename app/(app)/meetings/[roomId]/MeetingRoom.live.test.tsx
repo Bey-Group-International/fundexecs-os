@@ -160,7 +160,11 @@ let lastTapTrackId = "";
 function fakeTrack(kind: string, id = `${kind}-local`) {
   return {
     kind, id, enabled: true, readyState: "live",
-    getSettings: () => ({ deviceId: `${kind}-dev` }),
+    // One physical device group for every fake, matching the default entry in
+    // enumerateDevices below: the call's chosen mic IS the system default, so
+    // the wrong-microphone transcription notice stays away unless a test says
+    // otherwise.
+    getSettings: () => ({ deviceId: `${kind}-dev`, groupId: "group-local" }),
     addEventListener: () => {}, removeEventListener: () => {},
     stop: () => {}, applyConstraints: async () => {},
     clone() { return fakeTrack(kind, id); },
@@ -211,7 +215,9 @@ beforeEach(() => {
     value: {
       getUserMedia: async () => fakeStream([fakeTrack("audio"), fakeTrack("video")]),
       getDisplayMedia: async () => fakeStream([fakeTrack("video")]),
-      enumerateDevices: async () => [],
+      enumerateDevices: async () => [
+        { kind: "audioinput", deviceId: "default", groupId: "group-local", label: "Default - Built-in" },
+      ],
       addEventListener: () => {}, removeEventListener: () => {},
     },
   });
@@ -590,7 +596,9 @@ describe("a member with no microphone", () => {
         // A camera, and no microphone — the shape a denied mic prompt leaves.
         getUserMedia: async () => fakeStream([fakeTrack("video")]),
         getDisplayMedia: async () => fakeStream([fakeTrack("video")]),
-        enumerateDevices: async () => [],
+        enumerateDevices: async () => [
+        { kind: "audioinput", deviceId: "default", groupId: "group-local", label: "Default - Built-in" },
+      ],
         addEventListener: () => {}, removeEventListener: () => {},
       },
     });
@@ -690,7 +698,9 @@ describe("a member with no microphone", () => {
       value: {
         getUserMedia: async () => fakeStream([fakeTrack("audio"), fakeTrack("video")]),
         getDisplayMedia: async () => fakeStream([fakeTrack("video")]),
-        enumerateDevices: async () => [],
+        enumerateDevices: async () => [
+        { kind: "audioinput", deviceId: "default", groupId: "group-local", label: "Default - Built-in" },
+      ],
         addEventListener: () => {}, removeEventListener: () => {},
       },
     });
@@ -723,7 +733,9 @@ describe("a member with no microphone", () => {
       value: {
         getUserMedia: async () => fakeStream([recovered]),
         getDisplayMedia: async () => fakeStream([fakeTrack("video")]),
-        enumerateDevices: async () => [],
+        enumerateDevices: async () => [
+        { kind: "audioinput", deviceId: "default", groupId: "group-local", label: "Default - Built-in" },
+      ],
         addEventListener: () => {}, removeEventListener: () => {},
       },
     });
@@ -1064,7 +1076,9 @@ describe("a camera that stalls without ending", () => {
       value: {
         getUserMedia: async () => fakeStream([fakeTrack("audio"), camera as unknown as FakeTrack]),
         getDisplayMedia: async () => fakeStream([fakeTrack("video")]),
-        enumerateDevices: async () => [],
+        enumerateDevices: async () => [
+        { kind: "audioinput", deviceId: "default", groupId: "group-local", label: "Default - Built-in" },
+      ],
         addEventListener: () => {}, removeEventListener: () => {},
       },
     });
@@ -1138,7 +1152,9 @@ describe("a microphone that stalls without ending", () => {
       value: {
         getUserMedia,
         getDisplayMedia: async () => fakeStream([fakeTrack("video")]),
-        enumerateDevices: async () => [],
+        enumerateDevices: async () => [
+        { kind: "audioinput", deviceId: "default", groupId: "group-local", label: "Default - Built-in" },
+      ],
         addEventListener: () => {}, removeEventListener: () => {},
       },
     });
@@ -1932,6 +1948,62 @@ describe("saves that keep being refused", () => {
 
       expect(screen.getByText(/Leave and rejoin/)).toBeInTheDocument();
       expect(lastCoverage()).toBe(false);
+    } finally {
+      sr.restore();
+    }
+  });
+});
+
+describe("a microphone the engine will not follow", () => {
+  /**
+   * On an engine without MediaStreamTrack support — every Chrome and Edge
+   * that predates it, and Safari — the recognizer silently captures the
+   * computer's DEFAULT microphone, whatever the call uses. The old notice
+   * guessed by browser brand and warned Safari alone, so a member on such a
+   * Chrome with a conference microphone was transcribed from the laptop
+   * across the table and told nothing. The rule now asks the engine itself,
+   * and compares the physical devices.
+   */
+  function installRecognition() {
+    const instances: Array<{ onstart: (() => void) | null }> = [];
+    class Recognition {
+      continuous = false; interimResults = false; lang = "";
+      onstart: (() => void) | null = null;
+      onspeechstart = null; onresult = null; onerror = null; onend = null;
+      constructor() { instances.push(this); }
+      start() { this.onstart?.(); }
+      stop() {}
+    }
+    const w = window as unknown as { SpeechRecognition?: unknown };
+    const previous = w.SpeechRecognition;
+    w.SpeechRecognition = Recognition;
+    return { instances, restore: () => { w.SpeechRecognition = previous; } };
+  }
+
+  it("warns when transcription listens to a different device than the call", async () => {
+    const sr = installRecognition();
+    const devices = navigator.mediaDevices as unknown as { enumerateDevices: () => Promise<unknown[]> };
+    const original = devices.enumerateDevices;
+    // The system default is a DIFFERENT physical device from the call's mic.
+    devices.enumerateDevices = async () => [
+      { kind: "audioinput", deviceId: "default", groupId: "group-builtin", label: "Default - Built-in" },
+    ];
+    try {
+      await enterCall();
+      await flush(300, 5);
+      expect(await screen.findByText(/default microphone/)).toBeInTheDocument();
+    } finally {
+      devices.enumerateDevices = original;
+      sr.restore();
+    }
+  });
+
+  it("stays quiet when the chosen microphone IS the system default device", async () => {
+    const sr = installRecognition();
+    try {
+      await enterCall();
+      await flush(300, 5);
+      expect(screen.queryByText(/default microphone/)).not.toBeInTheDocument();
     } finally {
       sr.restore();
     }
