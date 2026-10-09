@@ -371,7 +371,7 @@ export default async function MeetingsPage(props: {
   const logs: LoggedMeeting[] = sortLogEntries(
     logRows
       .filter((row) => belongsInLog(row.meeting, now))
-      .map((row) => loggedMeeting(toLogEntry(row.meeting, row.report, row.attended, row.isHost))),
+      .map((row) => loggedMeeting(toLogEntry(row.meeting, row.report, row.attended, row.isHost, row.transcribed))),
   );
 
   return (

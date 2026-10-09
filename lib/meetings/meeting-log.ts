@@ -61,7 +61,7 @@ export interface MeetingLogEntry {
   /** A report exists and has been generated. */
   hasReport: boolean;
   /**
-   * Whether there is a transcript on file to build a fresh report from.
+   * Whether there is a transcript on file to build a report from.
    *
    * Separate from `hasReport` on purpose. `hasReport` answers "is there a
    * summary to READ"; this answers "is there a transcript to RE-READ", and the
@@ -70,6 +70,10 @@ export interface MeetingLogEntry {
    * summary — everything regeneration needs, and nothing the summary check can
    * see. Gating the regenerate action on `hasReport` hid it from the one row
    * that most needed it.
+   *
+   * Also true with NO report row, when the call's own transcript rows exist:
+   * a meeting the host never ended. The regenerate route writes its first
+   * report from those rows and marks it ended.
    */
   canRegenerate: boolean;
   /**
@@ -145,6 +149,13 @@ export function toLogEntry(
   report: MeetingLogReport | null,
   attended = true,
   isHost = false,
+  /**
+   * Whether live_meeting_transcripts holds rows for this meeting, which is the
+   * other way a transcript can exist: a meeting nobody ended has no report row
+   * at all, and `has_transcript` can say nothing about it. Read in one query
+   * for the page (meeting-log.server.ts); false when the caller did not ask.
+   */
+  transcribed = false,
 ): MeetingLogEntry {
   const analysis = report?.analysis ?? null;
   const summary = normalizeNoteText(report?.summary);
@@ -162,7 +173,10 @@ export function toLogEntry(
     actionItems: reportActionItems(report?.action_items, analysis),
     sentiment: normalizeNoteText(analysis?.sentiment),
     hasReport: summary.length > 0,
-    canRegenerate: report?.has_transcript === true,
+    // Either place a transcript can be. A report row's own flag covers every
+    // meeting that was ended properly; the rows cover the one that was not,
+    // and whose host is being offered this button to finish the job.
+    canRegenerate: report?.has_transcript === true || transcribed,
     attended,
     isHost,
   };

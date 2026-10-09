@@ -17,12 +17,17 @@ export const dynamic = "force-dynamic";
  * was denied, silently, by a policy that cannot fail loudly. The room's join
  * path did not even attempt it: it wrote a row only `if (user)`.
  *
- * The cost of that was not cosmetic. `live_meeting_reports` and
- * `live_meeting_transcripts` are readable by "the host OR a participant", so a
- * guest with no participant row was locked out of the report of the meeting
- * they had just sat through; the host's head-count did not include them; and
- * the report's attendance list could only say "cannot tell" about an invitee
- * who had joined by link.
+ * The cost of that was not cosmetic: the host's head-count did not include
+ * them, the report's attendance list could only say "cannot tell" about an
+ * invitee who had joined by link, and the summary email had nobody to write
+ * to for an instant meeting.
+ *
+ * What this row does NOT do is open the report to the guest. The
+ * `live_meeting_reports` policy matches participants by `user_id =
+ * auth.uid()`, and a guest row has neither — so the guest reads the report
+ * through the signed link the thank-you screen mints for their key instead
+ * (app/api/meetings/public/[roomCode]/report-link). The row written here is
+ * how that route knows the guest was in the room.
  *
  * MEMBERS ARE DELIBERATELY NOT ROUTED THROUGH HERE, and the asymmetry is the
  * point rather than an oversight. The existing policy expresses the member rule

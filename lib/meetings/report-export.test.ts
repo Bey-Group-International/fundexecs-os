@@ -1,4 +1,5 @@
 import {
+  TRUNCATED_NOTE,
   UNTITLED_MEETING,
   buildReportMarkdown,
   correspondenceSection,
@@ -7,9 +8,11 @@ import {
   meetingDurationMinutes,
   participantNames,
   rendererDrawsTitle,
+  reportDate,
   reportExportFilename,
   type ReportExportInput,
 } from "@/lib/meetings/report-export";
+import { NOTHING_TO_SUMMARISE } from "@/lib/meetings/report-generation";
 
 const base: ReportExportInput = {
   title: "Q3 LP Update",
@@ -547,5 +550,70 @@ describe("the report's insight sections", () => {
   it("adds no empty headings for a report without them", () => {
     const md = buildReportMarkdown(base);
     expect(md).not.toMatch(/## (Open Questions|Risks|Highlights|Next Meeting Agenda)/);
+  });
+});
+
+describe("the day the document is dated", () => {
+  // The page dates a meeting by when it happened; the export dated it by when
+  // the row was made, so a report booked a week ahead carried the wrong day.
+  const booked = {
+    ...base,
+    createdAt: "2026-09-01T09:00:00.000Z",
+    scheduledAt: "2026-09-07T14:00:00.000Z",
+    startedAt: null,
+    endedAt: null,
+  };
+
+  it("uses the start when there is one", () => {
+    expect(reportDate(base)).toBe(base.startedAt);
+  });
+
+  it("falls back to the booked time, and only then to the row", () => {
+    expect(reportDate(booked)).toBe("2026-09-07T14:00:00.000Z");
+    expect(reportDate({ ...booked, scheduledAt: null })).toBe("2026-09-01T09:00:00.000Z");
+    expect(reportDate({ ...booked, scheduledAt: null, createdAt: null })).toBeNull();
+  });
+
+  it("prints that day in the record block and in the filename", () => {
+    const md = buildReportMarkdown(booked);
+    expect(md).toContain("- **Date:** Monday, September 7, 2026");
+    expect(md).not.toContain("September 1");
+    expect(reportExportFilename(booked.title, reportDate(booked), "pdf")).toBe("q3-lp-update-2026-09-07.pdf");
+  });
+});
+
+describe("what the page shows that the file used to drop", () => {
+  it("files the questions put to the host, numbered so they can be answered by number", () => {
+    const md = buildReportMarkdown({
+      ...base,
+      analysis: { ...base.analysis, open_questions: ["Did Jane commit to the re-up?", "Which Friday?"] },
+    });
+    expect(md).toContain("## Questions For The Host\n\n1. Did Jane commit to the re-up?\n2. Which Friday?");
+    // Before the decisions they qualify.
+    expect(md.indexOf("## Questions For The Host")).toBeLessThan(md.indexOf("## Decisions"));
+  });
+
+  it("adds no heading when the host was asked nothing", () => {
+    expect(buildReportMarkdown(base)).not.toContain("Questions For The Host");
+  });
+
+  it("says when the analysis was cut short, before the summary it qualifies", () => {
+    const md = buildReportMarkdown({ ...base, analysis: { ...base.analysis, report_truncated: true } });
+    expect(md).toContain(`## Note\n\n${TRUNCATED_NOTE}`);
+    expect(md.indexOf("## Note")).toBeLessThan(md.indexOf("## Summary"));
+    expect(buildReportMarkdown(base)).not.toContain("## Note");
+  });
+
+  it("says there was nothing to summarise for a report filed that way on purpose", () => {
+    const md = buildReportMarkdown({
+      ...base,
+      summary: "",
+      hasReport: true,
+      fullTranscript: "Gary (uncertain — not recognised reliably): garble",
+      analysis: { unsummarised: "unusable" },
+    });
+    expect(md).toContain(`*${NOTHING_TO_SUMMARISE}*`);
+    // Not the advice for a failed analysis: regenerating this one changes nothing.
+    expect(md).not.toContain("did not complete");
   });
 });
