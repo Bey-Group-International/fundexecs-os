@@ -93,6 +93,16 @@ export function unsummarisedReason(analysis: Record<string, unknown> | null | un
  * speech" and "speech the engine could not score" is not actionable, and the
  * transcript — kept in full either way — is where they would look for it.
  */
+/**
+ * How often a share page that has nothing to show yet looks again.
+ *
+ * The in-app report page polls every 5s; a guest reading a holding page can
+ * wait longer. Lives here rather than in the route file because a Next.js
+ * route module may export only its handlers and config — any other export
+ * fails the build's route type check, which `tsc --noEmit` cannot see.
+ */
+export const NOT_READY_REFRESH_SECONDS = 15;
+
 export const NOTHING_TO_SUMMARISE = "Nothing to summarise: no usable speech was captured.";
 
 // ── Who was in the meeting ──────────────────────────────────────────────────

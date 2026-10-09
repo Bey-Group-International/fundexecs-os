@@ -21,13 +21,10 @@ import { loadReportForExport } from "@/lib/meetings/report-export.server";
 import { UNTITLED_MEETING, buildReportMarkdown, hasReportSummary } from "@/lib/meetings/report-export";
 import { renderMarkdownToHtml } from "@/lib/artifacts/export";
 import { reportStillPending, type ReportMeeting } from "@/lib/meetings/report-page";
-import { NOTHING_TO_SUMMARISE, unsummarisedReason } from "@/lib/meetings/report-generation";
+import { NOTHING_TO_SUMMARISE, NOT_READY_REFRESH_SECONDS, unsummarisedReason } from "@/lib/meetings/report-generation";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-
-/** How often a holding page looks again. The in-app poll asks every 5s; a guest can wait longer. */
-export const NOT_READY_REFRESH_SECONDS = 15;
 
 const HEADERS = {
   "Content-Type": "text/html; charset=utf-8",

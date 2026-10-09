@@ -21,7 +21,8 @@ jest.mock("@/lib/supabase/server", () => ({
   }),
 }));
 
-import { GET, NOT_READY_REFRESH_SECONDS } from "./route";
+import { GET } from "./route";
+import { NOT_READY_REFRESH_SECONDS } from "@/lib/meetings/report-generation";
 import { REPORT_WAIT_LIMIT_MS } from "@/lib/meetings/attendance";
 
 const ENDED = "2026-10-09T10:00:00.000Z";
