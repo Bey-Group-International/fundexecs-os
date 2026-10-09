@@ -5509,6 +5509,49 @@ Deployed, monitoring               →  live, observability active
              |  Room side in this entry (transcript-drain, transcript-saving,
              |  recognizer status, meter guard, attribution); report side in
              |  the next.
+
+2026-10-09  |  The report that only existed if the host pressed End  |  The
+             |  report side of the same audit, built in parallel on a
+             |  worktree by a second engineer and merged here.
+             |  ONE WRITE PATH. report-generation.server.ts now holds the
+             |  generate-from-stored-rows, unsummarised-row and close-meeting
+             |  steps, used by the End route, the Regenerate route and the
+             |  new hourly sweep. End is idempotent (a report seconds old is
+             |  returned, not regenerated); maxDuration pinned against the
+             |  client's wait. Participants come from attendance plus the
+             |  transcript's speakers in both routes - the invite list named
+             |  people who never came and omitted guests who did. The prompt
+             |  no longer tells the model a speaker called "You" is the host;
+             |  nobody was ever labelled "You".
+             |  NOTHING TO SUMMARISE is a state, not a report. A silent or
+             |  noise-only transcript writes a row that says so and closes
+             |  the meeting; the model is not called and the page does not
+             |  show "ready" over an empty report.
+             |  A MEETING NOBODY ENDED is found twice: the log offers
+             |  "Generate report" whenever transcript rows exist (an RPC
+             |  answers "which of these meetings have rows" under the
+             |  caller's own RLS), and an hourly sweep closes meetings three
+             |  hours past their last sign of life - one model call per pass,
+             |  booked-but-never-joined meetings untouched.
+             |  A GUEST CAN READ THE REPORT. The thank-you screen asks a
+             |  public route, with the key the browser knocked with, for a
+             |  signed expiring link; the token carries a digest of the key,
+             |  never the key, and is minted only for an admitted one. The
+             |  link's page waits politely while the report is still being
+             |  written. Four comments that said guests had this already, or
+             |  could never have it, now agree with the code.
+             |  THE SUMMARY EMAIL went from any attendee to everyone invited,
+             |  twice if pressed twice, to host-only, attended-only, with a
+             |  sent marker on the meeting and a deliberate resend.
+             |  Also: the export gains the host's open questions and the
+             |  meeting's real date; the gated follow-up writes the status
+             |  the chip reads; inbox threads are filed under the meeting's
+             |  org, not the sender's.
+             |  Confidence: two new migrations; new suites for report
+             |  generation, the sweep, the guest link (route, signer, page,
+             |  thank-you screen), the log and the generate button; the
+             |  route suites extended. Full Jest, typecheck and eslint clean
+             |  on the merged tree.
 ```
 
 ---

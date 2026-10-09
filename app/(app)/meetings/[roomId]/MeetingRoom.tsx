@@ -6496,7 +6496,9 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
   if (showGuestUpsell) {
     return (
       <BodyPortal>
-        <GuestThanksScreen onLeave={() => router.push("/")} />
+        {/* With the key this browser knocked with, the screen can fetch a
+            signed link to the summary — the only path a guest has to it. */}
+        <GuestThanksScreen onLeave={() => router.push("/")} roomCode={roomCode} guestKey={guestKeyRef.current} />
       </BodyPortal>
     );
   }
