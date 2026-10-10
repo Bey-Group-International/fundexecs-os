@@ -100,6 +100,9 @@ import {
 import {
   coverageNotice, engineFollowsTrack, localTranscribing, transcriptionMicNotice, type SrStatus,
 } from "@/lib/meetings/transcription-coverage";
+import {
+  browserBrand, lineDiagnostics, type RecognizerDiagnostics, type RecognizerRun,
+} from "@/lib/meetings/recognizer-diagnostics";
 import { PEER_DRAIN_GRACE_MS, drainTranscript as drainLines } from "@/lib/meetings/transcript-drain";
 import { saveFailureNotice, savesCovered } from "@/lib/meetings/transcript-saving";
 import { recordingNotice, type RecordingState } from "@/lib/meetings/recording-policy";
@@ -310,6 +313,12 @@ interface TranscriptLine {
   confidence: number;
   /** Someone else was audible at the same time. */
   overlapped: boolean;
+  /**
+   * The run that produced the line — engine brand, how it was started, the
+   * engine's raw score — stored beside it. Own final lines only; see
+   * recognizer-diagnostics.ts.
+   */
+  recognizer?: RecognizerDiagnostics;
 }
 
 type SignalMsg =
@@ -3693,6 +3702,19 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     // language does not fail, it produces fluent nonsense in the one it was told.
     recognition.lang = recognitionLang(typeof navigator !== "undefined" ? navigator.language : null);
 
+    // What every line will say about the run that produced it. The brand is
+    // read once: the engine behind `SpeechRecognition` is the browser's own
+    // (Edge's is not Chromium's), and a transcript that goes wrong on one
+    // brand and not another cannot be read without it. See
+    // recognizer-diagnostics.ts for why this exists.
+    const nav = typeof navigator !== "undefined" ? navigator : null;
+    const brand = browserBrand(
+      (nav as unknown as { userAgentData?: { brands?: Array<{ brand: string }> } } | null)?.userAgentData?.brands ?? null,
+      nav?.userAgent ?? null,
+    );
+    const srAvailable = engineFollowsTrack(SR);
+    const run: RecognizerRun = { path: "bare", run: 0, startedAt: null, trackLabel: null };
+
     // The restart bookkeeping: when this run started, how many runs in a row
     // died at once, and the timer for a delayed restart.
     let startedAt: number | null = null;
@@ -3707,6 +3729,7 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
 
     recognition.onstart = () => {
       startedAt = Date.now();
+      run.startedAt = startedAt;
       lastError = null;
       setSrStatus("active");
       srStatusRef.current = "active";
@@ -3727,10 +3750,16 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
       // The engine's score for what settled in this event: the lowest of the
       // finals it holds, because one garbled clause makes the sentence unsure.
       let engine: number | null = null;
+      // The engine's score exactly as given, zero included, for the stored
+      // diagnostics: `engineConfidence` below turns a zero into "no score",
+      // and whether the engine said zero or said nothing is a question the
+      // diagnostics exist to answer.
+      let rawEngine: unknown;
       for (let i = ev.resultIndex; i < ev.results.length; i++) {
         const r = ev.results[i];
         if (r.isFinal) {
           finalText += r[0].transcript + " ";
+          if (rawEngine === undefined) rawEngine = r[0]?.confidence;
           const score = engineConfidence(r[0]);
           if (score !== null) engine = engine === null ? score : Math.min(engine, score);
         } else {
@@ -3820,6 +3849,14 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
             isLocal: true,
             confidence,
             overlapped: attribution.overlapped,
+            recognizer: lineDiagnostics({
+              brand,
+              available: srAvailable,
+              run,
+              engineConfidence: rawEngine,
+              lang: recognition.lang,
+              now,
+            }),
           });
           interimIdRef.current = crypto.randomUUID();
           sendSignalRef.current({
@@ -3896,11 +3933,23 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
         return;
       }
       awaitingTrackRef.current = false;
-      try { recognition.start(track); return; } catch (err) {
+      run.run += 1;
+      run.startedAt = null;
+      run.trackLabel = track.label || null;
+      run.path = "track";
+      try {
+        recognition.start(track);
+        console.info(`[transcription] run ${run.run} on track "${run.trackLabel ?? ""}" (${brand}, available=${srAvailable})`);
+        return;
+      } catch (err) {
         // Already running is not a reason to retry without the track.
         if ((err as { name?: string })?.name === "InvalidStateError") return;
       }
-      try { recognition.start(); } catch { /* already started */ }
+      run.path = "bare";
+      try {
+        recognition.start();
+        console.info(`[transcription] run ${run.run} on the engine's own capture (${brand}, available=${srAvailable})`);
+      } catch { /* already started */ }
     };
     startRecognitionRef.current = startRecognition;
 

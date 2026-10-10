@@ -5552,6 +5552,51 @@ Deployed, monitoring               →  live, observability active
              |  thank-you screen), the log and the generate button; the
              |  route suites extended. Full Jest, typecheck and eslint clean
              |  on the merged tree.
+2026-10-09  |  The transcript that turned to noise on one browser  |  Asked
+             |  to work on the microphone; the owner answered questions one
+             |  at a time and gave a report link (sed-nu9-73). Read the stored
+             |  rows against the deploy history before touching code.
+             |  WHAT THE ROWS SAID. The guest's lines: 25 words each, real
+             |  engine scores, lowercase (Chrome). The host's: 3-4 words of
+             |  punctuated nonsense ("Bob Popcorn.", "Washoe surgery Power.")
+             |  at confidence 1.0, i.e. no engine score (Edge on Windows, per
+             |  the owner). Every host meeting since 2 October 17:59 UTC reads
+             |  the same; every one before reads 14-28 words a line. And in
+             |  the 17:20 meeting that day the host's transcript was perfect
+             |  for six minutes, then noise, while the guest said "I was able
+             |  to hear you, perfect" - the owner changed nothing.
+             |  WHAT CHANGED AT THAT MINUTE. #1265 (16:26 UTC) began handing
+             |  the recogniser the call's own track, start(track), to stop a
+             |  second raw capture breaking echo cancellation. That first
+             |  version fell through to a bare start() when the track was not
+             |  yet live at join, so the host's first run was still bare and
+             |  clean; the engine restarts itself every few minutes, and the
+             |  restart took the track and the transcript turned. Since 5
+             |  October the room waits for the track, so now every call is
+             |  noise from the first word. Edge is Chromium with its own
+             |  speech backend: it exposes available(), so this morning's
+             |  engine check counts it as following the track and says
+             |  nothing, and the audio it gets by that path comes out as
+             |  nonsense with no confidence. Chrome guests on the same code
+             |  are fine. Microsoft's docs describe track support only under
+             |  their on-device mode (Canary/Dev behind a flag).
+             |  THE OWNER CHOSE DIAGNOSTICS FIRST over an Edge-specific
+             |  bare start. Every own final line now carries, in a new
+             |  `recognizer` jsonb (migration 20261009180000): browser brand
+             |  (client hints, else UA), whether the engine exposes
+             |  available(), the run's path (track/bare), ordinal and age, the
+             |  engine's RAW confidence (zero kept as zero - "said zero" and
+             |  "said nothing" are different answers), the track label and
+             |  the language. The route keeps only those keys. The console
+             |  logs each run's path and brand. After one Edge call the rows
+             |  will say whether the track path is the whole story.
+             |  FOUND ON THE WAY: the DB Migrate workflow has failed since
+             |  16:36 UTC today on "Invalid access token" - SUPABASE_ACCESS_TOKEN
+             |  is dead - so 20261009100000 (summary_sent_at) and
+             |  20261009100100 (the transcript-rows RPC) are not in production
+             |  while the code that reads them is. Reported to the owner.
+             |  Confidence: new pure suite; buffer, route and live-room tests
+             |  extended; full Jest, typecheck and eslint clean.
 ```
 
 ---

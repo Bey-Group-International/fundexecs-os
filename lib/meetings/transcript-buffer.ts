@@ -43,10 +43,13 @@ export interface BufferableLine {
   isLocal: boolean;
   confidence: number;
   overlapped: boolean;
+  /** The recogniser run that produced an own final line; absent on remote lines. */
+  recognizer?: RecognizerDiagnostics;
 }
 
 /** A row as `live_meeting_transcripts` stores it. */
 import { LOCAL_SPEAKER_ID } from "@/lib/meetings/speaker-attribution";
+import type { RecognizerDiagnostics } from "@/lib/meetings/recognizer-diagnostics";
 
 export interface TranscriptRow {
   id: string;
@@ -58,6 +61,8 @@ export interface TranscriptRow {
   text: string;
   ts: string;
   overlapped: boolean;
+  /** See recognizer-diagnostics.ts; null for lines written before it existed. */
+  recognizer: RecognizerDiagnostics | null;
 }
 
 /**
@@ -164,6 +169,7 @@ export function transcriptRows(
     text: l.text,
     ts: new Date(l.ts).toISOString(),
     overlapped: l.overlapped,
+    recognizer: l.recognizer ?? null,
   }));
 }
 

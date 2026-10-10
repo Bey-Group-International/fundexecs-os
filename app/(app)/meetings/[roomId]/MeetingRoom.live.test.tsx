@@ -1622,6 +1622,77 @@ describe("the last sentence before leaving", () => {
   });
 });
 
+describe("what a saved line says about the engine that produced it", () => {
+  /**
+   * Read against the host's meetings of 2 to 9 October: every line of theirs
+   * after the recogniser was handed the call's track is a few words of
+   * nonsense at confidence 1.0, while Chrome guests kept whole sentences.
+   * Nothing stored said which path a line came from, which browser's engine
+   * produced it, or whether the engine scored it. Now every own final line
+   * carries exactly that, so the next bad transcript is read against facts.
+   */
+  function installRecognition() {
+    const instances: Array<{
+      onstart: (() => void) | null;
+      onspeechstart: (() => void) | null;
+      onresult: ((ev: unknown) => void) | null;
+    }> = [];
+    class Recognition {
+      continuous = false; interimResults = false; lang = "";
+      onstart: (() => void) | null = null;
+      onspeechstart: (() => void) | null = null;
+      onresult: ((ev: unknown) => void) | null = null;
+      onerror = null; onend = null;
+      constructor() { instances.push(this); }
+      start() { this.onstart?.(); }
+      stop() {}
+    }
+    const w = window as unknown as { SpeechRecognition?: unknown };
+    const previous = w.SpeechRecognition;
+    w.SpeechRecognition = Recognition;
+    return { instances, restore: () => { w.SpeechRecognition = previous; } };
+  }
+
+  it("records the run's path, ordinal and age, the browser, and the engine's raw score", async () => {
+    joinChoice.micEnabled = true;
+    const sr = installRecognition();
+    try {
+      await enterCall();
+      await act(async () => { sr.instances[0]?.onspeechstart?.(); await Promise.resolve(); });
+      await talkFor(2_000, "audio-local");
+      await act(async () => {
+        sr.instances[0]?.onresult?.({
+          resultIndex: 0,
+          results: [Object.assign([{ transcript: "we close on Friday", confidence: 0.92 }], { isFinal: true })],
+        });
+        await Promise.resolve();
+      });
+      await flush(16_000, 10);
+
+      const saved = (global.fetch as jest.Mock).mock.calls
+        .filter(([u]) => String(u).includes("/transcript"))
+        .flatMap(([, init]) =>
+          (JSON.parse(String((init as RequestInit).body)) as {
+            lines: Array<{ text: string; recognizer: Record<string, unknown> | null }>;
+          }).lines,
+        )
+        .find((l) => l.text === "we close on Friday");
+      expect(saved).toBeDefined();
+      expect(saved!.recognizer).toEqual(expect.objectContaining({
+        path: "track",
+        run: 1,
+        engineConfidence: 0.92,
+        lang: navigator.language,
+        available: false,
+      }));
+      expect(typeof saved!.recognizer!.brand).toBe("string");
+      expect(saved!.recognizer!.runAgeMs).toBeGreaterThanOrEqual(0);
+    } finally {
+      sr.restore();
+    }
+  });
+});
+
 describe("a background the room suspends", () => {
   /**
    * The suspension paths used to go through applyBackground like any pick and

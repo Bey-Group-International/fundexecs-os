@@ -3,6 +3,7 @@ import { createServerClient, createServiceClient, hasSupabaseServiceEnv } from "
 import { authorizeMeetingCaller } from "@/lib/meetings/meeting-access.server";
 import { checkRateLimit, clientIp, rateLimitHeaders } from "@/lib/rate-limit";
 import { MAX_BATCH, type TranscriptRow } from "@/lib/meetings/transcript-buffer";
+import { sanitizeDiagnostics } from "@/lib/meetings/recognizer-diagnostics";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -76,9 +77,19 @@ function sanitize(rows: unknown, meetingId: string, userId: string | null): Tran
       text,
       ts,
       overlapped: r.overlapped === true,
+      // The run that produced the line, kept only in the shape the client is
+      // allowed to write. See recognizer-diagnostics.ts.
+      recognizer: sanitizeDiagnostics(r.recognizer),
     });
   }
   return out;
+}
+
+/** PostgREST's "no such column" (PGRST204) or Postgres's (42703), naming this column. */
+function missingRecognizerColumn(error: { code?: string; message?: string } | null): boolean {
+  if (!error) return false;
+  const named = /recognizer/i.test(error.message ?? "");
+  return named && (error.code === "PGRST204" || error.code === "42703" || /column/i.test(error.message ?? ""));
 }
 
 export async function POST(req: NextRequest, { params }: { params: Params }) {
@@ -108,9 +119,21 @@ export async function POST(req: NextRequest, { params }: { params: Params }) {
     ? createServiceClient()
     : ((await createServerClient()) as SupabaseLike);
 
-  const { error } = await write
+  let { error } = await write
     .from("live_meeting_transcripts")
     .upsert(rows, { onConflict: "id", ignoreDuplicates: true });
+
+  // The `recognizer` column arrives by migration 20261009180000, and the
+  // migration pipeline does not always run when a deploy does. Code that
+  // reaches production ahead of its column must not turn every save into a
+  // 500 - that would cost the words to keep a diagnostic. Written again
+  // without the field, once, when the database says it has no such column.
+  if (error && missingRecognizerColumn(error)) {
+    console.warn("[/api/meetings/[id]/transcript] recognizer column missing; saving lines without it");
+    ({ error } = await write
+      .from("live_meeting_transcripts")
+      .upsert(rows.map(({ recognizer: _r, ...rest }) => rest), { onConflict: "id", ignoreDuplicates: true }));
+  }
 
   if (error) {
     // Answered as a failure on purpose. The client keeps unconfirmed lines in
