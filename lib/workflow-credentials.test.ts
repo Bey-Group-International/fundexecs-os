@@ -110,6 +110,21 @@ describe("workflow checkout credentials", () => {
       return;
     }
 
+    if (steps.length === 0) {
+      // A workflow with no checkout at all persists nothing — the safest
+      // state this file guards, not a discovery failure. health-check.yml is
+      // this shape: it probes production over HTTPS and never needs the
+      // repository. The assertion proves the file still parsed as a workflow
+      // WITH jobs, so an empty list keeps meaning "no checkout" rather than
+      // "the parse silently found nothing" — the evasion the discovery guard
+      // above exists to stop. Repo-wide, that guard still demands at least 7
+      // checkout steps across all files.
+      it("persists nothing because it checks nothing out", () => {
+        expect(Object.keys(wf.jobs ?? {}).length).toBeGreaterThan(0);
+      });
+      return;
+    }
+
     it("checks out the repository", () => {
       expect(steps.length).toBeGreaterThan(0);
     });
