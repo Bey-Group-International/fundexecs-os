@@ -26,6 +26,21 @@
 # The one legal path for a schema change, and how to recover when one has
 # already been applied by hand, are in supabase/migrations/README.md.
 #
+# Two things keep a credential failure from hiding again (it has now happened
+# twice: 2026-07-19 for a month, 2026-10-09 for twelve hours):
+#
+#   The SCHEDULE. Waiting for the next migration merge to discover a dead
+#   token means discovering it at the worst moment — after the app code has
+#   already deployed against a schema that will not follow. The 6-hourly run
+#   re-checks the credential and the repo/production agreement between merges,
+#   and because `db push` is idempotent it also self-heals: the first run
+#   after the secret is fixed applies everything that went stranded.
+#
+#   The ISSUE. A red run in the Actions tab is a tree falling in an empty
+#   forest. On failure the last step opens a labelled issue (once — an
+#   already-open issue is the signal, and re-posting would bury it); the
+#   first green run afterwards closes it with a link to itself.
+#
 # `supabase db push --include-all` applies every local migration whose version is
 # not already in the remote history — including files whose timestamps sort before
 # the remote head, which happens routinely when parallel sessions merge migrations
@@ -41,10 +56,17 @@ on:
     branches: [main]
     paths:
       - "supabase/migrations/**"
+  # Between migration merges: detect a dead credential within hours instead of
+  # on the next merge, and apply any migrations a failed run left stranded.
+  schedule:
+    - cron: "17 */6 * * *"
   workflow_dispatch: {}
 
 permissions:
   contents: read
+  # The escalation steps at the end open and close the db-migrate-failure
+  # issue. Nothing here writes code.
+  issues: write
 
 # Never let two production migration pushes run at once.
 concurrency:
@@ -355,3 +377,61 @@ jobs:
           # Both read by check (c) to decide whether it can run at all.
           GITHUB_EVENT_NAME: ${{ github.event_name }}
           GITHUB_RUN_ATTEMPT: ${{ github.run_attempt }}
+
+      # A red run that nobody reads is how the July 2026 token expiry cost a
+      # month. The issue is the escalation: it lands in notifications and on
+      # the issues list, and it stays open — a standing statement that
+      # production is not receiving migrations — until a run goes green.
+      #
+      # Opened ONCE: if the labelled issue is already open, the state is
+      # already loud, and a comment every six hours would train people to
+      # mute it. The failing step's own log (linked from the issue) names the
+      # specific problem — a dead token, a migration that did not apply, an
+      # orphan version — and its remedy.
+      - name: Open an issue so the failure cannot be missed
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          gh label create db-migrate-failure \
+            --description "DB Migrate cannot reach production or found drift" \
+            --color B60205 --force || true
+
+          existing="$(gh issue list --state open --label db-migrate-failure \
+            --json number --jq '.[0].number // empty' || true)"
+          if [ -n "$existing" ]; then
+            echo "Issue #${existing} is already open — the failure is already loud."
+            exit 0
+          fi
+
+          {
+            printf '%s\n\n' "A DB Migrate run has failed: ${RUN_URL}"
+            printf '%s\n\n' "Until this workflow runs green, **no committed migration reaches the production database**, while app deploys continue — so any feature depending on a new migration is broken in production, and merges keep looking green."
+            printf '%s\n\n' "The failing step's log names the specific problem. The two usual ones:"
+            printf '%s\n' "- **\`Link production project\` failed** — the \`SUPABASE_ACCESS_TOKEN\` repository secret is expired or revoked. Mint a new personal access token (Supabase dashboard → account → tokens) and update the secret under Settings → Secrets and variables → Actions."
+            printf '%s\n\n' "- **\`Verify no migration drift\` failed** — the repository and production disagree; the log says in which direction and for which versions. Recovery procedures are in \`supabase/migrations/README.md\`."
+            printf '%s\n' "No manual re-run is needed after fixing the cause: this workflow runs every 6 hours and applies anything stranded, then closes this issue on its first green run."
+          } > /tmp/issue-body.md
+
+          gh issue create \
+            --label db-migrate-failure \
+            --title "DB Migrate is failing: production is not receiving migrations" \
+            --body-file /tmp/issue-body.md
+        shell: bash
+
+      - name: Close the failure issue now that a run is green
+        if: success()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          numbers="$(gh issue list --state open --label db-migrate-failure \
+            --json number --jq '.[].number' || true)"
+          [ -z "$numbers" ] && { echo "No open db-migrate-failure issue."; exit 0; }
+          for n in $numbers; do
+            gh issue close "$n" \
+              --comment "DB Migrate is green again — this run applied/verified everything: ${RUN_URL}. Production and the repository agree." \
+              || echo "::warning::Could not close issue #${n}; close it by hand."
+          done
+        shell: bash
