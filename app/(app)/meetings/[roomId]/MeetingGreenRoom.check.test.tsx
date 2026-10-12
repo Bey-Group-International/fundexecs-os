@@ -1,17 +1,16 @@
 /**
- * The green room as a GATE, for an invite-link guest.
+ * The green room's device CHECK, for an invite-link guest.
  *
- * Until now this screen showed everything and required nothing: the Join button
- * was disabled while a join was in flight and at no other time, and `canJoin` in
- * lib/meetings/devices carries a comment saying that was on purpose. So the
- * commonest way to arrive in a call unheard was to walk past a screen that was
- * already explaining why.
+ * For a while this screen was a gate: the Join button stayed disabled until a
+ * guest had confirmed both camera and microphone, and guests with no webcam, a
+ * denied permission or an in-app browser could not get in at all. It is a check
+ * now — it measures, asks, and says plainly what is still unverified — and the
+ * button works throughout.
  *
  * The rules are in lib/meetings/device-check.ts and tested there. These are
- * about the wiring the rules cannot see: that the button is actually disabled,
- * that a guest's Yes is only worth anything with a measurement behind it, that
- * the latch survives switching the camera off, and that a host is not gated at
- * all.
+ * about the wiring the rules cannot see: that the button really is live, that a
+ * guest's Yes is only worth anything with a measurement behind it, that the
+ * latch survives switching the camera off, and that a host sees none of it.
  */
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MeetingGreenRoom } from "./MeetingGreenRoom";
@@ -102,6 +101,7 @@ beforeEach(() => {
   window.localStorage.clear();
   micIsLive = true;
   cameraIsLive = true;
+  base.onJoin.mockReset();
   Object.defineProperty(navigator, "mediaDevices", {
     configurable: true,
     value: {
@@ -128,6 +128,9 @@ async function show(props: Partial<typeof base> & { isGuest?: boolean } = {}) {
 
 const joinButton = () => screen.getByRole("button", { name: /join meeting|start meeting|join to listen/i });
 
+/** The sentence under the button while something is still unchecked. */
+const note = () => screen.queryByText(/still join/i);
+
 /** The Yes button inside the row whose text contains `within`. */
 function answerYes(within: RegExp) {
   const row = screen.getByText(within).closest("li");
@@ -146,11 +149,21 @@ function within_(row: Element, label: string): Element {
 }
 
 describe("a guest arriving by invite link", () => {
-  it("cannot join until the check is done", async () => {
+  it("can join straight away, and is told what is still unchecked", async () => {
     await show({ isGuest: true });
-    expect(joinButton()).toBeDisabled();
-    // And is told which device is in the way rather than that something is.
-    expect(screen.getByText(/before joining/i)).toBeInTheDocument();
+    expect(joinButton()).toBeEnabled();
+    // Told which devices, and that the button works regardless.
+    expect(note()).toBeInTheDocument();
+    expect(note()!.textContent).toMatch(/microphone and camera/i);
+  });
+
+  /** The one promise the whole change rests on. */
+  it("lets a guest with nothing checked press Join", async () => {
+    micIsLive = false;
+    cameraIsLive = false;
+    await show({ isGuest: true });
+    fireEvent.click(joinButton());
+    expect(base.onJoin).toHaveBeenCalledTimes(1);
   });
 
   it("is asked about each device once it is producing", async () => {
@@ -159,32 +172,36 @@ describe("a guest arriving by invite link", () => {
     expect(screen.getByText(/do the bars move/i)).toBeInTheDocument();
   });
 
-  it("is let in once the browser and the guest agree about both", async () => {
+  it("stops being nagged once the browser and the guest agree about both", async () => {
     await show({ isGuest: true });
     await waitFor(() => expect(screen.getByText(/can you see yourself/i)).toBeInTheDocument());
 
     answerYes(/can you see yourself/i);
-    // One of two is not enough.
-    expect(joinButton()).toBeDisabled();
+    // One of two is not enough — and the note now names the one that is left.
+    await waitFor(() => expect(note()!.textContent).toMatch(/^Your microphone hasn't/i));
+    expect(joinButton()).toBeEnabled();
 
     answerYes(/do the bars move/i);
-    await waitFor(() => expect(joinButton()).toBeEnabled());
+    await waitFor(() => expect(note()).not.toBeInTheDocument());
+    expect(joinButton()).toBeEnabled();
   });
 
   /**
-   * The assertion the whole design rests on. A guest who presses Yes with
-   * nothing arriving is the lens cap and the didn't-look button press in one
-   * shape, and a confirmation with no measurement behind it must buy nothing.
+   * A guest who presses Yes with nothing arriving is the lens cap and the
+   * didn't-look button press in one shape, and a confirmation with no
+   * measurement behind it must buy nothing — the row must still read unchecked.
+   * What it must NOT do any more is keep them out.
    */
-  it("is not let in by saying yes to a microphone that is making no sound", async () => {
+  it("does not count a yes about a microphone that is making no sound", async () => {
     micIsLive = false;
     await show({ isGuest: true });
 
     answerYes(/can you see yourself/i);
     // The microphone row has no question to answer — there is nothing to
-    // confirm — so the gate stays shut on it.
+    // confirm — so it stays unchecked, and the note says so.
     expect(screen.queryByText(/do the bars move/i)).not.toBeInTheDocument();
-    expect(joinButton()).toBeDisabled();
+    await waitFor(() => expect(note()!.textContent).toMatch(/microphone/i));
+    expect(joinButton()).toBeEnabled();
   });
 
   /**
@@ -192,13 +209,14 @@ describe("a guest arriving by invite link", () => {
    * cover: a track that is open but has produced no frame is not a working
    * camera, and must not be confirmable.
    */
-  it("is not let in by a camera that is open but sending no picture", async () => {
+  it("does not count a camera that is open but sending no picture", async () => {
     cameraIsLive = false;
     await show({ isGuest: true });
 
     expect(screen.queryByText(/can you see yourself/i)).not.toBeInTheDocument();
     answerYes(/do the bars move/i);
-    expect(joinButton()).toBeDisabled();
+    await waitFor(() => expect(note()!.textContent).toMatch(/camera/i));
+    expect(joinButton()).toBeEnabled();
   });
 
   it("takes no for an answer, and says what to try", async () => {
@@ -207,26 +225,27 @@ describe("a guest arriving by invite link", () => {
 
     answerNo(/can you see yourself/i);
     await waitFor(() => expect(screen.getByText(/covering the lens/i)).toBeInTheDocument());
-    expect(joinButton()).toBeDisabled();
     // Still answerable: the steps are what to change, the question is how they
-    // say the change worked.
+    // say the change worked. And still joinable.
     expect(screen.getByText(/can you see yourself/i)).toBeInTheDocument();
+    expect(joinButton()).toBeEnabled();
   });
 
   /**
    * The latch, from the side that matters to a real person: joining with the
-   * camera off is a state this product supports, and "turn your camera on to be
-   * let in, then turn it off again" has to actually work.
+   * camera off is a state this product supports, and a camera that was checked
+   * and then switched off must still read as checked.
    */
-  it("keeps the gate open when a checked camera is switched off again", async () => {
+  it("keeps a checked camera checked when it is switched off again", async () => {
     await show({ isGuest: true });
     await waitFor(() => expect(screen.getByText(/can you see yourself/i)).toBeInTheDocument());
     answerYes(/can you see yourself/i);
     answerYes(/do the bars move/i);
-    await waitFor(() => expect(joinButton()).toBeEnabled());
+    await waitFor(() => expect(note()).not.toBeInTheDocument());
 
     fireEvent.click(screen.getByRole("button", { name: /join with camera off/i }));
     await waitFor(() => expect(joinButton()).toBeEnabled());
+    expect(note()).not.toBeInTheDocument();
   });
 
   /**
@@ -239,19 +258,20 @@ describe("a guest arriving by invite link", () => {
     await waitFor(() => expect(screen.getByText(/can you see yourself/i)).toBeInTheDocument());
     answerYes(/can you see yourself/i);
     answerYes(/do the bars move/i);
-    await waitFor(() => expect(joinButton()).toBeEnabled());
+    await waitFor(() => expect(note()).not.toBeInTheDocument());
 
     // The pickers live behind the "Devices" fold.
     fireEvent.click(screen.getByText(/^Devices$/i).closest("button")!);
     fireEvent.change(screen.getByRole("combobox", { name: /camera/i }), { target: { value: "cam-other" } });
 
-    await waitFor(() => expect(joinButton()).toBeDisabled());
+    await waitFor(() => expect(note()!.textContent).toMatch(/camera/i));
+    expect(joinButton()).toBeEnabled();
   });
 });
 
 /**
- * The three defects CodeRabbit found in the first cut of this gate. Each one
- * made the check accuse somebody falsely, or pass a device it had not actually
+ * The three defects CodeRabbit found in the first cut of this check. Each one
+ * made it accuse somebody falsely, or pass a device it had not actually
  * measured, so each gets a test rather than a fix on trust.
  */
 describe("what the check must not get wrong", () => {
@@ -286,7 +306,7 @@ describe("what the check must not get wrong", () => {
 
     await waitFor(() => expect(screen.getByText(/unmute so your microphone/i)).toBeInTheDocument());
     expect(screen.queryByText(/pick a different microphone/i)).not.toBeInTheDocument();
-    expect(joinButton()).toBeDisabled();
+    expect(joinButton()).toBeEnabled();
   });
 
   /**
@@ -302,15 +322,16 @@ describe("what the check must not get wrong", () => {
 
 describe("a host or a member", () => {
   /**
-   * Not gated, and that is the decision rather than an oversight: somebody with
-   * colleagues in the room is told within seconds that they cannot be heard, and
-   * being made late to their own meeting costs them more than a quiet first
-   * minute.
+   * Not shown the check at all, and that is the decision rather than an
+   * oversight: somebody with colleagues in the room is told within seconds that
+   * they cannot be heard, and a screen of questions in front of their own
+   * meeting costs them more than a quiet first minute.
    */
   it("can join straight away, with no check in the way", async () => {
     await show({ isGuest: false });
     expect(joinButton()).toBeEnabled();
     expect(screen.queryByText(/can you see yourself/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/do the bars move/i)).not.toBeInTheDocument();
+    expect(note()).not.toBeInTheDocument();
   });
 });

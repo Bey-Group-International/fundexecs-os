@@ -259,9 +259,11 @@ export async function POST(req: NextRequest) {
       priority: body.priority ?? "normal",
       tags: body.tags ?? [],
       externalCalendarSyncEnabled: calendarPlan.enabled,
-      // Coerced, not passed through: this decides whether a stranger with the
-      // link walks straight into the room, so a truthy string must not enable it.
-      guestQuickAccess: body.guestQuickAccess === true,
+      // Coerced, not passed through, and ON by default: only an explicit false
+      // keeps the waiting room. A caller that never sends the field (an older
+      // client, the API) gets a link that works, and a truthy string is not an
+      // explicit false, so it keeps the default rather than deciding anything.
+      guestQuickAccess: body.guestQuickAccess !== false,
       // Derived, never taken from the request. The form used to offer Outlook,
       // Calendly and iCal, none of which has a writer — so a meeting could be
       // stored as syncing to Outlook and then pushed to Google or skipped.

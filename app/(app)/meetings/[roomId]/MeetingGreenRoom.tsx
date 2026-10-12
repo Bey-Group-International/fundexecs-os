@@ -20,15 +20,15 @@ import {
 import { echoRisk, echoRiskNotice } from "@/lib/meetings/echo";
 import {
   CAMERA_SETTLE_MS,
-  blockedReason,
+  checkComplete,
   checkCopy,
   checkStage,
   deviceChanged,
-  deviceCheckRequired,
+  deviceCheckShown,
   deviceOffBlocksEntry,
-  entryAllowed,
   measuringChosenDevice,
   offSteps,
+  uncheckedNote,
   shouldLatch,
   type CheckStage,
   type CheckedDevice,
@@ -85,9 +85,10 @@ export interface MeetingGreenRoomProps {
   roomCode: string;
   isHost: boolean;
   /**
-   * An invite-link guest, who has to prove their camera and microphone work
-   * before this screen will let them through. See lib/meetings/device-check.ts
-   * for why it is only them.
+   * An invite-link guest, who is shown a camera-and-microphone check above the
+   * Join button. Shown, not required: the button works throughout. See
+   * lib/meetings/device-check.ts for why it is only them, and why it no longer
+   * gates.
    */
   isGuest?: boolean;
   joining: boolean;
@@ -1112,12 +1113,15 @@ export function MeetingGreenRoom({
   const joinable = canJoinWith({ micDenied, mics: mics.length });
   const listenOnly = joinable && micDenied;
 
-  // ── The gate ─────────────────────────────────────────────────────────────
+  // ── The check ────────────────────────────────────────────────────────────
   //
-  // A guest only. `problemFor` hands each row the named fault for its own
-  // device, so a blocked microphone is reported as blocked rather than as the
-  // generic silence it also looks like.
-  const checkRequired = deviceCheckRequired({ isGuest });
+  // A guest only, and advisory: it says what is unverified under a Join button
+  // that stays live. It used to disable the button until both devices were
+  // confirmed, and guests with no webcam or a denied permission could not join
+  // at all. `problemFor` hands each row the named fault for its own device, so a
+  // blocked microphone is reported as blocked rather than as the generic
+  // silence it also looks like.
+  const checkShown = deviceCheckShown({ isGuest });
   const problemFor = (device: CheckedDevice): ReadinessProblem | null =>
     problems.find((p) =>
       device === "camera" ? p.kind.startsWith("camera") || p.kind === "no_camera"
@@ -1169,8 +1173,9 @@ export function MeetingGreenRoom({
     return checkCopy(device, stage).steps;
   };
 
-  const gateOpen = !checkRequired || entryAllowed(stages);
-  const gateReason = checkRequired ? blockedReason(stages) : null;
+  // The sentence under the button while something is still unchecked. Null for
+  // a host or a member, and null for a guest once both devices read as checked.
+  const checkNote = checkShown && !checkComplete(stages) ? uncheckedNote(stages) : null;
 
   // Latching is a render-time decision taken in an effect, because it is state:
   // the stage is derived, and the whole point of the latch is that it outlives
@@ -1191,10 +1196,9 @@ export function MeetingGreenRoom({
 
   const join = () => {
     if (!canPressJoin(admission)) return;
-    // Guarded here as well as on the button. The button being disabled is a
-    // presentation detail; this is the rule, and a guest who has not proved
-    // their devices does not get past it however the press arrived.
-    if (!gateOpen) return;
+    // No device gate here, on purpose. A guest who has not checked their devices
+    // has been told so under the button; stopping them was how guests with no
+    // webcam came to be locked out of meetings they were invited to.
     rememberDevice("videoinput", camId);
     rememberDevice("audioinput", micId);
     rememberDevice("audiooutput", speakerId);
@@ -1402,14 +1406,16 @@ export function MeetingGreenRoom({
               </ul>
             )}
 
-            {/* The required check, for a guest. Above the Join button it gates
-                and above the device pickers it sends them to, because a row that
+            {/* The check, for a guest. Above the Join button it advises, and
+                above the device pickers it sends them to, because a row that
                 says "pick another microphone" with the pickers somewhere else on
-                the screen is an instruction nobody can follow. */}
-            {checkRequired && (
+                the screen is an instruction nobody can follow. It never
+                disables the button: see lib/meetings/device-check.ts. */}
+            {checkShown && (
               <div className="flex flex-col gap-2">
                 <p className="text-xs font-medium text-[var(--fg-secondary)]">
-                  Check your camera and mic
+                  Check your camera and mic{" "}
+                  <span className="font-normal text-[var(--fg-muted)]">(optional)</span>
                 </p>
                 <ul className="flex flex-col gap-1.5">
                   <CheckRow
@@ -1546,16 +1552,17 @@ export function MeetingGreenRoom({
                 <button
                   type="button"
                   onClick={join}
-                  disabled={joining || !gateOpen}
+                  disabled={joining}
                   className="min-h-11 w-full rounded-lg bg-[var(--gold-400)] py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[var(--gold-500)] disabled:opacity-50"
                 >
                   {joinLabel}
                 </button>
-                {/* Names the device that is actually in the way. "Check your
-                    devices", in front of somebody whose camera is fine and whose
-                    microphone is not, costs them the next two minutes. */}
-                {gateReason && (
-                  <p className="mt-2 text-center text-[11px] text-[var(--fg-muted)]">{gateReason}</p>
+                {/* Names the device that is actually unchecked, and says the
+                    button still works. "Check your devices", in front of somebody
+                    whose camera is fine and whose microphone is not, costs them
+                    the next two minutes. */}
+                {checkNote && (
+                  <p className="mt-2 text-center text-[11px] text-[var(--fg-muted)]">{checkNote}</p>
                 )}
               </>
             )}
