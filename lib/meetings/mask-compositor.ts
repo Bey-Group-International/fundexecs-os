@@ -355,8 +355,13 @@ export class MaskCompositor {
   reset(): void {
     this.maskHistory = null;
     // The edge's hold goes with the history: what a cell showed before the
-    // pause must not decide what it takes to show it after.
+    // pause must not decide what it takes to show it after. Nor does the
+    // warmth of motion from before it.
     this.maskEdge = null;
+    this.motion?.warm.fill(0);
+    this.luma = null;
+    this.previousLuma = null;
+    this.lumaFresh = false;
     // And the hole fill's memory: what was covered before the pause says nothing
     // about what is a dropout after it, and a hold count carried across would
     // refuse to bridge the first real one.

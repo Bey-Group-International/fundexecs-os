@@ -349,13 +349,22 @@ export interface MotionScratch {
   rows: Float32Array;
   /** The box mean in both axes: the local motion energy. */
   energy: Float32Array;
+  /** Last frame's camera energy, decaying, so cells stay fast for a few frames
+   *  after they moved. See `CAMERA_WARMTH`. Carried between frames. */
+  warm: Float32Array;
+  /** A histogram of |luma change| over the frame, for the noise estimate. */
+  histogram: Uint32Array;
 }
 
 export function createMotionScratch(width: number, height: number): MotionScratch {
   const w = Math.max(0, Math.floor(width));
   const h = Math.max(0, Math.floor(height));
   const n = w * h;
-  return { width: w, height: h, delta: new Uint8ClampedArray(n), rows: new Float32Array(n), energy: new Float32Array(n) };
+  return {
+    width: w, height: h,
+    delta: new Uint8ClampedArray(n), rows: new Float32Array(n), energy: new Float32Array(n),
+    warm: new Float32Array(n), histogram: new Uint32Array(256),
+  };
 }
 
 /**
@@ -450,9 +459,25 @@ export function blendCoverageByEnergy(
 // What this gives up is honest: a person who is perfectly still while the
 // model finally finds a part of them it had missed -- an arm it had been
 // leaving out -- gets that arm at the still rate, over about twenty frames,
-// rather than at once. The three constants below are measured against a
-// harness that models the chunk jumps; the measurement is in the commit that
-// set them.
+// rather than at once.
+//
+// The constants below are measured against a harness that models the chunk
+// jumps (a stretch of edge re-decided by the model for a few frames, on an
+// edge that otherwise trembles) over a synthetic camera with sensor noise,
+// 72 frames each, flips in cells per frame and trail in pixels at 720p:
+//
+//   scene                      flips/frame   trail    without
+//   jump of 5px, warmth 0.6        37        2.8px    36 / 3.0px (no warmth)
+//   jump of 7px, warmth 0.6        57        4.2px    55 / 13.6px (no warmth)
+//   dark shirt (contrast 0.4)      37        5.0px    36 / 9.6px (no warmth)
+//   noisy camera (noise 8)         42        3.3px    207 (fixed floor of 6)
+//   bright room, adaptive floor    25        2.8px    36 (fixed floor of 6)
+//   dark shirt, adaptive floor     25        6.1px    36 (fixed floor of 6)
+//
+// Warmth of 0.75 took the trail down a further 0.5-1.6px for 1-3 more flips a
+// frame on every scene; the trade was not worth the flips. The mask-read
+// blend alone, the rule this replaced, ran at 205 flips a frame on the first
+// scene.
 //
 // `cameraMotion` reads a luma plane the compositor samples from the frame it
 // already draws at grid size for the segmenter; one readback of a 481x270
@@ -462,13 +487,40 @@ export function blendCoverageByEnergy(
 export const CAMERA_NOISE_FLOOR = 6;
 
 /**
+ * The floor as a multiple of the camera's OWN noise, measured each frame as the
+ * median luma change over the grid: on a still scene the median cell is sensor
+ * noise and nothing else, and a dim room's camera has several times the noise
+ * of a bright one. The larger of this and `CAMERA_NOISE_FLOOR` is used.
+ */
+export const CAMERA_NOISE_MULTIPLE = 2.5;
+
+/**
+ * A median luma change above this is the whole picture moving -- the laptop
+ * lid, a pan -- and no still/moving distinction can be read from a frame
+ * difference. The blend falls back to reading motion off the mask for it.
+ */
+export const CAMERA_GLOBAL_MOTION = 24;
+
+/**
  * The mean luma change over the window, after the floor, at which the rate is
  * fully the moving one.
  */
-export const CAMERA_FULL_SPEED = 12;
+export const CAMERA_FULL_SPEED = 6;
 
 /** The blend rate where the camera is still. */
 export const CAMERA_SMOOTHING_STILL = 0.05;
+
+/**
+ * How much of last frame's energy a cell keeps this frame.
+ *
+ * Cells stay fast for a few frames after the picture moved under them. The
+ * reason is a model jump that rides along with a real movement: the blend
+ * follows the model at the moving rate, model error included, and when the
+ * model corrects itself a few frames later the picture under those cells has
+ * gone still again -- so without this the correction would come at the still
+ * rate, and the error would sit on screen as room trailing the person.
+ */
+export const CAMERA_WARMTH = 0.6;
 
 /**
  * Measure motion from two luma planes into `scratch.energy`: the per-cell
@@ -484,20 +536,50 @@ export function cameraMotion(
   previousLuma: Uint8ClampedArray,
   noiseFloor: number = CAMERA_NOISE_FLOOR,
   radius: number = MOTION_WINDOW,
+  options: { noiseMultiple?: number; globalMotion?: number; warmth?: number } = {},
 ): Float32Array | null {
   const w = scratch.width;
   const h = scratch.height;
   const n = w * h;
   if (n <= 0 || luma.length !== n || previousLuma.length !== n) return null;
   if (scratch.delta.length < n || scratch.rows.length < n || scratch.energy.length < n) return null;
-  const floor = Number.isFinite(noiseFloor) && noiseFloor > 0 ? noiseFloor : 0;
-  const { delta, rows, energy } = scratch;
+  const { delta, rows, energy, warm, histogram } = scratch;
+  const multiple = options.noiseMultiple ?? CAMERA_NOISE_MULTIPLE;
+  const global = options.globalMotion ?? CAMERA_GLOBAL_MOTION;
+  const warmth = options.warmth ?? CAMERA_WARMTH;
+
+  // The camera's own noise this frame: the median |change| over the grid, read
+  // off a histogram so it costs one pass and no sort.
+  histogram.fill(0);
   for (let i = 0; i < n; i++) {
     const d = luma[i] - previousLuma[i];
-    const a = (d < 0 ? -d : d) - floor;
+    const a = d < 0 ? -d : d;
+    delta[i] = a;
+    histogram[a]++;
+  }
+  let seen = 0;
+  let median = 0;
+  const half = n >> 1;
+  for (let v = 0; v < 256; v++) { seen += histogram[v]; if (seen > half) { median = v; break; } }
+  if (Number.isFinite(global) && global > 0 && median >= global) return null;
+
+  let floor = Number.isFinite(noiseFloor) && noiseFloor > 0 ? noiseFloor : 0;
+  if (Number.isFinite(multiple) && multiple > 0) floor = Math.max(floor, multiple * median);
+  for (let i = 0; i < n; i++) {
+    const a = delta[i] - floor;
     delta[i] = a > 0 ? a : 0;
   }
   boxMean(delta, energy, rows, w, h, Math.max(0, Math.floor(radius)));
+
+  if (Number.isFinite(warmth) && warmth > 0 && warm.length >= n) {
+    const k = Math.min(1, warmth);
+    for (let i = 0; i < n; i++) {
+      const kept = warm[i] * k;
+      const e = energy[i] > kept ? energy[i] : kept;
+      warm[i] = e;
+      energy[i] = e;
+    }
+  }
   return energy;
 }
 

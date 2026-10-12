@@ -37,6 +37,7 @@ import {
   GROWTH_HEADROOM,
   EDGE_HOLD,
   CAMERA_FULL_SPEED,
+  CAMERA_WARMTH,
   MOTION_SMOOTHING_MOVING,
   blendCoverageByEnergy,
   blendCoverageByMotion,
@@ -1441,6 +1442,37 @@ describe("cameraMotion", () => {
     const scratch = createMotionScratch(W, H);
     expect(cameraMotion(scratch, new Uint8ClampedArray(N - 1), new Uint8ClampedArray(N))).toBeNull();
     expect(cameraMotion(scratch, new Uint8ClampedArray(N), new Uint8ClampedArray(N + 1))).toBeNull();
+  });
+
+  it("raises the floor to the camera's own noise in a dim room", () => {
+    // Noise of +-9 everywhere is over the fixed floor of 6 and would read as
+    // motion across the whole frame; measured as the median change, it is the
+    // floor instead, and the frame reads still.
+    const a = new Uint8ClampedArray(N).fill(100);
+    const b = new Uint8ClampedArray(N);
+    for (let i = 0; i < N; i++) b[i] = 100 + ((i * 7) % 19) - 9;
+    const energy = cameraMotion(createMotionScratch(W, H), b, a)!;
+    expect(Math.max(...energy)).toBe(0);
+  });
+
+  it("gives up on a frame where the whole picture moved", () => {
+    const a = new Uint8ClampedArray(N).fill(100);
+    const b = new Uint8ClampedArray(N).fill(160);
+    expect(cameraMotion(createMotionScratch(W, H), b, a)).toBeNull();
+  });
+
+  it("stays warm for a few frames after a cell moved", () => {
+    const scratch = createMotionScratch(W, H);
+    const still = new Uint8ClampedArray(N).fill(100);
+    const moved = new Uint8ClampedArray(N).fill(100);
+    for (let y = 0; y < H; y++) for (let x = 8; x < 12; x++) moved[y * W + x] = 200;
+    const hot = cameraMotion(scratch, moved, still)!;
+    const peak = hot[10 * W + 10];
+    expect(peak).toBeGreaterThan(0);
+    // The next frame is still again, in the band and everywhere else.
+    const after = cameraMotion(scratch, moved, moved)!;
+    expect(after[10 * W + 10]).toBeCloseTo(peak * CAMERA_WARMTH, 3);
+    expect(after[10 * W + 0]).toBe(0);
   });
 });
 
