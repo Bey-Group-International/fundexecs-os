@@ -359,6 +359,160 @@ export function createMotionScratch(width: number, height: number): MotionScratc
 }
 
 /**
+ * The mean of `src` over a (2r+1)-square window around each cell, into `out`,
+ * with `rows` as scratch. Two running sums, linear in cells; the window is
+ * clipped at the grid's edge rather than padded. The one loop every motion
+ * measure here shares.
+ */
+function boxMean(
+  src: ArrayLike<number>,
+  out: Float32Array,
+  rows: Float32Array,
+  w: number,
+  h: number,
+  r: number,
+): void {
+  for (let y = 0; y < h; y++) {
+    const row = y * w;
+    let sum = 0;
+    let count = 0;
+    for (let x = 0; x <= r && x < w; x++) { sum += src[row + x]; count++; }
+    for (let x = 0; x < w; x++) {
+      rows[row + x] = sum / count;
+      const leave = x - r;
+      const enter = x + r + 1;
+      if (leave >= 0) { sum -= src[row + leave]; count--; }
+      if (enter < w) { sum += src[row + enter]; count++; }
+    }
+  }
+  for (let x = 0; x < w; x++) {
+    let sum = 0;
+    let count = 0;
+    for (let y = 0; y <= r && y < h; y++) { sum += rows[y * w + x]; count++; }
+    for (let y = 0; y < h; y++) {
+      out[y * w + x] = sum / count;
+      const leave = y - r;
+      const enter = y + r + 1;
+      if (leave >= 0) { sum -= rows[leave * w + x]; count--; }
+      if (enter < h) { sum += rows[enter * w + x]; count++; }
+    }
+  }
+}
+
+/**
+ * Blend a new coverage map into the running one at a rate read from a motion
+ * energy somebody else measured: `energy[i]` of `fullSpeed` and above runs at
+ * the moving rate, zero runs at the still rate, between is interpolated.
+ *
+ * The shared tail of the two motion blends. Writes into `previous`, returns it,
+ * allocates nothing. Refuses, untouched, an energy buffer shorter than the
+ * history: a rate read from the wrong cell is worse than no blend.
+ */
+export function blendCoverageByEnergy(
+  previous: Uint8ClampedArray,
+  target: Uint8ClampedArray,
+  energy: Float32Array,
+  still: number,
+  moving: number,
+  fullSpeed: number,
+): Uint8ClampedArray {
+  const n = previous.length;
+  if (n <= 0 || target.length < n || energy.length < n) return previous;
+  const lo = Math.max(0, Math.min(1, still));
+  const hi = Math.max(0, Math.min(1, moving));
+  const full = Number.isFinite(fullSpeed) && fullSpeed > 0 ? fullSpeed : 1;
+  const span = hi - lo;
+  for (let i = 0; i < n; i++) {
+    const e = energy[i] / full;
+    const rate = lo + span * (e >= 1 ? 1 : e);
+    previous[i] = previous[i] + (target[i] - previous[i]) * rate;
+  }
+  return previous;
+}
+
+// ── Motion read from the camera, not from the mask ───────────────────────────
+//
+// The motion blend above reads motion off the MASK: where a band of cells
+// changes together it runs fast. That is the right test for a tremble, and the
+// wrong test for the fault that was left: a stretch of a clean edge -- a
+// shoulder, a sleeve -- re-decided by the model by one of its own pixels, five
+// pixels at 720p, for a few frames, then back. Those cells change together too.
+// To a rule that only sees the mask, a chunk of the model changing its mind
+// and a person moving are the same thing.
+//
+// The camera knows the difference. Where the person is still, the pixels under
+// and around the edge barely change from frame to frame -- sensor noise and
+// nothing else -- whatever the model says about them. Where the person moves,
+// they change a lot, along exactly the edge that moved. So the energy is read
+// from the frame difference, on the same grid the mask is carried on, and the
+// blend runs slow wherever the camera itself is still.
+//
+// What this gives up is honest: a person who is perfectly still while the
+// model finally finds a part of them it had missed -- an arm it had been
+// leaving out -- gets that arm at the still rate, over about twenty frames,
+// rather than at once. The three constants below are measured against a
+// harness that models the chunk jumps; the measurement is in the commit that
+// set them.
+//
+// `cameraMotion` reads a luma plane the compositor samples from the frame it
+// already draws at grid size for the segmenter; one readback of a 481x270
+// surface, the same size as the mask's own readback.
+
+/** Per-cell luma change, of 255, under which a difference is sensor noise. */
+export const CAMERA_NOISE_FLOOR = 6;
+
+/**
+ * The mean luma change over the window, after the floor, at which the rate is
+ * fully the moving one.
+ */
+export const CAMERA_FULL_SPEED = 12;
+
+/** The blend rate where the camera is still. */
+export const CAMERA_SMOOTHING_STILL = 0.05;
+
+/**
+ * Measure motion from two luma planes into `scratch.energy`: the per-cell
+ * change less the noise floor, clipped at zero, averaged over the window.
+ *
+ * Returns the energy, or null -- and leaves the scratch alone -- when either
+ * plane is not the scratch's grid, so a caller can fall back to the mask-read
+ * blend rather than blend at rates read from the wrong cells.
+ */
+export function cameraMotion(
+  scratch: MotionScratch,
+  luma: Uint8ClampedArray,
+  previousLuma: Uint8ClampedArray,
+  noiseFloor: number = CAMERA_NOISE_FLOOR,
+  radius: number = MOTION_WINDOW,
+): Float32Array | null {
+  const w = scratch.width;
+  const h = scratch.height;
+  const n = w * h;
+  if (n <= 0 || luma.length !== n || previousLuma.length !== n) return null;
+  if (scratch.delta.length < n || scratch.rows.length < n || scratch.energy.length < n) return null;
+  const floor = Number.isFinite(noiseFloor) && noiseFloor > 0 ? noiseFloor : 0;
+  const { delta, rows, energy } = scratch;
+  for (let i = 0; i < n; i++) {
+    const d = luma[i] - previousLuma[i];
+    const a = (d < 0 ? -d : d) - floor;
+    delta[i] = a > 0 ? a : 0;
+  }
+  boxMean(delta, energy, rows, w, h, Math.max(0, Math.floor(radius)));
+  return energy;
+}
+
+/**
+ * The luma of an RGBA plane, into `out`. Rec. 601 weights in integer form.
+ */
+export function lumaOf(rgba: Uint8ClampedArray, out: Uint8ClampedArray): Uint8ClampedArray {
+  const n = Math.min(out.length, rgba.length >> 2);
+  for (let i = 0, p = 0; i < n; i++, p += 4) {
+    out[i] = (rgba[p] * 77 + rgba[p + 1] * 150 + rgba[p + 2] * 29) >> 8;
+  }
+  return out;
+}
+
+/**
  * Blend a new coverage map into the running one at a rate set by how much is
  * MOVING around each pixel.
  *
@@ -395,43 +549,8 @@ export function blendCoverageByMotion(
     const d = target[i] - previous[i];
     delta[i] = d < 0 ? -d : d;
   }
-
-  // Box mean along each row, as a running sum over a window clipped to the row.
-  for (let y = 0; y < h; y++) {
-    const row = y * w;
-    let sum = 0;
-    let count = 0;
-    for (let x = 0; x <= r && x < w; x++) { sum += delta[row + x]; count++; }
-    for (let x = 0; x < w; x++) {
-      rows[row + x] = sum / count;
-      const leave = x - r;
-      const enter = x + r + 1;
-      if (leave >= 0) { sum -= delta[row + leave]; count--; }
-      if (enter < w) { sum += delta[row + enter]; count++; }
-    }
-  }
-
-  // And down each column, over the row means.
-  for (let x = 0; x < w; x++) {
-    let sum = 0;
-    let count = 0;
-    for (let y = 0; y <= r && y < h; y++) { sum += rows[y * w + x]; count++; }
-    for (let y = 0; y < h; y++) {
-      energy[y * w + x] = sum / count;
-      const leave = y - r;
-      const enter = y + r + 1;
-      if (leave >= 0) { sum -= rows[leave * w + x]; count--; }
-      if (enter < h) { sum += rows[enter * w + x]; count++; }
-    }
-  }
-
-  const span = hi - lo;
-  for (let i = 0; i < n; i++) {
-    const e = energy[i] / full;
-    const rate = lo + span * (e >= 1 ? 1 : e);
-    previous[i] = previous[i] + (target[i] - previous[i]) * rate;
-  }
-  return previous;
+  boxMean(delta, energy, rows, w, h, r);
+  return blendCoverageByEnergy(previous, target, energy, lo, hi, full);
 }
 
 /**
