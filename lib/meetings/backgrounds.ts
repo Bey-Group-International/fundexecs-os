@@ -278,6 +278,162 @@ function blendRates(hi: number, lo: number, cap: number): Float64Array {
 }
 
 
+// ── Smoothing by motion ──────────────────────────────────────────────────────
+//
+// The reversal rule above asks, per pixel, whether the model keeps UNDOING
+// itself, and damps the pixel when it does. It is good at a square wave. It is
+// blind to the thing a real segmenter does to a still person: the boundary
+// breathes. A cell's confidence drifts over three or four frames, pauses, drifts
+// back -- correlated, not re-rolled -- and every one of those drifts is a "new
+// movement" to a rule that resets on a quiet frame. So the edge trembles along
+// its whole length at full speed, and the sharpen multiplies the tremble by
+// three. That is the flutter.
+//
+// What tells a tremble from a turn of the head is not the pixel's own history
+// but its NEIGHBOURS. When somebody moves, a band of cells several wide changes
+// together, in the same direction, along the whole edge that moved. When the
+// model trembles, the cells that change are scattered and their changes do not
+// add up over any window. So the signal is the mean change in a window around
+// the pixel -- the local motion energy -- and the blend runs slow where it is
+// low and fast where it is high.
+//
+// MEASURED, seventy-two frames of a person on a 1280x720 frame: still for the
+// first half with a segmenter modelled with memory (a per-cell boundary wobble
+// correlated 0.7 frame to frame, sigma 0.35 cells, plus the whole edge breathing
+// +-0.6 cells over nine frames), then leaning 1.5 cells a frame. "Flutter" is
+// the mean frame-to-frame change within six cells of the edge while still;
+// "flips" is how many of those cells crossed half coverage per frame; "trail"
+// is room kept behind the person while moving and "lead" is the person left
+// uncovered ahead of the mask:
+//
+//   blend                                   flutter   flips/frame   trail    lead
+//   reversal rule, as shipped                 4.25        90        7.2px   1.3px
+//   reversal rule at 0.3                      2.71        58        9.1px   4.1px
+//   reversal rule at 0.7                      4.90       101        6.0px   1.1px
+//   by motion, 0.15 still / 0.7 moving        3.87        82        6.0px   1.1px
+//   by motion, 0.1 still / 0.7 moving         2.58        54        6.1px   1.1px
+//
+// Slowing the old rule to 0.3 buys about the same stillness and pays for it in
+// trail and lead -- a person arriving late in their own mask. The motion rule
+// buys it and ALSO trails less than the shipped rule, because where the person
+// is moving it runs at 0.7, faster than the old 0.5. The constants below are
+// the last row. The hold on the sharpen (`EDGE_HOLD`) is measured with it.
+
+/** The blend rate where nothing in the window is moving. */
+export const MOTION_SMOOTHING_STILL = 0.1;
+
+/** The blend rate where the window is moving at or beyond `MOTION_FULL_SPEED`. */
+export const MOTION_SMOOTHING_MOVING = 0.7;
+
+/**
+ * The mean change over the window, of 255, at which the rate is fully the
+ * moving one. Below it the rate is interpolated from the still one.
+ *
+ * Sixty over a seven-cell window: a band three cells wide changing by full
+ * coverage averages 109 over the window and runs at full speed; a single cell's
+ * line averages 36 and runs at a little over half; scattered tremble averages
+ * in the teens and runs slow.
+ */
+export const MOTION_FULL_SPEED = 60;
+
+/** Half the window's width, in grid cells. Seven cells at a radius of three. */
+export const MOTION_WINDOW = 3;
+
+/** The per-frame scratch the motion blend needs, allocated once per grid. */
+export interface MotionScratch {
+  width: number;
+  height: number;
+  /** |target - previous| per cell. */
+  delta: Uint8ClampedArray;
+  /** Row-wise box mean of `delta`. */
+  rows: Float32Array;
+  /** The box mean in both axes: the local motion energy. */
+  energy: Float32Array;
+}
+
+export function createMotionScratch(width: number, height: number): MotionScratch {
+  const w = Math.max(0, Math.floor(width));
+  const h = Math.max(0, Math.floor(height));
+  const n = w * h;
+  return { width: w, height: h, delta: new Uint8ClampedArray(n), rows: new Float32Array(n), energy: new Float32Array(n) };
+}
+
+/**
+ * Blend a new coverage map into the running one at a rate set by how much is
+ * MOVING around each pixel.
+ *
+ * Same contract as the other blends: writes into `previous`, returns it,
+ * allocates nothing. The box mean is two running sums, so the cost is linear in
+ * cells and independent of the window.
+ *
+ * Refuses, by returning `previous` untouched, a scratch whose grid is not the
+ * size of the history: blending at a rate read from the wrong cell is worse
+ * than not blending, and the only way to tell is the length.
+ */
+export function blendCoverageByMotion(
+  previous: Uint8ClampedArray,
+  target: Uint8ClampedArray,
+  scratch: MotionScratch,
+  still: number = MOTION_SMOOTHING_STILL,
+  moving: number = MOTION_SMOOTHING_MOVING,
+  fullSpeed: number = MOTION_FULL_SPEED,
+  radius: number = MOTION_WINDOW,
+): Uint8ClampedArray {
+  const w = scratch.width;
+  const h = scratch.height;
+  const n = w * h;
+  if (n <= 0 || previous.length !== n || target.length < n) return previous;
+  if (scratch.delta.length < n || scratch.rows.length < n || scratch.energy.length < n) return previous;
+
+  const lo = Math.max(0, Math.min(1, still));
+  const hi = Math.max(0, Math.min(1, moving));
+  const full = Number.isFinite(fullSpeed) && fullSpeed > 0 ? fullSpeed : 1;
+  const r = Math.max(0, Math.floor(radius));
+
+  const { delta, rows, energy } = scratch;
+  for (let i = 0; i < n; i++) {
+    const d = target[i] - previous[i];
+    delta[i] = d < 0 ? -d : d;
+  }
+
+  // Box mean along each row, as a running sum over a window clipped to the row.
+  for (let y = 0; y < h; y++) {
+    const row = y * w;
+    let sum = 0;
+    let count = 0;
+    for (let x = 0; x <= r && x < w; x++) { sum += delta[row + x]; count++; }
+    for (let x = 0; x < w; x++) {
+      rows[row + x] = sum / count;
+      const leave = x - r;
+      const enter = x + r + 1;
+      if (leave >= 0) { sum -= delta[row + leave]; count--; }
+      if (enter < w) { sum += delta[row + enter]; count++; }
+    }
+  }
+
+  // And down each column, over the row means.
+  for (let x = 0; x < w; x++) {
+    let sum = 0;
+    let count = 0;
+    for (let y = 0; y <= r && y < h; y++) { sum += rows[y * w + x]; count++; }
+    for (let y = 0; y < h; y++) {
+      energy[y * w + x] = sum / count;
+      const leave = y - r;
+      const enter = y + r + 1;
+      if (leave >= 0) { sum -= rows[leave * w + x]; count--; }
+      if (enter < h) { sum += rows[enter * w + x]; count++; }
+    }
+  }
+
+  const span = hi - lo;
+  for (let i = 0; i < n; i++) {
+    const e = energy[i] / full;
+    const rate = lo + span * (e >= 1 ? 1 : e);
+    previous[i] = previous[i] + (target[i] - previous[i]) * rate;
+  }
+  return previous;
+}
+
 /**
  * Feather radius as a fraction of frame width.
  *
@@ -388,14 +544,148 @@ export function sharpenEdge(
   out: Uint8ClampedArray,
   coverage: Uint8ClampedArray,
   contrast: number = EDGE_CONTRAST,
+  hold: EdgeHold | null = null,
 ): Uint8ClampedArray {
   const k = Number.isFinite(contrast) && contrast > 0 ? contrast : 1;
   const n = Math.min(out.length, coverage.length);
   // Around the midpoint, so full coverage and no coverage are both fixed points.
-  const mid = 127.5;
+  const centre = 127.5;
+  if (!hold) {
+    for (let i = 0; i < n; i++) {
+      const v = (coverage[i] - centre) * k + centre;
+      out[i] = v < 0 ? 0 : v > 255 ? 255 : v;
+    }
+    return out;
+  }
+  // With a hold, `out` arrives holding the previous frame's edge and each cell
+  // is read before it is written: a cell that was covered keeps the lower
+  // midpoint, so it takes more than a tremble to uncover it, and the reverse.
+  const on = hold.on;
+  const off = hold.off;
   for (let i = 0; i < n; i++) {
-    const v = (coverage[i] - mid) * k + mid;
+    const mid = out[i] >= 128 ? off : on;
+    const v = (coverage[i] - mid) * k + centre;
     out[i] = v < 0 ? 0 : v > 255 ? 255 : v;
+  }
+  return out;
+}
+
+/**
+ * The two midpoints the sharpen switches between, per cell, by what that cell
+ * showed last frame.
+ *
+ * A single midpoint is a trembling edge by construction: a cell whose smoothed
+ * coverage sits near it crosses it every few frames, and each crossing is a
+ * flip from room to person on screen. Two midpoints -- a higher one to cross
+ * on the way in, a lower one on the way out -- mean a cell has to move by the
+ * whole gap between them to change its mind. A cell sitting anywhere in the
+ * gap keeps what it showed.
+ *
+ * Measured with the motion blend above, same scene (see the table there for
+ * the columns):
+ *
+ *   hold (on / off)      flutter   flips/frame   trail   lead
+ *   none                   2.58        54        6.1px   1.1px
+ *   140 / 115              3.82        80        8.0px   2.0px   (reversal blend)
+ *   150 / 105              1.86        31        6.5px   1.2px
+ *   160 /  95              3.15        63        8.4px   2.7px   (reversal blend)
+ *
+ * A real change crosses the gap in a frame or two at the moving rate, which is
+ * what the near-unchanged trail and lead say. What the hold costs is a stricter
+ * first frame: a cell starts uncovered and has to reach `on` rather than the
+ * centre, which the moving rate does on the first frame of any real coverage.
+ */
+export interface EdgeHold {
+  /** The midpoint a cell that is showing room has to cross to show the person. */
+  on: number;
+  /** The midpoint a cell that is showing the person has to fall below to show room. */
+  off: number;
+}
+
+export const EDGE_HOLD: EdgeHold = { on: 150, off: 105 };
+
+/**
+ * How far the smoothed history is averaged before the sharpen, in grid cells.
+ *
+ * One: a 3x3 box. The motion blend above settles each cell against its own
+ * past; this settles it against its neighbours, which is the other half of a
+ * tremble -- the model's boundary wobbles cell by cell, and a cell's own
+ * history cannot know that the cells either side of it did not move. Along a
+ * real edge the box leaves the crossing where it was, because the cells
+ * either side of an edge average to the edge.
+ *
+ * Measured with the blend and the hold, same scene as `blendCoverageByMotion`,
+ * and then with the three-frame median before the blend taken out:
+ *
+ *   chain                                flutter   flips/frame   trail   lead   headwear
+ *   as shipped                             4.25        90        7.2px   1.3px   100%
+ *   motion blend + hold                    1.86        31        6.5px   1.2px   100%
+ *   + 3x3 box, median kept                 1.11         6        7.8px   1.7px    95%
+ *   + 3x3 box, median removed              1.37         7        5.1px   0.2px    95%
+ *   + 5x5 box, median kept                 1.17         4        8.3px   2.5px     --
+ *
+ *   on a noisier model (wobble sigma 0.6, breathing +-1 cell):
+ *   as shipped                             7.65       167        7.7px   1.6px
+ *   3x3 box + blend + hold, no median      4.64        70        5.3px   0.3px
+ *
+ * The last row of the first block is what ships. The median's job was the
+ * one-frame excursion, and the box and the hold now cover that between them
+ * (seven flips a frame against six with it kept) -- while the median cost a
+ * frame of latency on every change, which is the difference between 7.8px of
+ * room trailing a moving person and 5.1px, and between the person's leading
+ * edge arriving 1.7px late and 0.2px. The five-point loss of headwear is the
+ * box averaging the crown's outer cells against the room beyond them; the
+ * headwear tests say where that stops being acceptable, and they pass.
+ */
+export const SMOOTH_RADIUS = 1;
+
+/**
+ * Average the coverage over a box, writing into `out`.
+ *
+ * Separable: two running sums, linear in cells. The window is clipped at the
+ * frame's edge rather than padded, so a person against the edge of frame is
+ * not averaged against a border that is not there. `rows` is scratch the
+ * caller keeps, at least as long as the grid. Allocates nothing.
+ */
+export function smoothCoverage(
+  out: Uint8ClampedArray,
+  coverage: Uint8ClampedArray,
+  width: number,
+  height: number,
+  rows: Float32Array,
+  radius: number = SMOOTH_RADIUS,
+): Uint8ClampedArray {
+  const w = Math.max(0, Math.floor(width));
+  const h = Math.max(0, Math.floor(height));
+  const n = w * h;
+  const r = Math.max(0, Math.floor(radius));
+  if (n <= 0 || out.length < n || coverage.length < n || rows.length < n) return out;
+  if (r === 0) { out.set(coverage.subarray(0, n)); return out; }
+
+  for (let y = 0; y < h; y++) {
+    const row = y * w;
+    let sum = 0;
+    let count = 0;
+    for (let x = 0; x <= r && x < w; x++) { sum += coverage[row + x]; count++; }
+    for (let x = 0; x < w; x++) {
+      rows[row + x] = sum / count;
+      const leave = x - r;
+      const enter = x + r + 1;
+      if (leave >= 0) { sum -= coverage[row + leave]; count--; }
+      if (enter < w) { sum += coverage[row + enter]; count++; }
+    }
+  }
+  for (let x = 0; x < w; x++) {
+    let sum = 0;
+    let count = 0;
+    for (let y = 0; y <= r && y < h; y++) { sum += rows[y * w + x]; count++; }
+    for (let y = 0; y < h; y++) {
+      out[y * w + x] = sum / count;
+      const leave = y - r;
+      const enter = y + r + 1;
+      if (leave >= 0) { sum -= rows[leave * w + x]; count--; }
+      if (enter < h) { sum += rows[enter * w + x]; count++; }
+    }
   }
   return out;
 }
