@@ -32,6 +32,9 @@ interface Call {
 interface Recorder {
   factory: SurfaceFactory;
   calls: Call[];
+  /** What the camera shows at grid size, as luma, for `getImageData` on the
+   *  segmenter's input surface. Flat grey unless a test sets it: a still camera. */
+  camera: (x: number, y: number) => number;
   /** Surfaces in creation order, which is how the tests name them. */
   names: string[];
   sizes: Record<string, { width: number; height: number; alpha: boolean }>;
@@ -55,6 +58,8 @@ function recorder(mode: { filter?: boolean } = {}): Recorder {
   const names: string[] = [];
   const sizes: Recorder["sizes"] = {};
   const masks: Uint8ClampedArray[] = [];
+  // Filled in below, read lazily by the contexts the factory hands out.
+  let recorderRef: Recorder;
 
   const factory: SurfaceFactory = (width, height, opts) => {
     const name = names.length < SURFACES.length ? SURFACES[names.length] : `extra${names.length}`;
@@ -83,6 +88,19 @@ function recorder(mode: { filter?: boolean } = {}): Recorder {
       createImageData: (w: number, h: number) => ({
         width: w, height: h, data: new Uint8ClampedArray(w * h * 4),
       }),
+      getImageData: (_x: number, _y: number, w: number, h: number) => {
+        // The camera, as the compositor reads it back from the segmenter's
+        // input surface: whatever `rec.camera` says, in every channel.
+        const data = new Uint8ClampedArray(w * h * 4);
+        for (let y = 0, p = 0; y < h; y++) {
+          for (let x = 0; x < w; x++, p += 4) {
+            const v = recorderRef.camera(x, y);
+            data[p] = v; data[p + 1] = v; data[p + 2] = v; data[p + 3] = 255;
+          }
+        }
+        log("getImageData");
+        return { width: w, height: h, data };
+      },
       putImageData: (image: { width: number; height: number; data: Uint8ClampedArray }) => {
         // Snapshotted: the compositor reuses one ImageData for the life of a
         // grid, so holding the reference would give every frame the last frame's
@@ -121,10 +139,12 @@ function recorder(mode: { filter?: boolean } = {}): Recorder {
   const built = new Map<string, unknown>();
   const surfaceOf = (name: string) => built.get(name);
 
-  return {
+  recorderRef = {
     factory, calls, names, sizes, masks,
+    camera: () => 128,
     ops: (surface) => calls.filter((c) => c.surface === surface).map((c) => c.op),
   };
+  return recorderRef;
 }
 
 /** A frame the chain can draw. Its identity is a string so the log is readable. */
@@ -600,11 +620,43 @@ describe("the mask carried between frames", () => {
   it("moves toward the new coverage without jumping to it", () => {
     const rec = recorder();
     const c = MaskCompositor.create(rec.factory, WIDTH, HEIGHT)!;
+    // The camera changes between the two frames -- somebody really left -- so
+    // the blend runs at its moving rate, and still does not snap.
+    rec.camera = () => 40;
+    c.prepareSegmentInput(frame(WIDTH, HEIGHT));
     c.compose(frame(WIDTH, HEIGHT), all(SOLID));
+    rec.camera = () => 200;
+    c.prepareSegmentInput(frame(WIDTH, HEIGHT));
     c.compose(frame(WIDTH, HEIGHT), all(0));
 
     // The whole point of the blend: a pixel the model reversed on does not snap.
     expect(rec.masks[1][0]).toBeGreaterThan(0);
+    expect(rec.masks[1][0]).toBeLessThan(255);
+  });
+
+  /**
+   * And with the camera STILL, the model changing its mind about the whole
+   * frame is treated as what it is: the model, not the person. The mask holds.
+   * This is the rule the flutter fix rests on; see `cameraMotion`.
+   */
+  it("holds the mask where the camera itself has not changed", () => {
+    const rec = recorder();
+    const c = MaskCompositor.create(rec.factory, WIDTH, HEIGHT)!;
+    c.prepareSegmentInput(frame(WIDTH, HEIGHT));
+    c.compose(frame(WIDTH, HEIGHT), all(SOLID));
+    c.prepareSegmentInput(frame(WIDTH, HEIGHT));
+    c.compose(frame(WIDTH, HEIGHT), all(0));
+
+    expect(rec.masks[1][0]).toBe(255);
+  });
+
+  it("reads motion off the mask when the camera cannot be read", () => {
+    const rec = recorder();
+    const c = MaskCompositor.create(rec.factory, WIDTH, HEIGHT)!;
+    // No prepareSegmentInput, so no camera was read: the fallback blends by the
+    // mask's own motion, as before, and a whole-frame reversal moves.
+    c.compose(frame(WIDTH, HEIGHT), all(SOLID));
+    c.compose(frame(WIDTH, HEIGHT), all(0));
     expect(rec.masks[1][0]).toBeLessThan(255);
   });
 
@@ -986,7 +1038,11 @@ describe("a mask with no spots in it", () => {
       return WIDTH;
     };
 
-    for (let f = 0; f < 12; f++) c.compose(frame(WIDTH, HEIGHT), edgeAt(f));
+    // The camera is still throughout: the tremble is the model's, not the person's.
+    for (let f = 0; f < 12; f++) {
+      c.prepareSegmentInput(frame(WIDTH, HEIGHT));
+      c.compose(frame(WIDTH, HEIGHT), edgeAt(f));
+    }
 
     // After the opening frames settle, no flip in a trembling row or a steady one.
     const trembling = rec.masks.slice(4).map((m) => crossing(m, 24));
@@ -1013,8 +1069,20 @@ describe("a mask with no spots in it", () => {
       return WIDTH;
     };
 
-    for (let f = 0; f < 3; f++) c.compose(frame(WIDTH, HEIGHT), edgeAt(30));
-    for (let f = 0; f < 3; f++) c.compose(frame(WIDTH, HEIGHT), edgeAt(38));
+    // The camera moves with the edge: a textured person against a flat wall,
+    // which is what tells the blend this is the person and not the model.
+    const cameraAt = (edge: number) => (x: number, y: number) =>
+      x <= edge ? 60 + 60 * ((x + y) % 2) : 200;
+    for (let f = 0; f < 3; f++) {
+      rec.camera = cameraAt(30);
+      c.prepareSegmentInput(frame(WIDTH, HEIGHT));
+      c.compose(frame(WIDTH, HEIGHT), edgeAt(30));
+    }
+    for (let f = 0; f < 3; f++) {
+      rec.camera = cameraAt(38);
+      c.prepareSegmentInput(frame(WIDTH, HEIGHT));
+      c.compose(frame(WIDTH, HEIGHT), edgeAt(38));
+    }
 
     expect(crossing(rec.masks[2], 24)).toBeGreaterThanOrEqual(30);
     expect(crossing(rec.masks[2], 24)).toBeLessThanOrEqual(32);

@@ -33,11 +33,17 @@
 // owns the segmenter.
 
 import {
+  CAMERA_FULL_SPEED,
+  CAMERA_SMOOTHING_STILL,
   EDGE_HOLD,
+  MOTION_SMOOTHING_MOVING,
   NO_BACKGROUND,
+  blendCoverageByEnergy,
   blendCoverageByMotion,
   blurRadiusPx,
+  cameraMotion,
   createMotionScratch,
+  lumaOf,
   dilateCeiling,
   dilateCoverage,
   maskDilatePx,
@@ -184,6 +190,14 @@ export class MaskCompositor {
   private maskHistory: Uint8ClampedArray | null = null;
   /** How much is moving around each pixel, which is what sets its blend rate. */
   private motion: MotionScratch | null = null;
+  /** The camera at grid size, as luma, this frame and last: what the motion is
+   *  read from. Null until a frame has been read; `luma` is also null on a
+   *  frame whose readback failed, so the blend knows to fall back. */
+  private luma: Uint8ClampedArray | null = null;
+  private previousLuma: Uint8ClampedArray | null = null;
+  /** Whether this frame's luma was read, so `compose` can tell a frame the
+   *  camera was read for from one it was not. */
+  private lumaFresh = false;
   /** This frame's coverage, before it is blended into the history. */
   private maskTarget: Uint8ClampedArray | null = null;
   /** What growth may claim, rebuilt from each frame's own coverage. */
@@ -386,7 +400,41 @@ export class MaskCompositor {
     this.follow(frame);
     const { width, height } = this.gridSpec;
     this.segInput.ctx.drawImage(frame.source, 0, 0, width, height);
+    this.readCamera(width, height);
     return this.segInput.surface;
+  }
+
+  /**
+   * Keep this frame's camera, as luma at grid size, for the motion the blend
+   * reads. See `cameraMotion` in backgrounds.ts for why the camera and not the
+   * mask. The surface was just drawn for the segmenter, so this is one
+   * readback of a grid-sized surface and nothing more is drawn for it.
+   *
+   * A readback that fails -- a context without `getImageData`, or one that
+   * refuses -- leaves `lumaFresh` false and the blend falls back to reading
+   * motion off the mask, which is what it did before.
+   */
+  private readCamera(width: number, height: number): void {
+    this.lumaFresh = false;
+    const ctx = this.segInput.ctx;
+    if (typeof ctx.getImageData !== "function") return;
+    let rgba: Uint8ClampedArray;
+    try {
+      rgba = ctx.getImageData(0, 0, width, height).data;
+    } catch {
+      return;
+    }
+    const n = width * height;
+    if (rgba.length < n * 4) return;
+    // Rotate: last frame's plane becomes the previous, this frame's goes into
+    // whichever buffer is free. Allocated once per grid.
+    const previous = this.luma;
+    let next = this.previousLuma;
+    if (!next || next.length !== n) next = new Uint8ClampedArray(n);
+    lumaOf(rgba, next);
+    this.previousLuma = previous && previous.length === n ? previous : null;
+    this.luma = next;
+    this.lumaFresh = true;
   }
 
   /**
@@ -549,7 +597,16 @@ export class MaskCompositor {
       if (!this.motion || this.motion.width !== grid.width || this.motion.height !== grid.height) {
         this.motion = createMotionScratch(grid.width, grid.height);
       }
-      blendCoverageByMotion(this.maskHistory, target, this.motion);
+      // The camera's own motion where this frame and the last were both read;
+      // the mask's where they were not. See `cameraMotion`.
+      const energy = this.lumaFresh && this.luma && this.previousLuma
+        ? cameraMotion(this.motion, this.luma, this.previousLuma)
+        : null;
+      if (energy) {
+        blendCoverageByEnergy(this.maskHistory, target, energy, CAMERA_SMOOTHING_STILL, MOTION_SMOOTHING_MOVING, CAMERA_FULL_SPEED);
+      } else {
+        blendCoverageByMotion(this.maskHistory, target, this.motion);
+      }
     }
 
     const maskCtx = this.mask.ctx;
@@ -634,6 +691,9 @@ export class MaskCompositor {
     this.maskImage = null;
     this.maskHistory = null;
     this.motion = null;
+    this.luma = null;
+    this.previousLuma = null;
+    this.lumaFresh = false;
     this.maskTarget = null;
     this.dilateLimit = null;
     this.maskEdge = null;
@@ -687,6 +747,9 @@ export class MaskCompositor {
     this.maskImage = null;
     this.maskHistory = null;
     this.motion = null;
+    this.luma = null;
+    this.previousLuma = null;
+    this.lumaFresh = false;
     this.dilateLimit = null;
     this.maskEdge = null;
     this.structure = null;

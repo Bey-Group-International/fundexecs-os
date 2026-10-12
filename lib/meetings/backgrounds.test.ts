@@ -36,9 +36,13 @@ import {
   dilateCeiling,
   GROWTH_HEADROOM,
   EDGE_HOLD,
+  CAMERA_FULL_SPEED,
   MOTION_SMOOTHING_MOVING,
+  blendCoverageByEnergy,
   blendCoverageByMotion,
+  cameraMotion,
   createMotionScratch,
+  lumaOf,
   smoothCoverage,
   quietCoverageGaps,
   maskGapSpanPx,
@@ -1410,6 +1414,61 @@ describe("blendCoverageByMotion", () => {
     const untouched = new Uint8ClampedArray(N).fill(10);
     expect(blendCoverageByMotion(untouched, target, createMotionScratch(W, H - 1))).toBe(untouched);
     expect(untouched[0]).toBe(10);
+  });
+});
+
+describe("cameraMotion", () => {
+  const W = 20, H = 20, N = W * H;
+
+  it("reads sensor noise as no motion at all", () => {
+    const a = new Uint8ClampedArray(N).fill(100);
+    const b = new Uint8ClampedArray(N);
+    for (let i = 0; i < N; i++) b[i] = 100 + ((i * 7) % 5) - 2;   // +-2, under the floor
+    const energy = cameraMotion(createMotionScratch(W, H), b, a)!;
+    expect(Math.max(...energy)).toBe(0);
+  });
+
+  it("reads a band of the frame that changed as motion there, and not across the room", () => {
+    const a = new Uint8ClampedArray(N).fill(100);
+    const b = new Uint8ClampedArray(N).fill(100);
+    for (let y = 0; y < H; y++) for (let x = 8; x < 12; x++) b[y * W + x] = 200;
+    const energy = cameraMotion(createMotionScratch(W, H), b, a)!;
+    expect(energy[10 * W + 10]).toBeGreaterThan(CAMERA_FULL_SPEED);
+    expect(energy[10 * W + 0]).toBe(0);
+  });
+
+  it("refuses planes that are not the scratch's grid", () => {
+    const scratch = createMotionScratch(W, H);
+    expect(cameraMotion(scratch, new Uint8ClampedArray(N - 1), new Uint8ClampedArray(N))).toBeNull();
+    expect(cameraMotion(scratch, new Uint8ClampedArray(N), new Uint8ClampedArray(N + 1))).toBeNull();
+  });
+});
+
+describe("blendCoverageByEnergy", () => {
+  it("runs at the still rate at zero energy and the moving rate at full", () => {
+    const previous = new Uint8ClampedArray([0, 0, 0]);
+    const target = new Uint8ClampedArray([200, 200, 200]);
+    const energy = new Float32Array([0, 6, 12]);
+    blendCoverageByEnergy(previous, target, energy, 0.1, 0.7, 12);
+    expect(previous[0]).toBe(20);
+    expect(previous[1]).toBe(80);
+    expect(previous[2]).toBe(140);
+  });
+
+  it("refuses an energy buffer shorter than the history", () => {
+    const previous = new Uint8ClampedArray([0, 0]);
+    blendCoverageByEnergy(previous, new Uint8ClampedArray([255, 255]), new Float32Array([99]), 0.1, 0.7, 12);
+    expect([...previous]).toEqual([0, 0]);
+  });
+});
+
+describe("lumaOf", () => {
+  it("weights green most and alpha not at all", () => {
+    const rgba = new Uint8ClampedArray([255, 0, 0, 0, 0, 255, 0, 255, 0, 0, 255, 128, 255, 255, 255, 0]);
+    const out = lumaOf(rgba, new Uint8ClampedArray(4));
+    expect(out[1]).toBeGreaterThan(out[0]);
+    expect(out[0]).toBeGreaterThan(out[2]);
+    expect(out[3]).toBe(255);
   });
 });
 
