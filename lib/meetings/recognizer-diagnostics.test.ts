@@ -84,6 +84,7 @@ describe("what the save route keeps of a client's diagnostics", () => {
     expect(sanitizeDiagnostics("track")).toBeNull();
     expect(sanitizeDiagnostics({ brand: "x" })).toBeNull();
     expect(sanitizeDiagnostics({ path: "sideways" })).toBeNull();
+    expect(sanitizeDiagnostics({ path: "capture" })?.path).toBe("capture");
   });
 
   it("coerces the odd value rather than dropping the record", () => {

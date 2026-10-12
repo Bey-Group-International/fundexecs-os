@@ -1693,6 +1693,153 @@ describe("what a saved line says about the engine that produced it", () => {
   });
 });
 
+describe("what the recogniser is handed on Edge", () => {
+  /**
+   * Room fcb-xff-yq, 12 October 2026: the host on Edge, the picked mic the
+   * system default, every line four punctuated words of nonsense at a reported
+   * confidence of 1.0, the engine dying every thirty seconds — while the
+   * Chrome guest kept thirty-word lines in one run. Edge returns nonsense
+   * from the call's processed track. It gets a capture of its own, of the
+   * PICKED device, so the recogniser still hears the microphone the member
+   * chose. See recognizer-input.ts.
+   */
+  function installRecognition() {
+    const starts: unknown[][] = [];
+    const instances: Array<{
+      onstart: (() => void) | null;
+      onspeechstart: (() => void) | null;
+      onresult: ((ev: unknown) => void) | null;
+    }> = [];
+    class Recognition {
+      continuous = false; interimResults = false; lang = "";
+      onstart: (() => void) | null = null;
+      onspeechstart: (() => void) | null = null;
+      onresult: ((ev: unknown) => void) | null = null;
+      onerror = null; onend = null;
+      constructor() { instances.push(this); }
+      start(...args: unknown[]) { starts.push(args); this.onstart?.(); }
+      stop() {}
+    }
+    const w = window as unknown as { SpeechRecognition?: unknown };
+    const previous = w.SpeechRecognition;
+    w.SpeechRecognition = Recognition;
+    return { starts, instances, restore: () => { w.SpeechRecognition = previous; } };
+  }
+
+  function pretendEdge() {
+    Object.defineProperty(navigator, "userAgentData", {
+      configurable: true,
+      value: { brands: [{ brand: "Not_A Brand" }, { brand: "Chromium" }, { brand: "Microsoft Edge" }] },
+    });
+    return () => { delete (navigator as unknown as Record<string, unknown>).userAgentData; };
+  }
+
+  const isCaptureRequest = (c: MediaStreamConstraints) =>
+    typeof c.audio === "object" && (c.audio as MediaTrackConstraints).echoCancellation === false;
+
+  /**
+   * Records every getUserMedia request. The recogniser's own capture is the
+   * one with processing OFF; it gets a track of its own so the test can tell
+   * which track the engine was started on. The call's own request keeps the
+   * harness's answer.
+   */
+  function recordCaptures() {
+    const md = navigator.mediaDevices as unknown as { getUserMedia: (c: MediaStreamConstraints) => Promise<unknown> };
+    const original = md.getUserMedia;
+    const requests: MediaStreamConstraints[] = [];
+    let n = 0;
+    md.getUserMedia = async (c: MediaStreamConstraints) => {
+      requests.push(c);
+      if (isCaptureRequest(c)) {
+        n += 1;
+        const t = fakeTrack("audio", `audio-capture-${n}`);
+        t.getSettings = () => ({ deviceId: "audio-dev", groupId: "group-local" });
+        return fakeStream([t]);
+      }
+      return original(c);
+    };
+    return { requests, restore: () => { md.getUserMedia = original; } };
+  }
+
+  const savedRecognizers = () =>
+    (global.fetch as jest.Mock).mock.calls
+      .filter(([u]) => String(u).includes("/transcript"))
+      .flatMap(([, init]) =>
+        (JSON.parse(String((init as RequestInit).body)) as {
+          lines: Array<{ text: string; recognizer: Record<string, unknown> | null }>;
+        }).lines,
+      );
+
+  it("gives Edge a capture of the picked device, with processing off, instead of the call's track", async () => {
+    joinChoice.micEnabled = true;
+    const edge = pretendEdge();
+    const sr = installRecognition();
+    const captures = recordCaptures();
+    try {
+      await enterCall();
+      await flush(50, 5);
+
+      const own = captures.requests.filter(isCaptureRequest);
+      expect(own).toHaveLength(1);
+      expect(own[0].audio).toEqual({
+        echoCancellation: false, noiseSuppression: false, autoGainControl: false,
+        deviceId: { exact: "audio-dev" },
+      });
+
+      expect(sr.starts.length).toBeGreaterThan(0);
+      const [track] = sr.starts[0] as [{ id?: string } | undefined];
+      expect(track?.id).toBe("audio-capture-1");
+    } finally {
+      captures.restore();
+      sr.restore();
+      edge();
+    }
+  });
+
+  it("records the capture path on the lines it saves", async () => {
+    joinChoice.micEnabled = true;
+    const edge = pretendEdge();
+    const sr = installRecognition();
+    const captures = recordCaptures();
+    try {
+      await enterCall();
+      await flush(50, 5);
+      await act(async () => { sr.instances[0]?.onspeechstart?.(); await Promise.resolve(); });
+      await talkFor(2_000, "audio-local");
+      await act(async () => {
+        sr.instances[0]?.onresult?.({
+          resultIndex: 0,
+          results: [Object.assign([{ transcript: "the term sheet is signed", confidence: 1 }], { isFinal: true })],
+        });
+        await Promise.resolve();
+      });
+      await flush(16_000, 10);
+      const saved = savedRecognizers().find((l) => l.text === "the term sheet is signed");
+      expect(saved?.recognizer).toEqual(expect.objectContaining({ brand: "Microsoft Edge", path: "capture", run: 1 }));
+    } finally {
+      captures.restore();
+      sr.restore();
+      edge();
+    }
+  });
+
+  it("hands every other engine the call's own track and opens nothing of its own", async () => {
+    joinChoice.micEnabled = true;
+    const sr = installRecognition();
+    const captures = recordCaptures();
+    try {
+      await enterCall();
+      await flush(50, 5);
+      expect(captures.requests.filter(isCaptureRequest)).toHaveLength(0);
+      const [track] = sr.starts[0] as [{ id?: string } | undefined];
+      expect(track?.id).toBe("audio-local");
+    } finally {
+      captures.restore();
+      sr.restore();
+    }
+  });
+});
+
 describe("a background the room suspends", () => {
   /**
    * The suspension paths used to go through applyBackground like any pick and

@@ -5597,6 +5597,45 @@ Deployed, monitoring               →  live, observability active
              |  while the code that reads them is. Reported to the owner.
              |  Confidence: new pure suite; buffer, route and live-room tests
              |  extended; full Jest, typecheck and eslint clean.
+2026-10-12  |  Feed Edge's recogniser a capture of the picked microphone  |
+             |  The diagnostic rows came back (room fcb-xff-yq, 33 minutes):
+             |  the host on Edge, path "track", picked mic = the Windows
+             |  default ("Default - Microphone (fifine)"), every line three
+             |  or four punctuated words of nonsense at a reported engine
+             |  confidence of exactly 1.0, sixty-six runs none older than
+             |  thirty seconds; the Chrome guest on the same code, one run
+             |  for the whole call, thirty-two words a line, real scores.
+             |  The owner confirmed the guest heard them clearly throughout,
+             |  and that no echo was reported before 2 October when Edge
+             |  started bare. So: the wrong-device theory is dead (the pick
+             |  WAS the default) and Edge mangles the call's processed track
+             |  specifically. Asked which way the owner wanted it: "fix the
+             |  recognizer to read picked mics".
+             |  recognizer-input.ts decides: Edge gets a capture of its own
+             |  of the PICKED device (processing off, like the engine's own
+             |  capture that transcribed well), opened once per device and
+             |  kept across the engine's restarts, muted with the call,
+             |  reopened on a mic switch, stopped with the recogniser; every
+             |  other engine is handed the call's track as before (honoured
+             |  or ignored). The "default microphone" notice now reads
+             |  recognizerHearsPickedMic: Edge counts as hearing the pick,
+             |  an engine without available() still does not. Diagnostics
+             |  path gains "capture". A fallen capture (device gone,
+             |  permission withdrawn) starts bare rather than not at all.
+             |  AND A WAY TO CHECK THE RULE. /meetings/device-check/
+             |  transcription runs the same engine on the same microphone
+             |  four ways for twelve seconds each - the engine's own capture,
+             |  the call track, a raw capture, the raw capture at 16 kHz -
+             |  while the member reads one sentence, and shows what each
+             |  returned with run counts and engine scores, plus a copy
+             |  button. The rule in recognizer-input.ts was written from
+             |  stored rows; this is how the next browser, microphone or
+             |  Edge update is read before a meeting depends on it. The raw
+             |  capture on Edge is the untested leg: if the page shows Edge
+             |  mangling that too, the one-line change is to start bare.
+             |  Confidence: new pure suite; live-room tests for the Edge
+             |  capture (constraints, the track handed, the stored path) and
+             |  the non-Edge track; full Jest, typecheck and eslint clean.
 ```
 
 ---

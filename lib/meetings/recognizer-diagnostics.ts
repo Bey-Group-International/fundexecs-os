@@ -16,8 +16,12 @@
 //
 // Pure: no DOM. The room passes in what it read from the browser.
 
-/** How a recognition run was started. */
-export type RecognizerPath = "track" | "bare";
+/**
+ * How a recognition run was started: on the call's own track, on a capture
+ * of the picked device opened for the recogniser alone, or bare (the engine's
+ * own capture of the system default). See recognizer-input.ts.
+ */
+export type RecognizerPath = "track" | "capture" | "bare";
 
 /**
  * The facts a stored line carries about the run that produced it.
@@ -136,7 +140,7 @@ export function sanitizeDiagnostics(raw: unknown): RecognizerDiagnostics | null 
     typeof v === "string" ? v.slice(0, max) : null;
   const num = (v: unknown): number | null =>
     typeof v === "number" && Number.isFinite(v) ? v : null;
-  const path = r.path === "track" || r.path === "bare" ? r.path : null;
+  const path = r.path === "track" || r.path === "capture" || r.path === "bare" ? r.path : null;
   if (!path) return null;
   const out: RecognizerDiagnostics = {
     brand: str(r.brand, 60) ?? "",
