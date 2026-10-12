@@ -466,3 +466,78 @@ describe("sendEmail header injection", () => {
     ]);
   });
 });
+
+describe("sendEmail with file attachments", () => {
+  const PDF: { filename: string; contentType: string; content: Uint8Array } = {
+    filename: "Deck.pdf",
+    contentType: "application/pdf",
+    content: new Uint8Array(Buffer.from("%PDF-1.7 hello")),
+  };
+
+  /** The raw RFC 2822 message posted to Gmail's upload endpoint. */
+  function uploadedMessage(): string {
+    return String(fetchMock.mock.calls[0][1].body);
+  }
+
+  it("sends through Gmail's upload endpoint as message/rfc822", async () => {
+    getGoogleAccessTokenMock.mockResolvedValue("tok");
+    const result = await sendEmail({ ...ARGS, orgId: "org1", attachments: [PDF] });
+    expect(result).toMatchObject({ ok: true, channel: "gmail" });
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toBe("https://gmail.googleapis.com/upload/gmail/v1/users/me/messages/send?uploadType=media");
+    expect(init.headers["Content-Type"]).toBe("message/rfc822");
+  });
+
+  it("builds multipart/mixed with the html body and a base64 file part", async () => {
+    getGoogleAccessTokenMock.mockResolvedValue("tok");
+    await sendEmail({ ...ARGS, orgId: "org1", attachments: [PDF] });
+    const msg = uploadedMessage();
+    expect(msg).toMatch(/Content-Type: multipart\/mixed; boundary="/);
+    expect(msg).toContain("<p>hi</p>");
+    expect(msg).toContain('Content-Disposition: attachment; filename="Deck.pdf"');
+    expect(msg).toContain("Content-Type: application/pdf");
+    expect(msg).toContain(Buffer.from("%PDF-1.7 hello").toString("base64"));
+  });
+
+  it("falls back to application/octet-stream for a malformed content type", async () => {
+    getGoogleAccessTokenMock.mockResolvedValue("tok");
+    await sendEmail({
+      ...ARGS,
+      orgId: "org1",
+      attachments: [{ ...PDF, contentType: "text/html\r\nBcc: evil@x.test" }],
+    });
+    const msg = uploadedMessage();
+    expect(msg).not.toContain("Bcc: evil@x.test");
+    expect(msg).toContain("application/octet-stream");
+  });
+
+  it("keeps the calendar invite alongside files", async () => {
+    getGoogleAccessTokenMock.mockResolvedValue("tok");
+    await sendEmail({
+      ...ARGS,
+      orgId: "org1",
+      attachments: [PDF],
+      calendarInvite: { content: "BEGIN:VCALENDAR\r\nEND:VCALENDAR", method: "REQUEST", filename: "invite.ics" },
+    });
+    const msg = uploadedMessage();
+    expect(msg).toContain('filename="invite.ics"');
+    expect(msg).toContain('filename="Deck.pdf"');
+  });
+
+  it("carries the files through the backup provider", async () => {
+    process.env.RESEND_API_KEY = "re_test";
+    process.env.EMAIL_FALLBACK_FROM = "FundExecs <n@fundexecs.test>";
+    getGoogleAccessTokenMock.mockResolvedValue("tok");
+    fetchMock.mockImplementation(async (url: string) =>
+      url === "https://api.resend.com/emails"
+        ? { ok: true, json: async () => ({ id: "em_1" }), text: async () => "" }
+        : { ok: false, statusText: "Unauthorized", text: async () => "401" },
+    );
+    const result = await sendEmail({ ...ARGS, orgId: "org1", allowFallback: true, attachments: [PDF] });
+    expect(result).toMatchObject({ ok: true, channel: "fallback" });
+    const call = fetchMock.mock.calls.find(([u]) => u === "https://api.resend.com/emails")!;
+    const [att] = JSON.parse(call[1].body).attachments as Array<{ filename: string; content: string }>;
+    expect(att.filename).toBe("Deck.pdf");
+    expect(Buffer.from(att.content, "base64").toString()).toBe("%PDF-1.7 hello");
+  });
+});

@@ -17,6 +17,10 @@ jest.mock("@/lib/integrations/gateway", () => ({ orgConnectedChannels: async () 
 jest.mock("@/lib/integrations/log", () => ({ recordDispatch: (...a: unknown[]) => recordDispatch(...a) }));
 jest.mock("@/lib/grounding", () => ({ isVerifiable: (a: { verification_status: string }) => a.verification_status === "verified" }));
 jest.mock("@/lib/supabase/server", () => ({ hasSupabaseServiceEnv: () => false, createServiceClient: () => null }));
+const prepareOutgoingFiles = jest.fn();
+jest.mock("@/lib/inbox/attachments.server", () => ({
+  prepareOutgoingFiles: (...a: unknown[]) => prepareOutgoingFiles(...a),
+}));
 
 import {
   deliverApprovedReply,
@@ -336,5 +340,98 @@ describe("deliverApprovedReply for other actions", () => {
         },
       }),
     ).toMatchObject({ sharePreface: "P", backingArtifact: { verification_status: "verified", grounding_score: 0.8 } });
+  });
+});
+
+describe("replies with files", () => {
+  const FILES = [
+    { kind: "upload" as const, path: "org-1/x/Deck.pdf", name: "Deck.pdf", size: 40_000_000, mimeType: "application/pdf" },
+    { kind: "document" as const, documentId: "d1", name: "Memo.pdf", size: 10, mimeType: "application/pdf" },
+  ];
+  const ATTACHED = { filename: "Memo.pdf", contentType: "application/pdf", content: new Uint8Array([1, 2]) };
+
+  beforeEach(() => {
+    prepareOutgoingFiles.mockResolvedValue({
+      attachments: [ATTACHED],
+      links: [{ name: "Deck.pdf", size: 40_000_000, url: "https://s/deck?dl" }],
+      sent: [
+        { name: "Memo.pdf", size: 2, delivery: "attached" },
+        { name: "Deck.pdf", size: 40_000_000, delivery: "link" },
+      ],
+      missing: [],
+    });
+  });
+
+  it("attaches what fits, links the rest in the body, and reports both", async () => {
+    const { c } = client(THREAD);
+    const r = await deliverThreadAction(c, {
+      orgId: "org-1",
+      senderId: "u1",
+      thread: THREAD as never,
+      action: "send_reply",
+      body: "Deck attached.",
+      attachments: FILES,
+    });
+    expect(prepareOutgoingFiles).toHaveBeenCalledWith("org-1", FILES);
+    const sent = sendEmail.mock.calls[0][0];
+    expect(sent.attachments).toEqual([ATTACHED]);
+    expect(sent.htmlBody).toContain("Deck attached.");
+    expect(sent.htmlBody).toContain('href="https://s/deck?dl"');
+    expect(sent.htmlBody).toContain("Deck.pdf");
+    expect(r).toMatchObject({ ok: true, sentAttachments: [{ name: "Memo.pdf" }, { name: "Deck.pdf", delivery: "link" }] });
+  });
+
+  it("stops the send when a file cannot be read, rather than dropping it", async () => {
+    prepareOutgoingFiles.mockResolvedValue({ attachments: [], links: [], sent: [], missing: ["Deck.pdf"] });
+    const { c } = client(THREAD);
+    const r = await deliverThreadAction(c, {
+      orgId: "org-1",
+      senderId: "u1",
+      thread: THREAD as never,
+      action: "send_reply",
+      body: "Hi",
+      attachments: FILES,
+    });
+    expect(r).toMatchObject({ ok: false });
+    expect(r.error).toMatch(/Couldn't read Deck.pdf/);
+    expect(sendEmail).not.toHaveBeenCalled();
+  });
+
+  it("refuses files on a channel that cannot carry them", async () => {
+    const slack = { ...THREAD, channel: "slack" };
+    const { c } = client(slack);
+    const r = await deliverThreadAction(c, {
+      orgId: "org-1",
+      senderId: "u1",
+      thread: slack as never,
+      action: "send_reply",
+      body: "Hi",
+      attachments: FILES,
+    });
+    expect(r).toMatchObject({ ok: false, error: "Files can only be sent on an email conversation." });
+    expect(dispatchAction).not.toHaveBeenCalled();
+  });
+
+  it("does not touch Storage for a reply without files", async () => {
+    const { c } = client(THREAD);
+    await deliverThreadAction(c, { orgId: "org-1", senderId: "u1", thread: THREAD as never, action: "send_reply", body: "Hi" });
+    expect(prepareOutgoingFiles).not.toHaveBeenCalled();
+    expect(sendEmail.mock.calls[0][0].attachments).toBeUndefined();
+  });
+
+  it("an approved reply carries its files and records them on the message", async () => {
+    const { c, writes } = client(THREAD);
+    const r = await deliverApprovedReply(c, {
+      orgId: "org-1",
+      approverId: "a",
+      taskId: "task-1",
+      agent: null,
+      hub: null,
+      reply: { threadId: "t1", action: "send_reply", body: "Deck attached.", senderId: "author-1", attachments: FILES },
+    });
+    expect(r.ok).toBe(true);
+    expect(prepareOutgoingFiles).toHaveBeenCalledWith("org-1", FILES);
+    const msg = writes.find((w) => w.table === "inbox_messages")?.row as { metadata: { attachments: unknown[] } };
+    expect(msg.metadata.attachments).toHaveLength(2);
   });
 });

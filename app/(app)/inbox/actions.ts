@@ -18,6 +18,7 @@ import {
   type PendingInboxReply,
 } from "@/lib/inbox/deliver-reply.server";
 import { INBOX_ACTION_LABEL } from "@/lib/inbox/action-labels";
+import { parseAttachmentRefs, type AttachmentRef, type SentAttachment } from "@/lib/inbox/attachments";
 import { decideApproval } from "@/lib/engine";
 import { recordOperatorFeedback } from "@/lib/team-tasks";
 import { computePriority, fallbackSummary, draftReply, smartReplies } from "@/lib/inbox/intelligence";
@@ -91,6 +92,8 @@ async function performThreadAction(
     replyBody?: string;
     /** The draft's `updated_at` as the composer was seeded with it, if it was. */
     draftRevision?: string;
+    /** Files on the reply (uploads or library documents). */
+    attachments?: AttachmentRef[];
   } = {},
 ): Promise<ThreadActionResult> {
   const auth = await requireOrgContext();
@@ -167,6 +170,7 @@ async function performThreadAction(
         senderId: auth.ctx.userId,
         ...(opts.sharePreface ? { sharePreface: opts.sharePreface } : {}),
         ...(opts.backingArtifact ? { backingArtifact: opts.backingArtifact } : {}),
+        ...(opts.attachments?.length ? { attachments: opts.attachments } : {}),
       }
     : null;
 
@@ -276,6 +280,7 @@ async function performThreadAction(
     action,
     body: opts.replyBody,
     backingArtifact: opts.backingArtifact,
+    attachments: opts.attachments,
   });
 
   await recordDispatch(supabase, {
@@ -306,7 +311,13 @@ async function performThreadAction(
       author: "Earn",
       body,
       occurred_at: now,
-      metadata: { action, channel: result.channel, reference: result.reference ?? null, dispatch_detail: result.detail } as Json,
+      metadata: {
+        action,
+        channel: result.channel,
+        reference: result.reference ?? null,
+        dispatch_detail: result.detail,
+        ...(result.sentAttachments?.length ? { attachments: result.sentAttachments } : {}),
+      } as unknown as Json,
     });
   }
 
@@ -389,6 +400,8 @@ export interface ThreadMessageView {
   author: string | null;
   body: string;
   occurredAt: string;
+  /** Files that went with a sent message. */
+  attachments?: SentAttachment[];
 }
 
 /**
@@ -404,21 +417,25 @@ export async function getThreadMessages(threadId: string): Promise<ThreadMessage
 
   const { data, error } = await supabase
     .from("inbox_messages")
-    .select("id, direction, author, body, occurred_at")
+    .select("id, direction, author, body, occurred_at, metadata")
     .eq("organization_id", auth.ctx.orgId)
     .eq("thread_id", threadId)
     .order("occurred_at", { ascending: true })
     .limit(200);
   if (error || !data) return [];
 
-  return (data as Pick<InboxMessage, "id" | "direction" | "author" | "body" | "occurred_at">[]).map(
-    (m) => ({
-      id: m.id,
-      direction: m.direction,
-      author: m.author,
-      body: m.body,
-      occurredAt: m.occurred_at,
-    }),
+  return (data as Pick<InboxMessage, "id" | "direction" | "author" | "body" | "occurred_at" | "metadata">[]).map(
+    (m) => {
+      const files = (m.metadata as { attachments?: unknown } | null)?.attachments;
+      return {
+        id: m.id,
+        direction: m.direction,
+        author: m.author,
+        body: m.body,
+        occurredAt: m.occurred_at,
+        ...(Array.isArray(files) && files.length ? { attachments: files as SentAttachment[] } : {}),
+      };
+    },
   );
 }
 
@@ -536,7 +553,12 @@ export async function replyToThread(formData: FormData): Promise<ThreadActionRes
   // Present only when the composer was seeded from a draft. It identifies WHICH
   // draft, so sending cannot delete one saved after this composer opened.
   const draftRevision = String(formData.get("draft_revision") ?? "") || undefined;
-  return performThreadAction(threadId, "send_reply", { replyBody: body, draftRevision });
+  const attachments = parseAttachmentRefs(formData.get("attachments"));
+  return performThreadAction(threadId, "send_reply", {
+    replyBody: body,
+    draftRevision,
+    ...(attachments.length ? { attachments } : {}),
+  });
 }
 
 /**
@@ -629,24 +651,6 @@ export async function setThreadStatus(formData: FormData): Promise<{ ok: boolean
   revalidatePath("/inbox");
   revalidatePath("/dashboard");
   return { ok: true };
-}
-
-/** Bulk-clear the unread flag for all open threads in the org — called when
- *  the operator opens the inbox so already-visible threads don't keep showing
- *  the unread dot or inflating the badge on the next poll. */
-export async function markOpenThreadsRead(): Promise<void> {
-  const auth = await requireOrgContext();
-  if (!auth.ok) return;
-  const supabase = await createServerClient();
-  await supabase
-    .from("inbox_threads")
-    .update({ unread: false })
-    .eq("organization_id", auth.ctx.orgId)
-    .eq("unread", true)
-    .eq("status", "open")
-    .neq("channel", "deal_share");
-  revalidatePath("/inbox");
-  revalidatePath("/dashboard");
 }
 
 // ---------------------------------------------------------------------------

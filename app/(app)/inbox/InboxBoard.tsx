@@ -1,6 +1,6 @@
 "use client";
 
-import { memo, useMemo, useState, useTransition, useCallback } from "react";
+import { memo, useEffect, useMemo, useRef, useState, useTransition, useCallback } from "react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -21,12 +21,12 @@ import {
   type Teammate,
   type BulkAction,
 } from "./actions";
-import { relativeMeeting } from "./format";
+import { relativeMeeting, rowTime } from "./format";
 
 // The conversation transcript + inline composer, loaded only when a thread is
-// actually expanded. Opening a thread already waits on a server round trip for
+// actually opened. Opening a thread already waits on a server round trip for
 // its messages, so the chunk fetch overlaps work the operator was waiting on —
-// while every collapsed card on the board stops paying for that code.
+// while the list of rows never pays for that code.
 const ThreadConversation = dynamic(
   () => import("./ThreadConversation").then((m) => m.ThreadConversation),
   { loading: () => <p className="mt-2 text-xs text-fg-muted">Loading conversation…</p>, ssr: false },
@@ -58,7 +58,12 @@ export interface InboxCardData {
   category: InboxCategory;
   subject: string;
   counterparty: string;
+  /** Earn's summary of the thread, shown in the reading pane. */
   summary: string;
+  /** The latest message's preview — the row's snippet. */
+  snippet: string;
+  /** When the latest message landed; the row's time. */
+  lastMessageAt: string | null;
   intent: string | null;
   priority: number;
   bucket: "now" | "soon" | "later";
@@ -93,8 +98,8 @@ export interface InboxCardData {
   draft: { body: string; origin: string; revision: string } | null;
 }
 
-// How many thread cards mount before the operator asks for more.
-const CARDS_PER_PAGE = 30;
+// How many rows mount before the operator asks for more.
+const CARDS_PER_PAGE = 50;
 
 const BUCKETS = [
   { key: "now", label: "Needs you now", tone: "text-status-success" },
@@ -110,6 +115,24 @@ const FILTERS: { key: "all" | InboxCategory; label: string }[] = [
   { key: "signing", label: "Signing" },
   { key: "finance", label: "Finance" },
 ];
+
+/** The `?t=` param that keeps the open thread across reloads and shared links. */
+const OPEN_PARAM = "t";
+
+function writeOpenParam(id: string | null) {
+  if (typeof window === "undefined") return;
+  const url = new URL(window.location.href);
+  if (id) url.searchParams.set(OPEN_PARAM, id);
+  else url.searchParams.delete(OPEN_PARAM);
+  // replaceState, not a router navigation: opening a thread is a view change on
+  // this page, not a new server render, and it must not stack history entries.
+  window.history.replaceState(window.history.state, "", url);
+}
+
+function isTypingTarget(t: EventTarget | null): boolean {
+  if (!(t instanceof HTMLElement)) return false;
+  return t.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(t.tagName);
+}
 
 export function InboxBoard({ cards, teammates }: { cards: InboxCardData[]; teammates: Teammate[] }) {
   const router = useRouter();
@@ -135,6 +158,22 @@ export function InboxBoard({ cards, teammates }: { cards: InboxCardData[]; teamm
   }, []);
   const clearSelection = useCallback(() => setSelected(new Set()), []);
 
+  // The thread in the reading pane. Restored from `?t=` on load so a reload or a
+  // pasted link lands on the same conversation.
+  const [openId, setOpenId] = useState<string | null>(null);
+  useEffect(() => {
+    const t = new URLSearchParams(window.location.search).get(OPEN_PARAM);
+    if (t) setOpenId(t);
+  }, []);
+  const openThread = useCallback((id: string | null) => {
+    setOpenId(id);
+    writeOpenParam(id);
+  }, []);
+
+  // Threads read in this visit. Opening a thread marks it read on the server;
+  // this un-bolds its row immediately instead of after the refresh lands.
+  const [readIds, setReadIds] = useState<ReadonlySet<string>>(() => new Set());
+
   function handleClear() {
     const n = visible.filter((c) => c.status === "open").length;
     if (!confirm(`Clear ${n} open thread${n === 1 ? "" : "s"}${filter !== "all" ? ` in ${filter}` : ""}? This cannot be undone.`)) return;
@@ -142,6 +181,7 @@ export function InboxBoard({ cards, teammates }: { cards: InboxCardData[]; teamm
     startClearTransition(async () => {
       const r = await clearInbox(filter !== "all" ? { category: filter as InboxCategory } : undefined);
       if (r.ok) {
+        openThread(null);
         router.refresh();
       } else {
         setClearError("Failed to clear inbox. Try again.");
@@ -156,19 +196,79 @@ export function InboxBoard({ cards, teammates }: { cards: InboxCardData[]; teamm
       ),
     [cards, tab, filter],
   );
-  // Snoozed threads leave the active board and sit in their own collapsible
+  // Snoozed threads leave the active list and sit in their own collapsible
   // section until their wake time returns them to open (autoUnsnoozeExpired).
   const active = useMemo(() => visible.filter((c) => c.status !== "snoozed"), [visible]);
   const snoozed = useMemo(() => visible.filter((c) => c.status === "snoozed"), [visible]);
-  // The server hands over as many as 100 threads. Mounting all of them means a
-  // hundred fully-interactive cards — selects, composers, transition hooks —
-  // built before the operator has looked at the first one. Render a screenful
-  // and reveal the rest on request; `active` is already ranked hottest-first,
-  // so the cards that matter are the ones on screen.
+  // The server hands over as many as 100 threads. Render a screenful of rows and
+  // reveal the rest on request; `active` is already ranked hottest-first.
   const [shown, setShown] = useState(CARDS_PER_PAGE);
   const activeShown = useMemo(() => active.slice(0, shown), [active, shown]);
   const hiddenCount = active.length - activeShown.length;
   const [showSnoozed, setShowSnoozed] = useState(false);
+
+  const grouped = useMemo(
+    () =>
+      BUCKETS.map((b) => ({ bucket: b, rows: activeShown.filter((c) => c.bucket === b.key) })).filter(
+        (g) => g.rows.length > 0,
+      ),
+    [activeShown],
+  );
+  // The rows in the order they appear on screen — what ↑/↓ walk through.
+  const order = useMemo(
+    () => [...grouped.flatMap((g) => g.rows), ...(showSnoozed ? snoozed : [])].map((c) => c.id),
+    [grouped, snoozed, showSnoozed],
+  );
+
+  const openCard = useMemo(() => (openId ? (cards.find((c) => c.id === openId) ?? null) : null), [cards, openId]);
+
+  // Opening an unread thread reads it, as in Gmail.
+  useEffect(() => {
+    if (!openCard || !openCard.unread || readIds.has(openCard.id)) return;
+    const id = openCard.id;
+    setReadIds((prev) => new Set(prev).add(id));
+    bulkThreadAction([id], "read").catch(() => {});
+  }, [openCard, readIds]);
+
+  const move = useCallback(
+    (delta: 1 | -1) => {
+      if (!order.length) return;
+      const at = openId ? order.indexOf(openId) : -1;
+      const next = at < 0 ? order[delta === 1 ? 0 : order.length - 1] : order[at + delta];
+      if (next) openThread(next);
+    },
+    [order, openId, openThread],
+  );
+
+  // After Done, Snooze or Delete the thread leaves the list; the pane moves on to
+  // the next one rather than going blank, the way Gmail does.
+  const advanceFrom = useCallback(
+    (id: string) => {
+      const at = order.indexOf(id);
+      const next = at < 0 ? null : (order[at + 1] ?? order[at - 1] ?? null);
+      openThread(next);
+    },
+    [order, openThread],
+  );
+
+  // ↑/↓ (and j/k) move between threads, Esc closes the pane. Ignored while the
+  // operator is typing, so the composer and the search box keep their keys.
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.defaultPrevented || e.altKey || e.ctrlKey || e.metaKey || isTypingTarget(e.target)) return;
+      if (e.key === "ArrowDown" || e.key === "j") {
+        e.preventDefault();
+        move(1);
+      } else if (e.key === "ArrowUp" || e.key === "k") {
+        e.preventDefault();
+        move(-1);
+      } else if (e.key === "Escape" && openId) {
+        openThread(null);
+      }
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [move, openId, openThread]);
 
   // Run a bulk triage action over the current selection, then clear it.
   const runBulk = useCallback(
@@ -178,6 +278,7 @@ export function InboxBoard({ cards, teammates }: { cards: InboxCardData[]; teamm
       startBulkTransition(async () => {
         const r = await bulkThreadAction(ids, action);
         if (r.ok) {
+          if (action === "read") setReadIds((prev) => new Set([...prev, ...ids]));
           clearSelection();
           router.refresh();
         }
@@ -233,6 +334,8 @@ export function InboxBoard({ cards, teammates }: { cards: InboxCardData[]; teamm
     );
   }
 
+  const position = openId ? order.indexOf(openId) : -1;
+
   return (
     <div className="flex flex-col gap-4">
       {/* Focused / Other — the high-signal vs ambient split, above the pillars. */}
@@ -269,7 +372,7 @@ export function InboxBoard({ cards, teammates }: { cards: InboxCardData[]; teamm
       {/* Pillar filters + Clear */}
       <div className="flex flex-wrap items-center gap-1.5">
         {FILTERS.map((f) => {
-          const active = filter === f.key;
+          const on = filter === f.key;
           const n = counts.get(f.key) ?? 0;
           return (
             <button
@@ -280,7 +383,7 @@ export function InboxBoard({ cards, teammates }: { cards: InboxCardData[]; teamm
                 setShown(CARDS_PER_PAGE);
               }}
               className={`rounded-full border px-3 py-1 text-xs transition ${
-                active
+                on
                   ? "border-gold-500 bg-gold-500/10 text-gold-300"
                   : "border-line text-fg-secondary hover:bg-surface-2 hover:text-fg-primary"
               }`}
@@ -346,122 +449,141 @@ export function InboxBoard({ cards, teammates }: { cards: InboxCardData[]; teamm
         </div>
       ) : null}
 
-      {active.length === 0 ? (
-        <p className="px-1 py-6 text-sm text-fg-muted">
-          {tab === "focused" && filter === "all" && tabCounts.other > 0 ? (
-            <>
-              Focused is clear.{" "}
+      {/* Split view: rows on the left, the open thread on the right. On a phone
+          the open thread takes the whole screen and Back returns to the list. */}
+      <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)]">
+        <div className={openCard ? "hidden lg:block" : ""}>
+          {active.length === 0 ? (
+            <p className="px-1 py-6 text-sm text-fg-muted">
+              {tab === "focused" && filter === "all" && tabCounts.other > 0 ? (
+                <>
+                  Focused is clear.{" "}
+                  <button
+                    type="button"
+                    onClick={() => switchTab("other")}
+                    className="text-gold-300 transition hover:underline"
+                  >
+                    See {tabCounts.other} in Other →
+                  </button>
+                </>
+              ) : (
+                "Nothing here — inbox clear for this filter."
+              )}
+            </p>
+          ) : (
+            <div className="flex flex-col gap-3">
+              {grouped.map(({ bucket, rows }) => (
+                <section key={bucket.key}>
+                  <h2 className="mb-1 flex items-center gap-2 px-1 font-mono text-[11px] uppercase tracking-widest">
+                    <span className={bucket.tone}>{bucket.label}</span>
+                    <span className="text-fg-muted">{rows.length}</span>
+                  </h2>
+                  <ul className="fx-card divide-y divide-line/60 overflow-hidden p-0">
+                    {rows.map((c) => (
+                      <ThreadRow
+                        key={c.id}
+                        card={c}
+                        unread={c.unread && !readIds.has(c.id)}
+                        selected={selected.has(c.id)}
+                        open={c.id === openId}
+                        onToggleSelect={toggleSelect}
+                        onOpen={openThread}
+                      />
+                    ))}
+                  </ul>
+                </section>
+              ))}
+              {hiddenCount > 0 ? (
+                <button
+                  type="button"
+                  onClick={() => setShown((n) => n + CARDS_PER_PAGE)}
+                  className="self-start rounded-md border border-line px-3 py-1.5 text-xs text-fg-secondary transition hover:border-gold-500 hover:text-fg-primary"
+                >
+                  Show {Math.min(hiddenCount, CARDS_PER_PAGE)} more
+                  <span className="ml-1.5 font-mono text-[11px] text-fg-muted">{hiddenCount} left</span>
+                </button>
+              ) : null}
+            </div>
+          )}
+
+          {/* Snoozed — collapsed by default; each returns to the list at its wake time. */}
+          {snoozed.length > 0 ? (
+            <section className="mt-4">
               <button
                 type="button"
-                onClick={() => switchTab("other")}
-                className="text-gold-300 transition hover:underline"
+                onClick={() => setShowSnoozed((s) => !s)}
+                className="mb-1 flex items-center gap-2 px-1 font-mono text-[11px] uppercase tracking-widest text-fg-muted transition hover:text-fg-primary"
+                aria-expanded={showSnoozed}
               >
-                See {tabCounts.other} in Other →
+                <span className="text-[11px]">{showSnoozed ? "▾" : "▸"}</span>
+                Snoozed
+                <span>{snoozed.length}</span>
               </button>
-            </>
-          ) : (
-            "Nothing here — inbox clear for this filter."
-          )}
-        </p>
-      ) : (
-        <>
-          {BUCKETS.map((bucket) => {
-            const inBucket = activeShown.filter((c) => c.bucket === bucket.key);
-            if (inBucket.length === 0) return null;
-            return (
-              <section key={bucket.key}>
-                <h2 className="mb-2 flex items-center gap-2 font-mono text-[11px] uppercase tracking-widest">
-                  <span className={bucket.tone}>{bucket.label}</span>
-                  <span className="text-fg-muted">{inBucket.length}</span>
-                </h2>
-                <div className="flex flex-col gap-2">
-                  {inBucket.map((c) => (
-                    <ThreadCard
+              {showSnoozed ? (
+                <ul className="fx-card divide-y divide-line/60 overflow-hidden p-0">
+                  {snoozed.map((c) => (
+                    <ThreadRow
                       key={c.id}
                       card={c}
-                      teammates={teammates}
+                      unread={c.unread && !readIds.has(c.id)}
                       selected={selected.has(c.id)}
+                      open={c.id === openId}
                       onToggleSelect={toggleSelect}
+                      onOpen={openThread}
                     />
                   ))}
-                </div>
-              </section>
-            );
-          })}
-          {hiddenCount > 0 ? (
-            <button
-              type="button"
-              onClick={() => setShown((n) => n + CARDS_PER_PAGE)}
-              className="self-start rounded-md border border-line px-3 py-1.5 text-xs text-fg-secondary transition hover:border-gold-500 hover:text-fg-primary"
-            >
-              Show {Math.min(hiddenCount, CARDS_PER_PAGE)} more
-              <span className="ml-1.5 font-mono text-[11px] text-fg-muted">{hiddenCount} left</span>
-            </button>
+                </ul>
+              ) : null}
+            </section>
           ) : null}
-        </>
-      )}
+        </div>
 
-      {/* Snoozed — collapsed by default; each returns to the board at its wake time. */}
-      {snoozed.length > 0 ? (
-        <section>
-          <button
-            type="button"
-            onClick={() => setShowSnoozed((s) => !s)}
-            className="mb-2 flex items-center gap-2 font-mono text-[11px] uppercase tracking-widest text-fg-muted transition hover:text-fg-primary"
-            aria-expanded={showSnoozed}
-          >
-            <span className="text-[11px]">{showSnoozed ? "▾" : "▸"}</span>
-            Snoozed
-            <span>{snoozed.length}</span>
-          </button>
-          {showSnoozed ? (
-            <div className="flex flex-col gap-2">
-              {snoozed.map((c) => (
-                <ThreadCard
-                  key={c.id}
-                  card={c}
-                  teammates={teammates}
-                  selected={selected.has(c.id)}
-                  onToggleSelect={toggleSelect}
-                />
-              ))}
-            </div>
-          ) : null}
-        </section>
-      ) : null}
+        {openCard ? (
+          <ThreadPane
+            key={openCard.id}
+            card={openCard}
+            teammates={teammates}
+            onClose={() => openThread(null)}
+            onPrev={position > 0 ? () => move(-1) : null}
+            onNext={position >= 0 && position < order.length - 1 ? () => move(1) : null}
+            onRemoved={advanceFrom}
+          />
+        ) : (
+          <div className="fx-card hidden p-10 text-center text-sm text-fg-muted lg:sticky lg:top-4 lg:block">
+            Select a conversation to read it here.
+            <p className="mt-1 text-xs">↑ ↓ move between threads · Esc closes</p>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
 
 /**
- * One thread row.
+ * One row of the list, Gmail-style: select, star, sender, subject and snippet,
+ * time. Clicking it opens the thread in the reading pane.
  *
- * Memoized: the board holds the selection set, the tab and the pillar filter,
- * so without this every keystroke of triage — ticking one checkbox, switching
- * tabs — re-rendered all of the cards on screen rather than the one that
- * changed. Its props are stable by construction: `card` and `teammates` come
- * straight from server props, `onToggleSelect` is a `useCallback` with no
- * dependencies, and `selected` flips only for the card actually toggled.
+ * Memoized: the board holds the selection, the open thread and the filters, so
+ * without this every keystroke of triage re-rendered every row. Its callbacks are
+ * `useCallback`s with stable dependencies, and `selected`/`open`/`unread` flip
+ * only for the rows they concern.
  */
-const ThreadCard = memo(function ThreadCard({
+const ThreadRow = memo(function ThreadRow({
   card,
-  teammates,
+  unread,
   selected,
+  open,
   onToggleSelect,
+  onOpen,
 }: {
   card: InboxCardData;
-  teammates: Teammate[];
+  unread: boolean;
   selected: boolean;
+  open: boolean;
   onToggleSelect: (id: string) => void;
+  onOpen: (id: string) => void;
 }) {
   const router = useRouter();
-  const [result, setResult] = useState<ThreadActionResult | null>(null);
-  const [pending, startTransition] = useTransition();
-  const [active, setActive] = useState<string | null>(null);
-  const [deleting, startDeleteTransition] = useTransition();
-  const [deleteError, setDeleteError] = useState<string | null>(null);
-  const [assigning, startAssignTransition] = useTransition();
-
   // Star toggle — optimistic so the pin flips instantly, reverting on failure.
   const [starred, setStarred] = useState(card.starred);
   const [starPending, startStarTransition] = useTransition();
@@ -475,6 +597,102 @@ const ThreadCard = memo(function ThreadCard({
     });
   }, [starred, card.id, router]);
 
+  // Keep the open row on screen as ↑/↓ walk the list.
+  const ref = useRef<HTMLLIElement>(null);
+  useEffect(() => {
+    if (open) ref.current?.scrollIntoView?.({ block: "nearest" });
+  }, [open]);
+
+  const when =
+    card.status === "snoozed" && card.snoozedUntil ? `💤 ${rowTime(card.snoozedUntil)}` : rowTime(card.lastMessageAt);
+
+  return (
+    <li
+      ref={ref}
+      className={`flex items-center gap-2 px-2.5 py-2 text-sm transition ${
+        open ? "bg-gold-500/10" : selected ? "bg-gold-500/5" : unread ? "bg-surface-1" : "hover:bg-surface-2/60"
+      }`}
+    >
+      <input
+        type="checkbox"
+        checked={selected}
+        onChange={() => onToggleSelect(card.id)}
+        aria-label={`Select thread: ${card.subject}`}
+        className="h-3.5 w-3.5 shrink-0 cursor-pointer accent-gold-500"
+      />
+      <button
+        type="button"
+        onClick={toggleStar}
+        disabled={starPending}
+        aria-pressed={starred}
+        aria-label={starred ? "Unstar thread" : "Star thread"}
+        title={starred ? "Starred — click to unstar" : "Star this thread"}
+        className={`shrink-0 text-sm leading-none transition disabled:opacity-50 ${
+          starred ? "text-gold-300" : "text-fg-muted hover:text-gold-300"
+        }`}
+      >
+        {starred ? "★" : "☆"}
+      </button>
+      <button
+        type="button"
+        onClick={() => onOpen(card.id)}
+        aria-current={open ? "true" : undefined}
+        aria-label={`Open thread: ${card.subject} from ${card.counterparty}`}
+        className="flex min-w-0 flex-1 flex-col gap-0.5 text-left sm:flex-row sm:items-center sm:gap-3"
+      >
+        <span className="flex min-w-0 items-center gap-1.5 sm:w-40 sm:shrink-0">
+          <span aria-hidden className="shrink-0 font-mono text-xs text-gold-300" title={card.channelLabel}>
+            {card.channelIcon}
+          </span>
+          <span className={`truncate ${unread ? "font-semibold text-fg-primary" : "text-fg-secondary"}`}>
+            {card.counterparty}
+          </span>
+        </span>
+        <span className="min-w-0 flex-1 truncate">
+          {card.draft ? <span className="mr-1.5 text-status-danger">Draft</span> : null}
+          <span className={unread ? "font-semibold text-fg-primary" : "text-fg-primary"}>{card.subject}</span>
+          {card.snippet ? <span className="text-fg-muted"> — {card.snippet}</span> : null}
+        </span>
+        <span
+          className={`shrink-0 font-mono text-[11px] sm:text-right ${unread ? "font-semibold text-fg-primary" : "text-fg-muted"}`}
+        >
+          {when}
+        </span>
+      </button>
+    </li>
+  );
+});
+
+/**
+ * The reading pane: the open thread in full — Earn's summary, its links, owner
+ * and next moves — above the conversation and the composer.
+ *
+ * Keyed by thread id by the board, so moving to another thread starts clean.
+ */
+function ThreadPane({
+  card,
+  teammates,
+  onClose,
+  onPrev,
+  onNext,
+  onRemoved,
+}: {
+  card: InboxCardData;
+  teammates: Teammate[];
+  onClose: () => void;
+  onPrev: (() => void) | null;
+  onNext: (() => void) | null;
+  /** The thread left the list (done, snoozed, deleted); move the pane on. */
+  onRemoved: (id: string) => void;
+}) {
+  const router = useRouter();
+  const [result, setResult] = useState<ThreadActionResult | null>(null);
+  const [pending, startTransition] = useTransition();
+  const [active, setActive] = useState<string | null>(null);
+  const [deleting, startDeleteTransition] = useTransition();
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [assigning, startAssignTransition] = useTransition();
+
   // Assign / reassign the thread to a teammate (empty value clears it).
   const onAssign = useCallback(
     (value: string) => {
@@ -486,23 +704,8 @@ const ThreadCard = memo(function ThreadCard({
     [card.id, router],
   );
 
-  // Expandable conversation view + inline composer. Only the open/closed flag
-  // lives here now — the transcript, composer state and their five hooks moved
-  // into ThreadConversation, which mounts on expand. A collapsed card (the
-  // overwhelming majority on any board) carries none of it.
-  const [expanded, setExpanded] = useState(false);
-  // Once opened, the panel stays mounted and is merely hidden when collapsed, so
-  // re-expanding a thread does not refetch its transcript and smart replies —
-  // the state the card used to hold for it now lives in the panel. Cards the
-  // operator never opens still mount nothing.
-  const [hasOpened, setHasOpened] = useState(false);
-  const toggleThread = useCallback(() => {
-    setExpanded((open) => !open);
-    setHasOpened(true);
-  }, []);
-
-  // The panel reports its draft/send outcome back up so the card keeps showing
-  // results in the same place, below the action row, as it always has.
+  // The conversation reports its draft/send outcome back up so results show in
+  // one place, under the action row.
   const onPanelResult = useCallback((r: ThreadActionResult | null, key: string | null) => {
     setResult(r);
     setActive(key);
@@ -519,11 +722,12 @@ const ThreadCard = memo(function ThreadCard({
         setDeleteError("Failed to delete thread. Try again.");
         return;
       }
+      onRemoved(card.id);
       router.refresh();
     });
-  }, [card.id, router]);
+  }, [card.id, router, onRemoved]);
 
-  function run(key: string, fn: () => Promise<ThreadActionResult>) {
+  function run(key: string, fn: () => Promise<ThreadActionResult>, leaves = false) {
     setResult(null);
     startTransition(async () => {
       setActive(key);
@@ -531,7 +735,10 @@ const ThreadCard = memo(function ThreadCard({
       setResult(r);
       // Refresh server components so the nav badge and thread list reflect the
       // change immediately rather than waiting for the 30-second poll.
-      if (r.ok) router.refresh();
+      if (r.ok) {
+        if (leaves) onRemoved(card.id);
+        router.refresh();
+      }
     });
   }
 
@@ -543,69 +750,56 @@ const ThreadCard = memo(function ThreadCard({
   }
 
   return (
-    <div className={`fx-card fx-card-hover relative overflow-hidden p-4 ${selected ? "ring-1 ring-gold-500/60" : ""}`}>
-      <span
-        aria-hidden
-        className="absolute inset-y-0 left-0 w-1 bg-gradient-to-b from-gold-500/60 to-transparent"
-        style={{ opacity: card.priority / 100 }}
-      />
-
-      <div className="flex flex-wrap items-start justify-between gap-2">
-        <div className="min-w-0">
-          <div className="flex items-center gap-2">
-            <input
-              type="checkbox"
-              checked={selected}
-              onChange={() => onToggleSelect(card.id)}
-              aria-label={`Select thread: ${card.subject}`}
-              className="h-3.5 w-3.5 shrink-0 cursor-pointer accent-gold-500"
-            />
-            <span className="font-mono text-base leading-none text-gold-300" title={card.channelLabel}>
-              {card.channelIcon}
-            </span>
-            <h3 className={`truncate text-sm ${card.unread ? "font-semibold text-fg-primary" : "text-fg-primary"}`}>
-              {card.subject}
-            </h3>
-            {card.unread ? <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-gold-400" title="Unread" /> : null}
-          </div>
-          <p className="mt-0.5 font-mono text-[11px] uppercase tracking-wider text-fg-muted">
-            {card.counterparty} · {card.channelLabel}
-            {card.intent ? ` · ${card.intent}` : ""}
-          </p>
-        </div>
-        <div className="flex shrink-0 items-center gap-2">
+    <article
+      aria-label={`Thread: ${card.subject}`}
+      className="fx-card fixed inset-0 z-40 overflow-y-auto rounded-none p-4 lg:sticky lg:inset-auto lg:top-4 lg:z-auto lg:max-h-[calc(100vh-2rem)] lg:rounded-xl"
+    >
+      <div className="mb-3 flex items-center gap-2">
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label="Close thread"
+          title="Close (Esc)"
+          className="rounded-md px-2 py-1 text-xs text-fg-secondary transition hover:text-fg-primary"
+        >
+          <span className="lg:hidden">← Back</span>
+          <span className="hidden lg:inline">✕ Close</span>
+        </button>
+        <div className="ml-auto flex items-center gap-1">
           <button
             type="button"
-            onClick={toggleStar}
-            disabled={starPending}
-            aria-pressed={starred}
-            aria-label={starred ? "Unstar thread" : "Star thread"}
-            title={starred ? "Starred — click to unstar" : "Star this thread"}
-            className={`text-sm leading-none transition disabled:opacity-50 ${
-              starred ? "text-gold-300" : "text-fg-muted hover:text-gold-300"
-            }`}
+            disabled={!onPrev}
+            onClick={() => onPrev?.()}
+            aria-label="Previous thread"
+            title="Previous thread (↑ or k)"
+            className="rounded-md border border-line px-2 py-0.5 text-xs text-fg-secondary transition hover:border-gold-500 disabled:opacity-40"
           >
-            {starred ? "★" : "☆"}
+            ↑
           </button>
-          <span className="font-mono text-[11px] text-fg-muted" title="Triage priority">
-            {card.priority}
-          </span>
+          <button
+            type="button"
+            disabled={!onNext}
+            onClick={() => onNext?.()}
+            aria-label="Next thread"
+            title="Next thread (↓ or j)"
+            className="rounded-md border border-line px-2 py-0.5 text-xs text-fg-secondary transition hover:border-gold-500 disabled:opacity-40"
+          >
+            ↓
+          </button>
         </div>
       </div>
 
-      {card.summary ? <p className="mt-2 line-clamp-2 text-sm text-fg-secondary">{card.summary}</p> : null}
+      <h2 className="text-lg font-semibold leading-snug text-fg-primary">{card.subject}</h2>
+      <p className="mt-0.5 font-mono text-[11px] uppercase tracking-wider text-fg-muted">
+        <span aria-hidden>{card.channelIcon}</span> {card.counterparty} · {card.channelLabel}
+        {card.intent ? ` · ${card.intent}` : ""}
+      </p>
 
-      {/* An unsent draft is the one thing on this card that somebody was told to
-          come and do, so it is said on the COLLAPSED card. The board already puts
-          these threads first; a badge that only appeared once you expanded would
-          make the ordering the only clue. */}
-      {card.draft ? (
-        <p
-          className="mt-2 inline-flex items-center gap-1 rounded-full border border-gold-500/50 bg-gold-500/10 px-2 py-0.5 text-[11px] text-gold-300"
-          title="An unsent reply is waiting on this thread"
-        >
-          <span aria-hidden>✎</span> Draft ready to send
-        </p>
+      {card.summary ? (
+        <div className="mt-3 rounded-lg border border-gold-500/25 bg-gold-500/5 px-3 py-2">
+          <p className="font-mono text-[11px] uppercase tracking-wider text-gold-300/80">✦ Earn summary</p>
+          <p className="mt-0.5 text-sm text-fg-secondary">{card.summary}</p>
+        </div>
       ) : null}
 
       {card.nudge ? (
@@ -669,23 +863,6 @@ const ThreadCard = memo(function ThreadCard({
         </label>
       </div>
 
-      {/* Expand into the full conversation + inline composer */}
-      <button
-        type="button"
-        onClick={toggleThread}
-        aria-expanded={expanded}
-        className="mt-2 inline-flex items-center gap-1 text-[11px] text-fg-muted transition hover:text-fg-primary"
-      >
-        <span className="font-mono text-[11px]">{expanded ? "▾" : "▸"}</span>
-        {expanded ? "Hide thread" : "View thread"}
-      </button>
-
-      {hasOpened ? (
-        <div hidden={!expanded}>
-          <ThreadConversation card={card} onResult={onPanelResult} />
-        </div>
-      ) : null}
-
       {/* Gated next moves */}
       <div className="mt-3 flex flex-wrap items-center gap-2">
         {card.suggested ? (
@@ -720,10 +897,16 @@ const ThreadCard = memo(function ThreadCard({
         <button
           type="button"
           disabled={pending || deleting}
-          onClick={() => run("done", async () => {
-            const r = await setThreadStatus(fd({ status: "done", unread: "false" }));
-            return r.ok ? { ok: true, message: "Marked done." } : { ok: false, error: "Failed to mark as done. Try again." };
-          })}
+          onClick={() =>
+            run(
+              "done",
+              async () => {
+                const r = await setThreadStatus(fd({ status: "done", unread: "false" }));
+                return r.ok ? { ok: true, message: "Marked done." } : { ok: false, error: "Failed to mark as done. Try again." };
+              },
+              true,
+            )
+          }
           className="ml-auto rounded-md px-2 py-1 text-xs text-fg-muted transition hover:text-fg-primary disabled:opacity-50"
         >
           Done
@@ -749,10 +932,14 @@ const ThreadCard = memo(function ThreadCard({
               const preset = SNOOZE_PRESETS.find((p) => p.key === e.target.value);
               if (!preset) return;
               const iso = preset.until().toISOString();
-              run("snooze", async () => {
-                const r = await snoozeThread(card.id, iso);
-                return r.ok ? { ok: true, message: `Snoozed until ${preset.label.toLowerCase()}.` } : { ok: false, error: "Failed to snooze. Try again." };
-              });
+              run(
+                "snooze",
+                async () => {
+                  const r = await snoozeThread(card.id, iso);
+                  return r.ok ? { ok: true, message: `Snoozed until ${preset.label.toLowerCase()}.` } : { ok: false, error: "Failed to snooze. Try again." };
+                },
+                true,
+              );
             }}
             className="rounded-md bg-transparent px-1.5 py-1 text-xs text-fg-muted outline-none transition hover:text-fg-primary disabled:opacity-50"
           >
@@ -793,6 +980,8 @@ const ThreadCard = memo(function ThreadCard({
       {deleteError ? (
         <p className="mt-2 text-xs text-status-danger">{deleteError}</p>
       ) : null}
-    </div>
+
+      <ThreadConversation card={card} onResult={onPanelResult} />
+    </article>
   );
-});
+}

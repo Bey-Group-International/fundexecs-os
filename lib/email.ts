@@ -78,6 +78,11 @@ export interface SendEmailArgs {
     filename?: string;
   };
   /**
+   * Files to attach. The caller resolves and sizes them (an inbox reply sends
+   * what fits under Gmail's limit and links the rest); this only encodes them.
+   */
+  attachments?: EmailAttachment[];
+  /**
    * Explicit sender address. Gmail accepts this only when it is the connected
    * account or one of its verified send-as aliases; otherwise Gmail rewrites
    * it. Leave it unset (the normal case) and the message simply comes from the
@@ -94,6 +99,16 @@ export interface SendEmailArgs {
    */
   allowFallback?: boolean;
 }
+
+/** One file to send with a message. */
+export interface EmailAttachment {
+  filename: string;
+  contentType: string;
+  content: Uint8Array;
+}
+
+/** Raw bytes Gmail is asked to carry in one message, before base64. Its limit is 25 MB encoded. */
+export const MAX_ATTACHMENT_BYTES = 18 * 1024 * 1024;
 
 export interface SendEmailResult {
   ok: boolean;
@@ -145,8 +160,26 @@ function buildRfc2822(args: SendEmailArgs, from: string | null): string {
   ];
 
   const invite = args.calendarInvite;
-  if (!invite) {
+  const files = args.attachments ?? [];
+  if (!invite && files.length === 0) {
     return [...headers, `Content-Type: text/html; charset=utf-8`, ``, args.htmlBody].join("\r\n");
+  }
+  if (!invite) {
+    // mixed{ html, file, file, … }
+    const outer = boundary("mixed");
+    return [
+      ...headers,
+      `Content-Type: multipart/mixed; boundary="${outer}"`,
+      ``,
+      `--${outer}`,
+      `Content-Type: text/html; charset=utf-8`,
+      ``,
+      args.htmlBody,
+      ``,
+      ...files.flatMap((f) => attachmentPart(outer, f)),
+      `--${outer}--`,
+      ``,
+    ].join("\r\n");
   }
 
   // A calendar invitation needs the .ics twice, for two different readers.
@@ -202,9 +235,26 @@ function buildRfc2822(args: SendEmailArgs, from: string | null): string {
     ``,
     encoded,
     ``,
+    ...files.flatMap((f) => attachmentPart(outer, f)),
     `--${outer}--`,
     ``,
   ].join("\r\n");
+}
+
+/** One base64 file part, its name and type made safe to sit in a MIME header. */
+function attachmentPart(outer: string, file: EmailAttachment): string[] {
+  const name = sanitizeMimeParam(file.filename || "") || "attachment";
+  const type = /^[\w.+-]+\/[\w.+-]+$/.test(file.contentType) ? file.contentType : "application/octet-stream";
+  const encoded = Buffer.from(file.content).toString("base64").replace(/(.{76})/g, "$1\r\n");
+  return [
+    `--${outer}`,
+    `Content-Type: ${type}; name="${name}"`,
+    `Content-Disposition: attachment; filename="${name}"`,
+    `Content-Transfer-Encoding: base64`,
+    ``,
+    encoded,
+    ``,
+  ];
 }
 
 function base64url(str: string): string {
@@ -259,15 +309,23 @@ async function sendViaGmail(
   token: string,
   from: string | null,
 ): Promise<SendEmailResult> {
-  const raw = base64url(buildRfc2822(args, from));
-  const res = await fetch("https://gmail.googleapis.com/gmail/v1/users/me/messages/send", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${token}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({ raw }),
-  });
+  const mime = buildRfc2822(args, from);
+  // A message with files goes to the upload endpoint as raw RFC 822: the JSON
+  // endpoint refuses large bodies long before Gmail's 25 MB message limit.
+  const res = args.attachments?.length
+    ? await fetch("https://gmail.googleapis.com/upload/gmail/v1/users/me/messages/send?uploadType=media", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "message/rfc822" },
+        body: mime,
+      })
+    : await fetch("https://gmail.googleapis.com/gmail/v1/users/me/messages/send", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ raw: base64url(mime) }),
+      });
 
   if (!res.ok) {
     const text = await res.text().catch(() => res.statusText);
@@ -422,14 +480,23 @@ async function sendViaFallback(
         subject: sanitizeHeaderValue(args.subject),
         html: args.htmlBody,
         ...(replyTo ? { reply_to: replyTo } : {}),
-        ...(invite
+        ...(invite || args.attachments?.length
           ? {
               attachments: [
-                {
-                  filename: sanitizeMimeParam(invite.filename ?? "invite.ics"),
-                  content: Buffer.from(invite.content, "utf8").toString("base64"),
-                  content_type: `text/calendar; charset=utf-8; method=${methodOf(invite.content) ?? invite.method}`,
-                },
+                ...(invite
+                  ? [
+                      {
+                        filename: sanitizeMimeParam(invite.filename ?? "invite.ics"),
+                        content: Buffer.from(invite.content, "utf8").toString("base64"),
+                        content_type: `text/calendar; charset=utf-8; method=${methodOf(invite.content) ?? invite.method}`,
+                      },
+                    ]
+                  : []),
+                ...(args.attachments ?? []).map((f) => ({
+                  filename: sanitizeMimeParam(f.filename) || "attachment",
+                  content: Buffer.from(f.content).toString("base64"),
+                  content_type: f.contentType,
+                })),
               ],
             }
           : {}),

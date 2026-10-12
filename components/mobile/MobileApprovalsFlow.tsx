@@ -11,6 +11,7 @@ import { useMobileToast } from "./MobileToast";
 import { enqueue } from "./offlineQueue";
 import { APPROVAL_DECISION_TYPE, type ApprovalDecisionPayload } from "./MobileSyncRegistrar";
 import type { InboxMessageApproval } from "@/lib/inbox/pending-action";
+import { formatFileSize } from "@/lib/inbox/attachments";
 import { approveEditedInboxMessage, decideInboxApprovals } from "@/app/(app)/inbox/actions";
 
 export interface ApprovalItem {
@@ -537,6 +538,11 @@ function MobileMessagePreview({ m }: { m: InboxMessageApproval }) {
         <p className="mt-2 line-clamp-[10] whitespace-pre-wrap border-t border-line/60 pt-2 leading-snug text-fg-primary">
           {m.body ?? m.sharePreface ?? `${m.actionLabel} — carried out on approval.`}
         </p>
+        {m.attachments?.length ? (
+          <p className="mt-2 break-words text-[12px] text-fg-secondary">
+            📎 {m.attachments.map((a) => `${a.name} · ${formatFileSize(a.size)}`).join(", ")}
+          </p>
+        ) : null}
       </div>
       {who ? <p className="text-[12px] text-fg-muted">{who}</p> : null}
       {m.lastInbound ? (

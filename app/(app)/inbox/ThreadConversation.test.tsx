@@ -29,6 +29,19 @@ jest.mock("./actions", () => ({
   suggestSmartReplies: (...a: unknown[]) => suggestSmartReplies(...a),
 }));
 
+const requestAttachmentUpload = jest.fn();
+const listInboxDocuments = jest.fn();
+const createInboxRoomLink = jest.fn();
+const uploadToSignedUrl = jest.fn();
+jest.mock("./attachment-actions", () => ({
+  requestAttachmentUpload: (...a: unknown[]) => requestAttachmentUpload(...a),
+  listInboxDocuments: (...a: unknown[]) => listInboxDocuments(...a),
+  createInboxRoomLink: (...a: unknown[]) => createInboxRoomLink(...a),
+}));
+jest.mock("@/lib/supabase/client", () => ({
+  createClient: () => ({ storage: { from: () => ({ uploadToSignedUrl: (...a: unknown[]) => uploadToSignedUrl(...a) }) } }),
+}));
+
 import { ThreadConversation, type ThreadConversationCard } from "./ThreadConversation";
 
 const DRAFT_BODY = "Hi Ana,\n\nThanks for the time today.\n\n— Host";
@@ -260,5 +273,115 @@ describe("the revision follows the text, not the thread", () => {
     const form = replyToThread.mock.calls[0][0] as FormData;
     expect(form.get("draft_revision")).toBe(REVISION);
     expect(String(form.get("body"))).toContain("One more line.");
+  });
+});
+
+describe("files on a reply", () => {
+  const PATH = "org-1/123e4567-e89b-12d3-a456-426614174000/Deck.pdf";
+
+  beforeEach(() => {
+    requestAttachmentUpload.mockResolvedValue({ ok: true, path: PATH, token: "tok", signedUrl: "https://s/up" });
+    uploadToSignedUrl.mockResolvedValue({ error: null });
+    listInboxDocuments.mockResolvedValue({
+      library: [{ id: "d1", name: "Memo.pdf", size: 2048, mimeType: "application/pdf" }],
+      rooms: [{ id: "r-doc", name: "Fund II Deck", roomName: "Fund II" }],
+    });
+  });
+
+  function pdf() {
+    return new File(["%PDF"], "Deck.pdf", { type: "application/pdf" });
+  }
+
+  it("uploads a file from the computer and sends it with the reply", async () => {
+    const user = userEvent.setup();
+    panel();
+    await user.upload(screen.getByLabelText("Attach files"), pdf());
+    expect(await screen.findByText("Deck.pdf")).toBeInTheDocument();
+    expect(uploadToSignedUrl).toHaveBeenCalledWith(PATH, "tok", expect.any(File), { contentType: "application/pdf" });
+
+    await user.type(screen.getByPlaceholderText(/Reply to Ana Diaz/), "Deck attached.");
+    await user.click(screen.getByRole("button", { name: "Send reply" }));
+    await waitFor(() => expect(replyToThread).toHaveBeenCalled());
+    const f = replyToThread.mock.calls[0][0] as FormData;
+    expect(JSON.parse(String(f.get("attachments")))).toEqual([
+      { kind: "upload", path: PATH, name: "Deck.pdf", size: 4, mimeType: "application/pdf" },
+    ]);
+    // Sent: the composer is clear for the next message.
+    await waitFor(() => expect(screen.queryByText("Deck.pdf")).not.toBeInTheDocument());
+  });
+
+  it("holds Send while a file is still uploading", async () => {
+    let finish: (v: { error: null }) => void = () => {};
+    uploadToSignedUrl.mockImplementation(() => new Promise((r) => (finish = r)));
+    const user = userEvent.setup();
+    panel();
+    await user.type(screen.getByPlaceholderText(/Reply to Ana Diaz/), "Hi");
+    await user.upload(screen.getByLabelText("Attach files"), pdf());
+    expect(await screen.findByRole("button", { name: "Uploading…" })).toBeDisabled();
+    finish({ error: null });
+    expect(await screen.findByRole("button", { name: "Send reply" })).toBeEnabled();
+  });
+
+  it("will not send past a failed upload", async () => {
+    uploadToSignedUrl.mockResolvedValue({ error: { message: "boom" } });
+    const user = userEvent.setup();
+    panel();
+    await user.type(screen.getByPlaceholderText(/Reply to Ana Diaz/), "Hi");
+    await user.upload(screen.getByLabelText("Attach files"), pdf());
+    expect(await screen.findByText(/Upload failed/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Send reply" })).toBeDisabled();
+    await user.click(screen.getByRole("button", { name: "Remove Deck.pdf" }));
+    expect(screen.getByRole("button", { name: "Send reply" })).toBeEnabled();
+  });
+
+  it("attaches a document from the library", async () => {
+    const user = userEvent.setup();
+    panel();
+    await user.click(screen.getByRole("button", { name: "From Documents" }));
+    await user.click(await screen.findByRole("button", { name: /Memo\.pdf/ }));
+    await user.type(screen.getByPlaceholderText(/Reply to Ana Diaz/), "Memo attached.");
+    await user.click(screen.getByRole("button", { name: "Send reply" }));
+    await waitFor(() => expect(replyToThread).toHaveBeenCalled());
+    const f = replyToThread.mock.calls[0][0] as FormData;
+    expect(JSON.parse(String(f.get("attachments")))[0]).toMatchObject({ kind: "document", documentId: "d1" });
+  });
+
+  it("puts a data room link into the message", async () => {
+    createInboxRoomLink.mockResolvedValue({ ok: true, url: "https://app.test/s/abc", name: "Fund II Deck" });
+    const user = userEvent.setup();
+    panel();
+    await user.type(screen.getByPlaceholderText(/Reply to Ana Diaz/), "Here it is:");
+    await user.click(screen.getByRole("button", { name: "Data room link" }));
+    await user.click(await screen.findByRole("button", { name: /Fund II Deck/ }));
+    await waitFor(() =>
+      expect(screen.getByPlaceholderText(/Reply to Ana Diaz/)).toHaveValue("Here it is:\n\nFund II Deck: https://app.test/s/abc"),
+    );
+    expect(createInboxRoomLink).toHaveBeenCalledWith("t1", "r-doc");
+  });
+
+  it("offers only data room links off email, where files cannot go", () => {
+    panel({ channel: "slack", channelLabel: "Slack" });
+    expect(screen.queryByRole("button", { name: /Attach/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "From Documents" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Data room link" })).toBeInTheDocument();
+  });
+
+  it("shows the files a sent message carried, and which went as links", async () => {
+    getThreadMessages.mockResolvedValue([
+      {
+        id: "m1",
+        direction: "outbound",
+        author: "You",
+        body: "Deck attached.",
+        occurredAt: "2026-10-01T12:00:00.000Z",
+        attachments: [
+          { name: "Memo.pdf", size: 2048, delivery: "attached" },
+          { name: "Deck.pdf", size: 40 * 1024 * 1024, delivery: "link" },
+        ],
+      },
+    ]);
+    panel();
+    expect(await screen.findByText("Memo.pdf")).toBeInTheDocument();
+    expect(screen.getByText(/40 MB · sent as link/)).toBeInTheDocument();
   });
 });

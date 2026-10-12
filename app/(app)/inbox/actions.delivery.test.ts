@@ -179,3 +179,45 @@ describe("known contacts", () => {
     expect(isKnownContact).not.toHaveBeenCalled();
   });
 });
+
+describe("files on a reply", () => {
+  const ID = "123e4567-e89b-12d3-a456-426614174000";
+  const FILES = [
+    { kind: "upload", path: `org-1/${ID}/Deck.pdf`, name: "Deck.pdf", size: 1200, mimeType: "application/pdf" },
+  ];
+  function withFiles(raw: string) {
+    const f = form();
+    f.set("attachments", raw);
+    return f;
+  }
+
+  it("go to the sender with the reply and are recorded on the outbound message", async () => {
+    deliverThreadAction.mockResolvedValue({
+      ok: true,
+      channel: "gmail",
+      live: true,
+      detail: "Email sent.",
+      sentAttachments: [{ name: "Deck.pdf", size: 1200, delivery: "attached" }],
+    });
+    const r = await replyToThread(withFiles(JSON.stringify(FILES)));
+    expect(r.ok).toBe(true);
+    expect(deliverThreadAction).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ attachments: FILES }));
+    const msg = inserts.find((i) => i.table === "inbox_messages")?.row as { metadata: { attachments: unknown } };
+    expect(msg.metadata.attachments).toEqual([{ name: "Deck.pdf", size: 1200, delivery: "attached" }]);
+  });
+
+  it("ride along on a reply held for approval", async () => {
+    isKnownContact.mockResolvedValue(false);
+    gateDecision.mockReturnValue({ tier: 2, requiresApproval: true });
+    await replyToThread(withFiles(JSON.stringify(FILES)));
+    const task = inserts.find((i) => i.table === "tasks")?.row as { result: { inboxReply: { attachments: unknown } } };
+    expect(task.result.inboxReply.attachments).toEqual(FILES);
+  });
+
+  it("are ignored when malformed rather than failing the reply", async () => {
+    const r = await replyToThread(withFiles("{not json"));
+    expect(r.ok).toBe(true);
+    const sent = deliverThreadAction.mock.calls[0][1] as { attachments?: unknown[] };
+    expect(sent.attachments ?? []).toEqual([]);
+  });
+});
