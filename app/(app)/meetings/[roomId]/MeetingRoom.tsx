@@ -103,6 +103,9 @@ import {
 import {
   browserBrand, lineDiagnostics, type RecognizerDiagnostics, type RecognizerRun,
 } from "@/lib/meetings/recognizer-diagnostics";
+import {
+  captureConstraints, captureDeviceFor, captureReusable, recognizerHearsPickedMic, recognizerInputMode,
+} from "@/lib/meetings/recognizer-input";
 import { PEER_DRAIN_GRACE_MS, drainTranscript as drainLines } from "@/lib/meetings/transcript-drain";
 import { saveFailureNotice, savesCovered } from "@/lib/meetings/transcript-saving";
 import { recordingNotice, type RecordingState } from "@/lib/meetings/recording-policy";
@@ -801,6 +804,10 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
   // and how to start it, for the effect that follows the microphone.
   const recognitionTrackRef = useRef<MediaStreamTrack | null>(null);
   const awaitingTrackRef = useRef(false);
+  // The recogniser's own capture of the picked microphone, on engines that
+  // mangle the call's track (Edge). Opened by startRecognition, reopened on a
+  // device change, stopped with the recogniser. See recognizer-input.ts.
+  const recognitionCaptureRef = useRef<{ stream: MediaStream; deviceId: string | null } | null>(null);
   const startRecognitionRef = useRef<(() => void) | null>(null);
   // The engine's last few scores, for the "unclear audio" warning.
   const engineScoresRef = useRef<number[]>([]);
@@ -3713,7 +3720,14 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
       nav?.userAgent ?? null,
     );
     const srAvailable = engineFollowsTrack(SR);
+    // How this engine is fed so it hears the PICKED microphone: the call's
+    // track everywhere but Edge, which returns nonsense from the call's track
+    // and gets a capture of its own instead. See recognizer-input.ts.
+    const inputMode = recognizerInputMode({ brand });
     const run: RecognizerRun = { path: "bare", run: 0, startedAt: null, trackLabel: null };
+    // Which capture request is current: a device switch while one is opening
+    // must not start the recogniser on the device that was just left.
+    let captureSeq = 0;
 
     // The restart bookkeeping: when this run started, how many runs in a row
     // died at once, and the timer for a delayed restart.
@@ -3924,6 +3938,35 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     // transcribed under this member's name while the call itself had no
     // microphone at all. Now it waits; the effect below starts it when a
     // microphone arrives.
+    const startBare = () => {
+      run.path = "bare";
+      try {
+        recognition.start();
+        console.info(`[transcription] run ${run.run} on the engine's own capture (${brand}, available=${srAvailable})`);
+      } catch { /* already started */ }
+    };
+
+    // The recogniser's own capture of the picked device, opened once per
+    // device and kept across the engine's own restarts.
+    const openCapture = async (deviceId: string | null): Promise<MediaStreamTrack | null> => {
+      const current = recognitionCaptureRef.current;
+      const currentTrack = current?.stream.getAudioTracks()[0] ?? null;
+      if (current && currentTrack && captureReusable(
+        { deviceId: current.deviceId, readyState: currentTrack.readyState }, deviceId,
+      )) return currentTrack;
+      if (current) { releaseStream(current.stream); recognitionCaptureRef.current = null; }
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: captureConstraints(deviceId) });
+        const t = stream.getAudioTracks()[0] ?? null;
+        if (!t) { releaseStream(stream); return null; }
+        t.enabled = micOnRef.current;
+        recognitionCaptureRef.current = { stream, deviceId };
+        return t;
+      } catch {
+        return null;
+      }
+    };
+
     const startRecognition = () => {
       if (stopped) return;
       const track = localStreamRef.current?.getAudioTracks()[0] ?? null;
@@ -3936,6 +3979,30 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
       run.run += 1;
       run.startedAt = null;
       run.trackLabel = track.label || null;
+
+      if (inputMode === "capture") {
+        run.path = "capture";
+        let settled: string | undefined;
+        try { settled = track.getSettings?.().deviceId; } catch { /* gone */ }
+        const deviceId = captureDeviceFor(settled, selectedMicIdRef.current);
+        const seq = ++captureSeq;
+        void openCapture(deviceId).then((captureTrack) => {
+          if (stopped || seq !== captureSeq) return;
+          // No capture to be had (device gone, permission withdrawn): the
+          // engine's own capture is still better than no transcription.
+          if (!captureTrack) { startBare(); return; }
+          run.trackLabel = captureTrack.label || run.trackLabel;
+          try {
+            recognition.start(captureTrack);
+            console.info(`[transcription] run ${run.run} on own capture of "${run.trackLabel ?? ""}" (${brand}, available=${srAvailable})`);
+          } catch (err) {
+            if ((err as { name?: string })?.name === "InvalidStateError") return;
+            startBare();
+          }
+        });
+        return;
+      }
+
       run.path = "track";
       try {
         recognition.start(track);
@@ -3945,11 +4012,7 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
         // Already running is not a reason to retry without the track.
         if ((err as { name?: string })?.name === "InvalidStateError") return;
       }
-      run.path = "bare";
-      try {
-        recognition.start();
-        console.info(`[transcription] run ${run.run} on the engine's own capture (${brand}, available=${srAvailable})`);
-      } catch { /* already started */ }
+      startBare();
     };
     startRecognitionRef.current = startRecognition;
 
@@ -3991,9 +4054,14 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     recognitionRef.current = recognition;
     return () => {
       stopped = true;
+      captureSeq += 1;
       startRecognitionRef.current = null;
       awaitingTrackRef.current = false;
       recognitionTrackRef.current = null;
+      if (recognitionCaptureRef.current) {
+        releaseStream(recognitionCaptureRef.current.stream);
+        recognitionCaptureRef.current = null;
+      }
       if (restartTimer) clearTimeout(restartTimer);
       recognition.onend = null;
       try { recognition.stop(); } catch { /* never started */ }
@@ -4046,9 +4114,16 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
           devices.find((d) => d.kind === "audioinput" && d.deviceId === "default")?.groupId ?? null;
       } catch { /* no device list — the group comparison stands down */ }
       if (cancelled) return;
+      const nav = typeof navigator !== "undefined" ? navigator : null;
+      const brand = browserBrand(
+        (nav as unknown as { userAgentData?: { brands?: Array<{ brand: string }> } } | null)?.userAgentData?.brands ?? null,
+        nav?.userAgent ?? null,
+      );
       setSrMicNotice(transcriptionMicNotice({
         status: srStatus,
-        followsTrack: engineFollowsTrack(SR),
+        // "Follows" the picked microphone by whichever route: the call's track
+        // where the engine honours it, or a capture of the picked device.
+        followsTrack: recognizerHearsPickedMic({ brand, available: engineFollowsTrack(SR) }),
         micId: selectedMicId,
         micLabel: track?.label ?? null,
         micGroupId: track?.getSettings?.().groupId ?? null,
@@ -4775,6 +4850,8 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     micIntentRef.current = next;
     setMicToRecover(null);
     localStreamRef.current?.getAudioTracks().forEach((t) => { t.enabled = next; });
+    // The recogniser's own capture, where it has one, is muted with the call.
+    recognitionCaptureRef.current?.stream.getAudioTracks().forEach((t) => { t.enabled = next; });
     setMicOn(next);
     if (!next) lastAudibleRef.current.delete(LOCAL_SPEAKER_ID);
     // Everyone else needs this to know whether our silence means "listening" or
