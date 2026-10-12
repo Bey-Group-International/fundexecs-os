@@ -1,0 +1,168 @@
+# Probe production's health every 30 minutes: the app answers, and the
+# database still holds every table and function the guarded features stand on.
+#
+# Why this exists: in October 2026 the migration pipeline's credential died,
+# three merged migrations never reached production, and the deployed app spent
+# twelve hours calling a database function that did not exist — the meeting
+# log's "Regenerate from transcript" and the data-room publish path were
+# broken for users while every merge looked green. db-migrate.yml now watches
+# the PIPELINE (its own schedule and failure issue); this workflow watches the
+# RESULT: whatever the cause — a stranded migration, a dropped object, a
+# revoked grant, the site itself down — the broken dependency is named here
+# within half an hour.
+#
+# No new secrets, deliberately. office-hourly.yml failed 167 times in a row
+# waiting for a secret that was never added, so this workflow uses only what
+# already exists:
+#   - the public site URL for the app probe;
+#   - SUPABASE_ACCESS_TOKEN + SUPABASE_PROJECT_REF (the same read credential
+#     db-migrate.yml holds) for the database probe, through the Supabase
+#     Management API's query endpoint — GitHub runners have no IPv6 route to
+#     the database's direct port, so the API is the reliable path.
+#
+# The deeper runtime probe — the app's own view of its dependencies, through
+# the same client the features use — is GET /api/health (Bearer CRON_SECRET),
+# for anyone holding that secret. This workflow stays independent of it so a
+# misconfigured app secret can never silence the monitor.
+#
+# Escalation mirrors db-migrate.yml: a failure opens the labelled issue once
+# (an already-open issue IS the signal; a comment every half hour would train
+# people to mute it), and the first green run closes it.
+name: Health Check
+
+on:
+  schedule:
+    - cron: "11,41 * * * *"
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  # The escalation steps open and close the health-check-failure issue.
+  issues: write
+
+concurrency:
+  group: health-check-production
+  cancel-in-progress: false
+
+jobs:
+  probe:
+    name: Probe production features
+    runs-on: ubuntu-latest
+    steps:
+      - name: App answers
+        run: |
+          # The canonical production URL (lib/site.ts PRODUCTION_SITE_URL).
+          # Any 2xx/3xx proves the deployment is serving; feature depth is the
+          # database probe's job.
+          curl -fsS --retry 2 --retry-delay 5 --max-time 30 -o /dev/null \
+            "https://fundexecs.com/"
+
+      - name: Database serves each feature's dependencies
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+        run: |
+          # One row per dependency a guarded feature stands on, each reduced
+          # to "does it exist". Existence through pg catalogs rather than live
+          # queries: this credential should read metadata, not meeting
+          # transcripts. Adding a feature to the probe is adding its rows.
+          cat > /tmp/health.sql <<'SQL'
+          select * from (values
+            ('meetings', 'table live_meetings',
+              to_regclass('public.live_meetings') is not null),
+            ('meetings', 'table live_meeting_transcripts',
+              to_regclass('public.live_meeting_transcripts') is not null),
+            ('meetings', 'table live_meeting_chat',
+              to_regclass('public.live_meeting_chat') is not null),
+            ('meetings', 'table live_meeting_participants',
+              to_regclass('public.live_meeting_participants') is not null),
+            ('meetings', 'function live_meetings_with_transcript_rows(uuid[])',
+              to_regprocedure('public.live_meetings_with_transcript_rows(uuid[])') is not null),
+            ('inbox', 'table inbox_threads',
+              to_regclass('public.inbox_threads') is not null),
+            ('inbox', 'table inbox_messages',
+              to_regclass('public.inbox_messages') is not null),
+            ('inbox', 'table tracked_mail_threads',
+              to_regclass('public.tracked_mail_threads') is not null),
+            ('inbox', 'table gmail_mailbox_sync',
+              to_regclass('public.gmail_mailbox_sync') is not null)
+          ) as t(feature, dependency, ok);
+          SQL
+
+          body="$(jq -Rs '{query: .}' < /tmp/health.sql)"
+          if ! curl -fsS --max-time 60 \
+              -X POST "https://api.supabase.com/v1/projects/${SUPABASE_PROJECT_REF}/database/query" \
+              -H "Authorization: Bearer ${SUPABASE_ACCESS_TOKEN}" \
+              -H "Content-Type: application/json" \
+              -d "$body" > /tmp/health.json; then
+            echo "::error title=Could not query production::The Management API refused the health query. An auth error here means SUPABASE_ACCESS_TOKEN is expired or revoked — the same credential db-migrate.yml uses, so its runs will be red too."
+            exit 1
+          fi
+
+          # The endpoint answers with the rows as a JSON array. Anything else
+          # is a parse problem, and a parse problem must read as "could not
+          # check", never as "all clear".
+          rows="$(jq 'if type=="array" then . else empty end' /tmp/health.json || true)"
+          if [ -z "$rows" ] || [ "$(echo "$rows" | jq 'length')" -eq 0 ]; then
+            echo "::error title=Health query returned no rows::The query ran but nothing came back in the expected shape. Fix this probe rather than trusting it."
+            cat /tmp/health.json
+            exit 1
+          fi
+
+          echo "$rows" | jq -r '.[] | "\(if .ok == true then "ok " else "MISSING" end)  \(.feature)  \(.dependency)"'
+
+          failed="$(echo "$rows" | jq '[.[] | select(.ok != true)] | length')"
+          if [ "$failed" -gt 0 ]; then
+            echo "$rows" | jq -r '.[] | select(.ok != true) | "::error title=Feature dependency missing in production::\(.feature): \(.dependency) does not exist. The deployed app calls it; that feature is broken for users right now. If db-migrate.yml is also red, a stranded migration is the likely cause."'
+            exit 1
+          fi
+          echo "All $(echo "$rows" | jq 'length') feature dependencies exist in production."
+
+      # Same escalation shape as db-migrate.yml: opened once, closed by the
+      # first green run. An issue every half hour would be muted by Friday.
+      - name: Open an issue so the failure cannot be missed
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          gh label create health-check-failure \
+            --description "Production health probe is failing" \
+            --color B60205 --force || true
+
+          existing="$(gh issue list --state open --label health-check-failure \
+            --json number --jq '.[0].number // empty' || true)"
+          if [ -n "$existing" ]; then
+            echo "Issue #${existing} is already open — the failure is already loud."
+            exit 0
+          fi
+
+          {
+            printf '%s\n\n' "A production health check failed: ${RUN_URL}"
+            printf '%s\n\n' "The failing step names what is wrong: either the app stopped answering, or a table/function a shipped feature depends on is missing from the production database — meaning that feature is **broken for users right now**, whatever CI says."
+            printf '%s\n' "- If the \`Database serves each feature's dependencies\` step lists a missing dependency and **DB Migrate** is also failing, a migration is stranded — fix per that workflow's issue, and this one closes itself on the next green probe."
+            printf '%s\n\n' "- If the \`App answers\` step failed, the deployment itself is down or unreachable — check Vercel."
+            printf '%s\n' "This probe runs every 30 minutes and closes this issue automatically on its first green run."
+          } > /tmp/issue-body.md
+
+          gh issue create \
+            --label health-check-failure \
+            --title "Production health check is failing" \
+            --body-file /tmp/issue-body.md
+        shell: bash
+
+      - name: Close the failure issue now that production is healthy
+        if: success()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          numbers="$(gh issue list --state open --label health-check-failure \
+            --json number --jq '.[].number' || true)"
+          [ -z "$numbers" ] && { echo "No open health-check-failure issue."; exit 0; }
+          for n in $numbers; do
+            gh issue close "$n" \
+              --comment "Production is healthy again — every probed dependency answered: ${RUN_URL}" \
+              || echo "::warning::Could not close issue #${n}; close it by hand."
+          done
+        shell: bash

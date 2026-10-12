@@ -33,10 +33,17 @@
 // owns the segmenter.
 
 import {
+  CAMERA_FULL_SPEED,
+  CAMERA_SMOOTHING_STILL,
+  EDGE_HOLD,
+  MOTION_SMOOTHING_MOVING,
   NO_BACKGROUND,
-  blendCoverageByAgreement,
+  blendCoverageByEnergy,
+  blendCoverageByMotion,
   blurRadiusPx,
-  createMaskAgreement,
+  cameraMotion,
+  createMotionScratch,
+  lumaOf,
   dilateCeiling,
   dilateCoverage,
   maskDilatePx,
@@ -48,25 +55,23 @@ import {
   sampleCoverageFromCategory,
   sampleCoverageFromConfidence,
   sharpenEdge,
+  smoothCoverage,
   templateById,
   type BackgroundEffect,
   type BackgroundTemplate,
   type BlurStrength,
   type DilateRadii,
-  type MaskAgreement,
+  type MotionScratch,
   type MaskGrid,
 } from "@/lib/meetings/backgrounds";
 import {
   createStructureScratch,
-  createTemporalWindow,
   despeckleCoverage,
   fillEnclosedHoles,
   keepTouchingStructures,
   maskStructureReach,
-  steadyCoverage,
   type StructureReach,
   type StructureScratch,
-  type TemporalWindow,
 } from "@/lib/meetings/mask-structure";
 
 /**
@@ -183,9 +188,16 @@ export class MaskCompositor {
   private maskImage: ImageData | null = null;
   /** Coverage carried between frames, so edges settle instead of shimmering. */
   private maskHistory: Uint8ClampedArray | null = null;
-  /** Which pixels the model keeps contradicting itself about, which is what sets
-   *  each pixel's blend rate. */
-  private maskAgreement: MaskAgreement | null = null;
+  /** How much is moving around each pixel, which is what sets its blend rate. */
+  private motion: MotionScratch | null = null;
+  /** The camera at grid size, as luma, this frame and last: what the motion is
+   *  read from. Null until a frame has been read; `luma` is also null on a
+   *  frame whose readback failed, so the blend knows to fall back. */
+  private luma: Uint8ClampedArray | null = null;
+  private previousLuma: Uint8ClampedArray | null = null;
+  /** Whether this frame's luma was read, so `compose` can tell a frame the
+   *  camera was read for from one it was not. */
+  private lumaFresh = false;
   /** This frame's coverage, before it is blended into the history. */
   private maskTarget: Uint8ClampedArray | null = null;
   /** What growth may claim, rebuilt from each frame's own coverage. */
@@ -195,8 +207,10 @@ export class MaskCompositor {
 
   /** The distance fields and flood-fill bookkeeping the shape passes read. */
   private structure: StructureScratch | null = null;
-  /** The last two frames' coverage, so a one-frame excursion cannot reach anyone. */
-  private steadyWindow: TemporalWindow | null = null;
+  /** The history averaged against its neighbours, which is what the sharpen reads. */
+  private maskSmooth: Uint8ClampedArray | null = null;
+  /** Row sums for that average. */
+  private smoothRows: Float32Array | null = null;
   /** The previous frame's coverage as it left the chain, which is what lets the
    *  hole fill tell a dropout inside somebody from a gap that was never them. */
   private lastCoverage: Uint8ClampedArray | null = null;
@@ -340,11 +354,9 @@ export class MaskCompositor {
    */
   reset(): void {
     this.maskHistory = null;
-    this.maskAgreement = null;
-    // The three-frame window goes too. Kept, it would hold up the first frames
-    // back against two frames from before the pause — which for somebody who
-    // turned the effect off and on again is their own face arriving late.
-    this.steadyWindow = null;
+    // The edge's hold goes with the history: what a cell showed before the
+    // pause must not decide what it takes to show it after.
+    this.maskEdge = null;
     // And the hole fill's memory: what was covered before the pause says nothing
     // about what is a dropout after it, and a hold count carried across would
     // refuse to bridge the first real one.
@@ -388,7 +400,41 @@ export class MaskCompositor {
     this.follow(frame);
     const { width, height } = this.gridSpec;
     this.segInput.ctx.drawImage(frame.source, 0, 0, width, height);
+    this.readCamera(width, height);
     return this.segInput.surface;
+  }
+
+  /**
+   * Keep this frame's camera, as luma at grid size, for the motion the blend
+   * reads. See `cameraMotion` in backgrounds.ts for why the camera and not the
+   * mask. The surface was just drawn for the segmenter, so this is one
+   * readback of a grid-sized surface and nothing more is drawn for it.
+   *
+   * A readback that fails -- a context without `getImageData`, or one that
+   * refuses -- leaves `lumaFresh` false and the blend falls back to reading
+   * motion off the mask, which is what it did before.
+   */
+  private readCamera(width: number, height: number): void {
+    this.lumaFresh = false;
+    const ctx = this.segInput.ctx;
+    if (typeof ctx.getImageData !== "function") return;
+    let rgba: Uint8ClampedArray;
+    try {
+      rgba = ctx.getImageData(0, 0, width, height).data;
+    } catch {
+      return;
+    }
+    const n = width * height;
+    if (rgba.length < n * 4) return;
+    // Rotate: last frame's plane becomes the previous, this frame's goes into
+    // whichever buffer is free. Allocated once per grid.
+    const previous = this.luma;
+    let next = this.previousLuma;
+    if (!next || next.length !== n) next = new Uint8ClampedArray(n);
+    lumaOf(rgba, next);
+    this.previousLuma = previous && previous.length === n ? previous : null;
+    this.luma = next;
+    this.lumaFresh = true;
   }
 
   /**
@@ -516,24 +562,14 @@ export class MaskCompositor {
     }
     dilateCoverage(target, grid.width, grid.height, this.dilateRadii, limit);
 
-    // And take out the cells that disagree with their own recent past.
-    //
-    // After every spatial decision and before the blend, so what the blend
-    // smooths is a frame the model held for more than an instant. The two medians
-    // are not alternatives: one answers "nothing around here agrees with you", the
-    // other "you did not think this a moment ago", and the measured run needs both
-    // — stray islands 2.8 -> 0.4 a frame, pinholes 19.9 -> 4.1, mean frame-to-frame
-    // movement 1.13 -> 0.88 of 255 in cells where nothing actually moved, and the
-    // edge CLOSER to the person (1.2 cells behind to 0.4) because the blend is no
-    // longer being fed noise to damp.
-    //
-    // Three frames, measured against five: the wider window was worse on both
-    // counts that matter, 0.97 movement and 1.4 cells of lag, because two frames of
-    // latency is enough to be a person arriving late in their own mask.
-    if (!this.steadyWindow || this.steadyWindow.recent.length !== target.length) {
-      this.steadyWindow = createTemporalWindow(target.length);
-    }
-    steadyCoverage(target, this.steadyWindow);
+    // No three-frame median here any more. It removed a one-frame excursion at
+    // the price of a frame of latency on EVERY change -- which is the difference
+    // between 7.8px of room trailing a moving person and 5.1px, and between the
+    // person's leading edge arriving 1.7px late and 0.2px. What it removed, the
+    // hold in `fillEnclosedHoles` (an enclosed patch covered a frame ago), the
+    // motion blend and the hold on the sharpen now cover between them: seven
+    // edge cells a frame changing their mind on a still person, against six with
+    // the median kept and ninety as it shipped. See `SMOOTH_RADIUS`.
 
     // Remembered as it leaves the chain -- after the median, so what the next
     // frame's hole fill compares against is what this frame actually settled on.
@@ -545,16 +581,32 @@ export class MaskCompositor {
 
     // Carry coverage between frames. Segmentation flickers along the edge, and
     // an unsmoothed mask makes that flicker crawl visibly around the head.
+    //
+    // By MOTION, not by reversal. The reversal rule damped a pixel the model
+    // kept contradicting itself about, which is good against a square wave and
+    // blind to a boundary that drifts over a few frames and back -- which is
+    // what a real segmenter does to a still person, and what the edge's tremble
+    // was. The motion rule reads the neighbourhood instead: slow where nothing
+    // around a cell is changing, fast where a band is moving together. See
+    // `blendCoverageByMotion` for the measurement.
     if (!this.maskHistory || this.maskHistory.length !== target.length) {
       // Seeded from the first mask rather than from zero, so the person does not
       // fade in over the opening frames.
       this.maskHistory = new Uint8ClampedArray(target);
-      this.maskAgreement = createMaskAgreement(target.length);
     } else {
-      if (!this.maskAgreement || this.maskAgreement.previousTarget.length !== target.length) {
-        this.maskAgreement = createMaskAgreement(target.length);
+      if (!this.motion || this.motion.width !== grid.width || this.motion.height !== grid.height) {
+        this.motion = createMotionScratch(grid.width, grid.height);
       }
-      blendCoverageByAgreement(this.maskHistory, target, this.maskAgreement);
+      // The camera's own motion where this frame and the last were both read;
+      // the mask's where they were not. See `cameraMotion`.
+      const energy = this.lumaFresh && this.luma && this.previousLuma
+        ? cameraMotion(this.motion, this.luma, this.previousLuma)
+        : null;
+      if (energy) {
+        blendCoverageByEnergy(this.maskHistory, target, energy, CAMERA_SMOOTHING_STILL, MOTION_SMOOTHING_MOVING, CAMERA_FULL_SPEED);
+      } else {
+        blendCoverageByMotion(this.maskHistory, target, this.motion);
+      }
     }
 
     const maskCtx = this.mask.ctx;
@@ -565,10 +617,29 @@ export class MaskCompositor {
     // history must keep its graded values: sharpening it would compound frame on
     // frame until the mask was binary, and the smoothing above would be running
     // with nothing left to smooth.
+    //
+    // And with a hold: `maskEdge` still carries what each cell showed last
+    // frame, and a cell has to cross a higher midpoint to start showing the
+    // person and a lower one to stop. A fresh buffer has no last frame, and the
+    // first frame through it is sharpened plainly rather than against zeros --
+    // otherwise every cell would start under the stricter `on` midpoint and the
+    // person would arrive a shade thin for one frame.
+    //
+    // The sharpen reads the history averaged over a 3x3 box, never the history
+    // itself -- the box is not fed back, so it cannot compound into a blur of
+    // the whole person. A cell's own past cannot know that the cells either
+    // side of it did not move; the box can. See `SMOOTH_RADIUS`.
+    if (!this.maskSmooth || this.maskSmooth.length !== this.maskHistory.length) {
+      this.maskSmooth = new Uint8ClampedArray(this.maskHistory.length);
+      this.smoothRows = new Float32Array(this.maskHistory.length);
+    }
+    const smooth = smoothCoverage(this.maskSmooth, this.maskHistory, grid.width, grid.height, this.smoothRows!);
+    let fresh = false;
     if (!this.maskEdge || this.maskEdge.length !== this.maskHistory.length) {
       this.maskEdge = new Uint8ClampedArray(this.maskHistory.length);
+      fresh = true;
     }
-    const edge = sharpenEdge(this.maskEdge, this.maskHistory);
+    const edge = sharpenEdge(this.maskEdge, smooth, undefined, fresh ? null : EDGE_HOLD);
 
     const maskPixels = this.maskImage.data;
     for (let i = 0, p = 3; i < edge.length; i++, p += 4) maskPixels[p] = edge[i];
@@ -619,12 +690,16 @@ export class MaskCompositor {
     this.templateCache = null;
     this.maskImage = null;
     this.maskHistory = null;
-    this.maskAgreement = null;
+    this.motion = null;
+    this.luma = null;
+    this.previousLuma = null;
+    this.lumaFresh = false;
     this.maskTarget = null;
     this.dilateLimit = null;
     this.maskEdge = null;
     this.structure = null;
-    this.steadyWindow = null;
+    this.maskSmooth = null;
+    this.smoothRows = null;
     this.lastCoverage = null;
   }
 
@@ -671,11 +746,15 @@ export class MaskCompositor {
     this.maskTarget = new Uint8ClampedArray(grid.width * grid.height);
     this.maskImage = null;
     this.maskHistory = null;
-    this.maskAgreement = null;
+    this.motion = null;
+    this.luma = null;
+    this.previousLuma = null;
+    this.lumaFresh = false;
     this.dilateLimit = null;
     this.maskEdge = null;
     this.structure = null;
-    this.steadyWindow = null;
+    this.maskSmooth = null;
+    this.smoothRows = null;
     this.lastCoverage = null;
   }
 
@@ -975,6 +1054,14 @@ export function documentSurfaceFactory(): SurfaceFactory {
     // would keep them on the CPU and cost an upload every time one was drawn.
     const ctx = surface.getContext("2d", { alpha: opts.alpha });
     if (!ctx) return null;
+    // "high", because two of these surfaces resample by 2.5x or more -- the
+    // frame shrunk to grid size for the segmenter, and the mask scaled back up
+    // -- and the default is a two-tap bilinear that aliases on anything finer
+    // than its step. Aliasing on the segmenter's INPUT is shimmer in its
+    // output: a texture on a jacket that lands on different taps each frame as
+    // the person breathes gives the model a different picture each frame.
+    // Costs nothing measurable on the GPU; on Safari and Firefox it is a hint.
+    ctx.imageSmoothingQuality = "high";
     return { surface, ctx };
   };
 }
@@ -990,6 +1077,7 @@ export function offscreenSurfaceFactory(): SurfaceFactory {
     const surface = new OffscreenCanvas(Math.max(1, width), Math.max(1, height));
     const ctx = surface.getContext("2d", { alpha: opts.alpha });
     if (!ctx) return null;
+    ctx.imageSmoothingQuality = "high";
     return { surface, ctx };
   };
 }

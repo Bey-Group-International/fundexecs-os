@@ -79,14 +79,19 @@ export async function runSlaEscalations(supabase: Client, now: Date = new Date()
     const { data: taskRows } = await supabase
       .from("tasks")
       .select(
-        "id, title, status, session_id, created_at, hub, description, lifecycle_stage, target_engine, organization_id, created_by",
+        "id, title, status, session_id, created_at, hub, description, lifecycle_stage, target_engine, organization_id, created_by, result",
       )
       .is("parent_task_id", null)
       .in("status", ACTIVE_STATUSES)
       .order("created_at", { ascending: true })
       .limit(500);
 
-    const candidates = (taskRows ?? []) as EscalationCandidate[];
+    // Inbox messages held for approval have their own reminders, addressed to
+    // the people who can approve them (lib/inbox/approval-sweep.server.ts) —
+    // not a "Stuck" task for their author, who is the one person who can't.
+    const candidates = ((taskRows ?? []) as Array<EscalationCandidate & { result?: unknown }>).filter(
+      (t) => !(t.result && typeof t.result === "object" && "inboxReply" in (t.result as object)),
+    );
     if (!candidates.length) return 0;
 
     // The set of workflow ids already escalated (operator- or auto-initiated).

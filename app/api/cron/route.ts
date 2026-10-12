@@ -6,6 +6,7 @@ import { nextRun } from "@/lib/cron";
 import { findDueOrgsForScan, scanOrgRadarSignals } from "@/lib/radar-scan";
 import { findDuePulseOrgs, runPulseForOrg } from "@/lib/pulse.server";
 import { runSlaEscalations } from "@/lib/sla-cron";
+import { runInboxApprovalSweep, type ApprovalSweepStats } from "@/lib/inbox/approval-sweep.server";
 import { runWebhookDeliveries, type DeliveryStats } from "@/lib/webhooks-outbound";
 import { runProactiveSweepAllOrgs } from "@/lib/proactive/orchestrate";
 import { runIntelligenceSyncAllOrgs } from "@/lib/intelligence/sweep";
@@ -245,6 +246,16 @@ export async function GET(request: Request) {
   } catch (e) {
     console.error("sla_escalation failed", e);
     escalated = 0;
+  }
+
+  // Inbox messages held for approval: reminders to the people who can approve
+  // them, escalation to owners after a day, and approved messages scheduled for
+  // later sent when due. Never throws.
+  let inboxApprovals: ApprovalSweepStats | null = null;
+  try {
+    inboxApprovals = await runInboxApprovalSweep(supabase, now);
+  } catch (e) {
+    console.error("inbox_approval_sweep failed", e);
   }
 
   // Outbound webhook deliveries (audit P2 — v1 event subscriptions): send each
@@ -528,5 +539,5 @@ export async function GET(request: Request) {
     // best-effort: never let health tracking break the cron response
   }
 
-  return NextResponse.json({ swept: due.length, results, radar, pulse, escalated, webhooks, proactive, reminders, bookingConfirmations, bookingRequestReminders, bookingRequestsExpired, recordings, staleMeetings, calendarRepair, subscriptions, settledInvoices, nativeCollections, networkAutomations });
+  return NextResponse.json({ swept: due.length, results, radar, pulse, escalated, inboxApprovals, webhooks, proactive, reminders, bookingConfirmations, bookingRequestReminders, bookingRequestsExpired, recordings, staleMeetings, calendarRepair, subscriptions, settledInvoices, nativeCollections, networkAutomations });
 }

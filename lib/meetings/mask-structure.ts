@@ -225,8 +225,8 @@ const HOLE_SPAN_FRACTION = 0.025;
  * that the model gives up on for a frame or three, wider than 32px, and
  * therefore left as a window onto the room blinking inside somebody's body.
  * Nothing before this could touch it -- the spatial median only removes lone
- * cells, the three-frame median passes anything that lasts two frames, and the
- * fill refused it on size.
+ * cells, the three-frame median that then ran before the blend passed anything
+ * that lasted two frames, and the fill refused it on size.
  *
  * What separates that dropout from the enclosed regions the cap exists to
  * refuse is HISTORY, not size. The slot between two colleagues and the triangle
@@ -374,6 +374,17 @@ function med3(a: number, b: number, c: number): number {
  * The cost is a frame of latency on a change that arrives in a single frame, and
  * nothing on a change that lasts. At 24fps that is 42ms, against a blend whose own
  * time constant is already about three frames.
+ */
+/**
+ * NO LONGER IN THE COMPOSITOR'S CHAIN. It ran between the growth and the blend
+ * from the "mask firm" change until the flutter fix, and was taken out there
+ * for the frame of latency it cost every change: with the motion blend, the
+ * 3x3 box before the sharpen and the hold on the sharpen (backgrounds.ts), a
+ * still person's edge changes its mind in seven cells a frame with this gone
+ * against six with it kept, while room trailing a moving person fell from
+ * 7.8px to 5.1px. Kept, with its tests, because it is correct and measured, and
+ * because a chain on a slower machine that cannot afford the box may want it
+ * back.
  */
 export interface TemporalWindow {
   /** The frame before last. */

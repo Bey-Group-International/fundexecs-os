@@ -35,6 +35,15 @@ import {
   validateBackgroundUpload,
   dilateCeiling,
   GROWTH_HEADROOM,
+  EDGE_HOLD,
+  CAMERA_FULL_SPEED,
+  MOTION_SMOOTHING_MOVING,
+  blendCoverageByEnergy,
+  blendCoverageByMotion,
+  cameraMotion,
+  createMotionScratch,
+  lumaOf,
+  smoothCoverage,
   quietCoverageGaps,
   maskGapSpanPx,
   sharpenEdge,
@@ -1315,6 +1324,190 @@ describe("sharpenEdge", () => {
 
   it("does not read past a shorter output", () => {
     expect(() => sharpenEdge(new Uint8ClampedArray(2), buf(1, 2, 3, 4))).not.toThrow();
+  });
+});
+
+describe("sharpenEdge, holding what a cell showed", () => {
+  const buf = (...v: number[]) => new Uint8ClampedArray(v);
+
+  it("keeps showing the person through a tremble below the centre", () => {
+    // 115 is under the centre and over `off`: a cell showing room would clear
+    // it, a cell showing the person keeps it.
+    const showing = buf(255);
+    sharpenEdge(showing, buf(115), undefined, EDGE_HOLD);
+    expect(showing[0]).toBeGreaterThanOrEqual(128);
+    const plain = sharpenEdge(new Uint8ClampedArray(1), buf(115));
+    expect(plain[0]).toBeLessThan(128);
+  });
+
+  it("needs more than the centre to start showing the person", () => {
+    const showingRoom = buf(0);
+    sharpenEdge(showingRoom, buf(140), undefined, EDGE_HOLD);
+    expect(showingRoom[0]).toBeLessThan(128);
+    const plain = sharpenEdge(new Uint8ClampedArray(1), buf(140));
+    expect(plain[0]).toBeGreaterThan(128);
+  });
+
+  it("lets a real change through either way", () => {
+    const leaving = buf(255);
+    sharpenEdge(leaving, buf(60), undefined, EDGE_HOLD);
+    expect(leaving[0]).toBe(0);
+    const arriving = buf(0);
+    sharpenEdge(arriving, buf(200), undefined, EDGE_HOLD);
+    expect(arriving[0]).toBe(255);
+  });
+
+  it("ignores what the output held when there is no hold", () => {
+    const out = buf(255);
+    sharpenEdge(out, buf(40));
+    expect(out[0]).toBe(0);
+  });
+
+  it("has its two midpoints either side of the centre, and apart", () => {
+    expect(EDGE_HOLD.on).toBeGreaterThan(127.5);
+    expect(EDGE_HOLD.off).toBeLessThan(127.5);
+    expect(EDGE_HOLD.on - EDGE_HOLD.off).toBeGreaterThanOrEqual(30);
+  });
+});
+
+describe("blendCoverageByMotion", () => {
+  const W = 24, H = 24, N = W * H;
+
+  it("barely moves a cell whose change nothing around it shares", () => {
+    const previous = new Uint8ClampedArray(N).fill(200);
+    const target = new Uint8ClampedArray(N).fill(200);
+    // A scattered tremble: one cell in every fifth row and column drops by 150.
+    for (let y = 2; y < H; y += 5) for (let x = 2; x < W; x += 5) target[y * W + x] = 50;
+    blendCoverageByMotion(previous, target, createMotionScratch(W, H));
+    const i = 7 * W + 7;
+    // Moved toward the target, but by a small fraction of the distance.
+    expect(previous[i]).toBeLessThan(200);
+    expect(previous[i]).toBeGreaterThan(200 - 150 * 0.25);
+  });
+
+  it("follows a band that moves together at the moving rate", () => {
+    const previous = new Uint8ClampedArray(N);
+    const target = new Uint8ClampedArray(N);
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+      previous[y * W + x] = x < 10 ? 255 : 0;
+      target[y * W + x] = x < 16 ? 255 : 0;   // the whole edge steps six cells
+    }
+    blendCoverageByMotion(previous, target, createMotionScratch(W, H));
+    // A cell in the middle of the moved band is most of the way there in one frame.
+    expect(previous[12 * W + 13]).toBeGreaterThanOrEqual(255 * MOTION_SMOOTHING_MOVING - 1);
+  });
+
+  it("rates a uniform change the same at a corner as in the middle", () => {
+    // The window is clipped at the edge of the grid, not padded with zeros: a
+    // corner cell's mean is over the cells that exist, so it blends at the same
+    // rate as a cell with a full window.
+    const previous = new Uint8ClampedArray(N).fill(0);
+    const target = new Uint8ClampedArray(N).fill(255);
+    blendCoverageByMotion(previous, target, createMotionScratch(W, H));
+    expect(previous[0]).toBe(previous[12 * W + 12]);
+  });
+
+  it("writes into previous, returns it, and refuses a scratch for another grid", () => {
+    const previous = new Uint8ClampedArray(N).fill(10);
+    const target = new Uint8ClampedArray(N).fill(250);
+    expect(blendCoverageByMotion(previous, target, createMotionScratch(W, H))).toBe(previous);
+    const untouched = new Uint8ClampedArray(N).fill(10);
+    expect(blendCoverageByMotion(untouched, target, createMotionScratch(W, H - 1))).toBe(untouched);
+    expect(untouched[0]).toBe(10);
+  });
+});
+
+describe("cameraMotion", () => {
+  const W = 20, H = 20, N = W * H;
+
+  it("reads sensor noise as no motion at all", () => {
+    const a = new Uint8ClampedArray(N).fill(100);
+    const b = new Uint8ClampedArray(N);
+    for (let i = 0; i < N; i++) b[i] = 100 + ((i * 7) % 5) - 2;   // +-2, under the floor
+    const energy = cameraMotion(createMotionScratch(W, H), b, a)!;
+    expect(Math.max(...energy)).toBe(0);
+  });
+
+  it("reads a band of the frame that changed as motion there, and not across the room", () => {
+    const a = new Uint8ClampedArray(N).fill(100);
+    const b = new Uint8ClampedArray(N).fill(100);
+    for (let y = 0; y < H; y++) for (let x = 8; x < 12; x++) b[y * W + x] = 200;
+    const energy = cameraMotion(createMotionScratch(W, H), b, a)!;
+    expect(energy[10 * W + 10]).toBeGreaterThan(CAMERA_FULL_SPEED);
+    expect(energy[10 * W + 0]).toBe(0);
+  });
+
+  it("refuses planes that are not the scratch's grid", () => {
+    const scratch = createMotionScratch(W, H);
+    expect(cameraMotion(scratch, new Uint8ClampedArray(N - 1), new Uint8ClampedArray(N))).toBeNull();
+    expect(cameraMotion(scratch, new Uint8ClampedArray(N), new Uint8ClampedArray(N + 1))).toBeNull();
+  });
+});
+
+describe("blendCoverageByEnergy", () => {
+  it("runs at the still rate at zero energy and the moving rate at full", () => {
+    const previous = new Uint8ClampedArray([0, 0, 0]);
+    const target = new Uint8ClampedArray([200, 200, 200]);
+    const energy = new Float32Array([0, 6, 12]);
+    blendCoverageByEnergy(previous, target, energy, 0.1, 0.7, 12);
+    expect(previous[0]).toBe(20);
+    expect(previous[1]).toBe(80);
+    expect(previous[2]).toBe(140);
+  });
+
+  it("refuses an energy buffer shorter than the history", () => {
+    const previous = new Uint8ClampedArray([0, 0]);
+    blendCoverageByEnergy(previous, new Uint8ClampedArray([255, 255]), new Float32Array([99]), 0.1, 0.7, 12);
+    expect([...previous]).toEqual([0, 0]);
+  });
+});
+
+describe("lumaOf", () => {
+  it("weights green most and alpha not at all", () => {
+    const rgba = new Uint8ClampedArray([255, 0, 0, 0, 0, 255, 0, 255, 0, 0, 255, 128, 255, 255, 255, 0]);
+    const out = lumaOf(rgba, new Uint8ClampedArray(4));
+    expect(out[1]).toBeGreaterThan(out[0]);
+    expect(out[0]).toBeGreaterThan(out[2]);
+    expect(out[3]).toBe(255);
+  });
+});
+
+describe("smoothCoverage", () => {
+  it("averages a lone cell into its neighbours", () => {
+    const w = 5, h = 5;
+    const coverage = new Uint8ClampedArray(w * h);
+    coverage[2 * w + 2] = 255;
+    const out = smoothCoverage(new Uint8ClampedArray(w * h), coverage, w, h, new Float32Array(w * h));
+    expect(out[2 * w + 2]).toBe(Math.round(255 / 9));
+    expect(out[1 * w + 1]).toBe(Math.round(255 / 9));
+    expect(out[0]).toBe(0);
+  });
+
+  it("leaves a straight edge's crossing where it was", () => {
+    const w = 8, h = 6;
+    const coverage = new Uint8ClampedArray(w * h);
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) coverage[y * w + x] = x < 4 ? 255 : 0;
+    const out = smoothCoverage(new Uint8ClampedArray(w * h), coverage, w, h, new Float32Array(w * h));
+    expect(out[3 * w + 3]).toBeGreaterThan(128);
+    expect(out[3 * w + 4]).toBeLessThan(128);
+    expect(out[3 * w + 1]).toBe(255);
+  });
+
+  it("clips at the edge of the frame rather than padding it with room", () => {
+    const w = 4, h = 4;
+    const coverage = new Uint8ClampedArray(w * h).fill(255);
+    const out = smoothCoverage(new Uint8ClampedArray(w * h), coverage, w, h, new Float32Array(w * h));
+    expect(Math.min(...out)).toBe(255);
+  });
+
+  it("copies at radius zero, and refuses scratch that is too short", () => {
+    const w = 4, h = 3;
+    const coverage = Uint8ClampedArray.from({ length: w * h }, (_, i) => i * 20);
+    const copy = smoothCoverage(new Uint8ClampedArray(w * h), coverage, w, h, new Float32Array(w * h), 0);
+    expect([...copy]).toEqual([...coverage]);
+    const out = new Uint8ClampedArray(w * h);
+    expect(smoothCoverage(out, coverage, w, h, new Float32Array(2))).toBe(out);
+    expect(Math.max(...out)).toBe(0);
   });
 });
 

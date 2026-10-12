@@ -9,6 +9,7 @@
  */
 const requireOrgContext = jest.fn();
 const gateDecision = jest.fn();
+const isKnownContact = jest.fn(async (..._a: unknown[]) => false);
 const deliverThreadAction = jest.fn();
 const checkSendingMailbox = jest.fn();
 let inserts: Array<{ table: string; row: Record<string, unknown> }> = [];
@@ -18,7 +19,9 @@ jest.mock("next/cache", () => ({ revalidatePath: () => {} }));
 jest.mock("@/lib/gates", () => ({
   gateDecision: (...a: unknown[]) => gateDecision(...a),
   tierForAction: () => 2,
+  blastRadiusBreach: () => null,
 }));
+jest.mock("@/lib/inbox/known-contact.server", () => ({ isKnownContact: (...a: unknown[]) => isKnownContact(...a) }));
 jest.mock("@/lib/grounding", () => ({ isVerifiable: () => true }));
 jest.mock("@/lib/mandates", () => ({ getActiveMandate: async () => null }));
 jest.mock("@/lib/integrations/log", () => ({ recordDispatch: async () => {} }));
@@ -147,3 +150,32 @@ it.each(["propose_meeting", "confirm_booking", "create_video_meeting"])(
     expect(checkSendingMailbox).not.toHaveBeenCalled();
   },
 );
+
+describe("known contacts", () => {
+  it("send at once, without an approval, and say why on the record", async () => {
+    gateDecision.mockReturnValue({ tier: 2, requiresApproval: true });
+    isKnownContact.mockResolvedValueOnce(true);
+    const r = await replyToThread(form());
+    expect(r).toMatchObject({ ok: true, gated: false });
+    expect(deliverThreadAction).toHaveBeenCalled();
+    expect(inserts.some((i) => i.table === "approvals")).toBe(false);
+    const created = inserts.find((i) => i.table === "task_events")?.row as { payload: { auto_approved?: string } };
+    expect(created.payload.auto_approved).toBe("known_contact");
+  });
+
+  it("still wait when the contact is unknown", async () => {
+    gateDecision.mockReturnValue({ tier: 2, requiresApproval: true });
+    isKnownContact.mockResolvedValueOnce(false);
+    const r = await replyToThread(form());
+    expect(r).toMatchObject({ ok: true, gated: true });
+    expect(deliverThreadAction).not.toHaveBeenCalled();
+  });
+
+  it("never skip a Tier-3 hold", async () => {
+    gateDecision.mockReturnValue({ tier: 3, requiresApproval: true });
+    isKnownContact.mockResolvedValue(true);
+    const r = await replyToThread(form());
+    expect(r).toMatchObject({ gated: true });
+    expect(isKnownContact).not.toHaveBeenCalled();
+  });
+});

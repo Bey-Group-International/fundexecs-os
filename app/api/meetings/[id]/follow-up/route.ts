@@ -158,6 +158,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const mandate = await getActiveMandate(supabase, auth.ctx.orgId);
   if (gateDecision("send_reply", mandate).requiresApproval) {
     let queued = 0;
+    // Known contacts the firm has written to before skip the hold and go now
+    // (lib/inbox/known-contact.server.ts), so a gated follow-up can be both.
+    let sentNow = 0;
     const failed: string[] = [];
     for (const r of recipients) {
       const personal = personalizeFollowUp(draft, r.name, { hostName });
@@ -177,10 +180,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       fd.set("thread_id", thread.threadId);
       fd.set("body", personal);
       const result = await replyToThread(fd);
-      if (result.ok) queued++;
-      else failed.push(r.email);
+      if (!result.ok) failed.push(r.email);
+      else if (result.gated) queued++;
+      else sentNow++;
     }
-    if (queued === 0) {
+    if (queued === 0 && sentNow === 0) {
       return NextResponse.json(
         { error: "The follow-up could not be queued for approval.", failed, total: recipients.length },
         { status: 502 },
@@ -193,10 +197,12 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     // (live_meeting_sync_followup) moves it on from here as the approvals are
     // decided; this is the step it cannot take, because the approval rows it
     // reads are written by the inbox action above and it is not told when.
-    const { error: pendingError } = await supabase
-      .from("live_meetings")
-      .update({ followup_status: "pending_approval" } as never)
-      .eq("id", id);
+    const { error: pendingError } = queued > 0
+      ? await supabase
+          .from("live_meetings")
+          .update({ followup_status: "pending_approval" } as never)
+          .eq("id", id)
+      : { error: null };
     if (pendingError) {
       console.error(
         "[/api/meetings/:id/follow-up] status not marked pending_approval",
@@ -207,6 +213,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     return NextResponse.json({
       gated: true,
       queued,
+      sent: sentNow,
       total: recipients.length,
       unreachable: audience.unreachable,
       failed,

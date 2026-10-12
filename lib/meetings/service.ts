@@ -287,7 +287,12 @@ export async function saveScheduledMeeting(
     external_calendar_sync_enabled: !!input.externalCalendarSyncEnabled,
     external_calendar_provider: input.externalCalendarProvider ?? null,
     external_calendar_sync_status: externalStatus,
-    guest_quick_access: !!input.guestQuickAccess,
+    // On unless the host turned it off. The waiting room used to be the
+    // default, and a guest who opened a working link then sat outside a room
+    // whose host was not watching the panel — "the link didn't work", as it
+    // reached us. The link IS the invitation; a host who wants a waiting room
+    // for a particular call switches it on in the schedule form.
+    guest_quick_access: input.guestQuickAccess ?? true,
     is_draft: isDraft,
     preparation_status: isDraft ? "draft" : "prep_needed",
     followup_status: "not_started",

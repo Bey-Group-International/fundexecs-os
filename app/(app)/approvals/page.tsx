@@ -7,6 +7,8 @@ import { HUB_BY_KEY } from "@/lib/hubs";
 import type { AgentKey, Hub, Json } from "@/lib/supabase/database.types";
 import { approvalPreview, riskForHub } from "@/lib/inbox";
 import { MobileApprovalsFlow, type ApprovalItem } from "@/components/mobile/MobileApprovalsFlow";
+import { loadMessageApprovals } from "@/lib/inbox/message-approvals.server";
+import { canOverrideOwnApproval } from "@/lib/inbox/approver.server";
 
 export const metadata: Metadata = {
   title: "Approvals · FundExecs OS",
@@ -30,7 +32,7 @@ export default async function ApprovalsPage() {
 
   const { data: taskRows } = await supabase
     .from("tasks")
-    .select("id, title, description, assigned_agent, hub, result, created_at")
+    .select("id, title, description, assigned_agent, hub, result, created_at, created_by, status")
     .eq("organization_id", ctx.orgId)
     .is("parent_task_id", null)
     .eq("status", "awaiting_approval")
@@ -45,6 +47,8 @@ export default async function ApprovalsPage() {
     hub: Hub | null;
     result: Json | null;
     created_at: string;
+    created_by: string | null;
+    status: string;
   }[];
 
   // Resolve the still-pending approval id for each awaiting task.
@@ -61,11 +65,22 @@ export default async function ApprovalsPage() {
     }
   }
 
+  // Inbox messages get the same email preview the desktop inbox shows.
+  const messages = await loadMessageApprovals(
+    supabase,
+    ctx.orgId,
+    tasks.filter((t) => approvalByTask.has(t.id)),
+  );
+  const mayApproveOwn = canOverrideOwnApproval(ctx.role);
+
   const items: ApprovalItem[] = tasks
     .filter((t) => approvalByTask.has(t.id))
     .map((t) => {
       const agent = AGENT_BY_KEY[t.assigned_agent];
+      const message = messages.get(t.id) ?? null;
       return {
+        message,
+        selfAuthored: Boolean(message && message.authorId === ctx.userId && !mayApproveOwn),
         approvalId: approvalByTask.get(t.id)!,
         title: t.title,
         description: t.description,

@@ -21,10 +21,12 @@ export async function decideApprovalAction(
   if (!approvalId) return { ok: false };
   const supabase = await createServerClient();
   try {
-    await decideApproval(
+    const decided = await decideApproval(
       { supabase, orgId: ctx.orgId, actorId: ctx.userId },
       { approvalId, decision, note },
     );
+    // Refused (an author approving their own message): not a decision, so not ok.
+    if ((decided as { refused?: string }).refused) return { ok: false };
     await recordOperatorFeedback(supabase, [
       {
         organizationId: ctx.orgId,

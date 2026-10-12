@@ -723,6 +723,10 @@ export async function createMeetingForBooking(
       // reminder sweep skipped every booked meeting: the one kind of meeting
       // most likely to have an outside guest was the one never reminded.
       reminder_minutes: DEFAULT_REMINDER_MINUTES,
+      // The person who booked is expected by definition, and they are the only
+      // outside guest this meeting has. Making them knock and wait for a host
+      // who may not be watching the panel is how a booked guest "couldn't join".
+      guest_quick_access: true,
     } as never)
     .select("id, room_code")
     .single();

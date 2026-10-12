@@ -32,6 +32,9 @@ interface Call {
 interface Recorder {
   factory: SurfaceFactory;
   calls: Call[];
+  /** What the camera shows at grid size, as luma, for `getImageData` on the
+   *  segmenter's input surface. Flat grey unless a test sets it: a still camera. */
+  camera: (x: number, y: number) => number;
   /** Surfaces in creation order, which is how the tests name them. */
   names: string[];
   sizes: Record<string, { width: number; height: number; alpha: boolean }>;
@@ -55,6 +58,8 @@ function recorder(mode: { filter?: boolean } = {}): Recorder {
   const names: string[] = [];
   const sizes: Recorder["sizes"] = {};
   const masks: Uint8ClampedArray[] = [];
+  // Filled in below, read lazily by the contexts the factory hands out.
+  let recorderRef: Recorder;
 
   const factory: SurfaceFactory = (width, height, opts) => {
     const name = names.length < SURFACES.length ? SURFACES[names.length] : `extra${names.length}`;
@@ -83,6 +88,19 @@ function recorder(mode: { filter?: boolean } = {}): Recorder {
       createImageData: (w: number, h: number) => ({
         width: w, height: h, data: new Uint8ClampedArray(w * h * 4),
       }),
+      getImageData: (_x: number, _y: number, w: number, h: number) => {
+        // The camera, as the compositor reads it back from the segmenter's
+        // input surface: whatever `rec.camera` says, in every channel.
+        const data = new Uint8ClampedArray(w * h * 4);
+        for (let y = 0, p = 0; y < h; y++) {
+          for (let x = 0; x < w; x++, p += 4) {
+            const v = recorderRef.camera(x, y);
+            data[p] = v; data[p + 1] = v; data[p + 2] = v; data[p + 3] = 255;
+          }
+        }
+        log("getImageData");
+        return { width: w, height: h, data };
+      },
       putImageData: (image: { width: number; height: number; data: Uint8ClampedArray }) => {
         // Snapshotted: the compositor reuses one ImageData for the life of a
         // grid, so holding the reference would give every frame the last frame's
@@ -121,10 +139,12 @@ function recorder(mode: { filter?: boolean } = {}): Recorder {
   const built = new Map<string, unknown>();
   const surfaceOf = (name: string) => built.get(name);
 
-  return {
+  recorderRef = {
     factory, calls, names, sizes, masks,
+    camera: () => 128,
     ops: (surface) => calls.filter((c) => c.surface === surface).map((c) => c.op),
   };
+  return recorderRef;
 }
 
 /** A frame the chain can draw. Its identity is a string so the log is readable. */
@@ -374,9 +394,14 @@ describe("nothing raises coverage inside an enclosed gap", () => {
   const RIGHT = [26, 36] as const;
   const GAP = [21, 25] as const;
 
-  /** Two people in one row with a faint, wandering strip of room between them. */
+  /**
+   * Two people in a band three rows tall with a faint, wandering strip of room
+   * between them. Three rows rather than one: the sharpen reads the history
+   * averaged over a 3x3 box, and a person one cell tall would be averaged against
+   * the empty rows either side of them into nothing.
+   */
   const twoPeople = () => confidenceAt(WIDTH, HEIGHT, (x, y) => {
-    if (y !== ROW) return 0;
+    if (y < ROW - 1 || y > ROW + 1) return 0;
     if (x >= LEFT[0] && x <= LEFT[1]) return SOLID;
     if (x >= RIGHT[0] && x <= RIGHT[1]) return SOLID;
     if (x >= GAP[0] && x <= GAP[1]) return FAINT;
@@ -462,16 +487,22 @@ describe("nothing raises coverage inside an enclosed gap", () => {
     // shipped model has one class, so the PERSON is label 0 and everything else
     // is 255, MediaPipe's filler for "no category".
     const data = new Uint8Array(WIDTH * HEIGHT).fill(255);
-    for (let x = LEFT[0]; x <= LEFT[1]; x++) data[ROW * WIDTH + x] = PERSON_LABEL;
-    for (let x = RIGHT[0]; x <= RIGHT[1]; x++) data[ROW * WIDTH + x] = PERSON_LABEL;
-    // What a graded build would put here. On this path it is thresholded away.
-    for (let x = GAP[0]; x <= GAP[1]; x++) data[ROW * WIDTH + x] = 40;
+    for (let y = ROW - 1; y <= ROW + 1; y++) {
+      for (let x = LEFT[0]; x <= LEFT[1]; x++) data[y * WIDTH + x] = PERSON_LABEL;
+      for (let x = RIGHT[0]; x <= RIGHT[1]; x++) data[y * WIDTH + x] = PERSON_LABEL;
+      // What a graded build would put here. On this path it is thresholded away.
+      for (let x = GAP[0]; x <= GAP[1]; x++) data[y * WIDTH + x] = 40;
+    }
     c.compose(frame(WIDTH, HEIGHT), { kind: "category", data, width: WIDTH, height: HEIGHT });
 
+    // The gap arrives with nothing in it, and the people arrive whole. The
+    // mask as a whole is no longer binary -- the 3x3 box before the sharpen
+    // grades the outer cells of a person against the room -- so the check is on
+    // the cells that matter rather than on the set of values.
     const alpha = rec.masks.at(-1)!;
-    expect([...new Set(alpha)].sort((a, b) => a - b)).toEqual([0, 255]);
     for (let x = GAP[0]; x <= GAP[1]; x++) expect(alpha[ROW * WIDTH + x]).toBe(0);
     expect(alpha[ROW * WIDTH + LEFT[0] + 1]).toBe(255);
+    expect(alpha[ROW * WIDTH + RIGHT[1] - 1]).toBe(255);
   });
 });
 
@@ -527,7 +558,9 @@ describe("growth over headwear", () => {
     }));
 
     const alpha = rec.masks.at(-1)!;
-    const cell = alpha[band[1] * grid.width + column + 20];
+    // The middle of the band, not its bottom row: the sharpen reads a 3x3 box
+    // of the history, and the row touching the solid body is averaged with it.
+    const cell = alpha[(band[1] - 2) * grid.width + column + 20];
     // What the ramp alone would leave after the sharpen, and what growth adds.
     const unaided = sharpenEdge(new Uint8ClampedArray(1), Uint8ClampedArray.of(coverageFromConfidence(FAINTER_THAN_HEADWEAR)))[0];
     expect(cell).toBeGreaterThan(unaided);
@@ -587,11 +620,43 @@ describe("the mask carried between frames", () => {
   it("moves toward the new coverage without jumping to it", () => {
     const rec = recorder();
     const c = MaskCompositor.create(rec.factory, WIDTH, HEIGHT)!;
+    // The camera changes between the two frames -- somebody really left -- so
+    // the blend runs at its moving rate, and still does not snap.
+    rec.camera = () => 40;
+    c.prepareSegmentInput(frame(WIDTH, HEIGHT));
     c.compose(frame(WIDTH, HEIGHT), all(SOLID));
+    rec.camera = () => 200;
+    c.prepareSegmentInput(frame(WIDTH, HEIGHT));
     c.compose(frame(WIDTH, HEIGHT), all(0));
 
     // The whole point of the blend: a pixel the model reversed on does not snap.
     expect(rec.masks[1][0]).toBeGreaterThan(0);
+    expect(rec.masks[1][0]).toBeLessThan(255);
+  });
+
+  /**
+   * And with the camera STILL, the model changing its mind about the whole
+   * frame is treated as what it is: the model, not the person. The mask holds.
+   * This is the rule the flutter fix rests on; see `cameraMotion`.
+   */
+  it("holds the mask where the camera itself has not changed", () => {
+    const rec = recorder();
+    const c = MaskCompositor.create(rec.factory, WIDTH, HEIGHT)!;
+    c.prepareSegmentInput(frame(WIDTH, HEIGHT));
+    c.compose(frame(WIDTH, HEIGHT), all(SOLID));
+    c.prepareSegmentInput(frame(WIDTH, HEIGHT));
+    c.compose(frame(WIDTH, HEIGHT), all(0));
+
+    expect(rec.masks[1][0]).toBe(255);
+  });
+
+  it("reads motion off the mask when the camera cannot be read", () => {
+    const rec = recorder();
+    const c = MaskCompositor.create(rec.factory, WIDTH, HEIGHT)!;
+    // No prepareSegmentInput, so no camera was read: the fallback blends by the
+    // mask's own motion, as before, and a whole-frame reversal moves.
+    c.compose(frame(WIDTH, HEIGHT), all(SOLID));
+    c.compose(frame(WIDTH, HEIGHT), all(0));
     expect(rec.masks[1][0]).toBeLessThan(255);
   });
 
@@ -859,10 +924,12 @@ describe("a mask with no spots in it", () => {
    * The flicker half, and it has to be a PATCH rather than a cell.
    *
    * The first version of this test dropped a single cell for one frame and passed
-   * with the temporal median deleted — because the spatial median removes a lone
-   * cell on its own, so the test proved the despeckle twice and the window not at
-   * all. A twelve-cell square is far too big for a neighbour median to argue with,
-   * so only the three-frame window can save it.
+   * with the temporal filtering deleted — because the spatial median removes a
+   * lone cell on its own, so the test proved the despeckle twice and nothing
+   * else. A twelve-cell square is far too big for a neighbour median to argue
+   * with. It used to be the three-frame median that saved it; that is gone for
+   * the frame of latency it cost, and what saves it now is the hole fill's hold:
+   * an enclosed patch that was covered a frame ago is a dropout, and bridged.
    */
   it("does not pass on a patch that changed its mind for one frame", () => {
     const rec = recorder();
@@ -906,13 +973,12 @@ describe("a mask with no spots in it", () => {
   });
 
   /**
-   * The dropout the previous two could not reach: a patch too wide for the hole
-   * fill's cap, gone for THREE frames. The three-frame median passes anything
-   * that lasts two; the cap refuses the patch on size. Only the hold, reading
-   * that the patch was covered a frame ago, keeps it on screen.
+   * A patch too wide for the hole fill's cap, gone for THREE frames. The cap
+   * refuses the patch on size; only the hold, reading that the patch was
+   * covered a frame ago, keeps it on screen.
    *
    * A 20x20 patch against this grid's cap of 2 cells, and three frames rather
-   * than one, so that neither the median nor the despeckle can be what passes it.
+   * than one, so that the despeckle cannot be what passes it.
    */
   it("bridges a patch too wide for the hole cap that drops out for a few frames", () => {
     const rec = recorder();
@@ -950,6 +1016,78 @@ describe("a mask with no spots in it", () => {
     const last = rec.masks[rec.masks.length - 1];
     expect(last[22 * WIDTH + 30]).toBeLessThan(40);
     expect(last[22 * WIDTH + 5]).toBe(255);
+  });
+
+  /**
+   * The flutter. A real segmenter's boundary trembles cell by cell on a still
+   * person: here every third row's edge steps one cell right and back on
+   * alternate frames while the rows between hold still. What reaches the screen
+   * must not step with it -- the half-coverage crossing in a trembling row sits
+   * in one column from frame to frame, exactly as it does in a steady row.
+   */
+  it("holds a trembling edge still", () => {
+    const rec = recorder();
+    const c = MaskCompositor.create(rec.factory, WIDTH, HEIGHT)!;
+    c.setEffect({ kind: "blur", strength: "heavy" });
+    const edgeAt = (f: number) => confidenceAt(WIDTH, HEIGHT, (x, y) => {
+      const edge = y % 3 === 0 ? 30 + (f % 2) : 30;
+      return x <= edge ? SOLID : 0;
+    });
+    const crossing = (mask: Uint8ClampedArray, y: number) => {
+      for (let x = 0; x < WIDTH; x++) if (mask[y * WIDTH + x] < 128) return x;
+      return WIDTH;
+    };
+
+    // The camera is still throughout: the tremble is the model's, not the person's.
+    for (let f = 0; f < 12; f++) {
+      c.prepareSegmentInput(frame(WIDTH, HEIGHT));
+      c.compose(frame(WIDTH, HEIGHT), edgeAt(f));
+    }
+
+    // After the opening frames settle, no flip in a trembling row or a steady one.
+    const trembling = rec.masks.slice(4).map((m) => crossing(m, 24));
+    const steady = rec.masks.slice(4).map((m) => crossing(m, 25));
+    expect(new Set(trembling).size).toBe(1);
+    expect(new Set(steady).size).toBe(1);
+    // And the edge is where the person is, give or take the trembling cell.
+    expect(trembling[0]).toBeGreaterThanOrEqual(30);
+    expect(trembling[0]).toBeLessThanOrEqual(32);
+  });
+
+  /**
+   * And the other half of frictionless: a real move is followed at once. The
+   * whole edge steps eight cells and stays; the mask is there within three
+   * frames rather than trailing a shadow of where the person was.
+   */
+  it("follows a move of the whole edge within three frames", () => {
+    const rec = recorder();
+    const c = MaskCompositor.create(rec.factory, WIDTH, HEIGHT)!;
+    c.setEffect({ kind: "blur", strength: "heavy" });
+    const edgeAt = (edge: number) => confidenceAt(WIDTH, HEIGHT, (x) => (x <= edge ? SOLID : 0));
+    const crossing = (mask: Uint8ClampedArray, y: number) => {
+      for (let x = 0; x < WIDTH; x++) if (mask[y * WIDTH + x] < 128) return x;
+      return WIDTH;
+    };
+
+    // The camera moves with the edge: a textured person against a flat wall,
+    // which is what tells the blend this is the person and not the model.
+    const cameraAt = (edge: number) => (x: number, y: number) =>
+      x <= edge ? 60 + 60 * ((x + y) % 2) : 200;
+    for (let f = 0; f < 3; f++) {
+      rec.camera = cameraAt(30);
+      c.prepareSegmentInput(frame(WIDTH, HEIGHT));
+      c.compose(frame(WIDTH, HEIGHT), edgeAt(30));
+    }
+    for (let f = 0; f < 3; f++) {
+      rec.camera = cameraAt(38);
+      c.prepareSegmentInput(frame(WIDTH, HEIGHT));
+      c.compose(frame(WIDTH, HEIGHT), edgeAt(38));
+    }
+
+    expect(crossing(rec.masks[2], 24)).toBeGreaterThanOrEqual(30);
+    expect(crossing(rec.masks[2], 24)).toBeLessThanOrEqual(32);
+    expect(crossing(rec.masks[5], 24)).toBeGreaterThanOrEqual(38);
+    expect(crossing(rec.masks[5], 24)).toBeLessThanOrEqual(40);
   });
 
   /**
