@@ -1,23 +1,24 @@
-// The gate in front of a guest's first meeting.
+// The device check in front of a guest's first meeting.
 //
 // What matters here is not that the stages have the right names. It is that the
 // two conditions are BOTH load-bearing — a measurement nobody confirmed and a
-// confirmation with no measurement behind it each have to fail — and that the
-// latch holds, because without it the check is a maze rather than a step.
+// confirmation with no measurement behind it each have to fail — that the latch
+// holds, because without it the check is a maze rather than a step, and that
+// none of it ever reads as a reason to keep somebody out.
 
 import {
   CAMERA_SETTLE_MS,
   CAMERA_OFF_STEPS,
   MIC_OFF_STEPS,
-  blockedReason,
+  uncheckedNote,
   deviceOffBlocksEntry,
   measuringChosenDevice,
   offSteps,
   checkCopy,
   checkStage,
   deviceChanged,
-  deviceCheckRequired,
-  entryAllowed,
+  deviceCheckShown,
+  checkComplete,
   shouldLatch,
   type CheckStage,
 } from "@/lib/meetings/device-check";
@@ -28,19 +29,19 @@ const blocked: ReadinessProblem = { kind: "mic_blocked", message: "blocked" };
 /** The ordinary case: nothing latched, nothing wrong, no answer yet. */
 const base = { passed: false, problem: null, signal: true, signalSettled: true, answer: null } as const;
 
-describe("deviceCheckRequired", () => {
-  it("gates guests", () => {
-    expect(deviceCheckRequired({ isGuest: true })).toBe(true);
+describe("deviceCheckShown", () => {
+  it("is shown to guests", () => {
+    expect(deviceCheckShown({ isGuest: true })).toBe(true);
   });
 
   /**
-   * Hosts and members are not gated, and this is the decision rather than an
+   * Hosts and members are not shown it, and this is the decision rather than an
    * omission: somebody who joins unheard with colleagues in the room is told so
-   * within seconds, and being made late to their own meeting costs them more
-   * than a quiet first minute.
+   * within seconds, and a screen of questions in front of their own meeting
+   * costs them more than a quiet first minute.
    */
-  it("does not gate a host or a member", () => {
-    expect(deviceCheckRequired({ isGuest: false })).toBe(false);
+  it("is not shown to a host or a member", () => {
+    expect(deviceCheckShown({ isGuest: false })).toBe(false);
   });
 });
 
@@ -111,21 +112,21 @@ describe("shouldLatch", () => {
   });
 });
 
-describe("entryAllowed", () => {
+describe("checkComplete", () => {
   it("needs both devices", () => {
-    expect(entryAllowed({ camera: "passed", microphone: "passed" })).toBe(true);
-    expect(entryAllowed({ camera: "passed", microphone: "confirming" })).toBe(false);
-    expect(entryAllowed({ camera: "rejected", microphone: "passed" })).toBe(false);
+    expect(checkComplete({ camera: "passed", microphone: "passed" })).toBe(true);
+    expect(checkComplete({ camera: "passed", microphone: "confirming" })).toBe(false);
+    expect(checkComplete({ camera: "rejected", microphone: "passed" })).toBe(false);
   });
 
   /**
-   * There is no "join anyway". A guest whose microphone cannot be made to work
-   * does not get in. That is the instruction, and it is asserted here so that
-   * softening it later is a test failure rather than a quiet edit.
+   * A blocked device is an unchecked device, however the other one looks. What
+   * this no longer is: a reason to keep anybody out. The guest is told, under a
+   * Join button that works — see uncheckedNote.
    */
-  it("admits nobody on a blocked device, however the other one looks", () => {
-    expect(entryAllowed({ camera: "passed", microphone: "blocked" })).toBe(false);
-    expect(entryAllowed({ camera: "blocked", microphone: "blocked" })).toBe(false);
+  it("is not complete on a blocked device, however the other one looks", () => {
+    expect(checkComplete({ camera: "passed", microphone: "blocked" })).toBe(false);
+    expect(checkComplete({ camera: "blocked", microphone: "blocked" })).toBe(false);
   });
 });
 
@@ -269,24 +270,31 @@ describe("deviceOffBlocksEntry", () => {
   });
 });
 
-describe("blockedReason", () => {
-  it("says nothing when the gate is open", () => {
-    expect(blockedReason({ camera: "passed", microphone: "passed" })).toBeNull();
+describe("uncheckedNote", () => {
+  it("says nothing once both devices are checked", () => {
+    expect(uncheckedNote({ camera: "passed", microphone: "passed" })).toBeNull();
   });
 
   /** "Check your devices" in front of somebody whose camera is fine costs them
-   * the next two minutes, so the sentence names the one that is in the way. */
-  it("names the device that is actually in the way", () => {
-    expect(blockedReason({ camera: "passed", microphone: "blocked" })).toMatch(/microphone/i);
-    expect(blockedReason({ camera: "passed", microphone: "blocked" })).not.toMatch(/camera/i);
-    expect(blockedReason({ camera: "rejected", microphone: "passed" })).toMatch(/camera/i);
-    expect(blockedReason({ camera: "rejected", microphone: "passed" })).not.toMatch(/microphone/i);
+   * the next two minutes, so the sentence names the one that is unchecked. */
+  it("names the device that is actually unchecked", () => {
+    expect(uncheckedNote({ camera: "passed", microphone: "blocked" })).toMatch(/microphone/i);
+    expect(uncheckedNote({ camera: "passed", microphone: "blocked" })).not.toMatch(/camera/i);
+    expect(uncheckedNote({ camera: "rejected", microphone: "passed" })).toMatch(/camera/i);
+    expect(uncheckedNote({ camera: "rejected", microphone: "passed" })).not.toMatch(/microphone/i);
   });
 
   it("names both when both are outstanding", () => {
-    const both = blockedReason({ camera: "measuring", microphone: "measuring" }) ?? "";
+    const both = uncheckedNote({ camera: "measuring", microphone: "measuring" }) ?? "";
     expect(both).toMatch(/microphone/i);
     expect(both).toMatch(/camera/i);
+  });
+
+  /** The sentence must never read like a gate: the check is advice, and the button works. */
+  it("says in the same breath that they can join anyway", () => {
+    expect(uncheckedNote({ camera: "passed", microphone: "blocked" })).toMatch(/still join/i);
+    expect(uncheckedNote({ camera: "measuring", microphone: "measuring" })).toMatch(/still join/i);
+    expect(uncheckedNote({ camera: "blocked", microphone: "blocked" })).not.toMatch(/before joining/i);
   });
 });
 

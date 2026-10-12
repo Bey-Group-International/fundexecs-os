@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams } from "next/navigation";
 import { Logo } from "@/components/Logo";
 
 interface MeetingInfo {
@@ -39,26 +39,32 @@ function formatWhen(info: MeetingInfo | null): string {
   }
 }
 
+/**
+ * The page an invite link opens. One job: get the person holding the link into
+ * the meeting in one press.
+ *
+ * It used to be a chooser whose primary button was "Request access", with
+ * "Continue as guest" below a divider, then a name form, and only then the
+ * room — three screens between a guest and the meeting they were invited to,
+ * and the first of them pointed away from it. The room's own pre-join screen
+ * already asks for a name, next to the person's camera preview, so nothing here
+ * needs to.
+ */
 export default function MeetingInvitePage() {
   const params = useParams();
-  const router = useRouter();
   const roomCode = typeof params.roomCode === "string" ? params.roomCode : "";
 
   const [meeting, setMeeting] = useState<MeetingInfo | null>(null);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
 
-  const [mode, setMode] = useState<"choose" | "guest">("choose");
-  const [guestName, setGuestName] = useState("");
-  const [joining, setJoining] = useState(false);
-
   useEffect(() => {
     async function fetchMeeting() {
       // Public lookup by room code so invitees without an account can see the
-      // meeting and choose how to join. Only the title, status and time are
-      // returned — everything else stays RLS-protected.
+      // meeting and join. Only the title, status and time are returned —
+      // everything else stays RLS-protected.
       try {
-        const res = await fetch(`/api/meetings/public/${roomCode}`, { cache: "no-store" });
+        const res = await fetch(`/api/meetings/public/${encodeURIComponent(roomCode)}`, { cache: "no-store" });
         if (!res.ok) setNotFound(true);
         else setMeeting((await res.json()) as MeetingInfo);
       } catch {
@@ -69,27 +75,14 @@ export default function MeetingInvitePage() {
     if (roomCode) void fetchMeeting();
   }, [roomCode]);
 
-  function handleRequestAccess() {
-    router.push("/request-access");
-  }
-
-  function handleSignIn() {
-    // `next` is the parameter the login page, the sign-in actions and
-    // /auth/callback all read (lib/safe-next-path.ts). This used to send
-    // `redirect=`, which nothing reads, so an invitee who signed in landed on
-    // the workspace instead of in the meeting they had been invited to.
-    router.push(`/login?next=${encodeURIComponent(`/meetings/${roomCode}`)}`);
-  }
-
-  async function handleGuestJoin(e: React.FormEvent) {
-    e.preventDefault();
-    const name = guestName.trim();
-    if (!name) return;
-    setJoining(true);
-    // Store guest name in sessionStorage so MeetingRoom can pick it up
-    sessionStorage.setItem(`guest_name_${roomCode}`, name);
-    router.push(`/meeting-room/${roomCode}?guest=1&name=${encodeURIComponent(name)}`);
-  }
+  // A real link rather than a button that navigates on click: it works before
+  // the page's script has run, it works in a mail client's in-app browser, and
+  // it is what "join with one click" has to mean for somebody holding a link.
+  //
+  // `next`, not `redirect`: it is the parameter the login page, the sign-in
+  // actions and /auth/callback all read (lib/safe-next-path.ts).
+  const joinHref = `/meeting-room/${encodeURIComponent(roomCode)}?guest=1`;
+  const signInHref = `/login?next=${encodeURIComponent(`/meetings/${roomCode}`)}`;
 
   if (loading) {
     return (
@@ -111,6 +104,8 @@ export default function MeetingInvitePage() {
     );
   }
 
+  const ended = meeting?.status === "ended";
+
   return (
     <div className="fx-blueprint flex min-h-screen flex-col items-center justify-center bg-surface-0 px-4 py-16">
       <div className="w-full max-w-sm flex flex-col gap-6">
@@ -129,7 +124,7 @@ export default function MeetingInvitePage() {
                 <span className="w-1.5 h-1.5 rounded-full bg-yellow-400" /> Starting soon
               </span>
             )}
-            {meeting?.status === "ended" && (
+            {ended && (
               <span className="inline-flex items-center gap-1 mt-1.5 text-xs text-[var(--fg-muted)]">Meeting has ended</span>
             )}
             {when && (
@@ -138,35 +133,29 @@ export default function MeetingInvitePage() {
           </div>
         </div>
 
-        {/* Only for a meeting that has a time and has not happened: the .ics
-            endpoint 404s otherwise, and a button leading to a dead download is
-            worse than no button. */}
-        {when && meeting?.status !== "ended" && (
-          <a
-            href={`/api/meetings/public/${roomCode}/calendar.ics`}
-            className="self-center text-sm text-[var(--gold-400)] hover:underline"
-          >
-            Save to calendar
-          </a>
-        )}
-
-        {meeting?.status !== "ended" && mode === "choose" && (
+        {!ended && (
           <div className="fx-glass rounded-xl p-5 flex flex-col gap-3">
-            <p className="text-sm text-[var(--fg-secondary)] text-center">How would you like to join?</p>
-
-            <button
-              onClick={handleRequestAccess}
-              className="w-full rounded-lg bg-[var(--gold-400)] text-white text-sm font-semibold py-2.5 hover:opacity-90 transition-opacity"
+            <a
+              href={joinHref}
+              className="flex min-h-11 w-full items-center justify-center rounded-lg bg-[var(--gold-400)] text-white text-sm font-semibold py-2.5 hover:opacity-90 transition-opacity"
             >
-              Request access for the full workspace
-            </button>
+              Join meeting
+            </a>
+            <p className="text-[11px] text-[var(--fg-muted)] text-center leading-relaxed">
+              No account needed. You&apos;ll add your name and check your camera on the next screen.
+            </p>
 
-            <button
-              onClick={handleSignIn}
-              className="w-full rounded-lg border border-[var(--line)] bg-[var(--surface-2)] text-[var(--fg-primary)] text-sm font-medium py-2.5 hover:bg-[var(--surface-3)] transition-colors"
-            >
-              Already have an account? Sign in
-            </button>
+            {/* Only for a meeting that has a time: the .ics endpoint 404s
+                otherwise, and a button leading to a dead download is worse
+                than no button. */}
+            {when && (
+              <a
+                href={`/api/meetings/public/${encodeURIComponent(roomCode)}/calendar.ics`}
+                className="self-center text-sm text-[var(--gold-400)] hover:underline"
+              >
+                Save to calendar
+              </a>
+            )}
 
             <div className="flex items-center gap-3">
               <span className="h-px flex-1 bg-[var(--line)]" />
@@ -174,52 +163,25 @@ export default function MeetingInvitePage() {
               <span className="h-px flex-1 bg-[var(--line)]" />
             </div>
 
-            <button
-              onClick={() => setMode("guest")}
-              className="w-full rounded-lg border border-[var(--line)] text-[var(--fg-secondary)] text-sm py-2.5 hover:text-[var(--fg-primary)] hover:bg-[var(--surface-2)] transition-colors"
+            <a
+              href={signInHref}
+              className="flex min-h-11 w-full items-center justify-center rounded-lg border border-[var(--line)] bg-[var(--surface-2)] text-[var(--fg-primary)] text-sm font-medium py-2.5 hover:bg-[var(--surface-3)] transition-colors"
             >
-              Continue as guest
-            </button>
-
+              Already have an account? Sign in
+            </a>
             <p className="text-[11px] text-[var(--fg-muted)] text-center leading-relaxed">
-              Guests can join this meeting without an account. Request access for AI transcription, notes, and action items.
+              Want AI transcription, notes and action items for your own meetings?{" "}
+              <a href="/request-access" className="text-[var(--gold-400)] hover:underline">Request access</a>.
             </p>
           </div>
         )}
 
-        {meeting?.status !== "ended" && mode === "guest" && (
-          <form onSubmit={handleGuestJoin} className="fx-glass rounded-xl p-5 flex flex-col gap-3">
-            <p className="text-sm text-[var(--fg-secondary)] text-center">Enter your name to join</p>
-            <input
-              autoFocus
-              value={guestName}
-              onChange={(e) => setGuestName(e.target.value)}
-              placeholder="Your name"
-              className="rounded-lg border border-[var(--line)] bg-[var(--surface-2)] px-3 py-2.5 text-sm text-[var(--fg-primary)] placeholder:text-[var(--fg-muted)] outline-none focus:ring-2 focus:ring-[var(--gold-400)]"
-            />
-            <button
-              type="submit"
-              disabled={!guestName.trim() || joining}
-              className="w-full rounded-lg bg-[var(--gold-400)] text-white text-sm font-semibold py-2.5 hover:opacity-90 transition-opacity disabled:opacity-40"
-            >
-              {joining ? "Joining…" : "Join as guest"}
-            </button>
-            <button
-              type="button"
-              onClick={() => setMode("choose")}
-              className="text-xs text-[var(--fg-muted)] hover:text-[var(--fg-secondary)] transition-colors"
-            >
-              Back
-            </button>
-          </form>
-        )}
-
-        {meeting?.status === "ended" && (
+        {ended && (
           <div className="fx-glass rounded-xl p-5 flex flex-col gap-3 items-center text-center">
             <p className="text-sm text-[var(--fg-muted)]">This meeting has already ended.</p>
-            <button onClick={handleRequestAccess} className="text-[var(--gold-400)] text-sm hover:underline">
+            <a href="/request-access" className="text-[var(--gold-400)] text-sm hover:underline">
               Request FundExecs OS access →
-            </button>
+            </a>
           </div>
         )}
       </div>

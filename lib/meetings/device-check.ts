@@ -1,25 +1,27 @@
 // lib/meetings/device-check.ts
-// Proving a camera and a microphone work BEFORE somebody is let into a meeting.
+// Helping somebody prove their camera and microphone work BEFORE they join a
+// meeting — without ever standing between them and the meeting.
 //
-// The green room has always shown this. It never required it: the Join button
-// was disabled while the join was in flight and at no other time, and
-// `canJoin` in ./devices carries a comment saying so on purpose — "this never
-// blocks". Everything was discoverable and nothing was mandatory, so the
-// commonest way to arrive in a call unheard was to walk straight past a screen
-// that was already saying why.
+// The green room has always shown this. For a while it REQUIRED it of
+// invite-link guests: the Join button stayed disabled until the browser reported
+// signal on both devices and the person confirmed both. The reasoning was sound
+// — a guest is the one person with no colleague to tell them they are unheard —
+// and the result was still wrong: guests with no webcam, a denied permission, a
+// camera held by another app, or a mail client's in-app browser could not get
+// in at all, and "the link didn't work" was what reached the host. A check that
+// keeps people out of the meeting it exists to improve is not a check.
 //
-// This makes it a gate, and only for invite-link GUESTS. They are the
-// population that actually arrives with a blocked permission and no IT desk to
-// ask: a host or a colleague who joins unheard has a teammate who will tell them
-// within seconds, and a reason to be let in late is worse for them than a
-// silent first minute. A guest has neither.
+// So this is a CHECK, not a gate. It is shown to guests only (a host or a
+// colleague who joins unheard is told within seconds by the people in the room),
+// it measures and asks exactly as before, and it says plainly which device is
+// still unverified — but the Join button is live throughout, and a guest can
+// always join and sort their devices out in the call.
 //
-// TWO THINGS HAVE TO AGREE, which is the point and the cost. A measurement
+// TWO THINGS STILL HAVE TO AGREE for a device to read as checked. A measurement
 // alone cannot see a lens cap, a camera pointed at a ceiling, or a microphone
 // picking up a fan instead of a voice. A person's say-so alone is a button
 // somebody in a hurry presses without looking. So a device passes only when the
-// browser reports signal AND the person says the signal is of them. Either one
-// on its own is a guarantee that does not hold.
+// browser reports signal AND the person says the signal is of them.
 //
 // WHAT THIS DELIBERATELY DOES NOT TEST: the speaker. Nothing here plays a tone,
 // so a guest can pass this check and still hear nobody because their output is
@@ -29,17 +31,18 @@
 // Pure: no DOM, no media, no timers. The green room supplies what it observes.
 import type { ReadinessProblem } from "@/lib/meetings/devices";
 
-/** The two devices this gate covers. The speaker is not one of them — see above. */
+/** The two devices this check covers. The speaker is not one of them — see above. */
 export type CheckedDevice = "camera" | "microphone";
 
 /**
- * Whether a person has to pass the check before they can be let in.
+ * Whether the check is shown to this person at all.
  *
  * Guests only, as above. Deliberately a function of one fact rather than a
  * constant, so the decision has one home and the reason can be read next to it
- * rather than inferred from an `isGuest &&` at a call site.
+ * rather than inferred from an `isGuest &&` at a call site. Showing it never
+ * blocks anyone: see `checkComplete` and `uncheckedNote`.
  */
-export function deviceCheckRequired(who: { isGuest: boolean }): boolean {
+export function deviceCheckShown(who: { isGuest: boolean }): boolean {
   return who.isGuest;
 }
 
@@ -101,14 +104,15 @@ export function shouldLatch(stage: CheckStage, alreadyLatched: boolean): boolean
 }
 
 /**
- * Whether the guest may be let in.
+ * Whether both devices have been checked.
  *
- * Both, and nothing else counts. There is no "join anyway": a guest whose
- * microphone genuinely cannot be made to work does not get in, which is the
- * instruction and worth being plain about rather than softening at the last
- * line of code.
+ * This decides what the screen SAYS, never whether the person may join: a
+ * guest with one device unverified is told so under a Join button that works.
+ * This used to be called "entry allowed", and it was exactly that — which is
+ * how a guest with no webcam came to be locked out of a meeting they were
+ * invited to.
  */
-export function entryAllowed(stages: Record<CheckedDevice, CheckStage>): boolean {
+export function checkComplete(stages: Record<CheckedDevice, CheckStage>): boolean {
   return stages.camera === "passed" && stages.microphone === "passed";
 }
 
@@ -235,7 +239,7 @@ export function measuringChosenDevice(chosen: string, reported: string | null | 
 }
 
 /**
- * Whether a device being switched off is what is holding the gate shut.
+ * Whether a device being switched off is what is leaving it unchecked.
  *
  * Joining muted, or with the camera off, is a state this product supports and
  * people want — the camera toggle exists so the hardware light stays dark. But a
@@ -246,7 +250,8 @@ export function measuringChosenDevice(chosen: string, reported: string | null | 
  *
  * So this case gets its own sentence, and the resolution is the honest one: turn
  * it on long enough to be checked, then turn it off again. The latch in
- * `checkStage` is what makes that second half true.
+ * `checkStage` is what makes that second half true. (Or join as they are — the
+ * check never blocks; this only decides which steps the row shows.)
  *
  * Both devices, not just the camera. The first version of this covered the
  * camera only, which left a guest who muted themselves before the check being
@@ -267,24 +272,26 @@ export const MIC_OFF_STEPS: readonly string[] = [
   "You can mute again before you join — once it has been checked it stays checked.",
 ];
 
-/** The steps for a device that is switched off and not yet proved. */
+/** The steps for a device that is switched off and not yet checked. */
 export function offSteps(device: CheckedDevice): readonly string[] {
   return device === "camera" ? CAMERA_OFF_STEPS : MIC_OFF_STEPS;
 }
 
 /**
- * The sentence under a blocked Join button.
+ * The sentence under the Join button while something is still unchecked.
  *
- * Says which device is in the way rather than that something is, because "check
- * your devices" in front of somebody whose camera is fine and whose microphone
- * is not costs them the next two minutes.
+ * Names which device rather than that something is, because "check your
+ * devices" in front of somebody whose camera is fine and whose microphone is
+ * not costs them the next two minutes. And it says, in the same breath, that
+ * they can join anyway: the whole point of this not being a gate is lost if the
+ * sentence under the button reads like one. Null once both are checked.
  */
-export function blockedReason(stages: Record<CheckedDevice, CheckStage>): string | null {
+export function uncheckedNote(stages: Record<CheckedDevice, CheckStage>): string | null {
   const unfinished = (["microphone", "camera"] as const).filter((d) => stages[d] !== "passed");
   if (unfinished.length === 0) return null;
-  const names = unfinished.map((d) => (d === "microphone" ? "microphone" : "camera"));
-  const who = names.length === 1 ? `your ${names[0]}` : "your microphone and camera";
-  return `Check ${who} above before joining.`;
+  const who = unfinished.length === 1 ? `Your ${unfinished[0]} hasn't` : "Your microphone and camera haven't";
+  const it = unfinished.length === 1 ? "it" : "them";
+  return `${who} been checked yet — you can still join and sort ${it} out in the call.`;
 }
 
 /**

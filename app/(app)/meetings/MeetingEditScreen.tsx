@@ -207,9 +207,11 @@ export function MeetingEditScreen({
   const [unreachable, setUnreachable] = useState<MeetingAttendeeInput[]>(() =>
     seeded.filter((a) => !a.email?.trim()),
   );
-  // Off unless this meeting was already saved with it on — the waiting room is
-  // the safe default, and a host opts a specific call out of it.
-  const [guestQuickAccess, setGuestQuickAccess] = useState(initial?.guestQuickAccess ?? false);
+  // On for a new meeting: the link is the invitation, and a guest who opened a
+  // working link used to sit in a waiting room whose host was not watching. A
+  // host opts a specific call INTO the waiting room; an existing meeting keeps
+  // whatever it was saved with.
+  const [guestQuickAccess, setGuestQuickAccess] = useState(initial?.guestQuickAccess ?? true);
   const [objective, setObjective] = useState(initial?.objective ?? "");
   const [agenda, setAgenda] = useState(initial?.agenda ?? "");
   const [preparationRequirements, setPreparationRequirements] = useState(initial?.preparationRequirements ?? "");
