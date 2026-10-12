@@ -459,9 +459,25 @@ export function blendCoverageByEnergy(
 // What this gives up is honest: a person who is perfectly still while the
 // model finally finds a part of them it had missed -- an arm it had been
 // leaving out -- gets that arm at the still rate, over about twenty frames,
-// rather than at once. The three constants below are measured against a
-// harness that models the chunk jumps; the measurement is in the commit that
-// set them.
+// rather than at once.
+//
+// The constants below are measured against a harness that models the chunk
+// jumps (a stretch of edge re-decided by the model for a few frames, on an
+// edge that otherwise trembles) over a synthetic camera with sensor noise,
+// 72 frames each, flips in cells per frame and trail in pixels at 720p:
+//
+//   scene                      flips/frame   trail    without
+//   jump of 5px, warmth 0.6        37        2.8px    36 / 3.0px (no warmth)
+//   jump of 7px, warmth 0.6        57        4.2px    55 / 13.6px (no warmth)
+//   dark shirt (contrast 0.4)      37        5.0px    36 / 9.6px (no warmth)
+//   noisy camera (noise 8)         42        3.3px    207 (fixed floor of 6)
+//   bright room, adaptive floor    25        2.8px    36 (fixed floor of 6)
+//   dark shirt, adaptive floor     25        6.1px    36 (fixed floor of 6)
+//
+// Warmth of 0.75 took the trail down a further 0.5-1.6px for 1-3 more flips a
+// frame on every scene; the trade was not worth the flips. The mask-read
+// blend alone, the rule this replaced, ran at 205 flips a frame on the first
+// scene.
 //
 // `cameraMotion` reads a luma plane the compositor samples from the frame it
 // already draws at grid size for the segmenter; one readback of a 481x270
