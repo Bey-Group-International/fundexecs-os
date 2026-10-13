@@ -1,8 +1,9 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { Logo } from "@/components/Logo";
+import { createClient } from "@/lib/supabase/client";
 
 interface MeetingInfo {
   title: string;
@@ -53,6 +54,7 @@ function formatWhen(info: MeetingInfo | null): string {
 export default function MeetingInvitePage() {
   const params = useParams();
   const roomCode = typeof params.roomCode === "string" ? params.roomCode : "";
+  const router = useRouter();
 
   const [meeting, setMeeting] = useState<MeetingInfo | null>(null);
   const [loading, setLoading] = useState(true);
@@ -66,14 +68,33 @@ export default function MeetingInvitePage() {
       try {
         const res = await fetch(`/api/meetings/public/${encodeURIComponent(roomCode)}`, { cache: "no-store" });
         if (!res.ok) setNotFound(true);
-        else setMeeting((await res.json()) as MeetingInfo);
+        else {
+          const info = (await res.json()) as MeetingInfo;
+          setMeeting(info);
+          // Someone who is already signed in has nothing to choose here. This
+          // page's job is to get a stranger in; the link used to send EVERYONE
+          // to the guest door, so a member pressing their own invite joined as
+          // a guest — no documents, the sign-up upsell, and the host unable to
+          // tell them from a stranger. Straight to the member room instead,
+          // with no press at all. The session is read locally, as a hint only:
+          // the room checks it for real.
+          if (info.status !== "ended") {
+            try {
+              const { data } = await createClient().auth.getSession();
+              if (data.session) {
+                router.replace(`/meetings/${encodeURIComponent(roomCode)}`);
+                return;
+              }
+            } catch { /* no readable session: they are a guest, which is the page below */ }
+          }
+        }
       } catch {
         setNotFound(true);
       }
       setLoading(false);
     }
     if (roomCode) void fetchMeeting();
-  }, [roomCode]);
+  }, [roomCode, router]);
 
   // A real link rather than a button that navigates on click: it works before
   // the page's script has run, it works in a mail client's in-app browser, and

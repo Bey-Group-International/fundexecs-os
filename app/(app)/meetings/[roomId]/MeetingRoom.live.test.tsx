@@ -2227,3 +2227,46 @@ describe("a microphone the engine will not follow", () => {
     }
   });
 });
+
+describe("one screen at a time", () => {
+  const shareButton = () => {
+    const el = document.querySelector<HTMLButtonElement>('button[title="Share screen"]');
+    if (!el) throw new Error("no share control on screen");
+    return el;
+  };
+
+  it("refuses to open a second capture while someone else is presenting, and says who", async () => {
+    await enterCall();
+    await peerArrives("peer-1", "Dana");
+    await act(async () => {
+      realtime.signal({ type: "video", from: "peer-1", camOn: true, paused: false, sharing: true });
+      await Promise.resolve();
+    });
+    await flush(20, 3);
+
+    const picker = jest.spyOn(navigator.mediaDevices, "getDisplayMedia");
+    await act(async () => { shareButton().click(); await Promise.resolve(); });
+    await flush(20, 3);
+
+    // No picker: a second share is a second capture on this machine and a
+    // second stream on every link, for a room that can only show one.
+    expect(picker).not.toHaveBeenCalled();
+    expect(screen.getByText(/Dana is already sharing their screen/)).toBeInTheDocument();
+
+    // And the notice goes when the share it is about does.
+    await act(async () => {
+      realtime.signal({ type: "video", from: "peer-1", camOn: true, paused: false, sharing: false });
+      await Promise.resolve();
+    });
+    await flush(20, 3);
+    expect(screen.queryByText(/already sharing their screen/)).not.toBeInTheDocument();
+  });
+
+  it("opens the picker once when nobody else is sharing, however many times it is pressed", async () => {
+    await enterCall();
+    const picker = jest.spyOn(navigator.mediaDevices, "getDisplayMedia");
+    await act(async () => { shareButton().click(); shareButton().click(); await Promise.resolve(); });
+    await flush(20, 3);
+    expect(picker).toHaveBeenCalledTimes(1);
+  });
+});

@@ -6,8 +6,14 @@
  */
 import { render, screen, waitFor } from "@testing-library/react";
 
+const replaceMock = jest.fn();
 jest.mock("next/navigation", () => ({
   useParams: () => ({ roomCode: "abc-def-12" }),
+  useRouter: () => ({ replace: replaceMock }),
+}));
+const getSessionMock = jest.fn();
+jest.mock("@/lib/supabase/client", () => ({
+  createClient: () => ({ auth: { getSession: getSessionMock } }),
 }));
 jest.mock("@/components/Logo", () => ({ Logo: () => <span>FundExecs OS</span> }));
 
@@ -31,6 +37,9 @@ function meeting(over: Record<string, unknown> = {}) {
 }
 
 beforeEach(() => {
+  replaceMock.mockReset();
+  getSessionMock.mockReset();
+  getSessionMock.mockResolvedValue({ data: { session: null } });
   fetchMock.mockReset();
   (globalThis as { fetch: unknown }).fetch = fetchMock;
 });
@@ -80,5 +89,37 @@ describe("the invite page", () => {
     render(<MeetingInvitePage />);
     await waitFor(() => expect(screen.getByText(/invalid or has expired/i)).toBeInTheDocument());
     expect(screen.queryByRole("link", { name: /^join meeting$/i })).not.toBeInTheDocument();
+  });
+
+  it("takes someone who is signed in straight to the member room, without a press", async () => {
+    // A member pressing their own invite used to be handed the guest door.
+    getSessionMock.mockResolvedValue({ data: { session: { user: { id: "u1" } } } });
+    fetchMock.mockResolvedValue(meeting({ status: "active" }));
+    render(<MeetingInvitePage />);
+    await waitFor(() => expect(replaceMock).toHaveBeenCalledWith("/meetings/abc-def-12"));
+    expect(screen.queryByRole("link", { name: /^join meeting$/i })).not.toBeInTheDocument();
+  });
+
+  it("leaves a signed-out visitor on the page, with the guest link", async () => {
+    fetchMock.mockResolvedValue(meeting({ status: "active" }));
+    render(<MeetingInvitePage />);
+    await screen.findByRole("link", { name: /^join meeting$/i });
+    expect(replaceMock).not.toHaveBeenCalled();
+  });
+
+  it("does not send anyone into a meeting that has ended", async () => {
+    getSessionMock.mockResolvedValue({ data: { session: { user: { id: "u1" } } } });
+    fetchMock.mockResolvedValue(meeting({ status: "ended" }));
+    render(<MeetingInvitePage />);
+    await screen.findByText(/already ended/i);
+    expect(replaceMock).not.toHaveBeenCalled();
+  });
+
+  it("falls back to the guest page when the session cannot be read", async () => {
+    getSessionMock.mockRejectedValue(new Error("storage blocked"));
+    fetchMock.mockResolvedValue(meeting());
+    render(<MeetingInvitePage />);
+    await screen.findByRole("link", { name: /^join meeting$/i });
+    expect(replaceMock).not.toHaveBeenCalled();
   });
 });

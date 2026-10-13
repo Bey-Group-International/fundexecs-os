@@ -84,6 +84,22 @@ export function screenSharerId(input: {
 }
 
 /**
+ * Whoever else is presenting, from the ids that have announced a share.
+ *
+ * One screen at a time is the rule the whole stage is built on: the spotlight,
+ * the layout override and the recording all follow a single sharer. A second
+ * share started over the first does not add a second screen to the room, it
+ * adds a second capture to the presenter's machine and a second video stream
+ * to every mesh link, and leaves each presenter looking at their own screen
+ * while everyone else watches the other. So starting one is refused for as long
+ * as another is up, and the member is told who has to stop first.
+ */
+export function otherSharerId(sharing: Iterable<string>): string | null {
+  for (const id of sharing) return id;
+  return null;
+}
+
+/**
  * Whether a tile's video should be mirrored.
  *
  * A self-view is mirrored because that is what a person expects of their own
