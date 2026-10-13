@@ -165,7 +165,7 @@ export function CallRecorder({
       const res = await fetch(`/api/meetings/${id}/transcript`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ lines: transcriptRows(batch, id) }),
+        body: JSON.stringify({ lines: transcriptRows(batch, id), sentAt: Date.now() }),
         keepalive: opts.keepalive === true,
       });
       if (!res.ok) return false;
