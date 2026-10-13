@@ -99,7 +99,8 @@ import {
   type DragOrigin,
   type DragPreview,
 } from "@/lib/meetings/calendar-drag";
-import { MeetingEditScreen, type MeetingEditInitial } from "./MeetingEditScreen";
+import { MeetingEditScreen } from "./meeting-shared";
+import type { MeetingEditInitial } from "./MeetingEditScreen";
 import { seriesPositionLabel } from "@/lib/meetings/recurrence";
 import { useNow, useLivePresence, nextChannelName, type RoomPresence } from "./hooks";
 import { useFocusTrap } from "@/hooks/useFocusTrap";
@@ -2948,6 +2949,9 @@ function MeetingDetailBody({
   const live = meetingIsLive(meeting, presence, now);
   const copilot = meeting.assigned_copilot_agent ? AGENTS.find((a) => a.key === meeting.assigned_copilot_agent)?.name ?? meeting.assigned_copilot_agent : null;
   const attendees = meeting.attendees ?? [];
+  // Ended, or its time has run out: the one case where dragging is refused, so
+  // the detail offers a direct way to pick a new time instead.
+  const isOver = meeting.status === "ended" || meetingTimeState(meeting.scheduled_at, meeting.duration_minutes, now)?.phase === "ended";
 
   // Open Earn with a clean one-liner and run it, carrying only the meeting id +
   // mode as chatContext. The rich institutional context (deal financials, lead
@@ -2979,6 +2983,9 @@ function MeetingDetailBody({
         <Link href={`/meetings/${meeting.room_code}`} className={`rounded-lg px-3 py-1.5 text-xs font-semibold ${live ? "bg-[var(--status-success)] text-white hover:opacity-90" : "bg-gold-400 text-white hover:bg-gold-500"}`}>
           {live ? "Join live →" : "Join →"}
         </Link>
+        {isOver ? (
+          <button onClick={onEdit} className="rounded-lg border border-gold-400/50 px-3 py-1.5 text-xs font-medium text-[var(--gold-400)] hover:bg-gold-400/10">Reschedule</button>
+        ) : null}
         <button onClick={onEdit} className="rounded-lg border border-[var(--line)] px-3 py-1.5 text-xs text-[var(--fg-secondary)] hover:text-[var(--fg-primary)]">Edit</button>
         {meeting.status === "ended" ? (
           <>
