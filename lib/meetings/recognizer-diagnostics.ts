@@ -16,6 +16,8 @@
 //
 // Pure: no DOM. The room passes in what it read from the browser.
 
+import { ATTRIBUTION_BASES, type AttributionEvidence } from "@/lib/meetings/speaker-attribution";
+
 /**
  * How a recognition run was started: on the call's own track, on a capture
  * of the picked device opened for the recogniser alone, or bare (the engine's
@@ -49,6 +51,12 @@ export interface RecognizerDiagnostics {
   trackLabel: string | null;
   /** The language the engine was told. */
   lang: string;
+  /**
+   * What the voice meter measured over the window the line was judged on — the
+   * numbers behind its `overlapped` flag. Absent on lines saved before it was
+   * kept, and on lines from a client that predates it.
+   */
+  attribution?: AttributionEvidence;
 }
 
 interface BrandEntry { brand: string }
@@ -110,6 +118,7 @@ export function lineDiagnostics(input: {
   engineConfidence: unknown;
   lang: string;
   now: number;
+  attribution?: AttributionEvidence | null;
 }): RecognizerDiagnostics {
   const c = input.engineConfidence;
   const engine = typeof c === "number" && Number.isFinite(c) ? c : null;
@@ -122,11 +131,41 @@ export function lineDiagnostics(input: {
     engineConfidence: engine,
     trackLabel: input.run.trackLabel,
     lang: input.lang,
+    // Only when there is some: a line without it keeps the shape it always had.
+    ...(input.attribution ? { attribution: input.attribution } : {}),
   };
 }
 
 /** The most bytes a stored diagnostics object may take, serialised. */
-export const MAX_DIAGNOSTICS_BYTES = 1_000;
+export const MAX_DIAGNOSTICS_BYTES = 1_500;
+
+/**
+ * The stored measurements, each at its expected type and range. Null when it is
+ * not recognisably one, so a malformed block costs the evidence and never the
+ * line it belongs to.
+ */
+function sanitizeEvidence(raw: unknown): AttributionEvidence | null {
+  if (!raw || typeof raw !== "object") return null;
+  const r = raw as Record<string, unknown>;
+  const basis = (ATTRIBUTION_BASES as readonly unknown[]).includes(r.basis)
+    ? (r.basis as AttributionEvidence["basis"])
+    : null;
+  if (!basis) return null;
+  const unit = (v: unknown): number =>
+    typeof v === "number" && Number.isFinite(v) ? Math.min(1, Math.max(0, Math.round(v * 100) / 100)) : 0;
+  const count = (v: unknown, max: number): number =>
+    typeof v === "number" && Number.isFinite(v) ? Math.min(max, Math.max(0, Math.floor(v))) : 0;
+  return {
+    basis,
+    windowMs: count(r.windowMs, 600_000),
+    localSamples: count(r.localSamples, 100_000),
+    localShare: unit(r.localShare),
+    localPeak: unit(r.localPeak),
+    peerShare: unit(r.peerShare),
+    peerPeak: unit(r.peerPeak),
+    peerCount: count(r.peerCount, 1_000),
+  };
+}
 
 /**
  * What the save route keeps of a client's diagnostics: the known keys, each
@@ -152,6 +191,8 @@ export function sanitizeDiagnostics(raw: unknown): RecognizerDiagnostics | null 
     trackLabel: str(r.trackLabel, 120),
     lang: str(r.lang, 35) ?? "",
   };
+  const evidence = sanitizeEvidence(r.attribution);
+  if (evidence) out.attribution = evidence;
   if (JSON.stringify(out).length > MAX_DIAGNOSTICS_BYTES) return null;
   return out;
 }

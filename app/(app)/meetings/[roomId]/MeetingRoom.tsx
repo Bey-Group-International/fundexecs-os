@@ -3887,6 +3887,7 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
               engineConfidence: rawEngine,
               lang: recognition.lang,
               now,
+              attribution: attribution.evidence,
             }),
           });
           interimIdRef.current = crypto.randomUUID();

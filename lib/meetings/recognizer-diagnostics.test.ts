@@ -101,3 +101,40 @@ describe("what the save route keeps of a client's diagnostics", () => {
     expect(JSON.stringify(d).length).toBeLessThanOrEqual(MAX_DIAGNOSTICS_BYTES);
   });
 });
+
+describe("the measurements stored beside a line", () => {
+  const run = { path: "track" as const, run: 1, startedAt: 10_000, trackLabel: null };
+  const base = { brand: "Google Chrome", available: true, run, engineConfidence: 0.9, lang: "en-GB", now: 12_000 };
+  const evidence = {
+    basis: "cross-talk" as const, windowMs: 1800, localSamples: 15,
+    localShare: 0.6, localPeak: 0.31, peerShare: 0.4, peerPeak: 0.22, peerCount: 1,
+  };
+
+  it("carries them when there are some, and keeps the old shape when there are none", () => {
+    expect(lineDiagnostics({ ...base, attribution: evidence }).attribution).toEqual(evidence);
+    expect("attribution" in lineDiagnostics({ ...base })).toBe(false);
+    expect("attribution" in lineDiagnostics({ ...base, attribution: null })).toBe(false);
+  });
+
+  it("keeps them through the save route's check, so they reach the table", () => {
+    const stored = sanitizeDiagnostics({ ...lineDiagnostics({ ...base, attribution: evidence }) })!;
+    expect(stored.attribution).toEqual(evidence);
+    expect(JSON.stringify(stored).length).toBeLessThanOrEqual(MAX_DIAGNOSTICS_BYTES);
+  });
+
+  it("drops a block that is not recognisably one, but never the line it belongs to", () => {
+    expect(sanitizeDiagnostics({ path: "track", attribution: "loud" })?.attribution).toBeUndefined();
+    expect(sanitizeDiagnostics({ path: "track", attribution: { basis: "made-up" } })?.attribution).toBeUndefined();
+    expect(sanitizeDiagnostics({ path: "track", attribution: { basis: "echo" } })?.path).toBe("track");
+  });
+
+  it("clamps what a client claims into the ranges the meter can produce", () => {
+    const d = sanitizeDiagnostics({
+      path: "track",
+      attribution: { basis: "echo", windowMs: 9e12, localSamples: -4, localShare: 7, localPeak: -1, peerShare: Number.NaN, peerPeak: "x", peerCount: 1e9 },
+    })!;
+    expect(d.attribution).toEqual({
+      basis: "echo", windowMs: 600_000, localSamples: 0, localShare: 1, localPeak: 0, peerShare: 0, peerPeak: 0, peerCount: 1_000,
+    });
+  });
+});
