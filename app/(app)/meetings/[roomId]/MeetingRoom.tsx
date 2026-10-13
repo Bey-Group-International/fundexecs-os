@@ -4601,7 +4601,8 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         // Under this client's signaling id, not the in-memory "local" placeholder.
-        body: JSON.stringify({ lines: transcriptRows(batch, mId, myIdRef.current) }),
+        // `sentAt` lets the server correct lines from a clock that is wrong.
+        body: JSON.stringify({ lines: transcriptRows(batch, mId, myIdRef.current), sentAt: Date.now() }),
         keepalive: opts.keepalive === true,
       });
       if (!res.ok) { lastSaveStatusRef.current = res.status; noteSaveFailure(); return false; }

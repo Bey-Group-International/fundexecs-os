@@ -4,6 +4,7 @@ import { authorizeMeetingCaller } from "@/lib/meetings/meeting-access.server";
 import { checkRateLimit, clientIp, rateLimitHeaders } from "@/lib/rate-limit";
 import { MAX_BATCH, type TranscriptRow } from "@/lib/meetings/transcript-buffer";
 import { sanitizeDiagnostics } from "@/lib/meetings/recognizer-diagnostics";
+import { clockSkewMs, correctedTs } from "@/lib/meetings/clock-skew";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -54,7 +55,14 @@ type SupabaseLike = { from: (table: string) => any };
  * the door, and someone willing to impersonate a colleague in the transcript
  * could just as easily say the words out loud.
  */
-function sanitize(rows: unknown, meetingId: string, userId: string | null): TranscriptRow[] {
+function sanitize(
+  rows: unknown,
+  meetingId: string,
+  userId: string | null,
+  /** The sender's clock error, from `clockSkewMs`; zero when it is right or unknown. */
+  skewMs = 0,
+  now = Date.now(),
+): TranscriptRow[] {
   if (!Array.isArray(rows)) return [];
   const out: TranscriptRow[] = [];
   for (const raw of rows.slice(0, MAX_BATCH)) {
@@ -64,6 +72,10 @@ function sanitize(rows: unknown, meetingId: string, userId: string | null): Tran
     const text = typeof r.text === "string" ? r.text.slice(0, MAX_TEXT) : "";
     const ts = typeof r.ts === "string" ? r.ts : "";
     if (!id || !text.trim() || !ts || Number.isNaN(Date.parse(ts))) continue;
+    // On the server's clock. The report orders the meeting by this, and a guest
+    // whose own clock is out would otherwise sort away from the people they were
+    // talking to. See lib/meetings/clock-skew.ts.
+    const stamped = skewMs === 0 ? ts : new Date(correctedTs(Date.parse(ts), skewMs, now)).toISOString();
     const confidence = typeof r.confidence === "number" && Number.isFinite(r.confidence)
       ? Math.min(1, Math.max(0, r.confidence))
       : 1;
@@ -75,7 +87,7 @@ function sanitize(rows: unknown, meetingId: string, userId: string | null): Tran
       speaker_user_id: userId,
       confidence,
       text,
-      ts,
+      ts: stamped,
       overlapped: r.overlapped === true,
       // The run that produced the line, kept only in the shape the client is
       // allowed to write. See recognizer-diagnostics.ts.
@@ -111,8 +123,9 @@ export async function POST(req: NextRequest, { params }: { params: Params }) {
   // business with it: this is not a way to discover which meeting ids are real.
   if (!caller.ok) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const body = (await req.json().catch(() => ({}))) as { lines?: unknown };
-  const rows = sanitize(body.lines, id, caller.userId);
+  const body = (await req.json().catch(() => ({}))) as { lines?: unknown; sentAt?: unknown };
+  const now = Date.now();
+  const rows = sanitize(body.lines, id, caller.userId, clockSkewMs(body.sentAt, now), now);
   if (!rows.length) return NextResponse.json({ saved: 0 });
 
   const write: SupabaseLike = hasSupabaseServiceEnv()

@@ -135,6 +135,43 @@ describe("what it accepts", () => {
     expect((upserted?.rows as Record<string, unknown>[])[0].speaker_user_id).toBe("host");
   });
 
+  describe("a sender whose clock is wrong", () => {
+    const HOUR = 60 * 60 * 1000;
+    const rowsSaved = () => upserted?.rows as Record<string, unknown>[];
+
+    // The guest on a laptop an hour behind: every line they spoke sorted an hour
+    // away from the people they were talking to, so the stored meeting read as
+    // one person's side and then the other's.
+    it("puts lines from a clock an hour behind back where they were spoken", async () => {
+      const now = Date.now();
+      const spokeBy = (c: number) => new Date(c).toISOString();
+      await POST(request({
+        lines: [line({ ts: spokeBy(now - HOUR - 4_000) })],
+        sentAt: now - HOUR,
+      }), { params });
+      const stored = Date.parse(rowsSaved()[0].ts as string);
+      // About four seconds ago, on the server's clock; a little slack for the test.
+      expect(Math.abs(stored - (now - 4_000))).toBeLessThan(5_000);
+    });
+
+    it("leaves a sender whose clock is right exactly as it was", async () => {
+      const ts = new Date(Date.now() - 20_000).toISOString();
+      await POST(request({ lines: [line({ ts })], sentAt: Date.now() - 300 }), { params });
+      expect(rowsSaved()[0].ts).toBe(ts);
+    });
+
+    it("leaves an older client, which sends no clock, exactly as it was", async () => {
+      await POST(request({ lines: [line()] }), { params });
+      expect(rowsSaved()[0].ts).toBe("2026-09-15T10:00:00.000Z");
+    });
+
+    it("never stores a line from the future", async () => {
+      const future = new Date(Date.now() + HOUR).toISOString();
+      await POST(request({ lines: [line({ ts: future })], sentAt: Date.now() + HOUR }), { params });
+      expect(Date.parse(rowsSaved()[0].ts as string)).toBeLessThanOrEqual(Date.now());
+    });
+  });
+
   it("gives a guest's line no account at all", async () => {
     currentUser = null;
     tables.live_meeting_admissions = [{ id: "a1" }];
