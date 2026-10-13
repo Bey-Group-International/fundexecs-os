@@ -2270,3 +2270,13 @@ describe("one screen at a time", () => {
     expect(picker).toHaveBeenCalledTimes(1);
   });
 });
+
+describe("a returning guest", () => {
+  it("has the name they joined with kept for the next meeting", async () => {
+    localStorage.removeItem("fx_guest_name");
+    await enterCall();
+    // The harness is a guest named Ada. The next invite link prefills it, so a
+    // guest who comes back is one press from the room.
+    expect(localStorage.getItem("fx_guest_name")).toBe("Ada");
+  });
+});

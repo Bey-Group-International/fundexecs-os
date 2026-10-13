@@ -540,6 +540,9 @@ async function postGuestAttendance(
   }
 }
 
+/** Where an invite-link guest's name is kept between meetings. */
+const GUEST_NAME_KEY = "fx_guest_name";
+
 export function MeetingRoom({ roomCode }: { roomCode: string }) {
   // Start fetching the call screen as soon as the room mounts: the member is
   // about to spend a few seconds in the green room checking their camera, and
@@ -2694,7 +2697,11 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
         ? sessionStorage.getItem(`guest_name_${roomCode}`) ?? ""
         : "";
     } catch { /* storage unavailable — the URL param or an empty name */ }
-    const guestName = nameParam ? decodeURIComponent(nameParam) : storedName;
+    // The name given at the last meeting, so a guest who comes back is one press
+    // from the room rather than one press and a keyboard.
+    let rememberedName = "";
+    try { rememberedName = localStorage.getItem(GUEST_NAME_KEY) ?? ""; } catch { /* storage unavailable */ }
+    const guestName = nameParam ? decodeURIComponent(nameParam) : storedName || rememberedName;
     if (guestName) setDisplayName(guestName);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -3196,6 +3203,9 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
 
     setJoining(true);
     const name = displayName.trim() || "Participant";
+    if (isGuestRef.current && displayName.trim()) {
+      try { localStorage.setItem(GUEST_NAME_KEY, displayName.trim().slice(0, 80)); } catch { /* storage unavailable */ }
+    }
     setLocalName(name);
     localNameRef.current = name;
 

@@ -87,6 +87,17 @@ export default function MeetingInvitePage() {
               }
             } catch { /* no readable session: they are a guest, which is the page below */ }
           }
+          // A guest at a meeting that is under way has one thing to do, and a
+          // page whose only content is a button for doing it is one press too
+          // many: the link now lands them on the pre-join screen, which is
+          // where their name and camera are. A meeting that has not started
+          // keeps the page, because the time and "save to calendar" are what
+          // that visitor came for. The sign-in route moves with them: the
+          // pre-join screen offers it to a guest.
+          if (info.status === "active") {
+            router.replace(`/meeting-room/${encodeURIComponent(roomCode)}?guest=1`);
+            return;
+          }
         }
       } catch {
         setNotFound(true);

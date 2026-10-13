@@ -100,11 +100,20 @@ describe("the invite page", () => {
     expect(screen.queryByRole("link", { name: /^join meeting$/i })).not.toBeInTheDocument();
   });
 
-  it("leaves a signed-out visitor on the page, with the guest link", async () => {
-    fetchMock.mockResolvedValue(meeting({ status: "active" }));
+  it("leaves a signed-out visitor on the page, with the guest link, until the meeting starts", async () => {
+    fetchMock.mockResolvedValue(meeting({ status: "waiting" }));
     render(<MeetingInvitePage />);
     await screen.findByRole("link", { name: /^join meeting$/i });
     expect(replaceMock).not.toHaveBeenCalled();
+  });
+
+  it("takes a signed-out guest straight to the pre-join screen once the meeting is live", async () => {
+    // The page's only content would be a button for doing what the link
+    // already meant, so the press is skipped.
+    fetchMock.mockResolvedValue(meeting({ status: "active" }));
+    render(<MeetingInvitePage />);
+    await waitFor(() => expect(replaceMock).toHaveBeenCalledWith("/meeting-room/abc-def-12?guest=1"));
+    expect(screen.queryByRole("link", { name: /^join meeting$/i })).not.toBeInTheDocument();
   });
 
   it("does not send anyone into a meeting that has ended", async () => {

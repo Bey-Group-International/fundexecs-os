@@ -1385,6 +1385,9 @@ export function MeetingGreenRoom({
                 type="text"
                 value={displayName}
                 onChange={(e) => onDisplayNameChange(e.target.value)}
+                // Enter is the join: a guest who has just typed their name is
+                // looking at the keyboard, not the button.
+                onKeyDown={(e) => { if (e.key === "Enter" && !e.nativeEvent.isComposing) join(); }}
                 placeholder="Your name"
                 autoComplete="name"
                 className="rounded-lg border border-[var(--line)] bg-[var(--surface-0)] px-3 py-2.5 text-base text-[var(--fg-primary)] placeholder:text-[var(--fg-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--gold-400)] sm:text-sm"
@@ -1563,6 +1566,17 @@ export function MeetingGreenRoom({
                     the next two minutes. */}
                 {checkNote && (
                   <p className="mt-2 text-center text-[11px] text-[var(--fg-muted)]">{checkNote}</p>
+                )}
+                {/* A guest who does have an account has nowhere else to find
+                    this once the invite page forwards a live meeting straight
+                    here. */}
+                {isGuest && !checking && (
+                  <p className="mt-2 text-center text-[11px] text-[var(--fg-muted)]">
+                    Have an account?{" "}
+                    <a href={`/login?next=${encodeURIComponent(`/meetings/${roomCode}`)}`} className="text-[var(--gold-400)] hover:underline">
+                      Sign in
+                    </a>
+                  </p>
                 )}
               </>
             )}
