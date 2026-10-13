@@ -195,6 +195,7 @@ import {
 import {
   effectiveLayout,
   layoutIsForced,
+  otherSharerId,
   screenSharerId,
   stageFocusId,
 } from "@/lib/meetings/stage";
@@ -538,6 +539,9 @@ async function postGuestAttendance(
     return err instanceof Error ? err.message : String(err);
   }
 }
+
+/** Where an invite-link guest's name is kept between meetings. */
+const GUEST_NAME_KEY = "fx_guest_name";
 
 export function MeetingRoom({ roomCode }: { roomCode: string }) {
   // Start fetching the call screen as soon as the room mounts: the member is
@@ -1012,6 +1016,9 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     [shareOn, peerVideo],
   );
   const stageLayout = effectiveLayout(layout, sharerId);
+  // The refusal is about the share that was up; once it is gone there is nothing
+  // left to be refused for, and it must not greet the next one.
+  useEffect(() => { if (!sharerId || sharerId === LOCAL_SPEAKER_ID) setShareRefused(false); }, [sharerId]);
   const stageFocus = stageFocusId({ screenSharerId: sharerId, activeSpeakerId });
   const stageLayoutRef = useRef<"grid" | "speaker">("grid");
   const stageFocusRef = useRef<string | null>(null);
@@ -1208,6 +1215,9 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
   // the state it would otherwise be reading.
   const [shareStarting, setShareStarting] = useState(false);
   const sharePendingRef = useRef(false);
+  // A share was refused because someone else is presenting. Cleared by the
+  // member, or by the room once that stops being true.
+  const [shareRefused, setShareRefused] = useState(false);
   const [selectedSpeakerId, setSelectedSpeakerId] = useState("");
 
   /**
@@ -2687,7 +2697,11 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
         ? sessionStorage.getItem(`guest_name_${roomCode}`) ?? ""
         : "";
     } catch { /* storage unavailable — the URL param or an empty name */ }
-    const guestName = nameParam ? decodeURIComponent(nameParam) : storedName;
+    // The name given at the last meeting, so a guest who comes back is one press
+    // from the room rather than one press and a keyboard.
+    let rememberedName = "";
+    try { rememberedName = localStorage.getItem(GUEST_NAME_KEY) ?? ""; } catch { /* storage unavailable */ }
+    const guestName = nameParam ? decodeURIComponent(nameParam) : storedName || rememberedName;
     if (guestName) setDisplayName(guestName);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -3189,6 +3203,9 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
 
     setJoining(true);
     const name = displayName.trim() || "Participant";
+    if (isGuestRef.current && displayName.trim()) {
+      try { localStorage.setItem(GUEST_NAME_KEY, displayName.trim().slice(0, 80)); } catch { /* storage unavailable */ }
+    }
     setLocalName(name);
     localNameRef.current = name;
 
@@ -5297,7 +5314,16 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
   useEffect(() => { startCameraRef.current = startCamera; }, [startCamera]);
 
   const toggleScreen = useCallback(async () => {
-    if (shareOn) { restoreCameraTrack(); return; }
+    // The ref, not the state: this closure is handed to the control bar once and
+    // a press between a share starting and the next render still has to be a
+    // press on "Stop", not a request for a second capture.
+    if (shareOnRef.current) { restoreCameraTrack(); return; }
+    // One screen in the room at a time. Peers are read from the ref the
+    // announcements keep current, which is also what survives a peer leaving.
+    if (otherSharerId(sharingPeersRef.current)) {
+      setShareRefused(true);
+      return;
+    }
     // The picker stays open as long as the member likes, and `shareOn` is false
     // that whole time — so a second press opened a SECOND picker. Both
     // resolving left the first capture running: taken off the stream without
@@ -5348,7 +5374,7 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
       sharePendingRef.current = false;
       setShareStarting(false);
     }
-  }, [shareOn, restoreCameraTrack]);
+  }, [restoreCameraTrack]);
 
   /**
    * Move the call onto another microphone.
@@ -6868,6 +6894,17 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
         <span className="text-amber-500 mt-0.5 shrink-0">⚠</span>
         <p className="flex-1 text-sm text-amber-600 dark:text-amber-400">{mediaError}</p>
         <button onClick={() => setMediaError(null)} className="shrink-0 text-amber-500 hover:text-amber-600 text-xs font-medium underline">Dismiss</button>
+      </div>
+  ) });
+  // A share was refused because someone else is presenting. Shown only while
+  // that is still true, so it withdraws itself when the other share ends.
+  if (shareRefused && sharerId && sharerId !== LOCAL_SPEAKER_ID) stageNotices.push({ id: "share-refused", priority: 72, node: (
+      <div role="status" className="flex items-start gap-3 px-4 py-3 bg-amber-500/10 border-b border-amber-500/30 shrink-0">
+        <span className="text-amber-500 mt-0.5 shrink-0">⚠</span>
+        <p className="flex-1 text-sm text-amber-600 dark:text-amber-400">
+          {allPeers.find((p) => p.id === sharerId)?.displayName ?? "Someone"} is already sharing their screen. Ask them to stop sharing first, then start yours.
+        </p>
+        <button onClick={() => setShareRefused(false)} className="shrink-0 text-amber-500 hover:text-amber-600 text-xs font-medium underline">Dismiss</button>
       </div>
   ) });
   // Transcription deaf to a live microphone. The one person this hits — a host

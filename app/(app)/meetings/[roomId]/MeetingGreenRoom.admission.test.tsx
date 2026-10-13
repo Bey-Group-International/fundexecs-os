@@ -75,6 +75,38 @@ describe("before knocking", () => {
   });
 });
 
+describe("joining from the keyboard", () => {
+  it("joins on Enter in the name field, for a guest who has just typed their name", async () => {
+    const onJoin = jest.fn();
+    await show("idle", { onJoin });
+    await userEvent.type(screen.getByPlaceholderText(/your name/i), "{Enter}");
+    expect(onJoin).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not join twice, or at all, while a knock is already out", async () => {
+    const onJoin = jest.fn();
+    await show("waiting", { onJoin });
+    // The name field stays live during a wait; Enter in it is not a second knock.
+    await userEvent.type(screen.getByPlaceholderText(/your name/i), "{Enter}");
+    expect(onJoin).not.toHaveBeenCalled();
+  });
+});
+
+describe("a guest who already has an account", () => {
+  it("is offered the way to sign in from the screen the invite now lands on", async () => {
+    await show("idle", { isGuest: true });
+    expect(screen.getByRole("link", { name: /sign in/i })).toHaveAttribute(
+      "href",
+      `/login?next=${encodeURIComponent("/meetings/abc-defg-hi")}`,
+    );
+  });
+
+  it("is not shown to a member, who is already signed in", async () => {
+    await show("idle", { isGuest: false });
+    expect(screen.queryByRole("link", { name: /sign in/i })).not.toBeInTheDocument();
+  });
+});
+
 describe("while waiting to be let in", () => {
   it("replaces the button with a live status, in place", async () => {
     await show("waiting");

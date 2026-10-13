@@ -4,7 +4,7 @@
 // none of them, which is why screen sharing did not really work: the share was
 // tracked, broadcast, and drawn as one grid cell the size of a face.
 
-import { effectiveLayout, layoutIsForced, mirrorSelfView, screenSharerId, stageFocusId } from "./stage";
+import { effectiveLayout, layoutIsForced, mirrorSelfView, otherSharerId, screenSharerId, stageFocusId } from "./stage";
 
 const peer = (sharing: boolean) => ({ camOn: true, paused: false, sharing });
 
@@ -106,5 +106,20 @@ describe("mirrorSelfView", () => {
     // For them it is not a mirror, it is a photograph.
     expect(mirrorSelfView({ isLocal: false, showingScreenShare: false })).toBe(false);
     expect(mirrorSelfView({ isLocal: false, showingScreenShare: true })).toBe(false);
+  });
+});
+
+describe("otherSharerId", () => {
+  it("is null when nobody else has announced a share", () => {
+    expect(otherSharerId([])).toBeNull();
+    expect(otherSharerId(new Set<string>())).toBeNull();
+  });
+
+  it("names whoever is presenting, so a second share can be refused and the first named", () => {
+    expect(otherSharerId(new Set(["peer-a"]))).toBe("peer-a");
+  });
+
+  it("takes the first in announcement order when two already are", () => {
+    expect(otherSharerId(new Set(["peer-a", "peer-b"]))).toBe("peer-a");
   });
 });
