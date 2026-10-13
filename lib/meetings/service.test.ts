@@ -239,6 +239,23 @@ describe("updateMeeting — the calendar sequence and the reminder stamp", () =>
     expect(update).toHaveBeenCalledWith(expect.objectContaining({ last_reminder_sent_at: null }));
   });
 
+  it("reopens an ended meeting moved to a future time, and keeps one moved to the past ended", async () => {
+    const ended = { ...PRIOR, status: "ended", started_at: "2026-09-10T15:01:00.000Z", ended_at: "2026-09-10T16:00:00.000Z" };
+    const run = async (scheduledAt: string) => {
+      const { supabase, update } = client();
+      (supabase as unknown as { from: () => { maybeSingle: unknown } }).from = () => ({
+        select: () => ({ eq: () => ({ eq: () => ({ maybeSingle: async () => ({ data: ended, error: null }) }) }) }),
+        update: (v: unknown) => { update(v); return { eq: () => ({ eq: () => ({ select: () => ({ maybeSingle: async () => ({ data: { calendar_sequence: 8 }, error: null }) }) }) }) }; },
+      }) as never;
+      await updateMeeting(supabase, { orgId: "org1", userId: "u1" }, "m1", { scheduledAt });
+      return update;
+    };
+    const future = await run(new Date(Date.now() + 86_400_000).toISOString());
+    expect(future).toHaveBeenCalledWith(expect.objectContaining({ status: "waiting", started_at: null, ended_at: null }));
+    const past = await run("2026-09-11T15:00:00.000Z");
+    expect(past).toHaveBeenCalledWith(expect.not.objectContaining({ status: "waiting" }));
+  });
+
   it("leaves it alone when nothing about the timing actually changed", async () => {
     // Re-saving the same instant, spelled differently, is not a move — and an
     // attendee edit is not one either. Resetting on those would re-mail a

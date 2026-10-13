@@ -506,6 +506,20 @@ export async function updateMeeting(
     input.reminderMinutes !== undefined && (before2.reminder_minutes ?? null) !== (input.reminderMinutes ?? null);
   if (startMoved || reminderChanged) update.last_reminder_sent_at = null;
 
+  // Moving an ended meeting to a time that has not passed reopens it: same
+  // room and link, back to waiting, so it is a plan again rather than a record
+  // of what happened. Its report and transcript stay attached. Moving an old
+  // meeting to another PAST time is only a correction and stays ended.
+  if (startMoved && before2.status === "ended" && input.scheduledAt) {
+    const nextStart = new Date(input.scheduledAt).getTime();
+    const nextEnd = nextStart + cleanDuration(input.durationMinutes ?? before2.duration_minutes ?? 60) * 60_000;
+    if (Number.isFinite(nextStart) && nextEnd > Date.now()) {
+      update.status = "waiting";
+      update.started_at = null;
+      update.ended_at = null;
+    }
+  }
+
   // `select` so the row comes back with the sequence the trigger just bumped.
   // Sending the pre-update value is how a reschedule reaches a calendar client
   // as a revision it already holds — and is therefore discarded.
