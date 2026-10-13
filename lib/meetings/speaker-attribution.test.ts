@@ -412,3 +412,47 @@ describe("a mute pressed mid-sentence", () => {
     expect(micLiveDuring(window, false, 9_000, 9_000)).toBe(false);
   });
 });
+
+describe("the measurements behind a decision", () => {
+  const window = { startedAt: T0, endedAt: T0 + 1500 };
+
+  it("records the shares and peaks the overlapped flag was decided on", () => {
+    const log = new VoiceActivityLog();
+    // Local speaking throughout, a peer audible for the first half of the window.
+    fill(log, { [LOCAL_SPEAKER_ID]: 0.4 }, window.startedAt, window.endedAt);
+    fill(log, { "peer-1": 0.3 }, window.startedAt, window.startedAt + 700);
+    fill(log, { "peer-1": 0.0 }, window.startedAt + 800, window.endedAt);
+
+    const a = attributeUtterance(window, log, PEOPLE, { localMicOn: true });
+    expect(a.evidence.basis).toBe(a.basis);
+    expect(a.evidence.windowMs).toBe(1500);
+    expect(a.evidence.localShare).toBe(1);
+    expect(a.evidence.localPeak).toBe(0.4);
+    expect(a.evidence.peerPeak).toBe(0.3);
+    expect(a.evidence.peerCount).toBe(1);
+    // About half the window: the number a threshold would be tuned against.
+    expect(a.evidence.peerShare).toBeGreaterThan(0.4);
+    expect(a.evidence.peerShare).toBeLessThan(0.6);
+  });
+
+  it("is zero, not missing, for a room where nobody else made a sound", () => {
+    const log = new VoiceActivityLog();
+    fill(log, { [LOCAL_SPEAKER_ID]: 0.45, "peer-1": 0.0 }, window.startedAt, window.endedAt);
+    const a = attributeUtterance(window, log, PEOPLE, { localMicOn: true });
+    expect(a.evidence).toMatchObject({ peerShare: 0, peerPeak: 0, peerCount: 0 });
+  });
+
+  it("is there when the line was withheld too, so a dropped one can be audited", () => {
+    const log = new VoiceActivityLog();
+    fill(log, { [LOCAL_SPEAKER_ID]: 0.0, "peer-1": 0.4 }, window.startedAt, window.endedAt);
+    const a = attributeUtterance(window, log, PEOPLE, { localMicOn: true });
+    expect(a.publish).toBe(false);
+    expect(a.evidence.basis).toBe("echo");
+    expect(a.evidence.peerShare).toBe(1);
+  });
+
+  it("reports an unmeasured window as zero samples, which is not the same as silence", () => {
+    const a = attributeUtterance(window, new VoiceActivityLog(), PEOPLE, { localMicOn: true });
+    expect(a.evidence.localSamples).toBe(0);
+  });
+});

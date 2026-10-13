@@ -78,6 +78,15 @@ export interface ActivitySummary {
   samples: number;
 }
 
+/**
+ * Every reason `attributeUtterance` can give, as data. The stored evidence
+ * (see `AttributionEvidence`) is validated against this on the way in, so a
+ * client cannot write a basis the code does not have.
+ */
+export const ATTRIBUTION_BASES = [
+  "local-voice", "mic-muted", "echo", "cross-talk", "same-room", "unattributed",
+] as const;
+
 export type AttributionBasis =
   /** Local mic was live and the local voice dominated the window. */
   | "local-voice"
@@ -91,6 +100,34 @@ export type AttributionBasis =
   | "same-room"
   /** Nobody was measurably audible — usually a tail-end recognizer flush. */
   | "unattributed";
+
+/**
+ * What the voice meter measured over the window a line was judged on — the
+ * numbers behind `overlapped`, kept so the rule can be tuned against real
+ * meetings instead of guessed at.
+ *
+ * A line stored as "overlapped" used to say only that. Whether that was two
+ * people really talking at once or one stray peer sample against a quiet local
+ * mic (the rule fires on any peer share at least half the local one) could not
+ * be read back from anything stored, so there was nothing to measure a
+ * threshold against. Shares are the fraction of meter samples above
+ * `SPEAKING_LEVEL`; peaks are 0-1 levels. Rounded to two places: enough to
+ * group by, small enough to write on every utterance.
+ */
+export interface AttributionEvidence {
+  basis: AttributionBasis;
+  /** How long the window was, in ms. */
+  windowMs: number;
+  /** Meter samples of this member's own mic in the window. */
+  localSamples: number;
+  localShare: number;
+  localPeak: number;
+  /** The loudest peer by share; 0 when no peer was audible. */
+  peerShare: number;
+  peerPeak: number;
+  /** How many peers were audible at all. */
+  peerCount: number;
+}
 
 export interface Attribution {
   speakerId: string | null;
@@ -120,6 +157,8 @@ export interface Attribution {
    * the words — on a device with no meter every line looks "silent".
    */
   measured: boolean;
+  /** The measurements the decision rested on. */
+  evidence: AttributionEvidence;
 }
 
 /** Below this, the transcript marks the line as uncertainly attributed. */
@@ -263,6 +302,32 @@ export function attributeUtterance(
   participants: ParticipantAudio[],
   options: { localMicOn: boolean; sameRoomPeerIds?: ReadonlySet<string> } = { localMicOn: true },
 ): Attribution {
+  const decision = decideUtterance(window, log, participants, options);
+  const summaries = log.summarize(window.startedAt, window.endedAt);
+  const local = summaries.find((s) => s.speakerId === LOCAL_SPEAKER_ID);
+  const peers = summaries.filter((s) => s.speakerId !== LOCAL_SPEAKER_ID && s.share > 0);
+  const r2 = (n: number) => Math.round(n * 100) / 100;
+  return {
+    ...decision,
+    evidence: {
+      basis: decision.basis,
+      windowMs: Math.max(0, Math.round(window.endedAt - window.startedAt)),
+      localSamples: local?.samples ?? 0,
+      localShare: r2(local?.share ?? 0),
+      localPeak: r2(local?.peak ?? 0),
+      peerShare: r2(peers[0]?.share ?? 0),
+      peerPeak: r2(peers[0]?.peak ?? 0),
+      peerCount: peers.length,
+    },
+  };
+}
+
+function decideUtterance(
+  window: { startedAt: number; endedAt: number },
+  log: VoiceActivityLog,
+  participants: ParticipantAudio[],
+  options: { localMicOn: boolean; sameRoomPeerIds?: ReadonlySet<string> },
+): Omit<Attribution, "evidence"> {
   const nameOf = (id: string) => participants.find((p) => p.id === id)?.displayName ?? null;
   const summaries = log.summarize(window.startedAt, window.endedAt);
   const local = summaries.find((s) => s.speakerId === LOCAL_SPEAKER_ID);
