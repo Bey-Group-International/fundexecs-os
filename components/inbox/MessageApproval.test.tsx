@@ -92,6 +92,17 @@ it("shows exactly what goes out, from where, and the conversation", () => {
   expect(screen.getByRole("link", { name: /Open conversation/ }).getAttribute("href")).toBe("/inbox?q=ana%40acme.com");
 });
 
+it("lists the files the message will carry", () => {
+  render(
+    <MessageApprovalCard
+      item={item("1", { attachments: [{ name: "Deck.pdf", size: 2 * 1024 * 1024 }] })}
+      onDecided={onDecided}
+      onCleared={onCleared}
+    />,
+  );
+  expect(screen.getByText(/Deck\.pdf · 2\.0 MB/)).toBeTruthy();
+});
+
 it("approves only after a deliberate confirm", async () => {
   decideInboxApproval.mockResolvedValue({ ok: true });
   const user = userEvent.setup();

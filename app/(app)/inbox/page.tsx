@@ -19,9 +19,8 @@ import type { InboxChannel } from "@/lib/supabase/database.types";
 import { UNASSIGNED, type InboxThreadFilters } from "@/lib/inbox/data";
 import { orgConnectedChannels } from "@/lib/integrations/gateway";
 import { tierForAction, type GateTier } from "@/lib/gates";
-import { markOpenThreadsRead, getOrgTeammates } from "./actions";
+import { getOrgTeammates } from "./actions";
 import { InboxBoard, type InboxCardData } from "./InboxBoard";
-import { InboxReadMarker } from "./InboxReadMarker";
 import { InboxLive } from "./InboxLive";
 import { InboxSearch } from "./InboxSearch";
 
@@ -73,9 +72,9 @@ export default async function InboxPage(
 
   const supabase = await createServerClient();
   // Wake any snoozed threads whose time has passed, so they reappear on this
-  // render rather than the next one. Only the two reads that must observe the
-  // wake wait on it — everything else starts immediately, so the update is no
-  // longer a serial leg in front of the whole fetch. Best-effort per its own
+  // render rather than the next one. Only the thread read must observe the
+  // wake, so only it waits — everything else starts immediately, and the update
+  // is not a serial leg in front of the whole fetch. Best-effort per its own
   // contract: a failed wake leaves those threads snoozed for one more load
   // instead of failing the page.
   const woken = autoUnsnoozeExpired(supabase, ctx.orgId).catch(() => {});
@@ -83,29 +82,12 @@ export default async function InboxPage(
   // diligence, IC-ready deals, open risks) and the unified communications
   // stream (booking / messaging / video), plus the org's teammates for the
   // assignee picker — all fetched in parallel.
-  const [inbox, views, unreadProbe, teammates, connectedChannels] = await Promise.all([
+  const [inbox, views, teammates, connectedChannels] = await Promise.all([
     getInbox(ctx.orgId),
     woken.then(() => getInboxThreads(supabase, filters)),
-    // Is there anything for the read-marker to actually mark? One indexed row
-    // probe, on exactly the predicate `markOpenThreadsRead` writes with — and
-    // deliberately unfiltered, because that action clears every open unread
-    // thread, not just the ones the current search shows. When this comes back
-    // empty the marker is not rendered at all, so the common revisit does no
-    // write, no revalidation, and no second render of this page.
-    woken.then(() =>
-      supabase
-        .from("inbox_threads")
-        .select("id")
-        .eq("organization_id", ctx.orgId!)
-        .eq("unread", true)
-        .eq("status", "open")
-        .neq("channel", "deal_share")
-        .limit(1),
-    ),
     getOrgTeammates(),
     orgConnectedChannels(supabase, ctx.orgId),
   ]);
-  const hasUnread = (unreadProbe.data?.length ?? 0) > 0;
 
   // Prepare every comms display field on the server so the client board never
   // imports the intelligence module (and its AI SDK) into the browser bundle.
@@ -135,6 +117,10 @@ export default async function InboxPage(
       subject: thread.subject,
       counterparty: thread.counterparty_name ?? thread.counterparty_email ?? "Unknown",
       summary: thread.ai_summary ?? thread.preview ?? "",
+      // The row's snippet is the latest message itself, the way Gmail shows it;
+      // Earn's summary lives in the opened thread.
+      snippet: thread.preview ?? "",
+      lastMessageAt: thread.last_message_at,
       intent: thread.intent,
       priority: thread.priority,
       bucket: priorityBucket(thread.priority),
@@ -192,11 +178,7 @@ export default async function InboxPage(
   );
 
   return (
-    <div className="fx-ambient mx-auto max-w-4xl">
-      {/* Mark all open threads as read when the operator opens the inbox —
-          mounted only when something is actually unread, so a revisit with a
-          clean inbox costs neither the write nor the re-render it triggers. */}
-      {hasUnread ? <InboxReadMarker action={markOpenThreadsRead} /> : null}
+    <div className="fx-ambient mx-auto max-w-6xl">
       {/* Live updates: refresh as threads/messages arrive or change. */}
       <InboxLive orgId={ctx.orgId} />
       <header className="mb-6 flex flex-wrap items-start justify-between gap-4">

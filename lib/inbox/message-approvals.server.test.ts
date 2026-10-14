@@ -53,7 +53,7 @@ it("shows the recipient, reply subject, mailbox, meeting, contact and their last
     to: { name: "Ana Diaz", email: "Ana@Acme.com" },
     subject: "Re: Follow-up: IC",
     from: "host@fund.com",
-    threadHref: "/inbox?q=Ana%40Acme.com",
+    threadHref: "/inbox?q=Ana%40Acme.com&t=t1",
     meeting: { id: "m1", title: "Series B sync", roomCode: "abc-def" },
     contact: { company: "Acme", title: "Partner" },
     lastInbound: { body: "Can you send the deck?", at: "2026-10-05T10:00:00Z" },
@@ -102,4 +102,6 @@ it("links to the conversation by address, else subject", () => {
   expect(threadHref({ counterparty_email: "a@b.co", subject: "S" })).toBe("/inbox?q=a%40b.co");
   expect(threadHref({ counterparty_email: null, subject: "Intro call" })).toBe("/inbox?q=Intro%20call");
   expect(threadHref({})).toBe("/inbox");
+  // With the thread's id it opens straight in the reading pane.
+  expect(threadHref({ id: "t9", counterparty_email: "a@b.co" })).toBe("/inbox?q=a%40b.co&t=t9");
 });

@@ -41,6 +41,7 @@ import {
   replySubject,
   type PendingInboxReply,
 } from "@/lib/inbox/pending-action";
+import { ATTACHMENT_LINK_DAYS, formatFileSize, type AttachmentRef, type SentAttachment } from "@/lib/inbox/attachments";
 import type { AgentKey } from "@/lib/supabase/database.types";
 
 type Client = SupabaseClient<Database>;
@@ -80,6 +81,15 @@ export function isEmailThread(t: Pick<InboxThread, "channel" | "counterparty_ema
 }
 
 
+/** Files too big to attach, as links under the message. */
+export function linkedFilesHtml(files: ReadonlyArray<{ name: string; size: number; url: string }>): string {
+  if (!files.length) return "";
+  const items = files
+    .map((f) => `<li><a href="${escapeHtml(f.url)}">${escapeHtml(f.name)}</a> (${escapeHtml(formatFileSize(f.size))})</li>`)
+    .join("");
+  return `<p>Files (download links, valid ${ATTACHMENT_LINK_DAYS} days):</p><ul>${items}</ul>`;
+}
+
 export function replyHtml(body: string): string {
   const escaped = escapeHtml(body);
   return escaped ? `<p>${escaped.replace(/\n\n/g, "</p><p>").replace(/\n/g, "<br>")}</p>` : "";
@@ -112,9 +122,15 @@ export interface DeliverInput {
   body?: string;
   /** Composer work product behind the action, for the dispatch trust gate. */
   backingArtifact?: DispatchContext["backingArtifact"];
+  /** Files to send with an email reply. */
+  attachments?: AttachmentRef[];
 }
 
-export type DeliverResult = DispatchResult & { needsMailbox?: boolean };
+export type DeliverResult = DispatchResult & {
+  needsMailbox?: boolean;
+  /** What went with the message, for the transcript. */
+  sentAttachments?: SentAttachment[];
+};
 
 /** Send it. Email threads from the sender's mailbox; everything else through its adapter. */
 export async function deliverThreadAction(client: Client, input: DeliverInput): Promise<DeliverResult> {
@@ -138,12 +154,25 @@ export async function deliverThreadAction(client: Client, input: DeliverInput): 
       return { ok: false, channel: "gmail", live: false, detail: message, error: message, needsMailbox: true };
     }
     const to = t.counterparty_email as string;
+    // Files read back from Storage now, never taken from the client: attached
+    // while the message stays under Gmail's limit, linked after that. A file
+    // that cannot be read at all stops the send rather than vanishing from it.
+    const files = input.attachments?.length
+      ? // Loaded only for a message with files: it pulls in Storage and the data
+        // room, which nothing else on the send path needs.
+        await (await import("@/lib/inbox/attachments.server")).prepareOutgoingFiles(input.orgId, input.attachments)
+      : null;
+    if (files?.missing.length) {
+      const message = `Couldn't read ${files.missing.join(", ")} — remove ${files.missing.length === 1 ? "it" : "them"} and try again.`;
+      return { ok: false, channel: "gmail", live: false, detail: message, error: message };
+    }
     const sent = await sendEmail({
       orgId: input.orgId,
       credentials: { gmailAccessToken: mailbox.token },
       to: { name: t.counterparty_name ?? to, email: to },
       subject: replySubject(t.subject),
-      htmlBody: replyHtml(input.body),
+      htmlBody: replyHtml(input.body) + linkedFilesHtml(files?.links ?? []),
+      ...(files?.attachments.length ? { attachments: files.attachments } : {}),
     });
     if (!sent.ok) {
       return {
@@ -176,7 +205,14 @@ export async function deliverThreadAction(client: Client, input: DeliverInput): 
       live: true,
       detail: `Email sent to ${t.counterparty_name ?? to}.`,
       reference: sent.gmailMessageId,
+      ...(files?.sent.length ? { sentAttachments: files.sent } : {}),
     };
+  }
+
+  // Only email carries files; anything else would drop them without a word.
+  if (input.attachments?.length) {
+    const message = "Files can only be sent on an email conversation.";
+    return { ok: false, channel: t.channel, live: false, detail: message, error: message };
   }
 
   const connected = await orgConnectedChannels(client, input.orgId);
@@ -244,6 +280,7 @@ export async function deliverApprovedReply(
       action: reply.action,
       body: reply.body ?? undefined,
       backingArtifact: reply.backingArtifact ?? undefined,
+      attachments: reply.attachments,
     });
   } catch (err) {
     return finish(false, {}, err instanceof Error ? err.message : "Delivery failed.");
@@ -280,7 +317,8 @@ export async function deliverApprovedReply(
       reference: result.reference ?? null,
       dispatch_detail: result.detail,
       approved: true,
-    } as Json,
+      ...(result.sentAttachments?.length ? { attachments: result.sentAttachments } : {}),
+    } as unknown as Json,
   });
   // A booking or video link a live dispatch produced travels with the thread,
   // exactly as performThreadAction keeps it — never a mock's placeholder.

@@ -41,10 +41,17 @@ export interface MessageTask {
 
 const PREVIEW_MAX = 280;
 
-/** The inbox URL that opens this conversation. */
-export function threadHref(thread: { counterparty_email?: string | null; subject?: string | null }): string {
+/**
+ * The inbox URL that opens this conversation: the search narrows the list to it,
+ * and `t` opens it in the reading pane.
+ */
+export function threadHref(thread: { id?: string | null; counterparty_email?: string | null; subject?: string | null }): string {
+  const params = new URLSearchParams();
   const q = thread.counterparty_email || thread.subject || "";
-  return q ? `/inbox?q=${encodeURIComponent(q)}` : "/inbox";
+  if (q) params.set("q", q);
+  if (thread.id) params.set("t", thread.id);
+  const qs = params.toString().replace(/\+/g, "%20");
+  return qs ? `/inbox?${qs}` : "/inbox";
 }
 
 export async function loadMessageApprovals(
@@ -158,7 +165,7 @@ export async function loadMessageApprovals(
         to: { name: thread.counterparty_name, email: thread.counterparty_email },
         subject: p.action === "send_reply" ? replySubject(thread.subject) : thread.subject,
         from: thread.channel === "gmail" ? (fromBySender.get(p.senderId) ?? null) : null,
-        threadHref: threadHref(thread),
+        threadHref: threadHref({ ...thread, id: p.threadId }),
         meeting: thread.meeting_id ? (meetingById.get(thread.meeting_id) ?? null) : null,
         contact: email ? (contactByEmail.get(email) ?? null) : null,
         lastInbound: lastInbound.get(p.threadId) ?? null,
@@ -167,6 +174,7 @@ export async function loadMessageApprovals(
         authorId: p.senderId,
         scheduledAt: t.status === "pending" && stored?.scheduledAt && !stored.delivered ? stored.scheduledAt : null,
         waitingSince: t.status === "awaiting_approval" ? (t.waiting_since ?? t.created_at ?? null) : null,
+        ...(p.attachments?.length ? { attachments: p.attachments.map((a) => ({ name: a.name, size: a.size })) } : {}),
       });
     }
   } catch (err) {

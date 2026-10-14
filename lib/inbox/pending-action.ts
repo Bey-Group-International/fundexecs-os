@@ -5,6 +5,7 @@
 
 import type { ActionKind } from "@/lib/gates";
 import { INBOX_ACTION_LABEL } from "@/lib/inbox/action-labels";
+import { parseAttachmentRefs, type AttachmentRef } from "@/lib/inbox/attachments";
 
 export type BackingArtifact = { verification_status: string; grounding_score: number };
 
@@ -27,6 +28,8 @@ export interface PendingInboxReply {
   /** Set once delivered; the meeting's follow-up status reads it. */
   delivered?: boolean;
   error?: string;
+  /** Files the reply carries, sent with it when it goes out. */
+  attachments?: AttachmentRef[];
   /** Approved to go out at this time (ISO) rather than at once. */
   scheduledAt?: string | null;
   /** Who approved it — the scheduled send records them as its actor. */
@@ -53,6 +56,7 @@ export function extractInboxReply(result: unknown): PendingInboxReply | null {
     delivered: p.delivered === true,
     ...(typeof p.error === "string" ? { error: p.error } : {}),
     ...(typeof p.scheduledAt === "string" ? { scheduledAt: p.scheduledAt } : {}),
+    ...(Array.isArray(p.attachments) && p.attachments.length ? { attachments: parseAttachmentRefs(p.attachments) } : {}),
     ...(typeof p.approvedBy === "string" ? { approvedBy: p.approvedBy } : {}),
   };
 }
@@ -151,4 +155,6 @@ export interface InboxMessageApproval {
   scheduledAt: string | null;
   /** When it started waiting for approval (ISO), for the "waiting 1 day" flag. */
   waitingSince: string | null;
+  /** The files it will send, by name and size. */
+  attachments?: Array<{ name: string; size: number }>;
 }

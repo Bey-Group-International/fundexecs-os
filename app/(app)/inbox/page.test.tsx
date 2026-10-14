@@ -55,10 +55,8 @@ jest.mock("@/lib/integrations/gateway", () => ({
   orgConnectedChannels: (...a: unknown[]) => orgConnectedChannels(...a),
 }));
 jest.mock("./actions", () => ({
-  markOpenThreadsRead: async () => {},
   getOrgTeammates: (...a: unknown[]) => getOrgTeammates(...a),
 }));
-jest.mock("./InboxReadMarker", () => ({ InboxReadMarker: () => null }));
 jest.mock("./InboxLive", () => ({ InboxLive: () => null }));
 jest.mock("./InboxSearch", () => ({ InboxSearch: () => null }));
 

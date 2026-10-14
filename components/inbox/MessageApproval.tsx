@@ -21,6 +21,7 @@ import { useState, useTransition } from "react";
 import Link from "next/link";
 import type { InboxItem } from "@/lib/inbox";
 import type { InboxMessageApproval } from "@/lib/inbox/pending-action";
+import { formatFileSize } from "@/lib/inbox/attachments";
 import { relativeTime } from "@/components/mobile/format";
 import {
   approveEditedInboxMessage,
@@ -100,6 +101,15 @@ function Preview({ m }: { m: InboxMessageApproval }) {
       ) : (
         <p className="mt-2 border-t border-line/60 pt-2 text-fg-muted">{m.actionLabel} — carried out on approval.</p>
       )}
+      {m.attachments?.length ? (
+        <ul className="mt-2 flex flex-wrap gap-1.5" aria-label="Attachments">
+          {m.attachments.map((a, i) => (
+            <li key={`${a.name}-${i}`} className="rounded-md border border-line px-2 py-0.5 text-[11px] text-fg-secondary">
+              📎 {a.name} · {formatFileSize(a.size)}
+            </li>
+          ))}
+        </ul>
+      ) : null}
     </div>
   );
 }

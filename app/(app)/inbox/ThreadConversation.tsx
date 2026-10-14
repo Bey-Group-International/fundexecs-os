@@ -6,6 +6,8 @@ import { useRouter } from "next/navigation";
 import type { InboxChannel } from "@/lib/supabase/database.types";
 import { relativeMeeting } from "./format";
 import { LinkToContact } from "./LinkToContact";
+import { ComposerAttachments, readyRefs, type ComposerFile } from "./ComposerAttachments";
+import { formatFileSize } from "@/lib/inbox/attachments";
 import {
   getThreadMessages,
   replyToThread,
@@ -92,6 +94,14 @@ export function ThreadConversation({
   // until they arrive; the template chips (card.quickReplies) show meanwhile, so
   // the row is never empty and the upgrade is a silent swap.
   const [aiReplies, setAiReplies] = useState<string[] | null>(null);
+  // Files riding on the next reply. Uploads run in the background; Send waits
+  // until every one is in Storage so a file is never silently left behind.
+  const [files, setFiles] = useState<ComposerFile[]>([]);
+  const updateFiles = useCallback((update: (prev: ComposerFile[]) => ComposerFile[]) => setFiles(update), []);
+  const uploading = files.some((f) => f.status === "uploading");
+  // A failed upload blocks Send rather than going out without the file.
+  const failedFile = files.some((f) => f.status === "error");
+  const canAttach = card.channel === "gmail";
 
   const loadMessages = useCallback(() => {
     startMsgTransition(async () => {
@@ -147,11 +157,14 @@ export function ThreadConversation({
       // draft left behind is visible and discardable, a newer one deleted by an
       // older send is gone.
       if (seedRevision) f.set("draft_revision", seedRevision);
+      const refs = canAttach ? readyRefs(files) : [];
+      if (refs.length) f.set("attachments", JSON.stringify(refs));
       const r = await replyToThread(f);
       onResult(r, "reply");
       if (r.ok) {
         setReplyText("");
         setSeedRevision(null);
+        setFiles([]);
         // The reply has gone (or been queued for approval), so the draft of it is
         // no longer a draft. `replyToThread` deletes the row; this is the same
         // fact in the open panel, which would otherwise keep saying an unsent
@@ -164,7 +177,7 @@ export function ThreadConversation({
     // `seedRevision`, NOT `card.draft`. An earlier version depended on the prop with
     // a comment claiming the next send must carry the newest revision; that had the
     // invariant backwards and reintroduced the lost update it was meant to stop.
-  }, [replyText, card.id, seedRevision, loadMessages, router, onResult]);
+  }, [replyText, card.id, seedRevision, canAttach, files, loadMessages, router, onResult]);
 
   const chips = aiReplies ?? card.quickReplies;
   const showChips = chips.length > 0 && !replyText.trim();
@@ -191,6 +204,23 @@ export function ThreadConversation({
                 {m.author ?? (m.direction === "outbound" ? "You" : card.counterparty)} · {relativeMeeting(m.occurredAt)}
               </div>
               <div className="whitespace-pre-wrap break-words">{m.body}</div>
+              {m.attachments?.length ? (
+                <ul className="mt-1.5 flex flex-wrap gap-1.5" aria-label="Files sent">
+                  {m.attachments.map((a, i) => (
+                    <li
+                      key={`${a.name}-${i}`}
+                      className="inline-flex items-center gap-1 rounded-md border border-line/70 px-1.5 py-0.5 text-[11px] text-fg-secondary"
+                    >
+                      <span aria-hidden>📎</span>
+                      <span className="max-w-[12rem] truncate">{a.name}</span>
+                      <span className="text-fg-muted">
+                        {formatFileSize(a.size)}
+                        {a.delivery === "link" ? " · sent as link" : ""}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
             </div>
           ))}
         </div>
@@ -239,13 +269,22 @@ export function ThreadConversation({
             </div>
           </div>
         ) : null}
-        <textarea
-          value={replyText}
-          onChange={(e) => setReplyText(e.target.value)}
-          rows={2}
-          placeholder={`Reply to ${card.counterparty}…`}
-          className="w-full resize-none rounded-md border border-line bg-surface-2 px-2.5 py-2 text-sm text-fg-primary outline-none placeholder:text-fg-muted focus:border-gold-500"
-        />
+        <ComposerAttachments
+          threadId={card.id}
+          files={files}
+          onChange={updateFiles}
+          onInsertText={(t) => setReplyText((v) => (v.trim() ? `${v.trimEnd()}\n\n` : "") + t)}
+          canAttach={canAttach}
+          disabled={sending}
+        >
+          <textarea
+            value={replyText}
+            onChange={(e) => setReplyText(e.target.value)}
+            rows={3}
+            placeholder={`Reply to ${card.counterparty}…`}
+            className="w-full resize-y rounded-md border border-line bg-surface-2 px-2.5 py-2 text-sm text-fg-primary outline-none placeholder:text-fg-muted focus:border-gold-500"
+          />
+        </ComposerAttachments>
         <div className="mt-1.5 flex flex-wrap items-center justify-between gap-2">
           {card.connected && LIVE_CAPABLE_CHANNELS.has(card.channel) ? (
             <span className="font-mono text-[11px] uppercase tracking-wider text-fg-muted">
@@ -275,11 +314,18 @@ export function ThreadConversation({
             </button>
             <button
               type="button"
-              disabled={sending || drafting || !replyText.trim()}
+              disabled={sending || drafting || uploading || failedFile || !replyText.trim()}
               onClick={sendReply}
+              title={
+                uploading
+                  ? "Waiting for files to finish uploading"
+                  : failedFile
+                    ? "Remove the file that failed to upload first"
+                    : undefined
+              }
               className="rounded-md border border-line bg-surface-0/80 px-3 py-1.5 text-sm text-fg-primary transition hover:-translate-y-px hover:border-gold-500 disabled:opacity-50"
             >
-              {sending ? "Sending…" : "Send reply"}
+              {sending ? "Sending…" : uploading ? "Uploading…" : "Send reply"}
             </button>
           </div>
         </div>
