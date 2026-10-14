@@ -19,7 +19,7 @@ jest.mock("@/lib/meetings/report-generation.server", () => ({
 jest.mock("@/lib/anthropic-client", () => ({ anthropicClient: () => ({}), LONG_RUN_TIMEOUT_MS: 1 }));
 
 import { STALE_MEETING_MS } from "./report-generation";
-import { MAX_REPORTS_PER_SWEEP, runStaleMeetingSweep } from "./stale-meeting-sweep.server";
+import { MAX_PAGES, MAX_REPORTS_PER_SWEEP, runStaleMeetingSweep } from "./stale-meeting-sweep.server";
 
 const NOW = new Date("2026-10-09T12:00:00.000Z");
 const ago = (ms: number) => new Date(NOW.getTime() - ms).toISOString();
@@ -33,6 +33,10 @@ interface World {
   transcripts: Record<string, Row[]>;
   /** What the open-meetings read was filtered by. */
   filters: Array<[string, unknown]>;
+  /** Activity reads made, per table, for counting what a meeting cost. */
+  reads: { participants: number; transcripts: number };
+  /** Pages of open meetings read. */
+  pages: number;
 }
 
 function client(w: World) {
@@ -40,6 +44,7 @@ function client(w: World) {
     from: (table: string) => {
       let meetingId: unknown = null;
       let descending = false;
+      let after: string | null = null;
       const chain: Record<string, unknown> = {
         select: () => chain,
         in: (col: string, v: unknown) => { w.filters.push([col, v]); return chain; },
@@ -50,11 +55,22 @@ function client(w: World) {
           return chain;
         },
         lte: (col: string, v: unknown) => { w.filters.push([col, v]); return chain; },
+        // The keyset cursor: `created_at.gt.X,and(created_at.eq.X,id.gt.ID)`. The
+        // world is already in (created_at, id) order, so the id is enough.
+        or: (expr: string) => { after = /id\.gt\.([^)]+)\)/.exec(expr)?.[1] ?? null; return chain; },
         order: (_col: string, o?: { ascending?: boolean }) => { descending = o?.ascending === false; return chain; },
         limit: async (n: number) => {
-          if (table === "live_meetings") return { data: w.meetings.slice(0, n), error: null };
-          if (table === "live_meeting_participants") return { data: w.participants[String(meetingId)] ?? [], error: null };
+          if (table === "live_meetings") {
+            w.pages += 1;
+            const from = after === null ? 0 : w.meetings.findIndex((m) => m.id === after) + 1;
+            return { data: w.meetings.slice(from, from + n), error: null };
+          }
+          if (table === "live_meeting_participants") {
+            w.reads.participants += 1;
+            return { data: w.participants[String(meetingId)] ?? [], error: null };
+          }
           if (table === "live_meeting_transcripts") {
+            w.reads.transcripts += 1;
             const rows = [...(w.transcripts[String(meetingId)] ?? [])].sort((a, b) =>
               String(a.ts).localeCompare(String(b.ts)),
             );
@@ -70,7 +86,10 @@ function client(w: World) {
 }
 
 function world(over: Partial<World> = {}): World {
-  return { meetings: [], participants: {}, transcripts: {}, filters: [], ...over };
+  return {
+    meetings: [], participants: {}, transcripts: {}, filters: [],
+    reads: { participants: 0, transcripts: 0 }, pages: 0, ...over,
+  };
 }
 
 const meeting = (over: Row = {}): Row => ({
@@ -201,5 +220,83 @@ describe("resilience", () => {
     const stats = await sweep(w);
     expect(stats).toMatchObject({ failed: 1, closed: 1 });
     spy.mockRestore();
+  });
+});
+
+describe("walking the whole set of candidates", () => {
+  // The bug this exists for: the sweep read the fifty oldest open meetings and
+  // stopped. Meetings that were booked and never held show no sign of life, so
+  // they are never closed and pile up at the old end of that order; once there
+  // were a page of them, every real abandoned meeting behind was out of reach.
+  const neverHeld = (n: number) =>
+    Array.from({ length: n }, (_, i) => meeting({
+      id: `held-${String(i).padStart(3, "0")}`, status: "waiting",
+      created_at: ago((100 - i) * H), scheduled_at: ago((60 - i) * H),
+    }));
+
+  it("reaches an abandoned meeting that sits behind a full page of never-held ones", async () => {
+    const w = world({
+      meetings: [...neverHeld(5), meeting({ id: "real", status: "active", created_at: ago(30 * H) })],
+    });
+    const stats = await runStaleMeetingSweep(client(w), { now: NOW, client: null, model: "t", limit: 2 });
+    expect(stats).toMatchObject({ candidates: 6, closed: 1, failed: 0 });
+    expect(closeMeeting).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
+      meeting: expect.objectContaining({ id: "real" }),
+    }));
+    expect(w.pages).toBeGreaterThan(1);
+  });
+
+  it("does not skip a meeting when the one before it is closed mid-walk", async () => {
+    // Closing takes a meeting out of the set. A page offset would then jump
+    // over whoever slid into its place.
+    const w = world({
+      meetings: ["a", "b", "c", "d", "e"].map((id, i) => meeting({ id, created_at: ago((50 - i) * H) })),
+    });
+    closeMeeting.mockImplementation(async (_s: unknown, { meeting: m }: { meeting: Row }) => {
+      w.meetings = w.meetings.filter((x) => x.id !== m.id);
+      return { endedAt: "x", startedAt: null };
+    });
+    const stats = await runStaleMeetingSweep(client(w), { now: NOW, client: null, model: "t", limit: 2 });
+    expect(stats.closed).toBe(5);
+    expect(closeMeeting).toHaveBeenCalledTimes(5);
+  });
+
+  it("spends no reads on a meeting still booked for later", async () => {
+    const w = world({
+      meetings: [
+        meeting({ id: "future", status: "waiting", scheduled_at: new Date(NOW.getTime() + 24 * H).toISOString() }),
+        meeting({ id: "just-over", status: "waiting", scheduled_at: ago(1 * H) }),
+      ],
+    });
+    await sweep(w);
+    // Neither can be abandoned yet (the later one is not due, the other is only
+    // an hour past its time), so neither costs a participants or transcripts read.
+    expect(w.reads.participants + w.reads.transcripts).toBe(0);
+    expect(closeMeeting).not.toHaveBeenCalled();
+  });
+
+  it("still spends at most one model call, oldest first, across pages", async () => {
+    const w = world({
+      meetings: ["a", "b", "c"].map((id, i) => meeting({ id, created_at: ago((50 - i) * H) })),
+      transcripts: { a: [{ ts: ago(10 * H) }], b: [{ ts: ago(10 * H) }], c: [{ ts: ago(10 * H) }] },
+    });
+    const stats = await runStaleMeetingSweep(client(w), { now: NOW, client: null, model: "t", limit: 1 });
+    expect(stats).toMatchObject({ reported: MAX_REPORTS_PER_SWEEP, deferred: 2 });
+    const [, input] = generateReportFromStoredTranscript.mock.calls[0];
+    expect(input.meeting.id).toBe("a");
+  });
+
+  it("stops walking when it is out of time and leaves the rest for the next pass", async () => {
+    const warn = jest.spyOn(console, "warn").mockImplementation(() => {});
+    const w = world({ meetings: neverHeld(6) });
+    await runStaleMeetingSweep(client(w), { now: NOW, client: null, model: "t", limit: 2, budgetMs: -1 });
+    expect(w.pages).toBe(1);
+    warn.mockRestore();
+  });
+
+  it("is bounded in pages, so a runaway set cannot hold the cron", async () => {
+    const w = world({ meetings: neverHeld(MAX_PAGES * 2 + 6) });
+    await runStaleMeetingSweep(client(w), { now: NOW, client: null, model: "t", limit: 2 });
+    expect(w.pages).toBe(MAX_PAGES);
   });
 });
