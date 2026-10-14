@@ -180,6 +180,35 @@ function toEditInitial(m: CalendarMeeting): MeetingEditInitial {
   };
 }
 
+/**
+ * What "New meeting" opens with when a meeting is already open in the day
+ * panel: a copy of it, guests and every setting still attached and editable,
+ * but with no date or time and no link to the original's room, series or
+ * report. A Google/ICS event has less to give — its title and length.
+ */
+export function copyInitialFrom(item: DayAgendaItem): Partial<MeetingEditInitial> | null {
+  if (item.meeting) {
+    // Identity and time are not copied, nor the room's join link. Location and
+    // tags are left out too: the form has no field for either, so a copy would
+    // carry values the host can neither see nor change.
+    const {
+      meetingId: _id, isDraft: _draft, seriesId: _sid, seriesRule: _rule,
+      meetingUrl: _url, location: _loc, tags: _tags, ...rest
+    } = toEditInitial(item.meeting);
+    void _id; void _draft; void _sid; void _rule; void _url; void _loc; void _tags;
+    return { ...rest, blankTime: true };
+  }
+  if (item.event) {
+    const minutes = Math.round((new Date(item.event.endsAt).getTime() - new Date(item.event.startsAt).getTime()) / 60_000);
+    return {
+      title: item.event.title,
+      durationMinutes: Number.isFinite(minutes) && minutes >= 15 && !item.event.isAllDay ? Math.min(minutes, 480) : null,
+      blankTime: true,
+    };
+  }
+  return null;
+}
+
 export function MeetingsCalendar({
   initialMeetings,
   userId,
@@ -841,7 +870,13 @@ export function MeetingsCalendar({
               onOpenDay={openDay}
               onSelectItem={selectDayItem}
               onCloseDay={closeDay}
-              onNewMeeting={(d) => openScheduleAt(localIso(d.getFullYear(), d.getMonth(), d.getDate(), 9, 0))}
+              onNewMeeting={(d, from) => {
+                const copy = from ? copyInitialFrom(from) : null;
+                openScheduleAt(
+                  localIso(d.getFullYear(), d.getMonth(), d.getDate(), 9, 0),
+                  copy,
+                );
+              }}
               onBlockTime={(d) => {
                 const iso = localIso(d.getFullYear(), d.getMonth(), d.getDate(), 9, 0);
                 setBlockDraft({ startsAt: iso, endsAt: defaultBlockEnd(iso) });
@@ -1660,7 +1695,7 @@ function MonthView({
   onOpenDay: (day: Date, itemKey?: string) => void;
   onSelectItem: (itemKey: string | null) => void;
   onCloseDay: () => void;
-  onNewMeeting: (day: Date) => void;
+  onNewMeeting: (day: Date, from?: DayAgendaItem | null) => void;
   onBlockTime: (day: Date) => void;
   onEditMeeting: (m: CalendarMeeting) => void;
 }) {
@@ -1813,7 +1848,7 @@ export function DayPanel({
   selectedKey: string | null;
   onSelectItem: (itemKey: string | null) => void;
   onClose: () => void;
-  onNewMeeting: (day: Date) => void;
+  onNewMeeting: (day: Date, from?: DayAgendaItem | null) => void;
   onBlockTime: (day: Date) => void;
   onEditMeeting: (m: CalendarMeeting) => void;
   onClearBlock: (b: CalendarBlock) => void;
@@ -1862,7 +1897,7 @@ export function DayPanel({
         </div>
         <button
           type="button"
-          onClick={() => onNewMeeting(day)}
+          onClick={() => onNewMeeting(day, selected)}
           className="rounded-lg bg-gold-400 px-2.5 py-1.5 text-[11px] font-semibold text-white hover:bg-gold-500"
         >
           New meeting
