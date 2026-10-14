@@ -45,6 +45,12 @@ export interface MeetingEditInitial {
   title?: string;
   meetingType?: string;
   scheduledAt?: string | null;
+  /**
+   * Open with the date and start time empty, for a copy of another meeting:
+   * the host must choose when, rather than save the original's slot by
+   * accident. The copied duration is kept and applies once a start is picked.
+   */
+  blankTime?: boolean;
   durationMinutes?: number | null;
   timezone?: string | null;
   description?: string | null;
@@ -122,6 +128,7 @@ function isoToLocalParts(iso: string | null | undefined): { date: string; time: 
 }
 
 function addMinutesToTime(time: string, minutes: number): string {
+  if (!/^\d{2}:\d{2}$/.test(time)) return "";
   const [h, m] = time.split(":").map(Number);
   const total = (h * 60 + m + minutes) % (24 * 60);
   return `${pad2(Math.floor(total / 60))}:${pad2(total % 60)}`;
@@ -157,7 +164,7 @@ export function MeetingEditScreen({
     [],
   );
 
-  const startParts = isoToLocalParts(initial?.scheduledAt);
+  const startParts = initial?.blankTime ? { date: "", time: "" } : isoToLocalParts(initial?.scheduledAt);
   const initialDuration = initial?.durationMinutes ?? 60;
 
   const [title, setTitle] = useState(initial?.title ?? "");
@@ -363,13 +370,16 @@ export function MeetingEditScreen({
 
   function chooseDuration(minutes: number) {
     setCustomEnd(false);
+    if (!startTime) return;
     setEndTime(addMinutesToTime(startTime, minutes));
   }
 
   // Keep end time sensible when start moves past it.
   useEffect(() => {
+    if (!startTime) return;
     if (durationMinutesFromTimes(startTime, endTime) <= 0) {
-      setEndTime(addMinutesToTime(startTime, 60));
+      // First start picked on a copy: its own length, not the 60-minute default.
+      setEndTime(addMinutesToTime(startTime, endTime ? 60 : initialDuration));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [startTime]);

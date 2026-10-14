@@ -166,12 +166,22 @@ describe("DayPanel — the list", () => {
     expect(screen.queryByRole("button", { name: /Connected calendars/ })).not.toBeInTheDocument();
   });
 
+  it("hands New meeting the meeting that is open, to copy from", async () => {
+    const user = userEvent.setup();
+    const props = setup({ selectedKey: "meeting:m2" });
+    await user.click(screen.getByRole("button", { name: "New meeting" }));
+    expect(props.onNewMeeting).toHaveBeenCalledWith(
+      DAY,
+      expect.objectContaining({ key: "meeting:m2", meeting: expect.objectContaining({ id: "m2" }) }),
+    );
+  });
+
   it("offers both create paths the day cell used to offer", async () => {
     const user = userEvent.setup();
     const props = setup();
     await user.click(screen.getByRole("button", { name: "New meeting" }));
     await user.click(screen.getByRole("button", { name: "Block time" }));
-    expect(props.onNewMeeting).toHaveBeenCalledWith(DAY);
+    expect(props.onNewMeeting).toHaveBeenCalledWith(DAY, null);
     expect(props.onBlockTime).toHaveBeenCalledWith(DAY);
   });
 
