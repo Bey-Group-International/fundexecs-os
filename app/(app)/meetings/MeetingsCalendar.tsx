@@ -184,19 +184,24 @@ function toEditInitial(m: CalendarMeeting): MeetingEditInitial {
  * What "New meeting" opens with when a meeting is already open in the day
  * panel: a copy of it, guests and every setting still attached and editable,
  * but with no date or time and no link to the original's room, series or
- * report. A Google/ICS event has less to give — its title, place and length.
+ * report. A Google/ICS event has less to give — its title and length.
  */
 export function copyInitialFrom(item: DayAgendaItem): Partial<MeetingEditInitial> | null {
   if (item.meeting) {
-    const { meetingId: _id, isDraft: _draft, seriesId: _sid, seriesRule: _rule, ...rest } = toEditInitial(item.meeting);
-    void _id; void _draft; void _sid; void _rule;
+    // Identity and time are not copied, nor the room's join link. Location and
+    // tags are left out too: the form has no field for either, so a copy would
+    // carry values the host can neither see nor change.
+    const {
+      meetingId: _id, isDraft: _draft, seriesId: _sid, seriesRule: _rule,
+      meetingUrl: _url, location: _loc, tags: _tags, ...rest
+    } = toEditInitial(item.meeting);
+    void _id; void _draft; void _sid; void _rule; void _url; void _loc; void _tags;
     return { ...rest, blankTime: true };
   }
   if (item.event) {
     const minutes = Math.round((new Date(item.event.endsAt).getTime() - new Date(item.event.startsAt).getTime()) / 60_000);
     return {
       title: item.event.title,
-      location: item.event.location,
       durationMinutes: Number.isFinite(minutes) && minutes >= 15 && !item.event.isAllDay ? Math.min(minutes, 480) : null,
       blankTime: true,
     };

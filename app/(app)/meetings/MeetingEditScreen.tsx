@@ -166,6 +166,9 @@ export function MeetingEditScreen({
 
   const startParts = initial?.blankTime ? { date: "", time: "" } : isoToLocalParts(initial?.scheduledAt);
   const initialDuration = initial?.durationMinutes ?? 60;
+  // A length picked before any start time exists (a copy opens with none), held
+  // until the first start is chosen so the pick is not lost.
+  const [pickedDuration, setPickedDuration] = useState<number | null>(null);
 
   const [title, setTitle] = useState(initial?.title ?? "");
   const [meetingType, setMeetingType] = useState(initial?.meetingType ?? "internal_strategy");
@@ -370,7 +373,10 @@ export function MeetingEditScreen({
 
   function chooseDuration(minutes: number) {
     setCustomEnd(false);
-    if (!startTime) return;
+    if (!startTime) {
+      setPickedDuration(minutes);
+      return;
+    }
     setEndTime(addMinutesToTime(startTime, minutes));
   }
 
@@ -379,7 +385,7 @@ export function MeetingEditScreen({
     if (!startTime) return;
     if (durationMinutesFromTimes(startTime, endTime) <= 0) {
       // First start picked on a copy: its own length, not the 60-minute default.
-      setEndTime(addMinutesToTime(startTime, endTime ? 60 : initialDuration));
+      setEndTime(addMinutesToTime(startTime, endTime ? 60 : (pickedDuration ?? initialDuration)));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [startTime]);
