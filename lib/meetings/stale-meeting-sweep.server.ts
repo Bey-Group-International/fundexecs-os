@@ -44,12 +44,38 @@ import {
 type Client = Awaited<ReturnType<typeof createServerClient>>;
 
 /**
- * Open meetings read per sweep. Most will not be abandoned — a candidate is
- * merely "created more than three hours ago and not ended", which is every
- * meeting booked more than three hours in advance — so the read is wider
- * than the work.
+ * Open meetings read per page.
+ *
+ * Most will not be abandoned — a candidate is merely "created more than three
+ * hours ago and not ended", which is every meeting booked more than three
+ * hours in advance, and every meeting that was booked and never held. The
+ * second kind never leaves: a meeting nobody joined shows no sign of life, so
+ * it is never abandoned, never closed, and stays a candidate for good.
  */
 export const CANDIDATE_LIMIT = 50;
+
+/**
+ * Pages read per sweep.
+ *
+ * The sweep used to read ONE page of the oldest candidates and stop. Those
+ * never-held meetings accumulate at the old end of the order — 35 of the 37
+ * candidates when this was written, one more most days — so once there were as
+ * many as a page, every real abandoned meeting behind them was past the read
+ * and would never be looked at again. The sweep now walks the whole set, page
+ * by page, up to this bound (1,000 meetings at the default page size).
+ */
+export const MAX_PAGES = 20;
+
+/** Activity reads made at once. Two queries each, and a page is fifty meetings. */
+export const ACTIVITY_CONCURRENCY = 8;
+
+/**
+ * How long a sweep may spend reading and deciding, in ms, before it stops
+ * walking and leaves the rest to the next pass. The cron's whole envelope is
+ * 300s and it has a dozen other jobs, so reading candidates must not be able to
+ * eat it.
+ */
+export const SWEEP_BUDGET_MS = 90_000;
 
 /**
  * Model calls one sweep may make.
@@ -130,13 +156,28 @@ async function activityOf(
   };
 }
 
+/** `fn` over `items`, at most `limit` at a time, results in the items' order. */
+async function mapLimit<T, R>(items: readonly T[], limit: number, fn: (item: T) => Promise<R>): Promise<R[]> {
+  const out = new Array<R>(items.length);
+  let next = 0;
+  const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
+    while (next < items.length) {
+      const i = next;
+      next += 1;
+      out[i] = await fn(items[i]);
+    }
+  });
+  await Promise.all(workers);
+  return out;
+}
+
 /**
  * Close every meeting that has been abandoned, writing its report where
  * there is one to write. Never throws.
  */
 export async function runStaleMeetingSweep(
   supabase: Client,
-  opts: { now?: Date; client?: Anthropic | null; model?: string; limit?: number } = {},
+  opts: { now?: Date; client?: Anthropic | null; model?: string; limit?: number; budgetMs?: number } = {},
 ): Promise<StaleMeetingSweepStats> {
   const now = opts.now ?? new Date();
   const stats: StaleMeetingSweepStats = { candidates: 0, reported: 0, closed: 0, deferred: 0, failed: 0 };
@@ -150,83 +191,132 @@ export async function runStaleMeetingSweep(
   // the real decision reads the activity below, and a meeting created an hour
   // ago cannot have been quiet for three.
   const cutoff = new Date(now.getTime() - STALE_MEETING_MS).toISOString();
-  const { data, error } = await supabase
-    .from("live_meetings")
-    .select(SELECT)
-    .in("status", ["waiting", "active"])
-    .is("deleted_at", null)
-    .eq("is_draft", false)
-    .eq("kind", MEETING_KIND)
-    .lte("created_at", cutoff)
-    .order("created_at", { ascending: true })
-    .limit(opts.limit ?? CANDIDATE_LIMIT);
+  const pageSize = opts.limit ?? CANDIDATE_LIMIT;
+  const startedWalking = Date.now();
+  const budget = opts.budgetMs ?? SWEEP_BUDGET_MS;
+  // Keyset, not offset: closing a meeting takes it out of the set mid-walk, and
+  // an offset would then skip the one that slid into its place.
+  let cursor: { created_at: string; id: string } | null = null;
 
-  if (error) {
-    console.error("[stale-meeting-sweep] could not read open meetings", error.message);
-    return stats;
-  }
+  for (let page = 0; page < MAX_PAGES; page += 1) {
+    let query = supabase
+      .from("live_meetings")
+      .select(SELECT)
+      .in("status", ["waiting", "active"])
+      .is("deleted_at", null)
+      .eq("is_draft", false)
+      .eq("kind", MEETING_KIND)
+      .lte("created_at", cutoff);
+    if (cursor) {
+      query = query.or(
+        `created_at.gt.${cursor.created_at},and(created_at.eq.${cursor.created_at},id.gt.${cursor.id})`,
+      );
+    }
+    const { data, error } = await query
+      .order("created_at", { ascending: true })
+      .order("id", { ascending: true })
+      .limit(pageSize);
 
-  for (const row of (data ?? []) as unknown as Candidate[]) {
-    stats.candidates += 1;
-    try {
-      const activity = await activityOf(supabase, row);
-      if (!isAbandonedMeeting(activity, now.getTime())) continue;
+    if (error) {
+      console.error("[stale-meeting-sweep] could not read open meetings", error.message);
+      return stats;
+    }
+    const rows = (data ?? []) as unknown as Candidate[];
+    if (rows.length === 0) break;
 
-      // The end is the last thing that happened, not the moment the sweep
-      // noticed — the report page and the log both show a length from it.
-      const endedAt = new Date(lastActivityAt(activity) ?? now.getTime()).toISOString();
+    // Reads first, a few at a time; decisions after, in order, so the model
+    // budget below is still spent oldest-first and never concurrently.
+    const activities = await mapLimit(rows, ACTIVITY_CONCURRENCY, async (row) => {
+      // A meeting still booked for later cannot be abandoned, whatever it has
+      // done, so it costs no reads. This is most of any page.
+      const scheduled = row.scheduled_at ? Date.parse(row.scheduled_at) : null;
+      if (scheduled !== null && Number.isFinite(scheduled) && now.getTime() - scheduled < STALE_MEETING_MS) {
+        return null;
+      }
+      try {
+        return await activityOf(supabase, row);
+      } catch (err) {
+        return err instanceof Error ? err : new Error(String(err));
+      }
+    });
 
-      if (!activity.hasTranscript) {
-        await writeUnsummarisedReport(supabase, { meetingId: row.id, transcript: "", reason: "silent" });
-        await closeMeeting(supabase, { meeting: row, endedAt, firstJoinedAt: activity.firstJoinedAt });
-        stats.closed += 1;
+    for (let i = 0; i < rows.length; i += 1) {
+      const row = rows[i];
+      const activity = activities[i];
+      stats.candidates += 1;
+      if (activity === null) continue;
+      if (activity instanceof Error) {
+        stats.failed += 1;
+        console.error("[stale-meeting-sweep] failed", { meetingId: logId(row.id) }, activity);
         continue;
       }
+      try {
+        if (!isAbandonedMeeting(activity, now.getTime())) continue;
 
-      if (reports >= MAX_REPORTS_PER_SWEEP) {
-        stats.deferred += 1;
-        continue;
-      }
-      if (client === undefined) client = defaultClient();
+        // The end is the last thing that happened, not the moment the sweep
+        // noticed — the report page and the log both show a length from it.
+        const endedAt = new Date(lastActivityAt(activity) ?? now.getTime()).toISOString();
 
-      const outcome = await generateReportFromStoredTranscript(supabase, {
-        meeting: row,
-        hostEmail: null,
-        client,
-        model,
-        endedAt,
-        now,
-      });
-
-      switch (outcome.kind) {
-        case "written":
-          reports += 1;
-          stats.reported += 1;
-          break;
-        case "unsummarised":
-          // Filed without a model call; the budget is untouched.
-          stats.closed += 1;
-          break;
-        case "no_transcript":
-          // The rows were there a moment ago. Treated as silence rather than
-          // left open forever.
+        if (!activity.hasTranscript) {
           await writeUnsummarisedReport(supabase, { meetingId: row.id, transcript: "", reason: "silent" });
           await closeMeeting(supabase, { meeting: row, endedAt, firstJoinedAt: activity.firstJoinedAt });
           stats.closed += 1;
-          break;
-        default:
-          // "empty", "save_failed" or "refused": the model was asked (or
-          // would have been) and nothing usable came back. Left open for the
-          // next pass; the budget is spent regardless, so one bad meeting
-          // cannot burn through it.
-          reports += 1;
-          stats.failed += 1;
-          console.error("[stale-meeting-sweep] report not written", { meetingId: logId(row.id), outcome: outcome.kind });
+          continue;
+        }
+
+        if (reports >= MAX_REPORTS_PER_SWEEP) {
+          stats.deferred += 1;
+          continue;
+        }
+        if (client === undefined) client = defaultClient();
+
+        const outcome = await generateReportFromStoredTranscript(supabase, {
+          meeting: row,
+          hostEmail: null,
+          client,
+          model,
+          endedAt,
+          now,
+        });
+
+        switch (outcome.kind) {
+          case "written":
+            reports += 1;
+            stats.reported += 1;
+            break;
+          case "unsummarised":
+            // Filed without a model call; the budget is untouched.
+            stats.closed += 1;
+            break;
+          case "no_transcript":
+            // The rows were there a moment ago. Treated as silence rather than
+            // left open forever.
+            await writeUnsummarisedReport(supabase, { meetingId: row.id, transcript: "", reason: "silent" });
+            await closeMeeting(supabase, { meeting: row, endedAt, firstJoinedAt: activity.firstJoinedAt });
+            stats.closed += 1;
+            break;
+          default:
+            // "empty", "save_failed" or "refused": the model was asked (or
+            // would have been) and nothing usable came back. Left open for the
+            // next pass; the budget is spent regardless, so one bad meeting
+            // cannot burn through it.
+            reports += 1;
+            stats.failed += 1;
+            console.error("[stale-meeting-sweep] report not written", { meetingId: logId(row.id), outcome: outcome.kind });
+        }
+      } catch (err) {
+        stats.failed += 1;
+        console.error("[stale-meeting-sweep] failed", { meetingId: logId(row.id) }, err);
       }
-    } catch (err) {
-      stats.failed += 1;
-      console.error("[stale-meeting-sweep] failed", { meetingId: logId(row.id) }, err);
     }
+
+    if (rows.length < pageSize) break;
+    if (Date.now() - startedWalking > budget) {
+      console.warn("[stale-meeting-sweep] out of time; the rest waits for the next pass", { pages: page + 1 });
+      break;
+    }
+    const last = rows[rows.length - 1];
+    cursor = { created_at: last.created_at, id: last.id };
   }
 
   return stats;
