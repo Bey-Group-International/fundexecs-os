@@ -17,7 +17,7 @@
 // Everything that can be decided without a browser is decided in
 // audio-capture.ts. What is left here is wiring.
 
-import { CHUNK_MS } from "@/lib/meetings/recording-policy";
+import { CHUNK_MS, configureRecordingDestination } from "@/lib/meetings/recording-policy";
 import { CALL_AUDIO_BITRATE, preferredAudioMimeType } from "@/lib/meetings/audio-capture";
 import type { ComposerHandlers, PartTiming } from "@/lib/meetings/recording-composer";
 
@@ -74,6 +74,7 @@ export class OneWayRecorder {
     // gesture, and a suspended mix is a silent recording.
     if (this.audioContext.state !== "running") void this.audioContext.resume().catch(() => {});
     this.destination = this.audioContext.createMediaStreamDestination();
+    configureRecordingDestination(this.destination);
 
     // Mixed rather than recorded as two tracks. One track is what makes the
     // file playable everywhere and searchable as one transcript; telling the

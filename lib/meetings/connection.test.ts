@@ -1,4 +1,7 @@
 import {
+  audioSendEncodings,
+  ICE_PREFETCH_MAX_AGE_MS,
+  prefetchedIceUsable,
   DISCONNECT_GRACE_MS,
   INITIAL_LINK,
   INITIAL_RECOVERY,
@@ -831,5 +834,36 @@ describe("shouldAbandonRelayOnly", () => {
     // connections for no reason.
     expect(shouldAbandonRelayOnly(probe({ relayOnly: false, gatheringComplete: true }))).toBe(false);
     expect(shouldAbandonRelayOnly(probe({ relayOnly: false, failed: true, elapsedMs: 60_000 }))).toBe(false);
+  });
+});
+
+describe("audioSendEncodings", () => {
+  // A dropped video frame is a frame nobody misses; a dropped syllable is a
+  // question asked twice. The congestion controller shares the pain evenly
+  // unless told which sender matters.
+  it("marks the audio sender as the one that matters", () => {
+    const [encoding] = audioSendEncodings();
+    expect(encoding.priority).toBe("high");
+    expect(encoding.networkPriority).toBe("high");
+  });
+
+  it("is one encoding, and sets nothing an engine could refuse the track over", () => {
+    const encodings = audioSendEncodings();
+    expect(encodings).toHaveLength(1);
+    expect(Object.keys(encodings[0]).sort()).toEqual(["networkPriority", "priority"]);
+  });
+});
+
+describe("prefetchedIceUsable", () => {
+  it("reuses a configuration fetched moments ago in the green room", () => {
+    expect(prefetchedIceUsable(1_000, 1_000 + 30_000)).toBe(true);
+    expect(prefetchedIceUsable(1_000, 1_000 + ICE_PREFETCH_MAX_AGE_MS - 1)).toBe(true);
+  });
+
+  it("fetches again after a long wait, and when nothing was fetched", () => {
+    expect(prefetchedIceUsable(1_000, 1_000 + ICE_PREFETCH_MAX_AGE_MS)).toBe(false);
+    expect(prefetchedIceUsable(null, 5_000)).toBe(false);
+    // A clock that went backwards is not evidence of freshness.
+    expect(prefetchedIceUsable(10_000, 5_000)).toBe(false);
   });
 });

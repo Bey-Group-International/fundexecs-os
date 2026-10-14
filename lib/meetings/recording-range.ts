@@ -4,7 +4,7 @@
 // A recording is uploaded in five-second parts while the meeting runs, because
 // that is what makes it survive the host's laptop closing. It is watched as one
 // file. Nothing in between ever stitches them: Supabase Storage cannot
-// concatenate server-side, and pulling 675MB through a serverless function to
+// concatenate server-side, and pulling 700MB through a serverless function to
 // rewrite it as one object would cost more than storing it twice.
 //
 // So the parts stay parts, and the playback route presents them as a single

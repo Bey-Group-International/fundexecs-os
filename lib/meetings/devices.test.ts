@@ -214,6 +214,15 @@ describe("constraintsFor", () => {
     expect(c.deviceId).toEqual({ exact: "headset" });
   });
 
+  // The call sends mono Opus, so a stereo capture is two channels of one
+  // microphone mixed down on every frame. `ideal`: a stereo-only device must
+  // still open.
+  it("asks for one channel, and the platform's voice isolation where it exists", () => {
+    const c = constraintsFor("audioinput", null) as MediaTrackConstraints & { voiceIsolation?: boolean };
+    expect(c.channelCount).toEqual({ ideal: 1 });
+    expect(c.voiceIsolation).toBe(true);
+  });
+
   it("leaves the device unpinned when none is chosen", () => {
     expect((constraintsFor("videoinput", null) as MediaTrackConstraints).deviceId).toBeUndefined();
   });
@@ -540,6 +549,15 @@ describe("what to ask for when sharing a screen", () => {
   it("leaves the aspect ratio to the browser", () => {
     const video = displayConstraints().video as MediaTrackConstraints;
     expect(video.width).toBeUndefined();
+  });
+
+  // The call's own tab is the one most likely to be picked by mistake and the
+  // one that is never worth sharing; and a presenter moving between a deck
+  // and a spreadsheet should not have to stop and restart the share.
+  it("keeps the call's own tab out of the picker and lets the presenter switch tabs", () => {
+    const options = displayConstraints() as { selfBrowserSurface?: string; surfaceSwitching?: string };
+    expect(options.selfBrowserSurface).toBe("exclude");
+    expect(options.surfaceSwitching).toBe("include");
   });
 
   // A screen already smaller than the ceiling must not be blown up to meet it.

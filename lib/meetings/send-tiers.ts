@@ -70,9 +70,17 @@ export function tierForView(input: {
   tileCount: number;
   /** What they say their camera is doing; no point asking for a black frame. */
   cameraOn: boolean;
+  /**
+   * The grid is paged, and this participant is on a page that is not showing.
+   * Nothing is drawing them, so nothing should be encoded for us — the same
+   * saving as a backgrounded tab, per participant. Only the grid pages; in
+   * speaker view everyone not on stage is in the strip.
+   */
+  offPage?: boolean;
 }): VideoTier {
   if (input.documentHidden) return "none";
   if (!input.cameraOn) return "none";
+  if (input.layout === "grid" && input.offPage) return "none";
   if (input.layout === "speaker") return input.isSpotlight ? "high" : "low";
   // A grid of two or three still draws each tile large enough to be worth real
   // bitrate; past that they are thumbnails whatever the layout is called.
@@ -251,8 +259,13 @@ export const FULL_CAPTURE: CaptureSize = { width: 1280, height: 720, frameRate: 
  * to be one the camera actually supports, 360p is universally available where
  * 180p is not, and leaving the encoder something to scale keeps the edges of a
  * face from crawling.
+ *
+ * At the thumbnail's own frame rate. This captured at 30 while every encoder
+ * it fed was capped at THUMBNAIL_FPS, so half the frames were captured,
+ * handed to the segmenter and the scalers, and dropped at the encoder — the
+ * capture was sized to the demand and its rate was not.
  */
-export const THUMBNAIL_CAPTURE: CaptureSize = { width: 640, height: 360, frameRate: 30 };
+export const THUMBNAIL_CAPTURE: CaptureSize = { width: 640, height: 360, frameRate: THUMBNAIL_FPS };
 
 /**
  * A cap's resolution divisor, corrected for the capture actually in effect.

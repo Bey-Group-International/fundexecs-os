@@ -36,11 +36,12 @@ describe("preferredAudioMimeType", () => {
 
 describe("estimatedCallBytes", () => {
   // The number that justifies audio-only: an hour of call should be tens of
-  // megabytes, not the ~675MB the meeting recorder's video bitrate would cost.
+  // megabytes, not the ~700MB the meeting recorder's video bitrate would cost.
+  // Mono speech at 64 kbps: under 30MB.
   it("puts an hour of call in the tens of megabytes", () => {
     const hour = estimatedCallBytes(3600);
-    expect(hour).toBeGreaterThan(40_000_000);
-    expect(hour).toBeLessThan(80_000_000);
+    expect(hour).toBeGreaterThan(20_000_000);
+    expect(hour).toBeLessThan(40_000_000);
   });
 
   it("is the audio bitrate and nothing else", () => {

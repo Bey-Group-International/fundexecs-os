@@ -37,6 +37,21 @@ describe("tierForView", () => {
     expect(view({ documentHidden: true, isSpotlight: true })).toBe("none");
   });
 
+  // A paged grid draws one page. Everyone on the others is being encoded for
+  // a tile nobody can see — the backgrounded-tab saving, per participant.
+  it("asks for nothing from a participant on a grid page that is not showing", () => {
+    expect(view({ layout: "grid", tileCount: 20, offPage: true })).toBe("none");
+    expect(view({ layout: "grid", tileCount: 20, offPage: false })).toBe("low");
+    // Speaker view has no pages: the strip shows everyone off stage.
+    expect(view({ layout: "speaker", offPage: true })).toBe("low");
+  });
+
+  it("captures a thumbnail at the rate it is sent", () => {
+    // Capturing at 30 for encoders capped at 15 was half the frames segmented
+    // and scaled for nothing.
+    expect(THUMBNAIL_CAPTURE.frameRate).toBe(allocateSendCaps(all(["p1"], "low"), ["p1"]).get("p1")!.maxFramerate);
+  });
+
   it("asks for nothing from a camera that is off", () => {
     expect(view({ cameraOn: false, isSpotlight: true })).toBe("none");
   });

@@ -2280,3 +2280,196 @@ describe("a returning guest", () => {
     expect(localStorage.getItem("fx_guest_name")).toBe("Ada");
   });
 });
+
+describe("a phone whose recognizer captures the microphone itself", () => {
+  // On an engine that ignores `start(track)`, recognition is a second raw
+  // capture of the microphone beside the call's and a recognition stream for
+  // the whole call — on a laptop a cost worth the transcript, on a phone not.
+  // See recognizer-policy.ts.
+  const IPHONE_UA = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Mobile/15E148 Safari/604.1";
+
+  function onAnIphone() {
+    Object.defineProperty(navigator, "userAgent", { configurable: true, get: () => IPHONE_UA });
+    return () => { delete (navigator as unknown as Record<string, unknown>).userAgent; };
+  }
+
+  function withRecognizer(followsTrack: boolean) {
+    const starts: unknown[][] = [];
+    class FakeRecognition {
+      continuous = false; interimResults = false; lang = "";
+      onstart: (() => void) | null = null; onresult = null; onerror = null; onend = null; onspeechstart = null;
+      start(...args: unknown[]) { starts.push(args); }
+      stop() {}
+    }
+    if (followsTrack) {
+      (FakeRecognition as unknown as { available: () => Promise<string> }).available = async () => "available";
+    }
+    const w = window as unknown as { SpeechRecognition?: unknown };
+    const previous = w.SpeechRecognition;
+    w.SpeechRecognition = FakeRecognition;
+    return { starts, restore: () => { w.SpeechRecognition = previous; } };
+  }
+
+  const notice = () => screen.queryByText(/transcription is off on this phone/i);
+
+  it("does not start the engine, tells the member once, and tells the room it is not covered", async () => {
+    const restoreUa = onAnIphone();
+    const { starts, restore } = withRecognizer(false);
+    try {
+      await enterCall();
+      await flush(200, 4);
+      expect(starts).toEqual([]);
+      expect(notice()).toBeInTheDocument();
+      expect(notice()!.textContent).toContain("still be heard");
+      const srClaims = sent
+        .map((m) => (m as { payload?: { type?: string; transcribing?: boolean } }).payload)
+        .filter((p) => p?.type === "sr");
+      expect(srClaims[srClaims.length - 1]!.transcribing).toBe(false);
+    } finally {
+      restore();
+      restoreUa();
+    }
+  });
+
+  it("runs as on a laptop when the engine follows the call's track", async () => {
+    const restoreUa = onAnIphone();
+    const { starts, restore } = withRecognizer(true);
+    try {
+      await enterCall();
+      await flush(200, 4);
+      expect(starts.length).toBeGreaterThan(0);
+      expect(notice()).not.toBeInTheDocument();
+    } finally {
+      restore();
+      restoreUa();
+    }
+  });
+});
+
+describe("a camera switched off and left off", () => {
+  // "Off" used to disable the track and leave the device open: light on,
+  // capture running. See camera-release.ts for the wait and why there is one.
+  function withStoppableCamera() {
+    const stops: string[] = [];
+    let opened = 0;
+    Object.defineProperty(navigator, "mediaDevices", {
+      configurable: true,
+      value: {
+        getUserMedia: async (constraints: { video?: unknown; audio?: unknown }) => {
+          opened += 1;
+          const id = `video-local-${opened}`;
+          const camera = { ...fakeTrack("video", id), stop: () => { stops.push(id); } };
+          return constraints.audio
+            ? fakeStream([fakeTrack("audio"), camera])
+            : fakeStream([camera]);
+        },
+        getDisplayMedia: async () => fakeStream([fakeTrack("video")]),
+        enumerateDevices: async () => [
+          { kind: "audioinput", deviceId: "default", groupId: "group-local", label: "Default - Built-in" },
+          { kind: "videoinput", deviceId: "video-dev", groupId: "group-cam", label: "FaceTime HD" },
+        ],
+        addEventListener: () => {}, removeEventListener: () => {},
+      },
+    });
+    return { stops, opens: () => opened };
+  }
+
+  const cameraButton = () => screen.getByRole("button", { name: /camera off|camera on/i });
+  async function press() {
+    await act(async () => { cameraButton().click(); await Promise.resolve(); });
+    await flush(100, 4);
+  }
+
+  it("holds the device through a quick off-and-on, and releases it after the wait", async () => {
+    joinChoice.cameraEnabled = true;
+    const { stops, opens } = withStoppableCamera();
+    await enterCall();
+    const atJoin = opens();
+
+    await press();                       // off
+    await flush(3_000, 6);
+    await press();                       // and straight back on
+    await flush(15_000, 10);
+    expect(stops).toEqual([]);
+    expect(opens()).toBe(atJoin);        // nothing was reopened: the device was never let go
+
+    await press();                       // off, and left off
+    await flush(15_000, 10);
+    expect(stops).toEqual(["video-local-1"]);
+
+    await press();                       // on again: the device is reopened
+    expect(opens()).toBe(atJoin + 1);
+  });
+});
+
+describe("a headset plugged in mid-call", () => {
+  // It used to appear in the picker and nothing else. See device-follow.ts.
+  const laptop = [
+    { kind: "audioinput", deviceId: "default", groupId: "group-local", label: "Default - Built-in" },
+    { kind: "audioinput", deviceId: "builtin-mic", groupId: "group-local", label: "Built-in Microphone" },
+  ];
+  const headset = { kind: "audioinput", deviceId: "jabra-in", groupId: "group-jabra", label: "Jabra Evolve2" };
+
+  function withPluggableDevices() {
+    const listeners: Array<() => void> = [];
+    const opened: Array<{ audio?: unknown; video?: unknown }> = [];
+    let devices = laptop;
+    Object.defineProperty(navigator, "mediaDevices", {
+      configurable: true,
+      value: {
+        getUserMedia: async (constraints: { audio?: unknown; video?: unknown }) => {
+          opened.push(constraints);
+          return fakeStream([fakeTrack("audio"), fakeTrack("video")]);
+        },
+        getDisplayMedia: async () => fakeStream([fakeTrack("video")]),
+        enumerateDevices: async () => devices,
+        addEventListener: (type: string, fn: () => void) => { if (type === "devicechange") listeners.push(fn); },
+        removeEventListener: () => {},
+      },
+    });
+    return {
+      opened,
+      plugIn: async () => {
+        devices = [...laptop, headset];
+        await act(async () => { listeners.forEach((fn) => fn()); await Promise.resolve(); });
+        await flush(200, 4);
+      },
+    };
+  }
+
+  const micOpens = (opened: Array<{ audio?: unknown }>) =>
+    opened.map((c) => c.audio).filter((a): a is { deviceId?: { exact?: string } } => typeof a === "object" && a !== null);
+
+  it("moves the microphone to it, says so, and offers the way back", async () => {
+    const { opened, plugIn } = withPluggableDevices();
+    await enterCall();
+    const before = micOpens(opened).length;
+
+    await plugIn();
+    const after = micOpens(opened);
+    expect(after.length).toBe(before + 1);
+    expect(after[after.length - 1].deviceId).toEqual({ exact: "jabra-in" });
+    const notice = screen.getByText(/your microphone moved to jabra evolve2/i);
+    expect(notice).toBeInTheDocument();
+
+    // Undo reopens the device the call was on — by the id the join settled
+    // on, which is what the picker shows — and the notice goes.
+    await act(async () => { screen.getByRole("button", { name: /^undo$/i }).click(); await Promise.resolve(); });
+    await flush(100, 4);
+    const undone = micOpens(opened);
+    expect(undone.length).toBe(before + 2);
+    expect(undone[undone.length - 1].deviceId).toEqual({ exact: "audio-dev" });
+    expect(screen.queryByText(/moved to jabra/i)).not.toBeInTheDocument();
+  });
+
+  it("is not fooled by the device list merely being re-read", async () => {
+    const { opened, plugIn } = withPluggableDevices();
+    await enterCall();
+    await plugIn();
+    const after = micOpens(opened).length;
+    // A second devicechange with the same list — the default moving, a
+    // re-enumeration — plugs nothing in.
+    await plugIn();
+    expect(micOpens(opened).length).toBe(after);
+  });
+});

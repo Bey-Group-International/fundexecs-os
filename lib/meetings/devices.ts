@@ -155,7 +155,22 @@ export function settleCamera(devices: Device[], opened: string): string {
  * reaches the member as a share button that does nothing.
  */
 export function displayConstraints(): DisplayMediaStreamOptions {
-  return {
+  const options: DisplayMediaStreamOptions & {
+    selfBrowserSurface?: "include" | "exclude";
+    surfaceSwitching?: "include" | "exclude";
+  } = {
+    // Hints to the picker, not constraints on the capture; a browser that
+    // does not know them ignores them.
+    //
+    // The call's own tab is left out of the picker: sharing it is a hall of
+    // mirrors — the room inside the room, re-encoded every frame — and in a
+    // list of twenty tabs it is the one most likely to be picked by mistake.
+    selfBrowserSurface: "exclude",
+    // Chrome's "share this tab instead" button on the sharing bar. Without it
+    // a presenter switching from the deck to the spreadsheet stops the share,
+    // picks again and starts a new track, and every viewer watches a black
+    // frame and a reconnect in between.
+    surfaceSwitching: "include",
     video: {
       frameRate: { ideal: SCREEN_SHARE_FPS },
       // Height only, so the aspect ratio of whatever surface they picked is
@@ -169,6 +184,7 @@ export function displayConstraints(): DisplayMediaStreamOptions {
     // anywhere would light the "sharing audio" indicator while sending silence.
     audio: false,
   };
+  return options;
 }
 
 /** Frames a second to capture a shared screen at. */
@@ -292,7 +308,18 @@ export function constraintsFor(
       echoCancellation: true,
       noiseSuppression: true,
       autoGainControl: true,
+      // One channel. A voice has no second channel, the call sends mono Opus
+      // (connection.ts munges `stereo=0`), and a stereo capture from a USB
+      // interface or a Bluetooth headset in A2DP is two channels of the same
+      // microphone to mix down on every frame. `ideal`, so a device that only
+      // does stereo still opens.
+      channelCount: { ideal: 1 },
     };
+    // The platform's own voice isolation where it exists (macOS, iOS, newer
+    // Windows): a stronger separation of the speaker from the room than the
+    // browser's noise suppression, done by the OS with the hardware it knows.
+    // Not in the TypeScript lib yet; a browser that lacks it ignores the key.
+    (audio as MediaTrackConstraints & { voiceIsolation?: boolean }).voiceIsolation = true;
     if (deviceId) audio.deviceId = { exact: deviceId };
     return audio;
   }

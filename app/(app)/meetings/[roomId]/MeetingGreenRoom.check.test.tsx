@@ -121,8 +121,8 @@ beforeEach(() => {
 async function show(props: Partial<typeof base> & { isGuest?: boolean } = {}) {
   let view!: ReturnType<typeof render>;
   await act(async () => { view = render(<MeetingGreenRoom {...base} {...props} />); });
-  // The meter runs on requestAnimationFrame; give it frames to see a voice in.
-  await act(async () => { await new Promise((r) => setTimeout(r, 60)); });
+  // The meter reads the microphone on a timer, once at once; let it settle.
+  await act(async () => { await new Promise((r) => setTimeout(r, 150)); });
   return view;
 }
 
