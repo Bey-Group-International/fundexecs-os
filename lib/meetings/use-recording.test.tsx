@@ -34,7 +34,7 @@ import { useRecording } from "@/lib/meetings/use-recording";
 interface Update { table: string; id: string; patch: Record<string, unknown> }
 
 /** A Supabase stand-in that records what was written and can be made to fail. */
-function fakeClient() {
+function fakeClient(opts: { startedAt?: string } = {}) {
   const updates: Update[] = [];
   let nextId = 0;
   let insertFails = false;
@@ -57,7 +57,7 @@ function fakeClient() {
                 single: async () =>
                   insertFails
                     ? { data: null, error: new Error("insert refused") }
-                    : { data: { id: `r${++nextId}` }, error: null },
+                    : { data: { id: `r${++nextId}`, started_at: opts.startedAt }, error: null },
               };
             },
           };
@@ -295,5 +295,67 @@ describe("a recording that errors", () => {
     expect(closes[0].patch.status).toBe("failed");
     expect(view.result.current.state).toBe("failed");
     expect(view.result.current.error).toBeTruthy();
+  });
+});
+
+describe("when the recording ended", () => {
+  // The defect: ended_at was this machine's wall clock, written beside a
+  // started_at the database stamped. A host clock 49 seconds fast put the end
+  // 49 seconds after the last audio there was, and after the report written
+  // when the call ended.
+  it("is the server's start plus how long it ran, whatever this clock says", async () => {
+    const serverStart = Date.parse("2026-09-28T16:30:05.000Z");
+    const sb = fakeClient({ startedAt: new Date(serverStart).toISOString() });
+    // This machine believes it is a different day entirely; only differences
+    // between its own readings may be used.
+    const clock = jest.spyOn(Date, "now").mockReturnValue(5_000_000_000_000);
+    const { result } = setup(sb);
+
+    await act(async () => { await result.current.start(); });
+    clock.mockReturnValue(5_000_000_000_000 + 68_000);
+    act(() => { composer!.handlers.onStopped("stopped"); });
+    await flush();
+    clock.mockRestore();
+
+    const closed = sb.updates.find((u) => u.id === "r1" && u.patch.status === "complete");
+    expect(closed?.patch.ended_at).toBe(new Date(serverStart + 68_000).toISOString());
+  });
+
+  it("does not count the time the upload queue takes to drain", async () => {
+    const serverStart = Date.parse("2026-09-28T16:30:05.000Z");
+    const sb = fakeClient({ startedAt: new Date(serverStart).toISOString() });
+    const clock = jest.spyOn(Date, "now").mockReturnValue(1_000_000);
+    const { result } = setup(sb);
+
+    await act(async () => { await result.current.start(); });
+    sb.holdUploads();
+    act(() => { composer!.handlers.onChunk(new Blob(["a"]), 0, { offsetMs: 0, durationMs: 5000 }); });
+    await flush();
+
+    clock.mockReturnValue(1_000_000 + 10_000);
+    act(() => { composer!.handlers.onStopped("stopped"); });
+    await flush();
+    // The last part is still uploading when the host stops; it lands 30s later.
+    clock.mockReturnValue(1_000_000 + 40_000);
+    await act(async () => { sb.releaseUploads(); await Promise.resolve(); await Promise.resolve(); await Promise.resolve(); });
+    await flush();
+    clock.mockRestore();
+
+    const closed = sb.updates.find((u) => u.id === "r1" && u.patch.status === "complete");
+    expect(closed?.patch.ended_at).toBe(new Date(serverStart + 10_000).toISOString());
+  });
+
+  it("falls back to this machine's clock when the row did not say when it started", async () => {
+    const sb = fakeClient();
+    const clock = jest.spyOn(Date, "now").mockReturnValue(Date.parse("2026-10-14T12:00:00.000Z"));
+    const { result } = setup(sb);
+
+    await act(async () => { await result.current.start(); });
+    act(() => { composer!.handlers.onStopped("stopped"); });
+    await flush();
+    clock.mockRestore();
+
+    const closed = sb.updates.find((u) => u.id === "r1" && u.patch.status === "complete");
+    expect(closed?.patch.ended_at).toBe("2026-10-14T12:00:00.000Z");
   });
 });

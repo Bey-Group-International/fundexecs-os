@@ -122,7 +122,15 @@ export interface UseRecordingResult {
  */
 interface RecordingRun {
   readonly id: string;
+  /** When Record was pressed, on THIS machine's clock. Only ever subtracted from another reading of it. */
   readonly startedAt: number;
+  /**
+   * When the database stamped the row (epoch ms), or null if it did not say.
+   *
+   * The one clock every other timestamp on a recording is compared against,
+   * and the one `ended_at` has to be written on. See `finalize`.
+   */
+  readonly serverStartedAt: number | null;
   bytes: number;
   count: number;
   /**
@@ -288,6 +296,9 @@ export function useRecording(input: UseRecordingInput): UseRecordingResult {
     // First close wins, which is the one that knows why it ended.
     if (run.closed) return;
     run.closed = true;
+    // Read before anything is awaited, so the time the upload queue takes to
+    // drain is not counted as meeting.
+    const stoppedAt = Date.now();
     // Everything queued has to land before the row claims to be finished, or
     // the duration and size would describe a recording still being written.
     // Everything read after that await comes off `run`, which no later
@@ -298,12 +309,25 @@ export function useRecording(input: UseRecordingInput): UseRecordingResult {
     // disagree by exactly the parts that were dropped, and the stored file is
     // the shorter of them.
     const seconds = Math.round(run.endMs / 1000);
+    // `ended_at` is written as the server's `started_at` plus how long this
+    // machine says the recording ran — never as this machine's wall clock.
+    //
+    // The row's `started_at` is stamped by the database. Writing `new Date()`
+    // beside it put two clocks in one row, so a host whose clock ran fast made
+    // the recording end tens of seconds AFTER the report written at the moment
+    // it ended (five recordings were stored that way, by 35 to 49 seconds, and
+    // it read as audio lost off the end when none was). Only the difference
+    // between two readings of the same clock is trusted here, which cancels
+    // whatever that clock's error is.
+    const endedAt = run.serverStartedAt === null
+      ? stoppedAt
+      : run.serverStartedAt + Math.max(0, stoppedAt - run.startedAt);
     try {
       await supabase
         .from("live_meeting_recordings")
         .update({
           status,
-          ended_at: new Date().toISOString(),
+          ended_at: new Date(endedAt).toISOString(),
           duration_seconds: seconds,
           size_bytes: run.bytes,
           chunk_count: run.count,
@@ -342,13 +366,17 @@ export function useRecording(input: UseRecordingInput): UseRecordingResult {
           // is NOT NULL and the row has to exist before the first part lands.
           mime_type: fallbackMime,
         })
-        .select("id")
+        .select("id, started_at")
         .single();
       if (rowError || !data) throw rowError ?? new Error("could not start recording");
 
+      const row = data as { id: string; started_at?: string | null };
+      const stamped = row.started_at ? Date.parse(row.started_at) : NaN;
+
       const run: RecordingRun = {
-        id: (data as { id: string }).id,
+        id: row.id,
         startedAt: Date.now(),
+        serverStartedAt: Number.isFinite(stamped) ? stamped : null,
         bytes: 0,
         count: 0,
         endMs: 0,
