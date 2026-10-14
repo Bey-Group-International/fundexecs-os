@@ -141,6 +141,8 @@ function toDevices(list: MediaDeviceInfo[]): Device[] {
 // microphone is dead. Long enough to cover "hasn't spoken yet"; short enough
 // that a genuinely muted input is caught before the call starts.
 const MIC_SETTLE_MS = 3000;
+/** How often the level meter reads the microphone; the room's meter uses the same. */
+const MIC_METER_TICK_MS = 120;
 
 /**
  * getUserMedia, with one more go at a device that is merely busy.
@@ -983,7 +985,6 @@ export function MeetingGreenRoom({
     source.connect(analyser);
 
     const buffer = new Float32Array(analyser.fftSize);
-    let raf = 0;
     let smoothed = 0;
     let shownBars = -1;
 
@@ -1000,14 +1001,19 @@ export function MeetingGreenRoom({
       const bars = levelBars(smoothed, MIC_METER_BARS);
       const heard = wasSilent && micPeakRef.current > MIC_SILENT_PEAK;
       if (bars !== shownBars || heard) { shownBars = bars; setLevel(smoothed); }
-      raf = requestAnimationFrame(tick);
     };
-    raf = requestAnimationFrame(tick);
+    // On a timer, not the display frame: this ran at the refresh rate — 60 or
+    // 120 reads a second of a buffer that is drawn as twelve bars — for as
+    // long as a guest sat waiting to be let in. The in-call meter samples at
+    // the same cadence and nobody has found it slow. The first read is now,
+    // so a microphone that is already producing lights the meter at once.
+    tick();
+    const ticker = setInterval(tick, MIC_METER_TICK_MS);
 
     const settle = setTimeout(() => setMicSettled(true), MIC_SETTLE_MS);
 
     return () => {
-      cancelAnimationFrame(raf);
+      clearInterval(ticker);
       clearTimeout(settle);
       try { source.disconnect(); } catch { /* context already torn down */ }
       void ctx.close().catch(() => {});

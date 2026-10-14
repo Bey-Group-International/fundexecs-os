@@ -1,7 +1,7 @@
 // lib/meetings/recording-sweep.server.ts
 // Deleting recordings that have aged out, and closing ones that never ended.
 //
-// Recordings are the most expensive thing this product stores — around 675 MB
+// Recordings are the most expensive thing this product stores — around 700 MB
 // per hour of meeting — and nothing else in the system deletes them. Retention
 // that depends on somebody remembering to tidy up is not retention; it is a
 // bill that grows until it is noticed.

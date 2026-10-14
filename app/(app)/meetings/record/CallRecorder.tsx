@@ -40,7 +40,7 @@ import { engineConfidence, recognitionLang } from "@/lib/meetings/recognition-qu
 // softphone, on a bridge — and wants a transcript and a report of it
 // afterwards. There is no second participant here, no signalling and no
 // waiting room, and the session is audio only, because a 720p canvas of
-// nothing would cost 675MB an hour to store a picture no one will look at.
+// nothing would cost 700MB an hour to store a picture no one will look at.
 //
 // Everything after the microphone is shared with meetings on purpose: the same
 // part upload with its retries, the same recording rows, the same transcript

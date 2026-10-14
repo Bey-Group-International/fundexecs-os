@@ -35,9 +35,37 @@ export const RECORDING_HEIGHT = 720;
  */
 export const RECORDING_FPS = 24;
 
-/** ~1.5 Mbps video + 128 kbps audio ≈ 675 MB per hour. */
+/** ~1.5 Mbps video + 64 kbps audio ≈ 700 MB per hour. */
 export const VIDEO_BITRATE = 1_500_000;
-export const AUDIO_BITRATE = 128_000;
+
+/**
+ * Audio: 64 kbps, mono.
+ *
+ * Was 128 kbps into a stereo mix, which is a music setting. Every voice in
+ * the call is mono (the microphones are captured on one channel and the wire
+ * carries mono Opus), so the second channel of the recording was a copy of
+ * the first and the bits spent on it bought nothing. Opus at 64 kbps mono is
+ * transparent for speech; the audio-only recording of an hour's call halves,
+ * and so does its upload.
+ */
+export const AUDIO_BITRATE = 64_000;
+export const RECORDING_AUDIO_CHANNELS = 1;
+
+/**
+ * Make the mix destination produce the channels the recording is encoded for.
+ *
+ * `createMediaStreamDestination()` is stereo by default and `channelCountMode`
+ * is "explicit" on that node, so a mono recording has to be asked for here
+ * rather than at the encoder: a stereo track handed to a 64 kbps encoder is
+ * two channels sharing the bits meant for one.
+ */
+export function configureRecordingDestination(destination: {
+  channelCount: number;
+  channelCountMode: ChannelCountMode;
+}): void {
+  destination.channelCount = RECORDING_AUDIO_CHANNELS;
+  destination.channelCountMode = "explicit";
+}
 
 /**
  * How much speech one uploaded part holds.
@@ -106,7 +134,7 @@ export function preferredMimeType(isSupported: (type: string) => boolean): strin
  * The file extension a stored part should carry, from its recorded type.
  *
  * Audio containers are named too, because a one-way call is recorded audio
- * only — at the video bitrate an hour of phone call would cost ~675MB of still
+ * only — at the video bitrate an hour of phone call would cost ~700MB of still
  * picture. Existing types are unchanged, so the paths of everything already
  * stored still resolve.
  */

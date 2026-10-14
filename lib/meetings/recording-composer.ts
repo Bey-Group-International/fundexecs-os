@@ -17,6 +17,7 @@ import { attachHiddenVideo, detachHiddenVideo } from "./hidden-video";
 import {
   AUDIO_BITRATE,
   CHUNK_MS,
+  configureRecordingDestination,
   RECORDING_FPS,
   RECORDING_HEIGHT,
   RECORDING_WIDTH,
@@ -161,6 +162,7 @@ export class RecordingComposer {
     // records silence. Resume is a no-op where the context is already running.
     if (this.audioContext.state !== "running") void this.audioContext.resume().catch(() => {});
     this.destination = this.audioContext.createMediaStreamDestination();
+    configureRecordingDestination(this.destination);
     this.syncAudioSources();
 
     const mixed = new MediaStream([

@@ -20,6 +20,11 @@ import {
   type ReactionState,
 } from "@/lib/meetings/reactions";
 import { MeetingGreenRoom, type GreenRoomChoice } from "./MeetingGreenRoom";
+import { codecLeadFor, orderVideoCodecs } from "@/lib/meetings/codec-preference";
+import { browserFamily } from "@/lib/meetings/green-room";
+import { cameraReleaseDue, msUntilCameraRelease } from "@/lib/meetings/camera-release";
+import { RECOGNIZER_SKIPPED_NOTICE, isMobileUserAgent, recognizerSkipReason } from "@/lib/meetings/recognizer-policy";
+import { followDecision, followNotice, newlyPluggedDevices, type FollowDecision } from "@/lib/meetings/device-follow";
 import {
   constraintsFor,
   facingConstraints,
@@ -163,6 +168,8 @@ import {
   stepLink,
   summarizeInbound,
   withOpusResilience,
+  audioSendEncodings,
+  prefetchedIceUsable,
 } from "@/lib/meetings/connection";
 import {
   type BandwidthMode,
@@ -182,6 +189,7 @@ import {
 } from "@/lib/meetings/media-repair";
 import {
   allocateSendCaps,
+  activeEncoderCount,
   scaleForCapture,
   FULL_CAPTURE,
   THUMBNAIL_CAPTURE,
@@ -689,6 +697,40 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
   const audioRepairInFlightRef = useRef<Set<string>>(new Set());
   /** What each peer has asked US to send them. Absent means "not yet said". */
   const requestedTierRef = useRef<Map<string, VideoTier>>(new Map());
+  /**
+   * Nobody is receiving our camera: every peer asked for `none`, or there is
+   * no peer. Kept by applySendCaps, read by the segmenter's pause and by the
+   * self-view, which shows the raw camera while the composite is paused.
+   */
+  const maskIdleRef = useRef(false);
+  const [maskIdle, setMaskIdle] = useState(false);
+  /** Assigned once the mask driver's ref exists, below. */
+  const syncMaskPauseRef = useRef<() => void>(() => {});
+  /** The host's recording draws the local tile from the sent stream, so it counts as a viewer. */
+  const recordingLiveRef = useRef(false);
+  /** The device switches, reached from the plug-in follower declared above them. */
+  const switchMicRef = useRef<(id: string) => Promise<void>>(async () => {});
+  const switchSpeakerRef = useRef<(id: string) => Promise<void>>(async () => {});
+  /** The ICE fetch started in the green room, and when. See prefetchedIceUsable. */
+  const icePrefetchRef = useRef<{ at: number; promise: Promise<void> } | null>(null);
+  /** Which codec to lead with on this machine; read once from the user agent. */
+  const codecLeadRef = useRef<ReturnType<typeof codecLeadFor>>(null);
+  useEffect(() => {
+    const nav = typeof navigator !== "undefined" ? navigator : null;
+    const touch = nav?.maxTouchPoints ?? 0;
+    codecLeadRef.current = codecLeadFor({
+      family: browserFamily(nav?.userAgent, touch),
+      mobile: isMobileUserAgent(nav?.userAgent, touch),
+    });
+  }, []);
+  /** A phone that is not transcribing, told once. See recognizer-policy.ts. */
+  const [srSkippedNotice, setSrSkippedNotice] = useState<string | null>(null);
+  /** A headset plugged in mid-call that the audio followed, with the way back. */
+  const [deviceFollow, setDeviceFollow] = useState<{
+    decision: FollowDecision;
+    previousMicId: string;
+    previousSpeakerId: string;
+  } | null>(null);
   /** What we last asked each peer for, so only changes go on the wire. */
   const sentRequestRef = useRef<Map<string, VideoTier>>(new Map());
   /** When each peer was last genuinely wanted large, for the demotion linger. */
@@ -1086,6 +1128,17 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
   const [bgEffect, setBgEffect] = useState<BackgroundEffect>(NO_BACKGROUND);
   const bgEffectRef = useRef<BackgroundEffect>(NO_BACKGROUND);
   const maskRef = useRef<MaskDriver | null>(null);
+  /**
+   * The one place that decides whether the segmenter runs: off while the
+   * camera is off, while a screen share holds the sender, and while nobody
+   * is receiving the camera (maskIdleRef). Every path that changes one of
+   * those calls this rather than computing the pause itself, so no two of
+   * them can disagree.
+   */
+  const syncMaskPause = useCallback(() => {
+    maskRef.current?.setPaused(!camOnRef.current || shareOnRef.current || maskIdleRef.current);
+  }, []);
+  useEffect(() => { syncMaskPauseRef.current = syncMaskPause; }, [syncMaskPause]);
   const [bgPickerOpen, setBgPickerOpen] = useState(false);
   const [bgUnavailable, setBgUnavailable] = useState(false);
   const [bgNotice, setBgNotice] = useState<string | null>(null);
@@ -1219,6 +1272,8 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
   // member, or by the room once that stops being true.
   const [shareRefused, setShareRefused] = useState(false);
   const [selectedSpeakerId, setSelectedSpeakerId] = useState("");
+  const selectedSpeakerIdRef = useRef("");
+  useEffect(() => { selectedSpeakerIdRef.current = selectedSpeakerId; }, [selectedSpeakerId]);
 
   /**
    * Echo advice, kept apart from `mediaError` on purpose.
@@ -1406,7 +1461,14 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
   // A screen share is the same case wearing a different hat: the composited
   // canvas goes neither to the peers nor to the local tile while the screen
   // holds the video sender, so segmenting for it is a warm fan and nothing else.
-  useEffect(() => { maskRef.current?.setPaused(!camOn || shareOn); }, [camOn, shareOn]);
+  //
+  // And nothing is transmitted while nobody is receiving — alone in the room,
+  // or every peer has asked for `none` — which is the third case: the
+  // encoders are already stopped (applySendCaps) and the segmenter was still
+  // compositing for them at full rate. `maskIdleRef` is that fact, kept by
+  // applySendCaps; the self-view shows the raw camera meanwhile (see
+  // selfView below) so the member is not looking at a frozen frame.
+  useEffect(() => { syncMaskPauseRef.current(); }, [camOn, shareOn]);
 
   // A call already dropping video to protect audio should not be spending the
   // remaining budget on scenery. The CPU half of this rule is applied from
@@ -1574,11 +1636,26 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     // every other screen, and sending them a sixth of the budget at half
     // resolution spends the upload, and the encoder, on detail that is drawn
     // four times smaller than it is sent.
+    //
+    // A peer that asked for `none` — their tab is in the background, or their
+    // link is audio-only — gets nothing of the screen either. The share's
+    // even split used to ignore the request, so a presenter kept an encoder
+    // running, and a full share of the budget flowing, to every tab that was
+    // not looking.
     const caps: Map<string, SendCap | null> = !wanted
       ? new Map(ids.map((id) => [id, null]))
       : sharing
-        ? new Map(ids.map((id) => [id, screenSendCap(ids.length, bwModeRef.current)]))
+        ? new Map(ids.map((id) => [id, requestedTierRef.current.get(id) === "none" ? null : screenSendCap(ids.length, bwModeRef.current)]))
         : allocateSendCaps(requestedTierRef.current, ids, bwModeRef.current);
+
+    // Nobody receiving the camera means nothing to composite for. Not while
+    // recording: the recording draws the local tile from the same stream.
+    const idle = wanted && !sharing && activeEncoderCount(caps) === 0 && !recordingLiveRef.current;
+    if (idle !== maskIdleRef.current) {
+      maskIdleRef.current = idle;
+      setMaskIdle(idle);
+      syncMaskPauseRef.current();
+    }
 
     // Move the CAMERA to match the largest thing anyone asked for, not just the
     // encoders. Sizing the encoders alone still leaves a laptop capturing 720p
@@ -1664,6 +1741,8 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
         layout: stageLayoutRef.current,
         tileCount,
         cameraOn: said ? said.camOn && !said.paused : true,
+        // On a page of the grid that is not showing: nothing draws them.
+        offPage: gridPageIdsRef.current !== null && !gridPageIdsRef.current.has(id),
       });
       if (desired === "high") lastHighAtRef.current.set(id, now);
       const held = withDemotionDelay({
@@ -2009,10 +2088,26 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     if (audioTrack) audioTrack.contentHint = contentHintFor("microphone");
     if (videoTrack) videoTrack.contentHint = contentHintFor(shareOnRef.current ? "screen" : "camera");
 
-    const audioTx = pc.addTransceiver(audioTrack ?? "audio", { direction: "sendrecv", streams });
+    // Audio first, and marked as the sender that matters: see audioSendEncodings.
+    const audioTx = pc.addTransceiver(audioTrack ?? "audio", { direction: "sendrecv", streams, sendEncodings: audioSendEncodings() });
     const videoTx = pc.addTransceiver(videoTrack ?? "video", { direction: "sendrecv", streams });
     audioSenderRef.current.set(peerId, audioTx.sender);
     videoSenderRef.current.set(peerId, videoTx.sender);
+    // Lead with the codec this machine encodes well: hardware H.264 on a
+    // phone or Safari, VP9 on a desktop Chromium. Before the offer, because
+    // the order is negotiated once; and only ever a reorder of what the engine
+    // already offers, so two members who disagree still meet on VP8. See
+    // codec-preference.ts. Guarded throughout: an engine without
+    // setCodecPreferences, or one that rejects the list, keeps its own order.
+    try {
+      const capabilities = RTCRtpReceiver.getCapabilities?.("video")?.codecs;
+      if (capabilities && typeof videoTx.setCodecPreferences === "function") {
+        const ordered = orderVideoCodecs(capabilities, codecLeadRef.current);
+        if (ordered) videoTx.setCodecPreferences(ordered);
+      }
+    } catch (err) {
+      console.info("[meeting] codec preference not applied", err);
+    }
 
     pc.ontrack = (ev) => {
       // Prefer the stream the far end named, so both sides agree on identity,
@@ -2716,7 +2811,10 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     // below instead of holding the join up on its own round trip. Awaited again
     // just before signaling, which is the first moment a peer connection can be
     // built and therefore the last moment the config still matters.
-    const icePromise = loadIceServersRef.current();
+    const prefetched = icePrefetchRef.current;
+    const icePromise = prefetched && prefetchedIceUsable(prefetched.at, Date.now())
+      ? prefetched.promise
+      : loadIceServersRef.current();
 
     if (mId) {
       // Awaited, and the error read. This was a `void` on the query builder,
@@ -3089,6 +3187,25 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
 
   const loadIceServersRef = useRef(loadIceServers);
   useEffect(() => { loadIceServersRef.current = loadIceServers; }, [loadIceServers]);
+
+  // Started while the member is still in the green room, so the round trip
+  // for TURN credentials is paid during the idle time rather than on the path
+  // from Join to the first peer connection. Not for a guest: their request
+  // carries an admission key they do not have until they are let in, and a
+  // 401 here would be logged as a failure that was not one. enterRoom reuses
+  // it while it is fresh (prefetchedIceUsable) and fetches again otherwise.
+  useEffect(() => {
+    // From the URL, not `isGuest`: that state is set by an effect of its own
+    // and this one would run first, with it still false, for every guest.
+    if (ready || isGuest || searchParams.get("guest") === "1" || icePrefetchRef.current) return;
+    const at = Date.now();
+    const promise = loadIceServersRef.current().then(() => {
+      // A fetch that configured nothing (refused, unreachable) is not worth
+      // reusing: the join fetches again, as it would have anyway.
+      if (iceServersRef.current.length === 0 && icePrefetchRef.current?.at === at) icePrefetchRef.current = null;
+    });
+    icePrefetchRef.current = { at, promise };
+  }, [ready, isGuest, searchParams]);
 
   // Stable handle so the waiting-room poll can enter without re-creating itself.
   const enterRoomRef = useRef(enterRoom);
@@ -3689,6 +3806,57 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     return () => md.removeEventListener("devicechange", onChange);
   }, [sessionLive, selectedSpeakerId, applySpeakerSink]);
 
+  // The input side of GAINING a device. A headset plugged in mid-call used
+  // to appear in the picker and nothing else: the member who put it on to
+  // stop an echo kept talking into the laptop. The call follows it — both
+  // halves of a headset together — says so, and offers one tap back. See
+  // device-follow.ts for what counts as new; the first enumeration is the
+  // baseline, so nothing already plugged in at join is "followed".
+  useEffect(() => {
+    if (!sessionLive) return;
+    const md = navigator.mediaDevices;
+    if (!md?.enumerateDevices || !md.addEventListener) return;
+    let known: MediaDeviceInfo[] | null = null;
+    let cancelled = false;
+    const snapshot = async () => {
+      try { return await md.enumerateDevices(); } catch { return null; }
+    };
+    void snapshot().then((all) => { if (!cancelled && all) known = all; });
+    const onChange = () => {
+      void (async () => {
+        const all = await snapshot();
+        if (cancelled || !all) return;
+        const before = known;
+        known = all;
+        if (!before) return;
+        const decision = followDecision({
+          added: newlyPluggedDevices(before, all),
+          currentMicId: selectedMicIdRef.current,
+          currentSpeakerId: selectedSpeakerIdRef.current,
+        });
+        if (!decision) return;
+        const previousMicId = selectedMicIdRef.current;
+        const previousSpeakerId = selectedSpeakerIdRef.current;
+        if (decision.micId) await switchMicRef.current(decision.micId);
+        // Only where output routing exists at all (not Firefox): a speaker
+        // "moved" that cannot be moved is a notice about nothing.
+        const canRoute = typeof (HTMLMediaElement.prototype as { setSinkId?: unknown }).setSinkId === "function";
+        if (decision.speakerId && canRoute) await switchSpeakerRef.current(decision.speakerId);
+        if (cancelled) return;
+        setDeviceFollow({
+          decision: canRoute ? decision : { ...decision, speakerId: null },
+          previousMicId,
+          previousSpeakerId,
+        });
+      })();
+    };
+    md.addEventListener("devicechange", onChange);
+    return () => {
+      cancelled = true;
+      md.removeEventListener("devicechange", onChange);
+    };
+  }, [sessionLive]);
+
   // ── How long the meeting has been live ────────────────────────────────────
 
   // Open a live span while the session is live and bank it when it is not, so a
@@ -3720,6 +3888,24 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     const w = window as any;
     const SR = (w.SpeechRecognition ?? w.webkitSpeechRecognition) as (new () => any) | undefined;
     if (!SR) { setSrStatus("unsupported"); srStatusRef.current = "unsupported"; return; }
+    // A phone whose engine would open a second capture of the microphone
+    // beside the call's does not transcribe. "unsupported" is the honest
+    // status: the room's coverage banner then tells the host these words are
+    // reaching nobody's record, and the member is told once what still works.
+    // See recognizer-policy.ts.
+    {
+      const nav = typeof navigator !== "undefined" ? navigator : null;
+      const skip = recognizerSkipReason({
+        mobile: isMobileUserAgent(nav?.userAgent, nav?.maxTouchPoints ?? 0),
+        followsTrack: engineFollowsTrack(SR),
+      });
+      if (skip) {
+        console.info(`[transcription] not started: ${skip}`);
+        setSrStatus("unsupported"); srStatusRef.current = "unsupported";
+        setSrSkippedNotice(RECOGNIZER_SKIPPED_NOTICE);
+        return;
+      }
+    }
     const recognition = new SR();
     recognition.continuous = true; recognition.interimResults = true;
     // The browser's language, not en-US for everyone: an engine told the wrong
@@ -4800,6 +4986,13 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
   // the room's membership disagree.
   const recorderStateRef = useRef(recorder.state);
   useEffect(() => { recorderStateRef.current = recorder.state; }, [recorder.state]);
+  // The recording draws the local tile from the sent stream, so while it
+  // runs the segmenter has a viewer even when no peer does: re-decide the
+  // idle pause whenever recording starts or stops.
+  useEffect(() => {
+    recordingLiveRef.current = recorder.state === "recording";
+    applySendCapsRef.current();
+  }, [recorder.state]);
   useEffect(() => {
     if (recorderStateRef.current !== "recording") return;
     sendSignalRef.current({
@@ -5106,7 +5299,7 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
       // a frame, which the deadline reads as a broken pipeline and latches.
       // From the refs, not the state: this runs inside an async build that
       // began renders ago.
-      const startPaused = !camOnRef.current || shareOnRef.current;
+      const startPaused = !camOnRef.current || shareOnRef.current || maskIdleRef.current;
       let mask: MaskDriver | null = null;
       try {
         const { MaskDriver } = await import("@/lib/meetings/mask-driver");
@@ -5314,6 +5507,61 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
   // through this ref — the same forward reference the rest of the room uses.
   const startCameraRef = useRef(startCamera);
   useEffect(() => { startCameraRef.current = startCamera; }, [startCamera]);
+
+  const camStartingRef = useRef(false);
+  useEffect(() => { camStartingRef.current = camStarting; }, [camStarting]);
+
+  /**
+   * Let go of a camera that has been off for a while.
+   *
+   * "Off" disabled the track and left the device open: light on, capture
+   * running, nothing sent. See camera-release.ts for the wait. The release
+   * takes the outgoing track off the stream and the senders without stopping
+   * it — with a background on, that track is the segmenter's output and the
+   * driver keeps it — then stops the camera itself. The driver stays, paused,
+   * on a source that has ended; turning the camera back on reopens the device
+   * through startCamera, whose adoptCameraTrack re-points the driver at the
+   * new one (replaceSource), exactly as a camera switch does.
+   *
+   * The ended-track listener stands down on its own: it ignores a camera
+   * ending while `camOnRef` is false, which is the state this requires.
+   */
+  const releaseCamera = useCallback(() => {
+    const raw = rawCameraTrackRef.current;
+    if (!raw || camOnRef.current || camStartingRef.current) return;
+    if (!shareOnRef.current) swapOutgoingVideo(null, false);
+    rawCameraTrackRef.current = null;
+    setRawCameraTrack(null);
+    cameraTrackRef.current = null;
+    try { raw.stop(); } catch { /* already stopped */ }
+    console.info("[meeting] camera released after being off; it reopens when turned on");
+  }, [swapOutgoingVideo]);
+  const releaseCameraRef = useRef(releaseCamera);
+  useEffect(() => { releaseCameraRef.current = releaseCamera; }, [releaseCamera]);
+
+  useEffect(() => {
+    if (!sessionLive || camOn) return;
+    const offSince = Date.now();
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const check = () => {
+      timer = null;
+      const now = Date.now();
+      const due = cameraReleaseDue({
+        camOn: camOnRef.current,
+        hasCamera: rawCameraTrackRef.current !== null,
+        opening: camStartingRef.current || cameraSwitchRef.current,
+        offSinceMs: offSince,
+        nowMs: now,
+      });
+      if (due) { releaseCameraRef.current(); return; }
+      // Not yet, or a camera open is in flight: look again. Nothing to
+      // release ends it.
+      if (rawCameraTrackRef.current === null) return;
+      timer = setTimeout(check, Math.max(500, msUntilCameraRelease(offSince, now)));
+    };
+    timer = setTimeout(check, msUntilCameraRelease(offSince, offSince));
+    return () => { if (timer) clearTimeout(timer); };
+  }, [sessionLive, camOn]);
 
   const toggleScreen = useCallback(async () => {
     // The ref, not the state: this closure is handed to the control bar once and
@@ -5546,6 +5794,8 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
       if (notice) setEchoNotice((held) => (held === ECHO_DETECTED_NOTICE ? held : notice));
     } catch { /* enumeration refused; the detector is still watching */ }
   }, [applySpeakerSink]);
+  useEffect(() => { switchMicRef.current = switchMic; }, [switchMic]);
+  useEffect(() => { switchSpeakerRef.current = switchSpeaker; }, [switchSpeaker]);
 
   /**
    * Recover from a device that disappeared mid-call.
@@ -6674,6 +6924,10 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
   // Which page of a large call's grid is showing. Clamped where it is used,
   // so a call that shrinks under it lands on its last page rather than a blank.
   const [gridPage, setGridPage] = useState(0);
+  // Who is on it, for the video requests: a peer on another page is drawn by
+  // nobody and asked for nothing (tierForView's `offPage`). Null outside the
+  // grid, where there are no pages.
+  const gridPageIdsRef = useRef<Set<string> | null>(null);
 
   const abandonReport = useCallback(() => {
     endingRef.current = true;
@@ -6730,6 +6984,32 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
    * conditional return does not run in the same order every render.
    */
   const allPeers = useMemo(() => [...peers.values()] as Peer[], [peers]);
+
+  // Who the grid's current page draws, for the video requests. Decided here,
+  // above the early returns, from the same paging the stage uses below; a
+  // change of page re-asks every peer, so the ones that scrolled off stop
+  // being encoded for us and the ones that scrolled on start.
+  const gridPageKey = stageLayout === "grid"
+    ? pageTiles<Peer | "local">("local", allPeers, gridPage, viewport).tiles
+      .map((t) => (t === "local" ? "local" : t.id)).join("\u0000")
+    : null;
+  useEffect(() => {
+    gridPageIdsRef.current = gridPageKey === null ? null : new Set(gridPageKey.split("\u0000"));
+    if (ready) refreshVideoRequestsRef.current();
+  }, [gridPageKey, ready]);
+
+  // What the member's own tile shows. The sent stream, except while the
+  // segmenter is paused for want of a viewer: then the raw camera, mirrored
+  // like any self-view, because a paused composite is a frozen frame and a
+  // frozen self-view reads as a broken camera. Nobody else sees the raw
+  // camera — nobody else is receiving anything, which is why it is paused.
+  const selfView = useMemo(() => {
+    const raw = rawCameraTrack;
+    if (maskIdle && raw && raw.readyState === "live" && needsSegmentation(bgEffect) && !shareOn) {
+      return { stream: new MediaStream([raw]), track: raw };
+    }
+    return { stream: localStream, track: videoTrackOf(localStream) };
+  }, [maskIdle, rawCameraTrack, bgEffect, shareOn, localStream]);
   const participantList = useMemo(() => [
     { id: LOCAL_SPEAKER_ID, displayName: localName, micOn, isLocal: true },
     ...allPeers.map((p) => ({
@@ -6850,7 +7130,7 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
   const speakerPeer = speakerIsLocal ? null : allPeers.find((p) => p.id === speakerTileId);
   const stripItems: { id: string; displayName: string; stream: MediaStream | null; isLocal: boolean }[] = speakerIsLocal
     ? allPeers.map((p) => ({ id: p.id, displayName: p.displayName, stream: p.stream, isLocal: false }))
-    : [{ id: "local", displayName: localName, stream: localStream, isLocal: true }, ...allPeers.filter((p) => p.id !== speakerTileId).map((p) => ({ id: p.id, displayName: p.displayName, stream: p.stream, isLocal: false }))];
+    : [{ id: "local", displayName: localName, stream: selfView.stream, isLocal: true }, ...allPeers.filter((p) => p.id !== speakerTileId).map((p) => ({ id: p.id, displayName: p.displayName, stream: p.stream, isLocal: false }))];
 
   // The notices over the stage, most urgent first. See NoticeStack: one shows
   // at a time, apart from the two pinned ones, so a stage that opens with
@@ -6927,6 +7207,33 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
   ) });
   // The engine keeps dying. Names the cause the member can act on, and says the
   // call is fine, because "transcription failed" reads as a broken meeting.
+  // A phone that is not transcribing, told once (recognizer-policy.ts).
+  if (srSkippedNotice) stageNotices.push({ id: "sr-skipped", priority: 56, node: (
+      <div role="status" className="flex items-start gap-3 px-4 py-3 bg-[var(--surface-2)] border-b border-[var(--line)] shrink-0">
+        <span className="text-[var(--fg-muted)] mt-0.5 shrink-0">ℹ</span>
+        <p className="flex-1 text-sm text-[var(--fg-muted)]">{srSkippedNotice}</p>
+        <button onClick={() => setSrSkippedNotice(null)} className="shrink-0 text-[var(--fg-muted)] hover:text-[var(--fg-primary)] text-xs font-medium underline">Dismiss</button>
+      </div>
+  ) });
+  // A headset plugged in that the audio followed, with the way back.
+  if (deviceFollow) stageNotices.push({ id: "device-follow", priority: 71, node: (
+      <div role="status" className="flex items-start gap-3 px-4 py-3 bg-[var(--surface-2)] border-b border-[var(--line)] shrink-0">
+        <span className="text-[var(--fg-muted)] mt-0.5 shrink-0">🎧</span>
+        <p className="flex-1 text-sm text-[var(--fg-primary)]">{followNotice(deviceFollow.decision)}</p>
+        <button
+          onClick={() => {
+            const back = deviceFollow;
+            setDeviceFollow(null);
+            if (back.decision.micId) void switchMicRef.current(back.previousMicId);
+            if (back.decision.speakerId) void switchSpeakerRef.current(back.previousSpeakerId);
+          }}
+          className="shrink-0 text-[var(--fg-primary)] hover:underline text-xs font-medium underline"
+        >
+          Undo
+        </button>
+        <button onClick={() => setDeviceFollow(null)} className="shrink-0 text-[var(--fg-muted)] hover:text-[var(--fg-primary)] text-xs font-medium underline">Dismiss</button>
+      </div>
+  ) });
   if (srStatus === "failing") stageNotices.push({ id: "sr-failing", priority: 57, node: (
       <div role="status" className="flex items-start gap-3 px-4 py-3 bg-amber-500/10 border-b border-amber-500/30 shrink-0">
         <span className="text-amber-500 mt-0.5 shrink-0">⚠</span>
@@ -7093,7 +7400,7 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
                 style={{ maxWidth: `calc((100cqh - ${gridRows - 1} * 0.75rem) / ${gridRows} * 16 / 9 * ${gridCols} + ${gridCols - 1} * 0.75rem)` }}
               >
                 {gridPaged.tiles.map((tile) => tile === "local" ? (
-                  <VideoTile key="local" stream={localStream} videoTrack={videoTrackOf(localStream)} label={localName} isLocal showingScreenShare={shareOn} handRaised={handRaised} reaction={getReaction("local")} micOn={micOn} watchId={LOCAL_SPEAKER_ID} camOn={camOn} videoPaused={bwMode === "audio-only"} />
+                  <VideoTile key="local" stream={selfView.stream} videoTrack={selfView.track} label={localName} isLocal showingScreenShare={shareOn} handRaised={handRaised} reaction={getReaction("local")} micOn={micOn} watchId={LOCAL_SPEAKER_ID} camOn={camOn} videoPaused={bwMode === "audio-only"} />
                 ) : (
                   <VideoTile key={tile.id} stream={tile.stream} videoTrack={videoTrackOf(tile.stream)} label={tile.displayName} handRaised={raisedHands.has(tile.id)} reaction={getReaction(tile.id)} micOn={peerMicOn.get(tile.id) ?? true} watchId={tile.id} camOn={videoOf(tile.id).camOn} videoPaused={videoOf(tile.id).paused} status={statusOf(tile.id)} />
                 ))}
@@ -7121,11 +7428,11 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
               {/* Main speaker tile */}
               <div className="flex-1 min-h-0">
                 {speakerIsLocal ? (
-                  <VideoTile stream={localStream} videoTrack={videoTrackOf(localStream)} label={localName} isLocal showingScreenShare={shareOn} handRaised={handRaised} reaction={getReaction("local")} micOn={micOn} watchId={LOCAL_SPEAKER_ID} camOn={camOn} videoPaused={bwMode === "audio-only"} large />
+                  <VideoTile stream={selfView.stream} videoTrack={selfView.track} label={localName} isLocal showingScreenShare={shareOn} handRaised={handRaised} reaction={getReaction("local")} micOn={micOn} watchId={LOCAL_SPEAKER_ID} camOn={camOn} videoPaused={bwMode === "audio-only"} large />
                 ) : speakerPeer ? (
                   <VideoTile stream={speakerPeer.stream} videoTrack={videoTrackOf(speakerPeer.stream)} label={speakerPeer.displayName} handRaised={isHandRaised(speakerPeer.id)} reaction={getReaction(speakerPeer.id)} micOn={peerMicOn.get(speakerPeer.id) ?? true} watchId={speakerPeer.id} camOn={videoOf(speakerPeer.id).camOn} videoPaused={videoOf(speakerPeer.id).paused} status={statusOf(speakerPeer.id)} large />
                 ) : (
-                  <VideoTile stream={localStream} videoTrack={videoTrackOf(localStream)} label={localName} isLocal showingScreenShare={shareOn} handRaised={handRaised} reaction={getReaction("local")} micOn={micOn} watchId={LOCAL_SPEAKER_ID} camOn={camOn} videoPaused={bwMode === "audio-only"} large />
+                  <VideoTile stream={selfView.stream} videoTrack={selfView.track} label={localName} isLocal showingScreenShare={shareOn} handRaised={handRaised} reaction={getReaction("local")} micOn={micOn} watchId={LOCAL_SPEAKER_ID} camOn={camOn} videoPaused={bwMode === "audio-only"} large />
                 )}
               </div>
               {/* Thumbnail strip */}

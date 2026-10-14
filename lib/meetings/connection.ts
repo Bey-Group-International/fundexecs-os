@@ -887,6 +887,44 @@ export function withOpusResilience(sdp: string): string {
 }
 
 /**
+ * How long a prefetched ICE configuration is trusted.
+ *
+ * The green room is idle time, and the ICE fetch — a round trip to our own
+ * origin for TURN credentials — used to be started only when the member
+ * pressed Join, where it sat on the path to the first peer connection. So
+ * it is started while they are still choosing a camera, and reused at join
+ * if it is recent. Five minutes is well inside any credential TTL this
+ * deployment mints (turn-credentials.ts, default twelve hours) and past it
+ * the join simply fetches again, as it always did.
+ */
+export const ICE_PREFETCH_MAX_AGE_MS = 5 * 60_000;
+
+/** Whether an ICE configuration fetched at `fetchedAt` is still worth reusing. */
+export function prefetchedIceUsable(fetchedAt: number | null, now: number): boolean {
+  if (fetchedAt === null || !Number.isFinite(fetchedAt)) return false;
+  const age = now - fetchedAt;
+  return age >= 0 && age < ICE_PREFETCH_MAX_AGE_MS;
+}
+
+/**
+ * The encoding the audio sender is created with.
+ *
+ * Audio is the call. A video frame dropped is a frame nobody misses; a
+ * syllable dropped is a question asked twice. On a congested uplink the
+ * browser's congestion controller shares the pain across every sender
+ * unless told which one matters, so the audio sender is marked high
+ * priority (the bitrate allocator's share) and high network priority (the
+ * DSCP marking, where the network honours it). Set at construction because
+ * `priority` is read when the encoding is created; a later `setParameters`
+ * is accepted and ignored by more than one engine.
+ *
+ * Engines that know neither key ignore both; nothing here can fail a call.
+ */
+export function audioSendEncodings(): RTCRtpEncodingParameters[] {
+  return [{ priority: "high", networkPriority: "high" }];
+}
+
+/**
  * What a track is for, so the encoder optimises for the right thing.
  *
  * The defaults are reasonable but generic: without a hint a screen share is

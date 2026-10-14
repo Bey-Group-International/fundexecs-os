@@ -5636,6 +5636,64 @@ Deployed, monitoring               →  live, observability active
              |  Confidence: new pure suite; live-room tests for the Edge
              |  capture (constraints, the track handed, the stored path) and
              |  the non-Edge track; full Jest, typecheck and eslint clean.
+
+2026-10-14  |  Camera and microphone optimisation pass  |  Six product decisions put to the
+             |  owner one at a time, every one taken on the recommended option, plus the
+             |  engineering items that needed no asking.
+             |  Decisions: (1) a phone whose speech engine ignores start(track) does not
+             |  start recognition at all - it would open a second raw capture of the
+             |  microphone beside the call's and hold a recognition stream on the one
+             |  radio; the coverage banner tells the host, the member is told once
+             |  (recognizer-policy.ts). Desktop unchanged. (2) Codec: H.264 first on
+             |  phones and Safari (hardware), VP9 first on desktop Chrome/Edge (~30% fewer
+             |  bits), Firefox and unknowns left alone, VP8 always kept as the fallback -
+             |  a reorder of the engine's own capability list, never a subset
+             |  (codec-preference.ts, setCodecPreferences before the offer). (3) Camera
+             |  off for ten seconds releases the device - light off, capture stopped -
+             |  and turning it on reopens through startCamera; a quick off-and-on never
+             |  pays the reopen (camera-release.ts). With a background on, the mask
+             |  driver stays paused and is re-pointed by replaceSource, as a camera
+             |  switch does. (4) Segmentation pauses while nobody is receiving the camera
+             |  (every peer asked for none, or no peer); the self-view shows the raw
+             |  mirrored camera meanwhile, nobody else sees anything because nobody is
+             |  receiving. Not while recording - the recording draws the local tile from
+             |  the sent stream. (5) A headset plugged in mid-call is followed, both
+             |  halves together by groupId, with a notice and one-tap Undo; the first
+             |  enumeration is the baseline, aliases and re-reads are not arrivals
+             |  (device-follow.ts). (6) Recordings encode 64 kbps MONO - the destination
+             |  node is stereo by default and channelCountMode "explicit", so mono has to
+             |  be asked for on the node (configureRecordingDestination), not the
+             |  encoder.
+             |  Engineering: the audio transceiver is created with priority/networkPriority
+             |  "high" (set at construction - a later setParameters is ignored by more
+             |  than one engine); a grid peer on a page that is not showing is asked for
+             |  `none` (tierForView offPage, gridPageIdsRef kept above the early
+             |  returns); a screen share honours a peer's `none` (it ignored it);
+             |  THUMBNAIL_CAPTURE runs at THUMBNAIL_FPS not 30; microphone constraints
+             |  add channelCount ideal 1 and voiceIsolation; display constraints add
+             |  selfBrowserSurface exclude and surfaceSwitching include; the ICE/TURN
+             |  fetch starts in the green room and is reused at join while under five
+             |  minutes old (prefetchedIceUsable) - from the URL's guest flag, not the
+             |  isGuest state, which an effect sets AFTER this one would have fired for
+             |  every guest, and a fetch that configured nothing is dropped rather than
+             |  reused; the green-room meter reads on a 120ms timer with an immediate
+             |  first read instead of every display frame.
+             |  Left out, said so: qualityLimitationReason logging and remote levels via
+             |  getSynchronizationSources (no decision rests on either yet); mask-worker
+             |  preload in the green room (the green room's own BackgroundProcessor
+             |  already warms the segmenter and the model is HTTP-cached).
+             |  Gotchas: jsdom's green-room check test waited 60ms of real time for
+             |  animation frames; a 120ms timer needs 150. The live-room harness reports
+             |  a fake track's settled deviceId, so "undo" reopens that concrete id, not
+             |  "" - which is also what the picker shows, so the test was wrong, not the
+             |  room.
+             |  Confidence: five new pure suites plus extensions (codec order, release
+             |  timing, mobile policy, device follow, ICE freshness, audio encodings,
+             |  mono destination); live-room tests for the phone skip (both engines), the
+             |  camera release (held through a toggle, released after the wait, reopened
+             |  on press) and the headset follow (switch, notice, undo, re-read ignored);
+             |  full Jest, typecheck and eslint clean. Not measured on hardware: the
+             |  codec and voiceIsolation effects are the browser's to deliver.
 ```
 
 ---

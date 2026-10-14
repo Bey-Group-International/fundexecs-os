@@ -5,7 +5,7 @@
 // exists beside recording-policy rather than reusing it. The meeting recorder
 // composites a canvas of the room and encodes it at 1.5 Mbit — correct for a
 // meeting with faces in it, and absurd for a phone call, where it would spend
-// 675 MB an hour on a still picture of nothing. At the audio bitrate the same
+// 700 MB an hour on a still picture of nothing. At the audio bitrate the same
 // hour is about 57 MB, and the parts, the player, the expiry sweep and the
 // delete cleanup all work on it unchanged.
 //

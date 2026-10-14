@@ -1,4 +1,7 @@
 import {
+  AUDIO_BITRATE,
+  RECORDING_AUDIO_CHANNELS,
+  configureRecordingDestination,
   CHUNK_MS,
   CODEC_PREFERENCE,
   RECORDING_HEIGHT,
@@ -156,5 +159,20 @@ describe("the numbers themselves", () => {
   it("keeps a part well inside every request limit on the path", () => {
     const bytes = estimatedBytes(CHUNK_MS / 1000);
     expect(bytes).toBeLessThan(4_000_000);
+  });
+});
+
+describe("the audio a recording is encoded at", () => {
+  // Every voice in the call is mono and the wire carries mono Opus, so a
+  // stereo mix at a music bitrate was a copy of one channel paid for twice.
+  it("is speech-transparent mono, not a music setting", () => {
+    expect(AUDIO_BITRATE).toBe(64_000);
+    expect(RECORDING_AUDIO_CHANNELS).toBe(1);
+  });
+
+  it("makes the mix destination mono explicitly, because its default is stereo", () => {
+    const destination = { channelCount: 2, channelCountMode: "max" as ChannelCountMode };
+    configureRecordingDestination(destination);
+    expect(destination).toEqual({ channelCount: 1, channelCountMode: "explicit" });
   });
 });

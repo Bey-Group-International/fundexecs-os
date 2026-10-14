@@ -397,7 +397,7 @@ export async function GET(request: Request) {
   // the ones whose meeting was deleted out from under them.
   //
   // Recordings are by a wide margin the most expensive thing this product
-  // stores — around 675 MB per hour of meeting — and nothing else deletes them.
+  // stores — around 700 MB per hour of meeting — and nothing else deletes them.
   // Retention that waits for somebody to remember is not retention, it is a
   // bill. This also closes out rows still claiming to be recording hours later,
   // which is a host whose tab died mid-call: the parts they did upload are kept
