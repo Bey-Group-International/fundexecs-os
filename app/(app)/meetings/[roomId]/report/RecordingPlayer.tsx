@@ -31,6 +31,7 @@ import {
   type TimelinePart,
 } from "@/lib/meetings/recording-timeline";
 import { momentLink } from "@/lib/meetings/report-moments";
+import { startAtCluster } from "@/lib/meetings/webm-cluster";
 
 const CONTROL =
   "inline-flex min-h-10 items-center justify-center rounded-lg border border-[var(--line)] bg-[var(--surface-1)] px-3 text-xs text-[var(--fg-secondary)] transition-colors hover:border-gold-400/40 hover:text-[var(--fg-primary)] sm:min-h-8 sm:px-2.5";
@@ -39,6 +40,12 @@ const CONTROL =
 const BUFFER_AHEAD_MS = 30_000;
 /** Append more once the buffer ahead falls below this. */
 const REFILL_AT_MS = 12_000;
+/**
+ * How many times in a row the media source may be rebuilt after a failed append
+ * before the player gives up on seeking and plays the file from the start.
+ * Reset by any append that lands.
+ */
+const MAX_REBUILDS = 2;
 
 /**
  * The MediaSource this browser offers, or null.
@@ -117,6 +124,10 @@ export function RecordingPlayer({
   const videoRef = useRef<HTMLVideoElement>(null);
   const [meta, setMeta] = useState<PartsResponse | null>(null);
   const [native, setNative] = useState(false);
+  /** Seeking was abandoned after repeated failures, so the plain element is a fallback and not a limitation of the browser. */
+  const [seekFailed, setSeekFailed] = useState(false);
+  /** Bumped to throw the media source away and build a new one. */
+  const [generation, setGeneration] = useState(0);
   const [playing, setPlaying] = useState(false);
   const [positionMs, setPositionMs] = useState(0);
   const [scrubbing, setScrubbing] = useState(false);
@@ -139,6 +150,14 @@ export function RecordingPlayer({
     /** Serialises appends — a SourceBuffer rejects a second one mid-update. */
     queue: Promise.resolve(),
     ended: false,
+    /**
+     * The part that would continue the buffer's byte stream exactly, or null
+     * when it is unknown. An append of any other part is a jump, and a jump
+     * has to be started where the parser can pick it up (see `append`).
+     */
+    nextIdx: null as number | null,
+    /** Rebuilds since an append last landed. */
+    rebuilds: 0,
   });
 
   // ── Load the timeline ─────────────────────────────────────────────────────
@@ -165,6 +184,33 @@ export function RecordingPlayer({
     };
   }, [meetingId, recordingId]);
 
+  /**
+   * Throw the media source away and build a new one, resuming where the viewer
+   * was.
+   *
+   * A failed append can end the media source (a decode error does), and an
+   * ended source accepts nothing more: every later append is a quiet no-op, so
+   * the video simply freezes. Rebuilding is the only way back. Bounded, because
+   * a recording that cannot be seeked would otherwise be rebuilt forever; after
+   * `MAX_REBUILDS` in a row it plays from the start in the plain element, which
+   * cannot seek but does not freeze.
+   */
+  const recover = useCallback(() => {
+    const s = state.current;
+    const video = videoRef.current;
+    if (s.rebuilds >= MAX_REBUILDS) {
+      setSeekFailed(true);
+      setNative(true);
+      return;
+    }
+    s.rebuilds += 1;
+    pending.current = {
+      ms: (video?.currentTime ?? 0) * 1000,
+      play: video ? !video.paused : false,
+    };
+    setGeneration((g) => g + 1);
+  }, []);
+
   /** Append a run of parts, in order, one update at a time. */
   const append = useCallback(
     (wanted: TimelinePart[]) => {
@@ -177,13 +223,47 @@ export function RecordingPlayer({
 
       const range = rangeHeaderFor(fresh);
       if (!range) return;
+      const first = fresh[0].idx;
+      const last = fresh[fresh.length - 1].idx;
+      // The source this run was queued for. A rebuild swaps `s.source` and
+      // `s.buffer` under the queue, and a run left over from the old source
+      // must not be appended to the new one.
+      const queuedFor = s.source;
 
       s.queue = s.queue
         .then(async () => {
-          if (s.source?.readyState !== "open") return;
+          if (s.source !== queuedFor || s.source?.readyState !== "open") return;
           const res = await fetch(streamUrl, { headers: { Range: range } });
           if (!res.ok && res.status !== 206) throw new Error(String(res.status));
-          const bytes = new Uint8Array(await res.arrayBuffer());
+          if (s.source !== queuedFor) return;
+          let bytes: Uint8Array = new Uint8Array(await res.arrayBuffer());
+
+          // Decided here, where appends are strictly one after another, and not
+          // when the run was queued: by now every earlier append has either
+          // landed or failed, so `nextIdx` is the truth about the parser.
+          //
+          // A run that continues the byte stream goes in as it is. Any other —
+          // a seek, or a refill after one failed — begins partway through a
+          // cluster whose header the parser never saw, and handing it that is
+          // a gamble on the bytes: in measurement about one seek in five into
+          // video ended the media source. So the parser is reset and the run
+          // is started at its first cluster header, a place it can always
+          // begin from. What comes before that — under half a second — was
+          // only the tail of the previous cluster. Part 0 carries the
+          // initialisation segment and is appended whole.
+          const jump = s.nextIdx !== null ? first !== s.nextIdx : first !== 0;
+          if (jump && s.buffer && s.source?.readyState === "open") {
+            if (first === 0) {
+              try { s.buffer.abort(); } catch { /* nothing in flight to abort */ }
+            } else {
+              const trimmed = startAtCluster(bytes);
+              if (trimmed) {
+                try { s.buffer.abort(); } catch { /* nothing in flight to abort */ }
+                bytes = trimmed;
+              }
+            }
+          }
+
           await new Promise<void>((resolve, reject) => {
             const buffer = s.buffer;
             if (!buffer || s.source?.readyState !== "open") return resolve();
@@ -206,15 +286,25 @@ export function RecordingPlayer({
               throw err;
             }
           });
+
+          s.nextIdx = last + 1;
+          // Only an append from further in than the start proves seeking works:
+          // the opening run is what a rebuild appends first, and counting it
+          // would let a seek that always fails be retried forever.
+          if (first !== 0) s.rebuilds = 0;
         })
         .catch((err) => {
           // A part that will not append is a hole, not a dead player: forget it
           // so a later pass can try again, and let playback carry on.
           for (const p of fresh) s.appended.delete(p.idx);
+          // What the parser was left holding is unknown, so the next run is
+          // treated as a jump and restarted at a cluster.
+          s.nextIdx = null;
           console.warn("[recording] could not append parts", fresh.map((p) => p.idx), err);
+          if (s.source === queuedFor && s.source && s.source.readyState !== "open") recover();
         });
     },
-    [streamUrl],
+    [streamUrl, recover],
   );
 
   // ── Wire MediaSource ──────────────────────────────────────────────────────
@@ -238,6 +328,7 @@ export function RecordingPlayer({
     s.appended = new Set();
     s.queue = Promise.resolve();
     s.ended = false;
+    s.nextIdx = null;
 
     const url = URL.createObjectURL(source);
     video.src = url;
@@ -269,7 +360,7 @@ export function RecordingPlayer({
       s.buffer = null;
       URL.revokeObjectURL(url);
     };
-  }, [meta, native, append]);
+  }, [meta, native, append, generation]);
 
   /**
    * Hand back the video the viewer has already watched.
@@ -463,7 +554,9 @@ export function RecordingPlayer({
           onTimeUpdate={() => onTime?.((videoRef.current?.currentTime ?? 0) * 1000)}
         />
         <p className="text-[11px] text-[var(--fg-muted)]">
-          This browser cannot seek inside a meeting recording. It will play from the start.
+          {seekFailed
+            ? "Seeking failed for this recording, so it will play from the start."
+            : "This browser cannot seek inside a meeting recording. It will play from the start."}
         </p>
       </div>
     );

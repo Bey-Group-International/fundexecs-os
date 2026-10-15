@@ -22,13 +22,36 @@ import { KEEP_BEHIND_MS } from "@/lib/meetings/recording-timeline";
 /** ~940KB per five-second part, as recording-policy.ts states for these bitrates. */
 const PART_BYTES = 940_000;
 
+/** Where in each fake part its first cluster header sits. */
+const CLUSTER_AT = 100;
+/** A Cluster ID, an unknown-size field, and the Timecode every cluster opens with. */
+const CLUSTER_HEADER = Uint8Array.from([
+  0x1f, 0x43, 0xb6, 0x75, 0x01, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xe7, 0x81, 0x00,
+]);
+
 /** Every MediaSource the player constructs, so a test can open it. */
 let sources: FakeMediaSource[] = [];
 
 class FakeSourceBuffer extends EventTarget {
   appended: number[] = [];
   removals: Array<[number, number]> = [];
+  /** How many times the parser was reset, which is what a jump must do first. */
+  aborts = 0;
+  /** Make the next append fail the way a decode error does: the source ends. */
+  failNext = false;
+  constructor(private readonly owner?: { readyState: string }) {
+    super();
+  }
+  abort() {
+    this.aborts += 1;
+  }
   appendBuffer(bytes: BufferSource) {
+    if (this.failNext || FakeMediaSource.failAppends) {
+      this.failNext = false;
+      if (this.owner) this.owner.readyState = "ended";
+      setTimeout(() => this.dispatchEvent(new Event("error")), 0);
+      return;
+    }
     this.appended.push((bytes as Uint8Array).byteLength);
     setTimeout(() => this.dispatchEvent(new Event("updateend")), 0);
   }
@@ -51,7 +74,7 @@ class FakeManagedMediaSource extends EventTarget {
     sources.push(this as unknown as FakeMediaSource);
   }
   addSourceBuffer() {
-    this.buffer = new FakeSourceBuffer();
+    this.buffer = new FakeSourceBuffer(this);
     return this.buffer as unknown as SourceBuffer;
   }
 }
@@ -61,6 +84,8 @@ class FakeMediaSource extends EventTarget {
   duration = 0;
   buffer: FakeSourceBuffer | null = null;
   static supported = true;
+  /** Every append fails, on every source: a recording that cannot be seeked at all. */
+  static failAppends = false;
   static isTypeSupported() {
     return FakeMediaSource.supported;
   }
@@ -69,7 +94,7 @@ class FakeMediaSource extends EventTarget {
     sources.push(this);
   }
   addSourceBuffer() {
-    this.buffer = new FakeSourceBuffer();
+    this.buffer = new FakeSourceBuffer(this);
     return this.buffer as unknown as SourceBuffer;
   }
 }
@@ -116,9 +141,12 @@ async function setup(
     beforeOpen?: () => void;
     /** `ManagedMediaSource` beside `MediaSource` ("also"), or instead of it ("only": an iPhone). */
     managed?: "also" | "only";
+    /** Every append on every source ends it, as for a recording that cannot be seeked at all. */
+    failAppends?: boolean;
   } = {},
 ): Promise<Harness> {
   sources = [];
+  FakeMediaSource.failAppends = opts.failAppends ?? false;
   FakeMediaSource.supported = opts.supported ?? true;
   const w = window as unknown as { ManagedMediaSource?: unknown; MediaSource?: unknown };
   const g = globalThis as unknown as { MediaSource?: unknown };
@@ -160,10 +188,18 @@ async function setup(
     for (const i of idxs) resident.add(i);
     const m = /bytes=(\d+)-(\d+)/.exec(range);
     const size = m ? Number(m[2]) - Number(m[1]) + 1 : 0;
+    // Every part opens with CLUSTER_AT bytes of the previous cluster's tail and
+    // then a cluster header, which is where a real part's seam falls.
+    const body = new Uint8Array(size);
+    const from = m ? Number(m[1]) : 0;
+    for (const i of idxs) {
+      const at = i * PART_BYTES - from + CLUSTER_AT;
+      if (at >= 0 && at + CLUSTER_HEADER.length <= size) body.set(CLUSTER_HEADER, at);
+    }
     return {
       ok: true,
       status: 206,
-      arrayBuffer: async () => new ArrayBuffer(size),
+      arrayBuffer: async () => body.buffer,
     } as unknown as Response;
   }) as unknown as typeof fetch;
 
@@ -291,6 +327,158 @@ describe("filling the buffer", () => {
     // The native path is a <video src>, with no MediaSource at all.
     expect(h.video.getAttribute("src")).toContain("/stream");
     expect(sources).toHaveLength(0);
+  });
+});
+
+// ── Jumping into the middle ─────────────────────────────────────────────────
+
+describe("seeking into the middle of a recording", () => {
+  // Parts are cut between blocks, not between clusters, so every part after the
+  // first begins inside a cluster whose header the parser never saw. Appended
+  // after a jump, that is a gamble on the bytes: measured against real
+  // recordings, about one seek in five into video ended the media source.
+  it("resets the parser and starts the run at its first cluster header", async () => {
+    const ref = createRef<RecordingPlayerHandle>();
+    const h = await setup(60, { ref });
+    expect(h.buffer().aborts).toBe(0);
+
+    const before = h.buffer().appended.length;
+    const fetchedBefore = h.fetched.length;
+    await act(async () => {
+      ref.current!.seekTo(150_000);
+      await new Promise((r) => setTimeout(r, 0));
+    });
+
+    const run = h.fetched[fetchedBefore];
+    expect(run[0]).toBe(30);
+    expect(h.buffer().aborts).toBe(1);
+    // Everything before the header — the tail of the previous cluster — is
+    // dropped, and nothing after it is.
+    expect(h.buffer().appended[before]).toBe(run.length * PART_BYTES - CLUSTER_AT);
+  });
+
+  it("appends the opening run whole, with no reset", async () => {
+    const h = await setup(60);
+    expect(h.buffer().aborts).toBe(0);
+    expect(h.buffer().appended[0]).toBe(h.fetched[0].length * PART_BYTES);
+  });
+
+  it("does not reset or trim a refill that continues the stream", async () => {
+    const h = await setup(60);
+    for (let ms = 0; ms <= 120_000; ms += CHUNK_MS) await h.tick(ms);
+    expect(h.fetched.length).toBeGreaterThan(1);
+    expect(h.buffer().aborts).toBe(0);
+    for (const bytes of h.buffer().appended) expect(bytes % PART_BYTES).toBe(0);
+  });
+
+  it("resumes plain appends after a jump without resetting again", async () => {
+    const ref = createRef<RecordingPlayerHandle>();
+    const h = await setup(120, { ref });
+    await act(async () => {
+      ref.current!.seekTo(300_000);
+      await new Promise((r) => setTimeout(r, 0));
+    });
+    expect(h.buffer().aborts).toBe(1);
+
+    const fetchedAfterSeek = h.fetched.length;
+    for (let ms = 300_000; ms <= 360_000; ms += CHUNK_MS) await h.tick(ms);
+    expect(h.fetched.length).toBeGreaterThan(fetchedAfterSeek);
+    expect(h.buffer().aborts).toBe(1);
+  });
+
+  it("resets again for a second jump", async () => {
+    const ref = createRef<RecordingPlayerHandle>();
+    const h = await setup(120, { ref });
+    for (const ms of [300_000, 100_000]) {
+      await act(async () => {
+        ref.current!.seekTo(ms);
+        await new Promise((r) => setTimeout(r, 0));
+      });
+    }
+    expect(h.buffer().aborts).toBe(2);
+  });
+
+  it("resets, and appends the whole part, when the viewer returns to the very start", async () => {
+    const ref = createRef<RecordingPlayerHandle>();
+    const h = await setup(120, { ref });
+    await act(async () => {
+      ref.current!.seekTo(300_000);
+      await new Promise((r) => setTimeout(r, 0));
+    });
+    // Released from the front as the viewer moves on, so part 0 is wanted again.
+    for (let ms = 300_000; ms <= 420_000; ms += CHUNK_MS) await h.tick(ms);
+    const aborts = h.buffer().aborts;
+    const appendedBefore = h.buffer().appended.length;
+    await act(async () => {
+      ref.current!.seekTo(0);
+      await new Promise((r) => setTimeout(r, 0));
+    });
+
+    expect(h.buffer().aborts).toBe(aborts + 1);
+    // Part 0 carries the initialisation segment: nothing is cut from it.
+    expect(h.buffer().appended[appendedBefore] % PART_BYTES).toBe(0);
+  });
+});
+
+// ── A source that ends ──────────────────────────────────────────────────────
+
+describe("when an append ends the media source", () => {
+  const open = async (index: number) => {
+    await act(async () => {
+      sources[index].dispatchEvent(new Event("sourceopen"));
+      await new Promise((r) => setTimeout(r, 0));
+    });
+  };
+
+  // An ended source takes no more data and says nothing, so before this the
+  // video froze and stayed frozen until the page was reloaded.
+  it("builds a new source and resumes at the same moment", async () => {
+    const ref = createRef<RecordingPlayerHandle>();
+    const h = await setup(60, { ref });
+    expect(sources).toHaveLength(1);
+
+    h.buffer().failNext = true;
+    await act(async () => {
+      ref.current!.seekTo(150_000);
+      await new Promise((r) => setTimeout(r, 10));
+    });
+    expect(sources).toHaveLength(2);
+
+    await open(1);
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 20));
+    });
+    // The new source starts from the opening run and then makes the seek again.
+    expect(sources[1].buffer!.appended.length).toBeGreaterThanOrEqual(2);
+    expect(h.fetched.flat()).toContain(30);
+    expect(screen.queryByText(/Seeking failed/)).toBeNull();
+  });
+
+  it("gives up and plays from the start when every source keeps failing", async () => {
+    await setup(60, { failAppends: true });
+
+    // The original fails on open and every rebuild fails the same way. Each
+    // step is given time to land before the next source is opened, the way a
+    // browser opens one only after it has been built.
+    let opened = 1;
+    for (let i = 0; i < 8; i++) {
+      await act(async () => {
+        await new Promise((r) => setTimeout(r, 20));
+      });
+      if (sources[opened]) {
+        await open(opened);
+        opened += 1;
+      }
+    }
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 20));
+    });
+
+    expect(screen.getByText(/Seeking failed for this recording/)).toBeTruthy();
+    // The plain element is what is left, and it still plays.
+    expect(document.querySelector("video")?.getAttribute("src")).toContain("/stream");
+    // Bounded: the original plus two rebuilds, not a loop.
+    expect(sources.length).toBeLessThanOrEqual(3);
   });
 });
 
