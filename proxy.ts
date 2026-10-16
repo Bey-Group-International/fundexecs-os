@@ -21,8 +21,12 @@ export async function proxy(request: NextRequest) {
 }
 
 export const config = {
-  // Run on everything except static assets and image optimization.
+  // Run on everything except static assets and image optimization. The
+  // segmenter files under /mediapipe are static assets too: left in, each of
+  // their three requests paid a session refresh to Supabase Auth, and a refresh
+  // that rotated the cookie put a Set-Cookie on a 12MB response a shared cache
+  // would otherwise have held.
   matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
+    "/((?!_next/static|_next/image|mediapipe/|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
   ],
 };
