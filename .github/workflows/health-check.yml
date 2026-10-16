@@ -65,38 +65,64 @@ jobs:
           # step was skipped serves a 404 here while the page, the database and
           # every CI check stay green, and the failure shows up only as a member
           # whose "Background effects couldn't load" - so the files themselves are
-          # probed. HEAD, not GET: the wasm is ~12MB and this runs every half hour.
+          # probed.
           #
-          # A floor on size as well as the status, because a 200 with an HTML
-          # error page in it is still a missing runtime. And the loader must come
-          # back as JavaScript: the site sends X-Content-Type-Options: nosniff, so
-          # a script with the wrong type is refused outright.
+          # The first 16 bytes are fetched, not the file (the wasm is ~12MB and
+          # this runs every half hour), and they are checked for what each file
+          # is rather than for a size: the edge sends no Content-Length on a HEAD
+          # for these, and a 200 carrying an HTML error page is still a missing
+          # runtime. The loader must also come back as JavaScript - the site
+          # sends X-Content-Type-Options: nosniff, so a script with the wrong
+          # type is refused outright.
           base="https://fundexecs.com/mediapipe"
           failed=0
+          tmp="$(mktemp)"
           check() {
-            file="$1"; min="$2"; type_pattern="$3"
-            out="$(curl -sSI --retry 2 --retry-delay 5 --max-time 30 -L -o /dev/null \
-              -w '%{http_code} %header{content-length} %header{content-type}' \
-              "${base}/${file}" || true)"
-            code="${out%% *}"
-            rest="${out#* }"
-            length="${rest%% *}"
-            type="${rest#* }"
-            echo "${file}: status=${code} bytes=${length:-?} type=${type:-?}"
-            if [ "$code" != "200" ]; then
+            file="$1"; kind="$2"; type_pattern="$3"
+            rc=0
+            : > "$tmp"
+            out="$(curl -sS --retry 2 --retry-delay 5 --max-time 30 -L -r 0-15 \
+              --max-filesize 3000000 -o "$tmp" \
+              -w '%{http_code}|%header{content-range}|%header{content-type}' \
+              "${base}/${file}")" || rc=$?
+            IFS='|' read -r code range type <<< "$out"
+            hex="$(od -An -tx1 -N16 "$tmp" 2>/dev/null | tr -d ' \n')"
+            echo "${file}: status=${code:-none} range=${range:-none} type=${type:-?} head=${hex:-empty}"
+            if [ "$rc" = "63" ]; then
+              # The edge ignored the Range header and the file is large. It is
+              # being served; what it holds cannot be inspected without
+              # downloading it, which this probe will not do on a timer.
+              echo "::warning title=Segmenter file not inspected::${base}/${file} ignored the Range header, so only its status and type were checked."
+              [ "${code}" = "200" ] || { echo "::error title=Segmenter file missing::${base}/${file} answered ${code:-no response}."; failed=1; }
+              return
+            fi
+            if [ "$code" != "200" ] && [ "$code" != "206" ]; then
               echo "::error title=Segmenter file missing::${base}/${file} answered ${code:-no response}. Camera backgrounds cannot load for anyone until it is served - check that the deploy ran scripts/copy-mediapipe-assets.mjs (the prebuild step)."
-              failed=1
-            elif ! [[ "$length" =~ ^[0-9]+$ ]] || [ "$length" -lt "$min" ]; then
-              echo "::error title=Segmenter file looks wrong::${base}/${file} is ${length:-of unknown size} bytes; expected at least ${min}. It is probably an error page or a truncated copy."
-              failed=1
-            elif ! [[ "$type" =~ $type_pattern ]]; then
+              failed=1; return
+            fi
+            if ! [[ "$type" =~ $type_pattern ]]; then
               echo "::error title=Segmenter file has the wrong type::${base}/${file} is served as '${type}'; expected something matching ${type_pattern}."
+              failed=1; return
+            fi
+            case "$kind" in
+              wasm)   ok=0; [[ "$hex" == 0061736d* ]] && ok=1 ;;
+              tflite) ok=0; [[ "${hex:8:8}" == 54464c33 ]] && ok=1 ;;
+              js)     ok=0; [ -n "$hex" ] && [[ "$hex" != 3c* ]] && ok=1 ;;
+            esac
+            if [ "$ok" != "1" ]; then
+              echo "::error title=Segmenter file looks wrong::${base}/${file} does not begin like a ${kind} file (first bytes: ${hex:-none}). It is probably an error page or a truncated copy."
+              failed=1; return
+            fi
+            # A size floor too, when the response says how big the file is.
+            total="${range##*/}"
+            if [[ "$total" =~ ^[0-9]+$ ]] && [ "$total" -lt "$4" ]; then
+              echo "::error title=Segmenter file looks wrong::${base}/${file} is ${total} bytes; expected at least ${4}."
               failed=1
             fi
           }
-          check selfie_segmenter.tflite 100000 '.'
-          check vision_wasm_internal.js 100000 'javascript'
-          check vision_wasm_internal.wasm 5000000 'wasm|octet-stream'
+          check selfie_segmenter.tflite tflite '.' 100000
+          check vision_wasm_internal.js js 'javascript' 100000
+          check vision_wasm_internal.wasm wasm 'wasm|octet-stream' 5000000
           exit "$failed"
         shell: bash
 
@@ -167,6 +193,7 @@ jobs:
         if: failure()
         env:
           GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           gh label create health-check-failure \
@@ -198,6 +225,7 @@ jobs:
         if: success()
         env:
           GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           numbers="$(gh issue list --state open --label health-check-failure \
