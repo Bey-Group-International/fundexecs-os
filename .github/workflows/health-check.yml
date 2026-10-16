@@ -57,6 +57,49 @@ jobs:
           curl -fsS --retry 2 --retry-delay 5 --max-time 30 -o /dev/null \
             "https://fundexecs.com/"
 
+      - name: Background segmenter files are served
+        run: |
+          # Camera backgrounds run MediaPipe from our own origin (see
+          # scripts/copy-mediapipe-assets.mjs): the wasm is copied out of
+          # node_modules at build time and is not in git. A deploy whose prebuild
+          # step was skipped serves a 404 here while the page, the database and
+          # every CI check stay green, and the failure shows up only as a member
+          # whose "Background effects couldn't load" - so the files themselves are
+          # probed. HEAD, not GET: the wasm is ~12MB and this runs every half hour.
+          #
+          # A floor on size as well as the status, because a 200 with an HTML
+          # error page in it is still a missing runtime. And the loader must come
+          # back as JavaScript: the site sends X-Content-Type-Options: nosniff, so
+          # a script with the wrong type is refused outright.
+          base="https://fundexecs.com/mediapipe"
+          failed=0
+          check() {
+            file="$1"; min="$2"; type_pattern="$3"
+            out="$(curl -sSI --retry 2 --retry-delay 5 --max-time 30 -L -o /dev/null \
+              -w '%{http_code} %header{content-length} %header{content-type}' \
+              "${base}/${file}" || true)"
+            code="${out%% *}"
+            rest="${out#* }"
+            length="${rest%% *}"
+            type="${rest#* }"
+            echo "${file}: status=${code} bytes=${length:-?} type=${type:-?}"
+            if [ "$code" != "200" ]; then
+              echo "::error title=Segmenter file missing::${base}/${file} answered ${code:-no response}. Camera backgrounds cannot load for anyone until it is served - check that the deploy ran scripts/copy-mediapipe-assets.mjs (the prebuild step)."
+              failed=1
+            elif ! [[ "$length" =~ ^[0-9]+$ ]] || [ "$length" -lt "$min" ]; then
+              echo "::error title=Segmenter file looks wrong::${base}/${file} is ${length:-of unknown size} bytes; expected at least ${min}. It is probably an error page or a truncated copy."
+              failed=1
+            elif ! [[ "$type" =~ $type_pattern ]]; then
+              echo "::error title=Segmenter file has the wrong type::${base}/${file} is served as '${type}'; expected something matching ${type_pattern}."
+              failed=1
+            fi
+          }
+          check selfie_segmenter.tflite 100000 '.'
+          check vision_wasm_internal.js 100000 'javascript'
+          check vision_wasm_internal.wasm 5000000 'wasm|octet-stream'
+          exit "$failed"
+        shell: bash
+
       - name: Database serves each feature's dependencies
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}

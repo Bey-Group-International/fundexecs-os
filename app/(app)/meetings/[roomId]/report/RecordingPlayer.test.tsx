@@ -423,6 +423,18 @@ describe("seeking into the middle of a recording", () => {
 // ── A source that ends ──────────────────────────────────────────────────────
 
 describe("when an append ends the media source", () => {
+  // Waits for a condition rather than for a fixed few milliseconds: the rebuild
+  // is a chain of promises and timers, and a loaded machine running the whole
+  // suite stretches it past any delay chosen on an idle one.
+  const until = async (condition: () => boolean, ms = 2000) => {
+    const end = Date.now() + ms;
+    while (!condition() && Date.now() < end) {
+      await act(async () => {
+        await new Promise((r) => setTimeout(r, 5));
+      });
+    }
+  };
+
   const open = async (index: number) => {
     await act(async () => {
       sources[index].dispatchEvent(new Event("sourceopen"));
@@ -440,14 +452,12 @@ describe("when an append ends the media source", () => {
     h.buffer().failNext = true;
     await act(async () => {
       ref.current!.seekTo(150_000);
-      await new Promise((r) => setTimeout(r, 10));
     });
+    await until(() => sources.length === 2);
     expect(sources).toHaveLength(2);
 
     await open(1);
-    await act(async () => {
-      await new Promise((r) => setTimeout(r, 20));
-    });
+    await until(() => sources[1].buffer !== null && sources[1].buffer!.appended.length >= 2 && h.fetched.flat().includes(30));
     // The new source starts from the opening run and then makes the seek again.
     expect(sources[1].buffer!.appended.length).toBeGreaterThanOrEqual(2);
     expect(h.fetched.flat()).toContain(30);
@@ -465,6 +475,7 @@ describe("when an append ends the media source", () => {
       await act(async () => {
         await new Promise((r) => setTimeout(r, 20));
       });
+      await until(() => !!sources[opened], 100);
       if (sources[opened]) {
         await open(opened);
         opened += 1;

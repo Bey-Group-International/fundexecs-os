@@ -33,6 +33,17 @@ const nextConfig = {
           { key: "Permissions-Policy", value: "camera=(self), microphone=(self), geolocation=()" },
         ],
       },
+      {
+        // The camera-background segmenter: a ~12MB wasm runtime, its loader and a
+        // 250KB model, all under the same names from one build to the next, which
+        // rules out `immutable`. A day keeps a returning member from re-checking
+        // twelve megabytes every time they open the picker; the cost is that a
+        // MediaPipe upgrade reaches a browser that already has the old pair a day
+        // late, and the old pair still works together. Declared after the rule
+        // above so it is the later of two matches for the same key.
+        source: "/mediapipe/:path*",
+        headers: [{ key: "Cache-Control", value: "public, max-age=86400" }],
+      },
     ];
   },
   async redirects() {
