@@ -24,6 +24,7 @@ import { runBookingRequestExpiry, type RequestExpiryStats } from "@/lib/meetings
 import { runBookingRequestReminders, type RequestReminderStats } from "@/lib/meetings/booking-request-reminder.server";
 import { runRecordingSweep, type RecordingSweepStats } from "@/lib/meetings/recording-sweep.server";
 import { runStaleMeetingSweep, type StaleMeetingSweepStats } from "@/lib/meetings/stale-meeting-sweep.server";
+import { runFailedReportRetry, type FailedReportRetryStats } from "@/lib/meetings/failed-report-retry.server";
 import { runEventIdRepair } from "@/lib/calendar/event-id-repair.server";
 import { NO_REPAIRS, summarize, worthReporting, type RepairStats } from "@/lib/calendar/event-id-repair";
 import {
@@ -424,6 +425,17 @@ export async function GET(request: Request) {
     console.error("stale_meeting_sweep failed", e);
   }
 
+  // Reports the model never wrote. A meeting that ended while the Anthropic
+  // account was out of credit (or the call otherwise failed) is filed with a
+  // blank report and nothing asked again; this retries the newest blank
+  // report, one model call a pass, and stops at the first billing refusal.
+  let failedReports: FailedReportRetryStats = { candidates: 0, retried: 0, failed: 0, billingBlocked: false };
+  try {
+    failedReports = await runFailedReportRetry(supabase, { now });
+  } catch (e) {
+    console.error("failed_report_retry failed", e);
+  }
+
   // Reattach calendar events to the meetings that lost them. For as long as the
   // sync write named a provider the check constraint rejected, every push did
   // half its job: the event landed on the host's calendar and the UPDATE that
@@ -515,6 +527,9 @@ export async function GET(request: Request) {
         staleMeetingsClosed: staleMeetings.closed,
         staleMeetingsDeferred: staleMeetings.deferred,
         staleMeetingsFailed: staleMeetings.failed,
+        failedReportsRetried: failedReports.retried,
+        failedReportsPending: failedReports.candidates,
+        failedReportsBillingBlocked: failedReports.billingBlocked,
         calendarEventIdsReattached: calendarRepair.reattached,
         calendarEventIdsMissing: calendarRepair.noEvent,
         calendarEventIdRepairFailures: calendarRepair.failed,
@@ -539,5 +554,5 @@ export async function GET(request: Request) {
     // best-effort: never let health tracking break the cron response
   }
 
-  return NextResponse.json({ swept: due.length, results, radar, pulse, escalated, inboxApprovals, webhooks, proactive, reminders, bookingConfirmations, bookingRequestReminders, bookingRequestsExpired, recordings, staleMeetings, calendarRepair, subscriptions, settledInvoices, nativeCollections, networkAutomations });
+  return NextResponse.json({ swept: due.length, results, radar, pulse, escalated, inboxApprovals, webhooks, proactive, reminders, bookingConfirmations, bookingRequestReminders, bookingRequestsExpired, recordings, staleMeetings, failedReports, calendarRepair, subscriptions, settledInvoices, nativeCollections, networkAutomations });
 }
