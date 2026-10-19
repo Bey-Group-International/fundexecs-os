@@ -164,7 +164,7 @@ jobs:
               -H "Authorization: Bearer ${SUPABASE_ACCESS_TOKEN}" \
               -H "Content-Type: application/json" \
               -d "$body" > /tmp/health.json; then
-            echo "::error title=Could not query production::The Management API refused the health query. An auth error here means SUPABASE_ACCESS_TOKEN is expired or revoked — the same credential db-migrate.yml uses, so its runs will be red too."
+            echo "::error title=Could not query production::The Management API refused the health query. An auth error here means SUPABASE_ACCESS_TOKEN is expired or revoked (mint the replacement with no expiry) — the same credential db-migrate.yml uses, so its runs will be red too."
             exit 1
           fi
 

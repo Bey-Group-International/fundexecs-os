@@ -12,7 +12,9 @@
 #   SUPABASE_DB_PASSWORD   — the production database password
 #
 # A failure here is easy to miss, and that has already cost a month: the
-# SUPABASE_ACCESS_TOKEN expired on 2026-07-19 and every run since died at
+# SUPABASE_ACCESS_TOKEN expired on 2026-07-19 (and has lapsed repeatedly since:
+# the 2026-10-10 replacement died on 2026-10-17, to the hour a 7-day token
+# would — mint it with no expiry) and every run since died at
 # `supabase link` with {"message":"Unauthorized"}. Nothing blocks a merge on a
 # red DB Migrate run, so migrations quietly stopped reaching production while
 # the merges kept looking green. The steps below exist to make that state
@@ -125,7 +127,8 @@ jobs:
             echo "::error title=Supabase link failed::Could not link the production project."
             echo "::error::An 'Unauthorized' here means SUPABASE_ACCESS_TOKEN is expired or revoked."
             echo "::error::Mint a new personal access token (Supabase dashboard -> account -> tokens)"
-            echo "::error::and update the SUPABASE_ACCESS_TOKEN repository secret. Until then NO"
+            echo "::error::with NO EXPIRY (a 7-day token is what has been lapsing weekly) and update"
+            echo "::error::the SUPABASE_ACCESS_TOKEN repository secret. Until then NO"
             echo "::error::migration reaches production, and merges will keep looking green."
             exit 1
           fi
@@ -409,7 +412,7 @@ jobs:
             printf '%s\n\n' "A DB Migrate run has failed: ${RUN_URL}"
             printf '%s\n\n' "Until this workflow runs green, **no committed migration reaches the production database**, while app deploys continue — so any feature depending on a new migration is broken in production, and merges keep looking green."
             printf '%s\n\n' "The failing step's log names the specific problem. The two usual ones:"
-            printf '%s\n' "- **\`Link production project\` failed** — the \`SUPABASE_ACCESS_TOKEN\` repository secret is expired or revoked. Mint a new personal access token (Supabase dashboard → account → tokens) and update the secret under Settings → Secrets and variables → Actions."
+            printf '%s\n' "- **\`Link production project\` failed** — the \`SUPABASE_ACCESS_TOKEN\` repository secret is expired or revoked. Mint a new personal access token (Supabase dashboard → account → tokens) with **no expiry** — a token minted with an expiry date lapses on that date and puts this workflow back here — and update the secret under Settings → Secrets and variables → Actions."
             printf '%s\n\n' "- **\`Verify no migration drift\` failed** — the repository and production disagree; the log says in which direction and for which versions. Recovery procedures are in \`supabase/migrations/README.md\`."
             printf '%s\n' "No manual re-run is needed after fixing the cause: this workflow runs every 6 hours and applies anything stranded, then closes this issue on its first green run."
           } > /tmp/issue-body.md
