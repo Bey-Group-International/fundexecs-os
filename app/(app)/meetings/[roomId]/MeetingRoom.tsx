@@ -1142,6 +1142,12 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
   const [bgPickerOpen, setBgPickerOpen] = useState(false);
   const [bgUnavailable, setBgUnavailable] = useState(false);
   const [bgNotice, setBgNotice] = useState<string | null>(null);
+  /**
+   * The effect an automatic suspension took away, so it can be put back with
+   * one press. Null when the effect is on, or was switched off by choice.
+   */
+  const [suspendedEffect, setSuspendedEffect] = useState<BackgroundEffect | null>(null);
+  const suspendedEffectRef = useRef<BackgroundEffect | null>(null);
   const bgBtnRef = useRef<HTMLButtonElement>(null);
   // Sticky once tripped. A background that switched itself off and then back on
   // as the numbers wobbled would be worse than either state.
@@ -1466,8 +1472,8 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
   // or every peer has asked for `none` — which is the third case: the
   // encoders are already stopped (applySendCaps) and the segmenter was still
   // compositing for them at full rate. `maskIdleRef` is that fact, kept by
-  // applySendCaps; the self-view shows the raw camera meanwhile (see
-  // selfView below) so the member is not looking at a frozen frame.
+  // applySendCaps; the self-view holds its last frame with a caption saying
+  // why (see maskPausedBadge below).
   useEffect(() => { syncMaskPauseRef.current(); }, [camOn, shareOn]);
 
   // A call already dropping video to protect audio should not be spending the
@@ -1478,6 +1484,8 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     const decision = shouldSuspendEffect({ bwMode, consecutiveSlowFrames: 0 });
     if (!decision.suspend || !decision.reason) return;
     bgSuspendedRef.current = true;
+    suspendedEffectRef.current = bgEffectRef.current;
+    setSuspendedEffect(bgEffectRef.current);
     setBgNotice(suspensionMessage(decision.reason));
     // A suspension, not a choice: the stored preference survives for next call.
     void applyBackgroundRef.current(NO_BACKGROUND, null, "suspension");
@@ -5265,7 +5273,18 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
       // Destroyed only after the camera is back on the wire, so there is no
       // frame where the peers are holding a track nobody is drawing to.
       mask?.destroy();
-      setBgNotice(null);
+      // Only a CHOICE clears the notice. A suspension arrives here one line
+      // after it set the notice, and clearing it here is how the effect used
+      // to vanish without a word: the message was wiped in the same render it
+      // was written in, nobody saw why their background had gone, and the
+      // guard was re-armed so picking it back meant another silent drop two
+      // seconds later. The suspension's own notice stays until the member
+      // acts on it — turns the effect back on, or picks something.
+      if (cause === "choice") {
+        setBgNotice(null);
+        suspendedEffectRef.current = null;
+        setSuspendedEffect(null);
+      }
       bgSuspendedRef.current = false;
       return;
     }
@@ -5310,6 +5329,8 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
             const decision = shouldSuspendEffect({ bwMode: bwModeRef.current, consecutiveSlowFrames: consecutive });
             if (!decision.suspend || !decision.reason) return;
             bgSuspendedRef.current = true;
+            suspendedEffectRef.current = bgEffectRef.current;
+            setSuspendedEffect(bgEffectRef.current);
             setBgNotice(suspensionMessage(decision.reason));
             // A suspension, not a choice — the member's stored preference
             // survives for their next call. See applyBackground.
@@ -5409,6 +5430,24 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
   useEffect(() => { applyBackgroundRef.current = applyBackground; }, [applyBackground]);
   const abandonBackgroundRef = useRef(abandonBackground);
   useEffect(() => { abandonBackgroundRef.current = abandonBackground; }, [abandonBackground]);
+
+  /**
+   * Put back the effect a suspension took away.
+   *
+   * A choice, so the guard is cleared and the preference rewritten; the next
+   * slow run or bad patch suspends it again, with the notice, and the press is
+   * there again. The person has been told why it stopped and is asking for it
+   * anyway — the same words the picker uses for a fresh pick.
+   */
+  const restoreBackground = useCallback(() => {
+    const effect = suspendedEffectRef.current;
+    if (!effect) return;
+    suspendedEffectRef.current = null;
+    setSuspendedEffect(null);
+    bgSuspendedRef.current = false;
+    setBgNotice(null);
+    void applyBackgroundRef.current(effect, null, "choice");
+  }, []);
 
   /**
    * Adopt a newly opened camera device.
@@ -6998,18 +7037,16 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     if (ready) refreshVideoRequestsRef.current();
   }, [gridPageKey, ready]);
 
-  // What the member's own tile shows. The sent stream, except while the
-  // segmenter is paused for want of a viewer: then the raw camera, mirrored
-  // like any self-view, because a paused composite is a frozen frame and a
-  // frozen self-view reads as a broken camera. Nobody else sees the raw
-  // camera — nobody else is receiving anything, which is why it is paused.
-  const selfView = useMemo(() => {
-    const raw = rawCameraTrack;
-    if (maskIdle && raw && raw.readyState === "live" && needsSegmentation(bgEffect) && !shareOn) {
-      return { stream: new MediaStream([raw]), track: raw };
-    }
-    return { stream: localStream, track: videoTrackOf(localStream) };
-  }, [maskIdle, rawCameraTrack, bgEffect, shareOn, localStream]);
+  // What the member's own tile says while the segmenter is paused for want of
+  // a viewer. The tile holds the last composited frame — a paused canvas
+  // track sends nothing new, and the element keeps what it had — and the
+  // caption says why it is not moving. This replaced showing the raw camera
+  // there: that was the one tile in the room that could show the unblurred
+  // room, and it did so without a word the moment the other person's tab
+  // went to the background, which read as the effect cancelling itself.
+  const maskPausedBadge = maskIdle && camOn && !shareOn && needsSegmentation(bgEffect)
+    ? "Background paused — nobody is watching"
+    : null;
   const participantList = useMemo(() => [
     { id: LOCAL_SPEAKER_ID, displayName: localName, micOn, isLocal: true },
     ...allPeers.map((p) => ({
@@ -7130,7 +7167,7 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
   const speakerPeer = speakerIsLocal ? null : allPeers.find((p) => p.id === speakerTileId);
   const stripItems: { id: string; displayName: string; stream: MediaStream | null; isLocal: boolean }[] = speakerIsLocal
     ? allPeers.map((p) => ({ id: p.id, displayName: p.displayName, stream: p.stream, isLocal: false }))
-    : [{ id: "local", displayName: localName, stream: selfView.stream, isLocal: true }, ...allPeers.filter((p) => p.id !== speakerTileId).map((p) => ({ id: p.id, displayName: p.displayName, stream: p.stream, isLocal: false }))];
+    : [{ id: "local", displayName: localName, stream: localStream, isLocal: true }, ...allPeers.filter((p) => p.id !== speakerTileId).map((p) => ({ id: p.id, displayName: p.displayName, stream: p.stream, isLocal: false }))];
 
   // The notices over the stage, most urgent first. See NoticeStack: one shows
   // at a time, apart from the two pinned ones, so a stage that opens with
@@ -7207,6 +7244,22 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
   ) });
   // The engine keeps dying. Names the cause the member can act on, and says the
   // call is fine, because "transcription failed" reads as a broken meeting.
+  // A background effect the room switched off by itself. On the stage, not
+  // only inside the picker: the picker is a menu nobody opens until they
+  // wonder where their blur went, and this says so first, with the way back.
+  if (bgNotice && suspendedEffect) stageNotices.push({ id: "bg-suspended", priority: 58, node: (
+      <div role="status" className="flex items-start gap-3 px-4 py-3 bg-amber-500/10 border-b border-amber-500/30 shrink-0">
+        <span className="text-amber-500 mt-0.5 shrink-0">⚠</span>
+        <p className="flex-1 text-sm text-amber-600 dark:text-amber-400">{bgNotice}</p>
+        <button onClick={restoreBackground} className="shrink-0 text-amber-600 dark:text-amber-400 hover:underline text-xs font-medium underline">Turn it back on</button>
+        <button
+          onClick={() => { setBgNotice(null); suspendedEffectRef.current = null; setSuspendedEffect(null); }}
+          className="shrink-0 text-amber-500 hover:text-amber-600 text-xs font-medium underline"
+        >
+          Dismiss
+        </button>
+      </div>
+  ) });
   // A phone that is not transcribing, told once (recognizer-policy.ts).
   if (srSkippedNotice) stageNotices.push({ id: "sr-skipped", priority: 56, node: (
       <div role="status" className="flex items-start gap-3 px-4 py-3 bg-[var(--surface-2)] border-b border-[var(--line)] shrink-0">
@@ -7400,7 +7453,7 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
                 style={{ maxWidth: `calc((100cqh - ${gridRows - 1} * 0.75rem) / ${gridRows} * 16 / 9 * ${gridCols} + ${gridCols - 1} * 0.75rem)` }}
               >
                 {gridPaged.tiles.map((tile) => tile === "local" ? (
-                  <VideoTile key="local" stream={selfView.stream} videoTrack={selfView.track} label={localName} isLocal showingScreenShare={shareOn} handRaised={handRaised} reaction={getReaction("local")} micOn={micOn} watchId={LOCAL_SPEAKER_ID} camOn={camOn} videoPaused={bwMode === "audio-only"} />
+                  <VideoTile key="local" stream={localStream} videoTrack={videoTrackOf(localStream)} badge={maskPausedBadge} label={localName} isLocal showingScreenShare={shareOn} handRaised={handRaised} reaction={getReaction("local")} micOn={micOn} watchId={LOCAL_SPEAKER_ID} camOn={camOn} videoPaused={bwMode === "audio-only"} />
                 ) : (
                   <VideoTile key={tile.id} stream={tile.stream} videoTrack={videoTrackOf(tile.stream)} label={tile.displayName} handRaised={raisedHands.has(tile.id)} reaction={getReaction(tile.id)} micOn={peerMicOn.get(tile.id) ?? true} watchId={tile.id} camOn={videoOf(tile.id).camOn} videoPaused={videoOf(tile.id).paused} status={statusOf(tile.id)} />
                 ))}
@@ -7428,11 +7481,11 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
               {/* Main speaker tile */}
               <div className="flex-1 min-h-0">
                 {speakerIsLocal ? (
-                  <VideoTile stream={selfView.stream} videoTrack={selfView.track} label={localName} isLocal showingScreenShare={shareOn} handRaised={handRaised} reaction={getReaction("local")} micOn={micOn} watchId={LOCAL_SPEAKER_ID} camOn={camOn} videoPaused={bwMode === "audio-only"} large />
+                  <VideoTile stream={localStream} videoTrack={videoTrackOf(localStream)} badge={maskPausedBadge} label={localName} isLocal showingScreenShare={shareOn} handRaised={handRaised} reaction={getReaction("local")} micOn={micOn} watchId={LOCAL_SPEAKER_ID} camOn={camOn} videoPaused={bwMode === "audio-only"} large />
                 ) : speakerPeer ? (
                   <VideoTile stream={speakerPeer.stream} videoTrack={videoTrackOf(speakerPeer.stream)} label={speakerPeer.displayName} handRaised={isHandRaised(speakerPeer.id)} reaction={getReaction(speakerPeer.id)} micOn={peerMicOn.get(speakerPeer.id) ?? true} watchId={speakerPeer.id} camOn={videoOf(speakerPeer.id).camOn} videoPaused={videoOf(speakerPeer.id).paused} status={statusOf(speakerPeer.id)} large />
                 ) : (
-                  <VideoTile stream={selfView.stream} videoTrack={selfView.track} label={localName} isLocal showingScreenShare={shareOn} handRaised={handRaised} reaction={getReaction("local")} micOn={micOn} watchId={LOCAL_SPEAKER_ID} camOn={camOn} videoPaused={bwMode === "audio-only"} large />
+                  <VideoTile stream={localStream} videoTrack={videoTrackOf(localStream)} badge={maskPausedBadge} label={localName} isLocal showingScreenShare={shareOn} handRaised={handRaised} reaction={getReaction("local")} micOn={micOn} watchId={LOCAL_SPEAKER_ID} camOn={camOn} videoPaused={bwMode === "audio-only"} large />
                 )}
               </div>
               {/* Thumbnail strip */}
@@ -7440,7 +7493,7 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
                 <div className="flex gap-2 h-24 shrink-0 overflow-x-auto">
                   {stripItems.map((item) => (
                     <div key={item.id} className="h-full aspect-video shrink-0">
-                      <VideoTile stream={item.stream} videoTrack={videoTrackOf(item.stream)} label={item.displayName} isLocal={item.isLocal} showingScreenShare={item.isLocal && shareOn} handRaised={isHandRaised(item.id)} reaction={getReaction(item.id)} micOn={item.isLocal ? micOn : (peerMicOn.get(item.id) ?? true)} watchId={item.id} camOn={item.isLocal ? camOn : videoOf(item.id).camOn} videoPaused={item.isLocal ? bwMode === "audio-only" : videoOf(item.id).paused} status={item.isLocal ? "live" : statusOf(item.id)} />
+                      <VideoTile stream={item.stream} videoTrack={videoTrackOf(item.stream)} label={item.displayName} isLocal={item.isLocal} badge={item.isLocal ? maskPausedBadge : null} showingScreenShare={item.isLocal && shareOn} handRaised={isHandRaised(item.id)} reaction={getReaction(item.id)} micOn={item.isLocal ? micOn : (peerMicOn.get(item.id) ?? true)} watchId={item.id} camOn={item.isLocal ? camOn : videoOf(item.id).camOn} videoPaused={item.isLocal ? bwMode === "audio-only" : videoOf(item.id).paused} status={item.isLocal ? "live" : statusOf(item.id)} />
                     </div>
                   ))}
                 </div>
@@ -7553,10 +7606,13 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
             effect={bgEffect}
             unavailable={bgUnavailable}
             notice={bgNotice}
+            onRestore={suspendedEffect ? restoreBackground : undefined}
             onChange={(effect, image) => {
               // A deliberate choice clears an automatic suspension: the person
               // has been told why it stopped and is asking for it anyway.
               bgSuspendedRef.current = false;
+              suspendedEffectRef.current = null;
+              setSuspendedEffect(null);
               setBgNotice(null);
               void applyBackground(effect, image);
             }}
