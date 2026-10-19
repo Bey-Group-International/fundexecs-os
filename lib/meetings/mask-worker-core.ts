@@ -22,7 +22,7 @@
 // that would otherwise only be discovered in a real call.
 
 import type { CompositorFrame, MaskSample, Surface2D } from "@/lib/meetings/mask-compositor";
-import { FRAME_BUDGET_MS, OUTPUT_FPS, shouldDrawFrame } from "@/lib/meetings/backgrounds";
+import { OUTPUT_FPS, countsAsSlowFrame, shouldDrawFrame } from "@/lib/meetings/backgrounds";
 import {
   accumulateTiming,
   createTimingAccumulator,
@@ -137,6 +137,8 @@ export class MaskFrameLoop<TResult, TOut> {
   private lastDrawnAt: number | null = null;
   /** Consecutive frames over budget, which is what "not keeping up" means. */
   private slowFrames = 0;
+  /** When the first segmented frame ran; the slow run only counts after the warm-up. */
+  private segmentingSince: number | null = null;
   /** Causes already reported, so a loop failing every frame says it once. */
   private readonly reported = new Set<string>();
 
@@ -155,6 +157,11 @@ export class MaskFrameLoop<TResult, TOut> {
    */
   setSegmenter(segmenter: FrameSegmenter<TResult> | null): void {
     this.deps.segmenter = segmenter;
+    // A fresh segmenter warms up afresh. The clock starts on its first frame,
+    // not here: a runtime attached long before the camera produces anything
+    // would otherwise be judged warm on its very first inference.
+    this.segmentingSince = null;
+    this.slowFrames = 0;
   }
 
   /** Frames that reached the sink, which is what settles the first-frame deadline. */
@@ -227,6 +234,7 @@ export class MaskFrameLoop<TResult, TOut> {
         return this.emit(frame, started, readbackMs, chainMs);
       }
 
+      if (this.segmentingSince === null) this.segmentingSince = started;
       const timestampMs = this.nextTimestamp(frame.timestamp);
       const input = d.compositor.prepareSegmentInput(drawable);
 
@@ -305,8 +313,9 @@ export class MaskFrameLoop<TResult, TOut> {
       // Counted as a RUN, as the main thread counts it: one long frame is a
       // garbage collection pause, and a machine that is genuinely too slow
       // produces them one after another. `backgrounds.ts` owns how long a run
-      // has to be before the room acts on it.
-      if (totalMs > FRAME_BUDGET_MS) {
+      // has to be before the room acts on it, and how long a segmenter gets
+      // to warm up before its frames are evidence at all.
+      if (countsAsSlowFrame({ costMs: totalMs, segmentingSinceMs: this.segmentingSince, nowMs: d.now() })) {
         this.slowFrames += 1;
         d.onSlowFrames?.(this.slowFrames);
       } else if (this.slowFrames !== 0) {

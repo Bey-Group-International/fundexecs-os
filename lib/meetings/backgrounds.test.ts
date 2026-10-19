@@ -5,6 +5,8 @@ import {
   NATIVE_TEMPLATES,
   NO_BACKGROUND,
   SLOW_FRAME_RUN,
+  SEGMENTER_WARMUP_MS,
+  countsAsSlowFrame,
   UPLOAD_MAX_BYTES,
   MASK_SMOOTHING,
   MASK_REVERSAL_CONFIRM,
@@ -1695,5 +1697,38 @@ describe("the blend's rate table", () => {
     // stops moving.
     expect(seen[0]).toBe(255);
     expect(seen[seen.length - 1]).toBe(seen[seen.length - 2]);
+  });
+});
+
+describe("countsAsSlowFrame", () => {
+  const warmed = SEGMENTER_WARMUP_MS;
+
+  it("counts an over-budget frame once the segmenter has warmed up", () => {
+    expect(countsAsSlowFrame({ costMs: FRAME_BUDGET_MS + 1, segmentingSinceMs: 0, nowMs: warmed })).toBe(true);
+    expect(countsAsSlowFrame({ costMs: FRAME_BUDGET_MS + 1, segmentingSinceMs: 0, nowMs: warmed + 60_000 })).toBe(true);
+  });
+
+  // Shader compilation and the JIT make the first seconds the slowest by far;
+  // a run counted from the first inference switched the effect off two
+  // seconds after it was chosen, on hardware that keeps up fine once warm.
+  it("ignores over-budget frames while the segmenter is warming up", () => {
+    expect(countsAsSlowFrame({ costMs: 200, segmentingSinceMs: 0, nowMs: 0 })).toBe(false);
+    expect(countsAsSlowFrame({ costMs: 200, segmentingSinceMs: 0, nowMs: warmed - 1 })).toBe(false);
+    expect(countsAsSlowFrame({ costMs: 200, segmentingSinceMs: 1_000, nowMs: 1_000 + warmed - 1 })).toBe(false);
+  });
+
+  it("never counts a frame drawn before the segmenter arrived", () => {
+    expect(countsAsSlowFrame({ costMs: 200, segmentingSinceMs: null, nowMs: 60_000 })).toBe(false);
+  });
+
+  it("never counts a frame inside the budget, or exactly on it", () => {
+    expect(countsAsSlowFrame({ costMs: FRAME_BUDGET_MS, segmentingSinceMs: 0, nowMs: warmed })).toBe(false);
+    expect(countsAsSlowFrame({ costMs: 1, segmentingSinceMs: 0, nowMs: warmed })).toBe(false);
+    expect(countsAsSlowFrame({ costMs: Number.NaN, segmentingSinceMs: 0, nowMs: warmed })).toBe(false);
+  });
+
+  it("is a warm-up longer than any measured start and shorter than a call", () => {
+    expect(SEGMENTER_WARMUP_MS).toBeGreaterThanOrEqual(3_000);
+    expect(SEGMENTER_WARMUP_MS).toBeLessThanOrEqual(10_000);
   });
 });

@@ -5694,6 +5694,52 @@ Deployed, monitoring               →  live, observability active
              |  on press) and the headset follow (switch, notice, undo, re-read ignored);
              |  full Jest, typecheck and eslint clean. Not measured on hardware: the
              |  codec and voiceIsolation effects are the browser's to deliver.
+
+2026-10-19  |  Why the background effect kept switching itself off  |  Owner: "inspect
+             |  to see what keeps auto cancelling background effects/masking". Five
+             |  paths switch it off alone; two were the story.
+             |  THE CPU SUSPENSION WAS SILENT AND RE-ARMED. shouldSuspendEffect fires
+             |  on 45 consecutive frames over the 45ms budget - under two seconds at
+             |  24fps - and both pipelines counted from the segmenter's FIRST
+             |  inference, which is when the GPU compiles shaders, the JIT is cold
+             |  and, on the hand-over, the main thread is also loading a second copy
+             |  of the runtime. The 12 October edge work added per-frame cost (a luma
+             |  readback, a histogram, a box, two motion blends) and measured flicker
+             |  and trail but never milliseconds. Then the handler set the "paused -
+             |  it was slowing your video down" notice and called applyBackground
+             |  (none, "suspension"), whose no-effect branch synchronously called
+             |  setBgNotice(null) and reset the guard: the message was wiped in the
+             |  render it was written in, the effect vanished without a word, and
+             |  picking it back meant another silent drop two seconds later. The
+             |  stored preference re-applied it at the next join, so every call began
+             |  with a blur that went away. The notice also lived only inside the
+             |  background picker - a menu nobody opens until they wonder.
+             |  Fixes: SEGMENTER_WARMUP_MS = 5000 and countsAsSlowFrame in
+             |  backgrounds.ts - over-budget frames count only after the first
+             |  segmented frame plus the warm-up, never on pass-through frames, and
+             |  both pipelines restart the clock on a fresh segmenter or a restart.
+             |  applyBackground clears the notice only when the cause is a choice;
+             |  the suspension remembers the effect it took (suspendedEffect) and a
+             |  stage notice with "Turn it back on" and Dismiss says so where the
+             |  member is looking, the picker's notice gets the same button. The
+             |  bandwidth suspension shares all of it.
+             |  THE IDLE PAUSE LOOKED LIKE A CANCELLATION. PR #1352's "pause while
+             |  nobody is receiving, self-view shows the raw camera" meant the one
+             |  tile that could show the unblurred room did so, without a word, the
+             |  moment the other person's tab went to the background or the owner
+             |  tested alone. Changed: the local tile holds its last composited frame
+             |  (a paused canvas track sends nothing new) under a "Background paused
+             |  - nobody is watching" caption, a new `badge` prop on VideoTile that a
+             |  connection state outranks. The raw camera no longer appears anywhere
+             |  in the room.
+             |  Not done here: the per-frame cost after the 12 October chain was not
+             |  measured on hardware. The worker logs "[meeting] mask worker timing"
+             |  once a minute with totalMsPerFrame and worstTotalMs; one real call
+             |  on a mid-range laptop says whether 45ms still holds.
+             |  Confidence: countsAsSlowFrame tests; the worker-core slow-frame suite
+             |  re-based on a warmed loop with warm-up and fresh-segmenter cases;
+             |  tile badge tests (shown, hidden over a name card, outranked by a
+             |  connection state); full Jest, typecheck, eslint and build clean.
 ```
 
 ---

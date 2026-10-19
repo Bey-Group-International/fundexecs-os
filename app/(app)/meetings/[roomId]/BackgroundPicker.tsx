@@ -77,7 +77,7 @@ function BlurThumb({ heavy }: { heavy: boolean }) {
 }
 
 export function BackgroundPicker({
-  effect, onChange, unavailable, notice,
+  effect, onChange, unavailable, notice, onRestore,
 }: {
   effect: BackgroundEffect;
   /** The blob accompanies a custom pick so the caller need not re-read the store. */
@@ -86,6 +86,8 @@ export function BackgroundPicker({
   unavailable?: boolean;
   /** Why an effect switched itself off, if it did. */
   notice?: string | null;
+  /** Put back the effect the notice is about, when there is one to put back. */
+  onRestore?: () => void;
 }) {
   const [custom, setCustom] = useState<StoredBackground[]>([]);
   const [urls, setUrls] = useState<Record<string, string>>({});
@@ -150,9 +152,14 @@ export function BackgroundPicker({
   return (
     <div className="flex flex-col gap-2">
       {notice && (
-        <p className="rounded-lg border border-status-warning/30 bg-status-warning/10 px-2.5 py-1.5 text-[11px] text-[var(--fg-secondary)]">
-          {notice}
-        </p>
+        <div className="flex items-start gap-2 rounded-lg border border-status-warning/30 bg-status-warning/10 px-2.5 py-1.5 text-[11px] text-[var(--fg-secondary)]">
+          <p className="flex-1">{notice}</p>
+          {onRestore && (
+            <button type="button" onClick={onRestore} className="shrink-0 font-medium text-[var(--fg-primary)] underline">
+              Turn it back on
+            </button>
+          )}
+        </div>
       )}
 
       <div className="grid grid-cols-3 gap-2">

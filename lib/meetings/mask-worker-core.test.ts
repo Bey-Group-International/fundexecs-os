@@ -16,7 +16,7 @@ import {
   type IncomingFrame,
 } from "./mask-worker-core";
 import type { MaskSample, Surface2D } from "./mask-compositor";
-import { FRAME_BUDGET_MS, OUTPUT_FPS, SLOW_FRAME_RUN, frameIntervalMs } from "./backgrounds";
+import { FRAME_BUDGET_MS, OUTPUT_FPS, SEGMENTER_WARMUP_MS, SLOW_FRAME_RUN, frameIntervalMs } from "./backgrounds";
 import type { TimingReport } from "./mask-worker-protocol";
 
 /**
@@ -516,21 +516,59 @@ describe("the slow frames it reports", () => {
   const READINGS = 5;
   const overBudget = Math.ceil((FRAME_BUDGET_MS + 1) / READINGS);
 
-  it("says nothing while frames are inside the budget", () => {
+  /**
+   * A loop whose segmenter has been running past its warm-up. One frame
+   * starts the segmenter's clock; the clock then jumps past the grace. See
+   * countsAsSlowFrame for why the first seconds are never counted.
+   */
+  const warm = () => {
     const h = harness();
-    for (let i = 0; i < 5; i++) h.feed({ timestamp: i });
+    h.feed({ timestamp: 0 });
+    h.control.clock += SEGMENTER_WARMUP_MS;
+    return h;
+  };
+
+  it("says nothing while frames are inside the budget", () => {
+    const h = warm();
+    for (let i = 1; i < 6; i++) h.feed({ timestamp: i });
     expect(h.slow).toEqual([]);
   });
 
   it("counts a run of over-budget frames", () => {
-    const h = harness();
+    const h = warm();
     h.control.tick = overBudget;
-    for (let i = 0; i < 3; i++) h.feed({ timestamp: i });
+    for (let i = 1; i < 4; i++) h.feed({ timestamp: i });
     expect(h.slow).toEqual([1, 2, 3]);
   });
 
-  it("goes back to zero when a frame comes in under budget, once", () => {
+  // The first seconds are the slowest — shader compilation, a cold JIT, the
+  // main thread loading a second runtime during the hand-over — and a run
+  // counted from the first inference convicted machines that keep up fine
+  // once warm, two seconds after the effect was chosen.
+  it("does not count over-budget frames while the segmenter is warming up", () => {
     const h = harness();
+    h.control.tick = overBudget;
+    for (let i = 0; i < SLOW_FRAME_RUN; i++) h.feed({ timestamp: i });
+    expect(h.slow).toEqual([]);
+    // Past the warm-up the same frames are the machine's verdict.
+    h.control.clock += SEGMENTER_WARMUP_MS;
+    h.feed({ timestamp: SLOW_FRAME_RUN });
+    expect(h.slow).toEqual([1]);
+  });
+
+  it("warms up again when a fresh segmenter is attached", () => {
+    const h = warm();
+    h.control.tick = overBudget;
+    h.feed({ timestamp: 1 });
+    expect(h.slow).toEqual([1]);
+    h.loop.setSegmenter(h.deps.segmenter);
+    h.feed({ timestamp: 2 });
+    h.feed({ timestamp: 3 });
+    expect(h.slow).toEqual([1]);
+  });
+
+  it("goes back to zero when a frame comes in under budget, once", () => {
+    const h = warm();
     h.control.tick = overBudget;
     h.feed({ timestamp: 1 });
     h.control.tick = 1;
@@ -545,9 +583,9 @@ describe("the slow frames it reports", () => {
   /** The threshold the room acts on lives in `backgrounds.ts`; this only has to
    *  reach it, which a run of over-budget frames must. */
   it("reaches the run the room suspends on", () => {
-    const h = harness();
+    const h = warm();
     h.control.tick = overBudget;
-    for (let i = 0; i < SLOW_FRAME_RUN; i++) h.feed({ timestamp: i });
+    for (let i = 1; i <= SLOW_FRAME_RUN; i++) h.feed({ timestamp: i });
     expect(h.slow[h.slow.length - 1]).toBe(SLOW_FRAME_RUN);
   });
 
@@ -557,17 +595,17 @@ describe("the slow frames it reports", () => {
    *  animation frame at any refresh rate in use, so convicting a machine that
    *  lands exactly on it would suspend effects that are keeping up. */
   it("does not count a frame that lands exactly on the budget", () => {
-    const h = harness();
+    const h = warm();
     h.control.tick = FRAME_BUDGET_MS / READINGS;
-    for (let i = 0; i < 3; i++) h.feed({ timestamp: i });
+    for (let i = 1; i < 4; i++) h.feed({ timestamp: i });
     expect(h.slow).toEqual([]);
   });
 
   it("does not count a frame the sink refused", () => {
-    const h = harness();
+    const h = warm();
     h.control.tick = overBudget;
     h.control.deliverAccepts = false;
-    for (let i = 0; i < 3; i++) h.feed({ timestamp: i });
+    for (let i = 1; i < 4; i++) h.feed({ timestamp: i });
     expect(h.slow).toEqual([]);
   });
 });

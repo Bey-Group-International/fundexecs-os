@@ -49,7 +49,7 @@ function VideoTileImpl({
   stream, videoTrack, label, isLocal = false, showingScreenShare = false,
   handRaised = false, reaction = "", large = false,
   micOn = true, speaking = false, camOn = true, videoPaused = false,
-  status = "live", watchId,
+  status = "live", watchId, badge = null,
 }: {
   stream: MediaStream | null;
   /**
@@ -101,6 +101,13 @@ function VideoTileImpl({
   videoPaused?: boolean;
   /** Where their connection is, so a frozen tile is never left unexplained. */
   status?: PeerLinkStatus;
+  /**
+   * A short caption for the corner, when the room has something to say about
+   * this tile that the far end's own reports do not cover — the local tile
+   * holding its last composited frame while the background effect is paused.
+   * Outranked by a connection state, which is the thing that cannot wait.
+   */
+  badge?: string | null;
 }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const track = videoTrack;
@@ -195,9 +202,9 @@ function VideoTileImpl({
           : <span title="Muted — not being transcribed" aria-label="Muted">🔇</span>}
         {label}{isLocal ? " (You)" : ""}
       </div>
-      {hasVideo && (peerStatusLabel(status) ?? (videoPaused ? "Video paused" : null)) && (
+      {hasVideo && (peerStatusLabel(status) ?? (videoPaused ? "Video paused" : null) ?? badge) && (
         <div className="absolute top-2 left-3 rounded-full bg-black/60 backdrop-blur-sm px-2 py-0.5 text-[11px] text-white">
-          {peerStatusLabel(status) ?? "Video paused"}
+          {peerStatusLabel(status) ?? (videoPaused ? "Video paused" : null) ?? badge}
         </div>
       )}
       {handRaised && <div className="absolute top-2 right-3 text-lg">✋</div>}

@@ -36,7 +36,7 @@
 
 import { attachHiddenVideo, detachHiddenVideo } from "./hidden-video";
 import {
-  FRAME_BUDGET_MS,
+  countsAsSlowFrame,
   NO_BACKGROUND,
   needsSegmentation,
   OUTPUT_FPS,
@@ -197,6 +197,8 @@ export class BackgroundProcessor {
   private running = false;
   private raf = 0;
   private slowFrames = 0;
+  /** When the first segmented frame ran; the slow run only counts after the warm-up. */
+  private segmentingSince: number | null = null;
   private lastTimestamp = -1;
   /** When the last composite actually ran, for pacing. Null before the first. */
   private lastDrawnAt: number | null = null;
@@ -340,6 +342,9 @@ export class BackgroundProcessor {
     if (this.running || this.sourceEnded) return;
     this.running = true;
     this.slowFrames = 0;
+    // A restart warms up again: a paused loop's GPU state is cold and its
+    // first frames back are the slow ones.
+    this.segmentingSince = null;
 
     // Draw from this moment, not from whenever the segmenter finishes loading.
     // The canvas is captured as a track the instant an effect is chosen, and on
@@ -398,8 +403,9 @@ export class BackgroundProcessor {
 
     // Counted as a run rather than an average: one long frame is a garbage
     // collection pause, and a machine that is genuinely too slow produces them
-    // continuously. backgrounds.ts owns how long a run has to be.
-    if (cost > FRAME_BUDGET_MS) {
+    // continuously. backgrounds.ts owns how long a run has to be, and how long
+    // the segmenter gets to warm up before a frame is evidence at all.
+    if (countsAsSlowFrame({ costMs: cost, segmentingSinceMs: this.segmentingSince, nowMs: started })) {
       this.slowFrames += 1;
       this.callbacks.onSlowFrames(this.slowFrames);
     } else if (this.slowFrames !== 0) {
@@ -424,6 +430,7 @@ export class BackgroundProcessor {
     // the effect takes over the moment it can, and an unprocessed frame is a far
     // better thing to be sending than a black one.
     if (!this.segmenter) { compositor.passThrough(frame); return; }
+    if (this.segmentingSince === null) this.segmentingSince = now;
 
     // MediaPipe rejects a timestamp that does not advance, which happens when
     // two animation frames land inside the same millisecond.

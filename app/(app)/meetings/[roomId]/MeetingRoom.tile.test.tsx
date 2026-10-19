@@ -313,3 +313,52 @@ describe("PeerAudio", () => {
     expect(audio().muted).toBe(false);
   });
 });
+
+describe("a caption the room puts on a tile", () => {
+  // The local tile holds its last composited frame while the background
+  // effect is paused for want of a viewer, and the caption is what stops a
+  // still picture reading as a broken camera. See MeetingRoom's maskPausedBadge.
+  it("shows the badge while there is a picture to caption", () => {
+    const stream = fakeStream(track("v1"));
+    render(
+      <VideoTile
+        stream={stream as unknown as MediaStream}
+        videoTrack={videoTrackOf(stream as unknown as MediaStream)}
+        label="Rae Okafor"
+        isLocal
+        badge="Background paused — nobody is watching"
+      />,
+    );
+    expect(screen.getByText("Background paused — nobody is watching")).toBeInTheDocument();
+  });
+
+  it("says nothing over a name card", () => {
+    const stream = fakeStream(track("a1", "audio"));
+    render(
+      <VideoTile
+        stream={stream as unknown as MediaStream}
+        videoTrack={null}
+        label="Rae Okafor"
+        isLocal
+        badge="Background paused — nobody is watching"
+      />,
+    );
+    expect(screen.queryByText("Background paused — nobody is watching")).not.toBeInTheDocument();
+    expect(screen.getByText("Camera off")).toBeInTheDocument();
+  });
+
+  // A connection state is the thing that cannot wait; the caption yields to it.
+  it("is outranked by a connection state", () => {
+    const stream = fakeStream(track("v1"));
+    render(
+      <VideoTile
+        stream={stream as unknown as MediaStream}
+        videoTrack={videoTrackOf(stream as unknown as MediaStream)}
+        label="Rae Okafor"
+        status="reconnecting"
+        badge="Background paused — nobody is watching"
+      />,
+    );
+    expect(screen.queryByText("Background paused — nobody is watching")).not.toBeInTheDocument();
+  });
+});

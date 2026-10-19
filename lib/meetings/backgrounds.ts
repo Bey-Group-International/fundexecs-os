@@ -1821,6 +1821,42 @@ export function shouldSuspendEffect(input: {
   return { suspend: false, reason: null };
 }
 
+/**
+ * How long after segmentation begins before an over-budget frame counts.
+ *
+ * The first seconds of a segmenter are its slowest by a wide margin: the GPU
+ * compiles the model's shaders on the first inferences, the JIT has not seen
+ * the per-pixel chain yet, and on the hand-over the main thread is running
+ * all of that while the worker loads a second copy of the 12MB runtime. A run
+ * of 45 slow frames is under two seconds at the output rate, so the old rule
+ * convicted ordinary laptops in their warm-up and switched the effect off
+ * about two seconds after it was chosen — then again two seconds after it
+ * was chosen back, every time, because nothing distinguished "warming up"
+ * from "cannot keep up". Five seconds is past any warm-up measured and far
+ * short of a call.
+ */
+export const SEGMENTER_WARMUP_MS = 5_000;
+
+/**
+ * Whether this frame counts toward the slow run.
+ *
+ * Over budget, AND the segmenter has been running long enough that its cost
+ * is what the hardware costs rather than what starting up costs. A frame
+ * drawn before the segmenter arrived — the plain camera, passed through — is
+ * never evidence about segmentation at all.
+ */
+export function countsAsSlowFrame(input: {
+  /** What the frame took, in milliseconds. */
+  costMs: number;
+  /** When the first segmented frame ran, or null while frames pass through unmasked. */
+  segmentingSinceMs: number | null;
+  nowMs: number;
+}): boolean {
+  if (!(input.costMs > FRAME_BUDGET_MS)) return false;
+  if (input.segmentingSinceMs === null) return false;
+  return input.nowMs - input.segmentingSinceMs >= SEGMENTER_WARMUP_MS;
+}
+
 /** What to tell someone whose background just switched itself off. */
 export function suspensionMessage(reason: SuspendReason): string {
   if (reason === "bandwidth") {
