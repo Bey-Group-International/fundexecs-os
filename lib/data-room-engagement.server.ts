@@ -146,6 +146,7 @@ export async function loadRoomEngagement(
   supabase: SupabaseClient<Database>,
   orgId: string,
   roomId: string,
+  now = Date.now(),
 ): Promise<{ engagement: RoomEngagement; reads: Map<string, DataRoomEngagementRead> }> {
   const { data: shareRows } = await supabase
     .from("data_room_shares")
@@ -175,6 +176,7 @@ export async function loadRoomEngagement(
     (views ?? []) as EngagementView[],
     new Map(((docs ?? []) as { id: string; name: string }[]).map((d) => [d.id, d.name])),
     new Map(shares.map((s) => [s.id, s.label || "Untitled link"])),
+    now,
   );
   return {
     engagement,
@@ -198,7 +200,7 @@ export async function refreshRoomReads(
   now = new Date(),
   opts: { syncTimeline?: boolean } = {},
 ): Promise<{ ok: boolean; count: number }> {
-  const { engagement } = await loadRoomEngagement(supabase, orgId, room.id);
+  const { engagement } = await loadRoomEngagement(supabase, orgId, room.id, now.getTime());
   if (engagement.investors.length === 0) return { ok: true, count: 0 };
   // Readers' activity onto their CRM contact's timeline, from the daily sweep
   // only: those entries are system rows, which members may not update (RLS),
