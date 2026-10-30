@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { getSessionContext } from "@/lib/auth";
+import { isOnboardingStale, ONBOARDING_RESET_PATH } from "@/lib/onboarding-session";
 import OnboardingWizard from "./wizard";
 import { onboardingPrefillFor } from "@/lib/access-requests";
 import { DownloadOSFloat } from "@/components/DownloadOSFloat";
@@ -17,6 +18,13 @@ export default async function OnboardingPage(
   // Fetch principal record to pre-fill the user profile step.
   const { createServerClient } = await import("@/lib/supabase/server");
   const supabase = await createServerClient();
+
+  // Someone who signed in, never finished, and came back later is not resumed:
+  // the session is ended and they start over.
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (isOnboardingStale(user?.last_sign_in_at)) redirect(ONBOARDING_RESET_PATH);
   const [{ data: principal }, prefill] = await Promise.all([
     supabase.from("principals").select("full_name").eq("id", ctx.userId).single(),
     // What they told us when they requested access, if anything. Null for an

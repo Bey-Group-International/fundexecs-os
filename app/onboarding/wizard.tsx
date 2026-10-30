@@ -1,11 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { ActionKind } from "@/lib/gates";
 import { MANDATE_ACTION_OPTIONS } from "@/lib/mandate-options";
 import { AvatarUpload } from "@/components/shared/AvatarUpload";
 import { uploadAvatar } from "@/components/shared/avatar-actions";
+import { ONBOARDING_RESET_PATH } from "@/lib/onboarding-session";
 import { createOrganization, updateUserProfile } from "./actions";
 
 const TOTAL_STEPS = 6;
@@ -120,6 +121,20 @@ export default function OnboardingWizard({
   const router = useRouter();
   const [step, setStep] = useState(1);
   const [pending, setPending] = useState(false);
+
+  // Closing the tab before the organization exists abandons the signup. End the
+  // session so nobody is left half-signed-up; they start over at login. Skipped
+  // while submitting, since the page then leaves on purpose.
+  const submitting = useRef(false);
+  submitting.current = pending;
+  useEffect(() => {
+    const onPageHide = () => {
+      if (submitting.current) return;
+      navigator.sendBeacon?.(ONBOARDING_RESET_PATH);
+    };
+    window.addEventListener("pagehide", onPageHide);
+    return () => window.removeEventListener("pagehide", onPageHide);
+  }, []);
   const [formError, setFormError] = useState(error ?? "");
   const [formWarning, setFormWarning] = useState("");
   const [userData, setUserData] = useState<UserFormData>({
