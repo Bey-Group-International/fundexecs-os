@@ -2,6 +2,7 @@ import Link from "next/link";
 import { getSessionContext } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { Logo } from "@/components/Logo";
+import { ONBOARDING_RESET_PATH } from "@/lib/onboarding-session";
 import { signIn, signInWithGoogle } from "./actions";
 
 export default async function LoginPage(
@@ -11,7 +12,9 @@ export default async function LoginPage(
 ) {
   const searchParams = await props.searchParams;
   const ctx = await getSessionContext();
-  if (ctx) redirect(ctx.orgId ? "/workspace" : "/onboarding");
+  // A session with no organization is a signup that was never finished. Don't
+  // park it in onboarding — end it so they start over cleanly.
+  if (ctx) redirect(ctx.orgId ? "/workspace" : ONBOARDING_RESET_PATH);
 
   // Where the operator was headed before the auth gate bounced them here, e.g.
   // /login?next=/admin, or an installed-app shortcut into /earn or /approvals.
