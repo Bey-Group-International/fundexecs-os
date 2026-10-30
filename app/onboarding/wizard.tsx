@@ -126,7 +126,6 @@ export default function OnboardingWizard({
   // session so nobody is left half-signed-up; they start over at login. Skipped
   // while submitting, since the page then leaves on purpose.
   const submitting = useRef(false);
-  submitting.current = pending;
   useEffect(() => {
     const onPageHide = () => {
       if (submitting.current) return;
@@ -200,6 +199,7 @@ export default function OnboardingWizard({
   // `presetOverride` lets "Skip" persist the conservative default regardless of
   // any preset the operator may have clicked, without waiting for a state flush.
   const handleSubmit = async (presetOverride?: MandatePreset) => {
+    submitting.current = true;
     setPending(true);
     setFormError("");
     setFormWarning("");
@@ -231,6 +231,7 @@ export default function OnboardingWizard({
       const result = await createOrganization(fd);
       if (result?.error) {
         setFormError(result.error);
+        submitting.current = false;
         setPending(false);
         return;
       }
@@ -250,6 +251,7 @@ export default function OnboardingWizard({
       router.replace(result.redirectTo ?? "/workspace");
     } catch (e: unknown) {
       setFormError(e instanceof Error ? e.message : "Something went wrong");
+      submitting.current = false;
       setPending(false);
     }
   };
