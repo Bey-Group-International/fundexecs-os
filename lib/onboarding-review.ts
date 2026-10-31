@@ -4,6 +4,7 @@
 // DB-free, so the same rules run in the UI (to explain) and in the server
 // actions (to enforce).
 import type {
+  LpReviewState,
   OnboardingCheckKind,
   OnboardingCheckStatus,
   OnboardingDecisionKind,
@@ -34,6 +35,15 @@ export const CHECK_STATUS_LABEL: Record<OnboardingCheckStatus, string> = {
   clear: "Clear",
   flagged: "Flagged",
   failed: "Failed",
+};
+
+export const REVIEW_STATE_LABEL: Record<LpReviewState, string> = {
+  not_started: "Link sent",
+  in_progress: "LP filling in",
+  submitted: "Ready to review",
+  changes_requested: "More info requested",
+  approved: "Approved",
+  rejected: "Turned down",
 };
 
 export const DECISION_LABEL: Record<OnboardingDecisionKind, string> = {
@@ -163,4 +173,34 @@ export function describeAudit(action: string, detail: unknown): string {
   if (action === "check.updated") return `${kind} check changed from ${String(d.from ?? "")} to ${String(d.to ?? "")}`;
   if (action === "decision.recorded") return `Decision recorded: ${String(d.decision ?? "").replace("_", " ")}`;
   return action;
+}
+
+/**
+ * Which decisions the fund manager can record at each stage. The database holds
+ * the same rule: approval and a request for more information need the LP to have
+ * submitted, and an approved LP cannot be rejected afterwards. An LP who has not
+ * submitted can still be turned down.
+ */
+export function availableDecisions(state: LpReviewState): OnboardingDecisionKind[] {
+  if (state === "submitted") return ["approved", "rejected", "more_info"];
+  if (state === "approved" || state === "rejected") return [];
+  return ["rejected"];
+}
+
+/** What to tell the fund manager when no decision can be made yet. */
+export function decisionStageNote(state: LpReviewState): string | null {
+  switch (state) {
+    case "not_started":
+      return "The LP hasn't opened their link yet.";
+    case "in_progress":
+      return "The LP is still filling in the wizard. You can decide once they submit.";
+    case "changes_requested":
+      return "You asked the LP for more information. You can decide again once they resubmit.";
+    case "approved":
+      return "This LP is approved and can move on to the subscription documents.";
+    case "rejected":
+      return "This LP was turned down.";
+    default:
+      return null;
+  }
 }

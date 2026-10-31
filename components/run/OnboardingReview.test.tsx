@@ -5,6 +5,17 @@ jest.mock("@/app/(app)/[hub]/[module]/onboarding-actions", () => ({
   recordOnboardingDecision: (i: unknown) => recordDecision(i),
 }));
 
+const emailLink = jest.fn(async (_id: string): Promise<{ ok: true; sent: boolean } | { ok: false; error: string }> => ({ ok: true, sent: true }));
+const makeCode = jest.fn(async (_id: string): Promise<{ ok: true; code: string; expiresAt: string } | { ok: false; error: string }> => ({
+  ok: true,
+  code: "482913",
+  expiresAt: "2099-01-01T00:00:00Z",
+}));
+jest.mock("@/app/(app)/[hub]/[module]/onboarding-link-actions", () => ({
+  emailLpLinkAction: (id: string) => emailLink(id),
+  generateAccessCodeAction: (id: string) => makeCode(id),
+}));
+
 // inputClass comes from a module that also holds server actions; the build tests mock it the same way.
 jest.mock("@/components/build/actions", () => ({}));
 
@@ -20,6 +31,10 @@ const lp = (over: Partial<ReviewLp> = {}): ReviewLp => ({
   lpName: "Calpers Pension",
   lpEmail: "ops@calpers.ca.gov",
   stageLabel: "Accreditation",
+  reviewState: "submitted",
+  token: "tok-123",
+  expiresAt: FUTURE,
+  submission: { lpType: "individual", ownerThresholdPct: 25, profile: null, owners: [], consents: [] },
   checks: [],
   decisions: [],
   activity: [],
@@ -29,6 +44,8 @@ const lp = (over: Partial<ReviewLp> = {}): ReviewLp => ({
 const open = () => fireEvent.click(screen.getByRole("button", { name: /Calpers Pension/ }));
 
 beforeEach(() => {
+  emailLink.mockClear();
+  makeCode.mockClear();
   recordCheck.mockClear();
   recordDecision.mockClear();
 });
@@ -37,7 +54,14 @@ describe("an LP card", () => {
   it("counts what is left to resolve, and shows the stage", () => {
     render(<OnboardingReview lps={[lp({ checks: [clear("identity")] })]} />);
     expect(screen.getByText("4 to resolve")).toBeInTheDocument();
+    expect(screen.getByText("Ready to review")).toBeInTheDocument();
+  });
+
+  it("shows the onboarding stage once the LP is approved, and the review state before that", () => {
+    const { rerender } = render(<OnboardingReview lps={[lp({ reviewState: "approved" })]} />);
     expect(screen.getByText("Accreditation")).toBeInTheDocument();
+    rerender(<OnboardingReview lps={[lp({ reviewState: "in_progress" })]} />);
+    expect(screen.queryByText("Accreditation")).toBeNull();
   });
 
   it("says when every required check is clear, and shows the latest decision", () => {
@@ -151,9 +175,114 @@ describe("recording a decision", () => {
     recordDecision.mockResolvedValueOnce({ ok: false, error: "Give your reasoning. It is recorded with the decision." });
     render(<OnboardingReview lps={[lp()]} />);
     open();
+    fireEvent.change(screen.getByLabelText("Decision"), { target: { value: "rejected" } });
     await act(async () => {
       fireEvent.click(screen.getByRole("button", { name: "Record decision" }));
     });
     expect(within(screen.getByRole("alert")).getByText(/Give your reasoning/)).toBeInTheDocument();
+  });
+});
+
+describe("the decision follows the LP's stage", () => {
+  const options = () => within(screen.getByLabelText("Decision")).getAllByRole("option").map((o) => (o as HTMLOptionElement).value);
+
+  it("offers every decision once the LP has submitted", () => {
+    render(<OnboardingReview lps={[lp({ reviewState: "submitted" })]} />);
+    open();
+    expect(options().sort()).toEqual(["approved", "more_info", "rejected"]);
+  });
+
+  it.each(["not_started", "in_progress", "changes_requested"] as const)("only allows rejecting an LP who is %s", (reviewState) => {
+    render(<OnboardingReview lps={[lp({ reviewState })]} />);
+    open();
+    expect(options()).toEqual(["rejected"]);
+  });
+
+  it.each(["approved", "rejected"] as const)("offers nothing once the LP is %s", (reviewState) => {
+    render(<OnboardingReview lps={[lp({ reviewState })]} />);
+    open();
+    expect(screen.queryByRole("button", { name: "Record decision" })).toBeNull();
+  });
+});
+
+describe("the LP's link", () => {
+  it("is offered while the LP is still undecided", () => {
+    render(<OnboardingReview lps={[lp({ reviewState: "in_progress" })]} />);
+    open();
+    expect(screen.getByText(/The LP.s link/)).toBeInTheDocument();
+  });
+
+  it.each(["approved", "rejected"] as const)("is not offered once the LP is %s", (reviewState) => {
+    render(<OnboardingReview lps={[lp({ reviewState })]} />);
+    open();
+    expect(screen.queryByText(/The LP.s link/)).toBeNull();
+  });
+
+  it("emails the link, and says when it could not be sent", async () => {
+    render(<OnboardingReview lps={[lp({ reviewState: "not_started" })]} />);
+    open();
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /email/i }));
+    });
+    expect(emailLink).toHaveBeenCalledWith("s1");
+    expect(screen.getByText("Link emailed to the LP.")).toBeInTheDocument();
+
+    emailLink.mockResolvedValueOnce({ ok: true, sent: false });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /email/i }));
+    });
+    expect(screen.getByText(/couldn.t be sent/)).toBeInTheDocument();
+  });
+
+  it("says when the link has expired and stops offering to send it", () => {
+    render(<OnboardingReview lps={[lp({ reviewState: "not_started", expiresAt: "2020-01-01T00:00:00Z" })]} />);
+    open();
+    expect(screen.getByText(/has expired/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /email/i })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /code/i })).toBeDisabled();
+  });
+
+  it("shows a one-time code to read out", async () => {
+    render(<OnboardingReview lps={[lp({ reviewState: "not_started" })]} />);
+    open();
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /code/i }));
+    });
+    expect(makeCode).toHaveBeenCalledWith("s1");
+    expect(screen.getByText("482913")).toBeInTheDocument();
+  });
+});
+
+describe("what the LP submitted", () => {
+  const submission = {
+    lpType: "entity" as const,
+    ownerThresholdPct: 25,
+    profile: {
+      legalName: "Acme Holdings LLC",
+      entityType: "company" as const,
+      country: "US",
+      contactPhone: null,
+      signatoryName: "Jo Park",
+      signatoryTitle: "Manager",
+      sourceOfFunds: "Proceeds from the sale of a business",
+      accreditationBasis: null,
+      accreditationStatedAt: null,
+    },
+    owners: [{ id: "o1", fullName: "Jo Park", role: "controller" as const, ownershipPct: null, country: "US" }],
+    consents: [],
+  };
+
+  it("shows their statements and warns when nobody meets the ownership threshold", () => {
+    render(<OnboardingReview lps={[lp({ submission })]} />);
+    open();
+    expect(screen.getByText("Acme Holdings LLC")).toBeInTheDocument();
+    expect(screen.getByText("Proceeds from the sale of a business")).toBeInTheDocument();
+    expect(screen.getByText(/25%/)).toBeInTheDocument();
+  });
+
+  it("shows nothing when the LP has not entered anything", () => {
+    render(<OnboardingReview lps={[lp()]} />);
+    open();
+    expect(screen.queryByText("What the LP submitted")).toBeNull();
   });
 });

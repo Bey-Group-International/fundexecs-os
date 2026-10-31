@@ -5,6 +5,7 @@ jest.mock("@/lib/auth", () => ({ requireOrgContext: async () => auth }));
 
 // What the fake database returns and what it was asked to write.
 let sessionFound = true;
+let reviewState = "submitted";
 let checkRows: Array<{ kind: string; status: string; expires_at: string | null }> = [];
 let writeError: { code: string; message: string } | null = null;
 let upserted: { row: Record<string, unknown>; opts: unknown } | null = null;
@@ -20,7 +21,7 @@ jest.mock("@/lib/supabase/server", () => ({
           if (table === "lp_onboarding_sessions") sessionFilters[c] = v;
           return q;
         },
-        maybeSingle: async () => ({ data: sessionFound ? { id: "s1" } : null }),
+        maybeSingle: async () => ({ data: sessionFound ? { id: "s1", review_state: reviewState } : null }),
         upsert: async (row: Record<string, unknown>, opts: unknown) => {
           upserted = { row, opts };
           return { error: writeError };
@@ -44,6 +45,7 @@ const allClear = () =>
 beforeEach(() => {
   auth = { ok: true, ctx: { orgId: "org-1", userId: "user-1", role: "admin" } };
   sessionFound = true;
+  reviewState = "submitted";
   checkRows = [];
   writeError = null;
   upserted = null;
@@ -172,6 +174,32 @@ describe("recordOnboardingDecision", () => {
   it("lets an LP be rejected or sent back for information with nothing recorded", async () => {
     expect((await recordOnboardingDecision({ ...decision, decision: "rejected" })).ok).toBe(true);
     expect((await recordOnboardingDecision({ ...decision, decision: "more_info" })).ok).toBe(true);
+  });
+
+  describe("by the LP's stage", () => {
+    it.each(["not_started", "in_progress", "changes_requested"])("will not approve or send back an LP who is %s", async (state) => {
+      reviewState = state;
+      checkRows = allClear();
+      for (const d of ["approved", "more_info"] as const) {
+        const res = await recordOnboardingDecision({ ...decision, decision: d, reason: "Because" });
+        expect(res.ok).toBe(false);
+      }
+      expect(inserted).toBeNull();
+    });
+
+    it.each(["not_started", "in_progress", "changes_requested", "submitted"])("can always reject an LP who is %s", async (state) => {
+      reviewState = state;
+      expect((await recordOnboardingDecision(decision)).ok).toBe(true);
+    });
+
+    it.each(["approved", "rejected"])("takes no further decision on an LP who is %s", async (state) => {
+      reviewState = state;
+      checkRows = allClear();
+      for (const d of ["approved", "more_info", "rejected"] as const) {
+        expect((await recordOnboardingDecision({ ...decision, decision: d, reason: "Because" })).ok).toBe(false);
+      }
+      expect(inserted).toBeNull();
+    });
   });
 
   it("requires reasoning", async () => {
