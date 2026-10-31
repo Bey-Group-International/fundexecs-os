@@ -45,6 +45,8 @@ function safeBaseUrl(): string {
 const BASE_URL = safeBaseUrl();
 const ACCOUNT_ID = process.env.DOCUSIGN_ACCOUNT_ID ?? "";
 
+const ORG_FIELD = "fundexecs_org_id";
+
 async function createEnvelope(params: IssuanceParams): Promise<string> {
   // Build a minimal Docusign envelope request for a subscription document.
   const signers = params.investorIds.map((id, idx) => ({
@@ -67,6 +69,9 @@ async function createEnvelope(params: IssuanceParams): Promise<string> {
       },
     ],
     recipients: { signers },
+    // Docusign envelopes don't know our organizations, so the owner is recorded
+    // on the envelope and checked before any later read or send.
+    customFields: { textCustomFields: [{ name: ORG_FIELD, value: params.orgId, show: "false" }] },
     status: "created", // "created" = draft; "sent" = dispatched for signing
   };
 
@@ -90,14 +95,12 @@ async function createEnvelope(params: IssuanceParams): Promise<string> {
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-function assertEnvelopeId(envelopeId: string): void {
-  if (!UUID_RE.test(envelopeId)) {
-    throw new Error(`Invalid envelope ID: must be a UUID`);
-  }
-}
-
-async function sendEnvelope(envelopeId: string): Promise<void> {
-  assertEnvelopeId(envelopeId);
+async function sendEnvelope(envelopeId: string, orgId: string): Promise<void> {
+  // The id comes from the request, so it is checked right here, in the function
+  // that builds the URL from it (CodeQL's request-forgery query only credits a
+  // regexp test in the same function).
+  if (!UUID_RE.test(envelopeId)) throw new Error("Invalid envelope ID: must be a UUID");
+  await getEnvelopeStatus(envelopeId, orgId);
   const res = await fetch(
     `${BASE_URL}/v2.1/accounts/${ACCOUNT_ID}/envelopes/${envelopeId}`,
     {
@@ -115,17 +118,24 @@ async function sendEnvelope(envelopeId: string): Promise<void> {
   }
 }
 
-async function getEnvelopeStatus(envelopeId: string): Promise<string> {
-  assertEnvelopeId(envelopeId);
+// Reads an envelope's status, refusing one that wasn't created for `orgId`. An
+// envelope with no owner field (made before the field existed) is refused too.
+async function getEnvelopeStatus(envelopeId: string, orgId: string): Promise<string> {
+  if (!UUID_RE.test(envelopeId)) throw new Error("Invalid envelope ID: must be a UUID");
   const res = await fetch(
-    `${BASE_URL}/v2.1/accounts/${ACCOUNT_ID}/envelopes/${envelopeId}`,
+    `${BASE_URL}/v2.1/accounts/${ACCOUNT_ID}/envelopes/${envelopeId}?include=custom_fields`,
     {
       headers: { Authorization: `Bearer ${process.env.DOCUSIGN_ACCESS_TOKEN}` },
     },
   );
   if (!res.ok) throw new Error(`Docusign status fetch failed: ${res.status}`);
-  const data = await res.json();
-  return data.status as string;
+  const data = (await res.json()) as {
+    status: string;
+    customFields?: { textCustomFields?: Array<{ name?: string; value?: string }> };
+  };
+  const owner = data.customFields?.textCustomFields?.find((f) => f.name === ORG_FIELD)?.value;
+  if (!orgId || owner !== orgId) throw new Error("Docusign envelope not found");
+  return data.status;
 }
 
 // Map Docusign envelope status to our IssuanceRecord status.
@@ -168,7 +178,7 @@ export const docusignIssuanceProvider: IssuanceProvider = {
     }
   },
 
-  async issueSecurity(securityId: string, requestedBy: string): Promise<ProviderResult<IssuanceRecord>> {
+  async issueSecurity(securityId: string, requestedBy: string, orgId: string): Promise<ProviderResult<IssuanceRecord>> {
     void requestedBy;
     if (!configured()) {
       return {
@@ -180,7 +190,7 @@ export const docusignIssuanceProvider: IssuanceProvider = {
     }
 
     try {
-      await sendEnvelope(securityId);
+      await sendEnvelope(securityId, orgId);
       return {
         ok: true,
         live: true,
@@ -198,7 +208,7 @@ export const docusignIssuanceProvider: IssuanceProvider = {
     }
   },
 
-  async getStatus(securityId: string): Promise<ProviderResult<IssuanceRecord>> {
+  async getStatus(securityId: string, orgId: string): Promise<ProviderResult<IssuanceRecord>> {
     if (!configured()) {
       return {
         ok: true,
@@ -209,7 +219,7 @@ export const docusignIssuanceProvider: IssuanceProvider = {
     }
 
     try {
-      const ds = await getEnvelopeStatus(securityId);
+      const ds = await getEnvelopeStatus(securityId, orgId);
       return {
         ok: true,
         live: true,

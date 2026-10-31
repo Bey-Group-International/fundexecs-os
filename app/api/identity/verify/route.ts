@@ -1,16 +1,13 @@
 import { NextResponse } from "next/server";
+import { requireOrgContext } from "@/lib/auth";
 import { getIdentityVerificationProvider } from "@/lib/providers";
 import type { IdentityVerificationParams } from "@/lib/providers";
-import { createServerClient } from "@/lib/supabase/server";
 
 export const runtime = "nodejs";
 
 export async function POST(req: Request) {
-  const supabase = await createServerClient();
-  const { data: { user }, error: authError } = await supabase.auth.getUser();
-  if (authError || !user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const auth = await requireOrgContext();
+  if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: auth.status });
 
   try {
     const body = await req.json() as Partial<IdentityVerificationParams>;
@@ -23,13 +20,13 @@ export async function POST(req: Request) {
 
     const provider = getIdentityVerificationProvider();
     const result = await provider.initiate({
-      orgId: body.orgId ?? "",
+      orgId: auth.ctx.orgId,
       subjectId: body.subjectId,
       subjectType: body.subjectType,
       subjectName: body.subjectName,
       subjectEmail: body.subjectEmail,
       level: body.level,
-      requestedBy: body.requestedBy ?? "api",
+      requestedBy: auth.ctx.userId,
     });
 
     return NextResponse.json({ provider: provider.name, ...result });

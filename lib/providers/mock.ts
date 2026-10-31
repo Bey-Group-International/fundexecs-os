@@ -33,8 +33,9 @@ export const mockIssuanceProvider: IssuanceProvider = {
     };
   },
 
-  async issueSecurity(securityId: string, requestedBy: string): Promise<ProviderResult<IssuanceRecord>> {
+  async issueSecurity(securityId: string, requestedBy: string, orgId: string): Promise<ProviderResult<IssuanceRecord>> {
     void requestedBy;
+    void orgId;
     return {
       ok: true,
       live: false,
@@ -44,7 +45,8 @@ export const mockIssuanceProvider: IssuanceProvider = {
     };
   },
 
-  async getStatus(securityId: string): Promise<ProviderResult<IssuanceRecord>> {
+  async getStatus(securityId: string, orgId: string): Promise<ProviderResult<IssuanceRecord>> {
+    void orgId;
     return {
       ok: true,
       live: false,
@@ -72,7 +74,8 @@ export const mockCapitalRailProvider: CapitalRailProvider = {
     };
   },
 
-  async getStatus(transferId: string): Promise<ProviderResult<CapitalTransferRecord>> {
+  async getStatus(transferId: string, orgId: string): Promise<ProviderResult<CapitalTransferRecord>> {
+    void orgId;
     return {
       ok: true,
       live: false,
@@ -99,7 +102,8 @@ export const mockIdentityVerificationProvider: IdentityVerificationProvider = {
     };
   },
 
-  async getStatus(verificationId: string): Promise<ProviderResult<VerificationRecord>> {
+  async getStatus(verificationId: string, orgId: string): Promise<ProviderResult<VerificationRecord>> {
+    void orgId;
     return {
       ok: true,
       live: false,

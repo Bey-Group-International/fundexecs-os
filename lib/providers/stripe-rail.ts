@@ -208,7 +208,7 @@ export const stripeCapitalRailProvider: CapitalRailProvider = {
     }
   },
 
-  async getStatus(transferId: string): Promise<ProviderResult<CapitalTransferRecord>> {
+  async getStatus(transferId: string, orgId: string): Promise<ProviderResult<CapitalTransferRecord>> {
     if (!configured()) {
       return {
         ok: false,
@@ -238,7 +238,17 @@ export const stripeCapitalRailProvider: CapitalRailProvider = {
 
     for (const path of paths) {
       try {
-        const obj = await stripeGet<{ id: string; status: string; amount: number; created: number; posted_at?: number }>(path);
+        const obj = await stripeGet<{
+          id: string;
+          status: string;
+          amount: number;
+          created: number;
+          posted_at?: number;
+          metadata?: { org_id?: string };
+        }>(path);
+        // initiate() stamps every transfer with its organization. One that isn't
+        // this caller's reads exactly like one that doesn't exist.
+        if (!orgId || obj.metadata?.org_id !== orgId) continue;
         const status = mapTransferStatus(obj.status);
         return {
           ok: true,

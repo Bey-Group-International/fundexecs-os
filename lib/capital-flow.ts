@@ -89,6 +89,7 @@ export async function initiateTransfer(
 
 export interface GetTransferStatusArgs {
   supabase: Client;
+  orgId: string;
   capitalEventId: string;
   transferId: string;
 }
@@ -112,7 +113,7 @@ export async function getTransferStatus(
   args: GetTransferStatusArgs,
 ): Promise<TransferStatusResult> {
   const provider = getCapitalRailProvider();
-  const result: ProviderResult<CapitalTransferRecord> = await provider.getStatus(args.transferId);
+  const result: ProviderResult<CapitalTransferRecord> = await provider.getStatus(args.transferId, args.orgId);
 
   if (!result.ok || !result.data) {
     return {
