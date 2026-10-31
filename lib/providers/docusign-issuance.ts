@@ -95,13 +95,11 @@ async function createEnvelope(params: IssuanceParams): Promise<string> {
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-function assertEnvelopeId(envelopeId: string): void {
-  if (!UUID_RE.test(envelopeId)) {
-    throw new Error(`Invalid envelope ID: must be a UUID`);
-  }
-}
-
 async function sendEnvelope(envelopeId: string, orgId: string): Promise<void> {
+  // The id comes from the request, so it is checked right here, in the function
+  // that builds the URL from it (CodeQL's request-forgery query only credits a
+  // regexp test in the same function).
+  if (!UUID_RE.test(envelopeId)) throw new Error("Invalid envelope ID: must be a UUID");
   await getEnvelopeStatus(envelopeId, orgId);
   const res = await fetch(
     `${BASE_URL}/v2.1/accounts/${ACCOUNT_ID}/envelopes/${envelopeId}`,
@@ -123,7 +121,7 @@ async function sendEnvelope(envelopeId: string, orgId: string): Promise<void> {
 // Reads an envelope's status, refusing one that wasn't created for `orgId`. An
 // envelope with no owner field (made before the field existed) is refused too.
 async function getEnvelopeStatus(envelopeId: string, orgId: string): Promise<string> {
-  assertEnvelopeId(envelopeId);
+  if (!UUID_RE.test(envelopeId)) throw new Error("Invalid envelope ID: must be a UUID");
   const res = await fetch(
     `${BASE_URL}/v2.1/accounts/${ACCOUNT_ID}/envelopes/${envelopeId}?include=custom_fields`,
     {

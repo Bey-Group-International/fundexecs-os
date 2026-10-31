@@ -90,6 +90,14 @@ describe("docusign issuance", () => {
     expect(fetchMock.mock.calls[0][0]).toContain("include=custom_fields");
   });
 
+  it("never builds a request from an id that isn't a UUID", async () => {
+    const { docusignIssuanceProvider } = await import("./docusign-issuance");
+    const bad = "../../accounts/other/envelopes/x";
+    expect((await docusignIssuanceProvider.getStatus(bad, "org-a")).ok).toBe(false);
+    expect((await docusignIssuanceProvider.issueSecurity(bad, "user-1", "org-a")).ok).toBe(false);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it("refuses another organization's envelope, and one with no owner", async () => {
     const { docusignIssuanceProvider } = await import("./docusign-issuance");
     fetchMock.mockResolvedValueOnce(json(envelope("org-a")));
