@@ -94,6 +94,8 @@ function ShareRow({ share }: { share: ShareView }) {
           </span>
         ) : null}
 
+        {st.label === "Expired" ? <ReactivateButton share={share} /> : null}
+
         {live ? (
           <div className="ml-auto flex items-center gap-2">
             <button
@@ -129,7 +131,7 @@ function ShareRow({ share }: { share: ShareView }) {
               tell the operator a link gives full access while it shows the
               recipient an empty room. */}
           {share.allowed_sections === null ? (
-            <p className="mt-1 font-mono text-[11px] text-fg-muted/50">Everything published in this room</p>
+            <p className="mt-1 font-mono text-[11px] text-fg-muted/70">Everything published in this room</p>
           ) : share.allowed_sections.length === 0 ? (
             <p className="mt-1 font-mono text-[11px] text-amber-400/80">
               No sections — this link shows nothing
@@ -149,6 +151,42 @@ function ShareRow({ share }: { share: ShareView }) {
           <AccessEditor share={share} />
         </div>
       ) : null}
+    </div>
+  );
+}
+
+const REACTIVATE_DAYS = 30;
+
+/** Bring an expired link back for a fresh window in one click; the URL is kept. */
+function ReactivateButton({ share }: { share: ShareView }) {
+  const [pending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+
+  const reactivate = () =>
+    startTransition(async () => {
+      setError(null);
+      const res = await updateShareAccess(share.id, { expiresInDays: REACTIVATE_DAYS }).catch(() => ({
+        ok: false as const,
+        error: "Couldn't save. Try again.",
+      }));
+      if (!res.ok) setError(res.error);
+    });
+
+  return (
+    <div className="ml-auto flex items-center gap-2">
+      {error ? (
+        <span role="alert" className="text-[11px] text-amber-400">
+          {error}
+        </span>
+      ) : null}
+      <button
+        type="button"
+        disabled={pending}
+        onClick={reactivate}
+        className="rounded-lg border border-gold-500/40 bg-gold-500/10 px-3 py-1.5 font-mono text-[11px] uppercase tracking-wider text-gold-300 transition hover:bg-gold-500/20 disabled:opacity-50"
+      >
+        {pending ? "Reactivating…" : `Reactivate ${REACTIVATE_DAYS} days`}
+      </button>
     </div>
   );
 }
@@ -201,6 +239,7 @@ function AccessEditor({ share }: { share: ShareView }) {
 
   return (
     <div className="mt-3 space-y-3 rounded-lg border border-line bg-surface-1 p-3">
+      <div className="grid gap-3 sm:grid-cols-[12rem_minmax(0,1fr)_11rem]">
       <label className="block">
         <span className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">Expiry</span>
         <select value={expiry} onChange={(e) => setExpiry(e.target.value)} className={`${inputClass} mt-1`}>
@@ -216,7 +255,7 @@ function AccessEditor({ share }: { share: ShareView }) {
         <input
           value={domains}
           onChange={(e) => setDomains(e.target.value)}
-          placeholder="e.g. calpers.ca.gov, ilpa.org — blank for anyone"
+          placeholder="calpers.ca.gov, ilpa.org — blank for anyone"
           className={`${inputClass} mt-1`}
         />
         {invalid.length ? <span className="mt-1 block text-[11px] text-amber-400">Not a domain: {invalid.join(", ")}</span> : null}
@@ -234,6 +273,7 @@ function AccessEditor({ share }: { share: ShareView }) {
           className={`${inputClass} mt-1`}
         />
       </label>
+      </div>
       <p className="text-[11px] leading-relaxed text-fg-muted">
         Domain and reader limits ask every reader for their email. Emails aren&apos;t verified, so a domain limit stops
         casual forwarding but can&apos;t prove who someone is.
@@ -502,7 +542,7 @@ function CreateShareForm({
               min={1}
               value={maxReaders}
               onChange={(e) => setMaxReaders(e.target.value)}
-              placeholder="No limit"
+              placeholder="Blank for no limit"
               className={`${inputClass} mt-1 text-xs`}
             />
           </label>
@@ -629,6 +669,17 @@ function CreateShareForm({
   );
 }
 
+// A long list is searched and paged rather than scrolled; a short one stays as it was.
+const PAGE_SIZE = 10;
+const SEARCH_FROM = 6;
+
+type LinkView = "live" | "expired";
+type LinkSort = "newest" | "expiring";
+
+function time(iso: string | null): number {
+  return iso ? new Date(iso).getTime() : 0;
+}
+
 // Create + manage read-only public links into one room.
 export function ShareControls({
   roomId,
@@ -644,8 +695,38 @@ export function ShareControls({
   activeCount?: number;
 }) {
   const [open, setOpen] = useState(false);
-  const [pending, startTransition] = useTransition();
-  const active = shares.filter((s) => !s.revoked_at);
+  const [tab, setTab] = useState<LinkView | null>(null);
+  const [query, setQuery] = useState("");
+  const [sort, setSort] = useState<LinkSort>("newest");
+  const [shown, setShown] = useState(PAGE_SIZE);
+
+  // Revoked links are final and stay out of the list, as before.
+  const kept = shares.filter((s) => !s.revoked_at);
+  const live = kept.filter((s) => status(s).label === "Active");
+  const expired = kept.filter((s) => status(s).label === "Expired");
+  // Start on the live links, or on the expired ones when that is all there is.
+  const view: LinkView = tab ?? (live.length === 0 && expired.length > 0 ? "expired" : "live");
+
+  const needle = query.trim().toLowerCase();
+  const visible = (view === "live" ? live : expired)
+    .filter(
+      (s) =>
+        !needle ||
+        (s.label || "untitled link").toLowerCase().includes(needle) ||
+        (s.allowed_email_domains ?? []).some((d) => d.toLowerCase().includes(needle)),
+    )
+    .sort((a, b) =>
+      sort === "expiring"
+        ? (a.expires_at ? time(a.expires_at) : Infinity) - (b.expires_at ? time(b.expires_at) : Infinity)
+        : time(b.created_at) - time(a.created_at),
+    );
+
+  const searchable = kept.length >= SEARCH_FROM;
+  const page = visible.slice(0, shown);
+  const tabClass = (on: boolean) =>
+    `rounded-full border px-3 py-1 font-mono text-[11px] uppercase tracking-wider transition ${
+      on ? "border-gold-500/50 bg-gold-500/10 text-gold-300" : "border-line text-fg-muted hover:text-fg-secondary"
+    }`;
 
   return (
     <div>
@@ -682,7 +763,43 @@ export function ShareControls({
         />
       ) : null}
 
-      {active.length === 0 && !open ? (
+      {expired.length > 0 || searchable ? (
+        <div className="mb-3 flex flex-wrap items-center gap-2">
+          {expired.length > 0 ? (
+            <>
+              <button type="button" aria-pressed={view === "live"} onClick={() => { setTab("live"); setShown(PAGE_SIZE); }} className={tabClass(view === "live")}>
+                {`Live (${live.length})`}
+              </button>
+              <button type="button" aria-pressed={view === "expired"} onClick={() => { setTab("expired"); setShown(PAGE_SIZE); }} className={tabClass(view === "expired")}>
+                {`Expired (${expired.length})`}
+              </button>
+            </>
+          ) : null}
+          {searchable ? (
+            <div className="ml-auto flex flex-wrap items-center gap-2">
+              <input
+                type="search"
+                value={query}
+                onChange={(e) => { setQuery(e.target.value); setShown(PAGE_SIZE); }}
+                placeholder="Search links"
+                aria-label="Search links"
+                className={`${inputClass} w-44`}
+              />
+              <select
+                value={sort}
+                onChange={(e) => setSort(e.target.value as LinkSort)}
+                aria-label="Sort links"
+                className={`${inputClass} w-40`}
+              >
+                <option value="newest">Newest first</option>
+                <option value="expiring">Expiring soonest</option>
+              </select>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+
+      {live.length === 0 && expired.length === 0 && !open ? (
         <button
           type="button"
           onClick={() => setOpen(true)}
@@ -691,11 +808,24 @@ export function ShareControls({
           <p className="text-sm text-fg-muted">No active links.</p>
           <p className="mt-1 text-xs text-gold-300">Click to create a shareable link →</p>
         </button>
+      ) : visible.length === 0 ? (
+        <p className="rounded-xl border border-dashed border-line px-4 py-6 text-center text-sm text-fg-muted">
+          {needle ? `No ${view} links match "${query.trim()}".` : `No ${view} links.`}
+        </p>
       ) : (
         <div className="flex flex-col gap-2">
-          {active.map((s) => (
+          {page.map((s) => (
             <ShareRow key={s.id} share={s} />
           ))}
+          {visible.length > page.length ? (
+            <button
+              type="button"
+              onClick={() => setShown((n) => n + PAGE_SIZE)}
+              className="rounded-lg border border-line px-3 py-2 font-mono text-[11px] uppercase tracking-wider text-fg-muted transition hover:text-fg-secondary"
+            >
+              {`Show ${Math.min(PAGE_SIZE, visible.length - page.length)} more (${visible.length - page.length} left)`}
+            </button>
+          ) : null}
         </div>
       )}
     </div>
