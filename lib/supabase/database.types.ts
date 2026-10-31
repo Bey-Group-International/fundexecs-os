@@ -2255,6 +2255,51 @@ export type LpOnboardingSession = Timestamps & {
   expires_at: string;
 };
 
+// Run › Onboarding review (migration 20261031191852). Owner/admin access only.
+// A check is the current state of one screening step for one LP (one row per
+// session + kind); only status, dates and the vendor reference are stored, never
+// identity documents. Decisions and the audit log are append-only.
+export type OnboardingCheckKind =
+  | "identity"
+  | "sanctions"
+  | "pep"
+  | "adverse_media"
+  | "litigation"
+  | "accreditation";
+export type OnboardingCheckStatus = "pending" | "clear" | "flagged" | "failed";
+export type OnboardingCheck = Timestamps & {
+  id: string;
+  organization_id: string;
+  session_id: string;
+  kind: OnboardingCheckKind;
+  status: OnboardingCheckStatus;
+  method: "manual" | "stripe_identity";
+  vendor_ref: string | null;
+  summary: string | null;
+  checked_at: string | null;
+  expires_at: string | null;
+  recorded_by: string | null;
+};
+export type OnboardingDecisionKind = "approved" | "rejected" | "more_info";
+export type OnboardingDecision = {
+  id: string;
+  organization_id: string;
+  session_id: string;
+  decision: OnboardingDecisionKind;
+  reason: string;
+  decided_by: string | null;
+  decided_at: string;
+};
+export type OnboardingAuditEntry = {
+  id: number;
+  organization_id: string;
+  session_id: string | null;
+  actor_id: string | null;
+  action: string; // 'check.recorded' | 'check.updated' | 'decision.recorded'
+  detail: Json;
+  created_at: string;
+};
+
 // A live contract instance (migration 20260622100000) — generated from a
 // template or uploaded directly. `extracted_clauses` is free-form jsonb. Org-
 // scoped.
@@ -3392,6 +3437,9 @@ export type Database = {
       digest_experiment_variants: TableShape<DigestExperimentVariant>;
       cron_runs: TableShape<CronRun>;
       lp_onboarding_sessions: TableShape<LpOnboardingSession>;
+      onboarding_checks: TableShape<OnboardingCheck>;
+      onboarding_decisions: TableShape<OnboardingDecision>;
+      onboarding_audit_log: TableShape<OnboardingAuditEntry>;
       contracts: TableShape<Contract>;
       deal_signals: TableShape<DealSignalRow>;
       sector_heatmap_snapshots: TableShape<SectorHeatmapSnapshot>;
