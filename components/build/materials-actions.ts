@@ -188,8 +188,13 @@ export async function updateShareAccess(
     .eq("organization_id", ctx.orgId)
     .is("revoked_at", null)
     .select("id");
-  if (error) return { ok: false, error: "Couldn't save. Try again." };
-  if (!data || data.length === 0) return { ok: false, error: "That link is revoked or no longer exists." };
+  if (error) {
+    console.error("updateShareAccess failed", { shareId: id, code: error.code, message: error.message });
+    return { ok: false, error: "Couldn't save. Try again." };
+  }
+  // RLS hides a row the caller can't write, so an empty result is a revoked
+  // or missing link or a role without edit rights; the database can't say which.
+  if (!data || data.length === 0) return { ok: false, error: "That link is revoked or no longer exists, or you don't have edit access." };
   revalidatePath(ROOM);
   return { ok: true };
 }

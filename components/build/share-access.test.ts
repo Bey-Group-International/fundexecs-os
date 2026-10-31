@@ -70,7 +70,7 @@ it("refuses bad input without writing", async () => {
 
 it("says so when the link is revoked or gone", async () => {
   matches = false;
-  expect(await updateShareAccess("s1", { expiresInDays: 7 })).toEqual({ ok: false, error: "That link is revoked or no longer exists." });
+  expect(await updateShareAccess("s1", { expiresInDays: 7 })).toEqual({ ok: false, error: "That link is revoked or no longer exists, or you don't have edit access." });
 });
 
 it("needs a signed-in member", async () => {

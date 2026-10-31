@@ -73,6 +73,22 @@ describe("access on a live link", () => {
     expect(screen.getByText("Saved. The link keeps its URL.")).toBeInTheDocument();
   });
 
+  it("lets an expired link be given a new expiry, starting on 30 days", async () => {
+    renderWith(live({ expires_at: "2020-01-01T00:00:00Z" }));
+    expect(screen.getByText("Expired")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Edit access →" }));
+    expect((screen.getByRole("combobox") as HTMLSelectElement).value).toBe("30");
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Save access" }));
+    });
+    expect(updateShareAccess).toHaveBeenCalledWith("s1", { expiresInDays: 30, allowedDomains: "", maxReaders: null });
+  });
+
+  it("keeps a revoked link closed to editing", () => {
+    renderWith(live({ revoked_at: "2026-10-01T00:00:00Z" }));
+    expect(screen.queryByRole("button", { name: "Edit access →" })).toBeNull();
+  });
+
   it("won't save an entry that isn't a domain", () => {
     renderWith(live());
     fireEvent.click(screen.getByRole("button", { name: "Edit access →" }));
