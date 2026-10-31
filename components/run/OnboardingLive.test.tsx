@@ -41,6 +41,7 @@ jest.mock("@/components/run/OnboardingReview", () => ({
       reviewState: string;
       token: string;
       expiresAt: string;
+      remindedAt?: string | null;
       submission: { lpType: string; ownerThresholdPct: number; profile: { legalName: string | null } | null; owners: Array<{ fullName: string }>; consents: unknown[] };
       checks: unknown[];
       decisions: unknown[];
@@ -50,7 +51,7 @@ jest.mock("@/components/run/OnboardingReview", () => ({
     <ul>
       {lps.map((l) => (
         <li key={l.lpName}>
-          {l.lpName} | {l.stageLabel} | state:{l.reviewState} | token:{l.token} | checks:{l.checks.length} | decisions:{l.decisions.length} | {l.activity.map((a) => a.text).join(";")}
+          {l.lpName} | {l.stageLabel} | state:{l.reviewState} | token:{l.token} | reminded:{l.remindedAt ?? "never"} | checks:{l.checks.length} | decisions:{l.decisions.length} | {l.activity.map((a) => a.text).join(";")}
         </li>
       ))}
     </ul>
@@ -78,6 +79,8 @@ const session = (over: Record<string, unknown> = {}) => ({
   owner_threshold_pct: 25,
   token: "tok-1",
   expires_at: "2099-01-01T00:00:00Z",
+  reminded_day3_at: null,
+  reminded_day6_at: null,
   ...over,
 });
 
@@ -97,8 +100,8 @@ describe("Run › Onboarding", () => {
       { id: 2, session_id: "s2", action: "decision.recorded", detail: { decision: "rejected" }, created_at: "2026-10-31T00:00:00Z" },
     ];
     render(await OnboardingLive());
-    expect(screen.getByText(/Calpers Pension \| Accreditation \| state:approved \| token:tok-1 \| checks:1 \| decisions:1 \| Identity check recorded as clear/)).toBeInTheDocument();
-    expect(screen.getByText(/Ilpa Fund \| Complete \| state:approved \| token:tok-1 \| checks:0 \| decisions:0 \| Decision recorded: rejected/)).toBeInTheDocument();
+    expect(screen.getByText(/Calpers Pension \| Accreditation \| state:approved \| token:tok-1 \| reminded:never \| checks:1 \| decisions:1 \| Identity check recorded as clear/)).toBeInTheDocument();
+    expect(screen.getByText(/Ilpa Fund \| Complete \| state:approved \| token:tok-1 \| reminded:never \| checks:0 \| decisions:0 \| Decision recorded: rejected/)).toBeInTheDocument();
   });
 
   it("hands each LP its review state and link, and lists the organization's funds in the form", async () => {
@@ -107,6 +110,13 @@ describe("Run › Onboarding", () => {
     render(await OnboardingLive());
     expect(screen.getByText(/Calpers Pension \| Accreditation \| state:submitted \| token:tok-1/)).toBeInTheDocument();
     expect(screen.getByText("New LP link | funds:Fund I,Fund II")).toBeInTheDocument();
+  });
+
+  it("hands over when an LP was last reminded, the later of the two reminders", async () => {
+    tables.lp_onboarding_sessions = [session({ reminded_day3_at: "2026-11-04T10:00:00Z", reminded_day6_at: "2026-11-07T10:00:00Z" }), session({ id: "s2", lp_name: "Ilpa Fund", reminded_day3_at: "2026-11-04T10:00:00Z" })];
+    render(await OnboardingLive());
+    expect(screen.getByText(/Calpers Pension .*reminded:2026-11-07T10:00:00Z/)).toBeInTheDocument();
+    expect(screen.getByText(/Ilpa Fund .*reminded:2026-11-04T10:00:00Z/)).toBeInTheDocument();
   });
 
   it("scopes every read to the organization", async () => {

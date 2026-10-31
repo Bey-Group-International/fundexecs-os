@@ -22,6 +22,7 @@ import {
 } from "@/lib/meetings/booking-confirmation.server";
 import { runBookingRequestExpiry, type RequestExpiryStats } from "@/lib/meetings/booking-expiry.server";
 import { runBookingRequestReminders, type RequestReminderStats } from "@/lib/meetings/booking-request-reminder.server";
+import { runLpReminders, type LpReminderStats } from "@/lib/lp-reminders.server";
 import { runRecordingSweep, type RecordingSweepStats } from "@/lib/meetings/recording-sweep.server";
 import { runStaleMeetingSweep, type StaleMeetingSweepStats } from "@/lib/meetings/stale-meeting-sweep.server";
 import { runFailedReportRetry, type FailedReportRetryStats } from "@/lib/meetings/failed-report-retry.server";
@@ -385,6 +386,15 @@ export async function GET(request: Request) {
     console.error("booking_request_reminders failed", e);
   }
 
+  // LPs who were sent an onboarding link and have gone quiet: reminded on day 3
+  // and day 6 of the 7-day link, from the fund manager's own mailbox only.
+  let lpReminders: LpReminderStats = { reminded: 0, noMailbox: 0, failed: 0 };
+  try {
+    lpReminders = await runLpReminders(supabase, { now });
+  } catch (e) {
+    console.error("lp_reminders failed", e);
+  }
+
   // Booking requests the host never answered, closed once their time has come
   // so the invitee hears back instead of waiting on a meeting that is over.
   let bookingRequestsExpired: RequestExpiryStats = { expired: 0, notified: 0, failed: 0 };
@@ -554,5 +564,5 @@ export async function GET(request: Request) {
     // best-effort: never let health tracking break the cron response
   }
 
-  return NextResponse.json({ swept: due.length, results, radar, pulse, escalated, inboxApprovals, webhooks, proactive, reminders, bookingConfirmations, bookingRequestReminders, bookingRequestsExpired, recordings, staleMeetings, failedReports, calendarRepair, subscriptions, settledInvoices, nativeCollections, networkAutomations });
+  return NextResponse.json({ swept: due.length, results, radar, pulse, escalated, inboxApprovals, webhooks, proactive, reminders, bookingConfirmations, bookingRequestReminders, lpReminders, bookingRequestsExpired, recordings, staleMeetings, failedReports, calendarRepair, subscriptions, settledInvoices, nativeCollections, networkAutomations });
 }

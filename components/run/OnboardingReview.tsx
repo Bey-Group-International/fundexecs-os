@@ -66,6 +66,8 @@ export interface ReviewLp {
   reviewState: LpReviewState;
   token: string;
   expiresAt: string;
+  /** When the LP was last sent an automatic reminder, if ever. */
+  remindedAt?: string | null;
   submission: SubmissionView;
   checks: ReviewCheck[];
   decisions: ReviewDecision[];
@@ -316,7 +318,7 @@ function LpCard({ lp }: { lp: ReviewLp }) {
       {open ? (
         <div className="grid gap-3 border-t border-line/50 px-4 py-3">
           {lp.reviewState !== "approved" && lp.reviewState !== "rejected" ? (
-            <OnboardingLinkPanel sessionId={lp.id} token={lp.token} expiresAt={lp.expiresAt} />
+            <OnboardingLinkPanel sessionId={lp.id} token={lp.token} expiresAt={lp.expiresAt} remindedAt={lp.remindedAt ?? null} />
           ) : null}
           <OnboardingSubmission view={lp.submission} />
           {CHECK_KINDS.map((info) => (

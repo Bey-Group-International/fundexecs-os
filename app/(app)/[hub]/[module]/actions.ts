@@ -12,6 +12,7 @@ import { gmailAdapter } from "@/lib/integrations/adapters/gmail";
 import { gatedFeatureForHub } from "@/lib/feature-access";
 import { requireFeatureAccess } from "@/lib/feature-access.server";
 import type { DealStage } from "@/lib/supabase/database.types";
+import { LINK_TTL_DAYS } from "@/lib/lp-wizard";
 
 // Build › Profile edits are handled by `saveOrgProfile`
 // (app/(app)/build/profile/actions.ts), the single canonical profile action
@@ -397,6 +398,8 @@ export async function createLpInviteAction(formData: FormData) {
         lp_email: lpEmail,
         commitment_amount: commitmentAmount,
         status: "pending",
+        // The same 7 days as a link made from Run › Onboarding.
+        expires_at: new Date(Date.now() + LINK_TTL_DAYS * 86_400_000).toISOString(),
       })
       .select("token")
       .single();
@@ -418,7 +421,7 @@ export async function createLpInviteAction(formData: FormData) {
       target: { email: lpEmail, name: lpName },
       metadata: {
         subject: `You're invited to join the fund`,
-        body: `Hi ${lpName},\n\nYou have been invited to complete your LP onboarding. Click the link below to get started:\n\n${portalUrl}\n\nThis link expires in 30 days.\n\nBest,\nThe Fund Manager`,
+        body: `Hi ${lpName},\n\nYou have been invited to complete your LP onboarding. Click the link below to get started:\n\n${portalUrl}\n\nYou'll be asked for a code we email you when you open it. This link expires in ${LINK_TTL_DAYS} days.\n\nBest,\nThe Fund Manager`,
       },
     });
 

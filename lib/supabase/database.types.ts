@@ -2277,6 +2277,9 @@ export type LpOnboardingSession = Timestamps & {
   owner_threshold_pct: number;
   review_state: LpReviewState;
   submitted_at: string | null;
+  // Stalled-LP reminders (migration 20261031234403).
+  reminded_day3_at: string | null;
+  reminded_day6_at: string | null;
 };
 
 export type LpType = "individual" | "entity" | "institutional";

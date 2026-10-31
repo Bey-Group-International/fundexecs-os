@@ -237,6 +237,18 @@ describe("the LP's link", () => {
     expect(screen.getByText(/couldn.t be sent/)).toBeInTheDocument();
   });
 
+  it("says when the LP was last sent a reminder", () => {
+    render(<OnboardingReview lps={[lp({ reviewState: "in_progress", remindedAt: "2026-11-04T10:00:00Z" })]} />);
+    open();
+    expect(screen.getByText(/Reminder emailed Nov 4, 2026/)).toBeInTheDocument();
+  });
+
+  it("says nothing about reminders before one has been sent", () => {
+    render(<OnboardingReview lps={[lp({ reviewState: "in_progress" })]} />);
+    open();
+    expect(screen.queryByText(/Reminder emailed/)).toBeNull();
+  });
+
   it("says when the link has expired and stops offering to send it", () => {
     render(<OnboardingReview lps={[lp({ reviewState: "not_started", expiresAt: "2020-01-01T00:00:00Z" })]} />);
     open();
