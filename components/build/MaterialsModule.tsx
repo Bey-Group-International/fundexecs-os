@@ -103,6 +103,11 @@ export async function MaterialsModule({ roomId }: { roomId?: string } = {}) {
       .order("signed_at", { ascending: false }),
   ]);
 
+  // An errored read must not render as "no documents" / "no links": the operator
+  // would believe a live link is gone, or re-upload what is already there.
+  if (libraryRes.error) throw new Error(`Couldn't load the document library: ${libraryRes.error.message}`);
+  if (sharesRes.error) throw new Error(`Couldn't load the room's links: ${sharesRes.error.message}`);
+
   const libraryDocs = (libraryRes.data ?? []) as Document[];
   const shares = (sharesRes.data ?? []) as DataRoomShare[];
   // Readers admitted per capped link, for "3 of 10 readers". Only capped links
@@ -110,11 +115,12 @@ export async function MaterialsModule({ roomId }: { roomId?: string } = {}) {
   const cappedIds = shares.filter((s) => s.max_readers).map((s) => s.id);
   const readerCounts = new Map<string, number>();
   if (cappedIds.length) {
-    const { data: readerRows } = await supabase
+    const { data: readerRows, error: readerErr } = await supabase
       .from("data_room_link_readers")
       .select("share_id")
       .eq("organization_id", orgId)
       .in("share_id", cappedIds);
+    if (readerErr) throw new Error(`Couldn't load link reader counts: ${readerErr.message}`);
     for (const r of (readerRows ?? []) as { share_id: string }[]) {
       readerCounts.set(r.share_id, (readerCounts.get(r.share_id) ?? 0) + 1);
     }

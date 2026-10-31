@@ -37,6 +37,16 @@ export interface RoomSection {
 const SECTION_LABEL = new Map(DATA_ROOM_SECTIONS.map((s) => [s.key, s.label]));
 const SECTION_INDEX = new Map(DATA_ROOM_SECTIONS.map((s, i) => [s.key, i]));
 
+/**
+ * The section a document is shown under. A missing or unrecognised `doc_type`
+ * (a legacy row, an import) files under the catch-all, so the GP list, the
+ * coverage count and the LP viewer all place the same document in the same
+ * section instead of the viewer silently dropping what the GP can see.
+ */
+export function roomSectionKey(docType: string | null | undefined): string {
+  return docType && SECTION_INDEX.has(docType) ? docType : "other";
+}
+
 /** Canonical label for a section key, falling back to the catch-all. */
 export function sectionLabel(key: string | null): string {
   return SECTION_LABEL.get(key ?? "other") ?? SECTION_LABEL.get("other") ?? "Other Materials";
@@ -51,7 +61,7 @@ export function sectionLabel(key: string | null): string {
 export function groupRoomDocuments(docs: RoomDocument[]): RoomSection[] {
   const bySection = new Map<string, RoomDocument[]>();
   for (const d of docs) {
-    const key = SECTION_INDEX.has(d.section) ? d.section : "other";
+    const key = roomSectionKey(d.section);
     const bucket = bySection.get(key);
     if (bucket) bucket.push(d);
     else bySection.set(key, [d]);
@@ -77,7 +87,7 @@ export function summarizeRoom(
 ): DataRoomSummary {
   const counts: Record<string, number> = {};
   for (const d of docs) {
-    const key = SECTION_INDEX.has(d.section) ? d.section : "other";
+    const key = roomSectionKey(d.section);
     counts[key] = (counts[key] ?? 0) + 1;
   }
   return summarizeDataRoom(buildStatuses, counts);

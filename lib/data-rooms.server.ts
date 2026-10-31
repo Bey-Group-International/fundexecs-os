@@ -16,13 +16,16 @@ async function selectRooms(
   supabase: Awaited<ReturnType<typeof createServerClient>>,
   orgId: string,
 ): Promise<DataRoom[]> {
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from("data_rooms")
     .select("*")
     .eq("organization_id", orgId)
     .is("archived_at", null)
     .order("is_default", { ascending: false })
     .order("created_at", { ascending: true });
+  // An errored read is not "no rooms": returning [] would send listRooms off to
+  // create a default room and render "No data room yet." over an existing one.
+  if (error) throw new Error(`Couldn't load data rooms: ${error.message}`);
   return (data ?? []) as DataRoom[];
 }
 
@@ -68,20 +71,24 @@ export function pickRoom(rooms: DataRoom[], requestedId?: string): DataRoom | nu
  */
 export async function loadRoomDocuments(orgId: string, roomId: string): Promise<RoomDocument[]> {
   const supabase = await createServerClient();
-  const { data: manifest } = await supabase
+  const { data: manifest, error: manifestErr } = await supabase
     .from("data_room_documents")
     .select("document_id, sort_order, require_signature")
     .eq("organization_id", orgId)
     .eq("room_id", roomId)
     .order("sort_order", { ascending: true });
+  // Throw rather than return []: a failed read shown as an empty room reads as
+  // "nothing is published", and the operator may re-publish over it.
+  if (manifestErr) throw new Error(`Couldn't load the room's documents: ${manifestErr.message}`);
   const rows = (manifest ?? []) as { document_id: string; sort_order: number; require_signature: boolean }[];
   if (rows.length === 0) return [];
 
-  const { data: docRows } = await supabase
+  const { data: docRows, error: docsErr } = await supabase
     .from("documents")
     .select("*")
     .eq("organization_id", orgId)
     .in("id", rows.map((r) => r.document_id));
+  if (docsErr) throw new Error(`Couldn't load the room's documents: ${docsErr.message}`);
   const byId = new Map(((docRows ?? []) as Document[]).map((d) => [d.id, d]));
 
   return rows.flatMap((r) => {
