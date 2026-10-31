@@ -142,6 +142,12 @@ function ShareRow({ share }: { share: ShareView }) {
           <AlertToggles share={share} />
           <AccessEditor share={share} />
         </div>
+      ) : !share.revoked_at ? (
+        // An expired link can be brought back by giving it a new expiry; only a
+        // revoked one is final. Without this the operator had to mint a new URL.
+        <div className="border-t border-line/50 bg-surface-0 px-4 py-2">
+          <AccessEditor share={share} />
+        </div>
       ) : null}
     </div>
   );
@@ -159,7 +165,9 @@ const EXPIRY_CHOICES = [
 /** Change a live link's expiry, domain list and reader cap in place. */
 function AccessEditor({ share }: { share: ShareView }) {
   const [open, setOpen] = useState(false);
-  const [expiry, setExpiry] = useState("keep");
+  // "Keep" on an already-expired link would save nothing useful, so start it on
+  // a fresh window instead.
+  const [expiry, setExpiry] = useState(status(share).label === "Expired" ? "30" : "keep");
   const [domains, setDomains] = useState((share.allowed_email_domains ?? []).join(", "));
   const [maxReaders, setMaxReaders] = useState(share.max_readers ? String(share.max_readers) : "");
   const [message, setMessage] = useState<{ tone: "ok" | "error"; text: string } | null>(null);
