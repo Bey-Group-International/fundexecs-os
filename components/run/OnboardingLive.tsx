@@ -130,6 +130,7 @@ async function loadLps(orgId: string): Promise<ReviewLp[]> {
       checks: (checks.get(s.id) ?? []).map((c) => ({
         kind: c.kind,
         status: c.status,
+        method: c.method,
         summary: c.summary,
         checkedAt: c.checked_at,
         expiresAt: c.expires_at,

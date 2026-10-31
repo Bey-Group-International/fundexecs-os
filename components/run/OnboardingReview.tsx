@@ -10,6 +10,7 @@ import { inputClass } from "@/components/build/DraftWithEarn";
 import {
   recordOnboardingCheck,
   recordOnboardingDecision,
+  refreshIdentityCheckAction,
 } from "@/app/(app)/[hub]/[module]/onboarding-actions";
 import { OnboardingLinkPanel } from "@/components/run/OnboardingLinkPanel";
 import { OnboardingSubmission, type SubmissionView } from "@/components/run/OnboardingSubmission";
@@ -37,6 +38,8 @@ import type {
 export interface ReviewCheck {
   kind: OnboardingCheckKind;
   status: OnboardingCheckStatus;
+  /** How the result was recorded: by hand, or from Stripe Identity. */
+  method?: "manual" | "stripe_identity";
   summary: string | null;
   checkedAt: string | null;
   expiresAt: string | null;
@@ -110,6 +113,18 @@ function CheckRow({ lpId, info, check }: { lpId: string; info: (typeof CHECK_KIN
     });
 
   const expired = check?.status === "clear" && !isClear(toState(check));
+  const fromStripe = check?.method === "stripe_identity";
+
+  const refresh = () =>
+    startTransition(async () => {
+      setMessage(null);
+      const res = await refreshIdentityCheckAction(lpId).catch(() => ({ ok: false as const, error: "Couldn't refresh. Try again." }));
+      setMessage(
+        res.ok
+          ? { tone: "ok", text: "verified" in res && res.verified ? "Verified by Stripe." : "Not verified yet. Stripe has no final result." }
+          : { tone: "error", text: res.error },
+      );
+    });
 
   return (
     <div className="rounded-lg border border-line bg-surface-0 p-3">
@@ -119,6 +134,7 @@ function CheckRow({ lpId, info, check }: { lpId: string; info: (typeof CHECK_KIN
         <span className={`${pill} ${expired ? STATUS_TONE.flagged : STATUS_TONE[check?.status ?? "pending"]}`}>
           {expired ? "Expired" : CHECK_STATUS_LABEL[check?.status ?? "pending"]}
         </span>
+        {fromStripe ? <span className={`${pill} border-line text-fg-muted`}>Stripe Identity</span> : null}
         {check?.checkedAt ? (
           <span className="font-mono text-[11px] text-fg-muted">
             checked {day(check.checkedAt)}
@@ -172,6 +188,18 @@ function CheckRow({ lpId, info, check }: { lpId: string; info: (typeof CHECK_KIN
           {pending ? "Saving…" : "Save"}
         </button>
       </div>
+      {fromStripe && check?.status === "pending" ? (
+        <div className="mt-2">
+          <button
+            type="button"
+            disabled={pending}
+            onClick={refresh}
+            className="rounded-lg border border-line px-3 py-1.5 font-mono text-[11px] uppercase tracking-wider text-fg-muted transition hover:text-fg-secondary disabled:opacity-50"
+          >
+            Refresh Stripe result
+          </button>
+        </div>
+      ) : null}
       {message ? (
         <p role={message.tone === "error" ? "alert" : "status"} className={`mt-1 text-[11px] ${message.tone === "error" ? "text-amber-400" : "text-emerald-300"}`}>
           {message.text}

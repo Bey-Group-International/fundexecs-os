@@ -12,6 +12,10 @@ import { revalidatePath } from "next/cache";
 import { createServiceClient, hasSupabaseServiceEnv } from "@/lib/supabase/server";
 import { escapeHtml, sendEmail } from "@/lib/email";
 import { getLinkSession, grantLpPass, hasLpPass, issueCode, verifyCode, type LinkSession } from "@/lib/lp-access.server";
+import { getAppUrl } from "@/lib/integrations/adapters/app-url";
+import { stripeIdentityProvider } from "@/lib/providers/stripe-identity";
+import { identityOutcome, type IdentityState } from "@/lib/lp-identity";
+import { readIdentityCheck, refreshIdentityCheck } from "@/lib/lp-identity.server";
 import {
   ACCREDITATION_BASIS_LABEL,
   CONSENT_TEXT_VERSION,
@@ -245,16 +249,108 @@ export async function saveAccreditationAction(token: string, input: unknown): Pr
   }
 }
 
+// ---- ID verification (Stripe Identity) -------------------------------------
+
+export type IdentityResult = { ok: true; state: IdentityState; url: string | null } | { ok: false; error: string };
+
+/**
+ * Starts (or resumes) the LP's ID verification and returns the hosted link. It
+ * refuses unless the LP has consented to identity verification, and it never
+ * disturbs an identity check the fund manager has already recorded or decided.
+ */
+export async function startIdentityAction(token: string): Promise<IdentityResult> {
+  const ctx = await editableContext(token);
+  if (isResult(ctx)) return ctx as { ok: false; error: string };
+  const { supabase, session } = ctx;
+  try {
+    if (!stripeIdentityProvider.isConfigured()) {
+      return { ok: false, error: "Online ID verification isn't available. Your fund manager will verify you directly." };
+    }
+
+    const { data: consents } = await supabase
+      .from("lp_onboarding_consents")
+      .select("scope")
+      .eq("session_id", session.id)
+      .eq("scope", "identity_verification")
+      .eq("text_version", CONSENT_TEXT_VERSION)
+      .limit(1);
+    if (!consents || consents.length === 0) return { ok: false, error: "Give your consent to ID verification first." };
+
+    const existing = await readIdentityCheck(supabase, session.id);
+    if (existing?.status === "clear") return { ok: true, state: "verified", url: null };
+    if (existing && existing.status !== "pending" && existing.method !== "stripe_identity") {
+      return { ok: false, error: "Your fund manager is already handling your ID check." };
+    }
+
+    // Resume a verification already started, rather than opening a second one.
+    if (existing?.method === "stripe_identity" && existing.vendor_ref) {
+      const current = await refreshIdentityCheck(supabase, session.id, session.organization_id);
+      if (!current.ok) return current;
+      if (current.state === "canceled") {
+        return { ok: false, error: "This verification can't be continued. Ask your fund manager to start a new one." };
+      }
+      if (current.state === "verified" || current.state === "processing" || current.url) return current;
+      return { ok: false, error: "We couldn't reopen your verification. Try again in a moment." };
+    }
+
+    const started = await stripeIdentityProvider.initiate({
+      orgId: session.organization_id,
+      subjectId: session.id,
+      subjectType: session.lp_type === "individual" ? "individual" : "entity",
+      subjectName: session.lp_name,
+      subjectEmail: session.lp_email,
+      level: "kyc",
+      requestedBy: "lp-wizard",
+      returnUrl: `${getAppUrl()}/lp/${token}`,
+    });
+    const verificationId = started.data?.verificationId;
+    if (!started.ok || !started.reference || !verificationId) {
+      return { ok: false, error: "We couldn't start ID verification. Try again in a moment." };
+    }
+
+    const outcome = identityOutcome(started.data!);
+    const row = { ...outcome.check, method: "stripe_identity", vendor_ref: verificationId };
+    const { error } = existing
+      ? await supabase.from("onboarding_checks").update(row as never).eq("session_id", session.id).eq("kind", "identity").eq("status", "pending")
+      : await supabase.from("onboarding_checks").insert({ organization_id: session.organization_id, session_id: session.id, kind: "identity", ...row } as never);
+    if (error) {
+      console.error("startIdentityAction failed", { code: error.code, message: error.message });
+      return { ok: false, error: GENERIC };
+    }
+    revalidatePath(`/lp/${token}`);
+    return { ok: true, state: outcome.state, url: started.reference };
+  } catch (err) {
+    console.error("startIdentityAction threw", err);
+    return { ok: false, error: GENERIC };
+  }
+}
+
+/** Asks where the LP's verification stands. Safe to call repeatedly; used when they return from Stripe. */
+export async function checkIdentityAction(token: string): Promise<IdentityResult> {
+  const ctx = await passedContext(token);
+  if (!ctx) return { ok: false, error: UNAVAILABLE };
+  try {
+    const res = await refreshIdentityCheck(ctx.supabase, ctx.session.id, ctx.session.organization_id);
+    if (res.ok && res.state === "verified") revalidatePath(`/lp/${token}`);
+    return res;
+  } catch (err) {
+    console.error("checkIdentityAction threw", err);
+    return { ok: false, error: GENERIC };
+  }
+}
+
 // ---- submit ----------------------------------------------------------------
 
 export async function submitWizardAction(token: string): Promise<WizardResult> {
   const ctx = await editableContext(token);
   if (isResult(ctx)) return ctx;
   try {
-    const [profileRes, ownersRes, consentsRes] = await Promise.all([
+    const identityEnabled = stripeIdentityProvider.isConfigured();
+    const [profileRes, ownersRes, consentsRes, identityCheck] = await Promise.all([
       ctx.supabase.from("lp_onboarding_profiles").select("*").eq("session_id", ctx.session.id).maybeSingle(),
       ctx.supabase.from("lp_onboarding_owners").select("role").eq("session_id", ctx.session.id),
       ctx.supabase.from("lp_onboarding_consents").select("scope, text_version").eq("session_id", ctx.session.id),
+      identityEnabled ? readIdentityCheck(ctx.supabase, ctx.session.id) : Promise.resolve(null),
     ]);
     const profile = (profileRes.data ?? null) as WizardData["profile"] & { accreditation_basis: keyof typeof ACCREDITATION_BASIS_LABEL | null };
     const missing = incompleteSteps({
@@ -262,6 +358,7 @@ export async function submitWizardAction(token: string): Promise<WizardResult> {
       profile,
       owners: (ownersRes.data ?? []) as WizardData["owners"],
       consents: (consentsRes.data ?? []) as WizardData["consents"],
+      identity: { enabled: identityEnabled, verified: identityCheck?.status === "clear" },
     });
     if (missing.length) {
       return { ok: false, error: `Finish these first: ${missing.map((s) => STEP_LABEL[s]).join(", ")}.` };

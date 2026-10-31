@@ -86,6 +86,7 @@ export const stripeIdentityProvider: IdentityVerificationProvider = {
         "metadata[requested_by]": params.requestedBy,
       });
       if (params.subjectEmail) body.set("email", params.subjectEmail);
+      if (params.returnUrl) body.set("return_url", params.returnUrl);
 
       // Use | separator (can't appear in Stripe IDs) to prevent field-value collision.
       // Include today's date so a re-initiation the next day creates a fresh session
@@ -107,6 +108,7 @@ export const stripeIdentityProvider: IdentityVerificationProvider = {
           verificationId: session.id,
           level: params.level,
           status: mapStatus(session.status),
+          providerStatus: session.status,
         },
       };
     } catch {
@@ -137,6 +139,7 @@ export const stripeIdentityProvider: IdentityVerificationProvider = {
         id: string;
         status: string;
         created: number;
+        url?: string | null;
         last_error?: { reason: string };
         metadata?: { org_id?: string };
       }>(`/identity/verification_sessions/${encodeURIComponent(verificationId)}`);
@@ -157,10 +160,13 @@ export const stripeIdentityProvider: IdentityVerificationProvider = {
         ok: true,
         live: true,
         detail: `Verification ${verificationId}: ${session.status}.`,
+        // The hosted link, present while the subject can still complete or retry it.
+        ...(session.url ? { reference: session.url } : {}),
         data: {
           verificationId: session.id,
           level: "kyc",
           status,
+          providerStatus: session.status,
           // Use Stripe's authoritative created timestamp, not the server clock.
           ...(status === "approved" ? { completedAt: new Date(session.created * 1000).toISOString() } : {}),
           ...(session.last_error ? { notes: session.last_error.reason } : {}),

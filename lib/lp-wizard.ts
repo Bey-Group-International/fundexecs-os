@@ -45,21 +45,29 @@ export const ACCREDITATION_BASIS_LABEL: Record<LpAccreditationBasis, string> = {
   institutional: "Institutional investor",
 };
 
-export type WizardStepKey = "details" | "owners" | "consent" | "accreditation" | "review";
+export type WizardStepKey = "details" | "owners" | "consent" | "identity" | "accreditation" | "review";
 
 export const STEP_LABEL: Record<WizardStepKey, string> = {
   details: "Your details",
   owners: "Owners",
   consent: "Consent",
+  identity: "ID verification",
   accreditation: "Accreditation",
   review: "Review and submit",
 };
 
-/** An individual has no owners to list; an institution gives entity details and a signatory but no owner list. */
-export function stepsFor(lpType: LpType): WizardStepKey[] {
-  return lpType === "entity"
-    ? ["details", "owners", "consent", "accreditation", "review"]
-    : ["details", "consent", "accreditation", "review"];
+/**
+ * An individual has no owners to list; an institution gives entity details and a
+ * signatory but no owner list. The ID verification step exists only where online
+ * verification is set up; otherwise the fund manager verifies the LP themselves.
+ */
+export function stepsFor(lpType: LpType, identityEnabled = false): WizardStepKey[] {
+  const steps: WizardStepKey[] = ["details"];
+  if (lpType === "entity") steps.push("owners");
+  steps.push("consent");
+  if (identityEnabled) steps.push("identity");
+  steps.push("accreditation", "review");
+  return steps;
 }
 
 /** Whether the wizard is open for the LP to fill in or change. */
@@ -224,6 +232,8 @@ export interface WizardData {
   > | null;
   owners: Pick<LpOnboardingOwner, "role">[];
   consents: Pick<LpOnboardingConsent, "scope" | "text_version">[];
+  /** Present when online ID verification is set up. `verified` means Stripe cleared it. */
+  identity?: { enabled: boolean; verified: boolean };
 }
 
 /** The steps (other than the final review) still to be completed. */
@@ -242,6 +252,8 @@ export function incompleteSteps(data: WizardData): WizardStepKey[] {
 
   const consented = new Set(data.consents.filter((c) => c.text_version === CONSENT_TEXT_VERSION).map((c) => c.scope));
   if (!CONSENT_SCOPES.every((s) => consented.has(s))) missing.push("consent");
+
+  if (data.identity?.enabled && !data.identity.verified) missing.push("identity");
 
   const accreditationDone =
     !!p?.accreditation_basis && !!p.accreditation_statement_at && (p.source_of_funds ?? "").length >= SOURCE_OF_FUNDS_MIN;

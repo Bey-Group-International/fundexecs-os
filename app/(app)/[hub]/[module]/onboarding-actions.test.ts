@@ -37,7 +37,11 @@ jest.mock("@/lib/supabase/server", () => ({
   }),
 }));
 
-import { recordOnboardingCheck, recordOnboardingDecision } from "./onboarding-actions";
+let refreshResult: unknown = { ok: true, state: "verified", url: null };
+const refreshIdentity = jest.fn(async (..._a: unknown[]) => refreshResult);
+jest.mock("@/lib/lp-identity.server", () => ({ refreshIdentityCheck: (...a: unknown[]) => refreshIdentity(...a) }));
+
+import { recordOnboardingCheck, recordOnboardingDecision, refreshIdentityCheckAction } from "./onboarding-actions";
 
 const allClear = () =>
   ["identity", "sanctions", "pep", "adverse_media", "accreditation"].map((kind) => ({ kind, status: "clear", expires_at: null }));
@@ -61,6 +65,7 @@ const decision = { sessionId: "s1", decision: "rejected", reason: "Could not ver
 describe.each([
   ["recordOnboardingCheck", () => recordOnboardingCheck(check)],
   ["recordOnboardingDecision", () => recordOnboardingDecision(decision)],
+  ["refreshIdentityCheckAction", () => refreshIdentityCheckAction("s1")],
 ])("%s access", (_name, call) => {
   it("needs a signed-in member of an organization", async () => {
     auth = { ok: false, status: 401, error: "Not authenticated" };
@@ -210,5 +215,30 @@ describe("recordOnboardingDecision", () => {
   it("hides the database error from the caller", async () => {
     writeError = { code: "42501", message: "row-level security policy" };
     expect(await recordOnboardingDecision(decision)).toEqual({ ok: false, error: "Couldn't save. Try again." });
+  });
+});
+
+describe("refreshIdentityCheckAction", () => {
+  beforeEach(() => {
+    refreshResult = { ok: true, state: "verified", url: null };
+    refreshIdentity.mockClear();
+  });
+
+  it("asks Stripe for this organization's LP and says whether they are verified", async () => {
+    expect(await refreshIdentityCheckAction("s1")).toEqual({ ok: true, verified: true });
+    expect(refreshIdentity).toHaveBeenCalledWith(expect.anything(), "s1", "org-1");
+    refreshResult = { ok: true, state: "processing", url: null };
+    expect(await refreshIdentityCheckAction("s1")).toEqual({ ok: true, verified: false });
+  });
+
+  it("passes on a failure to reach Stripe", async () => {
+    refreshResult = { ok: false, error: "We couldn't reach the verification service. Try again in a moment." };
+    expect(await refreshIdentityCheckAction("s1")).toEqual({ ok: false, error: expect.stringContaining("couldn't reach") });
+  });
+
+  it("refuses a missing or non-text id without asking Stripe", async () => {
+    expect((await refreshIdentityCheckAction(undefined)).ok).toBe(false);
+    expect((await refreshIdentityCheckAction("")).ok).toBe(false);
+    expect(refreshIdentity).not.toHaveBeenCalled();
   });
 });

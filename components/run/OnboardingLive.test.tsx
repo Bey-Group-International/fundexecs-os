@@ -90,7 +90,7 @@ describe("Run › Onboarding", () => {
 
   it("hands each LP its stage, checks, decisions and activity", async () => {
     tables.lp_onboarding_sessions = [session(), session({ id: "s2", lp_name: "Ilpa Fund", status: "complete" })];
-    tables.onboarding_checks = [{ session_id: "s1", kind: "identity", status: "clear", summary: null, checked_at: null, expires_at: null }];
+    tables.onboarding_checks = [{ session_id: "s1", kind: "identity", status: "clear", method: "manual", summary: null, checked_at: null, expires_at: null }];
     tables.onboarding_decisions = [{ id: "d1", session_id: "s1", decision: "approved", reason: "ok", decided_at: "2026-10-31T00:00:00Z" }];
     tables.onboarding_audit_log = [
       { id: 1, session_id: "s1", action: "check.recorded", detail: { kind: "identity", status: "clear" }, created_at: "2026-10-31T00:00:00Z" },
