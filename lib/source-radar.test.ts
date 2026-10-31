@@ -50,6 +50,8 @@ describe("recommendMove (cross-cluster routing)", () => {
   it("routes a raise-leaning allocator to Outreach", () => {
     const m = recommendMove({ name: "Beta FO", kind: "investor", propensity: { sell: 5, raise: 75 }, fit: 50, inPipeline: true });
     expect(m.kind).toBe("outreach");
+    // Outbound cadences live in Run › Campaigns now that Onboarding has the Outreach slot.
+    expect(m.href).toBe("/run/campaigns");
   });
   it("recommends adding a strong-fit, untracked entity to the pipeline", () => {
     const m = recommendMove({ name: "Gamma", kind: "company", propensity: { sell: 10, raise: 10 }, fit: 70, inPipeline: false });

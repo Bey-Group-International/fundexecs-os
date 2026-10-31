@@ -11,6 +11,7 @@ import { buildCapitalMap } from "@/lib/capital-map";
 import { computeGPScorecard } from "@/lib/gp-scorecard";
 import type { LPMatch } from "@/components/source/LPDiscoveryPanel";
 import type { OutreachItem } from "@/components/source/OutreachPriorityQueue";
+import { OnboardingLive } from "@/components/run/OnboardingLive";
 
 // Lazily loaded — each search/triage surface is heavy and hub-specific.
 // next/dynamic splits them into separate chunks loaded only when the matching
@@ -101,7 +102,7 @@ const SOURCE_MODULES: Record<string, (initialPrompt?: string) => React.ReactElem
   triage: (initialPrompt) => <SourceTriage live={sourcingLive()} initialPrompt={initialPrompt} />,
   buyers: (initialPrompt) => <OwnershipIntel live={sourcingLive()} initialPrompt={initialPrompt} />,
   intel: (initialPrompt) => <SourcingIntel live={sourcingLive()} initialPrompt={initialPrompt} />,
-  // outreach handled by custom block below (includes OutreachPriorityQueue)
+  // Run › Campaigns (the outbound cadence tools) is handled by the custom block below
   signals: (initialPrompt) => <SourceSignals live={sourcingLive()} initialPrompt={initialPrompt} />,
   radar: (initialPrompt) => <SourceRadar live={sourcingLive()} initialPrompt={initialPrompt} />,
   funnel: (initialPrompt) => <SourceFunnel live={sourcingLive()} initialPrompt={initialPrompt} />,
@@ -137,10 +138,9 @@ export default async function ModulePage(
   if (params.hub === "run" && params.module === "search") {
     return <RunSearch live={copilotLive()} initialPrompt={initialPrompt} />;
   }
-  // Run › Campaigns — outreach analytics over enrolled sequences (formerly the
-  // standalone /campaigns page; /campaigns now redirects here).
-  if (params.hub === "run" && params.module === "campaigns") {
-    return <CampaignsClient />;
+  // Run › Onboarding — a GP takes an LP from invite to an approved decision.
+  if (params.hub === "run" && params.module === "onboarding") {
+    return <OnboardingLive />;
   }
   if (params.hub === "execute" && params.module === "search") {
     return <ExecuteSearch live={copilotLive()} initialPrompt={initialPrompt} />;
@@ -213,7 +213,7 @@ export default async function ModulePage(
   // These pull from the DB via the capital map and GP scorecard helpers.
   const needsCapitalMap =
     (params.hub === "source" && params.module === "lp_pipeline") ||
-    (params.hub === "run" && params.module === "outreach");
+    (params.hub === "run" && params.module === "campaigns");
   const needsGPScorecard = params.hub === "build" && params.module === "profile";
   const isReporting = params.hub === "execute" && params.module === "reporting";
   const isDealPipeline = params.hub === "source" && params.module === "deal_pipeline";
@@ -250,8 +250,10 @@ export default async function ModulePage(
       );
     }
 
-    // Run › Outreach — GPLPMatch priority queue above OutreachStudio.
-    if (params.hub === "run" && params.module === "outreach") {
+    // Run › Campaigns — GPLPMatch priority queue and the outbound cadence tools
+    // (these were Run › Outreach before Onboarding took that slot), above the
+    // analytics over enrolled sequences.
+    if (params.hub === "run" && params.module === "campaigns") {
       const capitalMap = ctx?.orgId ? await buildCapitalMap(supabase) : [];
       const now = Date.now();
       const items: OutreachItem[] = capitalMap
@@ -278,6 +280,9 @@ export default async function ModulePage(
           <OutreachPriorityQueue items={items} />
           <div className="border-t border-line pt-8">
             <OutreachStudio live={sourcingLive()} />
+          </div>
+          <div className="border-t border-line pt-8">
+            <CampaignsClient />
           </div>
         </div>
       );

@@ -85,8 +85,10 @@ const nextConfig = {
       // Network is now a standalone side-rail destination, no longer a Source
       // module. Heal old /source/network links (and its session-frame variant).
       { source: "/source/network", destination: "/network", permanent: true },
-      // Outreach moved from Source to Run.
-      { source: "/source/outreach", destination: "/run/outreach", permanent: true },
+      // Outreach moved from Source to Run, and its cadence tools then moved into
+      // Run › Campaigns when Run › Onboarding took the Outreach slot.
+      { source: "/source/outreach", destination: "/run/campaigns", permanent: true },
+      { source: "/run/outreach", destination: "/run/campaigns", permanent: true },
       // Documents moved from Run to Build.
       { source: "/run/documents", destination: "/build/documents", permanent: true },
       // Run's "Brains" module was renamed to "Evaluate".
