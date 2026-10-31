@@ -9,7 +9,7 @@ import { emailLpLinkAction, generateAccessCodeAction } from "@/app/(app)/[hub]/[
 const btn =
   "rounded-lg border border-line px-3 py-1.5 font-mono text-[11px] uppercase tracking-wider text-fg-muted transition hover:text-fg-secondary disabled:opacity-50";
 
-export function OnboardingLinkPanel({ sessionId, token, expiresAt }: { sessionId: string; token: string; expiresAt: string }) {
+export function OnboardingLinkPanel({ sessionId, token, expiresAt, remindedAt = null }: { sessionId: string; token: string; expiresAt: string; remindedAt?: string | null }) {
   const [copied, setCopied] = useState(false);
   const [note, setNote] = useState<{ tone: "ok" | "error"; text: string } | null>(null);
   const [code, setCode] = useState<{ value: string; expiresAt: string } | null>(null);
@@ -52,6 +52,11 @@ export function OnboardingLinkPanel({ sessionId, token, expiresAt }: { sessionId
       <p className="mt-1 text-xs text-fg-muted">
         {expired ? "This link has expired. Make a new one." : `Expires ${new Date(expiresAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}. The LP enters a code emailed to them to open it.`}
       </p>
+      {remindedAt ? (
+        <p className="mt-1 text-xs text-fg-muted">
+          Reminder emailed {new Date(remindedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}. LPs who haven&apos;t submitted are reminded on days 3 and 6.
+        </p>
+      ) : null}
       <div className="mt-2 flex flex-wrap items-center gap-2">
         <button type="button" onClick={copy} className={btn}>
           {copied ? "Copied ✓" : "Copy link"}

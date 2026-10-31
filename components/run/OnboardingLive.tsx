@@ -37,6 +37,8 @@ interface SessionRow {
   owner_threshold_pct: number;
   token: string;
   expires_at: string;
+  reminded_day3_at: string | null;
+  reminded_day6_at: string | null;
 }
 
 const STAGE_LABEL: Record<OnboardingStatus, string> = {
@@ -76,7 +78,7 @@ async function loadLps(orgId: string): Promise<ReviewLp[]> {
     const [sessionsRes, checksRes, decisionsRes, auditRes, profilesRes, ownersRes, consentsRes] = await Promise.all([
       supabase
         .from("lp_onboarding_sessions")
-        .select("id, lp_name, lp_email, status, review_state, lp_type, owner_threshold_pct, token, expires_at")
+        .select("id, lp_name, lp_email, status, review_state, lp_type, owner_threshold_pct, token, expires_at, reminded_day3_at, reminded_day6_at")
         .eq("organization_id", orgId)
         .order("created_at", { ascending: false }),
       supabase.from("onboarding_checks").select("*").eq("organization_id", orgId),
@@ -102,6 +104,7 @@ async function loadLps(orgId: string): Promise<ReviewLp[]> {
       reviewState: s.review_state,
       token: s.token,
       expiresAt: s.expires_at,
+      remindedAt: [s.reminded_day3_at, s.reminded_day6_at].filter((d): d is string => !!d).sort().pop() ?? null,
       submission: {
         lpType: s.lp_type,
         ownerThresholdPct: s.owner_threshold_pct,
