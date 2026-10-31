@@ -109,24 +109,37 @@ export async function buildViewerPayload(
   if (!(await isRoomOpen(supabase, orgId, roomId))) return null;
 
   let manifest: { document_id: string; sort_order: number }[];
+  // For a room link the signature requirement comes from the SAME read as the
+  // membership: two reads could straddle an unpublish, leaving a document that is
+  // still returned below but absent from the requirement lookup, so it would be
+  // served unlocked.
+  let manifestSig: { document_id: string; require_signature: boolean }[] | null = null;
   if (documentId) {
     manifest = [{ document_id: documentId, sort_order: 0 }];
   } else {
     const { data: manifestRows, error: manifestErr } = await supabase
       .from("data_room_documents")
-      .select("document_id, sort_order")
+      .select("document_id, sort_order, require_signature")
       .eq("organization_id", orgId)
       .eq("room_id", roomId)
       .order("sort_order", { ascending: true });
     // Fail closed: an errored read is not an empty room.
     if (manifestErr) return null;
-    manifest = (manifestRows ?? []) as { document_id: string; sort_order: number }[];
+    const rows = (manifestRows ?? []) as {
+      document_id: string;
+      sort_order: number;
+      require_signature: boolean;
+    }[];
+    manifest = rows;
+    manifestSig = rows;
   }
   const manifestOrder = new Map(manifest.map((m) => [m.document_id, m.sort_order ?? 0]));
 
   // Which of these files need a signature, and which this reader has signed.
   // The manifest row is the source of truth even for a single-document link.
-  const { data: sigRows, error: sigErr } = manifest.length
+  const { data: sigRows, error: sigErr } = manifestSig
+    ? { data: manifestSig, error: null }
+    : manifest.length
     ? await supabase
         .from("data_room_documents")
         .select("document_id, require_signature")

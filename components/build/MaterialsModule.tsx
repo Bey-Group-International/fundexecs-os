@@ -115,11 +115,12 @@ export async function MaterialsModule({ roomId }: { roomId?: string } = {}) {
   const cappedIds = shares.filter((s) => s.max_readers).map((s) => s.id);
   const readerCounts = new Map<string, number>();
   if (cappedIds.length) {
-    const { data: readerRows } = await supabase
+    const { data: readerRows, error: readerErr } = await supabase
       .from("data_room_link_readers")
       .select("share_id")
       .eq("organization_id", orgId)
       .in("share_id", cappedIds);
+    if (readerErr) throw new Error(`Couldn't load link reader counts: ${readerErr.message}`);
     for (const r of (readerRows ?? []) as { share_id: string }[]) {
       readerCounts.set(r.share_id, (readerCounts.get(r.share_id) ?? 0) + 1);
     }

@@ -155,15 +155,29 @@ export async function unpublishDocument(formData: FormData): Promise<void> {
   if (!roomId || !documentId) return;
 
   const supabase = await createServerClient();
-  const { error } = await supabase
+  const { data: deleted, error } = await supabase
     .from("data_room_documents")
     .delete()
     .eq("organization_id", ctx.orgId)
     .eq("room_id", roomId)
-    .eq("document_id", documentId);
+    .eq("document_id", documentId)
+    .select("id");
   // A silent failure here leaves a file the operator believes is withdrawn
   // still visible to every link into the room.
   if (error) throw new Error(`Couldn't withdraw the document: ${error.message}`);
+  if (!deleted?.length) {
+    // Nothing deleted and no error: either it was already withdrawn, or a row
+    // policy filtered the delete. Only the first is a no-op.
+    const { data: remaining, error: verifyErr } = await supabase
+      .from("data_room_documents")
+      .select("id")
+      .eq("organization_id", ctx.orgId)
+      .eq("room_id", roomId)
+      .eq("document_id", documentId)
+      .maybeSingle();
+    if (verifyErr) throw new Error(`Couldn't verify the withdrawal: ${verifyErr.message}`);
+    if (remaining) throw new Error("Couldn't withdraw the document: permission denied");
+  }
   revalidatePath(ROOMS);
   revalidatePath(LIBRARY);
 }

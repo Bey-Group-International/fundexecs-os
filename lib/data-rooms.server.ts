@@ -16,13 +16,16 @@ async function selectRooms(
   supabase: Awaited<ReturnType<typeof createServerClient>>,
   orgId: string,
 ): Promise<DataRoom[]> {
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from("data_rooms")
     .select("*")
     .eq("organization_id", orgId)
     .is("archived_at", null)
     .order("is_default", { ascending: false })
     .order("created_at", { ascending: true });
+  // An errored read is not "no rooms": returning [] would send listRooms off to
+  // create a default room and render "No data room yet." over an existing one.
+  if (error) throw new Error(`Couldn't load data rooms: ${error.message}`);
   return (data ?? []) as DataRoom[];
 }
 
