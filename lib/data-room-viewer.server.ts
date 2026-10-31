@@ -11,7 +11,7 @@ import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { blendTrackRecord } from "@/lib/track-record";
 import { DATA_ROOM_SECTIONS } from "@/lib/data-room";
-import { sectionsAllowedBy } from "@/lib/data-rooms";
+import { roomSectionKey, sectionsAllowedBy } from "@/lib/data-rooms";
 import { isUploadedFile, previewKindFor } from "@/lib/document-files";
 import type { Database } from "@/lib/supabase/database.types";
 import type {
@@ -112,26 +112,31 @@ export async function buildViewerPayload(
   if (documentId) {
     manifest = [{ document_id: documentId, sort_order: 0 }];
   } else {
-    const { data: manifestRows } = await supabase
+    const { data: manifestRows, error: manifestErr } = await supabase
       .from("data_room_documents")
       .select("document_id, sort_order")
       .eq("organization_id", orgId)
       .eq("room_id", roomId)
       .order("sort_order", { ascending: true });
+    // Fail closed: an errored read is not an empty room.
+    if (manifestErr) return null;
     manifest = (manifestRows ?? []) as { document_id: string; sort_order: number }[];
   }
   const manifestOrder = new Map(manifest.map((m) => [m.document_id, m.sort_order ?? 0]));
 
   // Which of these files need a signature, and which this reader has signed.
   // The manifest row is the source of truth even for a single-document link.
-  const { data: sigRows } = manifest.length
+  const { data: sigRows, error: sigErr } = manifest.length
     ? await supabase
         .from("data_room_documents")
         .select("document_id, require_signature")
         .eq("organization_id", orgId)
         .eq("room_id", roomId)
         .in("document_id", manifest.map((m) => m.document_id))
-    : { data: [] as { document_id: string; require_signature: boolean }[] };
+    : { data: [] as { document_id: string; require_signature: boolean }[], error: null };
+  // Fail closed. If this read errored, `needsSignature` would be empty and every
+  // file that requires a signature would be served unlocked.
+  if (sigErr) return null;
   const needsSignature = new Set(
     ((sigRows ?? []) as { document_id: string; require_signature: boolean }[])
       .filter((r) => r.require_signature)
@@ -170,11 +175,13 @@ export async function buildViewerPayload(
           .select("*")
           .eq("organization_id", orgId)
           .in("id", manifest.map((m) => m.document_id))
-      : Promise.resolve({ data: [] as Document[] }),
+      : Promise.resolve({ data: [] as Document[], error: null }),
   ]);
 
   const org = orgRes.data as Organization | null;
   if (!org) return null;
+  // A failed document read would render the room as empty, not as unavailable.
+  if (docsRes.error) return null;
 
   const thesis = thesisRes.data as InvestmentThesis | null;
   const records = (recordsRes.data ?? []) as TrackRecord[];
@@ -200,7 +207,7 @@ export async function buildViewerPayload(
   );
   const docsBySection = new Map<string, ViewerDoc[]>();
   for (const d of ordered) {
-    const k = d.doc_type ?? "other";
+    const k = roomSectionKey(d.doc_type);
     const locked = needsSignature.has(d.id) && !signed.has(d.id);
     const doc: ViewerDoc = locked
       ? {

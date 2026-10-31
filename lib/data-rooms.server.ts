@@ -68,20 +68,24 @@ export function pickRoom(rooms: DataRoom[], requestedId?: string): DataRoom | nu
  */
 export async function loadRoomDocuments(orgId: string, roomId: string): Promise<RoomDocument[]> {
   const supabase = await createServerClient();
-  const { data: manifest } = await supabase
+  const { data: manifest, error: manifestErr } = await supabase
     .from("data_room_documents")
     .select("document_id, sort_order, require_signature")
     .eq("organization_id", orgId)
     .eq("room_id", roomId)
     .order("sort_order", { ascending: true });
+  // Throw rather than return []: a failed read shown as an empty room reads as
+  // "nothing is published", and the operator may re-publish over it.
+  if (manifestErr) throw new Error(`Couldn't load the room's documents: ${manifestErr.message}`);
   const rows = (manifest ?? []) as { document_id: string; sort_order: number; require_signature: boolean }[];
   if (rows.length === 0) return [];
 
-  const { data: docRows } = await supabase
+  const { data: docRows, error: docsErr } = await supabase
     .from("documents")
     .select("*")
     .eq("organization_id", orgId)
     .in("id", rows.map((r) => r.document_id));
+  if (docsErr) throw new Error(`Couldn't load the room's documents: ${docsErr.message}`);
   const byId = new Map(((docRows ?? []) as Document[]).map((d) => [d.id, d]));
 
   return rows.flatMap((r) => {

@@ -12,6 +12,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { createServiceClient, hasSupabaseServiceEnv } from "@/lib/supabase/server";
 import { gateSatisfied, readGatePass } from "@/lib/data-room-gate";
 import { isRoomOpen } from "@/lib/data-room-viewer.server";
+import { roomSectionKey } from "@/lib/data-rooms";
 import type { DataRoomShare, Database, Document } from "@/lib/supabase/database.types";
 
 export type ShareAccess =
@@ -84,13 +85,16 @@ export async function resolveSharedDocument(
   // file requires a signature. Being in the org's library is not enough — an
   // unpublished draft must stay unreachable even to someone holding a valid
   // token and the document's id.
-  const { data: manifestRow } = await supabase
+  const { data: manifestRow, error: manifestErr } = await supabase
     .from("data_room_documents")
     .select("id, require_signature")
     .eq("organization_id", share.organization_id)
     .eq("room_id", roomId)
     .eq("document_id", documentId)
     .maybeSingle();
+  // Fail closed: for a single-document link an errored read would otherwise look
+  // like "no signature required" and open a file that needs one.
+  if (manifestErr) return { ok: false };
   if (!share.document_id && !manifestRow) return { ok: false };
   const signatureRequired = Boolean((manifestRow as { require_signature?: boolean } | null)?.require_signature);
 
@@ -105,7 +109,9 @@ export async function resolveSharedDocument(
 
   if (!share.document_id) {
     const allowed = share.allowed_sections ?? null;
-    if (allowed && (!doc.doc_type || !allowed.includes(doc.doc_type))) return { ok: false };
+    // Same section rule as the viewer, so a file the viewer lists under "Other"
+    // is not refused here (or opened) on a different reading of its doc_type.
+    if (allowed && !allowed.includes(roomSectionKey(doc.doc_type))) return { ok: false };
   }
 
   // A file that needs a signature stays shut — preview, open and download alike —

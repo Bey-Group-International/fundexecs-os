@@ -103,6 +103,11 @@ export async function MaterialsModule({ roomId }: { roomId?: string } = {}) {
       .order("signed_at", { ascending: false }),
   ]);
 
+  // An errored read must not render as "no documents" / "no links": the operator
+  // would believe a live link is gone, or re-upload what is already there.
+  if (libraryRes.error) throw new Error(`Couldn't load the document library: ${libraryRes.error.message}`);
+  if (sharesRes.error) throw new Error(`Couldn't load the room's links: ${sharesRes.error.message}`);
+
   const libraryDocs = (libraryRes.data ?? []) as Document[];
   const shares = (sharesRes.data ?? []) as DataRoomShare[];
   // Readers admitted per capped link, for "3 of 10 readers". Only capped links

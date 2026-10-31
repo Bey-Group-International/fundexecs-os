@@ -12,6 +12,7 @@ import {
   shareDocCount,
   sectionsAllowedBy,
   sectionLabel,
+  roomSectionKey,
   type RoomDocument,
 } from "@/lib/data-rooms";
 
@@ -199,5 +200,15 @@ describe("sectionsAllowedBy", () => {
   it("works on any shape carrying a key — GP rows and viewer sections alike", () => {
     const viewerish = [{ key: "thesis", label: "Thesis", docs: [{ id: "d1" }] }];
     expect(sectionsAllowedBy(["thesis"], viewerish)[0].docs).toHaveLength(1);
+  });
+});
+
+describe("roomSectionKey", () => {
+  it("keeps a known section and files anything else under the catch-all", () => {
+    expect(roomSectionKey("legal")).toBe("legal");
+    expect(roomSectionKey("wiki")).toBe("other");
+    expect(roomSectionKey("")).toBe("other");
+    expect(roomSectionKey(null)).toBe("other");
+    expect(roomSectionKey(undefined)).toBe("other");
   });
 });

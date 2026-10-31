@@ -7,6 +7,7 @@
 import { revalidatePath } from "next/cache";
 import { createServerClient } from "@/lib/supabase/server";
 import { getSessionContext } from "@/lib/auth";
+import { roomSectionKey } from "@/lib/data-rooms";
 
 const ROOMS = "/build/data_room";
 const LIBRARY = "/build/documents";
@@ -25,13 +26,14 @@ export async function createRoom(formData: FormData): Promise<void> {
     .select("id", { count: "exact", head: true })
     .eq("organization_id", ctx.orgId);
 
-  await supabase.from("data_rooms").insert({
+  const { error } = await supabase.from("data_rooms").insert({
     organization_id: ctx.orgId,
     name,
     description,
     is_default: (count ?? 0) === 0,
     created_by: ctx.userId,
   });
+  if (error) throw new Error(`Couldn't create the room: ${error.message}`);
   revalidatePath(ROOMS);
 }
 
@@ -49,11 +51,12 @@ export async function renameRoom(formData: FormData): Promise<void> {
   if (description !== undefined) patch.description = description;
 
   const supabase = await createServerClient();
-  await supabase
+  const { error } = await supabase
     .from("data_rooms")
     .update(patch)
     .eq("id", id)
     .eq("organization_id", ctx.orgId);
+  if (error) throw new Error(`Couldn't update the room: ${error.message}`);
   revalidatePath(ROOMS);
 }
 
@@ -90,13 +93,14 @@ export async function archiveRoom(formData: FormData): Promise<void> {
     .eq("room_id", id)
     .eq("organization_id", ctx.orgId)
     .is("revoked_at", null);
-  if (revokeErr) return;
+  if (revokeErr) throw new Error(`Couldn't close the room's links: ${revokeErr.message}`);
 
-  await supabase
+  const { error: archiveErr } = await supabase
     .from("data_rooms")
     .update({ archived_at: now })
     .eq("id", id)
     .eq("organization_id", ctx.orgId);
+  if (archiveErr) throw new Error(`Couldn't archive the room: ${archiveErr.message}`);
   revalidatePath(ROOMS);
 }
 
@@ -151,12 +155,15 @@ export async function unpublishDocument(formData: FormData): Promise<void> {
   if (!roomId || !documentId) return;
 
   const supabase = await createServerClient();
-  await supabase
+  const { error } = await supabase
     .from("data_room_documents")
     .delete()
     .eq("organization_id", ctx.orgId)
     .eq("room_id", roomId)
     .eq("document_id", documentId);
+  // A silent failure here leaves a file the operator believes is withdrawn
+  // still visible to every link into the room.
+  if (error) throw new Error(`Couldn't withdraw the document: ${error.message}`);
   revalidatePath(ROOMS);
   revalidatePath(LIBRARY);
 }
@@ -207,15 +214,16 @@ export async function moveRoomDocument(formData: FormData): Promise<void> {
 
   // Only peers in the same section swap — order is meaningful within a section,
   // not across the whole room.
-  const { data: docRows } = await supabase
+  const { data: docRows, error: docErr } = await supabase
     .from("documents")
     .select("id, doc_type, name")
     .eq("organization_id", orgId)
     .in("id", rows.map((r) => r.document_id));
+  if (docErr) throw new Error(`Couldn't reorder the document: ${docErr.message}`);
   const docMeta = new Map(
     ((docRows ?? []) as { id: string; doc_type: string | null; name: string }[]).map((d) => [
       d.id,
-      { section: d.doc_type ?? "other", name: d.name },
+      { section: roomSectionKey(d.doc_type), name: d.name },
     ]),
   );
   const target = rows.find((r) => r.document_id === documentId);
