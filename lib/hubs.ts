@@ -60,7 +60,10 @@ export const HUBS: HubDefinition[] = [
       { key: "underwriting", label: "Underwriting" },
       { key: "stress_test", label: "Stress Test" },
       { key: "risk", label: "Risk" },
-      { key: "outreach", label: "Outreach" },
+      // Onboarding is where a GP takes an LP from invite through identity,
+      // background and accreditation review to an approved decision. The outbound
+      // cadence tools that used to be "Outreach" live in Campaigns.
+      { key: "onboarding", label: "Onboarding" },
       { key: "campaigns", label: "Campaigns" },
       { key: "evaluate", label: "Evaluate" },
     ],
