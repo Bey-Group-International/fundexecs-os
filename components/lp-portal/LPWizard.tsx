@@ -5,13 +5,15 @@
 // screening, how they qualify and where the money comes from, then submit. Each
 // step is saved as the LP goes, so they can stop and return through the same
 // link. Submitting hands the file to the fund manager; nothing here approves anyone.
-import { useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
+  checkIdentityAction,
   grantConsentAction,
   saveAccreditationAction,
   saveDetailsAction,
   saveOwnersAction,
+  startIdentityAction,
   submitWizardAction,
 } from "@/app/lp/[token]/wizard-actions";
 import {
@@ -29,6 +31,8 @@ import {
   type ConsentScope,
   type WizardStepKey,
 } from "@/lib/lp-wizard";
+import { goTo } from "@/lib/browser-navigate";
+import type { IdentityState } from "@/lib/lp-identity";
 import type { LpAccreditationBasis, LpEntityType, LpType } from "@/lib/supabase/database.types";
 
 export interface WizardOwner {
@@ -73,20 +77,25 @@ export function LPWizard({
   lpType,
   ownerThresholdPct,
   changesRequested,
+  identity,
   initial,
 }: {
   token: string;
   lpType: LpType;
   ownerThresholdPct: number;
   changesRequested: boolean;
+  /** Whether online ID verification is set up, and where this LP's verification stands. */
+  identity: { enabled: boolean; state: IdentityState };
   initial: WizardInitial;
 }) {
   const router = useRouter();
-  const steps = stepsFor(lpType);
+  const steps = stepsFor(lpType, identity.enabled);
 
   const [data, setData] = useState(initial);
-  const missingNow = (d: WizardInitial) =>
+  const [idState, setIdState] = useState<IdentityState>(identity.state);
+  const missingNow = (d: WizardInitial, idVerified: boolean) =>
     incompleteSteps({
+      identity: { enabled: identity.enabled, verified: idVerified },
       lpType,
       profile: {
         legal_name: d.legalName || null,
@@ -102,9 +111,9 @@ export function LPWizard({
       consents: d.consents.map((c) => ({ scope: c.scope, text_version: c.textVersion })),
     });
 
-  const firstOpen = steps.find((s) => s !== "review" && missingNow(initial).includes(s)) ?? "review";
+  const firstOpen = steps.find((s) => s !== "review" && missingNow(initial, identity.state === "verified").includes(s)) ?? "review";
   const [step, setStep] = useState<WizardStepKey>(firstOpen);
-  const missing = missingNow(data);
+  const missing = missingNow(data, idState === "verified");
   const next = () => setStep(steps[Math.min(steps.indexOf(step) + 1, steps.length - 1)]);
 
   return (
@@ -143,6 +152,16 @@ export function LPWizard({
       {step === "details" ? <DetailsStep token={token} lpType={lpType} data={data} onSaved={(d) => { setData(d); next(); }} /> : null}
       {step === "owners" ? <OwnersStep token={token} thresholdPct={ownerThresholdPct} data={data} onSaved={(d) => { setData(d); next(); }} /> : null}
       {step === "consent" ? <ConsentStep token={token} data={data} onChange={setData} onContinue={next} /> : null}
+      {step === "identity" ? (
+        <IdentityStep
+          token={token}
+          lpType={lpType}
+          state={idState}
+          returning={identity.state !== "none" && identity.state !== "verified"}
+          onState={setIdState}
+          onContinue={next}
+        />
+      ) : null}
       {step === "accreditation" ? <AccreditationStep token={token} data={data} onSaved={(d) => { setData(d); next(); }} /> : null}
       {step === "review" ? (
         <ReviewStep
@@ -391,6 +410,112 @@ function ConsentBlock({ token, scope, data, onChange }: { token: string; scope: 
       )}
       <ErrorLine error={error} />
     </div>
+  );
+}
+
+function IdentityStep({
+  token,
+  lpType,
+  state,
+  returning,
+  onState,
+  onContinue,
+}: {
+  token: string;
+  lpType: LpType;
+  state: IdentityState;
+  /** The LP already started verification, so check how it went as soon as they arrive. */
+  returning: boolean;
+  onState: (s: IdentityState) => void;
+  onContinue: () => void;
+}) {
+  const [error, setError] = useState<string | null>(null);
+  const [pending, startTransition] = useTransition();
+  const polls = useRef(0);
+  const [tick, setTick] = useState(0);
+
+  const check = () =>
+    startTransition(async () => {
+      const res = await checkIdentityAction(token).catch(() => ({ ok: false as const, error: "Something went wrong. Try again." }));
+      setTick((t) => t + 1);
+      if (!res.ok) return setError(res.error);
+      setError(null);
+      onState(res.state);
+    });
+
+  // On coming back from the verification page, and while it is being checked, ask for the result.
+  useEffect(() => {
+    if (state === "verified") return;
+    if (state !== "processing" && !(returning && polls.current === 0)) return;
+    if (polls.current >= 20) return;
+    const wait = polls.current === 0 ? 0 : 4000;
+    const timer = setTimeout(() => {
+      polls.current += 1;
+      check();
+    }, wait);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state, returning, tick]);
+
+  const start = () =>
+    startTransition(async () => {
+      setError(null);
+      const res = await startIdentityAction(token).catch(() => ({ ok: false as const, error: "Something went wrong. Try again." }));
+      if (!res.ok) return setError(res.error);
+      onState(res.state);
+      // Only ever follow a secure link.
+      if (res.url && res.url.startsWith("https://")) goTo(res.url);
+    });
+
+  return (
+    <Section
+      title="Verify your identity"
+      hint={
+        lpType === "individual"
+          ? "You'll take a photo of a government ID and a selfie on a secure page run by Stripe."
+          : "The person who signs for the entity takes a photo of a government ID and a selfie on a secure page run by Stripe."
+      }
+    >
+      <p className="text-sm text-fg-secondary">
+        Stripe keeps the images. Your fund manager sees only whether you passed. It takes about two minutes, and you&apos;ll come back to this page afterwards.
+      </p>
+      {state === "verified" ? (
+        <p role="status" className="text-sm text-emerald-300">
+          ✓ Your identity is verified.
+        </p>
+      ) : null}
+      {state === "processing" ? (
+        <p role="status" className="text-sm text-fg-primary">
+          Checking your documents. This usually takes under a minute.
+        </p>
+      ) : null}
+      {state === "needs_input" ? (
+        <p role="status" className="text-sm text-fg-primary">
+          Your verification isn&apos;t finished yet. Open it again to continue.
+        </p>
+      ) : null}
+      <ErrorLine error={error} />
+      <div className="flex flex-wrap items-center gap-3">
+        {state === "verified" ? (
+          <button type="button" className={primary} onClick={onContinue}>
+            Continue
+          </button>
+        ) : (
+          <>
+            {state !== "processing" ? (
+              <button type="button" disabled={pending} className={primary} onClick={start}>
+                {pending ? "Opening…" : state === "needs_input" ? "Continue verification" : "Verify my identity"}
+              </button>
+            ) : null}
+            {state === "processing" || state === "needs_input" ? (
+              <button type="button" disabled={pending} className={quiet} onClick={check}>
+                Check status
+              </button>
+            ) : null}
+          </>
+        )}
+      </div>
+    </Section>
   );
 }
 

@@ -7,6 +7,9 @@ import { LPAccessGate } from "@/components/lp-portal/LPAccessGate";
 import { LPWizard, type WizardInitial } from "@/components/lp-portal/LPWizard";
 import { hasLpPass } from "@/lib/lp-access.server";
 import { maskEmail } from "@/lib/lp-wizard";
+import { stripeIdentityProvider } from "@/lib/providers/stripe-identity";
+import { readIdentityCheck } from "@/lib/lp-identity.server";
+import type { IdentityState } from "@/lib/lp-identity";
 import type { LpType } from "@/lib/supabase/database.types";
 import { renderDocumentTemplate } from "@/lib/document-templates";
 import type { OnboardingStatus } from "@/lib/lp-onboarding";
@@ -107,6 +110,18 @@ export default async function LPOnboardingPortal(props: { params: Promise<{ toke
         />
       );
     }
+    const identityEnabled = stripeIdentityProvider.isConfigured();
+    const identityCheck = identityEnabled ? await readIdentityCheck(supabase, sessionId) : null;
+    // A started Stripe verification is "needs_input" until the wizard asks Stripe how it went.
+    const identityState: IdentityState = !identityCheck
+      ? "none"
+      : identityCheck.status === "clear"
+        ? "verified"
+        : identityCheck.status === "failed"
+          ? "canceled"
+          : identityCheck.method === "stripe_identity"
+            ? "needs_input"
+            : "none";
     const [profileRes, ownersRes, consentsRes] = await Promise.all([
       supabase.from("lp_onboarding_profiles").select("*").eq("session_id", sessionId).maybeSingle(),
       supabase.from("lp_onboarding_owners").select("*").eq("session_id", sessionId).order("created_at", { ascending: true }),
@@ -142,6 +157,7 @@ export default async function LPOnboardingPortal(props: { params: Promise<{ toke
         lpType={sessionRow!.lp_type as LpType}
         ownerThresholdPct={sessionRow!.owner_threshold_pct as number}
         changesRequested={reviewState === "changes_requested"}
+        identity={{ enabled: identityEnabled, state: identityState }}
         initial={initial}
       />
     );

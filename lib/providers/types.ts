@@ -112,6 +112,8 @@ export interface IdentityVerificationParams {
   subjectEmail?: string;
   level: VerificationLevel;
   requestedBy: string;
+  /** Where the subject lands after completing a hosted verification flow. Set by the server, never by the subject. */
+  returnUrl?: string;
 }
 
 export interface VerificationRecord {
@@ -121,6 +123,8 @@ export interface VerificationRecord {
   completedAt?: string;
   expiresAt?: string;
   notes?: string;
+  /** The vendor's own status word (for example Stripe's `processing`), for callers that need more than `status`. */
+  providerStatus?: string;
 }
 
 export interface IdentityVerificationProvider {

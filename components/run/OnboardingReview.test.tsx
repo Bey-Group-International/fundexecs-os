@@ -1,8 +1,10 @@
 const recordCheck = jest.fn(async (_input: unknown): Promise<{ ok: true } | { ok: false; error: string }> => ({ ok: true }));
+const refreshIdentity = jest.fn(async (_id: string): Promise<{ ok: true; verified?: boolean } | { ok: false; error: string }> => ({ ok: true, verified: true }));
 const recordDecision = jest.fn(async (_input: unknown): Promise<{ ok: true } | { ok: false; error: string }> => ({ ok: true }));
 jest.mock("@/app/(app)/[hub]/[module]/onboarding-actions", () => ({
   recordOnboardingCheck: (i: unknown) => recordCheck(i),
   recordOnboardingDecision: (i: unknown) => recordDecision(i),
+  refreshIdentityCheckAction: (id: string) => refreshIdentity(id),
 }));
 
 const emailLink = jest.fn(async (_id: string): Promise<{ ok: true; sent: boolean } | { ok: false; error: string }> => ({ ok: true, sent: true }));
@@ -44,6 +46,7 @@ const lp = (over: Partial<ReviewLp> = {}): ReviewLp => ({
 const open = () => fireEvent.click(screen.getByRole("button", { name: /Calpers Pension/ }));
 
 beforeEach(() => {
+  refreshIdentity.mockClear();
   emailLink.mockClear();
   makeCode.mockClear();
   recordCheck.mockClear();
@@ -284,5 +287,51 @@ describe("what the LP submitted", () => {
     render(<OnboardingReview lps={[lp()]} />);
     open();
     expect(screen.queryByText("What the LP submitted")).toBeNull();
+  });
+});
+
+describe("an ID check from Stripe Identity", () => {
+  const stripeCheck = (status: "pending" | "clear") => ({ ...clear("identity"), status, method: "stripe_identity" as const, summary: "Waiting for the LP." });
+
+  it("is labelled, and can be refreshed while pending", async () => {
+    render(<OnboardingReview lps={[lp({ checks: [stripeCheck("pending")] })]} />);
+    open();
+    expect(screen.getByText("Stripe Identity")).toBeInTheDocument();
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Refresh Stripe result" }));
+    });
+    expect(refreshIdentity).toHaveBeenCalledWith("s1");
+    expect(screen.getByText("Verified by Stripe.")).toBeInTheDocument();
+  });
+
+  it("says when Stripe has no final result yet", async () => {
+    refreshIdentity.mockResolvedValueOnce({ ok: true, verified: false });
+    render(<OnboardingReview lps={[lp({ checks: [stripeCheck("pending")] })]} />);
+    open();
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Refresh Stripe result" }));
+    });
+    expect(screen.getByText(/Not verified yet/)).toBeInTheDocument();
+  });
+
+  it("shows why a refresh failed", async () => {
+    refreshIdentity.mockResolvedValueOnce({ ok: false, error: "We couldn't reach the verification service." });
+    render(<OnboardingReview lps={[lp({ checks: [stripeCheck("pending")] })]} />);
+    open();
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Refresh Stripe result" }));
+    });
+    expect(screen.getByRole("alert")).toHaveTextContent("couldn't reach");
+  });
+
+  it("has no refresh once settled, and none for a check recorded by hand", () => {
+    const { unmount } = render(<OnboardingReview lps={[lp({ checks: [stripeCheck("clear")] })]} />);
+    open();
+    expect(screen.queryByRole("button", { name: "Refresh Stripe result" })).toBeNull();
+    unmount();
+    render(<OnboardingReview lps={[lp({ checks: [{ ...clear("identity"), status: "pending", method: "manual" }] })]} />);
+    open();
+    expect(screen.queryByText("Stripe Identity")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Refresh Stripe result" })).toBeNull();
   });
 });

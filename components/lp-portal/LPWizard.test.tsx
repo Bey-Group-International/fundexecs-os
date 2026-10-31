@@ -8,13 +8,21 @@ const saveOwners = jest.fn(ok);
 const grantConsent = jest.fn(ok);
 const saveAccreditation = jest.fn(ok);
 const submit = jest.fn(ok);
+type IdResult = { ok: true; state: "none" | "needs_input" | "processing" | "verified" | "canceled"; url: string | null } | { ok: false; error: string };
+const startIdentity = jest.fn(async (..._a: unknown[]): Promise<IdResult> => ({ ok: true, state: "needs_input", url: "https://verify.stripe.com/start/abc" }));
+const checkIdentity = jest.fn(async (..._a: unknown[]): Promise<IdResult> => ({ ok: true, state: "verified", url: null }));
 jest.mock("@/app/lp/[token]/wizard-actions", () => ({
   saveDetailsAction: (...a: unknown[]) => saveDetails(...a),
   saveOwnersAction: (...a: unknown[]) => saveOwners(...a),
   grantConsentAction: (...a: unknown[]) => grantConsent(...a),
   saveAccreditationAction: (...a: unknown[]) => saveAccreditation(...a),
   submitWizardAction: (...a: unknown[]) => submit(...a),
+  startIdentityAction: (...a: unknown[]) => startIdentity(...a),
+  checkIdentityAction: (...a: unknown[]) => checkIdentity(...a),
 }));
+
+const assign = jest.fn();
+jest.mock("@/lib/browser-navigate", () => ({ goTo: (u: string) => assign(u) }));
 
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { LPWizard, type WizardInitial } from "./LPWizard";
@@ -46,7 +54,7 @@ const finished: WizardInitial = {
 };
 
 const wizard = (over: Partial<React.ComponentProps<typeof LPWizard>> = {}) =>
-  render(<LPWizard token="tok" lpType="individual" ownerThresholdPct={25} changesRequested={false} initial={blank} {...over} />);
+  render(<LPWizard token="tok" lpType="individual" ownerThresholdPct={25} changesRequested={false} identity={{ enabled: false, state: "none" }} initial={blank} {...over} />);
 const click = async (name: string | RegExp) =>
   act(async () => {
     fireEvent.click(screen.getByRole("button", { name }));
@@ -54,7 +62,7 @@ const click = async (name: string | RegExp) =>
 const stepNames = () => screen.getAllByRole("listitem").map((li) => li.textContent);
 
 beforeEach(() => {
-  for (const m of [refresh, saveDetails, saveOwners, grantConsent, saveAccreditation, submit]) m.mockClear();
+  for (const m of [refresh, saveDetails, saveOwners, grantConsent, saveAccreditation, submit, startIdentity, checkIdentity]) m.mockClear();
 });
 
 describe("the steps an LP sees", () => {
@@ -208,5 +216,96 @@ describe("review and submit", () => {
     await click("Submit for review");
     expect(screen.getByRole("alert")).toHaveTextContent("Finish these first");
     expect(refresh).not.toHaveBeenCalled();
+  });
+});
+
+describe("ID verification step", () => {
+  const consentDone = { ...finished, accreditationBasis: "" as const, accreditationStated: false, sourceOfFunds: "" };
+  const withId = (state: "none" | "needs_input" | "processing" | "verified" | "canceled", over: Partial<React.ComponentProps<typeof LPWizard>> = {}) =>
+    wizard({ identity: { enabled: true, state }, initial: consentDone, ...over });
+
+  beforeEach(() => assign.mockClear());
+  afterEach(() => jest.useRealTimers());
+
+  it("isn't a step where online verification isn't set up", () => {
+    wizard({ initial: consentDone });
+    expect(stepNames().join("|")).not.toMatch(/ID verification/);
+  });
+
+  it("is a step after consent where it is, and the wizard opens on it", () => {
+    withId("none");
+    expect(stepNames().join("|")).toMatch(/Consent.*ID verification.*Accreditation/);
+    expect(screen.getByRole("heading", { name: "Verify your identity" })).toBeInTheDocument();
+  });
+
+  it("sends the LP to the secure verification page", async () => {
+    withId("none");
+    await click("Verify my identity");
+    expect(startIdentity).toHaveBeenCalledWith("tok");
+    expect(assign).toHaveBeenCalledWith("https://verify.stripe.com/start/abc");
+  });
+
+  it("will only follow a secure link", async () => {
+    startIdentity.mockResolvedValueOnce({ ok: true, state: "needs_input", url: "http://evil.example/x" });
+    withId("none");
+    await click("Verify my identity");
+    expect(assign).not.toHaveBeenCalled();
+  });
+
+  it("shows why it couldn't start", async () => {
+    startIdentity.mockResolvedValueOnce({ ok: false, error: "Give your consent to ID verification first." });
+    withId("none");
+    await click("Verify my identity");
+    expect(screen.getByRole("alert")).toHaveTextContent("consent");
+    expect(assign).not.toHaveBeenCalled();
+  });
+
+  it("asks how it went as soon as an LP who started comes back, and moves on once verified", async () => {
+    await act(async () => {
+      withId("needs_input");
+    });
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 10));
+    });
+    expect(checkIdentity).toHaveBeenCalledWith("tok");
+    expect(screen.getByText("✓ Your identity is verified.")).toBeInTheDocument();
+    await click("Continue");
+    expect(screen.getByRole("heading", { name: "Accreditation and source of funds" })).toBeInTheDocument();
+  });
+
+  it("keeps checking while Stripe is processing", async () => {
+    jest.useFakeTimers();
+    checkIdentity.mockResolvedValue({ ok: true, state: "processing", url: null });
+    withId("processing");
+    expect(screen.getByRole("status")).toHaveTextContent(/Checking your documents/);
+    for (let i = 0; i < 3; i++) {
+      await act(async () => {
+        await jest.advanceTimersByTimeAsync(4100);
+      });
+    }
+    expect(checkIdentity.mock.calls.length).toBeGreaterThanOrEqual(3);
+    expect(screen.queryByRole("button", { name: "Verify my identity" })).toBeNull();
+  });
+
+  it("offers to continue an unfinished verification", async () => {
+    checkIdentity.mockResolvedValueOnce({ ok: true, state: "needs_input", url: "https://verify.stripe.com/start/abc" });
+    withId("needs_input");
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 10));
+    });
+    expect(screen.getByRole("button", { name: "Continue verification" })).toBeInTheDocument();
+  });
+
+  it("holds the submit button until the ID is verified", () => {
+    wizard({ identity: { enabled: true, state: "none" }, initial: finished });
+    fireEvent.click(screen.getByRole("button", { name: /Review and submit/ }));
+    expect(screen.getByRole("button", { name: "Submit for review" })).toBeDisabled();
+    expect(screen.getByText("Still to do:").parentElement).toHaveTextContent("ID verification");
+  });
+
+  it("lets a verified LP submit", () => {
+    wizard({ identity: { enabled: true, state: "verified" }, initial: finished });
+    expect(screen.getByRole("heading", { name: "Review and submit" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Submit for review" })).toBeEnabled();
   });
 });

@@ -33,6 +33,17 @@ describe("stepsFor", () => {
   });
 });
 
+describe("the ID verification step", () => {
+  it("appears after consent and before accreditation, only where online verification is set up", () => {
+    for (const t of ["individual", "entity", "institutional"] as const) {
+      expect(stepsFor(t)).not.toContain("identity");
+      const s = stepsFor(t, true);
+      expect(s.indexOf("consent")).toBeLessThan(s.indexOf("identity"));
+      expect(s.indexOf("identity")).toBeLessThan(s.indexOf("accreditation"));
+    }
+  });
+});
+
 describe("wizardEditable", () => {
   it.each([
     ["not_started", true],
@@ -164,6 +175,30 @@ describe("incompleteSteps", () => {
   it("needs the accreditation statement and a source of funds", () => {
     expect(incompleteSteps(full({ profile: { ...profile, accreditation_statement_at: null } }))).toEqual(["accreditation"]);
     expect(incompleteSteps(full({ profile: { ...profile, source_of_funds: "short" } }))).toEqual(["accreditation"]);
+  });
+});
+
+describe("incompleteSteps with ID verification", () => {
+  const profile = {
+    legal_name: "Jo Park",
+    entity_type: "individual" as const,
+    country: "US",
+    signatory_name: null,
+    signatory_title: null,
+    source_of_funds: "Sale of my company in 2022",
+    accreditation_basis: "accredited_investor" as const,
+    accreditation_statement_at: "2026-10-31T00:00:00Z",
+  };
+  const consents = CONSENT_SCOPES.map((scope) => ({ scope, text_version: CONSENT_TEXT_VERSION }));
+  const base = { lpType: "individual" as const, profile, owners: [], consents };
+
+  it("needs a verified ID when it is set up", () => {
+    expect(incompleteSteps({ ...base, identity: { enabled: true, verified: false } })).toEqual(["identity"]);
+    expect(incompleteSteps({ ...base, identity: { enabled: true, verified: true } })).toEqual([]);
+  });
+  it("ignores it when it is not set up, or not mentioned", () => {
+    expect(incompleteSteps({ ...base, identity: { enabled: false, verified: false } })).toEqual([]);
+    expect(incompleteSteps(base)).toEqual([]);
   });
 });
 

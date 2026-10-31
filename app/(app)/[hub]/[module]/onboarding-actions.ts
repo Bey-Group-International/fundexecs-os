@@ -10,6 +10,7 @@ import { requireOrgContext } from "@/lib/auth";
 import { requireOrgAdmin } from "@/lib/rbac";
 import { createServerClient } from "@/lib/supabase/server";
 import type { LpReviewState } from "@/lib/supabase/database.types";
+import { refreshIdentityCheck } from "@/lib/lp-identity.server";
 import {
   approvalBlocker,
   availableDecisions,
@@ -134,6 +135,27 @@ export async function recordOnboardingDecision(input: unknown): Promise<Onboardi
     return { ok: true };
   } catch (err) {
     console.error("recordOnboardingDecision threw", err);
+    return { ok: false, error: GENERIC };
+  }
+}
+
+/**
+ * Asks Stripe where an LP's ID verification stands and records it. The LP's own
+ * return to their link does the same; this is for when they finished and left.
+ */
+export async function refreshIdentityCheckAction(sessionId: unknown): Promise<OnboardingActionResult & { verified?: boolean }> {
+  const who = await authorize();
+  if (!who.ok) return who;
+  if (typeof sessionId !== "string" || !sessionId) return { ok: false, error: "That LP wasn't found." };
+  try {
+    const supabase = await createServerClient();
+    if (!(await sessionStage(supabase, sessionId, who.ctx.orgId))) return { ok: false, error: "That LP wasn't found." };
+    const res = await refreshIdentityCheck(supabase, sessionId, who.ctx.orgId);
+    if (!res.ok) return res;
+    revalidatePath(PAGE);
+    return { ok: true, verified: res.state === "verified" };
+  } catch (err) {
+    console.error("refreshIdentityCheckAction threw", err);
     return { ok: false, error: GENERIC };
   }
 }

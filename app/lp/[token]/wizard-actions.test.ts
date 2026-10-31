@@ -21,6 +21,7 @@ jest.mock("@/lib/supabase/server", () => ({
         select: () => q,
         eq: (c: string, v: unknown) => ((filters[c] = v), q),
         in: (c: string, v: unknown) => ((filters[c] = v), q),
+        limit: () => q,
         update: (row: unknown) => ((op = "update"), writes.push({ table, op, row, filters }), q),
         insert: (row: unknown) => ((op = "insert"), writes.push({ table, op, row, filters }), q),
         upsert: (row: unknown, opts: unknown) => ((op = "upsert"), writes.push({ table, op, row, opts, filters }), q),
@@ -32,6 +33,21 @@ jest.mock("@/lib/supabase/server", () => ({
       return q;
     },
   }),
+}));
+
+jest.mock("@/lib/integrations/adapters/app-url", () => ({ getAppUrl: () => "https://app.example.com" }));
+
+let idConfigured = false;
+const idInitiate = jest.fn(async (_p: unknown): Promise<unknown> => ({ ok: true, live: true, detail: "", reference: "https://verify.stripe.com/start/abc", data: { verificationId: "vs_1", level: "kyc", status: "pending", providerStatus: "requires_input" } }));
+jest.mock("@/lib/providers/stripe-identity", () => ({
+  stripeIdentityProvider: { isConfigured: () => idConfigured, initiate: (p: unknown) => idInitiate(p) },
+}));
+let idCheck: { status: string; method: string; vendor_ref: string | null } | null = null;
+let idRefresh: unknown = { ok: true, state: "needs_input", url: "https://verify.stripe.com/start/abc" };
+const refreshIdentity = jest.fn(async (..._a: unknown[]) => idRefresh);
+jest.mock("@/lib/lp-identity.server", () => ({
+  readIdentityCheck: async () => idCheck,
+  refreshIdentityCheck: (...a: unknown[]) => refreshIdentity(...a),
 }));
 
 let session: Record<string, unknown> | null;
@@ -48,11 +64,13 @@ jest.mock("@/lib/lp-access.server", () => ({
 }));
 
 import {
+  checkIdentityAction,
   grantConsentAction,
   requestAccessCodeAction,
   saveAccreditationAction,
   saveDetailsAction,
   saveOwnersAction,
+  startIdentityAction,
   submitWizardAction,
   verifyAccessCodeAction,
 } from "./wizard-actions";
@@ -84,6 +102,11 @@ beforeEach(() => {
   issue = { ok: true, code: "123456", expiresAt: "2099-01-01T00:00:00Z" };
   verify = { ok: true };
   grant.mockClear();
+  idConfigured = false;
+  idCheck = null;
+  idRefresh = { ok: true, state: "needs_input", url: "https://verify.stripe.com/start/abc" };
+  idInitiate.mockClear();
+  refreshIdentity.mockClear();
   sendEmail.mockClear();
   jest.spyOn(console, "error").mockImplementation(() => undefined);
 });
@@ -98,6 +121,7 @@ describe("every step needs a live link and a code pass", () => {
     ["grantConsent", () => grantConsentAction("tok", { scope: "identity_verification", typedName: "Jo" })],
     ["saveAccreditation", () => saveAccreditationAction("tok", accreditation)],
     ["submit", () => submitWizardAction("tok")],
+    ["startIdentity", () => startIdentityAction("tok")],
   ];
 
   it.each(steps)("%s refuses without a pass", async (_n, call) => {
@@ -310,5 +334,164 @@ describe("submitWizardAction", () => {
     updateReturn = [];
     expect((await submitWizardAction("tok")).ok).toBe(false);
     expect(writes.some((w) => w.table === "onboarding_checks")).toBe(false);
+  });
+});
+
+describe("startIdentityAction", () => {
+  const consented = () => {
+    tables.lp_onboarding_consents = { data: [{ scope: "identity_verification" }] };
+  };
+  beforeEach(() => {
+    idConfigured = true;
+    consented();
+  });
+
+  it("is unavailable where online verification isn't set up", async () => {
+    idConfigured = false;
+    const res = await startIdentityAction("tok");
+    expect(res).toMatchObject({ ok: false, error: expect.stringContaining("fund manager will verify you") });
+    expect(idInitiate).not.toHaveBeenCalled();
+  });
+
+  it("won't start without the LP's consent to ID verification", async () => {
+    tables.lp_onboarding_consents = { data: [] };
+    expect(await startIdentityAction("tok")).toEqual({ ok: false, error: "Give your consent to ID verification first." });
+    expect(idInitiate).not.toHaveBeenCalled();
+    expect(writes).toEqual([]);
+  });
+
+  it("starts a verification for this onboarding and brings the LP back to their own link", async () => {
+    session = liveSession({ lp_type: "entity" });
+    const res = await startIdentityAction("tok");
+    expect(res).toEqual({ ok: true, state: "needs_input", url: "https://verify.stripe.com/start/abc" });
+    expect(idInitiate).toHaveBeenCalledWith({
+      orgId: "org-1",
+      subjectId: "s1",
+      subjectType: "entity",
+      subjectName: "Jo Park",
+      subjectEmail: "jo@example.com",
+      level: "kyc",
+      requestedBy: "lp-wizard",
+      returnUrl: "https://app.example.com/lp/tok",
+    });
+    const w = writes.find((x) => x.table === "onboarding_checks")!;
+    expect(w.op).toBe("insert");
+    expect(w.row).toMatchObject({ organization_id: "org-1", session_id: "s1", kind: "identity", status: "pending", method: "stripe_identity", vendor_ref: "vs_1" });
+  });
+
+  it("never records a started verification as cleared", async () => {
+    await startIdentityAction("tok");
+    expect((writes.find((x) => x.table === "onboarding_checks")!.row as { status: string }).status).toBe("pending");
+  });
+
+  it("takes over a pending placeholder only while it is still pending", async () => {
+    idCheck = { status: "pending", method: "manual", vendor_ref: null };
+    await startIdentityAction("tok");
+    const w = writes.find((x) => x.table === "onboarding_checks")!;
+    expect(w.op).toBe("update");
+    expect(w.filters).toMatchObject({ session_id: "s1", kind: "identity", status: "pending" });
+  });
+
+  it("leaves a check the fund manager already decided alone", async () => {
+    for (const status of ["flagged", "failed"]) {
+      idCheck = { status, method: "manual", vendor_ref: null };
+      expect(await startIdentityAction("tok")).toEqual({ ok: false, error: "Your fund manager is already handling your ID check." });
+    }
+    expect(idInitiate).not.toHaveBeenCalled();
+    expect(writes).toEqual([]);
+  });
+
+  it("reports an already cleared check as verified without calling Stripe", async () => {
+    idCheck = { status: "clear", method: "manual", vendor_ref: null };
+    expect(await startIdentityAction("tok")).toEqual({ ok: true, state: "verified", url: null });
+    expect(idInitiate).not.toHaveBeenCalled();
+  });
+
+  it("resumes a verification already started instead of opening a second", async () => {
+    idCheck = { status: "pending", method: "stripe_identity", vendor_ref: "vs_1" };
+    const res = await startIdentityAction("tok");
+    expect(res).toEqual({ ok: true, state: "needs_input", url: "https://verify.stripe.com/start/abc" });
+    expect(refreshIdentity).toHaveBeenCalledWith(expect.anything(), "s1", "org-1");
+    expect(idInitiate).not.toHaveBeenCalled();
+  });
+
+  it("says so when a started verification can't be continued", async () => {
+    idCheck = { status: "pending", method: "stripe_identity", vendor_ref: "vs_1" };
+    idRefresh = { ok: true, state: "canceled", url: null };
+    expect(await startIdentityAction("tok")).toMatchObject({ ok: false, error: expect.stringContaining("Ask your fund manager") });
+    idRefresh = { ok: true, state: "needs_input", url: null };
+    expect((await startIdentityAction("tok")).ok).toBe(false);
+  });
+
+  it("reports a Stripe failure without recording anything", async () => {
+    idInitiate.mockResolvedValueOnce({ ok: false, live: false, detail: "boom" });
+    expect(await startIdentityAction("tok")).toMatchObject({ ok: false });
+    expect(writes).toEqual([]);
+  });
+
+  it("hides a database error", async () => {
+    tables.onboarding_checks = { error: { code: "42501", message: "rls" } };
+    expect(await startIdentityAction("tok")).toEqual({ ok: false, error: "Couldn't save. Try again." });
+  });
+
+  it("is closed once the LP has submitted", async () => {
+    session = liveSession({ review_state: "submitted" });
+    expect((await startIdentityAction("tok")).ok).toBe(false);
+    expect(idInitiate).not.toHaveBeenCalled();
+  });
+});
+
+describe("checkIdentityAction", () => {
+  it("needs the code pass, and works after submission too", async () => {
+    pass = false;
+    expect(await checkIdentityAction("tok")).toEqual(UNAVAILABLE);
+    pass = true;
+    session = liveSession({ review_state: "submitted" });
+    idRefresh = { ok: true, state: "processing", url: null };
+    expect(await checkIdentityAction("tok")).toEqual({ ok: true, state: "processing", url: null });
+    expect(refreshIdentity).toHaveBeenCalledWith(expect.anything(), "s1", "org-1");
+  });
+
+  it("refuses an unknown link", async () => {
+    session = null;
+    expect(await checkIdentityAction("tok")).toEqual(UNAVAILABLE);
+    expect(refreshIdentity).not.toHaveBeenCalled();
+  });
+});
+
+describe("submitting when online ID verification is set up", () => {
+  const profile = {
+    legal_name: "Jo Park",
+    entity_type: "individual",
+    country: "US",
+    signatory_name: null,
+    signatory_title: null,
+    source_of_funds: "Sale of my company in 2022",
+    accreditation_basis: "accredited_investor",
+    accreditation_statement_at: "2026-10-31T00:00:00Z",
+  };
+  beforeEach(() => {
+    idConfigured = true;
+    tables.lp_onboarding_profiles = { data: profile };
+    tables.lp_onboarding_consents = { data: CONSENT_SCOPES.map((scope) => ({ scope, text_version: CONSENT_TEXT_VERSION })) };
+  });
+
+  it.each([null, { status: "pending", method: "stripe_identity", vendor_ref: "vs_1" }, { status: "failed", method: "stripe_identity", vendor_ref: "vs_1" }])(
+    "won't submit while the ID check is %p",
+    async (check) => {
+      idCheck = check;
+      expect(await submitWizardAction("tok")).toEqual({ ok: false, error: expect.stringContaining("ID verification") });
+      expect(writes).toEqual([]);
+    },
+  );
+
+  it("submits once the ID check is cleared", async () => {
+    idCheck = { status: "clear", method: "stripe_identity", vendor_ref: "vs_1" };
+    expect(await submitWizardAction("tok")).toEqual({ ok: true });
+  });
+
+  it("accepts a check the fund manager cleared by hand", async () => {
+    idCheck = { status: "clear", method: "manual", vendor_ref: null };
+    expect(await submitWizardAction("tok")).toEqual({ ok: true });
   });
 });
