@@ -4,6 +4,8 @@
 // Follows mock-or-real discipline: when NEXT_PUBLIC_SUPABASE_URL is absent the
 // provider returns well-formed mock responses so the product runs locally.
 
+import { headers } from "next/headers";
+import { getAppUrl } from "@/lib/integrations/adapters/app-url";
 import type {
   IssuanceProvider,
   IssuanceParams,
@@ -12,27 +14,6 @@ import type {
 } from "./types";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
-
-// Validate that the configured app URL is a safe internal origin before using
-// it as a fetch base. Only localhost and *.fundexecs.com are permitted to
-// prevent SSRF if env vars are tampered with.
-function getBaseUrl(): string {
-  const raw =
-    process.env.NEXTAUTH_URL ||
-    process.env.NEXT_PUBLIC_APP_URL ||
-    "http://localhost:3000";
-  try {
-    const { hostname } = new URL(raw);
-    const safe =
-      hostname === "localhost" ||
-      hostname === "127.0.0.1" ||
-      hostname.endsWith(".fundexecs.com") ||
-      hostname.endsWith(".vercel.app");
-    return safe ? raw : "http://localhost:3000";
-  } catch {
-    return "http://localhost:3000";
-  }
-}
 
 function isMockMode(): boolean {
   return !process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -62,16 +43,31 @@ forth in the accompanying offering documents.
 `;
 }
 
+// The envelope routes authenticate from the session cookie, and this is a
+// server-to-server call, so without forwarding it every request is a 401.
+async function sessionCookie(): Promise<Record<string, string>> {
+  try {
+    const cookie = (await headers()).get("cookie");
+    return cookie ? { Cookie: cookie } : {};
+  } catch {
+    // Not inside a request (a script or a test): there is no session to forward.
+    return {};
+  }
+}
+
 async function apiFetch<T>(
   path: string,
   options?: RequestInit
 ): Promise<{ ok: boolean; data?: T; error?: string; status?: number }> {
-  const url = `${getBaseUrl()}${path}`;
+  // getAppUrl only returns localhost or this deploy's own hosts, so the
+  // caller's session cookie below never leaves the app.
+  const url = `${getAppUrl()}${path}`;
   try {
     const res = await fetch(url, {
       ...options,
       headers: {
         "Content-Type": "application/json",
+        ...(await sessionCookie()),
         ...(options?.headers ?? {}),
       },
     });
@@ -217,11 +213,7 @@ export const nativeSigningProvider: IssuanceProvider = {
       return mockIssued(securityId, "draft");
     }
 
-    const result = await apiFetch<{
-      envelopeId?: string;
-      status?: string;
-      completedAt?: string;
-    }>(`/api/envelopes/${encodeURIComponent(securityId)}/send`, {
+    const result = await apiFetch<{ ok?: boolean }>(`/api/envelopes/${encodeURIComponent(securityId)}/send`, {
       method: "POST",
       body: JSON.stringify({ requestedBy }),
     });
@@ -235,21 +227,14 @@ export const nativeSigningProvider: IssuanceProvider = {
       };
     }
 
-    const rawStatus = result.data?.status;
-    const status = mapEnvelopeStatus(rawStatus);
-
+    // Sending only puts the envelope out for signature. It is issued once every
+    // signer has signed, which getStatus reports as "completed".
     return {
       ok: true,
       live: true,
-      detail: `Envelope ${securityId} sent — current status: ${status}.`,
+      detail: `Envelope ${securityId} sent for signature — awaiting signers.`,
       reference: securityId,
-      data: {
-        securityId,
-        status,
-        ...(status === "issued" && result.data?.completedAt
-          ? { issuedAt: result.data.completedAt }
-          : {}),
-      },
+      data: { securityId, status: "draft" },
     };
   },
 
@@ -262,10 +247,9 @@ export const nativeSigningProvider: IssuanceProvider = {
       return mockIssued(securityId, "draft");
     }
 
+    // GET /api/envelopes/[id]/status nests the envelope under `envelope`.
     const result = await apiFetch<{
-      envelopeId?: string;
-      status?: string;
-      completedAt?: string;
+      envelope?: { status?: string; completed_at?: string | null };
     }>(`/api/envelopes/${encodeURIComponent(securityId)}/status`);
 
     if (!result.ok) {
@@ -277,7 +261,8 @@ export const nativeSigningProvider: IssuanceProvider = {
       };
     }
 
-    const rawStatus = result.data?.status;
+    const rawStatus = result.data?.envelope?.status;
+    const completedAt = result.data?.envelope?.completed_at;
     const status = mapEnvelopeStatus(rawStatus);
 
     return {
@@ -288,9 +273,7 @@ export const nativeSigningProvider: IssuanceProvider = {
       data: {
         securityId,
         status,
-        ...(status === "issued" && result.data?.completedAt
-          ? { issuedAt: result.data.completedAt }
-          : {}),
+        ...(status === "issued" && completedAt ? { issuedAt: completedAt } : {}),
       },
     };
   },
