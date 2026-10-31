@@ -204,10 +204,14 @@ export const nativeSigningProvider: IssuanceProvider = {
     };
   },
 
+  // The envelope routes behind this adapter resolve the organization from the
+  // session themselves, so `orgId` is not needed here.
   async issueSecurity(
     securityId: string,
-    requestedBy: string
+    requestedBy: string,
+    orgId: string
   ): Promise<ProviderResult<IssuanceRecord>> {
+    void orgId;
     if (isMockMode()) {
       // Simulate: first send leaves it in draft (pending signatures)
       return mockIssued(securityId, "draft");
@@ -250,8 +254,10 @@ export const nativeSigningProvider: IssuanceProvider = {
   },
 
   async getStatus(
-    securityId: string
+    securityId: string,
+    orgId: string
   ): Promise<ProviderResult<IssuanceRecord>> {
+    void orgId;
     if (isMockMode()) {
       return mockIssued(securityId, "draft");
     }

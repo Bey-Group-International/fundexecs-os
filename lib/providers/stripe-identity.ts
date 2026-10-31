@@ -121,7 +121,7 @@ export const stripeIdentityProvider: IdentityVerificationProvider = {
     }
   },
 
-  async getStatus(verificationId: string): Promise<ProviderResult<VerificationRecord>> {
+  async getStatus(verificationId: string, orgId: string): Promise<ProviderResult<VerificationRecord>> {
     if (!configured()) {
       return {
         ok: false,
@@ -133,9 +133,24 @@ export const stripeIdentityProvider: IdentityVerificationProvider = {
 
     try {
       assertStripeId(verificationId);
-      const session = await stripeGet<{ id: string; status: string; created: number; last_error?: { reason: string } }>(
-        `/identity/verification_sessions/${encodeURIComponent(verificationId)}`,
-      );
+      const session = await stripeGet<{
+        id: string;
+        status: string;
+        created: number;
+        last_error?: { reason: string };
+        metadata?: { org_id?: string };
+      }>(`/identity/verification_sessions/${encodeURIComponent(verificationId)}`);
+
+      // initiate() stamps every session with its organization. One that isn't
+      // this caller's reads exactly like one that doesn't exist.
+      if (!orgId || session.metadata?.org_id !== orgId) {
+        return {
+          ok: false,
+          live: false,
+          detail: "Could not fetch verification status.",
+          data: { verificationId, level: "kyc", status: "pending" },
+        };
+      }
 
       const status = mapStatus(session.status);
       return {

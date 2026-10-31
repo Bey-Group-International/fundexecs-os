@@ -1,15 +1,12 @@
 import { NextResponse } from "next/server";
+import { requireOrgContext } from "@/lib/auth";
 import { getCapitalRailProvider } from "@/lib/providers";
-import { createServerClient } from "@/lib/supabase/server";
 
 export const runtime = "nodejs";
 
 export async function GET(req: Request) {
-  const supabase = await createServerClient();
-  const { data: { user }, error: authError } = await supabase.auth.getUser();
-  if (authError || !user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const auth = await requireOrgContext();
+  if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: auth.status });
 
   try {
     const { searchParams } = new URL(req.url);
@@ -19,7 +16,7 @@ export async function GET(req: Request) {
     }
 
     const provider = getCapitalRailProvider();
-    const result = await provider.getStatus(transferId);
+    const result = await provider.getStatus(transferId, auth.ctx.orgId);
     return NextResponse.json({ provider: provider.name, ...result });
   } catch (err) {
     console.error("[/api/capital/status]", err);

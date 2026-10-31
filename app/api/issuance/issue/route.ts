@@ -1,18 +1,15 @@
 import { NextResponse } from "next/server";
+import { requireOrgContext } from "@/lib/auth";
 import { getIssuanceProvider } from "@/lib/providers";
-import { createServerClient } from "@/lib/supabase/server";
 
 export const runtime = "nodejs";
 
 export async function POST(req: Request) {
-  const supabase = await createServerClient();
-  const { data: { user }, error: authError } = await supabase.auth.getUser();
-  if (authError || !user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const auth = await requireOrgContext();
+  if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: auth.status });
 
   try {
-    const body = await req.json() as { securityId?: string; requestedBy?: string };
+    const body = await req.json() as { securityId?: string };
     if (!body.securityId) {
       return NextResponse.json({ error: "securityId is required" }, { status: 400 });
     }
@@ -20,7 +17,8 @@ export async function POST(req: Request) {
     const provider = getIssuanceProvider();
     const result = await provider.issueSecurity(
       body.securityId,
-      body.requestedBy ?? "api",
+      auth.ctx.userId,
+      auth.ctx.orgId,
     );
 
     return NextResponse.json({ provider: provider.name, ...result });

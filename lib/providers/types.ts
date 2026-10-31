@@ -54,10 +54,14 @@ export interface IssuanceProvider {
   isConfigured(): boolean;
   /** Create a draft security; returns immediately without minting. */
   draftSecurity(params: IssuanceParams): Promise<ProviderResult<IssuanceRecord>>;
-  /** Mint / finalize the security after operator approval. */
-  issueSecurity(securityId: string, requestedBy: string): Promise<ProviderResult<IssuanceRecord>>;
-  /** Retrieve current status of a security. */
-  getStatus(securityId: string): Promise<ProviderResult<IssuanceRecord>>;
+  /**
+   * Mint / finalize the security after operator approval. `orgId` is the
+   * caller's organization; an adapter that can tell whose security this is must
+   * refuse one that belongs to another organization.
+   */
+  issueSecurity(securityId: string, requestedBy: string, orgId: string): Promise<ProviderResult<IssuanceRecord>>;
+  /** Retrieve current status of a security belonging to `orgId`. */
+  getStatus(securityId: string, orgId: string): Promise<ProviderResult<IssuanceRecord>>;
 }
 
 // ─── CapitalRailProvider ──────────────────────────────────────────────────────
@@ -92,7 +96,8 @@ export interface CapitalRailProvider {
   supportedRails(): CapitalRailType[];
   /** Initiate a transfer; always requires prior Tier-3 gate approval. */
   initiate(params: CapitalTransferParams): Promise<ProviderResult<CapitalTransferRecord>>;
-  getStatus(transferId: string): Promise<ProviderResult<CapitalTransferRecord>>;
+  /** Status of a transfer initiated by `orgId`; another org's transfer reads as not found. */
+  getStatus(transferId: string, orgId: string): Promise<ProviderResult<CapitalTransferRecord>>;
 }
 
 // ─── IdentityVerificationProvider ────────────────────────────────────────────
@@ -123,5 +128,6 @@ export interface IdentityVerificationProvider {
   isConfigured(): boolean;
   /** Initiate a verification; sends request to the counterparty. */
   initiate(params: IdentityVerificationParams): Promise<ProviderResult<VerificationRecord>>;
-  getStatus(verificationId: string): Promise<ProviderResult<VerificationRecord>>;
+  /** Status of a verification requested by `orgId`; another org's reads as not found. */
+  getStatus(verificationId: string, orgId: string): Promise<ProviderResult<VerificationRecord>>;
 }
