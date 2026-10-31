@@ -99,6 +99,12 @@ export async function buildViewerPayload(
   allowedSections: string[] | null,
   /** Single-document link: show only this document, published or not. */
   documentId: string | null = null,
+  /**
+   * Who is looking. Files that require a signature are locked (their content
+   * and file reference withheld from the payload) unless this reader has
+   * signed on this link. Omitted — the GP preview — means unsigned.
+   */
+  reader: { shareId: string; email: string | null } | null = null,
 ): Promise<ViewerPayload | null> {
   if (!(await isRoomOpen(supabase, orgId, roomId))) return null;
 
@@ -115,6 +121,31 @@ export async function buildViewerPayload(
     manifest = (manifestRows ?? []) as { document_id: string; sort_order: number }[];
   }
   const manifestOrder = new Map(manifest.map((m) => [m.document_id, m.sort_order ?? 0]));
+
+  // Which of these files need a signature, and which this reader has signed.
+  // The manifest row is the source of truth even for a single-document link.
+  const { data: sigRows } = manifest.length
+    ? await supabase
+        .from("data_room_documents")
+        .select("document_id, require_signature")
+        .eq("organization_id", orgId)
+        .eq("room_id", roomId)
+        .in("document_id", manifest.map((m) => m.document_id))
+    : { data: [] as { document_id: string; require_signature: boolean }[] };
+  const needsSignature = new Set(
+    ((sigRows ?? []) as { document_id: string; require_signature: boolean }[])
+      .filter((r) => r.require_signature)
+      .map((r) => r.document_id),
+  );
+  const signed =
+    reader && needsSignature.size
+      ? await (await import("@/lib/document-signing.server")).signedDocumentIds(
+          supabase as never,
+          reader.shareId,
+          reader.email,
+          [...needsSignature],
+        )
+      : new Set<string>();
 
   const [orgRes, thesisRes, recordsRes, entitiesRes, membersRes, docsRes] = await Promise.all([
     supabase.from("organizations").select("*").eq("id", orgId).maybeSingle(),
@@ -170,7 +201,21 @@ export async function buildViewerPayload(
   const docsBySection = new Map<string, ViewerDoc[]>();
   for (const d of ordered) {
     const k = d.doc_type ?? "other";
-    const doc: ViewerDoc = {
+    const locked = needsSignature.has(d.id) && !signed.has(d.id);
+    const doc: ViewerDoc = locked
+      ? {
+          // Nothing of a locked file leaves the server: not its text, not where its bytes live.
+          id: d.id,
+          name: d.name,
+          content: null,
+          storage_key: null,
+          doc_type: d.doc_type ?? null,
+          preview_kind: "none",
+          uploaded: false,
+          requiresSignature: true,
+          signed: false,
+        }
+      : {
       id: d.id,
       name: d.name,
       content: d.content ?? null,
@@ -178,6 +223,7 @@ export async function buildViewerPayload(
       doc_type: d.doc_type ?? null,
       preview_kind: previewKindFor(d.storage_key),
       uploaded: isUploadedFile(d.storage_key),
+      ...(needsSignature.has(d.id) ? { requiresSignature: true, signed: true } : {}),
     };
     const bucket = docsBySection.get(k);
     if (bucket) bucket.push(doc);

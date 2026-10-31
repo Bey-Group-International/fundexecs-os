@@ -24,6 +24,8 @@ export interface RoomDocument {
   sortOrder: number;
   storageKey: string | null;
   hasContent: boolean;
+  /** Readers must sign this file before it opens. */
+  requireSignature?: boolean;
 }
 
 export interface RoomSection {

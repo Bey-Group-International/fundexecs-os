@@ -1,11 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { MarkdownRenderer } from "./MarkdownRenderer";
 import { ViewerGate } from "./ViewerGate";
 import type { GateConfig } from "./ViewerGate";
-import { recordRoomOpen, trackReading } from "./viewer-actions";
+import { recordRoomOpen, signRoomDocument, trackReading } from "./viewer-actions";
 import { ReadingClock } from "@/lib/data-room-engagement";
 import { FilePreview } from "@/components/documents/FilePreview";
 import type { PreviewKind } from "@/lib/document-files";
@@ -69,6 +69,10 @@ export interface ViewerDoc {
   preview_kind?: PreviewKind;
   /** A file in our bucket, as opposed to an external link. */
   uploaded?: boolean;
+  /** The reader must sign this file before it opens. */
+  requiresSignature?: boolean;
+  /** They have. When false and required, content and file are withheld. */
+  signed?: boolean;
 }
 
 /** Per-link controls set when the link was created. */
@@ -111,6 +115,8 @@ interface Props {
   viewControls?: ViewControls;
   /** Who is reading, for the preview watermark overlay. */
   viewerLabel?: string | null;
+  /** Email from the reader's gate pass: signatures are recorded under it. */
+  signerEmail?: string | null;
   /** Open on this document's section (the `?doc=` a view-only open redirects to). */
   focusDocumentId?: string | null;
 }
@@ -165,6 +171,7 @@ export function DataRoomViewer({
   preview = false,
   viewControls = DEFAULT_CONTROLS,
   viewerLabel = null,
+  signerEmail = null,
   focusDocumentId = null,
 }: Props) {
   const accent =
@@ -506,6 +513,7 @@ export function DataRoomViewer({
             preview={preview}
             controls={viewControls}
             viewerLabel={viewerLabel}
+            signerEmail={signerEmail}
             focusDocumentId={focusDocumentId}
           />
         </main>
@@ -527,6 +535,7 @@ function ContentPanel({
   preview,
   controls,
   viewerLabel,
+  signerEmail,
   focusDocumentId,
 }: {
   selected: string;
@@ -542,6 +551,7 @@ function ContentPanel({
   current: NavItem;
   controls: ViewControls;
   viewerLabel: string | null;
+  signerEmail: string | null;
   focusDocumentId: string | null;
 }) {
   if (selected === "overview") {
@@ -663,6 +673,7 @@ function ContentPanel({
             preview={preview}
             controls={controls}
             viewerLabel={viewerLabel}
+            signerEmail={signerEmail}
             // One document on the page, or the one a link pointed at: open it.
             startOpen={controls.singleDocument || doc.id === focusDocumentId || sec.docs.length === 1}
           />
@@ -688,6 +699,7 @@ function DocCard({
   preview,
   controls,
   viewerLabel,
+  signerEmail,
   startOpen,
 }: {
   doc: ViewerDoc;
@@ -696,9 +708,11 @@ function DocCard({
   preview?: boolean;
   controls: ViewControls;
   viewerLabel: string | null;
+  signerEmail: string | null;
   startOpen: boolean;
 }) {
   const [expanded, setExpanded] = useState(true);
+  const locked = Boolean(doc.requiresSignature) && !doc.signed;
   const href = hasFile(doc.storage_key);
   const kind = doc.preview_kind ?? "none";
   // Uploaded files read in the page. External links still open where they live.
@@ -715,8 +729,18 @@ function DocCard({
     >
       {/* Doc header */}
       <div className="flex flex-wrap items-center gap-3 px-5 py-3">
-        <span className="font-mono text-[11px] text-fg-muted">{href ? (doc.uploaded ? "▤" : "↗") : "≡"}</span>
+        <span className="font-mono text-[11px] text-fg-muted">
+          {locked ? "🔒" : href ? (doc.uploaded ? "▤" : "↗") : "≡"}
+        </span>
         <p className="min-w-0 flex-1 text-sm font-medium text-fg-primary">{doc.name}</p>
+        {doc.requiresSignature ? (
+          <span
+            className="shrink-0 rounded-full border px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider"
+            style={{ borderColor: `${accent}55`, color: accent }}
+          >
+            {doc.signed ? "Signed" : "Signature required"}
+          </span>
+        ) : null}
         {doc.content ? (
           <button
             type="button"
@@ -764,6 +788,10 @@ function DocCard({
         ) : null}
       </div>
 
+      {locked ? (
+        <SignatureLock token={token} doc={doc} accent={accent} preview={preview} viewerEmail={signerEmail} />
+      ) : null}
+
       {showFile && previewable && !preview ? (
         <div className="border-t border-line/50 bg-surface-0 p-3">
           <FilePreview
@@ -790,11 +818,111 @@ function DocCard({
       ) : null}
 
       {/* No content, no link */}
-      {!doc.content && !href ? (
+      {!locked && !doc.content && !href ? (
         <div className="border-t border-line/50 px-5 py-3">
           <p className="text-xs text-fg-muted">Document content not yet available.</p>
         </div>
       ) : null}
+    </div>
+  );
+}
+
+/**
+ * The lock on a file that needs the reader's signature. Nothing of the file is
+ * in the page until they sign; signing records their name, the time and the
+ * file's fingerprint on the server, then reloads the room with the file open.
+ */
+function SignatureLock({
+  token,
+  doc,
+  accent,
+  preview,
+  viewerEmail,
+}: {
+  token: string;
+  doc: ViewerDoc;
+  accent: string;
+  preview?: boolean;
+  viewerEmail: string | null;
+}) {
+  const router = useRouter();
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [agreed, setAgreed] = useState(false);
+  const [error, setError] = useState("");
+  const [pending, startTransition] = useTransition();
+  // The server takes the email from the reader's gate pass; ask only when the
+  // link has no email gate to take it from.
+  const needsEmail = !viewerEmail || !viewerEmail.includes("@");
+  const trimmed = name.trim();
+  const canSubmit = trimmed.length > 0 && agreed && (!needsEmail || email.trim().length > 0) && !pending;
+
+  if (preview) {
+    return (
+      <div className="border-t border-line/50 bg-surface-0 px-5 py-4">
+        <p className="text-xs text-fg-muted">
+          Readers must sign this file before it opens. They will see a signature form here.
+        </p>
+      </div>
+    );
+  }
+
+  function submit() {
+    if (!canSubmit) return;
+    setError("");
+    startTransition(async () => {
+      const fd = new FormData();
+      fd.set("signer_name", trimmed);
+      fd.set("agree", agreed ? "1" : "0");
+      if (needsEmail) fd.set("email", email.trim());
+      const result = await signRoomDocument(token, doc.id, fd);
+      if (result.ok) router.refresh();
+      else setError(result.error);
+    });
+  }
+
+  return (
+    <div className="border-t border-line/50 bg-surface-0 px-5 py-5">
+      <p className="text-sm font-medium text-fg-primary">Sign to open this document</p>
+      <p className="mt-1 text-xs text-fg-secondary">
+        The sender needs your signature on <span className="text-fg-primary">{doc.name}</span> before you can read it.
+        Your name, the time and a fingerprint of the file are recorded.
+      </p>
+      <div className="mt-4 max-w-sm space-y-3">
+        {needsEmail ? (
+          <input
+            type="email"
+            autoComplete="email"
+            placeholder="you@example.com"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            className="w-full rounded-lg border border-line bg-surface-1 px-3 py-2.5 text-sm text-fg-primary placeholder:text-fg-muted focus:border-gold-400 focus:outline-none"
+          />
+        ) : null}
+        <input
+          type="text"
+          autoComplete="name"
+          placeholder="Your full name"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && submit()}
+          className="w-full rounded-lg border border-line bg-surface-1 px-3 py-2.5 text-sm text-fg-primary placeholder:text-fg-muted focus:border-gold-400 focus:outline-none"
+        />
+        <label className="flex items-start gap-2 text-xs text-fg-secondary">
+          <input type="checkbox" checked={agreed} onChange={(e) => setAgreed(e.target.checked)} className="mt-0.5" />
+          <span>I have read and agree to this document, and I intend my typed name to be my signature.</span>
+        </label>
+        {error ? <p className="text-xs text-red-400">{error}</p> : null}
+        <button
+          type="button"
+          onClick={submit}
+          disabled={!canSubmit}
+          className="w-full rounded-lg py-2.5 text-sm font-medium text-surface-0 transition hover:opacity-90 disabled:opacity-50"
+          style={{ backgroundColor: accent }}
+        >
+          {pending ? "Signing…" : "Sign and open"}
+        </button>
+      </div>
     </div>
   );
 }

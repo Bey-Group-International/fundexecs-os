@@ -891,6 +891,25 @@ export type DataRoomDocument = {
   sort_order: number;
   added_by: string | null;
   created_at: string;
+  /** Readers must sign this file before it opens (migration 20261031120000). */
+  require_signature: boolean;
+};
+
+// One reader's signature on one file in one link (migration 20261031120000).
+export type DataRoomDocumentSignature = {
+  id: string;
+  organization_id: string;
+  room_id: string;
+  document_id: string;
+  share_id: string;
+  signer_name: string;
+  signer_email: string;
+  signed_at: string;
+  ip_hint: string | null;
+  file_name: string;
+  file_sha256: string;
+  agreed: boolean;
+  copy_sent_at: string | null;
 };
 
 export type DataRoomShare = {
@@ -3340,6 +3359,7 @@ export type Database = {
       brain_kb_chunks: TableShape<BrainKbChunk>;
       data_rooms: TableShape<DataRoom>;
       data_room_documents: TableShape<DataRoomDocument>;
+      data_room_document_signatures: TableShape<DataRoomDocumentSignature>;
       data_room_shares: TableShape<DataRoomShare>;
       data_room_views: TableShape<DataRoomView>;
       data_room_open_alerts: TableShape<DataRoomOpenAlert>;

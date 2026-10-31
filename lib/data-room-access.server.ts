@@ -23,6 +23,8 @@ export type ShareAccess =
       roomId: string;
       /** Email the reader gave at the gate, when the link asked for one. */
       viewerEmail: string | null;
+      /** This file requires the reader's signature (they have it, or the caller skipped the check). */
+      signatureRequired: boolean;
     }
   | { ok: false };
 
@@ -41,7 +43,12 @@ export function isShareLive(share: Pick<DataRoomShare, "revoked_at" | "expires_a
  * for a single-document link it must BE that document, otherwise it must be in
  * the room's publish manifest; and the link's section allowlist admits it.
  */
-export async function resolveSharedDocument(token: string, documentId: string): Promise<ShareAccess> {
+export async function resolveSharedDocument(
+  token: string,
+  documentId: string,
+  /** Only the signing action passes this: it must reach a file the reader has not yet signed. */
+  opts: { skipSignature?: boolean } = {},
+): Promise<ShareAccess> {
   if (!hasSupabaseServiceEnv()) return { ok: false };
   const supabase = createServiceClient();
 
@@ -70,22 +77,22 @@ export async function resolveSharedDocument(token: string, documentId: string): 
   // An archived room serves nothing, whatever its links still say.
   if (!(await isRoomOpen(supabase, share.organization_id, roomId))) return { ok: false };
 
-  if (share.document_id) {
-    // A single-document link reaches exactly one document, published or not —
-    // the operator chose it by name from its review page.
-    if (share.document_id !== documentId) return { ok: false };
-  } else {
-    // Being in the org's library is not enough — an unpublished draft must stay
-    // unreachable even to someone holding a valid token and the document's id.
-    const { data: manifestRow } = await supabase
-      .from("data_room_documents")
-      .select("id")
-      .eq("organization_id", share.organization_id)
-      .eq("room_id", roomId)
-      .eq("document_id", documentId)
-      .maybeSingle();
-    if (!manifestRow) return { ok: false };
-  }
+  if (share.document_id && share.document_id !== documentId) return { ok: false };
+
+  // The room's manifest row for this file: membership (unless a single-document
+  // link, which reaches its one document published or not) and whether the
+  // file requires a signature. Being in the org's library is not enough — an
+  // unpublished draft must stay unreachable even to someone holding a valid
+  // token and the document's id.
+  const { data: manifestRow } = await supabase
+    .from("data_room_documents")
+    .select("id, require_signature")
+    .eq("organization_id", share.organization_id)
+    .eq("room_id", roomId)
+    .eq("document_id", documentId)
+    .maybeSingle();
+  if (!share.document_id && !manifestRow) return { ok: false };
+  const signatureRequired = Boolean((manifestRow as { require_signature?: boolean } | null)?.require_signature);
 
   const { data: docRow } = await supabase
     .from("documents")
@@ -101,7 +108,15 @@ export async function resolveSharedDocument(token: string, documentId: string): 
     if (allowed && (!doc.doc_type || !allowed.includes(doc.doc_type))) return { ok: false };
   }
 
-  return { ok: true, supabase, share, doc, roomId, viewerEmail: pass?.email ?? null };
+  // A file that needs a signature stays shut — preview, open and download alike —
+  // until this reader (by gate email) has signed it on this link.
+  if (signatureRequired && !opts.skipSignature) {
+    const { signedDocumentIds } = await import("@/lib/document-signing.server");
+    const signed = await signedDocumentIds(supabase as never, share.id, pass?.email ?? null, [documentId]);
+    if (!signed.has(documentId)) return { ok: false };
+  }
+
+  return { ok: true, supabase, share, doc, roomId, viewerEmail: pass?.email ?? null, signatureRequired };
 }
 
 /** The line stamped onto a watermarked page: who, and when. */

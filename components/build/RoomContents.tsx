@@ -6,7 +6,7 @@
 // change a document's text you go to Documents; this page never edits content.
 import { useState, useTransition } from "react";
 import Link from "next/link";
-import { unpublishDocument, moveRoomDocument, publishDocument } from "./room-actions";
+import { unpublishDocument, moveRoomDocument, publishDocument, setDocumentSignature } from "./room-actions";
 import type { DocumentStatus } from "@/lib/supabase/database.types";
 
 export interface RoomContentDoc {
@@ -16,6 +16,10 @@ export interface RoomContentDoc {
   /** False when the document has neither a link nor written content. */
   hasBody: boolean;
   isLink: boolean;
+  /** Readers must sign this file before it opens. */
+  requireSignature: boolean;
+  /** Who has signed it, newest first, one entry per person. */
+  signers: { name: string; email: string; signedAt: string }[];
 }
 
 export interface RoomContentSection {
@@ -69,7 +73,8 @@ function DocRow({
   }
 
   return (
-    <div className="flex items-center gap-2 rounded-lg border border-line/60 bg-surface-0 px-3 py-2">
+    <div className="rounded-lg border border-line/60 bg-surface-0">
+    <div className="flex items-center gap-2 px-3 py-2">
       <span className="shrink-0 font-mono text-[11px] text-fg-muted">{doc.isLink ? "↗" : "≡"}</span>
       <Link
         href={`/document/${doc.id}`}
@@ -89,6 +94,25 @@ function DocRow({
           Empty
         </Flag>
       ) : null}
+
+      <button
+        type="button"
+        disabled={pending}
+        aria-pressed={doc.requireSignature}
+        onClick={() => act(setDocumentSignature, { required: doc.requireSignature ? "0" : "1" })}
+        title={
+          doc.requireSignature
+            ? "Readers must sign this file before it opens. Click to stop requiring it."
+            : "Require readers to sign this file before it opens (e.g. an NDA)."
+        }
+        className={`shrink-0 rounded-md border px-2 py-1 font-mono text-[11px] uppercase tracking-wider transition disabled:opacity-40 ${
+          doc.requireSignature
+            ? "border-gold-500/40 bg-gold-500/10 text-gold-300"
+            : "border-line text-fg-muted hover:text-fg-primary"
+        }`}
+      >
+        {doc.requireSignature ? `Signature on · ${doc.signers.length} signed` : "Require signature"}
+      </button>
 
       {/* Reordering moves a document relative to its real neighbours in the
           room, which a filtered view is not showing — the arrows would appear
@@ -126,6 +150,21 @@ function DocRow({
       >
         Remove
       </button>
+    </div>
+    {doc.requireSignature || doc.signers.length > 0 ? (
+      <details className="border-t border-line/50 px-3 py-1.5">
+        <summary className="cursor-pointer font-mono text-[11px] uppercase tracking-wider text-fg-muted">
+          {doc.signers.length === 0 ? "No signatures yet" : `${doc.signers.length} signed`}
+        </summary>
+        <ul className="mt-1.5 space-y-0.5 pb-1 text-xs text-fg-secondary">
+          {doc.signers.map((s) => (
+            <li key={s.email}>
+              {s.name} <span className="text-fg-muted">· {s.email} · {s.signedAt.slice(0, 10)}</span>
+            </li>
+          ))}
+        </ul>
+      </details>
+    ) : null}
     </div>
   );
 }

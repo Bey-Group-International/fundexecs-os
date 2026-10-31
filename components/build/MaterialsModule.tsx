@@ -74,7 +74,7 @@ export async function MaterialsModule({ roomId }: { roomId?: string } = {}) {
     );
   }
 
-  const [published, libraryRes, sharesRes, payload, reviewsRes] = await Promise.all([
+  const [published, libraryRes, sharesRes, payload, reviewsRes, signaturesRes] = await Promise.all([
     loadRoomDocuments(orgId, room.id),
     supabase
       .from("documents")
@@ -95,6 +95,12 @@ export async function MaterialsModule({ roomId }: { roomId?: string } = {}) {
       .from("document_reviews")
       .select("document_id, storage_key, suggested_section, recommendations")
       .eq("organization_id", orgId),
+    supabase
+      .from("data_room_document_signatures")
+      .select("document_id, signer_name, signer_email, signed_at")
+      .eq("organization_id", orgId)
+      .eq("room_id", room.id)
+      .order("signed_at", { ascending: false }),
   ]);
 
   const libraryDocs = (libraryRes.data ?? []) as Document[];
@@ -154,6 +160,21 @@ export async function MaterialsModule({ roomId }: { roomId?: string } = {}) {
   const unfinished = unfinishedPublications(published);
   const empty = emptyPublications(published);
 
+  const signersByDoc = new Map<string, { name: string; email: string; signedAt: string }[]>();
+  for (const r of (signaturesRes.data ?? []) as {
+    document_id: string;
+    signer_name: string;
+    signer_email: string;
+    signed_at: string;
+  }[]) {
+    const list = signersByDoc.get(r.document_id) ?? [];
+    // One entry per person, however many links they signed through.
+    if (!list.some((x) => x.email.toLowerCase() === r.signer_email.toLowerCase())) {
+      list.push({ name: r.signer_name, email: r.signer_email, signedAt: r.signed_at });
+    }
+    signersByDoc.set(r.document_id, list);
+  }
+
   const contentSections: RoomContentSection[] = roomSections.map((s) => ({
     key: s.key,
     label: s.label,
@@ -163,6 +184,8 @@ export async function MaterialsModule({ roomId }: { roomId?: string } = {}) {
       status: d.status,
       hasBody: Boolean(d.storageKey) || d.hasContent,
       isLink: Boolean(d.storageKey),
+      requireSignature: Boolean(d.requireSignature),
+      signers: signersByDoc.get(d.id) ?? [],
     })),
   }));
 
