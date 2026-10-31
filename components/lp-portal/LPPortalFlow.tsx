@@ -1,38 +1,16 @@
 "use client";
 
 // components/lp-portal/LPPortalFlow.tsx
-// Multi-step LP onboarding portal UI. Drives the LP through:
-//   pending → accreditation → subscription → committed → (operator closes → complete)
+// The LP's steps after the fund manager has approved them: subscription documents,
+// then the capital commitment. (Before approval the LP is in the setup wizard, in
+// LPWizard.tsx; approval moves the session to "accreditation", the first step here.)
+//   accreditation → subscription → committed → (operator closes → complete)
 import { useState, useTransition } from "react";
 import {
-  submitAccreditationAction,
   signSubscriptionAction,
   confirmCapitalCommitmentAction,
 } from "@/app/lp/[token]/actions";
 import { buildOnboardingSteps, onboardingProgressPct, type OnboardingStatus } from "@/lib/lp-onboarding";
-
-const ACCREDITATION_OPTIONS = [
-  {
-    value: "accredited_investor" as const,
-    label: "Accredited Investor",
-    description: "Individual with net worth > $1M (excluding primary residence) or income > $200K ($300K joint) for the past two years",
-  },
-  {
-    value: "qualified_purchaser" as const,
-    label: "Qualified Purchaser",
-    description: "Individual or family-owned business with ≥ $5M in investments",
-  },
-  {
-    value: "qualified_client" as const,
-    label: "Qualified Client",
-    description: "Individual with ≥ $2.2M in assets under management or ≥ $2.2M in net worth",
-  },
-  {
-    value: "institutional" as const,
-    label: "Institutional Investor",
-    description: "Endowment, foundation, pension, sovereign wealth fund, or equivalent institutional entity",
-  },
-];
 
 function ProgressBar({ status }: { status: OnboardingStatus }) {
   const pct = onboardingProgressPct(status);
@@ -64,85 +42,6 @@ function ProgressBar({ status }: { status: OnboardingStatus }) {
           </div>
         ))}
       </div>
-    </div>
-  );
-}
-
-function AccreditationStep({
-  token,
-  onDone,
-}: {
-  token: string;
-  onDone: () => void;
-}) {
-  const [selected, setSelected] = useState<string | null>(null);
-  const [pending, startTransition] = useTransition();
-  const [error, setError] = useState<string | null>(null);
-
-  function handleSubmit() {
-    if (!selected) return;
-    setError(null);
-    startTransition(async () => {
-      const result = await submitAccreditationAction(
-        token,
-        selected as "accredited_investor" | "qualified_purchaser" | "qualified_client" | "institutional",
-      );
-      if ("error" in result) {
-        setError(result.error);
-      } else {
-        onDone();
-      }
-    });
-  }
-
-  return (
-    <div>
-      <h2 className="font-display text-xl font-semibold text-fg-primary">Investor Accreditation</h2>
-      <p className="mt-1 text-sm text-fg-secondary">
-        Select the category that best describes your investor status. This is required by securities law before you can invest.
-      </p>
-
-      <div className="mt-6 flex flex-col gap-3">
-        {ACCREDITATION_OPTIONS.map((opt) => (
-          <label
-            key={opt.value}
-            className={`flex cursor-pointer items-start gap-3 rounded-xl border p-4 transition ${
-              selected === opt.value
-                ? "border-gold-500/60 bg-gold-500/10"
-                : "border-line bg-surface-1 hover:border-gold-500/30"
-            }`}
-          >
-            <input
-              type="radio"
-              name="accreditation"
-              value={opt.value}
-              checked={selected === opt.value}
-              onChange={() => setSelected(opt.value)}
-              className="mt-0.5 shrink-0 accent-amber-400"
-            />
-            <div>
-              <p className={`text-sm font-medium ${selected === opt.value ? "text-gold-300" : "text-fg-primary"}`}>
-                {opt.label}
-              </p>
-              <p className="mt-0.5 text-xs text-fg-muted">{opt.description}</p>
-            </div>
-          </label>
-        ))}
-      </div>
-
-      {error && <p className="mt-3 font-mono text-[11px] text-status-danger">{error}</p>}
-
-      <p className="mt-4 text-xs text-fg-muted">
-        By continuing, you confirm that the above description accurately describes your investor status. This self-certification is made under penalty of securities law.
-      </p>
-
-      <button
-        onClick={handleSubmit}
-        disabled={!selected || pending}
-        className="mt-5 w-full rounded-lg border border-gold-500/40 bg-gold-500/10 py-2.5 font-mono text-[11px] uppercase tracking-wider text-gold-300 transition hover:bg-gold-500/20 disabled:opacity-40"
-      >
-        {pending ? "Saving…" : "Confirm accreditation →"}
-      </button>
     </div>
   );
 }
@@ -364,10 +263,6 @@ export function LPPortalFlow({
   return (
     <div>
       <ProgressBar status={status} />
-
-      {status === "pending" && (
-        <AccreditationStep token={token} onDone={() => advance("accreditation")} />
-      )}
 
       {status === "accreditation" && (
         <SubscriptionStep

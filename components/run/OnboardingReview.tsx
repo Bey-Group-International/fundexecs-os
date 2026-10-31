@@ -11,18 +11,24 @@ import {
   recordOnboardingCheck,
   recordOnboardingDecision,
 } from "@/app/(app)/[hub]/[module]/onboarding-actions";
+import { OnboardingLinkPanel } from "@/components/run/OnboardingLinkPanel";
+import { OnboardingSubmission, type SubmissionView } from "@/components/run/OnboardingSubmission";
 import {
   CHECK_KINDS,
   CHECK_STATUS_LABEL,
   DECISION_LABEL,
   EXPIRY_CHOICES_DAYS,
   REASON_MAX,
+  REVIEW_STATE_LABEL,
   SUMMARY_MAX,
   approvalBlocker,
+  availableDecisions,
+  decisionStageNote,
   isClear,
   reviewReadiness,
 } from "@/lib/onboarding-review";
 import type {
+  LpReviewState,
   OnboardingCheckKind,
   OnboardingCheckStatus,
   OnboardingDecisionKind,
@@ -54,6 +60,10 @@ export interface ReviewLp {
   lpName: string;
   lpEmail: string;
   stageLabel: string;
+  reviewState: LpReviewState;
+  token: string;
+  expiresAt: string;
+  submission: SubmissionView;
   checks: ReviewCheck[];
   decisions: ReviewDecision[];
   activity: ReviewActivity[];
@@ -172,7 +182,9 @@ function CheckRow({ lpId, info, check }: { lpId: string; info: (typeof CHECK_KIN
 }
 
 function DecisionForm({ lp, blocker }: { lp: ReviewLp; blocker: string | null }) {
-  const [decision, setDecision] = useState<OnboardingDecisionKind>("more_info");
+  const options = availableDecisions(lp.reviewState);
+  const stageNote = decisionStageNote(lp.reviewState);
+  const [decision, setDecision] = useState<OnboardingDecisionKind>(options[0] ?? "rejected");
   const [reason, setReason] = useState("");
   const [message, setMessage] = useState<{ tone: "ok" | "error"; text: string } | null>(null);
   const [pending, startTransition] = useTransition();
@@ -190,15 +202,25 @@ function DecisionForm({ lp, blocker }: { lp: ReviewLp; blocker: string | null })
 
   const blocked = decision === "approved" && blocker !== null;
 
+  if (options.length === 0) {
+    return (
+      <div className="rounded-lg border border-line bg-surface-0 p-3">
+        <p className="text-sm font-medium text-fg-primary">Your decision</p>
+        {stageNote ? <p className="mt-1 text-sm text-fg-secondary">{stageNote}</p> : null}
+      </div>
+    );
+  }
+
   return (
     <div className="rounded-lg border border-line bg-surface-0 p-3">
       <p className="text-sm font-medium text-fg-primary">Your decision</p>
+      {stageNote ? <p className="mt-1 text-xs text-amber-400">{stageNote}</p> : null}
       <p className="mt-1 text-xs text-fg-muted">
         Recorded with your reasoning and can&apos;t be edited afterwards. Record a new decision to change course.
       </p>
       <div className="mt-2 grid gap-2">
         <select aria-label="Decision" value={decision} onChange={(e) => setDecision(e.target.value as OnboardingDecisionKind)} className={`${inputClass} sm:w-72`}>
-          {(Object.keys(DECISION_LABEL) as OnboardingDecisionKind[]).map((d) => (
+          {options.map((d) => (
             <option key={d} value={d}>
               {DECISION_LABEL[d]}
             </option>
@@ -253,7 +275,9 @@ function LpCard({ lp }: { lp: ReviewLp }) {
           <p className="truncate text-sm font-medium text-fg-primary">{lp.lpName}</p>
           <p className="truncate text-xs text-fg-muted">{lp.lpEmail}</p>
         </div>
-        <span className={`${pill} border-line text-fg-muted`}>{lp.stageLabel}</span>
+        <span className={`${pill} ${lp.reviewState === "approved" ? STATUS_TONE.clear : lp.reviewState === "submitted" ? STATUS_TONE.flagged : "border-line text-fg-muted"}`}>
+          {lp.reviewState === "approved" ? lp.stageLabel : REVIEW_STATE_LABEL[lp.reviewState]}
+        </span>
         <span className={`${pill} ${readiness.ready ? STATUS_TONE.clear : STATUS_TONE.pending}`}>
           {readiness.ready ? "Checks clear" : `${readiness.notDone.length + readiness.flagged.length + readiness.expired.length} to resolve`}
         </span>
@@ -263,6 +287,10 @@ function LpCard({ lp }: { lp: ReviewLp }) {
 
       {open ? (
         <div className="grid gap-3 border-t border-line/50 px-4 py-3">
+          {lp.reviewState !== "approved" && lp.reviewState !== "rejected" ? (
+            <OnboardingLinkPanel sessionId={lp.id} token={lp.token} expiresAt={lp.expiresAt} />
+          ) : null}
+          <OnboardingSubmission view={lp.submission} />
           {CHECK_KINDS.map((info) => (
             <CheckRow key={info.kind} lpId={lp.id} info={info} check={byKind.get(info.kind)} />
           ))}

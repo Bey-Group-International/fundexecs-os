@@ -9,8 +9,11 @@ import { revalidatePath } from "next/cache";
 import { requireOrgContext } from "@/lib/auth";
 import { requireOrgAdmin } from "@/lib/rbac";
 import { createServerClient } from "@/lib/supabase/server";
+import type { LpReviewState } from "@/lib/supabase/database.types";
 import {
   approvalBlocker,
+  availableDecisions,
+  decisionStageNote,
   reviewReadiness,
   validateCheckInput,
   validateDecisionInput,
@@ -30,19 +33,19 @@ async function authorize() {
   return { ok: true as const, ctx: auth.ctx };
 }
 
-/** The LP must be one of this organization's. */
-async function sessionBelongsToOrg(
+/** The LP's review stage, if the LP is one of this organization's. */
+async function sessionStage(
   supabase: Awaited<ReturnType<typeof createServerClient>>,
   sessionId: string,
   orgId: string,
-): Promise<boolean> {
+): Promise<LpReviewState | null> {
   const { data } = await supabase
     .from("lp_onboarding_sessions")
-    .select("id")
+    .select("review_state")
     .eq("id", sessionId)
     .eq("organization_id", orgId)
     .maybeSingle();
-  return Boolean(data);
+  return (data as { review_state: LpReviewState } | null)?.review_state ?? null;
 }
 
 export async function recordOnboardingCheck(input: unknown): Promise<OnboardingActionResult> {
@@ -54,7 +57,7 @@ export async function recordOnboardingCheck(input: unknown): Promise<OnboardingA
 
   try {
     const supabase = await createServerClient();
-    if (!(await sessionBelongsToOrg(supabase, sessionId, who.ctx.orgId))) {
+    if (!(await sessionStage(supabase, sessionId, who.ctx.orgId))) {
       return { ok: false, error: "That LP wasn't found." };
     }
     const now = Date.now();
@@ -95,8 +98,10 @@ export async function recordOnboardingDecision(input: unknown): Promise<Onboardi
 
   try {
     const supabase = await createServerClient();
-    if (!(await sessionBelongsToOrg(supabase, sessionId, who.ctx.orgId))) {
-      return { ok: false, error: "That LP wasn't found." };
+    const stage = await sessionStage(supabase, sessionId, who.ctx.orgId);
+    if (!stage) return { ok: false, error: "That LP wasn't found." };
+    if (!availableDecisions(stage).includes(decision)) {
+      return { ok: false, error: decisionStageNote(stage) ?? "That decision isn't available right now." };
     }
 
     // The screen explains this rule; this is where it is enforced.

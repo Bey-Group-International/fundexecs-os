@@ -2272,6 +2272,85 @@ export type LpOnboardingSession = Timestamps & {
   wire_instructions: Json;
   notes: string | null;
   expires_at: string;
+  // Setup wizard (migration 20261031200021).
+  lp_type: LpType;
+  owner_threshold_pct: number;
+  review_state: LpReviewState;
+  submitted_at: string | null;
+};
+
+export type LpType = "individual" | "entity" | "institutional";
+export type LpReviewState =
+  | "not_started"
+  | "in_progress"
+  | "submitted"
+  | "changes_requested"
+  | "approved"
+  | "rejected";
+export type LpEntityType =
+  | "individual"
+  | "trust"
+  | "company"
+  | "partnership"
+  | "fund"
+  | "pension"
+  | "endowment"
+  | "family_office"
+  | "other";
+export type LpAccreditationBasis = "accredited_investor" | "qualified_purchaser" | "qualified_client" | "institutional";
+
+// The LP's own details and statements (one row per session). Written only by the
+// LP wizard, as the service role; owners and admins read it.
+export type LpOnboardingProfile = Timestamps & {
+  session_id: string;
+  organization_id: string;
+  legal_name: string | null;
+  entity_type: LpEntityType | null;
+  country: string | null;
+  contact_phone: string | null;
+  signatory_name: string | null;
+  signatory_title: string | null;
+  source_of_funds: string | null;
+  accreditation_basis: LpAccreditationBasis | null;
+  accreditation_statement_at: string | null;
+};
+
+// Owners and controlling persons an entity LP lists. Names, roles, share and
+// country only.
+export type LpOnboardingOwner = {
+  id: string;
+  organization_id: string;
+  session_id: string;
+  full_name: string;
+  role: "owner" | "controller";
+  ownership_pct: number | null;
+  country: string | null;
+  created_at: string;
+};
+
+// Consent to screening. Append-only.
+export type LpOnboardingConsent = {
+  id: string;
+  organization_id: string;
+  session_id: string;
+  scope: "identity_verification" | "background_screening";
+  text_version: string;
+  typed_name: string;
+  consented_at: string;
+};
+
+// One-time access codes (hash only). Service role only.
+export type LpLinkCode = {
+  id: string;
+  organization_id: string;
+  session_id: string;
+  code_hash: string;
+  kind: "email" | "gp";
+  expires_at: string;
+  attempts: number;
+  consumed_at: string | null;
+  created_by: string | null;
+  created_at: string;
 };
 
 // Run › Onboarding review (migration 20261031191852). Owner/admin access only.
@@ -3457,6 +3536,10 @@ export type Database = {
       digest_experiment_variants: TableShape<DigestExperimentVariant>;
       cron_runs: TableShape<CronRun>;
       lp_onboarding_sessions: TableShape<LpOnboardingSession>;
+      lp_onboarding_profiles: TableShape<LpOnboardingProfile>;
+      lp_onboarding_owners: TableShape<LpOnboardingOwner>;
+      lp_onboarding_consents: TableShape<LpOnboardingConsent>;
+      lp_link_codes: TableShape<LpLinkCode>;
       onboarding_checks: TableShape<OnboardingCheck>;
       onboarding_decisions: TableShape<OnboardingDecision>;
       onboarding_audit_log: TableShape<OnboardingAuditEntry>;
