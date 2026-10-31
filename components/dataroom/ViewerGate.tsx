@@ -83,7 +83,7 @@ function EmailGate({
           value={value}
           onChange={(e) => { setValue(e.target.value); setError(""); }}
           onKeyDown={(e) => e.key === "Enter" && submit()}
-          className="w-full rounded-lg border border-line bg-surface-1 px-3 py-2.5 text-sm text-fg-primary placeholder:text-fg-muted focus:border-gold-400 focus:outline-none"
+          className="w-full rounded-lg border border-line bg-surface-1 px-3 py-2.5 text-base text-fg-primary sm:text-sm placeholder:text-fg-muted focus:border-gold-400 focus:outline-none"
         />
         {error ? <p className="text-xs text-red-400">{error}</p> : null}
         <button
@@ -188,7 +188,7 @@ function NdaGate({
               value={signerName}
               onChange={(e) => setSignerName(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && submit()}
-              className="w-full rounded-lg border border-line bg-surface-1 px-3 py-2.5 text-sm text-fg-primary placeholder:text-fg-muted focus:border-gold-400 focus:outline-none"
+              className="w-full rounded-lg border border-line bg-surface-1 px-3 py-2.5 text-base text-fg-primary sm:text-sm placeholder:text-fg-muted focus:border-gold-400 focus:outline-none"
             />
           </label>
 
@@ -297,7 +297,7 @@ function PasswordGate({
           value={value}
           onChange={(e) => { setValue(e.target.value); setError(""); }}
           onKeyDown={(e) => e.key === "Enter" && submit()}
-          className="w-full rounded-lg border border-line bg-surface-1 px-3 py-2.5 text-sm text-fg-primary placeholder:text-fg-muted focus:border-gold-400 focus:outline-none"
+          className="w-full rounded-lg border border-line bg-surface-1 px-3 py-2.5 text-base text-fg-primary sm:text-sm placeholder:text-fg-muted focus:border-gold-400 focus:outline-none"
         />
         {error ? <p className="text-xs text-red-400">{error}</p> : null}
         <button
@@ -352,8 +352,8 @@ export function ViewerGate({ token, shareId, config, onPass }: Props) {
   if (stage === "done") return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-surface-0/90 px-6 backdrop-blur-sm">
-      <div className="w-full max-w-lg rounded-2xl border border-line bg-surface-1 p-8 shadow-2xl">
+    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-surface-0/90 px-4 py-6 backdrop-blur-sm sm:items-center sm:px-6">
+      <div className="w-full max-w-lg rounded-2xl border border-line bg-surface-1 p-5 shadow-2xl sm:p-8">
         {/* Header */}
         <div className="mb-6 flex items-center gap-3 border-b border-line pb-5">
           <span

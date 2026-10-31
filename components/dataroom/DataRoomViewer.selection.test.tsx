@@ -158,3 +158,16 @@ describe("a live reader", () => {
     expect(total).toBeLessThanOrEqual(120);
   });
 });
+
+describe("mobile navigation", () => {
+  it("closes from a backdrop that is not inside the transformed sidebar", () => {
+    const { container } = render(view([FINANCIALS], false));
+    fireEvent.click(screen.getByRole("button", { name: "Toggle navigation" }));
+    const backdrop = screen.getByRole("button", { name: "Close navigation" });
+    // A fixed child of a transformed ancestor covers only that ancestor, so a
+    // tap on the page behind the open menu would never reach it.
+    expect(container.querySelector("aside")?.contains(backdrop)).toBe(false);
+    fireEvent.click(backdrop);
+    expect(screen.queryByRole("button", { name: "Close navigation" })).toBeNull();
+  });
+});
