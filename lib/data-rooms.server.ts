@@ -70,11 +70,11 @@ export async function loadRoomDocuments(orgId: string, roomId: string): Promise<
   const supabase = await createServerClient();
   const { data: manifest } = await supabase
     .from("data_room_documents")
-    .select("document_id, sort_order")
+    .select("document_id, sort_order, require_signature")
     .eq("organization_id", orgId)
     .eq("room_id", roomId)
     .order("sort_order", { ascending: true });
-  const rows = (manifest ?? []) as { document_id: string; sort_order: number }[];
+  const rows = (manifest ?? []) as { document_id: string; sort_order: number; require_signature: boolean }[];
   if (rows.length === 0) return [];
 
   const { data: docRows } = await supabase
@@ -96,6 +96,7 @@ export async function loadRoomDocuments(orgId: string, roomId: string): Promise<
         sortOrder: r.sort_order ?? 0,
         storageKey: d.storage_key ?? null,
         hasContent: Boolean(d.content && d.content.trim()),
+        requireSignature: Boolean(r.require_signature),
       } satisfies RoomDocument,
     ];
   });

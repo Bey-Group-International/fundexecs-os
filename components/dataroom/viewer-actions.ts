@@ -47,6 +47,71 @@ export async function recordNdaSignature(formData: FormData): Promise<{ ok: true
 }
 
 /**
+ * Signs one file that the room requires a signature on, for this reader.
+ *
+ * Same trust model as the link NDA: the browser sends only the typed name, the
+ * "I agree" tick and, when the link has no email gate, an email. The time is
+ * the server's; the signer's email is the gate pass's when there is one; and
+ * what is recorded is the SHA-256 of the file as it stands now. Access is
+ * resolved by the same function the file routes use, so only a reader who
+ * could otherwise reach this file (live link, gates passed, published) can
+ * sign it.
+ */
+export async function signRoomDocument(
+  token: string,
+  documentId: string,
+  formData: FormData,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const generic = { ok: false as const, error: "We couldn't record your signature. Please try again." };
+  if (typeof token !== "string" || !token || typeof documentId !== "string") return generic;
+
+  const { resolveSharedDocument } = await import("@/lib/data-room-access.server");
+  const access = await resolveSharedDocument(token, documentId, { skipSignature: true });
+  if (!access.ok || !access.signatureRequired) return generic;
+
+  const { readGatePass, grantGate } = await import("@/lib/data-room-gate");
+  const pass = await readGatePass(access.share.id);
+  let email = pass?.email ?? null;
+  if (!email) {
+    const typed = String(formData.get("email") ?? "").trim();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(typed)) return { ok: false, error: "Enter a valid email address." };
+    email = typed;
+  }
+
+  let ipHint: string | null = null;
+  try {
+    const headersList = await headers();
+    const rawIp = headersList.get("x-forwarded-for")?.split(",")[0]?.trim() ?? headersList.get("x-real-ip") ?? null;
+    if (rawIp) {
+      const parts = rawIp.split(".");
+      ipHint = parts.length === 4 ? parts.slice(0, 3).join(".") : rawIp.split(":").slice(0, 3).join(":");
+    }
+  } catch {
+    // headers() unavailable in some edge environments; skip
+  }
+
+  const { signDocument, afterDocumentSigned } = await import("@/lib/document-signing.server");
+  const result = await signDocument(access.supabase as never, {
+    shareId: access.share.id,
+    roomId: access.roomId,
+    orgId: access.share.organization_id,
+    doc: access.doc,
+    signerName: String(formData.get("signer_name") ?? ""),
+    agreed: formData.get("agree") === "1",
+    email,
+    ipHint,
+  });
+  if (!result.ok) return result;
+
+  // Remember the email so the file's routes know who signed.
+  if (!pass?.email) await grantGate(access.share.id, { email });
+  const { after } = await import("next/server");
+  const sigId = result.signatureId;
+  after(() => afterDocumentSigned(access.supabase as never, sigId).then(() => undefined, () => undefined));
+  return { ok: true };
+}
+
+/**
  * Records that a visitor provided their email for a data room that requires
  * one (data capture, not authentication — there's no secret to check), then
  * grants the "email" gate for this share via a signed server-side pass.

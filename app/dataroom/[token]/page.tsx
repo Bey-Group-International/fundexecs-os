@@ -122,6 +122,7 @@ export default async function PublicDataRoom(props: {
     roomId,
     share.allowed_sections ?? null,
     share.document_id ?? null,
+    { shareId: share.id, email: pass?.email ?? null },
   );
   if (!payload) return <Unavailable />;
   // A single-document link shows the document and nothing of the firm's room.
@@ -140,6 +141,7 @@ export default async function PublicDataRoom(props: {
       gateConfig={gateConfig}
       viewControls={viewControls}
       viewerLabel={pass?.email ?? share.recipient_email ?? null}
+      signerEmail={pass?.email ?? null}
       focusDocumentId={focusDoc ?? null}
       contentReady
     />

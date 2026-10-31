@@ -161,6 +161,30 @@ export async function unpublishDocument(formData: FormData): Promise<void> {
   revalidatePath(LIBRARY);
 }
 
+/**
+ * Require (or stop requiring) a reader's signature before one file in this room
+ * opens, e.g. an NDA. Takes effect on every link into the room at once. Existing
+ * signatures are kept, so turning it back on does not make anyone sign twice.
+ */
+export async function setDocumentSignature(formData: FormData): Promise<void> {
+  const ctx = await getSessionContext();
+  if (!ctx?.orgId) return;
+  const roomId = String(formData.get("room_id") ?? "");
+  const documentId = String(formData.get("document_id") ?? "");
+  const required = formData.get("required") === "1";
+  if (!roomId || !documentId) return;
+
+  const supabase = await createServerClient();
+  const { error } = await supabase
+    .from("data_room_documents")
+    .update({ require_signature: required })
+    .eq("organization_id", ctx.orgId)
+    .eq("room_id", roomId)
+    .eq("document_id", documentId);
+  if (error) throw new Error(`Couldn't update the signature requirement: ${error.message}`);
+  revalidatePath(ROOMS);
+}
+
 /** Reorder a published document within its section in this room. */
 export async function moveRoomDocument(formData: FormData): Promise<void> {
   const ctx = await getSessionContext();
