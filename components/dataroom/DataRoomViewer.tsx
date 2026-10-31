@@ -390,14 +390,14 @@ export function DataRoomViewer({
     >
       {/* Top bar */}
       <header
-        className="flex shrink-0 items-center gap-4 border-b border-line px-4 py-3"
+        className="flex shrink-0 items-center gap-3 border-b border-line px-4 py-3 sm:gap-4"
         style={{ borderBottomColor: `${accent}33` }}
       >
         {/* Mobile sidebar toggle */}
         <button
           type="button"
           onClick={() => setSidebarOpen((v) => !v)}
-          className={`rounded-lg border border-line p-2 text-fg-muted lg:hidden ${preview ? "hidden" : ""}`}
+          className={`flex h-11 w-11 shrink-0 flex-col items-center justify-center rounded-lg border border-line text-fg-muted lg:hidden ${preview ? "hidden" : ""}`}
           aria-label="Toggle navigation"
         >
           <span className="block h-0.5 w-4 bg-current mb-1" />
@@ -438,6 +438,17 @@ export function DataRoomViewer({
       </header>
 
       <div className="flex min-h-0 flex-1 overflow-hidden">
+        {/* Mobile close overlay. A sibling of the sidebar, not a child: the sidebar
+            is transformed, which makes a fixed child cover only the sidebar, so a
+            tap on the page behind it never closed the navigation. */}
+        {sidebarOpen && !preview ? (
+          <button
+            type="button"
+            className="fixed inset-0 z-20 bg-slate-900/40 lg:hidden"
+            onClick={() => setSidebarOpen(false)}
+            aria-label="Close navigation"
+          />
+        ) : null}
         {/* Sidebar */}
         <aside
           className={
@@ -449,16 +460,6 @@ export function DataRoomViewer({
           `
           }
         >
-          {/* Mobile close overlay */}
-          {sidebarOpen ? (
-            <button
-              type="button"
-              className="fixed inset-0 z-20 bg-slate-900/40 lg:hidden"
-              onClick={() => setSidebarOpen(false)}
-              aria-label="Close navigation"
-            />
-          ) : null}
-
           <div className="relative z-10 flex flex-1 flex-col overflow-y-auto py-4">
             <p className="px-4 pb-2 font-mono text-[11px] uppercase tracking-[0.16em] text-fg-muted">Contents</p>
             <nav className="flex flex-col gap-0.5 px-2">
@@ -470,7 +471,7 @@ export function DataRoomViewer({
                     type="button"
                     onClick={() => handleSelect(item.key)}
                     className={`
-                      w-full rounded-lg px-3 py-2 text-left text-sm transition
+                      w-full rounded-lg px-3 py-3 text-left text-sm transition lg:py-2
                       ${active
                         ? "bg-surface-0 font-medium text-fg-primary"
                         : "text-fg-secondary hover:bg-surface-0/60 hover:text-fg-primary"}
@@ -498,7 +499,7 @@ export function DataRoomViewer({
         </aside>
 
         {/* Content panel */}
-        <main ref={mainRef} className="min-w-0 flex-1 overflow-y-auto px-6 py-8 lg:px-10">
+        <main ref={mainRef} className="min-w-0 flex-1 overflow-y-auto px-4 py-6 sm:px-6 sm:py-8 lg:px-10">
           <ContentPanel
             selected={effectiveSelected}
             org={org}
@@ -719,7 +720,7 @@ function DocCard({
   const previewable = Boolean(doc.uploaded) && kind !== "none";
   const [showFile, setShowFile] = useState(startOpen && previewable);
   const fileUrl = `/dataroom/${token}/d/${doc.id}`;
-  const btn = "rounded-lg border px-3 py-1.5 font-mono text-[11px] uppercase tracking-wider transition hover:bg-surface-0";
+  const btn = "inline-flex min-h-11 items-center rounded-lg border px-3 py-1.5 font-mono text-[11px] uppercase tracking-wider transition hover:bg-surface-0 sm:min-h-0";
 
   return (
     <div
@@ -728,11 +729,11 @@ function DocCard({
       style={{ boxShadow: "0 1px 4px rgba(0,0,0,0.1)" }}
     >
       {/* Doc header */}
-      <div className="flex flex-wrap items-center gap-3 px-5 py-3">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2 px-4 py-3 sm:px-5">
         <span className="font-mono text-[11px] text-fg-muted">
           {locked ? "🔒" : href ? (doc.uploaded ? "▤" : "↗") : "≡"}
         </span>
-        <p className="min-w-0 flex-1 text-sm font-medium text-fg-primary">{doc.name}</p>
+        <p className="min-w-[9rem] flex-1 break-words text-sm font-medium text-fg-primary">{doc.name}</p>
         {doc.requiresSignature ? (
           <span
             className="shrink-0 rounded-full border px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider"
@@ -745,7 +746,7 @@ function DocCard({
           <button
             type="button"
             onClick={() => setExpanded((v) => !v)}
-            className="font-mono text-[11px] uppercase tracking-wider text-fg-muted hover:text-fg-secondary"
+            className="inline-flex min-h-11 items-center px-1 font-mono text-[11px] uppercase tracking-wider text-fg-muted hover:text-fg-secondary sm:min-h-0"
           >
             {expanded ? "Collapse" : "Expand"}
           </button>
@@ -812,7 +813,7 @@ function DocCard({
 
       {/* Native content */}
       {doc.content && expanded ? (
-        <div className="border-t border-line/50 bg-surface-0 px-5 py-5">
+        <div className="border-t border-line/50 bg-surface-0 px-4 py-5 sm:px-5">
           <MarkdownRenderer content={doc.content} />
         </div>
       ) : null}
@@ -882,7 +883,7 @@ function SignatureLock({
   }
 
   return (
-    <div className="border-t border-line/50 bg-surface-0 px-5 py-5">
+    <div className="border-t border-line/50 bg-surface-0 px-4 py-5 sm:px-5">
       <p className="text-sm font-medium text-fg-primary">Sign to open this document</p>
       <p className="mt-1 text-xs text-fg-secondary">
         The sender needs your signature on <span className="text-fg-primary">{doc.name}</span> before you can read it.
@@ -896,7 +897,7 @@ function SignatureLock({
             placeholder="you@example.com"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            className="w-full rounded-lg border border-line bg-surface-1 px-3 py-2.5 text-sm text-fg-primary placeholder:text-fg-muted focus:border-gold-400 focus:outline-none"
+            className="w-full rounded-lg border border-line bg-surface-1 px-3 py-2.5 text-base text-fg-primary sm:text-sm placeholder:text-fg-muted focus:border-gold-400 focus:outline-none"
           />
         ) : null}
         <input
@@ -906,10 +907,10 @@ function SignatureLock({
           value={name}
           onChange={(e) => setName(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && submit()}
-          className="w-full rounded-lg border border-line bg-surface-1 px-3 py-2.5 text-sm text-fg-primary placeholder:text-fg-muted focus:border-gold-400 focus:outline-none"
+          className="w-full rounded-lg border border-line bg-surface-1 px-3 py-2.5 text-base text-fg-primary sm:text-sm placeholder:text-fg-muted focus:border-gold-400 focus:outline-none"
         />
-        <label className="flex items-start gap-2 text-xs text-fg-secondary">
-          <input type="checkbox" checked={agreed} onChange={(e) => setAgreed(e.target.checked)} className="mt-0.5" />
+        <label className="flex items-start gap-3 py-1 text-xs text-fg-secondary">
+          <input type="checkbox" checked={agreed} onChange={(e) => setAgreed(e.target.checked)} className="mt-0.5 h-5 w-5 shrink-0" />
           <span>I have read and agree to this document, and I intend my typed name to be my signature.</span>
         </label>
         {error ? <p className="text-xs text-red-400">{error}</p> : null}
@@ -917,7 +918,7 @@ function SignatureLock({
           type="button"
           onClick={submit}
           disabled={!canSubmit}
-          className="w-full rounded-lg py-2.5 text-sm font-medium text-surface-0 transition hover:opacity-90 disabled:opacity-50"
+          className="min-h-11 w-full rounded-lg py-2.5 text-sm font-medium text-surface-0 transition hover:opacity-90 disabled:opacity-50"
           style={{ backgroundColor: accent }}
         >
           {pending ? "Signing…" : "Sign and open"}
