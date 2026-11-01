@@ -2,6 +2,8 @@ import { redirect, notFound } from "next/navigation";
 import Link from "next/link";
 import { requirePlatformAdmin } from "@/lib/platform-admin";
 import { signOut } from "@/app/login/actions";
+import { MFA_CHALLENGE_PATH, MFA_ENROLL_PATH } from "@/lib/mfa";
+import { getSessionContext } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
@@ -17,6 +19,10 @@ export default async function AdminLayout({
   const gate = await requirePlatformAdmin();
   if (!gate.ok) {
     if (gate.status === 401) redirect("/login?next=/admin");
+    if (gate.mfaRequired) {
+      const ctx = await getSessionContext();
+      redirect(ctx?.mfa?.enrolled ? MFA_CHALLENGE_PATH : MFA_ENROLL_PATH);
+    }
     notFound();
   }
 
