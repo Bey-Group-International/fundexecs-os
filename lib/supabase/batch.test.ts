@@ -59,11 +59,40 @@ describe("selectAllPages", () => {
     expect(data?.map((r) => r.n)).toEqual(table.map((r) => r.n));
   });
 
-  it("stops after a short page, with one request when everything fits", async () => {
+  it("ends on an empty page: a small table is one page of rows and one empty page", async () => {
     const run = jest.fn(async (f: number, t: number) => ({ data: table.slice(f, Math.min(t + 1, 10)), error: null }));
     const { data } = await selectAllPages<{ n: number }>(run, 1000);
     expect(data).toHaveLength(10);
-    expect(run).toHaveBeenCalledTimes(1);
+    expect(run).toHaveBeenCalledTimes(2);
+  });
+
+  it("reads an empty table as empty", async () => {
+    const { data, error } = await selectAllPages<{ n: number }>(async () => ({ data: [], error: null }));
+    expect(error).toBeNull();
+    expect(data).toEqual([]);
+  });
+
+  it.each([1000, 500, 300, 100])(
+    "reads everything, in order, when the server caps a page at %i rows, below or at the page asked for",
+    async (cap) => {
+      // PostgREST cuts every response at its max_rows setting and says nothing. A
+      // helper that took a short page for the last one would stop at `cap` rows, and
+      // one that moved on by the page size would skip the rows in between.
+      const big = Array.from({ length: 1200 }, (_, i) => ({ n: i }));
+      const { data, error } = await selectAllPages<{ n: number }>(async (f, t) => ({
+        data: big.slice(f, Math.min(t + 1, f + cap)),
+        error: null,
+      }), 1000);
+      expect(error).toBeNull();
+      expect(data?.map((r) => r.n)).toEqual(big.map((r) => r.n));
+    },
+  );
+
+  it("does not report a truncated list as complete if it never reaches the end", async () => {
+    // A server that ignores the range and answers every page with the same rows.
+    const out = await selectAllPages<{ n: number }>(async () => ({ data: [{ n: 1 }], error: null }));
+    expect(out.data).toBeNull();
+    expect(out.error?.message).toMatch(/gave up/);
   });
 
   it("asks again after an exactly full last page, then stops on the empty one", async () => {

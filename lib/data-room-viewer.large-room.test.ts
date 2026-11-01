@@ -44,6 +44,20 @@ describe("a room with more files than one request can carry", () => {
     expect(Math.max(...sizes)).toBeLessThanOrEqual(MAX_IN_IDS);
   });
 
+  it.each([500, 300])(
+    "shows every file when the server's row cap is %i, below the page the code asks for",
+    async (cap) => {
+      // max_rows is a project setting. PostgREST cuts every response at it and says
+      // nothing, so a paging loop that took a short page for the last one stopped at
+      // `cap` files, and one that moved on by the page size skipped the rest.
+      const { client } = fakeDb(room(1200), { maxInIds: MAX_IN_IDS, maxRows: cap });
+      const payload = await buildViewerPayload(client, "org", "room", null);
+      const shown = payload!.docSections.flatMap((s) => s.docs);
+      expect(shown).toHaveLength(1200);
+      expect(new Set(shown.map((d) => d.id)).size).toBe(1200);
+    },
+  );
+
   it("still serves an ordinary small room in one pass", async () => {
     const { client } = fakeDb(room(3), { maxInIds: MAX_IN_IDS });
     const payload = await buildViewerPayload(client, "org", "room", null);
