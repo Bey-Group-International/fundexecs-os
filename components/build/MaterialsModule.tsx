@@ -22,6 +22,7 @@ import {
 } from "@/lib/data-rooms";
 import { listRooms, pickRoom, loadRoomDocuments } from "@/lib/data-rooms.server";
 import { buildViewerPayload } from "@/lib/data-room-viewer.server";
+import { selectAllPages } from "@/lib/supabase/batch";
 import { RoomPreview, type PreviewShare } from "./RoomPreview";
 import { ShareControls } from "./ShareControls";
 import { ViewerAnalytics } from "./ViewerAnalytics";
@@ -76,12 +77,19 @@ export async function MaterialsModule({ roomId }: { roomId?: string } = {}) {
 
   const [published, libraryRes, sharesRes, payload, reviewsRes, signaturesRes] = await Promise.all([
     loadRoomDocuments(orgId, room.id),
-    supabase
-      .from("documents")
-      .select("*")
-      .eq("organization_id", orgId)
-      .order("sort_order", { ascending: true })
-      .order("created_at", { ascending: true }),
+    // Paged: the library can outgrow one request's max_rows, and a truncated list
+    // would hide documents from "Publish from library" with no sign anything is
+    // missing. id breaks ties so pages never skip or repeat a row.
+    selectAllPages<Document>((from, to) =>
+      supabase
+        .from("documents")
+        .select("*")
+        .eq("organization_id", orgId)
+        .order("sort_order", { ascending: true })
+        .order("created_at", { ascending: true })
+        .order("id", { ascending: true })
+        .range(from, to) as unknown as PromiseLike<{ data: Document[] | null; error: { message: string } | null }>,
+    ),
     supabase
       .from("data_room_shares")
       .select("*")

@@ -12,6 +12,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { blendTrackRecord } from "@/lib/track-record";
 import { DATA_ROOM_SECTIONS } from "@/lib/data-room";
 import { roomSectionKey, sectionsAllowedBy } from "@/lib/data-rooms";
+import { selectAllPages, selectInBatches } from "@/lib/supabase/batch";
 import { isUploadedFile, previewKindFor } from "@/lib/document-files";
 import type { Database } from "@/lib/supabase/database.types";
 import type {
@@ -117,12 +118,22 @@ export async function buildViewerPayload(
   if (documentId) {
     manifest = [{ document_id: documentId, sort_order: 0 }];
   } else {
-    const { data: manifestRows, error: manifestErr } = await supabase
-      .from("data_room_documents")
-      .select("document_id, sort_order, require_signature")
-      .eq("organization_id", orgId)
-      .eq("room_id", roomId)
-      .order("sort_order", { ascending: true });
+    // Paged: one request is capped at max_rows, and a room past that would
+    // silently lose its last files. sort_order is unique per room, so the
+    // pages neither skip nor repeat rows.
+    const { data: manifestRows, error: manifestErr } = await selectAllPages<{
+      document_id: string;
+      sort_order: number;
+      require_signature: boolean;
+    }>((from, to) =>
+      supabase
+        .from("data_room_documents")
+        .select("document_id, sort_order, require_signature")
+        .eq("organization_id", orgId)
+        .eq("room_id", roomId)
+        .order("sort_order", { ascending: true })
+        .range(from, to),
+    );
     // Fail closed: an errored read is not an empty room.
     if (manifestErr) return null;
     const rows = (manifestRows ?? []) as {
@@ -139,14 +150,16 @@ export async function buildViewerPayload(
   // The manifest row is the source of truth even for a single-document link.
   const { data: sigRows, error: sigErr } = manifestSig
     ? { data: manifestSig, error: null }
-    : manifest.length
-    ? await supabase
-        .from("data_room_documents")
-        .select("document_id, require_signature")
-        .eq("organization_id", orgId)
-        .eq("room_id", roomId)
-        .in("document_id", manifest.map((m) => m.document_id))
-    : { data: [] as { document_id: string; require_signature: boolean }[], error: null };
+    : await selectInBatches<{ document_id: string; require_signature: boolean }>(
+        manifest.map((m) => m.document_id),
+        (batch) =>
+          supabase
+            .from("data_room_documents")
+            .select("document_id, require_signature")
+            .eq("organization_id", orgId)
+            .eq("room_id", roomId)
+            .in("document_id", batch),
+      );
   // Fail closed. If this read errored, `needsSignature` would be empty and every
   // file that requires a signature would be served unlocked.
   if (sigErr) return null;
@@ -182,13 +195,17 @@ export async function buildViewerPayload(
       .order("vintage_year", { ascending: false }),
     supabase.from("entities").select("*").eq("organization_id", orgId),
     supabase.from("organization_members").select("*").eq("organization_id", orgId),
-    manifest.length
-      ? supabase
+    // Batched: every id in one `.in()` overflows the request URL for a big
+    // room, which used to take the whole file list down with it.
+    selectInBatches<Document>(
+      manifest.map((m) => m.document_id),
+      (batch) =>
+        supabase
           .from("documents")
           .select("*")
           .eq("organization_id", orgId)
-          .in("id", manifest.map((m) => m.document_id))
-      : Promise.resolve({ data: [] as Document[], error: null }),
+          .in("id", batch) as unknown as PromiseLike<{ data: Document[] | null; error: { message: string } | null }>,
+    ),
   ]);
 
   const org = orgRes.data as Organization | null;

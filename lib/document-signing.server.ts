@@ -12,6 +12,7 @@ import { createHash } from "crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { DOCUMENT_BUCKET, isUploadedFile } from "@/lib/document-files";
 import { escapeHtml, sendEmail } from "@/lib/email";
+import { selectInBatches } from "@/lib/supabase/batch";
 import { normalizeEmail } from "@/lib/crm/contact-match";
 import { formatSignedAt } from "@/lib/nda";
 import type { Document } from "@/lib/supabase/database.types";
@@ -51,13 +52,18 @@ export async function signedDocumentIds(
   documentIds: string[],
 ): Promise<Set<string>> {
   if (!email || documentIds.length === 0) return new Set();
-  const { data } = await client
-    .from("data_room_document_signatures")
-    .select("document_id")
-    .eq("share_id", shareId)
-    .ilike("signer_email", email.replace(/[\\%_]/g, (c) => `\\${c}`))
-    .in("document_id", documentIds);
-  return new Set(((data ?? []) as { document_id: string }[]).map((r) => r.document_id));
+  // Batched for the same reason as the room's document read: a long `.in()`
+  // overflows the URL, the read errors, and an errored read here would lock a
+  // reader out of files they have already signed.
+  const { data } = await selectInBatches<{ document_id: string }>(documentIds, (batch) =>
+    client
+      .from("data_room_document_signatures")
+      .select("document_id")
+      .eq("share_id", shareId)
+      .ilike("signer_email", email.replace(/[\\%_]/g, (c) => `\\${c}`))
+      .in("document_id", batch) as unknown as PromiseLike<{ data: { document_id: string }[] | null; error: { message: string } | null }>,
+  );
+  return new Set((data ?? []).map((r) => r.document_id));
 }
 
 export type SignDocumentResult =
