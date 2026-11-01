@@ -2,7 +2,8 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { confirmTotpEnrollment, startTotpEnrollment } from "./actions";
+import { confirmTotpEnrollment, createRecoveryCodes, startTotpEnrollment } from "./actions";
+import { RecoveryCodes } from "./RecoveryCodes";
 
 type Pending = { factorId: string; qrCode: string; secret: string };
 
@@ -10,6 +11,7 @@ export function EnrollTotp({ next }: { next: string }) {
   const router = useRouter();
   const [pending, setPending] = useState<Pending | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [codes, setCodes] = useState<string[] | null>(null);
   const [busy, startTransition] = useTransition();
 
   function begin() {
@@ -26,10 +28,15 @@ export function EnrollTotp({ next }: { next: string }) {
     setError(null);
     startTransition(async () => {
       const res = await confirmTotpEnrollment(pending.factorId, String(form.get("code") ?? ""));
-      if (res.ok) router.replace(next);
-      else setError(res.error);
+      if (!res.ok) return setError(res.error);
+      // Enrolment succeeded and the session is now aal2: issue recovery codes before moving on.
+      const rc = await createRecoveryCodes();
+      if (rc.ok) setCodes(rc.codes);
+      else router.replace(next);
     });
   }
+
+  if (codes) return <RecoveryCodes initial={codes} onDone={() => router.replace(next)} />;
 
   if (!pending) {
     return (

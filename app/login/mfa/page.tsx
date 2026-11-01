@@ -48,7 +48,10 @@ export default async function MfaChallengePage(props: {
             Verify
           </button>
         </form>
-        <form action={signOut} className="mt-6 text-center">
+        <a href="/login/mfa/recover" className="mt-4 block text-center text-xs text-gold-300 hover:underline">
+          Lost your device? Use a recovery code
+        </a>
+        <form action={signOut} className="mt-4 text-center">
           <button type="submit" className="text-xs text-fg-muted hover:underline">Sign out</button>
         </form>
       </div>

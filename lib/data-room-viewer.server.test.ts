@@ -72,12 +72,26 @@ const OPEN: FileSpec = { id: "doc-b", name: "Deck", content: "public deck", stor
 
 const allDocs = (p: Awaited<ReturnType<typeof buildViewerPayload>>) => p!.docSections.flatMap((s) => s.docs);
 
+describe("the payload sent to the browser", () => {
+  it("says a file exists but never where it lives, for locked and unlocked files alike", async () => {
+    const { client } = fakeDb(
+      tables([{ ...LOCKED, require_signature: false }, { id: "doc-c", name: "Link", storage_key: "https://example.com/secret-link" }]),
+    );
+    const payload = await buildViewerPayload(client, ORG, ROOM, null);
+    expect(allDocs(payload).every((d) => d.hasFile)).toBe(true);
+    const wire = JSON.stringify(payload);
+    expect(wire).not.toContain(SECRET_PATH);
+    expect(wire).not.toContain("secret-link");
+    expect(wire).not.toContain("storage_key");
+  });
+});
+
 describe("a file that requires a signature", () => {
   it("leaves the server with none of itself in it until this reader has signed", async () => {
     const { client } = fakeDb(tables([LOCKED, OPEN]));
     const payload = await buildViewerPayload(client, ORG, ROOM, null, null, { shareId: SHARE, email: "lp@example.com" });
     const locked = allDocs(payload).find((d) => d.id === "doc-a")!;
-    expect(locked).toMatchObject({ content: null, storage_key: null, requiresSignature: true, signed: false, preview_kind: "none" });
+    expect(locked).toMatchObject({ content: null, hasFile: false, requiresSignature: true, signed: false, preview_kind: "none" });
     // Not just the fields above: no trace of it anywhere in what is sent.
     const wire = JSON.stringify(payload);
     expect(wire).not.toContain(SECRET_TEXT);
@@ -89,7 +103,7 @@ describe("a file that requires a signature", () => {
   it("is locked for the GP preview, which has no reader", async () => {
     const { client } = fakeDb(tables([LOCKED]));
     const payload = await buildViewerPayload(client, ORG, ROOM, null);
-    expect(allDocs(payload)[0]).toMatchObject({ content: null, storage_key: null, signed: false });
+    expect(allDocs(payload)[0]).toMatchObject({ content: null, hasFile: false, signed: false });
   });
 
   it("opens for the reader who signed it, matching their email regardless of case", async () => {
@@ -97,7 +111,7 @@ describe("a file that requires a signature", () => {
       tables([LOCKED], { data_room_document_signatures: [{ share_id: SHARE, document_id: "doc-a", signer_email: "lp@example.com" }] }),
     );
     const payload = await buildViewerPayload(client, ORG, ROOM, null, null, { shareId: SHARE, email: "LP@Example.com" });
-    expect(allDocs(payload)[0]).toMatchObject({ content: SECRET_TEXT, storage_key: SECRET_PATH, requiresSignature: true, signed: true });
+    expect(allDocs(payload)[0]).toMatchObject({ content: SECRET_TEXT, hasFile: true, requiresSignature: true, signed: true });
   });
 
   it("stays locked for a different reader, and for the same email on a different link", async () => {
