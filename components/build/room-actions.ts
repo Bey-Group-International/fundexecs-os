@@ -220,7 +220,7 @@ export async function moveRoomDocument(formData: FormData): Promise<void> {
   const supabase = await createServerClient();
   // Whole room, not the first max_rows of it: peers are found by section, and a
   // truncated manifest would swap the wrong neighbours.
-  const { data: manifest } = await selectAllPages<{ id: string; document_id: string; sort_order: number }>(
+  const { data: manifest, error: manifestErr } = await selectAllPages<{ id: string; document_id: string; sort_order: number }>(
     (from, to) =>
       supabase
         .from("data_room_documents")
@@ -230,6 +230,9 @@ export async function moveRoomDocument(formData: FormData): Promise<void> {
         .order("sort_order", { ascending: true })
         .range(from, to),
   );
+  // A failed read must not look like an empty room: the arrows would do nothing
+  // and say nothing. Throw, as the document read just below does.
+  if (manifestErr) throw new Error(`Couldn't reorder the document: ${manifestErr.message}`);
   const rows = manifest ?? [];
   if (rows.length === 0) return;
 
