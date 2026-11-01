@@ -7,7 +7,7 @@
 //
 // Codes are 10 characters from an unambiguous alphabet (no 0/O/1/I/L), shown as
 // xxxxx-xxxxx: 31^10 ≈ 2^49.5 combinations. Only a keyed hash is stored.
-import { createHmac, randomInt } from "crypto";
+import { randomInt, scrypt } from "crypto";
 
 export const RECOVERY_CODE_COUNT = 10;
 export const RECOVERY_MAX_FAILURES = 5;
@@ -37,12 +37,19 @@ export function normalizeRecoveryCode(raw: unknown): string | null {
   return cleaned;
 }
 
-/** Keyed hash. The key is MFA_RECOVERY_SECRET, else the service-role key (as the LP codes do). */
-export function hashRecoveryCode(normalized: string, env: Record<string, string | undefined> = process.env): string {
+/**
+ * Slow, keyed hash (scrypt, N=2^14). The salt includes MFA_RECOVERY_SECRET (else the
+ * service-role key), so a stolen table alone cannot be attacked offline, and an
+ * attacker who also has the key still pays scrypt's cost for each of ~2^49 guesses.
+ * Deterministic on purpose: the stored hash is looked up by equality.
+ */
+export function hashRecoveryCode(normalized: string, env: Record<string, string | undefined> = process.env): Promise<string> {
   const key = env.MFA_RECOVERY_SECRET?.trim() || env.SUPABASE_SERVICE_ROLE_KEY || "";
-  return createHmac("sha256", createHmac("sha256", "fx-mfa-recovery").update(key).digest("hex"))
-    .update(normalized)
-    .digest("hex");
+  return new Promise((resolve, reject) =>
+    scrypt(normalized, `fx-mfa-recovery:${key}`, 32, { N: 16384, r: 8, p: 1 }, (err, out) =>
+      err ? reject(err) : resolve(out.toString("hex")),
+    ),
+  );
 }
 
 /** True when the failures inside the window have reached the limit. */

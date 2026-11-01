@@ -41,7 +41,7 @@ export async function useRecoveryCode(formData: FormData) {
       .from("mfa_recovery_codes")
       .update({ used_at: new Date().toISOString() })
       .eq("user_id", userId)
-      .eq("code_hash", hashRecoveryCode(code))
+      .eq("code_hash", await hashRecoveryCode(code))
       .is("used_at", null)
       .select("id");
     burned = Array.isArray(data) && data.length === 1;

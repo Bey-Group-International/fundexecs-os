@@ -24,18 +24,18 @@ describe("recovery codes", () => {
     }
   });
 
-  it("hashes the same code the same way, and differently under another key", () => {
-    const a = hashRecoveryCode("ABCDEFGHJK", { MFA_RECOVERY_SECRET: "one" });
-    expect(hashRecoveryCode("ABCDEFGHJK", { MFA_RECOVERY_SECRET: "one" })).toBe(a);
-    expect(hashRecoveryCode("ABCDEFGHJK", { MFA_RECOVERY_SECRET: "two" })).not.toBe(a);
-    expect(hashRecoveryCode("ABCDEFGHJM", { MFA_RECOVERY_SECRET: "one" })).not.toBe(a);
-    expect(a).not.toContain("ABCDE");
+  it("hashes the same code the same way, and differently under another key", async () => {
+    const a = await hashRecoveryCode("ABCDEFGHJK", { MFA_RECOVERY_SECRET: "one" });
+    expect(await hashRecoveryCode("ABCDEFGHJK", { MFA_RECOVERY_SECRET: "one" })).toBe(a);
+    expect(await hashRecoveryCode("ABCDEFGHJK", { MFA_RECOVERY_SECRET: "two" })).not.toBe(a);
+    expect(await hashRecoveryCode("ABCDEFGHJM", { MFA_RECOVERY_SECRET: "one" })).not.toBe(a);
+    expect(a).toMatch(/^[0-9a-f]{64}$/);
   });
 
-  it("a generated code survives the show -> type -> normalize -> hash round trip", () => {
+  it("a generated code survives the show -> type -> normalize -> hash round trip", async () => {
     const env = { MFA_RECOVERY_SECRET: "k" };
     const [c] = generateRecoveryCodes(1);
-    expect(hashRecoveryCode(normalizeRecoveryCode(c.toLowerCase())!, env)).toBe(hashRecoveryCode(c.replace("-", ""), env));
+    expect(await hashRecoveryCode(normalizeRecoveryCode(c.toLowerCase())!, env)).toBe(await hashRecoveryCode(c.replace("-", ""), env));
   });
 });
 

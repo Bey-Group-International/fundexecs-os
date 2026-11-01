@@ -100,7 +100,7 @@ export async function createRecoveryCodes(): Promise<RecoveryCodesResult> {
   if (del.error) return { ok: false, error: "Could not save recovery codes. Try again." };
   const ins = await db
     .from("mfa_recovery_codes")
-    .insert(codes.map((c) => ({ user_id: auth.user.id, code_hash: hashRecoveryCode(c.replace("-", "")) })));
+    .insert(await Promise.all(codes.map(async (c) => ({ user_id: auth.user.id, code_hash: await hashRecoveryCode(c.replace("-", "")) }))));
   if (ins.error) return { ok: false, error: "Could not save recovery codes. Try again." };
   await audit(auth.user.id, "mfa.recovery_codes_generated", { codes: codes.length });
   return { ok: true, codes };
