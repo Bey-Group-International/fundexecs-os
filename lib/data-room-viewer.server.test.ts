@@ -111,9 +111,13 @@ describe("a file that requires a signature", () => {
   it("takes the requirement from the same read as membership, so an unpublish between two reads can't unlock it", async () => {
     const db = fakeDb(tables([LOCKED, OPEN]));
     await buildViewerPayload(db.client, ORG, ROOM, null);
-    // One read of the manifest for a room link. A second, separate read is the
-    // window in which a file could be returned without its requirement.
-    expect(db.readsOf("data_room_documents")).toBe(1);
+    // Every read of the manifest for a room link is a page of the one paged read,
+    // which carries membership and requirement together. A separate lookup by id
+    // (an `.in()`) is the window in which a file could be returned without its
+    // requirement.
+    const manifestReads = db.requests.filter((r) => r.table === "data_room_documents");
+    expect(manifestReads.length).toBeGreaterThan(0);
+    expect(manifestReads.every((r) => r.ranged === true && r.inSize === undefined)).toBe(true);
   });
 });
 

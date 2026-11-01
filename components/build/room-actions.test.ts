@@ -9,23 +9,30 @@ jest.mock("@/lib/auth", () => ({ getSessionContext: async () => ctx }));
 const singles: Record<string, unknown> = {};
 const rows: Record<string, unknown[]> = {};
 const rpcCalls: { fn: string; args: Record<string, unknown> }[] = [];
+// Tables whose reads should fail, as a database error would.
+const failing = new Set<string>();
 let rpcResult: { data: unknown; error: { message: string } | null } = { data: true, error: null };
 const tableWrites: { table: string; op: string }[] = [];
 
 jest.mock("@/lib/supabase/server", () => ({
   createServerClient: async () => ({
     from: (table: string) => {
+      let page: [number, number] | null = null;
       const q: Record<string, unknown> = {
         select: () => q,
         eq: () => q,
         in: () => q,
         order: () => q,
-        // Manifest reads are paged with .range(); these tables are tiny, so every
-        // page request is answered with all rows and paging ends after one page.
-        range: () => q,
+        // Manifest reads are paged with .range(). Honour the offset, so the first
+        // page holds the rows and the next is empty, which is what ends the read.
+        range: (from: number, to: number) => ((page = [from, to]), q),
         limit: () => q,
         maybeSingle: async () => ({ data: singles[table] ?? null }),
-        then: (resolve: (v: unknown) => unknown) => resolve({ data: rows[table] ?? [] }),
+        then: (resolve: (v: unknown) => unknown) => {
+          if (failing.has(table)) return resolve({ data: null, error: { message: "injected" } });
+          const all = rows[table] ?? [];
+          return resolve({ data: page ? all.slice(page[0], page[1] + 1) : all });
+        },
         upsert: async () => {
           tableWrites.push({ table, op: "upsert" });
           return { error: null };
@@ -56,6 +63,7 @@ beforeEach(() => {
   ctx = { orgId: "org-1", userId: "user-1" };
   for (const k of Object.keys(singles)) delete singles[k];
   for (const k of Object.keys(rows)) delete rows[k];
+  failing.clear();
   rpcCalls.length = 0;
   tableWrites.length = 0;
   rpcResult = { data: true, error: null };
@@ -125,6 +133,30 @@ describe("reordering a document", () => {
       { id: "doc-l", doc_type: "legal", name: "Charter" },
       { id: "doc-b", doc_type: "financials", name: "Beta" },
     ];
+  });
+
+  it("says so when the room's manifest can't be read, instead of doing nothing", async () => {
+    // A failed read used to return quietly: the arrows did nothing and showed
+    // nothing, which is indistinguishable from an empty room.
+    failing.add("data_room_documents");
+    await expect(
+      moveRoomDocument(form({ room_id: "room-1", document_id: "doc-a", dir: "down" })),
+    ).rejects.toThrow(/Couldn't reorder the document/);
+    expect(rpcCalls).toEqual([]);
+  });
+
+  it("says so when the documents can't be read either", async () => {
+    failing.add("documents");
+    await expect(
+      moveRoomDocument(form({ room_id: "room-1", document_id: "doc-a", dir: "down" })),
+    ).rejects.toThrow(/Couldn't reorder the document/);
+    expect(rpcCalls).toEqual([]);
+  });
+
+  it("still treats a room with nothing in it as a quiet no-op", async () => {
+    rows.data_room_documents = [];
+    await expect(moveRoomDocument(form({ room_id: "room-1", document_id: "doc-a", dir: "down" }))).resolves.toBeUndefined();
+    expect(rpcCalls).toEqual([]);
   });
 
   // The old path renumbered the whole section 0..n-1 — positions another

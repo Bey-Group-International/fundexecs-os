@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { getSessionContext } from "@/lib/auth";
+import { enforceMfa } from "@/lib/mfa.server";
 import { isPlatformAdmin as isPlatformAdminUser } from "@/lib/platform-admin";
 import { countPendingAccessRequests } from "@/lib/admin/access-requests";
 import { signOut } from "@/app/login/actions";
@@ -46,6 +47,7 @@ export default async function AppLayout({
   const ctx = await getSessionContext();
   if (!ctx) redirect("/login");
   if (!ctx.orgId) redirect("/onboarding");
+  enforceMfa(ctx);
 
   const supabase = await createServerClient();
   // Computed before the batch so the pending-request count is only queried for
