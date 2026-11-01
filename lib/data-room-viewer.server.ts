@@ -261,11 +261,11 @@ export async function buildViewerPayload(
     const locked = needsSignature.has(d.id) && !signed.has(d.id);
     const doc: ViewerDoc = locked
       ? {
-          // Nothing of a locked file leaves the server: not its text, not where its bytes live.
+          // Nothing of a locked file leaves the server: not its text, not where its bytes live, not even that it has a file.
           id: d.id,
           name: d.name,
           content: null,
-          storage_key: null,
+          hasFile: false,
           doc_type: d.doc_type ?? null,
           preview_kind: "none",
           uploaded: false,
@@ -276,7 +276,7 @@ export async function buildViewerPayload(
       id: d.id,
       name: d.name,
       content: d.content ?? null,
-      storage_key: d.storage_key ?? null,
+      hasFile: Boolean(d.storage_key),
       doc_type: d.doc_type ?? null,
       preview_kind: previewKindFor(d.storage_key),
       uploaded: isUploadedFile(d.storage_key),

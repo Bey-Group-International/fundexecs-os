@@ -52,7 +52,7 @@ function section(key: string, label: string, docName: string): ViewerSection {
         id: `${key}-1`,
         name: docName,
         content: `Body text unique to ${key}.`,
-        storage_key: null,
+        hasFile: false,
         doc_type: key,
       },
     ],

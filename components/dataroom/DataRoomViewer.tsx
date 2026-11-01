@@ -63,7 +63,12 @@ export interface ViewerDoc {
   id: string;
   name: string;
   content: string | null;
-  storage_key: string | null;
+  /**
+   * Whether a file or link sits behind this document. Never where it lives: the
+   * bucket path or external URL stays on the server, and the card opens
+   * `/dataroom/<token>/d/<id>`, which re-checks access.
+   */
+  hasFile: boolean;
   doc_type: string | null;
   /** How the in-app viewer can show the file (set by the payload builder). */
   preview_kind?: PreviewKind;
@@ -129,20 +134,6 @@ function compactUsd(n: number | null): string | null {
     notation: "compact",
     maximumFractionDigits: 1,
   }).format(n);
-}
-
-/**
- * Whether this document has a file behind it — an external link, or a file
- * uploaded into the private bucket.
- *
- * The card never links to `storage_key` itself. It links to
- * `/dataroom/<token>/d/<id>`, which re-checks the gate, the room manifest and
- * the link's section allowlist before deciding what to serve, and for an
- * uploaded file mints a signed URL there. So this only decides whether to show
- * an Open button, not where it points.
- */
-function hasFile(storageKey: string | null): boolean {
-  return Boolean(storageKey);
 }
 
 type NavItem =
@@ -714,7 +705,7 @@ function DocCard({
 }) {
   const [expanded, setExpanded] = useState(true);
   const locked = Boolean(doc.requiresSignature) && !doc.signed;
-  const href = hasFile(doc.storage_key);
+  const href = doc.hasFile;
   const kind = doc.preview_kind ?? "none";
   // Uploaded files read in the page. External links still open where they live.
   const previewable = Boolean(doc.uploaded) && kind !== "none";
