@@ -30,6 +30,11 @@ export function dueReminder(s: ReminderCandidate, now: number): ReminderDay | nu
   if (s.review_state !== "not_started" && s.review_state !== "in_progress") return null;
   if (s.status === "expired") return null;
   if (new Date(s.expires_at).getTime() <= now) return null;
+  // Only links with the lifetime reminders are timed for. An older, longer link
+  // (the allocator invite used to last 30 days) would get "expires soon" a
+  // fortnight early. A day of slack covers the gap between when the row and its
+  // expiry were stamped.
+  if (new Date(s.expires_at).getTime() - new Date(s.created_at).getTime() > (LINK_TTL_DAYS + 1) * DAY_MS) return null;
 
   const age = now - new Date(s.created_at).getTime();
   if (age >= 6 * DAY_MS) return s.reminded_day6_at ? null : 6;
@@ -55,7 +60,7 @@ export function reminderEmail(args: {
       `<p>Hello ${escapeHtml(args.lpName)},</p>` +
       `<p>${lead}</p>` +
       `<p><a href="${escapeHtml(args.url)}">Continue your onboarding</a></p>` +
-      `<p>You'll be asked for a code we email you when you open the link. The link works until ${escapeHtml(expires)} (${LINK_TTL_DAYS} days from when it was sent).</p>` +
+      `<p>You'll be asked for a code we email you when you open the link. The link works until ${escapeHtml(expires)}.</p>` +
       `<p>If you've already finished, you can ignore this email.</p>`,
   };
 }

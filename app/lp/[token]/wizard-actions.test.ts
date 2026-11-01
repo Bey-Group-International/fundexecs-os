@@ -1,5 +1,16 @@
 jest.mock("next/cache", () => ({ revalidatePath: jest.fn() }));
 
+let afterThrows = false;
+const afterTasks: Array<() => Promise<void>> = [];
+jest.mock("next/server", () => ({
+  after: (fn: () => Promise<void>) => {
+    if (afterThrows) throw new Error("outside a request");
+    afterTasks.push(fn);
+  },
+}));
+const runOfacScreen = jest.fn(async (..._a: unknown[]) => ({ ok: true }));
+jest.mock("@/lib/ofac.server", () => ({ runOfacScreen: (...a: unknown[]) => runOfacScreen(...a) }));
+
 const sendEmail = jest.fn(async (_i: unknown) => ({ ok: true, channel: "gmail", detail: "" }));
 jest.mock("@/lib/email", () => ({
   escapeHtml: (s: string) => s.replace(/</g, "&lt;"),
@@ -102,6 +113,9 @@ beforeEach(() => {
   issue = { ok: true, code: "123456", expiresAt: "2099-01-01T00:00:00Z" };
   verify = { ok: true };
   grant.mockClear();
+  afterThrows = false;
+  afterTasks.length = 0;
+  runOfacScreen.mockClear();
   idConfigured = false;
   idCheck = null;
   idRefresh = { ok: true, state: "needs_input", url: "https://verify.stripe.com/start/abc" };
@@ -493,5 +507,44 @@ describe("submitting when online ID verification is set up", () => {
   it("accepts a check the fund manager cleared by hand", async () => {
     idCheck = { status: "clear", method: "manual", vendor_ref: null };
     expect(await submitWizardAction("tok")).toEqual({ ok: true });
+  });
+});
+
+describe("the OFAC first-pass screen on submit", () => {
+  const profile = {
+    legal_name: "Jo Park",
+    entity_type: "individual",
+    country: "US",
+    signatory_name: null,
+    signatory_title: null,
+    source_of_funds: "Sale of my company in 2022",
+    accreditation_basis: "accredited_investor",
+    accreditation_statement_at: "2026-10-31T00:00:00Z",
+  };
+  beforeEach(() => {
+    tables.lp_onboarding_profiles = { data: profile };
+    tables.lp_onboarding_consents = { data: CONSENT_SCOPES.map((scope) => ({ scope, text_version: CONSENT_TEXT_VERSION })) };
+  });
+
+  it("is scheduled after the response, for this LP and its organization, and not run inline", async () => {
+    expect(await submitWizardAction("tok")).toEqual({ ok: true });
+    expect(runOfacScreen).not.toHaveBeenCalled();
+    expect(afterTasks).toHaveLength(1);
+    await afterTasks[0]();
+    expect(runOfacScreen).toHaveBeenCalledWith(expect.anything(), "s1", "org-1");
+  });
+
+  it("never holds up or fails a submission", async () => {
+    afterThrows = true;
+    expect(await submitWizardAction("tok")).toEqual({ ok: true });
+  });
+
+  it("isn't scheduled when the submission didn't go through", async () => {
+    updateReturn = [];
+    expect((await submitWizardAction("tok")).ok).toBe(false);
+    tables.lp_onboarding_consents = { data: [] };
+    updateReturn = [{ id: "s1" }];
+    expect((await submitWizardAction("tok")).ok).toBe(false);
+    expect(afterTasks).toHaveLength(0);
   });
 });
