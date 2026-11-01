@@ -60,15 +60,15 @@ Main code: `app/lp/[token]/`, `lib/lp-access.server.ts`, `lib/lp-wizard.ts`,
 
 ## Subprocessors and data flows
 
-|                  Party                  |                                                            What it receives                                                             |           Where in code            |
-|-----------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------|------------------------------------|
-| Supabase                                | All stored data above (hosting, database, auth)                                                                                         | `lib/supabase/`                    |
-| Vercel                                  | Hosts the app and runs the hourly cron                                                                                                  | `vercel.json`                      |
-| Stripe Identity                         | LP email and the LP's ID images and selfie, captured by Stripe                                                                          | `lib/providers/stripe-identity.ts` |
-| Google (the organization's own Gmail)   | Link, reminder and access-code emails, when the organization has connected a mailbox                                                    | `lib/email.ts`                     |
-| Resend (backup sender)                  | Link and access-code emails **only if** a backup sender is configured and the organization's mailbox fails. **Not** used for reminders. | `lib/email.ts` (`allowFallback`)   |
-| U.S. Treasury (OFAC)                    | Nothing. The public SDN list is downloaded and matched locally.                                                                         | `lib/ofac.server.ts`               |
-| CodeRabbit, Qodo, Pullfrog, Vercel bots | Source code of pull requests (not customer data)                                                                                        | `.github/workflows/pullfrog.yml`   |
+|                  Party                  |                                                                       What it receives                                                                       |           Where in code            |
+|-----------------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------|------------------------------------|
+| Supabase                                | All stored data above (hosting, database, auth)                                                                                                              | `lib/supabase/`                    |
+| Vercel                                  | Hosts the app and runs the hourly cron                                                                                                                       | `vercel.json`                      |
+| Stripe Identity                         | LP email and the LP's ID images and selfie, captured by Stripe                                                                                               | `lib/providers/stripe-identity.ts` |
+| Google (the organization's own Gmail)   | Link, reminder, access-code and team "LP submitted" emails, when the organization has connected a mailbox                                                    | `lib/email.ts`                     |
+| Resend (backup sender)                  | Link, access-code and team "LP submitted" emails **only if** a backup sender is configured and the organization's mailbox fails. **Not** used for reminders. | `lib/email.ts` (`allowFallback`)   |
+| U.S. Treasury (OFAC)                    | Nothing. The public SDN list is downloaded and matched locally.                                                                                              | `lib/ofac.server.ts`               |
+| CodeRabbit, Qodo, Pullfrog, Vercel bots | Source code of pull requests (not customer data)                                                                                                             | `.github/workflows/pullfrog.yml`   |
 
 ## Control map
 
@@ -108,9 +108,9 @@ Main code: `app/lp/[token]/`, `lib/lp-access.server.ts`, `lib/lp-wizard.ts`,
 
 ### CC9: Risk mitigation and vendors
 
-|              Criterion              |                                            Control as implemented                                             |                 Evidence                  |                         Status                          |
-|-------------------------------------|---------------------------------------------------------------------------------------------------------------|-------------------------------------------|---------------------------------------------------------|
-| CC9.2 Vendors and business partners | The subprocessors above. ID images are held by Stripe, not here. Reminders never use the backup email sender. | Table above; `lib/lp-reminders.server.ts` | Partial: vendor reviews are Outside; bot reviewers: G-8 |
+|              Criterion              |                                                                                                                Control as implemented                                                                                                                |                                  Evidence                                   |                         Status                          |
+|-------------------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|-----------------------------------------------------------------------------|---------------------------------------------------------|
+| CC9.2 Vendors and business partners | The subprocessors above. ID images are held by Stripe, not here. Reminders to LPs never use the backup email sender. The "LP submitted" email goes to the organization's own owners and admins, carries only the LP's name and type, and may use it. | Table above; `lib/lp-reminders.server.ts`, `lib/lp-submit-notice.server.ts` | Partial: vendor reviews are Outside; bot reviewers: G-8 |
 
 ### C1: Confidentiality
 
