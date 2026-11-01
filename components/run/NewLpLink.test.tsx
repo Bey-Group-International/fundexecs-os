@@ -1,11 +1,14 @@
 const refresh = jest.fn();
 jest.mock("next/navigation", () => ({ useRouter: () => ({ refresh }) }));
 
-const create = jest.fn(async (_i: unknown): Promise<{ ok: true; sessionId: string; url: string } | { ok: false; error: string }> => ({
-  ok: true,
-  sessionId: "s9",
-  url: "https://app.example.com/lp/tok-abc",
-}));
+const create = jest.fn(
+  async (_i: unknown): Promise<{ ok: true; sessionId: string; url: string; carried: Array<{ kind: string; checkedAt: string; expiresAt: string }> } | { ok: false; error: string }> => ({
+    ok: true,
+    sessionId: "s9",
+    url: "https://app.example.com/lp/tok-abc",
+    carried: [],
+  }),
+);
 const email = jest.fn(async (_id: string): Promise<{ ok: true; sent: boolean; detail: string } | { ok: false; error: string }> => ({ ok: true, sent: true, detail: "" }));
 jest.mock("@/app/(app)/[hub]/[module]/onboarding-link-actions", () => ({
   createLpLinkAction: (i: unknown) => create(i),
@@ -108,6 +111,28 @@ describe("NewLpLink", () => {
       fireEvent.click(screen.getByRole("button", { name: "Copy link" }));
     });
     expect(writeText).toHaveBeenCalledWith("https://app.example.com/lp/tok-abc");
+  });
+
+  it("says nothing about earlier verification for a new LP", async () => {
+    openForm();
+    fill();
+    await make();
+    expect(screen.queryByText(/carries over/)).toBeNull();
+  });
+
+  it("tells the fund manager when a returning LP keeps their ID verification, and that the rest runs again", async () => {
+    create.mockResolvedValueOnce({
+      ok: true,
+      sessionId: "s9",
+      url: "https://app.example.com/lp/tok-abc",
+      carried: [{ kind: "identity", checkedAt: "2026-07-24T00:00:00Z", expiresAt: "2027-07-24T00:00:00Z" }],
+    });
+    openForm();
+    fill();
+    await make();
+    expect(screen.getByRole("status")).toHaveTextContent(/ID verification of Jul 2[34], 2026 carries over/);
+    expect(screen.getByRole("status")).toHaveTextContent(/won't repeat it/);
+    expect(screen.getByRole("status")).toHaveTextContent(/Screening and accreditation still run again/);
   });
 
   it("starts over for another LP", async () => {

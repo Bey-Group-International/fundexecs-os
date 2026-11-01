@@ -25,7 +25,7 @@ export function NewLpLink({ funds }: { funds: { id: string; name: string }[] }) 
   const [fundId, setFundId] = useState("");
   const [commitment, setCommitment] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const [made, setMade] = useState<{ sessionId: string; url: string } | null>(null);
+  const [made, setMade] = useState<{ sessionId: string; url: string; carried: Array<{ kind: string; checkedAt: string; expiresAt: string }> } | null>(null);
   const [note, setNote] = useState<{ tone: "ok" | "error"; text: string } | null>(null);
   const [copied, setCopied] = useState(false);
   const [pending, startTransition] = useTransition();
@@ -54,7 +54,7 @@ export function NewLpLink({ funds }: { funds: { id: string; name: string }[] }) 
         commitmentAmount: commitment,
       }).catch(() => ({ ok: false as const, error: "Couldn't do that. Try again." }));
       if (!res.ok) return setError(res.error);
-      setMade({ sessionId: res.sessionId, url: res.url });
+      setMade({ sessionId: res.sessionId, url: res.url, carried: res.carried ?? [] });
       router.refresh();
     });
 
@@ -102,6 +102,13 @@ export function NewLpLink({ funds }: { funds: { id: string; name: string }[] }) 
           <p className="text-sm text-fg-secondary">
             Send this link to {lpName}. They&apos;ll confirm it&apos;s them with a code we email, then complete the setup. It works for {LINK_TTL_DAYS} days.
           </p>
+          {made.carried.some((c) => c.kind === "identity") ? (
+            <p role="status" className="text-sm text-emerald-300">
+              {lpName} was approved before, so their ID verification of{" "}
+              {new Date(made.carried.find((c) => c.kind === "identity")!.checkedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}{" "}
+              carries over and they won&apos;t repeat it. Screening and accreditation still run again.
+            </p>
+          ) : null}
           <p className="break-all rounded-lg border border-line bg-surface-0 px-3 py-2 font-mono text-[11px] text-fg-primary">{made.url}</p>
           <div className="flex flex-wrap items-center gap-2">
             <button
