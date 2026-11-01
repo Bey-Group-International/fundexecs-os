@@ -67,7 +67,7 @@ describe("the investor pages' Content-Security-Policy", () => {
     );
   const prod = directives(lpContentSecurityPolicy());
 
-  it("forbids framing, plugins, a different base, and forms posted elsewhere", () => {
+  it("forbids framing and plugins, and keeps the base URL and form targets to this origin", () => {
     expect(prod["frame-ancestors"]).toEqual(["'none'"]);
     expect(prod["object-src"]).toEqual(["'none'"]);
     expect(prod["base-uri"]).toEqual(["'self'"]);
