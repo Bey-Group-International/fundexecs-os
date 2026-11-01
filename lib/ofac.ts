@@ -97,6 +97,8 @@ export interface SdnIndex {
   listDate: string;
   /** Present when the list was downloaded; absent for one built by hand (tests). */
   source?: ListSource;
+  /** Whether both files are kept in the archive (G-7). Absent for one built by hand. */
+  archived?: boolean;
 }
 
 const KINDS: Record<string, SdnKind> = { individual: "individual", vessel: "vessel", aircraft: "aircraft" };

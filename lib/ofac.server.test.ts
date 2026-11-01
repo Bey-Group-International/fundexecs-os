@@ -1,6 +1,23 @@
 jest.mock("server-only", () => ({}), { virtual: true });
 
 import { createHash } from "node:crypto";
+
+// The archive: a fake bucket that remembers what was stored.
+let stored: Map<string, { bytes: Uint8Array; contentType?: string }>;
+let uploadError: { message: string } | null;
+let racedBy: string | null;
+const bucketMock = {
+  exists: jest.fn(async (path: string) => ({ data: stored.has(path), error: null })),
+  upload: jest.fn(async (path: string, bytes: Uint8Array, opts: { contentType?: string; upsert?: boolean }) => {
+    if (uploadError) return { error: uploadError };
+    if (racedBy === path || stored.has(path)) return { error: { message: "The resource already exists" } };
+    stored.set(path, { bytes, contentType: opts.contentType });
+    return { error: null };
+  }),
+};
+const fromBucket = jest.fn((_b: string) => bucketMock);
+jest.mock("@/lib/supabase/server", () => ({ createServiceClient: () => ({ storage: { from: (b: string) => fromBucket(b) } }) }));
+
 import { MIN_SDN_ROWS, SCREEN_PREFIX } from "./ofac";
 import { loadSdnIndex, resetSdnCache, runOfacScreen, subjectsFor } from "./ofac.server";
 
@@ -54,6 +71,12 @@ const client = {
 
 beforeEach(() => {
   resetSdnCache();
+  stored = new Map();
+  uploadError = null;
+  racedBy = null;
+  bucketMock.exists.mockClear();
+  bucketMock.upload.mockClear();
+  fromBucket.mockClear();
   fetched = [];
   sdnResponse = { ok: true, status: 200, text: SDN, modified: "Thu, 30 Oct 2026 15:00:00 GMT" };
   altResponse = { ok: true, status: 200, text: ALT };
@@ -108,6 +131,50 @@ describe("loadSdnIndex", () => {
     expect(b.source!.sdnSha256).not.toBe(a.source!.sdnSha256);
     expect(b.source!.altSha256).toBe(a.source!.altSha256);
     expect(b.source!.dateBasis).toBe("fetched");
+  });
+
+  it("archives both files, each under its own fingerprint, in the private bucket", async () => {
+    const idx = await loadSdnIndex(NOW);
+    expect(idx.archived).toBe(true);
+    expect(fromBucket).toHaveBeenCalledWith("ofac-lists");
+    expect([...stored.keys()].sort()).toEqual([`${sha(SDN)}.csv`, `${sha(ALT)}.csv`].sort());
+    // The stored bytes are exactly what was served, so they hash back to the fingerprint.
+    expect(sha(Buffer.from(stored.get(`${sha(SDN)}.csv`)!.bytes))).toBe(sha(SDN));
+    expect(stored.get(`${sha(ALT)}.csv`)!.contentType).toBe("text/csv");
+  });
+
+  it("does not store a file again that is already archived", async () => {
+    await loadSdnIndex(NOW);
+    bucketMock.upload.mockClear();
+    resetSdnCache();
+    const idx = await loadSdnIndex(NOW);
+    expect(idx.archived).toBe(true);
+    expect(bucketMock.upload).not.toHaveBeenCalled();
+  });
+
+  it("stores only the file that changed when the list is updated", async () => {
+    await loadSdnIndex(NOW);
+    bucketMock.upload.mockClear();
+    resetSdnCache();
+    sdnResponse = { ...sdnResponse, text: SDN + "\r\n" + row(99999, "NEW ENTRY ONE") };
+    await loadSdnIndex(NOW);
+    expect(bucketMock.upload).toHaveBeenCalledTimes(1);
+    expect(stored.size).toBe(3);
+  });
+
+  it("treats a file another process stored first as archived", async () => {
+    racedBy = `${sha(SDN)}.csv`;
+    expect((await loadSdnIndex(NOW)).archived).toBe(true);
+  });
+
+  it("still screens when the archive fails, and says it was not archived", async () => {
+    uploadError = { message: "storage is down" };
+    const idx = await loadSdnIndex(NOW);
+    expect(idx.archived).toBe(false);
+    expect(idx.entries.length).toBe(MIN_SDN_ROWS + 1);
+    resetSdnCache();
+    await runOfacScreen(client, "s1", "org-1", { now: NOW });
+    expect(audits[0]).toMatchObject({ detail: { archived: false } });
   });
 
   it("keeps the list for a few hours, then downloads again", async () => {
@@ -184,6 +251,7 @@ describe("runOfacScreen", () => {
             date_basis: "last_modified",
             sdn_sha256: sha(SDN),
             alt_sha256: sha(ALT),
+            archived: true,
           },
         },
       ]);
