@@ -221,3 +221,61 @@ describe("a document section that shares its name with a Build page", () => {
     expect(screen.queryByText("Fund I Investment Memorandum")).not.toBeInTheDocument();
   });
 });
+
+describe("the All documents view", () => {
+  const MARKETING = {
+    key: "marketing",
+    label: "Marketing & Materials",
+    docs: [
+      { id: "m1", name: "Executive Summary", content: "x", hasFile: true, doc_type: "marketing", uploaded: true, preview_kind: "pdf" as const },
+      { id: "m2", name: "Fund I Teaser", content: "x", hasFile: true, doc_type: "marketing", uploaded: true, preview_kind: "pdf" as const },
+    ],
+  };
+  const THESIS = section("thesis", "Investment Strategy & Thesis", "Investment Memorandum");
+  const TRACK = section("track_record", "Track Record & Performance", "Assumptions and Model Package");
+
+  it("lists every published document, grouped by section as the room's Contents lists them", () => {
+    render(view([MARKETING, THESIS, TRACK]));
+    fireEvent.click(screen.getByRole("button", { name: /^All documents/ }));
+    expect(screen.getByRole("heading", { level: 1, name: "All documents" })).toBeInTheDocument();
+    for (const name of ["Executive Summary", "Fund I Teaser", "Investment Memorandum", "Assumptions and Model Package"]) {
+      expect(screen.getByText(name)).toBeInTheDocument();
+    }
+    // Section labels sit above their documents, in order.
+    const text = document.body.textContent ?? "";
+    const at = (s: string) => text.lastIndexOf(s);
+    expect(at("Marketing & Materials")).toBeLessThan(at("Executive Summary"));
+    expect(at("Fund I Teaser")).toBeLessThan(at("Investment Strategy & Thesis"));
+    expect(at("Investment Memorandum")).toBeLessThan(at("Track Record & Performance"));
+  });
+
+  it("shows the total in the nav", () => {
+    render(view([MARKETING, THESIS, TRACK]));
+    expect(screen.getByRole("button", { name: /^All documents\s*4$/ })).toBeInTheDocument();
+  });
+
+  it("does not open a file preview for every document at once", () => {
+    const { container } = render(view([MARKETING, THESIS, TRACK]));
+    fireEvent.click(screen.getByRole("button", { name: /^All documents/ }));
+    expect(container.querySelectorAll("iframe, video, img[alt]").length).toBe(0);
+  });
+
+  it("is absent when the room has nothing published", () => {
+    render(view([]));
+    expect(screen.queryByRole("button", { name: /^All documents/ })).not.toBeInTheDocument();
+  });
+});
+
+describe("what a reader sees on opening the room", () => {
+  it("is the room's published contents, with no click needed", () => {
+    render(view([section("marketing", "Marketing & Materials", "Executive Summary"), section("thesis", "Investment Strategy & Thesis", "Investment Memorandum")]));
+    expect(screen.getByRole("heading", { level: 1, name: "All documents" })).toBeInTheDocument();
+    expect(screen.getByText("Executive Summary")).toBeInTheDocument();
+    expect(screen.getByText("Investment Memorandum")).toBeInTheDocument();
+  });
+
+  it("still opens on Overview when nothing is published", () => {
+    render(view([]));
+    expect(screen.getByRole("heading", { level: 1, name: "Overview" })).toBeInTheDocument();
+  });
+});

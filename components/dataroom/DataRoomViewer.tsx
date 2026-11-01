@@ -136,6 +136,9 @@ function compactUsd(n: number | null): string | null {
   }).format(n);
 }
 
+/** Nav key of the "All documents" view: every published file, grouped as the room's Contents lists it. */
+const ALL_DOCS_KEY = "all";
+
 /**
  * Nav key of a document section. The Build-backed pages (overview, track_record,
  * thesis, team) and the document sections share names: a room's "Investment
@@ -144,10 +147,10 @@ function compactUsd(n: number | null): string | null {
  * page instead, and the files in it were unreachable for the reader.
  */
 const docNavKey = (sectionKey: string) => `docs:${sectionKey}`;
-const docNavKeyOrUndefined = (sectionKey: string | undefined) => (sectionKey === undefined ? undefined : docNavKey(sectionKey));
 
 type NavItem =
   | { key: "overview"; label: string }
+  | { key: "all"; label: string; count: number }
   | { key: "track_record"; label: string }
   | { key: "thesis"; label: string }
   | { key: "team"; label: string }
@@ -191,6 +194,10 @@ export function DataRoomViewer({
     const items: NavItem[] = [];
     // A single-document link has no firm overview to show — just the document.
     if (!viewControls.singleDocument) items.push({ key: "overview", label: "Overview" });
+    // Everything published, in the order and grouping the GP's Room contents
+    // shows, so a reader can see the whole room without opening each section.
+    const total = docSections.reduce((n, s) => n + s.docs.length, 0);
+    if (!viewControls.singleDocument && total > 0) items.push({ key: ALL_DOCS_KEY, label: "All documents", count: total });
     if (blended.dealCount > 0) items.push({ key: "track_record", label: "Track Record" });
     if (thesis) items.push({ key: "thesis", label: "Investment Thesis" });
     if (team.length > 0) items.push({ key: "team", label: "Team" });
@@ -201,10 +208,15 @@ export function DataRoomViewer({
     return items;
   }, [blended.dealCount, thesis, team.length, entities.length, docSections, viewControls.singleDocument]);
 
-  const focusSection = focusDocumentId
-    ? docNavKeyOrUndefined(docSections.find((s) => s.docs.some((d) => d.id === focusDocumentId))?.key)
+  const focusDocSection = focusDocumentId
+    ? docSections.find((s) => s.docs.some((d) => d.id === focusDocumentId))
     : undefined;
-  const [selected, setSelected] = useState<string>(focusSection ?? nav[0]?.key ?? "overview");
+  const focusSection = focusDocSection ? docNavKey(focusDocSection.key) : undefined;
+  // A reader opens on the room's contents (what the GP published), or on the
+  // document a link points at. Overview is one click away.
+  const [selected, setSelected] = useState<string>(
+    focusSection ?? nav.find((n) => n.key === ALL_DOCS_KEY)?.key ?? nav[0]?.key ?? "overview",
+  );
   const mainRef = useRef<HTMLElement>(null);
   const shellRef = useRef<HTMLDivElement>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -483,6 +495,9 @@ export function DataRoomViewer({
                     {"docs" in item && item.docs.length > 1 ? (
                       <span className="ml-2 font-mono text-[11px] text-fg-muted">{item.docs.length}</span>
                     ) : null}
+                    {"count" in item ? (
+                      <span className="ml-2 font-mono text-[11px] text-fg-muted">{item.count}</span>
+                    ) : null}
                   </button>
                 );
               })}
@@ -651,6 +666,39 @@ function ContentPanel({
             <div key={i} className="rounded-lg border border-line bg-surface-1 px-4 py-2.5">
               <p className="text-sm font-medium text-fg-primary">{e.name}</p>
               {e.entity_type ? <p className="text-xs text-fg-muted">{e.entity_type}</p> : null}
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  if (selected === ALL_DOCS_KEY) {
+    return (
+      <div className="max-w-4xl">
+        <SectionHeader title="All documents" accent={accent} />
+        <div className="mt-4 space-y-6">
+          {docSections
+            .filter((sec) => sec.docs.length > 0)
+            .map((sec) => (
+            <div key={sec.key}>
+              <p className="mb-2 font-mono text-[11px] uppercase tracking-[0.16em] text-fg-muted">{sec.label}</p>
+              <div className="space-y-4">
+                {sec.docs.map((doc) => (
+                  <DocCard
+                    key={doc.id}
+                    doc={doc}
+                    token={token}
+                    accent={accent}
+                    preview={preview}
+                    controls={controls}
+                    viewerLabel={viewerLabel}
+                    signerEmail={signerEmail}
+                    // A long list of open file previews is not a list: the reader opens the ones they want.
+                    startOpen={false}
+                  />
+                ))}
+              </div>
             </div>
           ))}
         </div>
