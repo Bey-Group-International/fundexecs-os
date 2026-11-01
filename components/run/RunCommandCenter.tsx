@@ -82,30 +82,9 @@ function DealConvictionChip({ d }: { d: DealConviction }) {
 export function RunCommandCenter({ conviction }: { conviction: RunConviction }) {
   const { overall, stage, deals, benchmark, nextAction, mandate } = conviction;
 
-  if (deals.length === 0) {
-    return (
-      <div className="mb-6 flex flex-col items-center rounded-2xl border border-dashed border-line bg-surface-1 px-8 py-10 text-center">
-        <div className="flex items-center gap-2">
-          <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-300">
-            Deal command center
-          </span>
-          <Link
-            href="/run/diligence"
-            className="rounded-md border border-gold-500/40 bg-gold-500/10 px-2.5 py-1 font-mono text-[11px] uppercase tracking-wider text-gold-200 transition hover:bg-gold-500/20"
-          >
-            ✶ AI Evaluate
-          </Link>
-        </div>
-        <p className="mt-2 max-w-sm text-sm text-fg-secondary">
-          No deals in evaluation yet. Move a deal into diligence from the{" "}
-          <Link href="/source/deal_pipeline" className="text-gold-300 hover:underline">
-            deal pipeline
-          </Link>{" "}
-          and conviction will build here as you underwrite and clear diligence.
-        </p>
-      </div>
-    );
-  }
+  // Nothing to show until a deal is in evaluation: no empty-state box, so the
+  // module bar sits right under the hub header. The Diligence tab is the way in.
+  if (deals.length === 0) return null;
 
   const irrTone =
     benchmark.avgPipelineIrr == null || benchmark.targetIrr == null
