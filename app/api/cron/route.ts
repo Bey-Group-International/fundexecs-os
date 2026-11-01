@@ -398,9 +398,13 @@ export async function GET(request: Request) {
 
   // Onboarding links nobody ever used, deleted once well past expiry (SOC 2 G-1).
   let lpAbandonedPurged = 0;
+  let lpAbandonedPurgeFailed = false;
   try {
-    lpAbandonedPurged = await purgeAbandonedLps(supabase);
+    const purge = await purgeAbandonedLps(supabase);
+    lpAbandonedPurged = purge.count;
+    lpAbandonedPurgeFailed = purge.failed;
   } catch (e) {
+    lpAbandonedPurgeFailed = true;
     console.error("lp_retention failed", e);
   }
 
@@ -512,7 +516,8 @@ export async function GET(request: Request) {
   try {
     await recordCronRun(supabase, {
       job: "cron",
-      status: "ok",
+      // A failed retention purge must not look like a healthy run.
+      status: lpAbandonedPurgeFailed ? "error" : "ok",
       detail: {
         swept: due.length,
         scannedOrgs: radar.scannedOrgs,
@@ -549,6 +554,8 @@ export async function GET(request: Request) {
         failedReportsRetried: failedReports.retried,
         failedReportsPending: failedReports.candidates,
         failedReportsBillingBlocked: failedReports.billingBlocked,
+        lpAbandonedPurged,
+        lpAbandonedPurgeFailed,
         calendarEventIdsReattached: calendarRepair.reattached,
         calendarEventIdsMissing: calendarRepair.noEvent,
         calendarEventIdRepairFailures: calendarRepair.failed,
@@ -573,5 +580,5 @@ export async function GET(request: Request) {
     // best-effort: never let health tracking break the cron response
   }
 
-  return NextResponse.json({ swept: due.length, results, radar, pulse, escalated, inboxApprovals, webhooks, proactive, reminders, bookingConfirmations, bookingRequestReminders, lpReminders, lpAbandonedPurged, bookingRequestsExpired, recordings, staleMeetings, failedReports, calendarRepair, subscriptions, settledInvoices, nativeCollections, networkAutomations });
+  return NextResponse.json({ swept: due.length, results, radar, pulse, escalated, inboxApprovals, webhooks, proactive, reminders, bookingConfirmations, bookingRequestReminders, lpReminders, lpAbandonedPurged, lpAbandonedPurgeFailed, bookingRequestsExpired, recordings, staleMeetings, failedReports, calendarRepair, subscriptions, settledInvoices, nativeCollections, networkAutomations });
 }

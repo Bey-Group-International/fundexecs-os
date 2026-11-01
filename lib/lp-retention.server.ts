@@ -15,14 +15,16 @@ export async function eraseLp(client: Client, args: { orgId: string; sessionId: 
   return data;
 }
 
-/** Deletes never-used links past the retention window. Never throws; returns how many went. */
-export async function purgeAbandonedLps(client: Client, days: number = ABANDONED_AFTER_DAYS): Promise<number> {
+export type PurgeAbandonedLpsResult = { count: number; failed: boolean };
+
+/** Deletes never-used links past the retention window. Never throws; says whether it failed, so a broken purge is not mistaken for "nothing to delete". */
+export async function purgeAbandonedLps(client: Client, days: number = ABANDONED_AFTER_DAYS): Promise<PurgeAbandonedLpsResult> {
   try {
     const { data, error } = await client.rpc("purge_abandoned_lp_onboarding", { p_days: days });
     if (error) throw new Error(error.message);
-    return typeof data === "number" ? data : 0;
+    return { count: typeof data === "number" ? data : 0, failed: false };
   } catch (err) {
     console.error("purgeAbandonedLps failed", err);
-    return 0;
+    return { count: 0, failed: true };
   }
 }

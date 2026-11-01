@@ -41,7 +41,10 @@ describe("the migration", () => {
     expect(sql).toContain("status = 'flagged'");
   });
   it("writes the audit entry before it deletes, and keeps the audit log", () => {
-    expect(sql.indexOf("'lp.erased'")).toBeLessThan(sql.indexOf("delete from public.lp_onboarding_sessions where id = p_session"));
+    // Anchor on the insert's own values; the header comment also contains the string 'lp.erased'.
+    const insertAt = sql.indexOf("'user', 'lp.erased'");
+    expect(insertAt).toBeGreaterThan(-1);
+    expect(insertAt).toBeLessThan(sql.indexOf("delete from public.lp_onboarding_sessions where id = p_session"));
     expect(sql).not.toMatch(/delete from public\.onboarding_audit_log/);
   });
   it("enforces the retention floor the app promises", () => {
