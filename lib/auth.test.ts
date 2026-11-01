@@ -65,7 +65,34 @@ describe("getSessionContext", () => {
       emailConfirmed: false,
       orgId: "org1",
       role: "owner",
+      mfa: { enrolled: false, level: null, required: true },
     });
+  });
+
+  it("reports an enrolled owner at aal1 so the gate can challenge", async () => {
+    mockCreateClient.mockResolvedValue({
+      auth: {
+        getUser: jest.fn().mockResolvedValue({
+          data: {
+            user: {
+              id: "u1",
+              email: "u1@example.com",
+              factors: [{ id: "f1", factor_type: "totp", status: "verified" }],
+            },
+          },
+        }),
+        mfa: {
+          getAuthenticatorAssuranceLevel: jest
+            .fn()
+            .mockResolvedValue({ data: { currentLevel: "aal1", nextLevel: "aal2" } }),
+        },
+      },
+      from: jest.fn().mockReturnValue(
+        membershipQuery({ data: { organization_id: "org1", role: "admin" } }),
+      ),
+    });
+    const ctx = await getSessionContext();
+    expect(ctx?.mfa).toEqual({ enrolled: true, level: "aal1", required: true });
   });
 
   it("returns null instead of throwing when auth.getUser rejects (backend unreachable)", async () => {
@@ -91,5 +118,47 @@ describe("getSessionContext", () => {
       from: jest.fn().mockReturnValue(query),
     });
     await expect(getSessionContext()).resolves.toBeNull();
+  });
+});
+
+
+describe("requireOrgContext MFA gate", () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockHasEnv.mockReturnValue(true);
+  });
+
+  function client(role: string, factors: unknown[], level: string) {
+    return {
+      auth: {
+        getUser: jest.fn().mockResolvedValue({ data: { user: { id: "u1", email: "u@x.co", factors } } }),
+        mfa: {
+          getAuthenticatorAssuranceLevel: jest
+            .fn()
+            .mockResolvedValue({ data: { currentLevel: level, nextLevel: "aal2" } }),
+        },
+      },
+      from: jest.fn().mockReturnValue(membershipQuery({ data: { organization_id: "org1", role } })),
+    };
+  }
+
+  it("refuses an admin with no second factor", async () => {
+    mockCreateClient.mockResolvedValue(client("admin", [], "aal1"));
+    const { requireOrgContext } = await import("@/lib/auth");
+    await expect(requireOrgContext()).resolves.toMatchObject({ ok: false, status: 403 });
+  });
+
+  it("allows an admin who passed the challenge", async () => {
+    mockCreateClient.mockResolvedValue(
+      client("admin", [{ id: "f1", factor_type: "totp", status: "verified" }], "aal2"),
+    );
+    const { requireOrgContext } = await import("@/lib/auth");
+    await expect(requireOrgContext()).resolves.toMatchObject({ ok: true });
+  });
+
+  it("does not force a plain member", async () => {
+    mockCreateClient.mockResolvedValue(client("member", [], "aal1"));
+    const { requireOrgContext } = await import("@/lib/auth");
+    await expect(requireOrgContext()).resolves.toMatchObject({ ok: true });
   });
 });

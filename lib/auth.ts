@@ -5,6 +5,7 @@
 import { cache } from "react";
 import { createServerClient, hasSupabaseServerEnv } from "@/lib/supabase/server";
 import type { MemberRole } from "@/lib/supabase/database.types";
+import { buildMfaState, mfaGate, verifiedTotpFactors, type AssuranceLevel, type MfaState } from "@/lib/mfa";
 
 export interface SessionContext {
   userId: string;
@@ -13,6 +14,8 @@ export interface SessionContext {
   emailConfirmed: boolean;
   orgId: string | null;
   role: MemberRole | null;
+  /** Second-factor state. Undefined only where it could not be determined. */
+  mfa?: MfaState;
 }
 
 // cache() dedupes per request: layouts and pages that render together share one
@@ -43,12 +46,27 @@ export const getSessionContext = perRequest(async (): Promise<SessionContext | n
       .limit(1)
       .maybeSingle();
 
+    // Only ask for the assurance level when a factor exists: with none, the
+    // level is irrelevant, and this saves a session read on most requests.
+    const factors = user.factors ?? [];
+    let level: AssuranceLevel | null = null;
+    if (verifiedTotpFactors(factors).length > 0) {
+      try {
+        const { data } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
+        level = (data?.currentLevel as AssuranceLevel | null | undefined) ?? null;
+      } catch {
+        level = null; // unknown with an enrolled factor => challenged (fail closed)
+      }
+    }
+    const role = (membership?.role as MemberRole) ?? null;
+
     return {
       userId: user.id,
       email: user.email ?? "",
       emailConfirmed: Boolean(user.email_confirmed_at),
       orgId: membership?.organization_id ?? null,
-      role: (membership?.role as MemberRole) ?? null,
+      role,
+      mfa: buildMfaState({ role, factors, level }),
     };
   } catch (err) {
     console.warn("getSessionContext: auth backend unreachable", err);
@@ -68,5 +86,9 @@ export async function requireOrgContext(): Promise<
   if (!ctx) return { ok: false, status: 401, error: "Not authenticated" };
   if (!ctx.orgId)
     return { ok: false, status: 403, error: "No active organization" };
+  // Same gate the pages apply, so an owner/admin session that has not passed
+  // the second factor cannot reach data through the API either.
+  if (ctx.mfa && mfaGate(ctx.mfa) !== "ok")
+    return { ok: false, status: 403, error: "Multi-factor authentication required" };
   return { ok: true, ctx: { ...ctx, orgId: ctx.orgId } };
 }
