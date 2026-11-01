@@ -8,12 +8,12 @@ import { buildOnboardingSteps, onboardingProgressPct } from "@/lib/lp-onboarding
 interface Session {
   id: string;
   lpName: string;
-  lpEmail: string;
+  /** Only owners and admins are given the LP's email. */
+  lpEmail?: string;
   status: OnboardingStatus;
   fundName?: string;
   commitmentAmount?: number | null;
   expiresAt: string;
-  token: string;
 }
 
 const STATUS_COLOR: Record<OnboardingStatus, string> = {
@@ -45,7 +45,7 @@ function SessionCard({ session }: { session: Session }) {
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="truncate text-sm font-medium text-fg-primary">{session.lpName}</p>
-          <p className="truncate text-xs text-fg-muted">{session.lpEmail}</p>
+          {session.lpEmail && <p className="truncate text-xs text-fg-muted">{session.lpEmail}</p>}
         </div>
         <span
           className={`shrink-0 rounded-full border px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider ${STATUS_COLOR[session.status]}`}

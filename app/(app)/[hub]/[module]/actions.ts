@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createServerClient, createServiceClient, hasSupabaseServiceEnv } from "@/lib/supabase/server";
 import { getSessionContext, requireOrgContext } from "@/lib/auth";
+import { requireOrgAdmin } from "@/lib/rbac";
 import { ADD_ROW_CONFIGS } from "@/lib/module-forms";
 import { logLPContact } from "@/lib/lp-relationships";
 import { LP_DOCUMENT_TYPES, renderDocumentTemplate } from "@/lib/document-templates";
@@ -376,6 +377,8 @@ export async function advanceContractAction(contractId: string) {
 export async function createLpInviteAction(formData: FormData) {
   const auth = await requireOrgContext();
   if (!auth.ok) return { error: "Unauthorized" };
+  // Same rule as a link made from Run › Onboarding: the session holds the LP's email and link token.
+  if (!requireOrgAdmin(auth.ctx.role).ok) return { error: "Only organization owners and admins can invite LPs." };
 
   const investorId = String(formData.get("investor_id") ?? "").trim() || null;
   const fundId = String(formData.get("fund_id") ?? "").trim() || null;
