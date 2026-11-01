@@ -72,3 +72,28 @@ export function submissionNotice(args: SubmissionNoticeArgs): { subject: string;
       `<p>Screening results appear on the review card as they come in. You'll need to sign in to see the details.</p>`,
   };
 }
+
+export interface InboxAlertCopy {
+  subject: string;
+  preview: string;
+  body: string;
+}
+
+/**
+ * The Inbox thread for the same event. Same rules as the email: who and what
+ * kind, never anything else the LP entered. Plain text, not HTML, so the LP's
+ * name is only trimmed and capped.
+ */
+export function inboxAlert(args: { lpName: string; lpType: string | null; resubmitted: boolean }): InboxAlertCopy {
+  const lpName = (args.lpName.replace(/\s+/g, " ").trim() || "An LP").slice(0, 120);
+  const typeLabel = args.lpType && args.lpType in LP_TYPE_LABEL ? LP_TYPE_LABEL[args.lpType as LpType] : null;
+  const what = args.resubmitted ? "sent back their onboarding with the changes you asked for" : "finished their investor onboarding";
+  const subject = args.resubmitted ? `${lpName} resubmitted their onboarding` : `${lpName} submitted their onboarding`;
+  return {
+    subject,
+    preview: `Waiting for your review in Run › Onboarding.`,
+    body:
+      `${lpName}${typeLabel ? ` (${typeLabel})` : ""} has ${what}. It's waiting for your review; nothing is approved until you do it.\n\n` +
+      `Open Run › Onboarding to review it. Screening results appear on the review card as they come in.`,
+  };
+}
