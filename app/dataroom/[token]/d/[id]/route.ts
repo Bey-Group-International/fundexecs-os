@@ -59,7 +59,12 @@ export async function GET(req: Request, props: { params: Promise<{ token: string
   }
 
   const access = await resolveSharedDocument(params.token, params.id);
-  if (!access.ok) return NextResponse.redirect(roomUrl);
+  if (!access.ok) {
+    // "We couldn't check" is not "you may not have this": a redirect to the room
+    // would send a reader with a good link round in a circle during an outage.
+    if (access.unavailable) return refuse("This document is temporarily unavailable. Please try again.", 503);
+    return NextResponse.redirect(roomUrl);
+  }
   const { supabase, share, doc, roomId, viewerEmail } = access;
   if (!doc.storage_key) return NextResponse.redirect(roomUrl);
 

@@ -124,3 +124,49 @@ describe("grantGate / readGatePass round-trip", () => {
     expect(await readGatePass("share-1")).toBeNull();
   });
 });
+
+
+describe("with no signing key", () => {
+  // The secret is derived from SUPABASE_SERVICE_ROLE_KEY. It used to fall back to
+  // an empty string when that was missing, which makes the secret a constant that
+  // is public in this repository: anyone could sign a pass for any link.
+  const KEY = "test-service-role-key";
+  afterEach(() => {
+    process.env.SUPABASE_SERVICE_ROLE_KEY = KEY;
+  });
+
+  async function forgedWithEmptyKey(shareId: string) {
+    const { createHmac } = await import("crypto");
+    const body = Buffer.from(JSON.stringify(pass({ shareId, pwd: true, nda: true, email: "attacker@example.com" })), "utf8").toString("base64url");
+    const secret = createHmac("sha256", "fx-data-room-gate").update("").digest("hex");
+    const mac = createHmac("sha256", secret).update(body).digest("base64url");
+    return `${body}.${mac}`;
+  }
+
+  it("refuses to sign a pass", async () => {
+    delete process.env.SUPABASE_SERVICE_ROLE_KEY;
+    await expect(grantGate("share-1", { pwd: true })).rejects.toThrow(/no signing key/);
+    expect(cookieJar.size).toBe(0);
+  });
+
+  it("refuses to sign with a key that is only whitespace", async () => {
+    process.env.SUPABASE_SERVICE_ROLE_KEY = "   ";
+    await expect(grantGate("share-1", { pwd: true })).rejects.toThrow(/no signing key/);
+  });
+
+  it("rejects a pass forged with the old empty-key secret", async () => {
+    delete process.env.SUPABASE_SERVICE_ROLE_KEY;
+    cookieJar.set("fx_dr_gate_share-1", { value: await forgedWithEmptyKey("share-1") });
+    expect(await readGatePass("share-1")).toBeNull();
+  });
+
+  it("rejects that same forged pass when a key is set", async () => {
+    cookieJar.set("fx_dr_gate_share-1", { value: await forgedWithEmptyKey("share-1") });
+    expect(await readGatePass("share-1")).toBeNull();
+  });
+
+  it("signs and verifies again once a key is present", async () => {
+    await grantGate("share-1", { pwd: true });
+    expect(await readGatePass("share-1")).toMatchObject({ shareId: "share-1", pwd: true });
+  });
+});
