@@ -49,11 +49,15 @@ const recordAudit = jest.fn(async (..._a: unknown[]) => true);
 jest.mock("@/lib/lp-audit.server", () => ({ recordAudit: (...a: unknown[]) => recordAudit(...a) }));
 const audited = () => recordAudit.mock.calls.map((c) => c[1] as Record<string, unknown>);
 
+let decideResult: unknown = "confirmed";
+const decideCarryover = jest.fn(async (..._a: unknown[]) => decideResult);
+jest.mock("@/lib/lp-reuse.server", () => ({ decideCarryover: (...a: unknown[]) => decideCarryover(...a) }));
+
 let ofacResult: unknown = { ok: true, flagged: 0, screened: 2, wrote: true };
 const runOfac = jest.fn(async (..._a: unknown[]) => ofacResult);
 jest.mock("@/lib/ofac.server", () => ({ runOfacScreen: (...a: unknown[]) => runOfac(...a) }));
 
-import { recordOnboardingCheck, recordOnboardingDecision, refreshIdentityCheckAction, runOfacScreenAction } from "./onboarding-actions";
+import { decideCarryoverAction, recordOnboardingCheck, recordOnboardingDecision, refreshIdentityCheckAction, runOfacScreenAction } from "./onboarding-actions";
 
 const allClear = () =>
   ["identity", "sanctions", "pep", "adverse_media", "accreditation"].map((kind) => ({ kind, status: "clear", expires_at: null }));
@@ -68,6 +72,8 @@ beforeEach(() => {
   upserted = null;
   inserted = null;
   recordAudit.mockClear();
+  decideCarryover.mockClear();
+  decideResult = "confirmed";
   for (const k of Object.keys(sessionFilters)) delete sessionFilters[k];
   jest.spyOn(console, "error").mockImplementation(() => undefined);
 });
@@ -328,5 +334,49 @@ describe.each([
     serviceEnv = false;
     expect(await call()).toEqual({ ok: false, error: "Couldn't save. Try again." });
     expect(work).not.toHaveBeenCalled();
+  });
+});
+
+describe("decideCarryoverAction (an earlier ID check is only a proposal until a person confirms it)", () => {
+  it("lets an owner or admin confirm, passing the organization and the person from the session, and logs who did", async () => {
+    const res = await decideCarryoverAction("s1", "confirm");
+    expect(res.ok).toBe(true);
+    expect(decideCarryover).toHaveBeenCalledWith(SERVICE_CLIENT, { orgId: "org-1", sessionId: "s1", decision: "confirm", actorId: "user-1" });
+    expect(audited()).toContainEqual({ orgId: "org-1", sessionId: "s1", action: "carryover.confirmed", actorKind: "user", actorId: "user-1", detail: { kind: "identity" } });
+  });
+
+  it("declining is logged as declined", async () => {
+    decideResult = "declined";
+    expect((await decideCarryoverAction("s1", "decline")).ok).toBe(true);
+    expect(audited()[0]).toMatchObject({ action: "carryover.declined" });
+  });
+
+  it("refuses anyone who is not an owner or admin, and does nothing", async () => {
+    auth = { ok: true, ctx: { orgId: "org-1", userId: "user-2", role: "member" } };
+    expect((await decideCarryoverAction("s1", "confirm")).ok).toBe(false);
+    expect(decideCarryover).not.toHaveBeenCalled();
+  });
+
+  it("refuses an LP that is not this organization's", async () => {
+    sessionFound = false;
+    const res = await decideCarryoverAction("s1", "confirm");
+    expect(res).toEqual({ ok: false, message: "That LP wasn't found." });
+    expect(decideCarryover).not.toHaveBeenCalled();
+  });
+
+  it("accepts only 'confirm' or 'decline'", async () => {
+    expect((await decideCarryoverAction("s1", "approve")).ok).toBe(false);
+    expect((await decideCarryoverAction(42, "confirm")).ok).toBe(false);
+    expect(decideCarryover).not.toHaveBeenCalled();
+  });
+
+  it("explains an expired, missing or redundant proposal and logs nothing for it", async () => {
+    for (const outcome of ["expired", "not_found", "already_has_check"]) {
+      decideResult = outcome;
+      const res = await decideCarryoverAction("s1", "confirm");
+      expect(res.ok).toBe(false);
+      expect(res.message.length).toBeGreaterThan(10);
+    }
+    expect(audited()).toEqual([]);
   });
 });

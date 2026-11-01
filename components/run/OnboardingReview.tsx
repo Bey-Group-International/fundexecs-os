@@ -12,6 +12,7 @@ import {
   recordOnboardingDecision,
   refreshIdentityCheckAction,
   runOfacScreenAction,
+  decideCarryoverAction,
 } from "@/app/(app)/[hub]/[module]/onboarding-actions";
 import { eraseLpAction } from "@/app/(app)/[hub]/[module]/onboarding-erase-actions";
 import { OnboardingLinkPanel } from "@/components/run/OnboardingLinkPanel";
@@ -74,6 +75,16 @@ export interface ReviewLp {
   checks: ReviewCheck[];
   decisions: ReviewDecision[];
   activity: ReviewActivity[];
+  /** An earlier ID check for this email, waiting for a person to confirm it is the same individual. */
+  carryover?: ReviewCarryover | null;
+}
+
+export interface ReviewCarryover {
+  priorName: string | null;
+  namesMatch: boolean;
+  checkedAt: string;
+  expiresAt: string;
+  method: string;
 }
 
 /** The shape the shared review rules read. */
@@ -243,6 +254,64 @@ function CheckRow({ lpId, info, check }: { lpId: string; info: (typeof CHECK_KIN
   );
 }
 
+function CarryoverPrompt({ lp, carryover }: { lp: ReviewLp; carryover: ReviewCarryover }) {
+  const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
+  const [pending, startTransition] = useTransition();
+
+  const decide = (decision: "confirm" | "decline") =>
+    startTransition(async () => {
+      setMessage(null);
+      const res = await decideCarryoverAction(lp.id, decision).catch(() => ({ ok: false, message: "Couldn't save. Try again." }));
+      setMessage({ ok: res.ok, text: res.message });
+    });
+
+  return (
+    <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 p-3">
+      <p className="text-sm font-medium text-fg-primary">An earlier ID check may apply</p>
+      <p className="mt-1 text-xs text-fg-secondary">
+        This email was approved before, with an ID check cleared on {day(carryover.checkedAt)} (good until {day(carryover.expiresAt)}). An email address
+        isn&apos;t proof of who someone is, so it only counts once you confirm it is the same person.
+      </p>
+      <dl className="mt-2 grid gap-1 text-xs sm:grid-cols-2">
+        <div>
+          <dt className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">Earlier onboarding</dt>
+          <dd className="text-fg-primary">{carryover.priorName ?? "Name not recorded"}</dd>
+        </div>
+        <div>
+          <dt className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">This onboarding</dt>
+          <dd className="text-fg-primary">{lp.lpName}</dd>
+        </div>
+      </dl>
+      {!carryover.namesMatch ? (
+        <p role="alert" className="mt-2 text-xs text-amber-300">
+          The names differ. Confirm only if you know they are the same person or entity, for example from your own records.
+        </p>
+      ) : null}
+      <div className="mt-2 flex flex-wrap gap-2">
+        <button
+          type="button"
+          disabled={pending}
+          onClick={() => decide("confirm")}
+          className="rounded-lg border border-gold-500/40 bg-gold-500/10 px-3 py-1.5 font-mono text-[11px] uppercase tracking-wider text-gold-300 transition hover:bg-gold-500/20 disabled:opacity-50"
+        >
+          {carryover.namesMatch ? "Same person, use it" : "Names differ, use it anyway"}
+        </button>
+        <button
+          type="button"
+          disabled={pending}
+          onClick={() => decide("decline")}
+          className="rounded-lg border border-line px-3 py-1.5 font-mono text-[11px] uppercase tracking-wider text-fg-muted transition hover:text-fg-secondary disabled:opacity-50"
+        >
+          Make them verify again
+        </button>
+      </div>
+      {message ? (
+        <p role={message.ok ? "status" : "alert"} className={`mt-2 text-xs ${message.ok ? "text-emerald-300" : "text-amber-400"}`}>{message.text}</p>
+      ) : null}
+    </div>
+  );
+}
+
 function EraseLp({ lp }: { lp: ReviewLp }) {
   const [open, setOpen] = useState(false);
   const [typed, setTyped] = useState("");
@@ -394,6 +463,7 @@ function LpCard({ lp }: { lp: ReviewLp }) {
           {lp.reviewState !== "approved" && lp.reviewState !== "rejected" ? (
             <OnboardingLinkPanel sessionId={lp.id} token={lp.token} expiresAt={lp.expiresAt} remindedAt={lp.remindedAt ?? null} />
           ) : null}
+          {lp.carryover ? <CarryoverPrompt lp={lp} carryover={lp.carryover} /> : null}
           <OnboardingSubmission view={lp.submission} />
           {CHECK_KINDS.map((info) => (
             <CheckRow key={info.kind} lpId={lp.id} info={info} check={byKind.get(info.kind)} />

@@ -14,7 +14,7 @@ import { gatedFeatureForHub } from "@/lib/feature-access";
 import { requireFeatureAccess } from "@/lib/feature-access.server";
 import type { DealStage } from "@/lib/supabase/database.types";
 import { LINK_TTL_DAYS } from "@/lib/lp-wizard";
-import { carryForwardChecks } from "@/lib/lp-reuse.server";
+import { proposeCarryover } from "@/lib/lp-reuse.server";
 import { recordAudit } from "@/lib/lp-audit.server";
 
 // Build › Profile edits are handled by `saveOrgProfile`
@@ -415,10 +415,10 @@ export async function createLpInviteAction(formData: FormData) {
     }
 
     const token = session.token as string;
-    // A returning LP keeps their earlier ID verification. Best-effort: it never fails the invite.
+    // A returning LP's earlier ID verification is found and put to a fund manager to confirm; nothing is reused until they do. Best-effort: it never fails the invite.
     if (session.id && hasSupabaseServiceEnv()) {
       const service = createServiceClient();
-      const carried = await carryForwardChecks(service, { orgId, sessionId: session.id as string, email: lpEmail });
+      const carried = await proposeCarryover(service, { orgId, sessionId: session.id as string, email: lpEmail, lpName });
       // Who sent the invite. Best-effort: the invite exists either way.
       await recordAudit(service, {
         orgId,
