@@ -32,8 +32,10 @@ const PUBLIC_OBJECT_PREFIX = `/storage/v1/object/public/${MEMBER_AVATAR_BUCKET}/
  * replaced in place on re-upload, so a member can never accumulate orphans.
  * The `${orgId}/` first segment is what the bucket's RLS policies key on.
  */
-export function avatarObjectPath(orgId: string, principalId: string): string {
-  return `${orgId}/${principalId}.jpg`;
+export function avatarObjectPath(orgId: string, id: string, isProfile = false): string {
+  // A no-login team profile is prefixed so its id can never collide with, or be
+  // mistaken for, a member's uid (which the bucket's own-photo policy matches).
+  return isProfile ? `${orgId}/profile-${id}.jpg` : `${orgId}/${id}.jpg`;
 }
 
 /**

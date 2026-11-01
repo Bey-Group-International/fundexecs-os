@@ -12,6 +12,10 @@ import {
   changeMemberRole,
   removeMember,
   inviteMember,
+  addTeamProfile,
+  updateTeamProfile,
+  deleteTeamProfile,
+  giveProfileAccess,
 } from "./team-actions";
 
 export interface TeamMemberView {
@@ -25,6 +29,16 @@ export interface TeamMemberView {
   role: MemberRole;
 }
 
+/** A person on the team with no login: display data only, no seat. */
+export interface TeamProfileView {
+  profileId: string;
+  name: string;
+  email: string;
+  title: string | null;
+  bio: string | null;
+  avatarUrl: string | null;
+}
+
 export interface SeatInfo {
   used: number;
   /** Seat allotment for the current plan. `null` = unlimited. */
@@ -33,6 +47,7 @@ export interface SeatInfo {
 
 interface TeamControlsProps {
   members: TeamMemberView[];
+  profiles: TeamProfileView[];
   currentUserId: string;
   currentRole: MemberRole | null;
   ownProfile: {
@@ -102,6 +117,7 @@ function RoleBadge({ role }: { role: MemberRole }) {
 
 export function TeamControls({
   members,
+  profiles,
   currentUserId,
   currentRole,
   ownProfile,
@@ -144,6 +160,8 @@ export function TeamControls({
 
       {isAdmin ? <InviteForm seats={seats} /> : null}
 
+      {isAdmin ? <AddProfileForm /> : null}
+
       {leaders.length > 0 ? (
         <div className="flex flex-col gap-2">
           <p className="px-1 font-mono text-[11px] uppercase tracking-wider text-fg-muted">
@@ -161,6 +179,215 @@ export function TeamControls({
           {regular.map(renderMember)}
         </div>
       ) : null}
+
+      {profiles.length > 0 ? (
+        <div className="flex flex-col gap-2">
+          <p className="px-1 font-mono text-[11px] uppercase tracking-wider text-fg-muted">
+            Team profiles · no system access
+          </p>
+          {profiles.map((t) => (
+            <ProfileRow key={t.profileId} profile={t} isAdmin={isAdmin} seats={seats} />
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+// --- Team profiles (no login) ---------------------------------------------
+function AddProfileForm() {
+  const [pending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState(false);
+  const formRef = useRef<HTMLFormElement>(null);
+
+  return (
+    <form
+      ref={formRef}
+      action={(fd) => {
+        setError(null);
+        setSuccess(false);
+        startTransition(async () => {
+          const res = await addTeamProfile(fd);
+          if (res.error) {
+            setError(res.error);
+          } else {
+            setSuccess(true);
+            formRef.current?.reset();
+          }
+        });
+      }}
+      className="grid gap-3 rounded-xl border border-line bg-surface-1 p-4 sm:grid-cols-2"
+    >
+      <div className="sm:col-span-2">
+        <p className="text-sm font-medium text-fg-primary">Add team profile</p>
+        <p className="mt-0.5 text-xs text-fg-muted">
+          List someone on your team who doesn&apos;t need to sign in. They appear on the firm page
+          and in the data room, give no access to the system, and don&apos;t use a seat.
+        </p>
+      </div>
+      <input name="full_name" required placeholder="Full name" className={inputClass} />
+      <input name="title" placeholder="Title" className={inputClass} />
+      <input name="email" type="email" placeholder="Email (optional)" className={inputClass} />
+      <textarea
+        name="bio"
+        rows={3}
+        maxLength={MAX_BIO_LENGTH}
+        placeholder="Short bio — what they run, and the track record behind it."
+        className={`${inputClass} sm:col-span-2`}
+      />
+      <div className="flex items-center gap-3 sm:col-span-2">
+        <button
+          disabled={pending}
+          className="rounded-md bg-gold-400 px-4 py-2 text-sm font-medium text-on-gold transition hover:bg-gold-300 disabled:opacity-50"
+        >
+          {pending ? "Adding…" : "Add profile"}
+        </button>
+        {error ? <span className="text-xs text-status-danger">{error}</span> : null}
+        {success ? <span className="text-xs text-status-success">Profile added.</span> : null}
+      </div>
+    </form>
+  );
+}
+
+function ProfileRow({
+  profile,
+  isAdmin,
+  seats,
+}: {
+  profile: TeamProfileView;
+  isAdmin: boolean;
+  seats: SeatInfo;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [pending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+  const seatsFull = seats.limit !== null && seats.used >= seats.limit;
+
+  if (editing && isAdmin) {
+    return (
+      <form
+        action={(fd) => {
+          setError(null);
+          fd.set("profileId", profile.profileId);
+          startTransition(async () => {
+            const res = await updateTeamProfile(fd);
+            if (res.error) setError(res.error);
+            else setEditing(false);
+          });
+        }}
+        className="grid gap-3 rounded-xl border border-line bg-surface-1 p-3 sm:grid-cols-2"
+      >
+        <input name="full_name" required defaultValue={profile.name} className={inputClass} />
+        <input name="title" defaultValue={profile.title ?? ""} placeholder="Title" className={inputClass} />
+        <input
+          name="email"
+          type="email"
+          defaultValue={profile.email}
+          placeholder="Email (optional)"
+          className={`${inputClass} sm:col-span-2`}
+        />
+        <textarea
+          name="bio"
+          rows={3}
+          maxLength={MAX_BIO_LENGTH}
+          defaultValue={profile.bio ?? ""}
+          placeholder="Short bio"
+          className={`${inputClass} sm:col-span-2`}
+        />
+        <div className="flex items-center gap-3 sm:col-span-2">
+          <button
+            disabled={pending}
+            className="rounded-md bg-gold-400 px-4 py-2 text-sm font-medium text-on-gold transition hover:bg-gold-300 disabled:opacity-50"
+          >
+            {pending ? "Saving…" : "Save"}
+          </button>
+          <button
+            type="button"
+            onClick={() => setEditing(false)}
+            className="rounded-md border border-line px-3 py-2 text-xs text-fg-muted hover:text-fg-primary"
+          >
+            Cancel
+          </button>
+          {error ? <span className="text-xs text-status-danger">{error}</span> : null}
+        </div>
+      </form>
+    );
+  }
+
+  return (
+    <div className="flex items-start gap-3 rounded-xl border border-line bg-surface-1 p-3">
+      {isAdmin ? (
+        <AvatarUpload name={profile.name} currentUrl={profile.avatarUrl} profileId={profile.profileId} />
+      ) : (
+        <Avatar name={profile.name} avatarUrl={profile.avatarUrl} />
+      )}
+      <div className="min-w-0">
+        <p className="truncate text-sm text-fg-primary">{profile.name}</p>
+        {profile.title ? <p className="truncate text-xs text-fg-secondary">{profile.title}</p> : null}
+        {profile.email ? <p className="truncate text-xs text-fg-muted">{profile.email}</p> : null}
+        {profile.bio ? (
+          <p className="mt-1 whitespace-pre-line text-xs leading-relaxed text-fg-secondary">
+            {profile.bio}
+          </p>
+        ) : null}
+        {error ? <p className="mt-1 text-xs text-status-danger">{error}</p> : null}
+      </div>
+      <div className="ml-auto flex shrink-0 items-center gap-2">
+        <span className="rounded-full border border-line px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider text-fg-muted">
+          no access
+        </span>
+        {isAdmin ? (
+          <>
+            {profile.email ? (
+              <button
+                type="button"
+                disabled={pending || seatsFull}
+                title={
+                  seatsFull
+                    ? "Your plan's seats are full."
+                    : "Add them as a member. They need a FundExecs account with this email."
+                }
+                onClick={() => {
+                  setError(null);
+                  const fd = new FormData();
+                  fd.set("profileId", profile.profileId);
+                  startTransition(async () => {
+                    const res = await giveProfileAccess(fd);
+                    if (res.error) setError(res.error);
+                  });
+                }}
+                className="rounded-md border border-line px-2 py-1 text-xs text-fg-secondary transition hover:border-gold-500/60 disabled:opacity-50"
+              >
+                Give access
+              </button>
+            ) : null}
+            <button
+              type="button"
+              onClick={() => setEditing(true)}
+              className="rounded-md border border-line px-2 py-1 text-xs text-fg-secondary transition hover:border-gold-500/60"
+            >
+              Edit
+            </button>
+            <form
+              action={(fd) => {
+                fd.set("profileId", profile.profileId);
+                startTransition(async () => {
+                  await deleteTeamProfile(fd);
+                });
+              }}
+            >
+              <button
+                disabled={pending}
+                title="Remove team profile"
+                className="rounded-md border border-line px-2 py-1 text-xs text-fg-muted transition hover:border-status-danger/40 hover:text-status-danger disabled:opacity-50"
+              >
+                ✕
+              </button>
+            </form>
+          </>
+        ) : null}
+      </div>
     </div>
   );
 }

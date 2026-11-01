@@ -31,6 +31,8 @@ export interface AvatarUploadProps {
   currentUrl?: string | null;
   /** Whose photo this is. Omit for the signed-in member's own. */
   principalId?: string;
+  /** A no-login team profile (Build > Team) whose photo this is, instead of a member's. */
+  profileId?: string;
   /** Deferred mode: receives the encoded JPEG (or null when cleared). */
   onFileSelected?: (file: File | null) => void;
   size?: keyof typeof SIZE_CLASS;
@@ -42,6 +44,7 @@ export function AvatarUpload({
   name,
   currentUrl = null,
   principalId,
+  profileId,
   onFileSelected,
   size = "sm",
   allowRemove = true,
@@ -95,6 +98,7 @@ export function AvatarUpload({
       const fd = new FormData();
       fd.append("file", encoded.file);
       if (principalId) fd.append("principal_id", principalId);
+      if (profileId) fd.append("team_profile_id", profileId);
       const result = await uploadAvatar(fd);
       if (result.error) {
         URL.revokeObjectURL(encoded.previewUrl);
@@ -123,6 +127,7 @@ export function AvatarUpload({
     try {
       const fd = new FormData();
       if (principalId) fd.append("principal_id", principalId);
+      if (profileId) fd.append("team_profile_id", profileId);
       const result = await removeAvatar(fd);
       if (result.error) {
         setError(result.error);

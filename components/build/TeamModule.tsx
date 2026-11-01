@@ -4,9 +4,9 @@ import { createServerClient } from "@/lib/supabase/server";
 import { getWallet } from "@/lib/wallet";
 import { planSeatLimit } from "@/lib/billing";
 import { avatarUrlWithVersion } from "@/lib/avatar";
-import type { OrganizationMember, Principal } from "@/lib/supabase/database.types";
+import type { OrganizationMember, Principal, TeamProfile } from "@/lib/supabase/database.types";
 import { ModuleHeader } from "./DraftWithEarn";
-import { TeamControls, type TeamMemberView } from "./TeamControls";
+import { TeamControls, type TeamMemberView, type TeamProfileView } from "./TeamControls";
 
 export async function TeamModule() {
   const ctx = await getSessionContext();
@@ -40,6 +40,20 @@ export async function TeamModule() {
     };
   });
 
+  const { data: profileData } = await supabase
+    .from("team_profiles")
+    .select("*")
+    .eq("organization_id", ctx.orgId)
+    .order("created_at", { ascending: true });
+  const profileViews: TeamProfileView[] = ((profileData ?? []) as TeamProfile[]).map((t) => ({
+    profileId: t.id,
+    name: t.full_name,
+    email: t.email ?? "",
+    title: t.title,
+    bio: t.bio,
+    avatarUrl: t.avatar_url ? avatarUrlWithVersion(t.avatar_url, t.updated_at) : null,
+  }));
+
   const self = byId.get(ctx.userId);
   const ownProfile = {
     full_name: self?.full_name ?? null,
@@ -61,13 +75,14 @@ export async function TeamModule() {
         module="team"
       />
 
-      {members.length === 0 ? (
+      {members.length === 0 && profileViews.length === 0 ? (
         <p className="rounded-xl border border-dashed border-line bg-surface-1 p-6 text-center text-sm text-fg-muted">
           No team members found.
         </p>
       ) : (
         <TeamControls
           members={memberViews}
+          profiles={profileViews}
           currentUserId={ctx.userId}
           currentRole={ctx.role}
           ownProfile={ownProfile}
@@ -76,7 +91,7 @@ export async function TeamModule() {
       )}
 
       <p className="mt-4 text-xs text-fg-muted">
-        Only existing FundExecs users can be added. Ask Earn to draft team bios with the button above.
+        Members can sign in. Team profiles are people who appear on the firm page and in the data room but have no login and use no seat. Ask Earn to draft team bios with the button above.
       </p>
     </div>
   );

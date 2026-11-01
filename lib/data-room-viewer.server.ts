@@ -211,6 +211,13 @@ export async function buildViewerPayload(
     principals = (data ?? []) as Principal[];
   }
   const byId = new Map(principals.map((p) => [p.id, p]));
+  // People on the team with no login still belong on the fund's team page.
+  const { data: profileRows } = await supabase
+    .from("team_profiles")
+    .select("full_name, title, email")
+    .eq("organization_id", orgId)
+    .order("created_at", { ascending: true });
+  const profiles = (profileRows ?? []) as { full_name: string; title: string | null; email: string | null }[];
   const blended = blendTrackRecord(records);
 
   // Group published documents by section, in the order the room sets.
@@ -292,14 +299,17 @@ export async function buildViewerPayload(
           check_size_max: thesis.check_size_max ?? null,
         }
       : null,
-    team: members.map((m) => {
-      const p = byId.get(m.principal_id);
-      return {
-        name: p?.full_name || p?.email || "Member",
-        title: p?.title ?? null,
-        email: p?.email ?? null,
-      };
-    }),
+    team: [
+      ...members.map((m) => {
+        const p = byId.get(m.principal_id);
+        return {
+          name: p?.full_name || p?.email || "Member",
+          title: p?.title ?? null,
+          email: p?.email ?? null,
+        };
+      }),
+      ...profiles.map((t) => ({ name: t.full_name, title: t.title, email: t.email })),
+    ],
     entities: entities.map((e) => ({
       name: e.name,
       entity_type: (e as { entity_type?: string | null }).entity_type ?? null,

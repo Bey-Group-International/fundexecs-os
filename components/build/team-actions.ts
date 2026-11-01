@@ -10,7 +10,8 @@ import {
   normalizeTeamTaskPriority,
   recordOperatorFeedback,
 } from "@/lib/team-tasks";
-import { normalizeBio } from "@/lib/member-profile";
+import { normalizeBio, normalizeEmail } from "@/lib/member-profile";
+import { MEMBER_AVATAR_BUCKET, avatarObjectPath } from "@/lib/avatar";
 import type { Hub, MemberRole } from "@/lib/supabase/database.types";
 
 const TEAM = "/build/team";
@@ -214,7 +215,21 @@ export async function inviteMember(
     .toLowerCase();
   if (!email) return { error: "Enter an email address." };
   const role = parseRole(formData.get("role")) ?? "member";
+  return addMemberByEmail(ctx as AdminCtx, email, role);
+}
 
+type AdminCtx = NonNullable<Awaited<ReturnType<typeof getSessionContext>>> & {
+  orgId: string;
+};
+
+// Shared by inviteMember and giveProfileAccess. Callers MUST have passed the
+// admin guard first. When the new member's email matches a no-login team
+// profile, that profile is merged into them and removed (see mergeProfile).
+async function addMemberByEmail(
+  ctx: AdminCtx,
+  email: string,
+  role: MemberRole,
+): Promise<{ error?: string }> {
   // Cross-org principal lookup needs the service client (RLS would hide
   // principals outside the caller's org). Only reached after the admin guard.
   const svc = createServiceClient();
@@ -245,6 +260,7 @@ export async function inviteMember(
   // Seat limit: an org can only add members up to its plan's seat allotment.
   // Read the plan and current member count with the service client so the
   // check is reliable regardless of the caller's row-level visibility.
+  // No-login team profiles are deliberately not counted: they are not logins.
   const { data: wallet } = await svc
     .from("wallets")
     .select("plan")
@@ -276,6 +292,205 @@ export async function inviteMember(
     return { error: "Could not add that member. Please try again." };
   }
 
+  await mergeProfile(svc, ctx.orgId, principal.id, email);
+
   revalidatePath(TEAM);
   return {};
+}
+
+// Fold a no-login profile into the account that now owns its email: fill the
+// member's blank name/title/bio/photo from the profile (never overwrite what
+// they wrote themselves), then drop the profile so the person is listed once.
+// Best-effort -- the membership is already created, so a failure here leaves a
+// harmless duplicate the admin can delete, and is logged rather than surfaced.
+async function mergeProfile(
+  svc: ReturnType<typeof createServiceClient>,
+  orgId: string,
+  principalId: string,
+  email: string,
+): Promise<void> {
+  try {
+    const { data: profile } = await svc
+      .from("team_profiles")
+      .select("*")
+      .eq("organization_id", orgId)
+      .eq("email", email)
+      .maybeSingle();
+    if (!profile) return;
+
+    const { data: p } = await svc
+      .from("principals")
+      .select("full_name, title, bio, avatar_url")
+      .eq("id", principalId)
+      .maybeSingle();
+
+    const patch: Record<string, string> = {};
+    if (!p?.full_name && profile.full_name) patch.full_name = profile.full_name;
+    if (!p?.title && profile.title) patch.title = profile.title;
+    if (!p?.bio && profile.bio) patch.bio = profile.bio;
+
+    if (!p?.avatar_url && profile.avatar_url) {
+      const from = avatarObjectPath(orgId, profile.id, true);
+      const to = avatarObjectPath(orgId, principalId);
+      const { error: copyErr } = await svc.storage
+        .from(MEMBER_AVATAR_BUCKET)
+        .copy(from, to);
+      if (!copyErr) {
+        const { data: pub } = svc.storage.from(MEMBER_AVATAR_BUCKET).getPublicUrl(to);
+        if (pub?.publicUrl) patch.avatar_url = pub.publicUrl;
+      }
+    }
+    if (Object.keys(patch).length > 0) {
+      await svc
+        .from("principals")
+        .update({ ...patch, updated_at: new Date().toISOString() })
+        .eq("id", principalId);
+    }
+
+    await svc.from("team_profiles").delete().eq("id", profile.id);
+    await svc.storage
+      .from(MEMBER_AVATAR_BUCKET)
+      .remove([avatarObjectPath(orgId, profile.id, true)]);
+  } catch (err) {
+    console.error("[mergeProfile]", err);
+  }
+}
+
+// --- Team profiles: people on the team who have no login ------------------
+// Owners and admins only. These rows are display data for the Team page and the
+// data room; they are not members, grant no access, and use no seat.
+
+function readProfileFields(
+  formData: FormData,
+): { error: string } | { fields: { full_name: string; title: string | null; email: string | null; bio: string | null } } {
+  const full_name = String(formData.get("full_name") ?? "").trim().slice(0, 200);
+  if (!full_name) return { error: "Enter a name." };
+  const rawEmail = String(formData.get("email") ?? "").trim();
+  const email = normalizeEmail(rawEmail);
+  if (rawEmail && !email) return { error: "That email address doesn't look right." };
+  return {
+    fields: {
+      full_name,
+      title: String(formData.get("title") ?? "").trim().slice(0, 200) || null,
+      email,
+      bio: normalizeBio(formData.get("bio")),
+    },
+  };
+}
+
+export async function addTeamProfile(
+  formData: FormData,
+): Promise<{ error?: string; id?: string }> {
+  const ctx = await getSessionContext();
+  if (!ctx?.orgId) return { error: "No active organization." };
+  if (!isAdmin(ctx.role)) return { error: "Only admins and owners can add team profiles." };
+
+  const parsed = readProfileFields(formData);
+  if ("error" in parsed) return { error: parsed.error };
+
+  const supabase = await createServerClient();
+
+  // An email that already belongs to a real member would show them twice.
+  if (parsed.fields.email) {
+    const svc = createServiceClient();
+    const { data: principal } = await svc
+      .from("principals")
+      .select("id")
+      .eq("email", parsed.fields.email)
+      .maybeSingle();
+    if (principal) {
+      const { data: member } = await svc
+        .from("organization_members")
+        .select("id")
+        .eq("organization_id", ctx.orgId)
+        .eq("principal_id", principal.id)
+        .maybeSingle();
+      if (member) return { error: "That person is already a member of this team." };
+    }
+  }
+
+  const { data, error } = await supabase
+    .from("team_profiles")
+    .insert({ organization_id: ctx.orgId, created_by: ctx.userId, ...parsed.fields })
+    .select("id")
+    .single();
+  if (error) {
+    if (error.code === "23505") return { error: "A team profile with that email already exists." };
+    console.error("[addTeamProfile]", error.message);
+    return { error: "Could not add that team member. Please try again." };
+  }
+
+  revalidatePath(TEAM);
+  return { id: data?.id };
+}
+
+export async function updateTeamProfile(formData: FormData): Promise<{ error?: string }> {
+  const ctx = await getSessionContext();
+  if (!ctx?.orgId) return { error: "No active organization." };
+  if (!isAdmin(ctx.role)) return { error: "Only admins and owners can edit team profiles." };
+
+  const id = String(formData.get("profileId") ?? "").trim();
+  if (!id) return { error: "Missing team profile." };
+  const parsed = readProfileFields(formData);
+  if ("error" in parsed) return { error: parsed.error };
+
+  const supabase = await createServerClient();
+  const { data, error } = await supabase
+    .from("team_profiles")
+    .update({ ...parsed.fields, updated_at: new Date().toISOString() })
+    .eq("id", id)
+    .eq("organization_id", ctx.orgId)
+    .select("id");
+  if (error) {
+    if (error.code === "23505") return { error: "A team profile with that email already exists." };
+    console.error("[updateTeamProfile]", error.message);
+    return { error: "Could not save that profile. Please try again." };
+  }
+  if (!data?.length) return { error: "That team profile was not found." };
+
+  revalidatePath(TEAM);
+  return {};
+}
+
+export async function deleteTeamProfile(formData: FormData): Promise<void> {
+  const ctx = await getSessionContext();
+  if (!ctx?.orgId) return;
+  if (!isAdmin(ctx.role)) return;
+
+  const id = String(formData.get("profileId") ?? "").trim();
+  if (!id) return;
+
+  const supabase = await createServerClient();
+  await supabase
+    .from("team_profiles")
+    .delete()
+    .eq("id", id)
+    .eq("organization_id", ctx.orgId);
+  // Best-effort: the row is gone, so a failed delete only leaves storage litter.
+  await supabase.storage
+    .from(MEMBER_AVATAR_BUCKET)
+    .remove([avatarObjectPath(ctx.orgId, id, true)]);
+
+  revalidatePath(TEAM);
+}
+
+// Turn a no-login profile into a real member: look up the account by the
+// profile's email and add it (seat-checked), merging the profile into it.
+export async function giveProfileAccess(formData: FormData): Promise<{ error?: string }> {
+  const ctx = await getSessionContext();
+  if (!ctx?.orgId) return { error: "No active organization." };
+  if (!isAdmin(ctx.role)) return { error: "Only admins and owners can grant access." };
+
+  const id = String(formData.get("profileId") ?? "").trim();
+  const role = parseRole(formData.get("role")) ?? "member";
+  const supabase = await createServerClient();
+  const { data: profile } = await supabase
+    .from("team_profiles")
+    .select("email")
+    .eq("id", id)
+    .eq("organization_id", ctx.orgId)
+    .maybeSingle();
+  if (!profile) return { error: "That team profile was not found." };
+  if (!profile.email) return { error: "Add an email to this profile first." };
+  return addMemberByEmail(ctx as AdminCtx, profile.email.toLowerCase(), role);
 }
