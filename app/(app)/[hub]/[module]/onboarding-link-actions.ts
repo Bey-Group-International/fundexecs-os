@@ -10,6 +10,7 @@ import { createServerClient, createServiceClient, hasSupabaseServiceEnv } from "
 import { escapeHtml, sendEmail } from "@/lib/email";
 import { getAppUrl } from "@/lib/integrations/adapters/app-url";
 import { issueCode } from "@/lib/lp-access.server";
+import { carryForwardChecks, type CarriedSummary } from "@/lib/lp-reuse.server";
 import { LINK_TTL_DAYS, validateLinkInput } from "@/lib/lp-wizard";
 
 const PAGE = "/run/onboarding";
@@ -23,7 +24,9 @@ async function authorize() {
   return { ok: true as const, ctx: auth.ctx };
 }
 
-export type CreateLinkResult = { ok: true; sessionId: string; url: string } | { ok: false; error: string };
+export type CreateLinkResult =
+  | { ok: true; sessionId: string; url: string; carried: CarriedSummary[] }
+  | { ok: false; error: string };
 
 export async function createLpLinkAction(input: unknown): Promise<CreateLinkResult> {
   const who = await authorize();
@@ -62,8 +65,12 @@ export async function createLpLinkAction(input: unknown): Promise<CreateLinkResu
       console.error("createLpLinkAction failed", { code: error?.code, message: error?.message });
       return { ok: false, error: GENERIC };
     }
+    // A returning LP keeps their earlier ID verification. Best-effort: it never fails the link.
+    const carried = hasSupabaseServiceEnv()
+      ? await carryForwardChecks(createServiceClient(), { orgId: who.ctx.orgId, sessionId: row.id, email: v.lpEmail })
+      : [];
     revalidatePath(PAGE);
-    return { ok: true, sessionId: row.id, url: `${getAppUrl()}/lp/${row.token}` };
+    return { ok: true, sessionId: row.id, url: `${getAppUrl()}/lp/${row.token}`, carried };
   } catch (err) {
     console.error("createLpLinkAction threw", err);
     return { ok: false, error: GENERIC };

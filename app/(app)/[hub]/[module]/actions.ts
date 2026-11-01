@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { createServerClient, createServiceClient } from "@/lib/supabase/server";
+import { createServerClient, createServiceClient, hasSupabaseServiceEnv } from "@/lib/supabase/server";
 import { getSessionContext, requireOrgContext } from "@/lib/auth";
 import { ADD_ROW_CONFIGS } from "@/lib/module-forms";
 import { logLPContact } from "@/lib/lp-relationships";
@@ -13,6 +13,7 @@ import { gatedFeatureForHub } from "@/lib/feature-access";
 import { requireFeatureAccess } from "@/lib/feature-access.server";
 import type { DealStage } from "@/lib/supabase/database.types";
 import { LINK_TTL_DAYS } from "@/lib/lp-wizard";
+import { carryForwardChecks } from "@/lib/lp-reuse.server";
 
 // Build › Profile edits are handled by `saveOrgProfile`
 // (app/(app)/build/profile/actions.ts), the single canonical profile action
@@ -401,7 +402,7 @@ export async function createLpInviteAction(formData: FormData) {
         // The same 7 days as a link made from Run › Onboarding.
         expires_at: new Date(Date.now() + LINK_TTL_DAYS * 86_400_000).toISOString(),
       })
-      .select("token")
+      .select("id, token")
       .single();
 
     if (error || !session) {
@@ -410,6 +411,10 @@ export async function createLpInviteAction(formData: FormData) {
     }
 
     const token = session.token as string;
+    // A returning LP keeps their earlier ID verification. Best-effort: it never fails the invite.
+    if (session.id && hasSupabaseServiceEnv()) {
+      await carryForwardChecks(createServiceClient(), { orgId, sessionId: session.id as string, email: lpEmail });
+    }
     const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
     const portalUrl = `${appUrl}/lp/${token}`;
 

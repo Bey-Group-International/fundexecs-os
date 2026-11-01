@@ -38,6 +38,10 @@ jest.mock("@/lib/supabase/server", () => ({
   }),
 }));
 
+let carryResult: unknown[] = [];
+const carryForward = jest.fn(async (..._a: unknown[]) => carryResult);
+jest.mock("@/lib/lp-reuse.server", () => ({ carryForwardChecks: (...a: unknown[]) => carryForward(...a) }));
+
 import { createLpLinkAction, emailLpLinkAction, generateAccessCodeAction } from "./onboarding-link-actions";
 
 const FUTURE = "2099-01-01T00:00:00Z";
@@ -62,6 +66,8 @@ beforeEach(() => {
   for (const k of Object.keys(filters)) delete filters[k];
   sendEmail.mockClear();
   issueCode.mockClear();
+  carryResult = [];
+  carryForward.mockClear();
   jest.spyOn(console, "error").mockImplementation(() => undefined);
 });
 afterEach(() => jest.restoreAllMocks());
@@ -88,11 +94,28 @@ describe("createLpLinkAction", () => {
   it("makes a session in the caller's organization that lasts seven days, and returns the link", async () => {
     const before = Date.now();
     const res = await createLpLinkAction({ ...link, organization_id: "org-evil", ownerThresholdPct: 10 });
-    expect(res).toEqual({ ok: true, sessionId: "s9", url: "https://app.example.com/lp/tok-abc" });
+    expect(res).toEqual({ ok: true, sessionId: "s9", url: "https://app.example.com/lp/tok-abc", carried: [] });
     expect(inserted).toMatchObject({ organization_id: "org-1", lp_name: "Calpers", lp_email: "ops@calpers.ca.gov", lp_type: "institutional", owner_threshold_pct: 10 });
     const days = (new Date(inserted!.expires_at as string).getTime() - before) / 86_400_000;
     expect(days).toBeGreaterThan(6.99);
     expect(days).toBeLessThan(7.01);
+  });
+
+  it("carries a returning LP's earlier ID verification onto the new link, as the system", async () => {
+    carryResult = [{ kind: "identity", checkedAt: "2026-07-24T00:00:00Z", expiresAt: "2027-07-24T00:00:00Z" }];
+    const res = await createLpLinkAction(link);
+    expect(res).toMatchObject({ ok: true, carried: carryResult });
+    expect(carryForward).toHaveBeenCalledWith({ service: true }, { orgId: "org-1", sessionId: "s9", email: "ops@calpers.ca.gov" });
+  });
+
+  it("does not look for an earlier onboarding when the link wasn't made", async () => {
+    insertError = { code: "42501", message: "rls" };
+    await createLpLinkAction(link);
+    fundFound = false;
+    insertError = null;
+    await createLpLinkAction({ ...link, fundId: "f-other" });
+    await createLpLinkAction({ ...link, lpEmail: "nope" });
+    expect(carryForward).not.toHaveBeenCalled();
   });
 
   it("defaults the owner threshold to 25%", async () => {

@@ -9,14 +9,16 @@ jest.mock("@/lib/auth", () => ({
 }));
 
 let inserted: Record<string, unknown> | null = null;
+let serviceEnv = true;
 jest.mock("@/lib/supabase/server", () => ({
-  createServiceClient: jest.fn(),
+  hasSupabaseServiceEnv: () => serviceEnv,
+  createServiceClient: () => ({ service: true }),
   createServerClient: async () => ({
     from: () => {
       const q: Record<string, unknown> = {
         insert: (row: Record<string, unknown>) => ((inserted = row), q),
         select: () => q,
-        single: async () => ({ data: { token: "tok-abc" }, error: null }),
+        single: async () => ({ data: { id: "s9", token: "tok-abc" }, error: null }),
       };
       return q;
     },
@@ -25,6 +27,9 @@ jest.mock("@/lib/supabase/server", () => ({
 
 const dispatch = jest.fn(async (_a: unknown) => ({ ok: true }));
 jest.mock("@/lib/integrations/adapters/gmail", () => ({ gmailAdapter: { dispatch: (a: unknown) => dispatch(a) } }));
+
+const carryForward = jest.fn(async (..._a: unknown[]) => []);
+jest.mock("@/lib/lp-reuse.server", () => ({ carryForwardChecks: (...a: unknown[]) => carryForward(...a) }));
 
 import { createLpInviteAction } from "./actions";
 
@@ -37,7 +42,9 @@ const form = () => {
 
 beforeEach(() => {
   inserted = null;
+  serviceEnv = true;
   dispatch.mockClear();
+  carryForward.mockClear();
 });
 
 describe("createLpInviteAction", () => {
@@ -56,5 +63,18 @@ describe("createLpInviteAction", () => {
     expect(body).toContain("expires in 7 days");
     expect(body).toContain("code we email you");
     expect(body).not.toContain("30 days");
+  });
+});
+
+describe("a returning LP invited from an allocator's page", () => {
+  it("keeps their earlier ID verification, as for a link made in Run › Onboarding", async () => {
+    await createLpInviteAction(form());
+    expect(carryForward).toHaveBeenCalledWith({ service: true }, { orgId: "org-1", sessionId: "s9", email: "ops@calpers.ca.gov" });
+  });
+
+  it("still makes the invite where the service role isn't configured", async () => {
+    serviceEnv = false;
+    expect(await createLpInviteAction(form())).toMatchObject({ ok: true, token: "tok-abc" });
+    expect(carryForward).not.toHaveBeenCalled();
   });
 });
