@@ -23,7 +23,7 @@ const client = {
       neq: (c: string, v: unknown) => (filters.push([c, "neq", v]), q),
       in: (c: string, v: unknown) => (filters.push([c, "in", v]), q),
       ilike: (c: string, v: unknown) => (filters.push([c, "ilike", v]), q),
-      limit: () => q,
+      limit: (n: number) => (filters.push(["*", "limit", n]), q),
       insert: (rows: Array<Record<string, unknown>>) => ((isInsert = true), (inserted = rows), q),
       then: (resolve: (v: unknown) => void) => {
         if (isInsert) return resolve({ error: errors.insert ?? null });
@@ -84,6 +84,12 @@ describe("carryForwardChecks", () => {
     const sessions = queries.find((q) => q.table === "lp_onboarding_sessions")!;
     expect(sessions.filters).toContainEqual(["lp_email", "ilike", "a\\_b@x.com"]);
     expect(sessions.filters).toContainEqual(["id", "neq", "s-new"]);
+  });
+
+  it("never caps the earlier-onboardings lookup, so an old rejection can't be cut off", async () => {
+    await carryForwardChecks(client, args);
+    const sessions = queries.find((q) => q.table === "lp_onboarding_sessions")!;
+    expect(sessions.filters.some(([, op]) => op === "limit")).toBe(false);
   });
 
   it("decides on the exact address, not the pattern match", async () => {

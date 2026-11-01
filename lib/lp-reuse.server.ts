@@ -22,8 +22,6 @@ export interface CarriedSummary {
   expiresAt: string;
 }
 
-const MAX_PRIOR_SESSIONS = 50;
-
 export async function carryForwardChecks(
   client: Client,
   args: { orgId: string; sessionId: string; email: string; now?: number },
@@ -39,8 +37,9 @@ export async function carryForwardChecks(
       .select("id, review_state, lp_email")
       .eq("organization_id", args.orgId)
       .neq("id", args.sessionId)
-      .ilike("lp_email", escapeLike(email))
-      .limit(MAX_PRIOR_SESSIONS);
+      .ilike("lp_email", escapeLike(email));
+    // No row limit: this is one address in one organization, and a cap could cut
+    // off an older rejection, which must always be seen.
     if (error) throw new Error(error.message);
     const sessions = ((found ?? []) as Array<PriorSession & { lp_email: string }>).filter((s) => normalizeEmail(s.lp_email) === email);
     if (sessions.length === 0) return [];
