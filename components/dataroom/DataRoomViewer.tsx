@@ -136,6 +136,16 @@ function compactUsd(n: number | null): string | null {
   }).format(n);
 }
 
+/**
+ * Nav key of a document section. The Build-backed pages (overview, track_record,
+ * thesis, team) and the document sections share names: a room's "Investment
+ * Strategy & Thesis" documents are filed under `thesis`, the same key as the
+ * firm's thesis page. Un-namespaced, selecting that section rendered the thesis
+ * page instead, and the files in it were unreachable for the reader.
+ */
+const docNavKey = (sectionKey: string) => `docs:${sectionKey}`;
+const docNavKeyOrUndefined = (sectionKey: string | undefined) => (sectionKey === undefined ? undefined : docNavKey(sectionKey));
+
 type NavItem =
   | { key: "overview"; label: string }
   | { key: "track_record"; label: string }
@@ -186,13 +196,13 @@ export function DataRoomViewer({
     if (team.length > 0) items.push({ key: "team", label: "Team" });
     if (entities.length > 0) items.push({ key: "structure", label: "Structure" });
     for (const s of docSections) {
-      if (s.docs.length > 0) items.push({ key: s.key, label: s.label, docs: s.docs } as NavItem);
+      if (s.docs.length > 0) items.push({ key: docNavKey(s.key), label: s.label, docs: s.docs } as NavItem);
     }
     return items;
   }, [blended.dealCount, thesis, team.length, entities.length, docSections, viewControls.singleDocument]);
 
   const focusSection = focusDocumentId
-    ? docSections.find((s) => s.docs.some((d) => d.id === focusDocumentId))?.key
+    ? docNavKeyOrUndefined(docSections.find((s) => s.docs.some((d) => d.id === focusDocumentId))?.key)
     : undefined;
   const [selected, setSelected] = useState<string>(focusSection ?? nav[0]?.key ?? "overview");
   const mainRef = useRef<HTMLElement>(null);
@@ -649,7 +659,7 @@ function ContentPanel({
   }
 
   // Document section
-  const sec = docSections.find((s) => s.key === selected);
+  const sec = docSections.find((s) => docNavKey(s.key) === selected);
   if (!sec) return null;
 
   return (

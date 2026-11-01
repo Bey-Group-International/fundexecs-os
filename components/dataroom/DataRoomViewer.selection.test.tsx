@@ -171,3 +171,53 @@ describe("mobile navigation", () => {
     expect(screen.queryByRole("button", { name: "Close navigation" })).toBeNull();
   });
 });
+
+describe("a document section that shares its name with a Build page", () => {
+  // A room's "Investment Strategy & Thesis" documents are filed under `thesis`,
+  // and its "Track Record & Performance" documents under `track_record`: the same
+  // keys as the firm's own thesis and track-record pages. Picking the document
+  // section used to open the page instead, so the files in it could not be read.
+  const THESIS_DOCS = section("thesis", "Investment Strategy & Thesis", "Fund I Investment Memorandum");
+  const TRACK_DOCS = section("track_record", "Track Record & Performance", "Fund I Assumptions and Model Package");
+  const TEAM_DOCS = section("team", "Team & Governance", "Team Bios");
+  const OVERVIEW_DOCS = section("overview", "Firm Overview", "Firm Overview Deck");
+  const THESIS = { strategy: "Build page strategy text", edge: null, targetReturns: null, sectors: [], geographies: [] } as never;
+
+  function withBuildPages(docSections: ViewerSection[]) {
+    return (
+      <DataRoomViewer
+        token="preview"
+        shareId="preview"
+        org={ORG}
+        blended={{ ...BLENDED, dealCount: 2 }}
+        thesis={THESIS}
+        team={[{ name: "Pat Principal", title: "Partner", bio: null } as never]}
+        entities={[]}
+        docSections={docSections}
+        gateConfig={{ requireEmail: false, requireNda: false, ndaText: null, passwordProtected: false }}
+        contentReady
+        preview
+      />
+    );
+  }
+
+  it.each([
+    ["Investment Strategy & Thesis", "thesis", "Fund I Investment Memorandum"],
+    ["Track Record & Performance", "track_record", "Fund I Assumptions and Model Package"],
+    ["Team & Governance", "team", "Team Bios"],
+    ["Firm Overview", "overview", "Firm Overview Deck"],
+  ])("opens the %s documents, not the page of the same name", (label, key, docName) => {
+    render(withBuildPages([THESIS_DOCS, TRACK_DOCS, TEAM_DOCS, OVERVIEW_DOCS]));
+    fireEvent.click(screen.getByRole("button", { name: new RegExp(`^${label.replace(/[&]/g, "\\&")}`) }));
+    expect(screen.getByRole("heading", { level: 1, name: label })).toBeInTheDocument();
+    expect(screen.getByText(docName)).toBeInTheDocument();
+    expect(screen.getByText(new RegExp(`Body text unique to ${key}`))).toBeInTheDocument();
+  });
+
+  it("still opens the Build pages from their own nav entries", () => {
+    render(withBuildPages([THESIS_DOCS]));
+    fireEvent.click(screen.getByRole("button", { name: /^Investment Thesis$/ }));
+    expect(screen.getByRole("heading", { level: 1, name: "Investment Thesis" })).toBeInTheDocument();
+    expect(screen.queryByText("Fund I Investment Memorandum")).not.toBeInTheDocument();
+  });
+});
