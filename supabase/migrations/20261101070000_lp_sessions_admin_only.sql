@@ -44,7 +44,11 @@ create policy lp_onboarding_sessions_delete on public.lp_onboarding_sessions
 -- token. The view runs with its owner's rights (so it can read the table) and
 -- applies the membership filter itself: current_principal_org_ids() is the
 -- signed-in user's own organizations, and is empty for anyone not signed in.
-create or replace view public.lp_onboarding_session_overview as
+-- security_barrier makes that filter run before any condition the caller adds,
+-- so a caller's own predicate (and any error it raises) never sees another
+-- organization's rows.
+create or replace view public.lp_onboarding_session_overview
+  with (security_barrier = true) as
   select
     s.id,
     s.organization_id,

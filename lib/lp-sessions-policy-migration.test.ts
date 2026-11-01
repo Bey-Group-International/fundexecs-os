@@ -62,6 +62,10 @@ describe("the overview a non-admin member reads", () => {
     expect(view).toMatch(/organization_id in \(select public\.current_principal_org_ids\(\)\)/);
   });
 
+  it("applies the membership filter before anything the caller adds (security_barrier)", () => {
+    expect(text).toMatch(/create or replace view public\.lp_onboarding_session_overview\s+with \(security_barrier = true\) as/i);
+  });
+
   it("is not readable by anyone signed out", () => {
     expect(text).toMatch(/revoke all on public\.lp_onboarding_session_overview from anon/i);
     expect(text).toMatch(/grant select on public\.lp_onboarding_session_overview to authenticated/i);
