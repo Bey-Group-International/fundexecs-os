@@ -38,3 +38,23 @@ describe("useActionError", () => {
     await waitFor(() => expect(result).toBe(false));
   });
 });
+
+describe("useActionError with returned failures", () => {
+  it("treats a resolved { ok: false, error } as a failure and shows its error", async () => {
+    render(<Harness action={() => Promise.resolve({ ok: false, error: "Your role is view-only." })} />);
+    fireEvent.click(screen.getByText("go"));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Your role is view-only.");
+  });
+
+  it("falls back to the caller's message when the failure carries no error text", async () => {
+    render(<Harness action={() => Promise.resolve({ ok: false })} />);
+    fireEvent.click(screen.getByText("go"));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Couldn't do it. Try again.");
+  });
+
+  it("does not treat { ok: true } or void as a failure", async () => {
+    render(<Harness action={() => Promise.resolve({ ok: true })} />);
+    fireEvent.click(screen.getByText("go"));
+    await waitFor(() => expect(screen.queryByRole("alert")).toBeNull());
+  });
+});

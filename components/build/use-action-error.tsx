@@ -12,7 +12,17 @@
 // The message is fixed text chosen by the caller. In production Next.js redacts
 // the message of an error thrown from a server action, so there is no real
 // reason to show; "try again" is the honest thing to say.
+//
+// Some actions (review-actions.ts) report failure by RETURNING
+// `{ ok: false, error }` instead of throwing. That is a failure too, and its
+// `error` is returned data, not a redacted exception, so it is shown as is.
 import { useCallback, useState } from "react";
+
+function failedResult(value: unknown): string | null {
+  if (typeof value !== "object" || value === null) return null;
+  const v = value as { ok?: unknown; error?: unknown };
+  return v.ok === false ? (typeof v.error === "string" && v.error ? v.error : "") : null;
+}
 
 export function useActionError() {
   const [error, setError] = useState<string | null>(null);
@@ -21,7 +31,12 @@ export function useActionError() {
   const run = useCallback(async (action: () => Promise<unknown>, message: string): Promise<boolean> => {
     setError(null);
     try {
-      await action();
+      const result = await action();
+      const failed = failedResult(result);
+      if (failed !== null) {
+        setError(failed || message);
+        return false;
+      }
       return true;
     } catch {
       setError(message);

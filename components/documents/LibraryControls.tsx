@@ -142,6 +142,10 @@ export function PublishControl({ doc, rooms }: { doc: LibraryDoc; rooms: Library
         {count > 0 ? `Shared · ${count}` : "Private"}
       </button>
 
+      {/* A failure that lands after the popover was closed would otherwise be
+          invisible until it is reopened. */}
+      {!open ? <ActionError message={error} className="absolute right-0 top-full z-10 mt-1 w-60" /> : null}
+
       {open ? (
         <>
           {/* Click-away layer — keeps the popover from stealing the page. */}
@@ -165,6 +169,10 @@ export function PublishControl({ doc, rooms }: { doc: LibraryDoc; rooms: Library
                   <input
                     type="checkbox"
                     checked={on}
+                    // One toggle at a time: two in flight capture opposite
+                    // directions, and if both fail the rollbacks can leave the
+                    // box showing the opposite of the server.
+                    disabled={pending}
                     onChange={() => toggle(r.id)}
                     className="h-3.5 w-3.5 accent-gold-400"
                   />
