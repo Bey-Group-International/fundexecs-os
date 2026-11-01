@@ -208,7 +208,7 @@ describe("a document section that shares its name with a Build page", () => {
     ["Firm Overview", "overview", "Firm Overview Deck"],
   ])("opens the %s documents, not the page of the same name", (label, key, docName) => {
     render(withBuildPages([THESIS_DOCS, TRACK_DOCS, TEAM_DOCS, OVERVIEW_DOCS]));
-    fireEvent.click(screen.getByRole("button", { name: new RegExp(`^${label.replace(/[&]/g, "\\&")}`) }));
+    fireEvent.click(screen.getByRole("button", { name: (accessibleName) => accessibleName.startsWith(label) }));
     expect(screen.getByRole("heading", { level: 1, name: label })).toBeInTheDocument();
     expect(screen.getByText(docName)).toBeInTheDocument();
     expect(screen.getByText(new RegExp(`Body text unique to ${key}`))).toBeInTheDocument();
