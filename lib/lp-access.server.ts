@@ -112,7 +112,9 @@ export async function issueCode(
   return { ok: true, code, expiresAt };
 }
 
-export type VerifyResult = { ok: true } | { ok: false; error: string };
+/** Why a code was refused, for the audit trail. Never shown to the LP, who gets `error`. */
+export type VerifyFailure = "format" | "expired" | "locked" | "wrong" | "used";
+export type VerifyResult = { ok: true } | { ok: false; error: string; reason: VerifyFailure };
 
 /** Checks a typed code. A wrong guess spends one of five tries; the right one is used up. */
 export async function verifyCode(
@@ -122,7 +124,7 @@ export async function verifyCode(
   now: number = Date.now(),
 ): Promise<VerifyResult> {
   const code = normalizeCode(input);
-  if (!code) return { ok: false, error: "Enter the 6-digit code." };
+  if (!code) return { ok: false, error: "Enter the 6-digit code.", reason: "format" };
 
   const { data } = await supabase
     .from("lp_link_codes")
@@ -134,10 +136,10 @@ export async function verifyCode(
     .maybeSingle();
   const row = data as { id: string; code_hash: string; expires_at: string; attempts: number } | null;
   if (!row || new Date(row.expires_at).getTime() < now) {
-    return { ok: false, error: "That code has expired. Ask for a new one." };
+    return { ok: false, error: "That code has expired. Ask for a new one.", reason: "expired" };
   }
   if (row.attempts >= CODE_MAX_ATTEMPTS) {
-    return { ok: false, error: "Too many wrong codes. Ask for a new one." };
+    return { ok: false, error: "Too many wrong codes. Ask for a new one.", reason: "locked" };
   }
 
   if (!safeEqual(hashCode(session.id, code), row.code_hash)) {
@@ -147,7 +149,7 @@ export async function verifyCode(
       .update({ attempts: row.attempts + 1 } as never)
       .eq("id", row.id)
       .eq("attempts", row.attempts);
-    return { ok: false, error: "That code isn't right." };
+    return { ok: false, error: "That code isn't right.", reason: "wrong" };
   }
 
   // Use it up, but only once: a parallel request with the same code loses.
@@ -157,7 +159,7 @@ export async function verifyCode(
     .eq("id", row.id)
     .is("consumed_at", null)
     .select("id");
-  if (!used || used.length === 0) return { ok: false, error: "That code has already been used. Ask for a new one." };
+  if (!used || used.length === 0) return { ok: false, error: "That code has already been used. Ask for a new one.", reason: "used" };
   return { ok: true };
 }
 

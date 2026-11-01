@@ -15,6 +15,7 @@
 //     manager recorded: only a missing check, a pending one, or one this screen
 //     itself flagged earlier.
 import "server-only";
+import { recordAudit } from "@/lib/lp-audit.server";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { buildIndex, screenNames, screenOutcome, SCREEN_PREFIX, type ScreenResult, type ScreenSubject, type SdnIndex } from "@/lib/ofac";
 
@@ -80,8 +81,17 @@ export async function subjectsFor(client: Client, sessionId: string, orgId: stri
  * service client for the automatic screen on submit, the fund manager's own
  * client for a re-run (so row-level security applies to it).
  */
-export async function runOfacScreen(client: Client, sessionId: string, orgId: string, opts: { now?: number } = {}): Promise<OfacRun> {
+/** Who asked for the screen. The automatic one on submit is the system's; a re-run is a fund manager's. */
+export type ScreenActor = { kind: "user"; id: string } | { kind: "system" };
+
+export async function runOfacScreen(
+  client: Client,
+  sessionId: string,
+  orgId: string,
+  opts: { now?: number; actor?: ScreenActor } = {},
+): Promise<OfacRun> {
   const now = opts.now ?? Date.now();
+  const actor = opts.actor ?? { kind: "system" as const };
   try {
     const subjects = await subjectsFor(client, sessionId, orgId);
     if (subjects.length === 0) return { ok: false, error: "That LP wasn't found." };
@@ -106,11 +116,23 @@ export async function runOfacScreen(client: Client, sessionId: string, orgId: st
       .maybeSingle();
     const row = existing as { status: string; summary: string | null; recorded_by: string | null } | null;
 
+    // Every run is logged, including one that changes nothing: that is when an
+    // auditor most needs to see that the screen ran, by whom, and against which list.
+    const audit = (wrote: boolean) =>
+      recordAudit(client, {
+        orgId,
+        sessionId,
+        action: "check.screen_run",
+        ...(actor.kind === "user" ? { actorKind: "user" as const, actorId: actor.id } : { actorKind: "system" as const }),
+        detail: { status: outcome.status, matches: result.flagged, screened: result.results.filter((r) => r.screened).length, wrote, list_date: result.listDate },
+      });
+
     // A result a person recorded is theirs. Only a missing or pending check, or
     // a flag this screen raised itself, may be replaced.
     const ours = !!row && row.recorded_by === null && (row.summary ?? "").startsWith(SCREEN_PREFIX);
     const replaceable = !row || (row.status === "pending" && (ours || !(row.summary ?? "").trim())) || (row.status === "flagged" && ours);
     if (!replaceable) {
+      await audit(false);
       return { ok: true, flagged: result.flagged, screened: result.results.filter((r) => r.screened).length, wrote: false, result };
     }
 
@@ -135,6 +157,7 @@ export async function runOfacScreen(client: Client, sessionId: string, orgId: st
       console.error("[ofac] could not record the screen", { code: error.code, message: error.message });
       return { ok: false, error: "Couldn't save the screen. Try again." };
     }
+    await audit(true);
     return { ok: true, flagged: result.flagged, screened: result.results.filter((r) => r.screened).length, wrote: true, result };
   } catch (err) {
     console.error("[ofac] screen threw", err);

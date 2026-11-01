@@ -38,6 +38,10 @@ jest.mock("@/lib/supabase/server", () => ({
   }),
 }));
 
+const recordAudit = jest.fn(async (..._a: unknown[]) => true);
+jest.mock("@/lib/lp-audit.server", () => ({ recordAudit: (...a: unknown[]) => recordAudit(...a) }));
+const audited = () => recordAudit.mock.calls.map((c) => c[1] as Record<string, unknown>);
+
 let carryResult: unknown[] = [];
 const carryForward = jest.fn(async (..._a: unknown[]) => carryResult);
 jest.mock("@/lib/lp-reuse.server", () => ({ carryForwardChecks: (...a: unknown[]) => carryForward(...a) }));
@@ -68,6 +72,7 @@ beforeEach(() => {
   issueCode.mockClear();
   carryResult = [];
   carryForward.mockClear();
+  recordAudit.mockClear();
   jest.spyOn(console, "error").mockImplementation(() => undefined);
 });
 afterEach(() => jest.restoreAllMocks());
@@ -118,6 +123,26 @@ describe("createLpLinkAction", () => {
     expect(carryForward).not.toHaveBeenCalled();
   });
 
+  it("records who made the link, as that person, with no name or address", async () => {
+    carryResult = [{ kind: "identity", checkedAt: "x", expiresAt: "y" }];
+    await createLpLinkAction({ ...link, fundId: "f1" });
+    expect(audited()).toEqual([
+      { orgId: "org-1", sessionId: "s9", action: "link.created", actorKind: "user", actorId: "user-1", detail: { source: "run", lp_type: "institutional", has_fund: true, carried: 1 } },
+    ]);
+    expect(JSON.stringify(recordAudit.mock.calls)).not.toMatch(/calpers|tok-abc/i);
+  });
+
+  it("records nothing for a link that wasn't made", async () => {
+    insertError = { code: "42501", message: "rls" };
+    await createLpLinkAction(link);
+    expect(recordAudit).not.toHaveBeenCalled();
+  });
+
+  it("still makes the link when the audit write fails", async () => {
+    recordAudit.mockResolvedValueOnce(false);
+    expect(await createLpLinkAction(link)).toMatchObject({ ok: true, sessionId: "s9" });
+  });
+
   it("defaults the owner threshold to 25%", async () => {
     await createLpLinkAction(link);
     expect(inserted!.owner_threshold_pct).toBe(25);
@@ -158,6 +183,17 @@ describe("emailLpLinkAction", () => {
     expect(await emailLpLinkAction("s1")).toMatchObject({ ok: true, sent: false });
   });
 
+  it("records that the manager sent the link, and whether it went, without the address", async () => {
+    await emailLpLinkAction("s1");
+    sendEmail.mockResolvedValueOnce({ ok: false, channel: "none", detail: "no mailbox" });
+    await emailLpLinkAction("s1");
+    expect(audited()).toEqual([
+      { orgId: "org-1", sessionId: "s1", action: "email.sent", actorKind: "user", actorId: "user-1", detail: { kind: "link", ok: true } },
+      { orgId: "org-1", sessionId: "s1", action: "email.sent", actorKind: "user", actorId: "user-1", detail: { kind: "link", ok: false } },
+    ]);
+    expect(JSON.stringify(recordAudit.mock.calls)).not.toContain("ops@calpers");
+  });
+
   it("will not email a link for an LP outside the organization, a decided LP, or an expired link", async () => {
     sessionRow = null;
     expect(await emailLpLinkAction("s-other")).toEqual({ ok: false, error: "That LP wasn't found." });
@@ -181,6 +217,16 @@ describe("generateAccessCodeAction", () => {
   it("passes on a rate-limit refusal", async () => {
     issueCode.mockResolvedValueOnce({ ok: false, error: "A code was just sent." });
     expect(await generateAccessCodeAction("s1")).toEqual({ ok: false, error: "A code was just sent." });
+  });
+
+  it("records that the manager issued a code, never the code, and nothing for a refusal", async () => {
+    await generateAccessCodeAction("s1");
+    expect(audited()).toEqual([{ orgId: "org-1", sessionId: "s1", action: "code.issued_by_manager", actorKind: "user", actorId: "user-1" }]);
+    expect(JSON.stringify(recordAudit.mock.calls)).not.toContain("482913");
+    recordAudit.mockClear();
+    issueCode.mockResolvedValueOnce({ ok: false, error: "A code was just sent." });
+    await generateAccessCodeAction("s1");
+    expect(recordAudit).not.toHaveBeenCalled();
   });
 
   it("refuses an LP outside the organization, a decided LP, and an expired link", async () => {

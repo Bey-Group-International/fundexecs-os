@@ -14,6 +14,7 @@ import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { getEmailConfigStatus, sendEmail } from "@/lib/email";
 import { getAppUrl } from "@/lib/integrations/adapters/app-url";
+import { recordAudit } from "@/lib/lp-audit.server";
 import { dueReminder, reminderEmail, type ReminderDay } from "@/lib/lp-reminders";
 
 type Client = SupabaseClient<any, any, any>;
@@ -164,6 +165,14 @@ export async function runLpReminders(client: Client, opts: { now?: Date } = {}):
         subject: mail.subject,
         htmlBody: mail.htmlBody,
         allowFallback: false,
+      });
+      // The sweep is the actor: no person asked for this email.
+      await recordAudit(client, {
+        orgId: row.organization_id,
+        sessionId: row.id,
+        action: "email.sent",
+        actorKind: "system",
+        detail: { kind: "reminder", day, ok: result.ok },
       });
       if (result.ok) {
         stats.reminded += 1;

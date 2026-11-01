@@ -23,6 +23,8 @@ let tables: Record<string, unknown>;
 let writes: Array<{ table: string; op: string; row: Record<string, unknown>; filters: Record<string, unknown> }>;
 let writeError: { code: string; message: string } | null;
 let checkReads: Array<Record<string, unknown>>;
+// Audit rows are kept apart, so assertions about the check row stay about the check row.
+let audits: Array<Record<string, unknown>>;
 const client = {
   from(table: string) {
     const filters: Record<string, unknown> = {};
@@ -31,7 +33,12 @@ const client = {
       select: () => q,
       eq: (c: string, v: unknown) => ((filters[c] = v), q),
       update: (row: Record<string, unknown>) => ((op = "update"), writes.push({ table, op, row, filters }), q),
-      insert: (row: Record<string, unknown>) => ((op = "insert"), writes.push({ table, op, row, filters }), q),
+      insert: (row: Record<string, unknown>) => {
+        op = "insert";
+        if (table === "onboarding_audit_log") audits.push(row);
+        else writes.push({ table, op, row, filters });
+        return q;
+      },
       maybeSingle: async () => {
         if (table === "onboarding_checks") checkReads.push({ ...filters });
         return { data: (tables[table] as unknown) ?? null };
@@ -56,6 +63,7 @@ beforeEach(() => {
     onboarding_checks: null,
   };
   writes = [];
+  audits = [];
   checkReads = [];
   writeError = null;
   jest.spyOn(console, "error").mockImplementation(() => undefined);
@@ -127,6 +135,51 @@ describe("runOfacScreen", () => {
     expect(writes).toHaveLength(1);
     expect(writes[0]).toMatchObject({ table: "onboarding_checks", op: "insert", row: { kind: "sanctions", status: "pending", organization_id: "org-1", session_id: "s1", recorded_by: null, checked_at: null } });
     expect(String(writes[0].row.summary)).toContain("Not a clearance");
+  });
+
+  describe("the audit trail", () => {
+    it("records a run that wrote, as the system's by default, with the outcome and the list it used", async () => {
+      await runOfacScreen(client, "s1", "org-1", { now: NOW });
+      expect(audits).toEqual([
+        {
+          organization_id: "org-1",
+          session_id: "s1",
+          actor_id: null,
+          actor_kind: "system",
+          action: "check.screen_run",
+          detail: { status: "pending", matches: 0, screened: 1, wrote: true, list_date: "2026-10-30" },
+        },
+      ]);
+    });
+
+    it("records a re-run by a fund manager under their id", async () => {
+      await runOfacScreen(client, "s1", "org-1", { now: NOW, actor: { kind: "user", id: "user-7" } });
+      expect(audits[0]).toMatchObject({ actor_id: "user-7", actor_kind: "user", action: "check.screen_run" });
+    });
+
+    it("records a re-run that changed nothing, because a person's result was left alone", async () => {
+      tables.onboarding_checks = { status: "clear", summary: "Checked Dow Jones", recorded_by: "user-1" };
+      tables.lp_onboarding_profiles = { legal_name: "Aerocaribbean Airlines", signatory_name: null };
+      await runOfacScreen(client, "s1", "org-1", { now: NOW, actor: { kind: "user", id: "user-7" } });
+      expect(writes).toEqual([]);
+      expect(audits).toHaveLength(1);
+      expect(audits[0]).toMatchObject({ actor_id: "user-7", detail: { status: "flagged", matches: 1, wrote: false } });
+    });
+
+    it("records nothing for a run that failed before it screened anything", async () => {
+      sdnResponse = { ok: false, status: 503, text: "" };
+      await runOfacScreen(client, "s1", "org-1", { now: NOW });
+      tables.lp_onboarding_sessions = null;
+      await runOfacScreen(client, "s1", "org-1", { now: NOW });
+      expect(audits).toEqual([]);
+    });
+
+    it("records nothing for a run whose result could not be saved", async () => {
+      writeError = { code: "42501", message: "denied" };
+      const res = await runOfacScreen(client, "s1", "org-1", { now: NOW });
+      expect(res.ok).toBe(false);
+      expect(audits).toEqual([]);
+    });
   });
 
   it("flags a possible match, which blocks approval until a person records a result", async () => {

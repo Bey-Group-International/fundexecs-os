@@ -10,6 +10,7 @@ import { createServerClient, createServiceClient, hasSupabaseServiceEnv } from "
 import { escapeHtml, sendEmail } from "@/lib/email";
 import { getAppUrl } from "@/lib/integrations/adapters/app-url";
 import { issueCode } from "@/lib/lp-access.server";
+import { recordAudit } from "@/lib/lp-audit.server";
 import { carryForwardChecks, type CarriedSummary } from "@/lib/lp-reuse.server";
 import { LINK_TTL_DAYS, validateLinkInput } from "@/lib/lp-wizard";
 
@@ -66,9 +67,19 @@ export async function createLpLinkAction(input: unknown): Promise<CreateLinkResu
       return { ok: false, error: GENERIC };
     }
     // A returning LP keeps their earlier ID verification. Best-effort: it never fails the link.
-    const carried = hasSupabaseServiceEnv()
-      ? await carryForwardChecks(createServiceClient(), { orgId: who.ctx.orgId, sessionId: row.id, email: v.lpEmail })
-      : [];
+    const service = hasSupabaseServiceEnv() ? createServiceClient() : null;
+    const carried = service ? await carryForwardChecks(service, { orgId: who.ctx.orgId, sessionId: row.id, email: v.lpEmail }) : [];
+    // Who made the link. Best-effort: the link exists either way.
+    if (service) {
+      await recordAudit(service, {
+        orgId: who.ctx.orgId,
+        sessionId: row.id,
+        action: "link.created",
+        actorKind: "user",
+        actorId: who.ctx.userId,
+        detail: { source: "run", lp_type: v.lpType, has_fund: Boolean(v.fundId), carried: carried.length },
+      });
+    }
     revalidatePath(PAGE);
     return { ok: true, sessionId: row.id, url: `${getAppUrl()}/lp/${row.token}`, carried };
   } catch (err) {
@@ -118,6 +129,16 @@ export async function emailLpLinkAction(sessionId: unknown): Promise<EmailLinkRe
         `<p>You'll be asked for a code we email you when you open the link. The link works for ${LINK_TTL_DAYS} days.</p>`,
       allowFallback: true,
     });
+    if (hasSupabaseServiceEnv()) {
+      await recordAudit(createServiceClient(), {
+        orgId: who.ctx.orgId,
+        sessionId: session.id,
+        action: "email.sent",
+        actorKind: "user",
+        actorId: who.ctx.userId,
+        detail: { kind: "link", ok: result.ok },
+      });
+    }
     return { ok: true, sent: result.ok, detail: result.detail };
   } catch (err) {
     console.error("emailLpLinkAction threw", err);
@@ -142,7 +163,18 @@ export async function generateAccessCodeAction(sessionId: unknown): Promise<Code
       return { ok: false, error: "This LP's onboarding is already decided." };
     }
     if (new Date(session.expires_at).getTime() < Date.now()) return { ok: false, error: "This link has expired. Make a new one." };
-    return await issueCode(createServiceClient(), { id: session.id, organization_id: session.organization_id }, "gp", who.ctx.userId);
+    const service = createServiceClient();
+    const issued = await issueCode(service, { id: session.id, organization_id: session.organization_id }, "gp", who.ctx.userId);
+    if (issued.ok) {
+      await recordAudit(service, {
+        orgId: session.organization_id,
+        sessionId: session.id,
+        action: "code.issued_by_manager",
+        actorKind: "user",
+        actorId: who.ctx.userId,
+      });
+    }
+    return issued;
   } catch (err) {
     console.error("generateAccessCodeAction threw", err);
     return { ok: false, error: GENERIC };

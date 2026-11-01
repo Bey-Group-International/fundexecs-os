@@ -28,6 +28,10 @@ jest.mock("@/lib/supabase/server", () => ({
 const dispatch = jest.fn(async (_a: unknown) => ({ ok: true }));
 jest.mock("@/lib/integrations/adapters/gmail", () => ({ gmailAdapter: { dispatch: (a: unknown) => dispatch(a) } }));
 
+const recordAudit = jest.fn(async (..._a: unknown[]) => true);
+jest.mock("@/lib/lp-audit.server", () => ({ recordAudit: (...a: unknown[]) => recordAudit(...a) }));
+const audited = () => recordAudit.mock.calls.map((c) => c[1] as Record<string, unknown>);
+
 const carryForward = jest.fn(async (..._a: unknown[]) => []);
 jest.mock("@/lib/lp-reuse.server", () => ({ carryForwardChecks: (...a: unknown[]) => carryForward(...a) }));
 
@@ -45,6 +49,7 @@ beforeEach(() => {
   serviceEnv = true;
   dispatch.mockClear();
   carryForward.mockClear();
+  recordAudit.mockClear();
 });
 
 describe("createLpInviteAction", () => {
@@ -72,9 +77,20 @@ describe("a returning LP invited from an allocator's page", () => {
     expect(carryForward).toHaveBeenCalledWith({ service: true }, { orgId: "org-1", sessionId: "s9", email: "ops@calpers.ca.gov" });
   });
 
+  it("records who sent the invite and from where, without the name or address", async () => {
+    const f = form();
+    f.set("investor_id", "inv-1");
+    await createLpInviteAction(f);
+    expect(audited()).toEqual([
+      { orgId: "org-1", sessionId: "s9", action: "link.created", actorKind: "user", actorId: "user-1", detail: { source: "allocator", has_fund: false, has_investor: true, carried: 0 } },
+    ]);
+    expect(JSON.stringify(recordAudit.mock.calls)).not.toMatch(/calpers|tok-abc/i);
+  });
+
   it("still makes the invite where the service role isn't configured", async () => {
     serviceEnv = false;
     expect(await createLpInviteAction(form())).toMatchObject({ ok: true, token: "tok-abc" });
     expect(carryForward).not.toHaveBeenCalled();
+    expect(recordAudit).not.toHaveBeenCalled();
   });
 });
