@@ -24,19 +24,17 @@ interface CheckRow {
 }
 
 /** The identity check on file for a session, if any. */
-export async function readIdentityCheck(supabase: Client, sessionId: string): Promise<CheckRow | null> {
-  const { data } = await supabase
-    .from("onboarding_checks")
-    .select("status, method, vendor_ref")
-    .eq("session_id", sessionId)
-    .eq("kind", "identity")
-    .maybeSingle();
+export async function readIdentityCheck(supabase: Client, sessionId: string, orgId?: string): Promise<CheckRow | null> {
+  let q = supabase.from("onboarding_checks").select("status, method, vendor_ref").eq("session_id", sessionId).eq("kind", "identity");
+  // The service role bypasses row-level security, so a caller holding it names the organization too.
+  if (orgId) q = q.eq("organization_id", orgId);
+  const { data } = await q.maybeSingle();
   return (data as CheckRow | null) ?? null;
 }
 
 /** Asks Stripe where a started verification stands, and records it. */
 export async function refreshIdentityCheck(supabase: Client, sessionId: string, orgId: string): Promise<IdentityCheckResult> {
-  const row = await readIdentityCheck(supabase, sessionId);
+  const row = await readIdentityCheck(supabase, sessionId, orgId);
   if (!row || row.method !== "stripe_identity" || !row.vendor_ref) {
     return { ok: true, state: row?.status === "clear" ? "verified" : "none", url: null };
   }
@@ -51,6 +49,7 @@ export async function refreshIdentityCheck(supabase: Client, sessionId: string, 
     .from("onboarding_checks")
     .update(outcome.check as never)
     .eq("session_id", sessionId)
+    .eq("organization_id", orgId)
     .eq("kind", "identity")
     .eq("method", "stripe_identity")
     .eq("status", "pending");
