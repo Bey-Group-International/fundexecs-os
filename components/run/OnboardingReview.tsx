@@ -15,6 +15,8 @@ import {
   decideCarryoverAction,
 } from "@/app/(app)/[hub]/[module]/onboarding-actions";
 import { eraseLpAction } from "@/app/(app)/[hub]/[module]/onboarding-erase-actions";
+import { approvalRequirement, approvalRiskBlocker, type RiskAssessment } from "@/lib/lp-risk";
+import type { MemberRole } from "@/lib/supabase/database.types";
 import { OnboardingLinkPanel } from "@/components/run/OnboardingLinkPanel";
 import { OnboardingSubmission, type SubmissionView } from "@/components/run/OnboardingSubmission";
 import {
@@ -77,6 +79,8 @@ export interface ReviewLp {
   activity: ReviewActivity[];
   /** An earlier ID check for this email, waiting for a person to confirm it is the same individual. */
   carryover?: ReviewCarryover | null;
+  /** How careful an approval must be, from where the LP is, what it is, and what screening found. */
+  risk?: RiskAssessment | null;
 }
 
 export interface ReviewCarryover {
@@ -254,6 +258,28 @@ function CheckRow({ lpId, info, check }: { lpId: string; info: (typeof CHECK_KIN
   );
 }
 
+const RISK_TONE: Record<"elevated" | "high", string> = {
+  elevated: "border-amber-500/40 bg-amber-500/10 text-amber-300",
+  high: "border-red-500/40 bg-red-500/10 text-red-300",
+};
+
+function RiskPanel({ risk }: { risk: RiskAssessment }) {
+  if (risk.tier === "low") return null;
+  return (
+    <div className="rounded-lg border border-line bg-surface-0 p-3">
+      <div className="flex items-center gap-2">
+        <span className={`${pill} ${RISK_TONE[risk.tier]}`}>{risk.tier === "high" ? "High risk" : "Elevated risk"}</span>
+        <p className="text-xs text-fg-muted">This changes what an approval needs. It does not approve or reject anyone.</p>
+      </div>
+      <ul className="mt-2 grid gap-1 text-xs text-fg-secondary">
+        {risk.factors.map((f) => (
+          <li key={f.code}>• {f.text}</li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 function CarryoverPrompt({ lp, carryover }: { lp: ReviewLp; carryover: ReviewCarryover }) {
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
   const [pending, startTransition] = useTransition();
@@ -354,7 +380,7 @@ function EraseLp({ lp }: { lp: ReviewLp }) {
   );
 }
 
-function DecisionForm({ lp, blocker }: { lp: ReviewLp; blocker: string | null }) {
+function DecisionForm({ lp, blocker, viewerRole }: { lp: ReviewLp; blocker: string | null; viewerRole?: MemberRole | null }) {
   const options = availableDecisions(lp.reviewState);
   const stageNote = decisionStageNote(lp.reviewState);
   const [decision, setDecision] = useState<OnboardingDecisionKind>(options[0] ?? "rejected");
@@ -373,7 +399,10 @@ function DecisionForm({ lp, blocker }: { lp: ReviewLp; blocker: string | null })
       setMessage(res.ok ? { tone: "ok", text: "Decision recorded." } : { tone: "error", text: res.error });
     });
 
-  const blocked = decision === "approved" && blocker !== null;
+  const riskBlocker = decision === "approved" && lp.risk ? approvalRiskBlocker(lp.risk, viewerRole, reason) : null;
+  const shownBlocker = blocker ?? riskBlocker;
+  const blocked = decision === "approved" && shownBlocker !== null;
+  const riskNote = decision === "approved" && lp.risk && lp.risk.tier !== "low" ? approvalRequirement(lp.risk.tier).note : null;
 
   if (options.length === 0) {
     return (
@@ -409,7 +438,8 @@ function DecisionForm({ lp, blocker }: { lp: ReviewLp; blocker: string | null })
           className={inputClass}
         />
       </div>
-      {blocked ? <p role="status" className="mt-2 text-xs text-amber-400">{blocker}</p> : null}
+      {riskNote && !blocked ? <p role="status" className="mt-2 text-xs text-amber-400">{riskNote}</p> : null}
+      {blocked ? <p role="status" className="mt-2 text-xs text-amber-400">{shownBlocker}</p> : null}
       <div className="mt-2 flex items-center gap-3">
         <button
           type="button"
@@ -429,7 +459,7 @@ function DecisionForm({ lp, blocker }: { lp: ReviewLp; blocker: string | null })
   );
 }
 
-function LpCard({ lp }: { lp: ReviewLp }) {
+function LpCard({ lp, viewerRole }: { lp: ReviewLp; viewerRole?: MemberRole | null }) {
   const [open, setOpen] = useState(false);
   const readiness = reviewReadiness(lp.checks.map(toState));
   const blocker = approvalBlocker(readiness);
@@ -468,7 +498,8 @@ function LpCard({ lp }: { lp: ReviewLp }) {
           {CHECK_KINDS.map((info) => (
             <CheckRow key={info.kind} lpId={lp.id} info={info} check={byKind.get(info.kind)} />
           ))}
-          <DecisionForm lp={lp} blocker={blocker} />
+          {lp.risk && lp.risk.tier !== "low" ? <RiskPanel risk={lp.risk} /> : null}
+          <DecisionForm lp={lp} blocker={blocker} viewerRole={viewerRole} />
           <EraseLp lp={lp} />
 
           {lp.decisions.length ? (
@@ -502,11 +533,11 @@ function LpCard({ lp }: { lp: ReviewLp }) {
   );
 }
 
-export function OnboardingReview({ lps }: { lps: ReviewLp[] }) {
+export function OnboardingReview({ lps, viewerRole }: { lps: ReviewLp[]; viewerRole?: MemberRole | null }) {
   return (
     <div className="flex flex-col gap-2">
       {lps.map((lp) => (
-        <LpCard key={lp.id} lp={lp} />
+        <LpCard key={lp.id} lp={lp} viewerRole={viewerRole} />
       ))}
     </div>
   );

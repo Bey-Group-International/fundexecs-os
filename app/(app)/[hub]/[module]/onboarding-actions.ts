@@ -13,6 +13,7 @@ import type { LpReviewState } from "@/lib/supabase/database.types";
 import { refreshIdentityCheck } from "@/lib/lp-identity.server";
 import { runOfacScreen } from "@/lib/ofac.server";
 import { recordAudit } from "@/lib/lp-audit.server";
+import { assessRisk, approvalRiskBlocker } from "@/lib/lp-risk";
 import { decideCarryover, type DecideOutcome } from "@/lib/lp-reuse.server";
 import {
   approvalBlocker,
@@ -93,6 +94,30 @@ export async function recordOnboardingCheck(input: unknown): Promise<OnboardingA
   }
 }
 
+/** The risk tier of an LP, from what is stored for them. */
+async function assessStoredRisk(supabase: Awaited<ReturnType<typeof createServerClient>>, sessionId: string, orgId: string) {
+  const [{ data: session }, { data: profile }, { data: owners }, { data: checks }] = await Promise.all([
+    supabase.from("lp_onboarding_sessions").select("lp_type, owner_threshold_pct").eq("id", sessionId).eq("organization_id", orgId).maybeSingle(),
+    supabase.from("lp_onboarding_profiles").select("entity_type, country").eq("session_id", sessionId).eq("organization_id", orgId).maybeSingle(),
+    supabase.from("lp_onboarding_owners").select("role, ownership_pct, country").eq("session_id", sessionId).eq("organization_id", orgId),
+    supabase.from("onboarding_checks").select("kind, status, method").eq("session_id", sessionId).eq("organization_id", orgId),
+  ]);
+  const s = (session ?? {}) as { lp_type?: string; owner_threshold_pct?: number };
+  const p = (profile ?? {}) as { entity_type?: string | null; country?: string | null };
+  return assessRisk({
+    lpType: s.lp_type,
+    entityType: p.entity_type,
+    country: p.country,
+    ownerThresholdPct: s.owner_threshold_pct,
+    owners: ((owners ?? []) as Array<{ role?: string; ownership_pct?: number | null; country?: string | null }>).map((o) => ({
+      role: String(o.role ?? ""),
+      ownershipPct: o.ownership_pct,
+      country: o.country,
+    })),
+    checks: ((checks ?? []) as Array<{ kind: never; status: never; method?: string | null }>).filter((c) => c && c.kind),
+  });
+}
+
 export async function recordOnboardingDecision(input: unknown): Promise<OnboardingActionResult> {
   const who = await authorize();
   if (!who.ok) return who;
@@ -121,6 +146,22 @@ export async function recordOnboardingDecision(input: unknown): Promise<Onboardi
       }
       const blocker = approvalBlocker(reviewReadiness((data ?? []) as CheckState[]));
       if (blocker) return { ok: false, error: blocker };
+
+      // Risk-based routing: a riskier LP needs a more careful approval. Assessed here from the
+      // stored answers and checks, never from anything the browser sends.
+      const risk = await assessStoredRisk(supabase, sessionId, who.ctx.orgId);
+      const riskBlocker = approvalRiskBlocker(risk, who.ctx.role, reason);
+      if (riskBlocker) return { ok: false, error: riskBlocker };
+      if (risk.tier !== "low" && hasSupabaseServiceEnv()) {
+        await recordAudit(createServiceClient(), {
+          orgId: who.ctx.orgId,
+          sessionId,
+          action: "risk.assessed",
+          actorKind: "user",
+          actorId: who.ctx.userId,
+          detail: { tier: risk.tier, factors: risk.factors.length },
+        });
+      }
     }
 
     const { error } = await supabase.from("onboarding_decisions").insert({

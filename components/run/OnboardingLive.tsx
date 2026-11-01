@@ -9,6 +9,7 @@
 // Reads are best-effort, so a failed query shows the empty state instead of
 // throwing.
 import { openProfileRow } from "@/lib/lp-pii";
+import { assessRisk, riskLists } from "@/lib/lp-risk";
 import Link from "next/link";
 import { createServerClient } from "@/lib/supabase/server";
 import { getSessionContext } from "@/lib/auth";
@@ -102,7 +103,19 @@ async function loadLps(orgId: string): Promise<ReviewLp[]> {
     const owners = groupBy((ownersRes.data ?? []) as LpOnboardingOwner[]);
     const consents = groupBy((consentsRes.data ?? []) as LpOnboardingConsent[]);
 
+    const lists = riskLists();
     return ((sessionsRes.data ?? []) as SessionRow[]).map((s) => ({
+      risk: assessRisk(
+        {
+          lpType: s.lp_type,
+          entityType: profiles.get(s.id)?.entity_type,
+          country: profiles.get(s.id)?.country,
+          ownerThresholdPct: s.owner_threshold_pct,
+          owners: (owners.get(s.id) ?? []).map((o) => ({ role: o.role, ownershipPct: o.ownership_pct, country: o.country })),
+          checks: (checks.get(s.id) ?? []).map((c) => ({ kind: c.kind, status: c.status, method: c.method })),
+        },
+        lists,
+      ),
       carryover: carryovers.has(s.id)
         ? {
             priorName: carryovers.get(s.id)!.prior_name,
@@ -219,7 +232,7 @@ export async function OnboardingLive() {
           </p>
         </div>
       ) : (
-        <OnboardingReview lps={lps} />
+        <OnboardingReview lps={lps} viewerRole={ctx.role} />
       )}
     </Shell>
   );

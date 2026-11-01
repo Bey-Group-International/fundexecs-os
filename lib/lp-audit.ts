@@ -32,6 +32,8 @@ export const AUDIT_ACTIONS = [
   "carryover.confirmed",
   /** A fund manager declined it; the LP verifies again. */
   "carryover.declined",
+  /** An LP at elevated or high risk was approved: the tier and how many reasons, never the reasons. */
+  "risk.assessed",
 ] as const;
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];
 
