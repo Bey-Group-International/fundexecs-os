@@ -23,11 +23,14 @@ const client = {
       select: () => q,
       eq: (c: string, v: unknown) => (f.push([c, "eq", v]), q),
       in: (c: string, v: unknown) => (f.push([c, "in", v]), q),
+      order: (c: string, o: { ascending: boolean }) => (f.push([c, "order", o.ascending]), q),
       limit: () => q,
-      maybeSingle: () => (filters.push({ table, filters: f }), Promise.resolve({ data: table === "organizations" ? org : session, error: null })),
+      maybeSingle: () =>
+        (filters.push({ table, filters: f }),
+        Promise.resolve({ data: table === "organizations" ? org : session, error: errors[table] ?? null })),
       then: (resolve: (v: unknown) => void) => {
         filters.push({ table, filters: f });
-        if (table === "organization_members") return resolve({ data: members, error: null });
+        if (table === "organization_members") return resolve({ data: members, error: errors.organization_members ?? null });
         return resolve({ data: people, error: errors.principals ?? null });
       },
     };
@@ -106,6 +109,22 @@ describe("notifyTeamOfSubmission", () => {
     await expect(notifyTeamOfSubmission(client, args)).resolves.toEqual({ sent: 0, failed: 0 });
     expect(sendEmail).not.toHaveBeenCalled();
     expect(console.error).toHaveBeenCalled();
+  });
+
+  it.each(["lp_onboarding_sessions", "organizations", "organization_members"])(
+    "a failed %s read is logged and sends nothing, rather than being treated as an empty answer",
+    async (table) => {
+      errors[table] = { message: "connection reset" };
+      await expect(notifyTeamOfSubmission(client, args)).resolves.toEqual({ sent: 0, failed: 0 });
+      expect(sendEmail).not.toHaveBeenCalled();
+      expect(console.error).toHaveBeenCalledWith(expect.stringContaining("[lp-submit-notice]"), expect.objectContaining({ message: "connection reset" }));
+    },
+  );
+
+  it("asks for owners before admins, so a cap on rows can never cut an owner", async () => {
+    await notifyTeamOfSubmission(client, args);
+    const m = filters.find((x) => x.table === "organization_members")!;
+    expect(m.filters).toContainEqual(["role", "order", true]);
   });
 
   it("never throws when the mailbox itself throws", async () => {

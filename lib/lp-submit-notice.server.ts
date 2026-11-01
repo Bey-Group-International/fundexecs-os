@@ -39,8 +39,13 @@ export async function notifyTeamOfSubmission(
         .eq("organization_id", args.orgId)
         .maybeSingle(),
       client.from("organizations").select("name").eq("id", args.orgId).maybeSingle(),
-      client.from("organization_members").select("role, principal_id").eq("organization_id", args.orgId).in("role", ["owner", "admin"]).limit(100),
+      // Owners sort before admins (the role enum's order), so a cap can never cut an owner.
+      client.from("organization_members").select("role, principal_id").eq("organization_id", args.orgId).in("role", ["owner", "admin"]).order("role", { ascending: true }).limit(100),
     ]);
+    // A failed read is a failure, not an empty answer: nothing is sent on a guess, and the cause is logged.
+    if (sessionRes.error) throw new Error(sessionRes.error.message);
+    if (orgRes.error) throw new Error(orgRes.error.message);
+    if (membersRes.error) throw new Error(membersRes.error.message);
     const session = sessionRes.data as { lp_name: string; lp_type: string | null } | null;
     if (!session) return result;
 
