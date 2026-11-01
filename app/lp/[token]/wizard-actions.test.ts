@@ -11,6 +11,9 @@ jest.mock("next/server", () => ({
 const runOfacScreen = jest.fn(async (..._a: unknown[]) => ({ ok: true }));
 jest.mock("@/lib/ofac.server", () => ({ runOfacScreen: (...a: unknown[]) => runOfacScreen(...a) }));
 
+const notifyTeam = jest.fn(async (..._a: unknown[]) => ({ sent: 1, failed: 0 }));
+jest.mock("@/lib/lp-submit-notice.server", () => ({ notifyTeamOfSubmission: (...a: unknown[]) => notifyTeam(...a) }));
+
 const sendEmail = jest.fn(async (_i: unknown) => ({ ok: true, channel: "gmail", detail: "" }));
 jest.mock("@/lib/email", () => ({
   escapeHtml: (s: string) => s.replace(/</g, "&lt;"),
@@ -116,6 +119,7 @@ beforeEach(() => {
   afterThrows = false;
   afterTasks.length = 0;
   runOfacScreen.mockClear();
+  notifyTeam.mockClear();
   idConfigured = false;
   idCheck = null;
   idRefresh = { ok: true, state: "needs_input", url: "https://verify.stripe.com/start/abc" };
@@ -529,8 +533,8 @@ describe("the OFAC first-pass screen on submit", () => {
   it("is scheduled after the response, for this LP and its organization, and not run inline", async () => {
     expect(await submitWizardAction("tok")).toEqual({ ok: true });
     expect(runOfacScreen).not.toHaveBeenCalled();
-    expect(afterTasks).toHaveLength(1);
-    await afterTasks[0]();
+    expect(afterTasks).toHaveLength(2);
+    await Promise.all(afterTasks.map((t) => t()));
     expect(runOfacScreen).toHaveBeenCalledWith(expect.anything(), "s1", "org-1");
   });
 
@@ -546,5 +550,57 @@ describe("the OFAC first-pass screen on submit", () => {
     updateReturn = [{ id: "s1" }];
     expect((await submitWizardAction("tok")).ok).toBe(false);
     expect(afterTasks).toHaveLength(0);
+  });
+});
+
+describe("telling the fund manager's team on submit", () => {
+  beforeEach(() => {
+    tables.lp_onboarding_profiles = {
+      data: { legal_name: "Jo Park", entity_type: "individual", country: "US", signatory_name: null, signatory_title: null, source_of_funds: "Sale of my company in 2022", accreditation_basis: "accredited_investor", accreditation_statement_at: "2026-10-31T00:00:00Z" },
+    };
+    tables.lp_onboarding_consents = { data: CONSENT_SCOPES.map((scope) => ({ scope, text_version: CONSENT_TEXT_VERSION })) };
+  });
+
+  it("is sent after the response, for this LP and its organization, not inline", async () => {
+    expect(await submitWizardAction("tok")).toEqual({ ok: true });
+    expect(notifyTeam).not.toHaveBeenCalled();
+    await Promise.all(afterTasks.map((t) => t()));
+    expect(notifyTeam).toHaveBeenCalledTimes(1);
+    expect(notifyTeam).toHaveBeenCalledWith(expect.anything(), { sessionId: "s1", orgId: "org-1", resubmitted: false });
+  });
+
+  it("says it's a resubmission when the fund manager had asked for changes", async () => {
+    session = liveSession({ review_state: "changes_requested" });
+    expect(await submitWizardAction("tok")).toEqual({ ok: true });
+    await Promise.all(afterTasks.map((t) => t()));
+    expect(notifyTeam).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ resubmitted: true }));
+  });
+
+  it("still runs the OFAC screen when the notice fails, and the other way round", async () => {
+    notifyTeam.mockRejectedValueOnce(new Error("mail down"));
+    await submitWizardAction("tok");
+    await Promise.allSettled(afterTasks.map((t) => t()));
+    expect(runOfacScreen).toHaveBeenCalled();
+
+    afterTasks.length = 0;
+    runOfacScreen.mockClear();
+    notifyTeam.mockClear();
+    runOfacScreen.mockRejectedValueOnce(new Error("treasury down"));
+    session = liveSession();
+    await submitWizardAction("tok");
+    await Promise.allSettled(afterTasks.map((t) => t()));
+    expect(notifyTeam).toHaveBeenCalled();
+  });
+
+  it("never holds up or fails a submission", async () => {
+    afterThrows = true;
+    expect(await submitWizardAction("tok")).toEqual({ ok: true });
+  });
+
+  it("isn't sent when the submission didn't go through", async () => {
+    updateReturn = [];
+    expect((await submitWizardAction("tok")).ok).toBe(false);
+    expect(afterTasks).toHaveLength(0);
+    expect(notifyTeam).not.toHaveBeenCalled();
   });
 });

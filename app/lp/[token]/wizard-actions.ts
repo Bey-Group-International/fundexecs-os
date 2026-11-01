@@ -18,6 +18,7 @@ import { stripeIdentityProvider } from "@/lib/providers/stripe-identity";
 import { identityOutcome, type IdentityState } from "@/lib/lp-identity";
 import { readIdentityCheck, refreshIdentityCheck } from "@/lib/lp-identity.server";
 import { runOfacScreen } from "@/lib/ofac.server";
+import { notifyTeamOfSubmission } from "@/lib/lp-submit-notice.server";
 import {
   ACCREDITATION_BASIS_LABEL,
   CONSENT_TEXT_VERSION,
@@ -401,6 +402,18 @@ export async function submitWizardAction(token: string): Promise<WizardResult> {
       });
     } catch (err) {
       console.error("submitWizardAction could not schedule the OFAC screen", err);
+    }
+
+    // Tell the fund manager's team it's waiting for them. Also after the LP has
+    // their answer and separate from the screen above, so neither waits on or
+    // can stop the other. The notice never throws.
+    try {
+      const resubmitted = ctx.session.review_state === "changes_requested";
+      after(async () => {
+        await notifyTeamOfSubmission(ctx.supabase, { sessionId: ctx.session.id, orgId: ctx.session.organization_id, resubmitted });
+      });
+    } catch (err) {
+      console.error("submitWizardAction could not schedule the team notice", err);
     }
 
     revalidatePath(`/lp/${token}`);
