@@ -8,6 +8,7 @@ import { getAppUrlFromHeaders } from "@/lib/integrations/adapters/app-url";
 import { DEFAULT_POST_AUTH_PATH, safeNextPathOrNull } from "@/lib/safe-next-path";
 import { MFA_CHALLENGE_PATH, mfaGate, verifiedTotpFactors } from "@/lib/mfa";
 import { EnrollTotp } from "./EnrollTotp";
+import { RecoveryCodes } from "./RecoveryCodes";
 import { removeFactor } from "./actions";
 
 export const dynamic = "force-dynamic";
@@ -64,6 +65,9 @@ export default async function MfaSettingsPage(props: {
                   </li>
                 ))}
               </ul>
+              <div className="mt-4">
+                <RecoveryCodes label="Generate new recovery codes" />
+              </div>
               <a href={next} className="mt-5 block text-center text-sm text-gold-300 hover:underline">Continue</a>
             </>
           )}
