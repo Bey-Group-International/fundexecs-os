@@ -20,7 +20,12 @@ export async function GET(req: Request, props: { params: Promise<{ token: string
     return NextResponse.json({ error: "Rate limit exceeded" }, { status: 429, headers: rateLimitHeaders(rateLimit, 60) });
   }
   const access = await resolveSharedDocument(params.token, params.id);
-  if (!access.ok) return NextResponse.json({ error: "Not available" }, { status: 404 });
+  if (!access.ok) {
+    if (access.unavailable) {
+      return NextResponse.json({ error: "Temporarily unavailable" }, { status: 503, headers: { "Cache-Control": "no-store" } });
+    }
+    return NextResponse.json({ error: "Not available" }, { status: 404 });
+  }
   const result = await getDocumentText({
     orgId: access.share.organization_id,
     documentId: access.doc.id,

@@ -1,6 +1,7 @@
 import { createServiceClient, hasSupabaseServiceEnv } from "@/lib/supabase/server";
 import { gateSatisfied, readGatePass } from "@/lib/data-room-gate";
 import { buildViewerPayload, EMPTY_BLENDED } from "@/lib/data-room-viewer.server";
+import { DataRoomReadError, logReadFailure, orThrowRead } from "@/lib/data-room-errors";
 import type { Organization, DataRoomShare } from "@/lib/supabase/database.types";
 import { DataRoomViewer } from "@/components/dataroom/DataRoomViewer";
 import type { GateConfig } from "@/components/dataroom/DataRoomViewer";
@@ -21,7 +22,36 @@ function Unavailable() {
   );
 }
 
+// A failed read is not a dead link. Saying "invalid, expired or revoked" during a
+// database hiccup tells a reader with a good link to go and ask for a new one.
+function TemporarilyUnavailable() {
+  return (
+    <main className="flex min-h-screen flex-col items-center justify-center bg-surface-0 px-6 text-center">
+      <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-300">FundExecs OS</span>
+      <h1 className="mt-3 font-display text-2xl font-semibold text-fg-primary">This data room is temporarily unavailable</h1>
+      <p className="mt-2 max-w-sm text-sm text-fg-secondary">
+        We couldn&apos;t load it just now. Your link is fine. Please try again in a minute.
+      </p>
+    </main>
+  );
+}
+
 export default async function PublicDataRoom(props: {
+  params: Promise<{ token: string }>;
+  searchParams: Promise<{ doc?: string }>;
+}) {
+  try {
+    return await renderDataRoom(props);
+  } catch (error) {
+    // Only our own read failures are handled here. Anything else (including
+    // Next's redirect and not-found signals) keeps travelling.
+    if (!(error instanceof DataRoomReadError)) throw error;
+    logReadFailure(error);
+    return <TemporarilyUnavailable />;
+  }
+}
+
+async function renderDataRoom(props: {
   params: Promise<{ token: string }>;
   searchParams: Promise<{ doc?: string }>;
 }) {
@@ -30,11 +60,10 @@ export default async function PublicDataRoom(props: {
   if (!hasSupabaseServiceEnv()) return <Unavailable />;
   const supabase = createServiceClient();
 
-  const { data: shareRow } = await supabase
-    .from("data_room_shares")
-    .select("*")
-    .eq("token", params.token)
-    .maybeSingle();
+  const shareRow = orThrowRead(
+    "share",
+    await supabase.from("data_room_shares").select("*").eq("token", params.token).maybeSingle(),
+  );
   const share = shareRow as DataRoomShare | null;
   if (!share || share.revoked_at) return <Unavailable />;
   if (share.expires_at && new Date(share.expires_at).getTime() < Date.now()) return <Unavailable />;
@@ -81,11 +110,14 @@ export default async function PublicDataRoom(props: {
   );
 
   if (!passed) {
-    const { data: brandRow } = await supabase
-      .from("organizations")
-      .select("name, tagline, brand_color, logo_url")
-      .eq("id", orgId)
-      .maybeSingle();
+    const brandRow = orThrowRead(
+      "organization",
+      await supabase
+        .from("organizations")
+        .select("name, tagline, brand_color, logo_url")
+        .eq("id", orgId)
+        .maybeSingle(),
+    );
     if (!brandRow) return <Unavailable />;
     const brand = brandRow as Pick<Organization, "name" | "tagline" | "brand_color" | "logo_url">;
 

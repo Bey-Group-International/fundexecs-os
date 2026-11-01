@@ -13,6 +13,7 @@ import { blendTrackRecord } from "@/lib/track-record";
 import { DATA_ROOM_SECTIONS } from "@/lib/data-room";
 import { roomSectionKey, sectionsAllowedBy } from "@/lib/data-rooms";
 import { selectAllPages, selectInBatches } from "@/lib/supabase/batch";
+import { DataRoomReadError } from "@/lib/data-room-errors";
 import { isUploadedFile, previewKindFor } from "@/lib/document-files";
 import type { Database } from "@/lib/supabase/database.types";
 import type {
@@ -74,6 +75,10 @@ type Client = SupabaseClient<Database>;
  * are dead — and invisible to them, since archived rooms leave the switcher.
  * Both public surfaces check this directly, so the room's own state is the
  * boundary rather than a bookkeeping step that has to succeed.
+ *
+ * A read that errored throws DataRoomReadError. It is not evidence the room is
+ * open, so nothing is served, but it is not evidence the room is closed either:
+ * a caller must be able to say "try again" rather than "this link is dead".
  */
 export async function isRoomOpen(
   supabase: Client,
@@ -87,8 +92,7 @@ export async function isRoomOpen(
     .eq("organization_id", orgId)
     .is("archived_at", null)
     .maybeSingle();
-  // Fail closed: a read that errored is not evidence the room is open.
-  if (error) return false;
+  if (error) throw new DataRoomReadError("room", error);
   return Boolean(data);
 }
 
@@ -134,8 +138,8 @@ export async function buildViewerPayload(
         .order("sort_order", { ascending: true })
         .range(from, to),
     );
-    // Fail closed: an errored read is not an empty room.
-    if (manifestErr) return null;
+    // An errored read is not an empty room.
+    if (manifestErr) throw new DataRoomReadError("manifest", manifestErr);
     const rows = (manifestRows ?? []) as {
       document_id: string;
       sort_order: number;
@@ -160,9 +164,9 @@ export async function buildViewerPayload(
             .eq("room_id", roomId)
             .in("document_id", batch),
       );
-  // Fail closed. If this read errored, `needsSignature` would be empty and every
-  // file that requires a signature would be served unlocked.
-  if (sigErr) return null;
+  // If this read errored, `needsSignature` would be empty and every file that
+  // requires a signature would be served unlocked. Nothing is served instead.
+  if (sigErr) throw new DataRoomReadError("signature-requirement", sigErr);
   const needsSignature = new Set(
     ((sigRows ?? []) as { document_id: string; require_signature: boolean }[])
       .filter((r) => r.require_signature)
@@ -208,10 +212,18 @@ export async function buildViewerPayload(
     ),
   ]);
 
+  // Every read must have answered. A failed one is not an empty one: a missing
+  // track record or team would read as the firm having none, and a failed
+  // document read as an empty room.
+  if (orgRes.error) throw new DataRoomReadError("organization", orgRes.error);
+  if (thesisRes.error) throw new DataRoomReadError("thesis", thesisRes.error);
+  if (recordsRes.error) throw new DataRoomReadError("track-records", recordsRes.error);
+  if (entitiesRes.error) throw new DataRoomReadError("entities", entitiesRes.error);
+  if (membersRes.error) throw new DataRoomReadError("members", membersRes.error);
+  if (docsRes.error) throw new DataRoomReadError("documents", docsRes.error);
+
   const org = orgRes.data as Organization | null;
   if (!org) return null;
-  // A failed document read would render the room as empty, not as unavailable.
-  if (docsRes.error) return null;
 
   const thesis = thesisRes.data as InvestmentThesis | null;
   const records = (recordsRes.data ?? []) as TrackRecord[];
@@ -221,10 +233,11 @@ export async function buildViewerPayload(
 
   let principals: Principal[] = [];
   if (members.length) {
-    const { data } = await supabase
+    const { data, error: principalsErr } = await supabase
       .from("principals")
       .select("*")
       .in("id", members.map((m) => m.principal_id));
+    if (principalsErr) throw new DataRoomReadError("principals", principalsErr);
     principals = (data ?? []) as Principal[];
   }
   const byId = new Map(principals.map((p) => [p.id, p]));

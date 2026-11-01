@@ -13,6 +13,7 @@ import { createServiceClient, hasSupabaseServiceEnv } from "@/lib/supabase/serve
 import { gateSatisfied, readGatePass } from "@/lib/data-room-gate";
 import { isRoomOpen } from "@/lib/data-room-viewer.server";
 import { roomSectionKey } from "@/lib/data-rooms";
+import { DataRoomReadError, logReadFailure, orThrowRead } from "@/lib/data-room-errors";
 import type { DataRoomShare, Database, Document } from "@/lib/supabase/database.types";
 
 export type ShareAccess =
@@ -27,7 +28,16 @@ export type ShareAccess =
       /** This file requires the reader's signature (they have it, or the caller skipped the check). */
       signatureRequired: boolean;
     }
-  | { ok: false };
+  | {
+      ok: false;
+      /**
+       * Set only when the answer is "we couldn't find out", never for a denial.
+       * Callers answer 503 / "try again" for it, not "this link is dead".
+       */
+      unavailable?: true;
+    };
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /** A share that exists, is not revoked, and has not expired. */
 export function isShareLive(share: Pick<DataRoomShare, "revoked_at" | "expires_at"> | null): boolean {
@@ -50,14 +60,35 @@ export async function resolveSharedDocument(
   /** Only the signing action passes this: it must reach a file the reader has not yet signed. */
   opts: { skipSignature?: boolean } = {},
 ): Promise<ShareAccess> {
+  // Not an id at all: a denial, decided before the database sees it. Otherwise
+  // a malformed id would reach a uuid column, come back as an error, and be
+  // reported as an outage instead of a miss.
+  if (typeof documentId !== "string" || !UUID.test(documentId)) return { ok: false };
+  try {
+    return await resolveShared(token, documentId, opts);
+  } catch (error) {
+    // Fails closed (nothing is served) but says so honestly: the caller can
+    // tell "we couldn't check" from "you may not have this".
+    if (error instanceof DataRoomReadError) {
+      logReadFailure(error);
+      return { ok: false, unavailable: true };
+    }
+    throw error;
+  }
+}
+
+async function resolveShared(
+  token: string,
+  documentId: string,
+  opts: { skipSignature?: boolean },
+): Promise<ShareAccess> {
   if (!hasSupabaseServiceEnv()) return { ok: false };
   const supabase = createServiceClient();
 
-  const { data: shareRow } = await supabase
-    .from("data_room_shares")
-    .select("*")
-    .eq("token", token)
-    .maybeSingle();
+  const shareRow = orThrowRead(
+    "share",
+    await supabase.from("data_room_shares").select("*").eq("token", token).maybeSingle(),
+  );
   const share = shareRow as DataRoomShare | null;
   if (!share || !isShareLive(share)) return { ok: false };
 
@@ -85,25 +116,30 @@ export async function resolveSharedDocument(
   // file requires a signature. Being in the org's library is not enough — an
   // unpublished draft must stay unreachable even to someone holding a valid
   // token and the document's id.
-  const { data: manifestRow, error: manifestErr } = await supabase
-    .from("data_room_documents")
-    .select("id, require_signature")
-    .eq("organization_id", share.organization_id)
-    .eq("room_id", roomId)
-    .eq("document_id", documentId)
-    .maybeSingle();
-  // Fail closed: for a single-document link an errored read would otherwise look
-  // like "no signature required" and open a file that needs one.
-  if (manifestErr) return { ok: false };
+  const manifestRow = orThrowRead(
+    "manifest",
+    await supabase
+      .from("data_room_documents")
+      .select("id, require_signature")
+      .eq("organization_id", share.organization_id)
+      .eq("room_id", roomId)
+      .eq("document_id", documentId)
+      .maybeSingle(),
+  );
+  // An errored read throws above. For a single-document link it would otherwise
+  // look like "no signature required" and open a file that needs one.
   if (!share.document_id && !manifestRow) return { ok: false };
   const signatureRequired = Boolean((manifestRow as { require_signature?: boolean } | null)?.require_signature);
 
-  const { data: docRow } = await supabase
-    .from("documents")
-    .select("*")
-    .eq("id", documentId)
-    .eq("organization_id", share.organization_id)
-    .maybeSingle();
+  const docRow = orThrowRead(
+    "document",
+    await supabase
+      .from("documents")
+      .select("*")
+      .eq("id", documentId)
+      .eq("organization_id", share.organization_id)
+      .maybeSingle(),
+  );
   const doc = docRow as Document | null;
   if (!doc) return { ok: false };
 
