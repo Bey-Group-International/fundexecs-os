@@ -410,3 +410,60 @@ describe("what a reader sees on opening the room", () => {
     ).toBeInTheDocument();
   });
 });
+
+describe("a gated link", () => {
+  // The first render sends no content (the reader has not cleared the gate); the
+  // server then refreshes the page with the room. The viewer is the same
+  // instance across that refresh, so its state must not be frozen at the empty
+  // render's defaults.
+  function gated(ready: boolean, docSections: ViewerSection[]) {
+    return (
+      <DataRoomViewer
+        token="tok"
+        shareId="share-1"
+        org={ORG}
+        blended={BLENDED}
+        thesis={null}
+        team={[]}
+        entities={[]}
+        docSections={docSections}
+        gateConfig={{
+          requireEmail: true,
+          requireNda: false,
+          ndaText: null,
+          passwordProtected: false,
+        }}
+        contentReady={ready}
+      />
+    );
+  }
+  const ROOM = [
+    section("marketing", "Marketing & Materials", "Executive Summary"),
+    section("thesis", "Investment Strategy & Thesis", "Investment Memorandum"),
+  ];
+
+  it("lands on the room's contents once the gate opens", () => {
+    const { rerender } = render(gated(false, []));
+    rerender(gated(true, ROOM));
+    expect(
+      screen.getByRole("heading", { level: 1, name: "All documents" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Investment Memorandum")).toBeInTheDocument();
+  });
+
+  it("keeps a section the reader picked when the page refreshes again", () => {
+    const { rerender } = render(gated(true, ROOM));
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: (n) => n.startsWith("Investment Strategy"),
+      }),
+    );
+    rerender(gated(true, [...ROOM]));
+    expect(
+      screen.getByRole("heading", {
+        level: 1,
+        name: "Investment Strategy & Thesis",
+      }),
+    ).toBeInTheDocument();
+  });
+});

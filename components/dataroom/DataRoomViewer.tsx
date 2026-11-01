@@ -246,13 +246,17 @@ export function DataRoomViewer({
     ? docNavKey(focusDocSection.key)
     : undefined;
   // A reader opens on the room's contents (what the GP published), or on the
-  // document a link points at. Overview is one click away.
-  const [selected, setSelected] = useState<string>(
+  // document a link points at. Overview is one click away. Only what the reader
+  // picks is stored: the default is derived from the content on every render, so
+  // a gated link, which first renders empty and then refreshes with the room,
+  // lands on the contents instead of keeping the empty render's Overview.
+  const [picked, setPicked] = useState<string | null>(null);
+  const selected =
+    picked ??
     focusSection ??
-      nav.find((n) => n.key === ALL_DOCS_KEY)?.key ??
-      nav[0]?.key ??
-      "overview",
-  );
+    nav.find((n) => n.key === ALL_DOCS_KEY)?.key ??
+    nav[0]?.key ??
+    "overview";
   const mainRef = useRef<HTMLElement>(null);
   const shellRef = useRef<HTMLDivElement>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -382,7 +386,7 @@ export function DataRoomViewer({
       if (key === effectiveSelected) return;
       // Credit the section being left before its documents leave the page.
       flushReading.current();
-      setSelected(key);
+      setPicked(key);
       setSidebarOpen(false);
       // A new section starts at its top, not wherever the last one was scrolled.
       if (mainRef.current) mainRef.current.scrollTop = 0;
