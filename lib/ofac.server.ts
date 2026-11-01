@@ -17,6 +17,7 @@
 import "server-only";
 import { createHash } from "node:crypto";
 import { recordAudit } from "@/lib/lp-audit.server";
+import { createServiceClient } from "@/lib/supabase/server";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { buildIndex, screenNames, type ListSource, screenOutcome, SCREEN_PREFIX, type ScreenResult, type ScreenSubject, type SdnIndex } from "@/lib/ofac";
 
@@ -26,6 +27,8 @@ const SDN_URL = "https://www.treasury.gov/ofac/downloads/sdn.csv";
 const ALT_URL = "https://www.treasury.gov/ofac/downloads/alt.csv";
 const FETCH_TIMEOUT_MS = 30_000;
 const CACHE_MS = 6 * 3600_000;
+/** Private bucket holding every list a screen has used, one object per fingerprint (G-7). */
+export const OFAC_ARCHIVE_BUCKET = "ofac-lists";
 
 let cached: { at: number; index: SdnIndex } | null = null;
 
@@ -45,6 +48,29 @@ async function download(url: string): Promise<{ text: string; bytes: Uint8Array;
 
 const sha256 = (bytes: Uint8Array) => createHash("sha256").update(bytes).digest("hex");
 
+/**
+ * Keeps both files, each under its own fingerprint, so a past screen can be
+ * reproduced from its audit entry. Best-effort: a failure is logged and reported
+ * as not archived (the audit entry says so), and never stops a screen.
+ */
+async function archiveLists(files: Array<{ sha: string; bytes: Uint8Array }>): Promise<boolean> {
+  try {
+    const bucket = createServiceClient().storage.from(OFAC_ARCHIVE_BUCKET);
+    for (const f of files) {
+      const path = `${f.sha}.csv`;
+      const { data: there } = await bucket.exists(path);
+      if (there) continue;
+      const { error } = await bucket.upload(path, f.bytes, { contentType: "text/csv", upsert: false });
+      // Another process stored the same file first: same bytes, same name.
+      if (error && !/already exists|duplicate/i.test(error.message)) throw new Error(error.message);
+    }
+    return true;
+  } catch (err) {
+    console.error("[ofac] could not archive the list", err);
+    return false;
+  }
+}
+
 /** The SDN list, kept for a few hours so several screens in a row download it once. */
 export async function loadSdnIndex(now: number = Date.now()): Promise<SdnIndex> {
   if (cached && now - cached.at < CACHE_MS) return cached.index;
@@ -58,6 +84,10 @@ export async function loadSdnIndex(now: number = Date.now()): Promise<SdnIndex> 
     dateBasis: fromHeader ? "last_modified" : "fetched",
   };
   const index = buildIndex(sdn.text, alt.text, listDate, source);
+  index.archived = await archiveLists([
+    { sha: source.sdnSha256, bytes: sdn.bytes },
+    { sha: source.altSha256, bytes: alt.bytes },
+  ]);
   cached = { at: now, index };
   return index;
 }
@@ -145,7 +175,7 @@ export async function runOfacScreen(
           list_date: result.listDate,
           list_size: result.listSize,
           // Which files, exactly: lets a later reader tell whether two screens used the same list.
-          ...(result.source ? { date_basis: result.source.dateBasis, sdn_sha256: result.source.sdnSha256, alt_sha256: result.source.altSha256 } : {}),
+          ...(result.source ? { date_basis: result.source.dateBasis, sdn_sha256: result.source.sdnSha256, alt_sha256: result.source.altSha256, archived: index.archived === true } : {}),
         },
       });
 
