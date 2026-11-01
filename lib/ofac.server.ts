@@ -29,17 +29,21 @@ const CACHE_MS = 6 * 3600_000;
 
 let cached: { at: number; index: SdnIndex } | null = null;
 
-async function download(url: string): Promise<{ text: string; modified: string | null }> {
+async function download(url: string): Promise<{ text: string; bytes: Uint8Array; modified: string | null }> {
   const res = await fetch(url, {
     cache: "no-store",
     signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
     headers: { "User-Agent": "FundExecsOS-OFAC-screen" },
   });
   if (!res.ok) throw new Error(`OFAC download failed: ${res.status}`);
-  return { text: await res.text(), modified: res.headers.get("last-modified") };
+  // Read the bytes once: the fingerprint is of exactly what was served (a leading
+  // byte-order mark included, which decoding to text would drop), and the same
+  // bytes are then decoded for matching.
+  const bytes = new Uint8Array(await res.arrayBuffer());
+  return { text: new TextDecoder("utf-8").decode(bytes), bytes, modified: res.headers.get("last-modified") };
 }
 
-const sha256 = (text: string) => createHash("sha256").update(text, "utf8").digest("hex");
+const sha256 = (bytes: Uint8Array) => createHash("sha256").update(bytes).digest("hex");
 
 /** The SDN list, kept for a few hours so several screens in a row download it once. */
 export async function loadSdnIndex(now: number = Date.now()): Promise<SdnIndex> {
@@ -49,8 +53,8 @@ export async function loadSdnIndex(now: number = Date.now()): Promise<SdnIndex> 
   const fromHeader = !!stamp && !Number.isNaN(stamp.getTime());
   const listDate = (fromHeader ? stamp! : new Date(now)).toISOString().slice(0, 10);
   const source: ListSource = {
-    sdnSha256: sha256(sdn.text),
-    altSha256: sha256(alt.text),
+    sdnSha256: sha256(sdn.bytes),
+    altSha256: sha256(alt.bytes),
     dateBasis: fromHeader ? "last_modified" : "fetched",
   };
   const index = buildIndex(sdn.text, alt.text, listDate, source);

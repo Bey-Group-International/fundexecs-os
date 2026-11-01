@@ -78,8 +78,8 @@ export interface SdnName {
 
 /**
  * Which files a list was built from, so a screen can be tied to them later.
- * The hashes are SHA-256 of each file's text exactly as downloaded (UTF-8), in
- * lower-case hex. `dateBasis` says where `listDate` came from: the file's own
+ * The hashes are SHA-256 of each file's bytes exactly as downloaded, in
+ * lower-case hex, so anyone can recompute one from a saved copy of the file. `dateBasis` says where `listDate` came from: the file's own
  * Last-Modified header, or only the day it was fetched (when Treasury sent none).
  */
 export interface ListSource {
