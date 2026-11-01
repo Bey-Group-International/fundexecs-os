@@ -1,3 +1,8 @@
+import { createRequire } from "node:module";
+
+// lib/security-headers.cjs is CommonJS so tests can require it too.
+const { securityHeaderRules } = createRequire(import.meta.url)("./lib/security-headers.cjs");
+
 // A short, stable identifier for this build. It is appended to the service
 // worker's registration URL, which makes it the app-shell cache's version key:
 // a new build is a new worker script URL, so the browser installs it, refreshes
@@ -24,15 +29,9 @@ const nextConfig = {
   },
   async headers() {
     return [
-      {
-        source: "/(.*)",
-        headers: [
-          { key: "X-Content-Type-Options", value: "nosniff" },
-          { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
-          { key: "X-Frame-Options", value: "SAMEORIGIN" },
-          { key: "Permissions-Policy", value: "camera=(self), microphone=(self), geolocation=()" },
-        ],
-      },
+      // Site-wide headers, then the stricter set for the public investor pages
+      // under /lp/ (their URL is a bearer link). Defined in lib/security-headers.cjs.
+      ...securityHeaderRules({ dev: process.env.NODE_ENV !== "production" }),
       {
         // The camera-background segmenter: a ~12MB wasm runtime, its loader and a
         // 250KB model, all under the same names from one build to the next, which
