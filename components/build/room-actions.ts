@@ -8,6 +8,7 @@ import { revalidatePath } from "next/cache";
 import { createServerClient } from "@/lib/supabase/server";
 import { getSessionContext } from "@/lib/auth";
 import { roomSectionKey } from "@/lib/data-rooms";
+import { selectAllPages, selectInBatches } from "@/lib/supabase/batch";
 
 const ROOMS = "/build/data_room";
 const LIBRARY = "/build/documents";
@@ -217,22 +218,31 @@ export async function moveRoomDocument(formData: FormData): Promise<void> {
   const orgId = ctx.orgId;
 
   const supabase = await createServerClient();
-  const { data: manifest } = await supabase
-    .from("data_room_documents")
-    .select("id, document_id, sort_order")
-    .eq("organization_id", orgId)
-    .eq("room_id", roomId)
-    .order("sort_order", { ascending: true });
-  const rows = (manifest ?? []) as { id: string; document_id: string; sort_order: number }[];
+  // Whole room, not the first max_rows of it: peers are found by section, and a
+  // truncated manifest would swap the wrong neighbours.
+  const { data: manifest } = await selectAllPages<{ id: string; document_id: string; sort_order: number }>(
+    (from, to) =>
+      supabase
+        .from("data_room_documents")
+        .select("id, document_id, sort_order")
+        .eq("organization_id", orgId)
+        .eq("room_id", roomId)
+        .order("sort_order", { ascending: true })
+        .range(from, to),
+  );
+  const rows = manifest ?? [];
   if (rows.length === 0) return;
 
   // Only peers in the same section swap — order is meaningful within a section,
   // not across the whole room.
-  const { data: docRows, error: docErr } = await supabase
-    .from("documents")
-    .select("id, doc_type, name")
-    .eq("organization_id", orgId)
-    .in("id", rows.map((r) => r.document_id));
+  const { data: docRows, error: docErr } = await selectInBatches<{ id: string; doc_type: string | null; name: string }>(
+    rows.map((r) => r.document_id),
+    (batch) =>
+      supabase.from("documents").select("id, doc_type, name").eq("organization_id", orgId).in("id", batch) as unknown as PromiseLike<{
+        data: { id: string; doc_type: string | null; name: string }[] | null;
+        error: { message: string } | null;
+      }>,
+  );
   if (docErr) throw new Error(`Couldn't reorder the document: ${docErr.message}`);
   const docMeta = new Map(
     ((docRows ?? []) as { id: string; doc_type: string | null; name: string }[]).map((d) => [

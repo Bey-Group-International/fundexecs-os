@@ -20,6 +20,9 @@ jest.mock("@/lib/supabase/server", () => ({
         eq: () => q,
         in: () => q,
         order: () => q,
+        // Manifest reads are paged with .range(); these tables are tiny, so every
+        // page request is answered with all rows and paging ends after one page.
+        range: () => q,
         limit: () => q,
         maybeSingle: async () => ({ data: singles[table] ?? null }),
         then: (resolve: (v: unknown) => unknown) => resolve({ data: rows[table] ?? [] }),
