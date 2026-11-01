@@ -22,6 +22,7 @@ import {
 } from "@/lib/data-rooms";
 import { listRooms, pickRoom, loadRoomDocuments } from "@/lib/data-rooms.server";
 import { buildViewerPayload } from "@/lib/data-room-viewer.server";
+import { DataRoomReadError, logReadFailure } from "@/lib/data-room-errors";
 import { selectAllPages } from "@/lib/supabase/batch";
 import { RoomPreview, type PreviewShare } from "./RoomPreview";
 import { ShareControls } from "./ShareControls";
@@ -98,7 +99,13 @@ export async function MaterialsModule({ roomId }: { roomId?: string } = {}) {
       .order("created_at", { ascending: false }),
     // The preview is built by the same function the live room uses, with no
     // section allowlist — the widest view any link into this room can give.
-    buildViewerPayload(supabase, orgId, room.id, null),
+    buildViewerPayload(supabase, orgId, room.id, null).catch((error: unknown) => {
+      // The preview is a convenience pane: a failed read shows "Preview
+      // unavailable" and is logged, and does not take the whole page down.
+      if (!(error instanceof DataRoomReadError)) throw error;
+      logReadFailure(error);
+      return null;
+    }),
     supabase
       .from("document_reviews")
       .select("document_id, storage_key, suggested_section, recommendations")

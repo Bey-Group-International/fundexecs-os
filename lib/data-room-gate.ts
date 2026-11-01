@@ -40,26 +40,41 @@ export interface GateRequirements {
   allowed_email_domains?: string[] | null;
 }
 
-function gateSecret(): string {
-  // Derived from the service-role key so no new secret needs provisioning —
-  // the data room is already fully gated behind `hasSupabaseServiceEnv()`, so
-  // this key is always present wherever the data room itself works.
-  const base = process.env.SUPABASE_SERVICE_ROLE_KEY ?? "";
+/**
+ * The key a gate pass is signed with, or null when there is none to derive it
+ * from.
+ *
+ * Derived from the service-role key so no new secret needs provisioning: the
+ * data room is already gated behind `hasSupabaseServiceEnv()`, so the key is
+ * present wherever the data room itself works.
+ *
+ * It used to fall back to an empty string when the variable was missing. That
+ * turns the "secret" into a constant that is public in this repository, so
+ * anyone could sign a pass for any link. A missing key now means there is no
+ * secret: nothing is signed and every pass is rejected.
+ */
+function gateSecret(): string | null {
+  const base = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim();
+  if (!base) return null;
   return createHmac("sha256", "fx-data-room-gate").update(base).digest("hex");
 }
 
 function sign(payload: GatePassPayload): string {
+  const secret = gateSecret();
+  if (!secret) throw new Error("The data room gate has no signing key (SUPABASE_SERVICE_ROLE_KEY is not set).");
   const body = Buffer.from(JSON.stringify(payload), "utf8").toString("base64url");
-  const mac = createHmac("sha256", gateSecret()).update(body).digest("base64url");
+  const mac = createHmac("sha256", secret).update(body).digest("base64url");
   return `${body}.${mac}`;
 }
 
 function verify(value: string): GatePassPayload | null {
+  const secret = gateSecret();
+  if (!secret) return null;
   const dot = value.lastIndexOf(".");
   if (dot < 0) return null;
   const body = value.slice(0, dot);
   const mac = value.slice(dot + 1);
-  const expectedMac = createHmac("sha256", gateSecret()).update(body).digest("base64url");
+  const expectedMac = createHmac("sha256", secret).update(body).digest("base64url");
   const a = Buffer.from(mac);
   const b = Buffer.from(expectedMac);
   if (a.length !== b.length || !timingSafeEqual(a, b)) return null;
