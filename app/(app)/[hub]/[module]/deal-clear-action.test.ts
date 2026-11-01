@@ -7,6 +7,8 @@
 // could archive the entire pipeline despite being read-only everywhere else.
 // It now uses createServerClient(), matching its sibling.
 
+// actions.ts imports server-only modules; the real package only resolves inside Next.
+jest.mock("server-only", () => ({}), { virtual: true });
 jest.mock("next/cache", () => ({ revalidatePath: jest.fn() }));
 
 const requireOrgContext = jest.fn();
