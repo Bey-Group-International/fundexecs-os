@@ -1,5 +1,6 @@
 jest.mock("server-only", () => ({}), { virtual: true });
 
+import { createHash } from "node:crypto";
 import { MIN_SDN_ROWS, SCREEN_PREFIX } from "./ofac";
 import { loadSdnIndex, resetSdnCache, runOfacScreen, subjectsFor } from "./ofac.server";
 
@@ -8,6 +9,7 @@ const SDN = [row(1, "AEROCARIBBEAN AIRLINES", "-0- ", "CUBA"), ...Array.from({ l
 const ALT = `1,1,"aka","AERO-CARIBBEAN","-0- "\r\n`;
 
 const NOW = Date.parse("2026-11-01T12:00:00Z");
+const sha = (t: string) => createHash("sha256").update(t, "utf8").digest("hex");
 
 let fetched: string[] = [];
 let sdnResponse: { ok: boolean; status: number; text: string; modified?: string } = { ok: true, status: 200, text: SDN, modified: "Thu, 30 Oct 2026 15:00:00 GMT" };
@@ -83,6 +85,22 @@ describe("loadSdnIndex", () => {
     expect((await loadSdnIndex(NOW)).listDate).toBe("2026-11-01");
   });
 
+  it("fingerprints exactly the two files it matched against", async () => {
+    const idx = await loadSdnIndex(NOW);
+    expect(idx.source).toEqual({ sdnSha256: sha(SDN), altSha256: sha(ALT), dateBasis: "last_modified" });
+    expect(idx.source!.sdnSha256).toMatch(/^[0-9a-f]{64}$/);
+  });
+
+  it("gives a different fingerprint when the list changes, and says when the date is only the day it was fetched", async () => {
+    const a = await loadSdnIndex(NOW);
+    resetSdnCache();
+    sdnResponse = { ...sdnResponse, text: SDN + "\r\n" + row(99999, "NEW ENTRY ONE"), modified: undefined };
+    const b = await loadSdnIndex(NOW);
+    expect(b.source!.sdnSha256).not.toBe(a.source!.sdnSha256);
+    expect(b.source!.altSha256).toBe(a.source!.altSha256);
+    expect(b.source!.dateBasis).toBe("fetched");
+  });
+
   it("keeps the list for a few hours, then downloads again", async () => {
     await loadSdnIndex(NOW);
     await loadSdnIndex(NOW + 3600_000);
@@ -147,7 +165,17 @@ describe("runOfacScreen", () => {
           actor_id: null,
           actor_kind: "system",
           action: "check.screen_run",
-          detail: { status: "pending", matches: 0, screened: 1, wrote: true, list_date: "2026-10-30" },
+          detail: {
+            status: "pending",
+            matches: 0,
+            screened: 1,
+            wrote: true,
+            list_date: "2026-10-30",
+            list_size: MIN_SDN_ROWS + 1,
+            date_basis: "last_modified",
+            sdn_sha256: sha(SDN),
+            alt_sha256: sha(ALT),
+          },
         },
       ]);
     });

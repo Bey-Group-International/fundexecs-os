@@ -15,9 +15,10 @@
 //     manager recorded: only a missing check, a pending one, or one this screen
 //     itself flagged earlier.
 import "server-only";
+import { createHash } from "node:crypto";
 import { recordAudit } from "@/lib/lp-audit.server";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { buildIndex, screenNames, screenOutcome, SCREEN_PREFIX, type ScreenResult, type ScreenSubject, type SdnIndex } from "@/lib/ofac";
+import { buildIndex, screenNames, type ListSource, screenOutcome, SCREEN_PREFIX, type ScreenResult, type ScreenSubject, type SdnIndex } from "@/lib/ofac";
 
 type Client = SupabaseClient<any, any, any>;
 
@@ -38,13 +39,21 @@ async function download(url: string): Promise<{ text: string; modified: string |
   return { text: await res.text(), modified: res.headers.get("last-modified") };
 }
 
+const sha256 = (text: string) => createHash("sha256").update(text, "utf8").digest("hex");
+
 /** The SDN list, kept for a few hours so several screens in a row download it once. */
 export async function loadSdnIndex(now: number = Date.now()): Promise<SdnIndex> {
   if (cached && now - cached.at < CACHE_MS) return cached.index;
   const [sdn, alt] = await Promise.all([download(SDN_URL), download(ALT_URL)]);
-  const stamp = sdn.modified ? new Date(sdn.modified) : new Date(now);
-  const listDate = (Number.isNaN(stamp.getTime()) ? new Date(now) : stamp).toISOString().slice(0, 10);
-  const index = buildIndex(sdn.text, alt.text, listDate);
+  const stamp = sdn.modified ? new Date(sdn.modified) : null;
+  const fromHeader = !!stamp && !Number.isNaN(stamp.getTime());
+  const listDate = (fromHeader ? stamp! : new Date(now)).toISOString().slice(0, 10);
+  const source: ListSource = {
+    sdnSha256: sha256(sdn.text),
+    altSha256: sha256(alt.text),
+    dateBasis: fromHeader ? "last_modified" : "fetched",
+  };
+  const index = buildIndex(sdn.text, alt.text, listDate, source);
   cached = { at: now, index };
   return index;
 }
@@ -124,7 +133,16 @@ export async function runOfacScreen(
         sessionId,
         action: "check.screen_run",
         ...(actor.kind === "user" ? { actorKind: "user" as const, actorId: actor.id } : { actorKind: "system" as const }),
-        detail: { status: outcome.status, matches: result.flagged, screened: result.results.filter((r) => r.screened).length, wrote, list_date: result.listDate },
+        detail: {
+          status: outcome.status,
+          matches: result.flagged,
+          screened: result.results.filter((r) => r.screened).length,
+          wrote,
+          list_date: result.listDate,
+          list_size: result.listSize,
+          // Which files, exactly: lets a later reader tell whether two screens used the same list.
+          ...(result.source ? { date_basis: result.source.dateBasis, sdn_sha256: result.source.sdnSha256, alt_sha256: result.source.altSha256 } : {}),
+        },
       });
 
     // A result a person recorded is theirs. Only a missing or pending check, or

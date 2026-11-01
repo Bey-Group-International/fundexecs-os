@@ -76,6 +76,18 @@ export interface SdnName {
   tokens: string[];
 }
 
+/**
+ * Which files a list was built from, so a screen can be tied to them later.
+ * The hashes are SHA-256 of each file's text exactly as downloaded (UTF-8), in
+ * lower-case hex. `dateBasis` says where `listDate` came from: the file's own
+ * Last-Modified header, or only the day it was fetched (when Treasury sent none).
+ */
+export interface ListSource {
+  sdnSha256: string;
+  altSha256: string;
+  dateBasis: "last_modified" | "fetched";
+}
+
 export interface SdnIndex {
   entries: SdnEntry[];
   names: SdnName[];
@@ -83,6 +95,8 @@ export interface SdnIndex {
   byToken: Map<string, number[]>;
   /** When the list was published or fetched, as an ISO date (YYYY-MM-DD). */
   listDate: string;
+  /** Present when the list was downloaded; absent for one built by hand (tests). */
+  source?: ListSource;
 }
 
 const KINDS: Record<string, SdnKind> = { individual: "individual", vessel: "vessel", aircraft: "aircraft" };
@@ -90,7 +104,7 @@ const KINDS: Record<string, SdnKind> = { individual: "individual", vessel: "vess
 /** The minimum rows a real SDN file has (it holds well over ten thousand). Less means a bad download. */
 export const MIN_SDN_ROWS = 5000;
 
-export function buildIndex(sdnCsv: string, altCsv: string, listDate: string): SdnIndex {
+export function buildIndex(sdnCsv: string, altCsv: string, listDate: string, source?: ListSource): SdnIndex {
   const entries: SdnEntry[] = [];
   const byId = new Map<string, number>();
   for (const r of parseCsv(sdnCsv)) {
@@ -124,7 +138,7 @@ export function buildIndex(sdnCsv: string, altCsv: string, listDate: string): Sd
       else byToken.set(t, [i]);
     }
   });
-  return { entries, names: kept, byToken, listDate };
+  return { entries, names: kept, byToken, listDate, ...(source ? { source } : {}) };
 }
 
 // ---- names -----------------------------------------------------------------
@@ -216,6 +230,8 @@ export interface SubjectResult {
 
 export interface ScreenResult {
   listDate: string;
+  /** The files this screen matched against, when known. */
+  source?: ListSource;
   listSize: number;
   results: SubjectResult[];
   /** Subjects with at least one possible match. */
@@ -281,7 +297,7 @@ export function screenNames(index: SdnIndex, subjects: ScreenSubject[]): ScreenR
     const matches = Array.from(best.values()).sort((a, b) => b.score - a.score).slice(0, MAX_MATCHES_PER_SUBJECT);
     results.push({ subject, screened: true, matches });
   }
-  return { listDate: index.listDate, listSize: index.entries.length, results, flagged: results.filter((r) => r.matches.length > 0).length };
+  return { listDate: index.listDate, ...(index.source ? { source: index.source } : {}), listSize: index.entries.length, results, flagged: results.filter((r) => r.matches.length > 0).length };
 }
 
 // ---- what to record --------------------------------------------------------

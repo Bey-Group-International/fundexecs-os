@@ -232,3 +232,20 @@ describe("screenOutcome", () => {
     expect(screenOutcome(r).summary.length).toBeLessThanOrEqual(480);
   });
 });
+
+
+describe("the files a screen used", () => {
+  const source = { sdnSha256: "a".repeat(64), altSha256: "b".repeat(64), dateBasis: "last_modified" as const };
+
+  it("travels from the list to the screen's result", () => {
+    const idx = buildIndex(sdnFile(), ALT, "2026-10-30", source);
+    expect(idx.source).toEqual(source);
+    expect(screenNames(idx, [{ role: "the LP", name: "Jane Doe" }]).source).toEqual(source);
+  });
+
+  it("is simply absent for a list built without one", () => {
+    const idx = buildIndex(sdnFile(), ALT, "2026-10-30");
+    expect("source" in idx).toBe(false);
+    expect("source" in screenNames(idx, [{ role: "the LP", name: "Jane Doe" }])).toBe(false);
+  });
+});
