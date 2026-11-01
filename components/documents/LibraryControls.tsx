@@ -6,6 +6,7 @@
 import { useState, useTransition } from "react";
 import { updateDocumentStatus } from "./document-actions";
 import { publishDocument, unpublishDocument } from "@/components/build/room-actions";
+import { ActionError, useActionError } from "@/components/build/use-action-error";
 import type { DocumentStatus } from "@/lib/supabase/database.types";
 
 export interface LibraryRoom {
@@ -100,6 +101,7 @@ export function PublishControl({ doc, rooms }: { doc: LibraryDoc; rooms: Library
   const [open, setOpen] = useState(false);
   const [published, setPublished] = useState<string[]>(doc.roomIds);
   const [pending, startTransition] = useTransition();
+  const { error, run } = useActionError();
 
   if (rooms.length === 0) return null;
 
@@ -110,7 +112,14 @@ export function PublishControl({ doc, rooms }: { doc: LibraryDoc; rooms: Library
       const fd = new FormData();
       fd.set("room_id", roomId);
       fd.set("document_id", doc.id);
-      await (isOn ? unpublishDocument(fd) : publishDocument(fd));
+      const ok = await run(
+        () => (isOn ? unpublishDocument(fd) : publishDocument(fd)),
+        isOn
+          ? "Couldn't withdraw it from that room. It may still be visible. Try again."
+          : "Couldn't publish it to that room. Try again.",
+      );
+      // The checkbox moved optimistically; put it back so it shows what is true.
+      if (!ok) setPublished((prev) => (isOn ? [...prev, roomId] : prev.filter((r) => r !== roomId)));
     });
   }
 
@@ -132,6 +141,10 @@ export function PublishControl({ doc, rooms }: { doc: LibraryDoc; rooms: Library
       >
         {count > 0 ? `Shared · ${count}` : "Private"}
       </button>
+
+      {/* A failure that lands after the popover was closed would otherwise be
+          invisible until it is reopened. */}
+      {!open ? <ActionError message={error} className="absolute right-0 top-full z-10 mt-1 w-60" /> : null}
 
       {open ? (
         <>
@@ -156,6 +169,10 @@ export function PublishControl({ doc, rooms }: { doc: LibraryDoc; rooms: Library
                   <input
                     type="checkbox"
                     checked={on}
+                    // One toggle at a time: two in flight capture opposite
+                    // directions, and if both fail the rollbacks can leave the
+                    // box showing the opposite of the server.
+                    disabled={pending}
                     onChange={() => toggle(r.id)}
                     className="h-3.5 w-3.5 accent-gold-400"
                   />
@@ -163,6 +180,7 @@ export function PublishControl({ doc, rooms }: { doc: LibraryDoc; rooms: Library
                 </label>
               );
             })}
+            <ActionError message={error} className="px-2 pt-1" />
             <p className="mt-1 border-t border-line/60 px-2 pt-2 text-[11px] leading-snug text-fg-muted">
               Only published documents are reachable from a share link.
             </p>

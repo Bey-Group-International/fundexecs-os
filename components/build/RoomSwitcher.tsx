@@ -7,6 +7,7 @@
 import { useState, useTransition } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { createRoom, renameRoom, archiveRoom } from "./room-actions";
+import { ActionError, useActionError } from "./use-action-error";
 
 export interface RoomOption {
   id: string;
@@ -20,6 +21,7 @@ export function RoomSwitcher({ rooms, current }: { rooms: RoomOption[]; current:
   const pathname = usePathname();
   const [mode, setMode] = useState<"none" | "new" | "edit">("none");
   const [pending, startTransition] = useTransition();
+  const { error, run, clear } = useActionError();
 
   function select(id: string) {
     router.push(`${pathname}?room=${id}`);
@@ -45,14 +47,20 @@ export function RoomSwitcher({ rooms, current }: { rooms: RoomOption[]; current:
         ))}
         <button
           type="button"
-          onClick={() => setMode(mode === "new" ? "none" : "new")}
+          onClick={() => {
+            clear();
+            setMode(mode === "new" ? "none" : "new");
+          }}
           className="rounded-lg border border-dashed border-line px-3 py-1.5 font-mono text-[11px] uppercase tracking-wider text-fg-muted transition hover:border-gold-500/40 hover:text-gold-300"
         >
           + New room
         </button>
         <button
           type="button"
-          onClick={() => setMode(mode === "edit" ? "none" : "edit")}
+          onClick={() => {
+            clear();
+            setMode(mode === "edit" ? "none" : "edit");
+          }}
           className="rounded-lg px-2 py-1.5 font-mono text-[11px] uppercase tracking-wider text-fg-muted transition hover:text-fg-primary"
         >
           Settings
@@ -61,12 +69,15 @@ export function RoomSwitcher({ rooms, current }: { rooms: RoomOption[]; current:
 
       {mode === "new" ? (
         <form
-          action={(fd) =>
+          // onSubmit, not action: a form action resets its inputs when it finishes,
+          // success or not, which would discard the name after a failed create.
+          onSubmit={(e) => {
+            e.preventDefault();
+            const fd = new FormData(e.currentTarget);
             startTransition(async () => {
-              await createRoom(fd);
-              setMode("none");
-            })
-          }
+              if (await run(() => createRoom(fd), "Couldn't create the room. Try again.")) setMode("none");
+            });
+          }}
           className="mt-3 flex flex-wrap items-center gap-2 rounded-xl border border-line bg-surface-1 p-3"
         >
           <input
@@ -93,12 +104,13 @@ export function RoomSwitcher({ rooms, current }: { rooms: RoomOption[]; current:
       {mode === "edit" ? (
         <div className="mt-3 rounded-xl border border-line bg-surface-1 p-3">
           <form
-            action={(fd) =>
+            onSubmit={(e) => {
+              e.preventDefault();
+              const fd = new FormData(e.currentTarget);
               startTransition(async () => {
-                await renameRoom(fd);
-                setMode("none");
-              })
-            }
+                if (await run(() => renameRoom(fd), "Couldn't save the room. Try again.")) setMode("none");
+              });
+            }}
             className="flex flex-wrap items-center gap-2"
           >
             <input type="hidden" name="room_id" value={current.id} />
@@ -131,9 +143,10 @@ export function RoomSwitcher({ rooms, current }: { rooms: RoomOption[]; current:
             <form
               action={(fd) =>
                 startTransition(async () => {
-                  await archiveRoom(fd);
-                  setMode("none");
-                  router.push(pathname);
+                  if (await run(() => archiveRoom(fd), "Couldn't archive the room. Its links may still be live. Try again.")) {
+                    setMode("none");
+                    router.push(pathname);
+                  }
                 })
               }
               onSubmit={(e) => {
@@ -157,6 +170,8 @@ export function RoomSwitcher({ rooms, current }: { rooms: RoomOption[]; current:
           )}
         </div>
       ) : null}
+
+      <ActionError message={error} className="mt-2" />
     </div>
   );
 }

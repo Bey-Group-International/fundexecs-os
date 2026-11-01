@@ -8,6 +8,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { publishDocument, unpublishDocument } from "./room-actions";
 import { refileDocument } from "@/components/documents/review-actions";
+import { ActionError, useActionError } from "./use-action-error";
 import type { OrganizerItem } from "@/lib/earn-room-organizer";
 
 export function EarnRoomOrganizer({
@@ -25,6 +26,7 @@ export function EarnRoomOrganizer({
   const [open, setOpen] = useState(false);
   const [done, setDone] = useState<Set<string>>(new Set());
   const [pending, startTransition] = useTransition();
+  const { error, run } = useActionError();
 
   const remaining = items.filter((i) => !done.has(`${i.kind}:${i.docId}`));
   if (items.length === 0) return null;
@@ -32,16 +34,24 @@ export function EarnRoomOrganizer({
   const apply = (items: OrganizerItem[]) =>
     startTransition(async () => {
       for (const item of items) {
-        if (item.kind === "publish" || item.kind === "hold") {
-          const fd = new FormData();
-          fd.set("room_id", roomId);
-          fd.set("document_id", item.docId);
-          await (item.kind === "publish" ? publishDocument(fd) : unpublishDocument(fd));
-        } else {
-          await refileDocument(item.docId, item.to);
-        }
+        const ok = await run(
+          () => {
+            if (item.kind === "publish" || item.kind === "hold") {
+              const fd = new FormData();
+              fd.set("room_id", roomId);
+              fd.set("document_id", item.docId);
+              return item.kind === "publish" ? publishDocument(fd) : unpublishDocument(fd);
+            }
+            return refileDocument(item.docId, item.to);
+          },
+          "Couldn't apply that suggestion. Try again.",
+        );
+        // Stop at the first failure: later items may depend on the order, and
+        // the operator should see which one stopped it.
+        if (!ok) break;
         setDone((prev) => new Set(prev).add(`${item.kind}:${item.docId}`));
       }
+      // Refresh even after a failure so what did apply is reflected.
       router.refresh();
     });
 
@@ -110,6 +120,7 @@ export function EarnRoomOrganizer({
               </li>
             ))}
           </ul>
+          <ActionError message={error} className="mt-2" />
           {canWrite && publishable.length > 1 ? (
             <button
               type="button"
