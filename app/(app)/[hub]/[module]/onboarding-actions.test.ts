@@ -7,6 +7,7 @@ jest.mock("@/lib/auth", () => ({ requireOrgContext: async () => auth }));
 let sessionFound = true;
 let reviewState = "submitted";
 let checkRows: Array<{ kind: string; status: string; expires_at: string | null }> = [];
+let profileRow: Record<string, unknown> | null = null;
 let writeError: { code: string; message: string } | null = null;
 let upserted: { row: Record<string, unknown>; opts: unknown } | null = null;
 let inserted: Record<string, unknown> | null = null;
@@ -25,7 +26,10 @@ jest.mock("@/lib/supabase/server", () => ({
           if (table === "lp_onboarding_sessions") sessionFilters[c] = v;
           return q;
         },
-        maybeSingle: async () => ({ data: sessionFound ? { id: "s1", review_state: reviewState } : null }),
+        maybeSingle: async () =>
+          table === "lp_onboarding_profiles"
+            ? { data: profileRow }
+            : { data: sessionFound ? { id: "s1", review_state: reviewState, lp_type: "entity", owner_threshold_pct: 25 } : null },
         upsert: async (row: Record<string, unknown>, opts: unknown) => {
           upserted = { row, opts };
           return { error: writeError };
@@ -74,6 +78,7 @@ beforeEach(() => {
   recordAudit.mockClear();
   decideCarryover.mockClear();
   decideResult = "confirmed";
+  profileRow = null;
   for (const k of Object.keys(sessionFilters)) delete sessionFilters[k];
   jest.spyOn(console, "error").mockImplementation(() => undefined);
 });
@@ -378,5 +383,44 @@ describe("decideCarryoverAction (an earlier ID check is only a proposal until a 
       expect(res.message.length).toBeGreaterThan(10);
     }
     expect(audited()).toEqual([]);
+  });
+});
+
+describe("recordOnboardingDecision: risk-based routing", () => {
+  const readyChecks = () => ["identity", "sanctions", "pep", "adverse_media", "accreditation"].map((kind) => ({ kind, status: "clear", expires_at: null }));
+
+  it("lets a low-risk LP be approved with ordinary reasoning (existing behaviour)", async () => {
+    checkRows = readyChecks();
+    expect((await recordOnboardingDecision({ sessionId: "s1", decision: "approved", reason: "Fine." })).ok).toBe(true);
+  });
+
+  it("is checked on the server from stored answers: an LP in a high-risk country can't be approved by an admin", async () => {
+    checkRows = readyChecks();
+    profileRow = { entity_type: "company", country: "Iran" };
+    const res = await recordOnboardingDecision({ sessionId: "s1", decision: "approved", reason: "x".repeat(200) });
+    expect(res).toMatchObject({ ok: false });
+    expect((res as { error: string }).error).toMatch(/only an organization owner/);
+    expect(inserted).toBeNull();
+  });
+
+  it("lets an owner approve it with enough reasoning, and logs the tier but not the reasons", async () => {
+    checkRows = readyChecks();
+    profileRow = { entity_type: "company", country: "Iran" };
+    auth = { ok: true, ctx: { orgId: "org-1", userId: "user-9", role: "owner" } };
+    expect((await recordOnboardingDecision({ sessionId: "s1", decision: "approved", reason: "x".repeat(100) })).ok).toBe(true);
+    expect(audited()).toContainEqual({ orgId: "org-1", sessionId: "s1", action: "risk.assessed", actorKind: "user", actorId: "user-9", // Two reasons: the country, and no owner at or above the threshold is listed for this company.
+    detail: { tier: "high", factors: 2 } });
+  });
+
+  it("asks for real reasoning on an elevated-risk LP", async () => {
+    checkRows = readyChecks();
+    profileRow = { entity_type: "trust", country: "United States" };
+    const res = await recordOnboardingDecision({ sessionId: "s1", decision: "approved", reason: "Looks fine." });
+    expect((res as { error: string }).error).toMatch(/Elevated risk/);
+  });
+
+  it("does not make rejecting or asking for more information harder", async () => {
+    profileRow = { entity_type: "company", country: "Iran" };
+    expect((await recordOnboardingDecision({ sessionId: "s1", decision: "rejected", reason: "No." })).ok).toBe(true);
   });
 });

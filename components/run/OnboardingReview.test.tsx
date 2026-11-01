@@ -394,3 +394,59 @@ describe("the OFAC first-pass screen on the sanctions check", () => {
     expect(screen.getByRole("alert")).toHaveTextContent("Couldn't get OFAC's list");
   });
 });
+
+describe("risk-based routing", () => {
+  const high = { tier: "high" as const, factors: [{ code: "lp_high_risk_country", tier: "high" as const, text: "The LP is in a high-risk jurisdiction (Iran)." }] };
+  const elevated = { tier: "elevated" as const, factors: [{ code: "opaque_structure", tier: "elevated" as const, text: "A trust can hide who is behind it." }] };
+
+  it("shows nothing for a low-risk LP", () => {
+    render(<OnboardingReview lps={[lp({ checks: REQUIRED.map(clear), risk: { tier: "low", factors: [] } })]} />);
+    open();
+    expect(screen.queryByText(/risk/i)).toBeNull();
+  });
+
+  it("shows the tier and every reason, and says it does not decide anything", () => {
+    render(<OnboardingReview lps={[lp({ checks: REQUIRED.map(clear), risk: high })]} viewerRole="owner" />);
+    open();
+    expect(screen.getByText("High risk")).toBeInTheDocument();
+    expect(screen.getByText(/high-risk jurisdiction \(Iran\)/)).toBeInTheDocument();
+    expect(screen.getByText(/does not approve or reject anyone/)).toBeInTheDocument();
+  });
+
+  it("will not let an admin send an approval of a high-risk LP, and says an owner must", () => {
+    render(<OnboardingReview lps={[lp({ checks: REQUIRED.map(clear), risk: high })]} viewerRole="admin" />);
+    open();
+    fireEvent.change(screen.getByLabelText("Decision"), { target: { value: "approved" } });
+    fireEvent.change(screen.getByLabelText("Reasoning"), { target: { value: "x".repeat(200) } });
+    expect(screen.getByText(/only an organization owner can approve/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Record decision" })).toBeDisabled();
+  });
+
+  it("lets an owner approve a high-risk LP once the reasoning is long enough", () => {
+    render(<OnboardingReview lps={[lp({ checks: REQUIRED.map(clear), risk: high })]} viewerRole="owner" />);
+    open();
+    fireEvent.change(screen.getByLabelText("Decision"), { target: { value: "approved" } });
+    fireEvent.change(screen.getByLabelText("Reasoning"), { target: { value: "short" } });
+    expect(screen.getByRole("button", { name: "Record decision" })).toBeDisabled();
+    fireEvent.change(screen.getByLabelText("Reasoning"), { target: { value: "x".repeat(80) } });
+    expect(screen.getByRole("button", { name: "Record decision" })).not.toBeDisabled();
+  });
+
+  it("asks for real reasoning on an elevated-risk LP, from an admin too", () => {
+    render(<OnboardingReview lps={[lp({ checks: REQUIRED.map(clear), risk: elevated })]} viewerRole="admin" />);
+    open();
+    fireEvent.change(screen.getByLabelText("Decision"), { target: { value: "approved" } });
+    fireEvent.change(screen.getByLabelText("Reasoning"), { target: { value: "ok" } });
+    expect(screen.getByRole("button", { name: "Record decision" })).toBeDisabled();
+    fireEvent.change(screen.getByLabelText("Reasoning"), { target: { value: "x".repeat(40) } });
+    expect(screen.getByRole("button", { name: "Record decision" })).not.toBeDisabled();
+  });
+
+  it("does not stand in the way of rejecting a high-risk LP", () => {
+    render(<OnboardingReview lps={[lp({ checks: [], risk: high })]} viewerRole="admin" />);
+    open();
+    fireEvent.change(screen.getByLabelText("Decision"), { target: { value: "rejected" } });
+    fireEvent.change(screen.getByLabelText("Reasoning"), { target: { value: "No." } });
+    expect(screen.getByRole("button", { name: "Record decision" })).not.toBeDisabled();
+  });
+});
