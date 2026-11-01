@@ -6,6 +6,7 @@
 import { useState, useTransition } from "react";
 import { updateDocumentStatus } from "./document-actions";
 import { publishDocument, unpublishDocument } from "@/components/build/room-actions";
+import { ActionError, useActionError } from "@/components/build/use-action-error";
 import type { DocumentStatus } from "@/lib/supabase/database.types";
 
 export interface LibraryRoom {
@@ -100,6 +101,7 @@ export function PublishControl({ doc, rooms }: { doc: LibraryDoc; rooms: Library
   const [open, setOpen] = useState(false);
   const [published, setPublished] = useState<string[]>(doc.roomIds);
   const [pending, startTransition] = useTransition();
+  const { error, run } = useActionError();
 
   if (rooms.length === 0) return null;
 
@@ -110,7 +112,14 @@ export function PublishControl({ doc, rooms }: { doc: LibraryDoc; rooms: Library
       const fd = new FormData();
       fd.set("room_id", roomId);
       fd.set("document_id", doc.id);
-      await (isOn ? unpublishDocument(fd) : publishDocument(fd));
+      const ok = await run(
+        () => (isOn ? unpublishDocument(fd) : publishDocument(fd)),
+        isOn
+          ? "Couldn't withdraw it from that room. It may still be visible. Try again."
+          : "Couldn't publish it to that room. Try again.",
+      );
+      // The checkbox moved optimistically; put it back so it shows what is true.
+      if (!ok) setPublished((prev) => (isOn ? [...prev, roomId] : prev.filter((r) => r !== roomId)));
     });
   }
 
@@ -163,6 +172,7 @@ export function PublishControl({ doc, rooms }: { doc: LibraryDoc; rooms: Library
                 </label>
               );
             })}
+            <ActionError message={error} className="px-2 pt-1" />
             <p className="mt-1 border-t border-line/60 px-2 pt-2 text-[11px] leading-snug text-fg-muted">
               Only published documents are reachable from a share link.
             </p>

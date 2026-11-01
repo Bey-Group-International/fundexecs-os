@@ -8,6 +8,7 @@ import { useState, useTransition } from "react";
 import Link from "next/link";
 import { unpublishDocument, moveRoomDocument, publishDocument, setDocumentSignature } from "./room-actions";
 import type { DocumentStatus } from "@/lib/supabase/database.types";
+import { ActionError, useActionError } from "./use-action-error";
 
 export interface RoomContentDoc {
   id: string;
@@ -61,14 +62,15 @@ function DocRow({
   hideReorder?: boolean;
 }) {
   const [pending, startTransition] = useTransition();
+  const { error, run } = useActionError();
 
-  function act(fn: (fd: FormData) => Promise<void>, extra?: Record<string, string>) {
+  function act(fn: (fd: FormData) => Promise<void>, failure: string, extra?: Record<string, string>) {
     const fd = new FormData();
     fd.set("room_id", roomId);
     fd.set("document_id", doc.id);
     for (const [k, v] of Object.entries(extra ?? {})) fd.set(k, v);
     startTransition(async () => {
-      await fn(fd);
+      await run(() => fn(fd), failure);
     });
   }
 
@@ -99,7 +101,11 @@ function DocRow({
         type="button"
         disabled={pending}
         aria-pressed={doc.requireSignature}
-        onClick={() => act(setDocumentSignature, { required: doc.requireSignature ? "0" : "1" })}
+        onClick={() =>
+          act(setDocumentSignature, "Couldn't change the signature requirement. Try again.", {
+            required: doc.requireSignature ? "0" : "1",
+          })
+        }
         title={
           doc.requireSignature
             ? "Readers must sign this file before it opens. Click to stop requiring it."
@@ -123,7 +129,7 @@ function DocRow({
           <button
             type="button"
             disabled={pending}
-            onClick={() => act(moveRoomDocument, { dir: "up" })}
+            onClick={() => act(moveRoomDocument, "Couldn't move the document. Try again.", { dir: "up" })}
             title="Move up"
             className="rounded px-1.5 py-1 font-mono text-[11px] text-fg-muted transition hover:text-fg-primary disabled:opacity-40"
           >
@@ -132,7 +138,7 @@ function DocRow({
           <button
             type="button"
             disabled={pending}
-            onClick={() => act(moveRoomDocument, { dir: "down" })}
+            onClick={() => act(moveRoomDocument, "Couldn't move the document. Try again.", { dir: "down" })}
             title="Move down"
             className="rounded px-1.5 py-1 font-mono text-[11px] text-fg-muted transition hover:text-fg-primary disabled:opacity-40"
           >
@@ -144,13 +150,14 @@ function DocRow({
       <button
         type="button"
         disabled={pending}
-        onClick={() => act(unpublishDocument)}
+        onClick={() => act(unpublishDocument, "Couldn't remove it from this room. It may still be visible. Try again.")}
         title="Remove from this room — the document stays in your library"
         className="shrink-0 rounded-md border border-line px-2 py-1 font-mono text-[11px] uppercase tracking-wider text-fg-muted transition hover:border-status-danger/40 hover:text-status-danger disabled:opacity-40"
       >
         Remove
       </button>
     </div>
+    <ActionError message={error} className="border-t border-line/50 px-3 py-1.5" />
     {doc.requireSignature || doc.signers.length > 0 ? (
       <details className="border-t border-line/50 px-3 py-1.5">
         <summary className="cursor-pointer font-mono text-[11px] uppercase tracking-wider text-fg-muted">
@@ -174,6 +181,7 @@ function AddFromLibrary({ roomId, available }: { roomId: string; available: Avai
   const [query, setQuery] = useState("");
   const [added, setAdded] = useState<string[]>([]);
   const [pending, startTransition] = useTransition();
+  const { error, run } = useActionError();
 
   const q = query.trim().toLowerCase();
   const matches = q
@@ -188,7 +196,9 @@ function AddFromLibrary({ roomId, available }: { roomId: string; available: Avai
     fd.set("room_id", roomId);
     fd.set("document_id", id);
     startTransition(async () => {
-      await publishDocument(fd);
+      const ok = await run(() => publishDocument(fd), "Couldn't publish that document. Try again.");
+      // Undo the optimistic "Published" so the button offers the retry.
+      if (!ok) setAdded((prev) => prev.filter((x) => x !== id));
     });
   }
 
@@ -255,6 +265,7 @@ function AddFromLibrary({ roomId, available }: { roomId: string; available: Avai
               })
             )}
           </div>
+          <ActionError message={error} className="mt-2" />
           <p className="mt-2 border-t border-line/60 pt-2 text-[11px] text-fg-muted">
             Documents are created and edited in{" "}
             <Link href="/build/documents" className="text-gold-300 hover:underline">
