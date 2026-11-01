@@ -88,6 +88,28 @@ describe("selectAllPages", () => {
     },
   );
 
+  it("reads a result that ends exactly on the last allowed page, rather than giving up one request short", async () => {
+    // One row per page, so 1000 non-empty pages is the whole guard budget. The end
+    // is only known once an empty page confirms it.
+    const exact = Array.from({ length: 1000 }, (_, i) => ({ n: i }));
+    const out = await selectAllPages<{ n: number }>(
+      async (f, t) => ({ data: exact.slice(f, t + 1), error: null }),
+      1,
+    );
+    expect(out.error).toBeNull();
+    expect(out.data).toHaveLength(1000);
+  });
+
+  it("still reports an error when there is more than the guard allows", async () => {
+    const tooMany = Array.from({ length: 1001 }, (_, i) => ({ n: i }));
+    const out = await selectAllPages<{ n: number }>(
+      async (f, t) => ({ data: tooMany.slice(f, t + 1), error: null }),
+      1,
+    );
+    expect(out.data).toBeNull();
+    expect(out.error?.message).toMatch(/gave up/);
+  });
+
   it("does not report a truncated list as complete if it never reaches the end", async () => {
     // A server that ignores the range and answers every page with the same rows.
     const out = await selectAllPages<{ n: number }>(async () => ({ data: [{ n: 1 }], error: null }));

@@ -71,7 +71,10 @@ export async function selectAllPages<T>(
 ): Promise<BatchResult<T>> {
   const rows: T[] = [];
   let from = 0;
-  for (let page = 0; page < MAX_PAGES; page++) {
+  // `<=`, not `<`: MAX_PAGES pages of rows plus one more request to confirm the
+  // end. Without it, a result that ends exactly on the last allowed page would
+  // fail without ever asking whether anything is left.
+  for (let page = 0; page <= MAX_PAGES; page++) {
     const { data, error } = await run(from, from + pageSize - 1);
     if (error) return { data: null, error };
     const got = data ?? [];
