@@ -8,7 +8,7 @@
 import { revalidatePath } from "next/cache";
 import { requireOrgContext } from "@/lib/auth";
 import { requireOrgAdmin } from "@/lib/rbac";
-import { createServerClient } from "@/lib/supabase/server";
+import { createServerClient, createServiceClient, hasSupabaseServiceEnv } from "@/lib/supabase/server";
 import type { LpReviewState } from "@/lib/supabase/database.types";
 import { refreshIdentityCheck } from "@/lib/lp-identity.server";
 import { runOfacScreen } from "@/lib/ofac.server";
@@ -151,7 +151,12 @@ export async function refreshIdentityCheckAction(sessionId: unknown): Promise<On
   try {
     const supabase = await createServerClient();
     if (!(await sessionStage(supabase, sessionId, who.ctx.orgId))) return { ok: false, error: "That LP wasn't found." };
-    const res = await refreshIdentityCheck(supabase, sessionId, who.ctx.orgId);
+    // The result is recorded by the system, not as this person: the checks table
+    // only lets a signed-in user write rows stamped with their own id. So the
+    // write goes through the service role, after the checks above, scoped to this
+    // organization.
+    if (!hasSupabaseServiceEnv()) return { ok: false, error: GENERIC };
+    const res = await refreshIdentityCheck(createServiceClient(), sessionId, who.ctx.orgId);
     if (!res.ok) return res;
     revalidatePath(PAGE);
     return { ok: true, verified: res.state === "verified" };
@@ -176,7 +181,11 @@ export async function runOfacScreenAction(
   try {
     const supabase = await createServerClient();
     if (!(await sessionStage(supabase, sessionId, who.ctx.orgId))) return { ok: false, error: "That LP wasn't found." };
-    const res = await runOfacScreen(supabase, sessionId, who.ctx.orgId);
+    // Recorded by the system, not as this person (the checks table only lets a
+    // signed-in user write rows stamped with their own id), so the write goes
+    // through the service role, after the checks above, scoped to this organization.
+    if (!hasSupabaseServiceEnv()) return { ok: false, error: GENERIC };
+    const res = await runOfacScreen(createServiceClient(), sessionId, who.ctx.orgId);
     if (!res.ok) return res;
     revalidatePath(PAGE);
     return { ok: true, flagged: res.flagged, screened: res.screened, wrote: res.wrote };

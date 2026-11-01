@@ -46,7 +46,7 @@ describe("refreshIdentityCheck", () => {
     expect(await refreshIdentityCheck(supabase, "s1", "org-1")).toEqual({ ok: true, state: "verified", url: null });
     expect(getStatus).toHaveBeenCalledWith("vs_1", "org-1");
     expect(update!.patch).toMatchObject({ status: "clear", expires_at: expect.any(String), checked_at: expect.any(String) });
-    expect(update!.filters).toEqual({ session_id: "s1", kind: "identity", method: "stripe_identity", status: "pending" });
+    expect(update!.filters).toEqual({ session_id: "s1", organization_id: "org-1", kind: "identity", method: "stripe_identity", status: "pending" });
   });
 
   it("keeps a verification in progress pending, and offers the link while it can be finished", async () => {
@@ -93,6 +93,30 @@ describe("refreshIdentityCheck", () => {
     status = stripe("verified", "approved");
     updateError = { code: "42501", message: "rls" };
     expect(await refreshIdentityCheck(supabase, "s1", "org-1")).toEqual({ ok: false, error: "Couldn't save the result. Try again." });
+  });
+});
+
+describe("organization scoping", () => {
+  it("names the organization on the read and on the write, since the service role bypasses row-level security", async () => {
+    const seen: Array<Record<string, unknown>> = [];
+    const spy = {
+      from: () => {
+        const filters: Record<string, unknown> = {};
+        const q: Record<string, unknown> = {
+          select: () => q,
+          eq: (c: string, v: unknown) => ((filters[c] = v), q),
+          update: () => ((q as { __u: boolean }).__u = true, q),
+          maybeSingle: async () => (seen.push({ ...filters }), { data: row }),
+          then: (resolve: (v: unknown) => void) => (seen.push({ ...filters, write: true }), resolve({ error: null })),
+        };
+        return q;
+      },
+    } as never;
+    status = stripe("verified", "approved");
+    await refreshIdentityCheck(spy, "s1", "org-1");
+    expect(seen).toHaveLength(2);
+    expect(seen[0]).toMatchObject({ session_id: "s1", organization_id: "org-1" });
+    expect(seen[1]).toMatchObject({ session_id: "s1", organization_id: "org-1", write: true });
   });
 });
 

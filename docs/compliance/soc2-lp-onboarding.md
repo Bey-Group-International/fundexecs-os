@@ -1,0 +1,205 @@
+# SOC 2 control map: LP onboarding and KYC
+
+Last reviewed: 2026-11-01, against `main` at the commit that added this file.
+
+## Read this first
+
+This is a **map**, not a certification and not a claim of compliance.
+
+- A SOC 2 report is written by an independent CPA firm after an audit. Type I
+  says controls were *designed* appropriately on a date. Type II says they
+  *operated effectively* over a period, usually 3 to 12 months. Nothing in this
+  repository can substitute for either.
+- What a repository *can* show is the technical controls in code and database
+  schema, and what is missing. That is all this document does. Controls that
+  live in policies, people and vendor settings are listed as **Outside this
+  repository** and are the organization's to supply.
+- Scope is one subsystem: the LP setup wizard and the fund manager's review of
+  it (Run › Onboarding). It is not a map of the whole platform.
+- It is written to be checked, not believed. Each row names the file or query
+  that evidences it. `lib/compliance/soc2-doc.test.ts` fails if a path named
+  here stops existing.
+- This is engineering documentation, not legal advice.
+
+Status words: **In place** (implemented, with evidence), **Partial** (implemented
+with a stated limit), **Gap** (not implemented), **Outside** (not something a
+repository can show).
+
+## What the subsystem does
+
+A fund manager (organization owner or admin) makes a unique 7-day link for a
+prospective LP. The LP confirms an emailed 6-digit code, completes a stepped
+wizard (details, owners, consent, ID verification, accreditation), and submits.
+The fund manager reviews the LP's statements and the screening checks and
+records a decision with reasoning. Until approval the LP cannot reach the
+signing steps.
+
+Main code: `app/lp/[token]/`, `lib/lp-access.server.ts`, `lib/lp-wizard.ts`,
+`lib/lp-identity.server.ts`, `lib/ofac.server.ts`, `lib/lp-reminders.server.ts`,
+`app/(app)/[hub]/[module]/onboarding-actions.ts`,
+`app/(app)/[hub]/[module]/onboarding-link-actions.ts`,
+`components/run/OnboardingReview.tsx`, and the migrations
+`supabase/migrations/20261031191852_onboarding_review.sql`,
+`supabase/migrations/20261031200021_lp_onboarding_wizard.sql`,
+`supabase/migrations/20261031234403_lp_onboarding_reminders.sql`.
+
+## Data inventory
+
+|                                               Data                                                |          Where           |                   Who can read                   |                                 Notes                                  |
+|---------------------------------------------------------------------------------------------------|--------------------------|--------------------------------------------------|------------------------------------------------------------------------|
+| LP name, email, type, commitment                                                                  | `lp_onboarding_sessions` | **Any member** of the organization (see gap G-6) | The link token is in the same row.                                     |
+| Legal name, entity type, country, phone, signatory, source-of-funds text, accreditation statement | `lp_onboarding_profiles` | Organization owners and admins                   | LP's own statements.                                                   |
+| Owners and controllers: name, role, ownership %, country                                          | `lp_onboarding_owners`   | Owners and admins                                | Capped at 25 per LP.                                                   |
+| Consent: scope, wording version, typed name, time                                                 | `lp_onboarding_consents` | Owners and admins                                | Append-only.                                                           |
+| Screening checks: status, short note, date, vendor reference                                      | `onboarding_checks`      | Owners and admins                                | Notes are free text; the form tells reviewers not to enter ID numbers. |
+| Decisions and reasoning                                                                           | `onboarding_decisions`   | Owners and admins                                | Append-only.                                                           |
+| Audit trail                                                                                       | `onboarding_audit_log`   | Owners and admins                                | Append-only; ids and statuses only, no free text.                      |
+| One-time access codes                                                                             | `lp_link_codes`          | **Nobody signed in.** Service role only.         | Stored as an HMAC, never the code.                                     |
+| ID images, selfies, government ID numbers                                                         | Stripe Identity          | Stripe                                           | **Never stored here.** The fund manager sees pass or fail.             |
+| Date of birth, tax IDs, addresses                                                                 | Not collected            |                                                  | Deliberately out of scope to keep the personal data small.             |
+
+## Subprocessors and data flows
+
+|                  Party                  |                                                            What it receives                                                             |           Where in code            |
+|-----------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------|------------------------------------|
+| Supabase                                | All stored data above (hosting, database, auth)                                                                                         | `lib/supabase/`                    |
+| Vercel                                  | Hosts the app and runs the hourly cron                                                                                                  | `vercel.json`                      |
+| Stripe Identity                         | LP email and the LP's ID images and selfie, captured by Stripe                                                                          | `lib/providers/stripe-identity.ts` |
+| Google (the organization's own Gmail)   | Link, reminder and access-code emails, when the organization has connected a mailbox                                                    | `lib/email.ts`                     |
+| Resend (backup sender)                  | Link and access-code emails **only if** a backup sender is configured and the organization's mailbox fails. **Not** used for reminders. | `lib/email.ts` (`allowFallback`)   |
+| U.S. Treasury (OFAC)                    | Nothing. The public SDN list is downloaded and matched locally.                                                                         | `lib/ofac.server.ts`               |
+| CodeRabbit, Qodo, Pullfrog, Vercel bots | Source code of pull requests (not customer data)                                                                                        | `.github/workflows/pullfrog.yml`   |
+
+## Control map
+
+### CC6: Logical and physical access
+
+|                         Criterion                          |                                                                                                                                    Control as implemented                                                                                                                                     |                                                         Evidence                                                         |                  Status                  |
+|------------------------------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|--------------------------------------------------------------------------------------------------------------------------|------------------------------------------|
+| CC6.1 Logical access security                              | Row-level security is on for every table in this subsystem. The LP wizard writes only through the service role, after the link and code checks. Signed-in users cannot read or write `lp_link_codes`.                                                                                         | The three migrations above; `app/lp/[token]/wizard-actions.ts`; query R-1 below                                          | In place                                 |
+| CC6.1                                                      | A database trigger stops a signed-in user from setting an LP's review state, submission time, accreditation or KYC stamps. Approval is applied by a trigger on the decision insert, which refuses to approve an LP who has not submitted. The rule holds even if the application is bypassed. | `supabase/migrations/20261031200021_lp_onboarding_wizard.sql` (`lp_onboarding_state_guard`, `onboarding_apply_decision`) | In place                                 |
+| CC6.1                                                      | Cross-organization isolation is enforced by the database: every dependent row carries an `organization_id` tied to its session's own organization by a composite foreign key.                                                                                                                 | Same migrations                                                                                                          | In place                                 |
+| CC6.1                                                      | The HMAC key for access codes and LP passes is derived from `SUPABASE_SERVICE_ROLE_KEY`.                                                                                                                                                                                                      | `lib/lp-access.server.ts`                                                                                                | Partial: see G-5                         |
+| CC6.2 Registration and authorization of external users     | An LP gets access only through a link made by an organization owner or admin, then a code emailed to the address the fund manager entered (or a code the fund manager reads to them). Link is a 256-bit random token and expires in 7 days.                                                   | `lib/lp-access.server.ts`, `app/(app)/[hub]/[module]/onboarding-link-actions.ts`, `lib/lp-wizard.ts` (`LINK_TTL_DAYS`)   | In place                                 |
+| CC6.2                                                      | Codes: 6 digits, 15 minutes, 5 wrong tries then locked, single use (a parallel use loses), 1 per minute and 5 per hour per LP. After the code, a signed HttpOnly cookie bound to that one onboarding, valid 6 hours.                                                                          | `lib/lp-access.server.ts`, `lib/lp-access.server.test.ts`                                                                | In place                                 |
+| CC6.3 Least privilege and role-based access                | Creating links, recording checks and decisions, running screens: owners and admins only, enforced in each server action and again by row-level security. Members cannot read checks, decisions or the audit log.                                                                              | `onboarding-actions.ts`, `onboarding-link-actions.ts`, `lib/rbac.ts`; tests alongside each                               | In place                                 |
+| CC6.3                                                      | Members can read the LP *sessions* table, including LP email and link token. The emailed code is the second factor, but the exposure is wider than the review data.                                                                                                                           | Query R-2 below                                                                                                          | Gap: G-6                                 |
+| CC6.3                                                      | Removing a member's access follows the platform's membership model; the subsystem does not add its own.                                                                                                                                                                                       | `organization_members`                                                                                                   | Outside (access reviews are a procedure) |
+| CC6.5 Disposal of protections over assets                  | No retention or erasure of an individual LP's data (see G-1). Deleting an organization cascades to all of it.                                                                                                                                                                                 | Migrations                                                                                                               | Gap: G-1                                 |
+| CC6.6 Threats from outside the boundary                    | Public LP routes are token-gated and code-gated; the code check is rate limited per LP. No limit per IP on the public page or its actions. Standard response headers are set (`nosniff`, `Referrer-Policy`, `X-Frame-Options`); no Content-Security-Policy.                                   | `next.config.mjs`, `lib/lp-access.server.ts`                                                                             | Partial: G-4                             |
+| CC6.7 Restricting transmission and movement of information | Cookies are `Secure`, `HttpOnly`, `SameSite=Lax` in production. Transport encryption is provided by Vercel and Supabase. The LP never receives other LPs' or the fund manager's review data.                                                                                                  | `lib/lp-access.server.ts`, `app/lp/[token]/page.tsx`                                                                     | In place (TLS inherited from vendors)    |
+| CC6.8 Malicious software                                   | Code scanning (CodeQL) and workflow auditing (zizmor) run on every pull request.                                                                                                                                                                                                              | `.github/workflows/workflow-security.yml`, CodeQL check                                                                  | In place                                 |
+
+### CC7: System operations
+
+|                         Criterion                         |                                                                                Control as implemented                                                                                |                                                  Evidence                                                  |    Status    |
+|-----------------------------------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|------------------------------------------------------------------------------------------------------------|--------------|
+| CC7.1 Detecting vulnerabilities and configuration changes | CodeQL, zizmor, lint, typecheck, build, a full test suite and a migration checker run on every pull request.                                                                         | `.github/workflows/`                                                                                       | In place     |
+| CC7.2 Monitoring for anomalies                            | An append-only audit trail, written by database triggers so no code path can skip it, records: check recorded and updated, decision recorded, consent granted, review state changed. | `onboarding_audit_log`; `supabase/migrations/20261031200021_lp_onboarding_wizard.sql` (`onboarding_audit`) | Partial: G-2 |
+| CC7.2                                                     | Production is probed every 30 minutes (app up, database objects present); a failure opens a labelled issue. The hourly cron records each run.                                        | `.github/workflows/health-check.yml`, `lib/cron-health.ts`                                                 | In place     |
+| CC7.3 to CC7.5 Incident evaluation, response, recovery    | No incident-response procedure is in this repository.                                                                                                                                | n/a                                                                                                        | Outside      |
+
+### CC8: Change management
+
+|                 Criterion                  |                                                                                Control as implemented                                                                                 |                            Evidence                            |        Status         |
+|--------------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|----------------------------------------------------------------|-----------------------|
+| CC8.1 Authorized, tested, approved changes | Every change here was a pull request with automated checks. Migrations are meant to go only through the pipeline, with a checker that rejects editing or deleting a merged migration. | `supabase/migrations/README.md`, `scripts/check-migrations.ts` | Partial: G-3          |
+| CC8.1                                      | Whether those checks are *required* before merge is a branch-protection setting, not visible from the code.                                                                           | GitHub Settings → Branches                                     | Outside: verify (G-8) |
+
+### CC9: Risk mitigation and vendors
+
+|              Criterion              |                                            Control as implemented                                             |                 Evidence                  |                         Status                          |
+|-------------------------------------|---------------------------------------------------------------------------------------------------------------|-------------------------------------------|---------------------------------------------------------|
+| CC9.2 Vendors and business partners | The subprocessors above. ID images are held by Stripe, not here. Reminders never use the backup email sender. | Table above; `lib/lp-reminders.server.ts` | Partial: vendor reviews are Outside; bot reviewers: G-8 |
+
+### C1: Confidentiality
+
+|                      Criterion                      |                                                            Control as implemented                                                            |              Evidence              |  Status  |
+|-----------------------------------------------------|----------------------------------------------------------------------------------------------------------------------------------------------|------------------------------------|----------|
+| C1.1 Identify and maintain confidential information | The inventory above. Personal data is minimized: no DOB, tax IDs or ID images are stored. Audit rows hold ids and statuses, never free text. | Data inventory; `onboarding_audit` | In place |
+| C1.2 Dispose of confidential information            | See G-1.                                                                                                                                     | n/a                                | Gap      |
+
+### A1: Availability
+
+|                Criterion                |                                                   Control as implemented                                                    | Evidence | Status  |
+|-----------------------------------------|-----------------------------------------------------------------------------------------------------------------------------|----------|---------|
+| A1.1 to A1.3 Capacity, backup, recovery | Inherited from Supabase and Vercel. Backup, point-in-time recovery and restore testing are account settings and procedures. | n/a      | Outside |
+
+### PI1: Processing integrity
+
+|                 Criterion                  |                                                                                                                                                                                                                    Control as implemented                                                                                                                                                                                                                     |                                              Evidence                                               |                Status                |
+|--------------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|-----------------------------------------------------------------------------------------------------|--------------------------------------|
+| PI1.2 to PI1.4 Inputs, processing, outputs | Every wizard input is validated on the server with the same rules the screens use. A submission is refused while a required step is incomplete. Only Stripe's own "verified" clears the identity check. The OFAC screen can flag but never clears, and never overwrites a person's result. Approval needs every required check clear and unexpired, which the server action enforces; the database separately refuses to approve an LP who has not submitted. | `lib/lp-wizard.ts`, `lib/lp-identity.ts`, `lib/ofac.ts`, `lib/onboarding-review.ts` and their tests | In place                             |
+| PI1.4                                      | The OFAC screen is a first pass on names against one list. It does not see transliterations, initials, addresses or countries, and says so on the check itself.                                                                                                                                                                                                                                                                                               | `lib/ofac.ts`                                                                                       | Partial by design; list version: G-7 |
+
+### Privacy (P)
+
+|                           Criterion                            |                                                                           Control as implemented                                                                           |                                Evidence                                 |  Status  |
+|----------------------------------------------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------|-------------------------------------------------------------------------|----------|
+| P2 Choice and consent                                          | The LP gives written, typed-name consent to ID verification and to background screening, recorded with the wording version and time. Verification cannot start without it. | `lib/lp-wizard.ts` (`CONSENT_TEXT`), `app/lp/[token]/wizard-actions.ts` | In place |
+| P3 Collection                                                  | Only what the review needs is collected.                                                                                                                                   | Data inventory                                                          | In place |
+| P1 Notice, P5 Access, P4 Retention and disposal, P6 Disclosure | No LP-facing privacy notice, no access or correction request path, and no retention schedule are implemented here (G-1).                                                   | n/a                                                                     | Gap      |
+
+### CC1 to CC5, CC9.1 and the rest
+
+Control environment, communication, risk assessment, monitoring of the control
+program, policies, HR, training, and business-disruption planning are
+organizational. **Outside this repository.** They need written policies and
+records kept over time, which is most of what a Type II audit samples.
+
+## Gaps, in the order worth fixing
+
+| ID  |                                                                                                                                                                                                                                      Gap                                                                                                                                                                                                                                       |                                    Why it matters                                    |                                                                             Suggested fix                                                                             |          Kind          |
+|-----|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|--------------------------------------------------------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------|------------------------|
+| G-1 | No retention or erasure for an individual LP's data. Deleting the whole organization cascades; one LP cannot be erased, and nothing expires old rejected or abandoned LPs.                                                                                                                                                                                                                                                                                                     | C1.2, P4, and any LP's erasure request.                                              | A retention schedule, plus an owner/admin action that deletes an LP's profile, owners, consents and session while keeping the audit trail (which holds no free text). | Engineering and policy |
+| G-2 | Not audited: link creation, access-code requests and failed attempts, emails sent, and an OFAC re-run that leaves the status unchanged. System actions have no actor (the audit log records `auth.uid()`, which is null for the service role).                                                                                                                                                                                                                                 | CC7.2: no record of who minted a link or probed one.                                 | Add triggers or explicit audit rows for these events, with an actor for fund-manager-initiated actions.                                                               | Engineering            |
+| G-3 | Production schema changes were applied by hand on 2026-10-31 (three migrations) because the pipeline's credential (`SUPABASE_ACCESS_TOKEN`) expired. One recorded version differs from its file (`20261031230029` recorded, `20261031200021` in the repo), so the migration history needs a repair before the pipeline runs again. The health check's database probe uses the same credential and fails for the same reason, so that monitor is degraded until it is replaced. | CC8.1: a change path that bypassed review, and a history that disagrees with itself. | Replace the token; run the repair described in `supabase/migrations/README.md`; do not hand-apply again.                                                              | Engineering and ops    |
+| G-4 | No Content-Security-Policy; no IP-based rate limit on the public LP page and actions; HSTS is not set by the app (confirm Vercel's setting).                                                                                                                                                                                                                                                                                                                                   | CC6.6.                                                                               | Add a CSP and an edge rate limit for `/lp/*`.                                                                                                                         | Engineering            |
+| G-5 | The HMAC key for codes and passes is the service-role key. Rotating that key silently invalidates every open code and LP pass, and anyone holding it can forge a pass.                                                                                                                                                                                                                                                                                                         | CC6.1: a powerful secret doing a second job.                                         | A dedicated secret for this purpose.                                                                                                                                  | Engineering            |
+| G-6 | Any organization member can read LP sessions, including LP email and link token. Review data is already restricted to owners and admins.                                                                                                                                                                                                                                                                                                                                       | CC6.3 least privilege.                                                               | Restrict the sessions select policy to owners and admins, or move the token and email to a restricted table; check what else reads that table first.                  | Engineering            |
+| G-7 | The OFAC list is downloaded fresh and only its date is recorded, so an auditor cannot reproduce exactly what was matched. The download itself has not yet been exercised against the live Treasury site.                                                                                                                                                                                                                                                                       | PI1: reproducibility.                                                                | Store the list's version identifier with each screen; run it once in production and keep the result.                                                                  | Engineering            |
+| G-8 | Branch protection, required reviews, and who can merge are not visible here. Four automated reviewers read pull requests (CodeRabbit, Qodo, Pullfrog, Vercel). During this work Qodo was paused and Pullfrog was out of credit, so they were not reviewing.                                                                                                                                                                                                                    | CC8.1, CC9.2.                                                                        | Confirm required checks match `supabase/migrations/README.md`; review each bot's data terms.                                                                          | Org                    |
+
+## Evidence an auditor can pull
+
+**R-1: row-level security is on, and which policies exist**
+
+```sql
+select c.relname, c.relrowsecurity as rls_enabled
+from pg_class c join pg_namespace n on n.oid = c.relnamespace
+where n.nspname = 'public'
+  and c.relname in ('lp_onboarding_sessions','lp_onboarding_profiles','lp_onboarding_owners',
+                    'lp_onboarding_consents','lp_link_codes','onboarding_checks',
+                    'onboarding_decisions','onboarding_audit_log');
+
+select tablename, policyname, cmd, qual, with_check
+from pg_policies
+where schemaname = 'public' and (tablename like 'lp\_%' or tablename like 'onboarding\_%')
+order by tablename, policyname;
+```
+
+**R-2: who can read the sessions table**: the `lp_onboarding_sessions_select`
+row of the second query (`current_principal_org_ids()`: any member).
+
+**R-3: what the audit trail holds**
+
+```sql
+select action, count(*), min(created_at), max(created_at)
+from public.onboarding_audit_log group by action order by action;
+```
+
+**R-4: migrations applied outside the pipeline**
+
+```sql
+select version, name from supabase_migrations.schema_migrations
+where statements is null order by version;
+```
+
+**R-5: change evidence**: the pull request list on GitHub, each with its CI
+check runs, plus `.github/workflows/`.
+
+## Keeping this current
+
+Update this file in the same pull request that changes a control, and move a gap
+to *In place* only when its fix has merged. The reviewed date at the top should
+move when someone re-reads it against the code, not when a typo is fixed.

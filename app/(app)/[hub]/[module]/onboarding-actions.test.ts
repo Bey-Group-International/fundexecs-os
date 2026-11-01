@@ -12,7 +12,11 @@ let upserted: { row: Record<string, unknown>; opts: unknown } | null = null;
 let inserted: Record<string, unknown> | null = null;
 const sessionFilters: Record<string, unknown> = {};
 
+let serviceEnv = true;
+const SERVICE_CLIENT = { marker: "service-role" };
 jest.mock("@/lib/supabase/server", () => ({
+  hasSupabaseServiceEnv: () => serviceEnv,
+  createServiceClient: () => SERVICE_CLIENT,
   createServerClient: async () => ({
     from: (table: string) => {
       const q: Record<string, unknown> = {
@@ -53,6 +57,7 @@ const allClear = () =>
 beforeEach(() => {
   auth = { ok: true, ctx: { orgId: "org-1", userId: "user-1", role: "admin" } };
   sessionFound = true;
+  serviceEnv = true;
   reviewState = "submitted";
   checkRows = [];
   writeError = null;
@@ -231,7 +236,7 @@ describe("refreshIdentityCheckAction", () => {
 
   it("asks Stripe for this organization's LP and says whether they are verified", async () => {
     expect(await refreshIdentityCheckAction("s1")).toEqual({ ok: true, verified: true });
-    expect(refreshIdentity).toHaveBeenCalledWith(expect.anything(), "s1", "org-1");
+    expect(refreshIdentity).toHaveBeenCalledWith(SERVICE_CLIENT, "s1", "org-1");
     refreshResult = { ok: true, state: "processing", url: null };
     expect(await refreshIdentityCheckAction("s1")).toEqual({ ok: true, verified: false });
   });
@@ -256,7 +261,7 @@ describe("runOfacScreenAction", () => {
 
   it("screens this organization's LP and reports what it found", async () => {
     expect(await runOfacScreenAction("s1")).toEqual({ ok: true, flagged: 0, screened: 2, wrote: true });
-    expect(runOfac).toHaveBeenCalledWith(expect.anything(), "s1", "org-1");
+    expect(runOfac).toHaveBeenCalledWith(SERVICE_CLIENT, "s1", "org-1");
     ofacResult = { ok: true, flagged: 1, screened: 2, wrote: false };
     expect(await runOfacScreenAction("s1")).toEqual({ ok: true, flagged: 1, screened: 2, wrote: false });
   });
@@ -270,5 +275,41 @@ describe("runOfacScreenAction", () => {
     expect((await runOfacScreenAction(undefined)).ok).toBe(false);
     expect((await runOfacScreenAction("")).ok).toBe(false);
     expect(runOfac).not.toHaveBeenCalled();
+  });
+});
+
+// The checks table lets a signed-in user write only rows stamped with their own id
+// (recorded_by = auth.uid()). These two results are recorded by the system, so
+// done with the signed-in client the database would refuse every write. They run
+// on the service role instead, only after the caller is confirmed an admin of
+// the LP's own organization.
+describe.each([
+  ["refreshIdentityCheckAction", () => refreshIdentityCheckAction("s1"), refreshIdentity],
+  ["runOfacScreenAction", () => runOfacScreenAction("s1"), runOfac],
+] as const)("%s writes as the system", (_name, call, work) => {
+  beforeEach(() => {
+    refreshResult = { ok: true, state: "verified", url: null };
+    ofacResult = { ok: true, flagged: 0, screened: 1, wrote: true };
+    work.mockClear();
+  });
+
+  it("uses the service role, never the signed-in client", async () => {
+    await call();
+    expect(work).toHaveBeenCalledTimes(1);
+    expect(work.mock.calls[0][0]).toBe(SERVICE_CLIENT);
+  });
+
+  it("still checks the caller and the LP's organization first", async () => {
+    sessionFound = false;
+    expect(await call()).toEqual({ ok: false, error: "That LP wasn't found." });
+    auth = { ok: true, ctx: { orgId: "org-1", userId: "user-1", role: "member" } };
+    expect((await call()).ok).toBe(false);
+    expect(work).not.toHaveBeenCalled();
+  });
+
+  it("does nothing, and says so, where the service role isn't configured", async () => {
+    serviceEnv = false;
+    expect(await call()).toEqual({ ok: false, error: "Couldn't save. Try again." });
+    expect(work).not.toHaveBeenCalled();
   });
 });
