@@ -4,15 +4,19 @@ const DAY = 86_400_000;
 const NOW = Date.parse("2026-11-10T12:00:00Z");
 const created = (daysAgo: number) => new Date(NOW - daysAgo * DAY).toISOString();
 
-const base = (over: Partial<ReminderCandidate> = {}): ReminderCandidate => ({
-  review_state: "in_progress",
-  status: "pending",
-  created_at: created(0),
-  expires_at: new Date(NOW + 7 * DAY).toISOString(),
-  reminded_day3_at: null,
-  reminded_day6_at: null,
-  ...over,
-});
+// A link lasts 7 days from when it was made, as a real one does.
+const base = (over: Partial<ReminderCandidate> = {}): ReminderCandidate => {
+  const made = over.created_at ?? created(0);
+  return {
+    review_state: "in_progress",
+    status: "pending",
+    created_at: made,
+    expires_at: new Date(new Date(made).getTime() + 7 * DAY).toISOString(),
+    reminded_day3_at: null,
+    reminded_day6_at: null,
+    ...over,
+  };
+};
 
 describe("dueReminder", () => {
   it.each([
@@ -24,7 +28,7 @@ describe("dueReminder", () => {
     [6, 6],
     [6.9, 6],
   ])("a link made %p days ago → %p", (days, expected) => {
-    expect(dueReminder(base({ created_at: created(days), expires_at: new Date(NOW + 1 * DAY).toISOString() }), NOW)).toBe(expected);
+    expect(dueReminder(base({ created_at: created(days) }), NOW)).toBe(expected);
   });
 
   it("sends each reminder once", () => {
@@ -45,6 +49,13 @@ describe("dueReminder", () => {
     for (const review_state of ["submitted", "changes_requested", "approved", "rejected"]) {
       expect(dueReminder(base({ ...old, review_state }), NOW)).toBeNull();
     }
+  });
+
+  it("leaves alone a link longer than the current 7 days (an older invite lasted 30)", () => {
+    const legacy = base({ created_at: created(7), expires_at: new Date(NOW + 23 * DAY).toISOString() });
+    expect(dueReminder(legacy, NOW)).toBeNull();
+    // A day of slack for the gap between when the row and its expiry were stamped.
+    expect(dueReminder(base({ created_at: created(4), expires_at: new Date(NOW + 3 * DAY + 5000).toISOString() }), NOW)).toBe(3);
   });
 
   it("does not remind about a link that has run out", () => {
@@ -68,6 +79,12 @@ describe("reminderEmail", () => {
     expect(mail.htmlBody).toContain('href="https://app.example.com/lp/tok?a=1&amp;b=2"');
     expect(mail.htmlBody).not.toContain("<b>");
     expect(mail.htmlBody).toContain("Acme &amp; Co");
+  });
+
+  it("states the date the link works until, not how long it lasts", () => {
+    const body = reminderEmail({ ...args, day: 3 }).htmlBody;
+    expect(body).toContain("works until");
+    expect(body).not.toMatch(/\d+ days from/);
   });
 
   it("tells the LP about the code", () => {

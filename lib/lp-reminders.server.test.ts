@@ -28,30 +28,37 @@ interface Row {
   reminded_day3_at: string | null;
   reminded_day6_at: string | null;
 }
-const row = (over: Partial<Row> = {}): Row => ({
-  id: "s1",
-  organization_id: "org-1",
-  lp_name: "Jo Park",
-  lp_email: "jo@example.com",
-  token: "tok-1",
-  review_state: "in_progress",
-  status: "pending",
-  created_at: created(4),
-  expires_at: new Date(NOW.getTime() + 3 * DAY).toISOString(),
-  reminded_day3_at: null,
-  reminded_day6_at: null,
-  ...over,
-});
+// A link lasts 7 days from when it was made, as a real one does.
+const row = (over: Partial<Row> = {}): Row => {
+  const made = over.created_at ?? created(4);
+  return {
+    id: "s1",
+    organization_id: "org-1",
+    lp_name: "Jo Park",
+    lp_email: "jo@example.com",
+    token: "tok-1",
+    review_state: "in_progress",
+    status: "pending",
+    created_at: made,
+    expires_at: new Date(new Date(made).getTime() + 7 * DAY).toISOString(),
+    reminded_day3_at: null,
+    reminded_day6_at: null,
+    ...over,
+  };
+};
 
 let rows: Row[] = [];
 let lookupError: { message: string } | null = null;
 let claimResult: Array<{ id: string }> = [{ id: "s1" }];
 let updates: Array<{ patch: Record<string, unknown>; filters: Array<[string, string, unknown]> }> = [];
 let lookups: Array<[string, string, unknown]> = [];
+let pagesRead = 0;
+let releaseFailures = 0;
 const client = {
   from(table: string) {
     const filters: Array<[string, string, unknown]> = [];
     let patch: Record<string, unknown> | null = null;
+    let limitN = Infinity;
     const q: Record<string, unknown> = {
       select: () => q,
       in: (c: string, v: unknown) => (filters.push([c, "in", v]), q),
@@ -61,17 +68,33 @@ const client = {
       or: (v: string) => (filters.push(["", "or", v]), q),
       eq: (c: string, v: unknown) => (filters.push([c, "eq", v]), q),
       is: (c: string, v: unknown) => (filters.push([c, "is", v]), q),
+      gte: (c: string, v: unknown) => (filters.push([c, "gte", v]), q),
       order: () => q,
-      limit: () => q,
+      limit: (n: number) => ((limitN = n), q),
       update: (p: Record<string, unknown>) => ((patch = p), q),
       maybeSingle: async () => ({ data: table === "organizations" ? { name: "Acme" } : null }),
       then: (resolve: (v: unknown) => void) => {
         if (patch) {
           updates.push({ patch, filters });
+          const isRelease = Object.values(patch).every((v) => v === null);
+          if (isRelease && releaseFailures > 0) {
+            releaseFailures -= 1;
+            return resolve({ data: null, error: { message: "release failed" } });
+          }
           return resolve({ data: claimResult, error: null });
         }
-        if (table === "lp_onboarding_sessions") lookups = filters;
-        return resolve({ data: lookupError ? null : rows, error: lookupError });
+        if (table === "lp_onboarding_sessions") {
+          lookups = filters;
+          pagesRead += 1;
+          if (lookupError) return resolve({ data: null, error: lookupError });
+          const gte = filters.find(([c, op]) => c === "created_at" && op === "gte")?.[2] as string | undefined;
+          const page = [...rows]
+            .sort((a, b) => a.created_at.localeCompare(b.created_at) || a.id.localeCompare(b.id))
+            .filter((r) => !gte || r.created_at >= gte)
+            .slice(0, limitN);
+          return resolve({ data: page, error: null });
+        }
+        return resolve({ data: rows, error: null });
       },
     };
     return q;
@@ -84,6 +107,8 @@ beforeEach(() => {
   claimResult = [{ id: "s1" }];
   updates = [];
   lookups = [];
+  pagesRead = 0;
+  releaseFailures = 0;
   mailboxSource = { "org-1": "org-oauth" };
   sendEmail.mockClear();
   sendEmail.mockResolvedValue({ ok: true, channel: "gmail", detail: "sent" });
@@ -187,6 +212,62 @@ describe("runLpReminders", () => {
   it("returns quietly if the lookup fails", async () => {
     lookupError = { message: "db down" };
     expect(await runLpReminders(client, { now: NOW })).toEqual({ reminded: 0, noMailbox: 0, failed: 0 });
+  });
+
+  describe("reading candidates a page at a time", () => {
+    it("reaches LPs behind a page of organizations with no mailbox", async () => {
+      mailboxSource = { "org-1": "org-oauth", "org-old": "none" };
+      // 100 older LPs whose organization has no mailbox, then a newer one that does.
+      const old = Array.from({ length: 100 }, (_, i) => row({ id: `old${String(i).padStart(3, "0")}`, organization_id: "org-old", created_at: created(6.5 - i * 0.001) }));
+      rows = [...old, row({ id: "new", created_at: created(4) })];
+      claimResult = [{ id: "x" }];
+      const stats = await runLpReminders(client, { now: NOW });
+      expect(stats.reminded).toBe(1);
+      expect(stats.noMailbox).toBe(100);
+      expect(pagesRead).toBeGreaterThan(1);
+      expect((sendEmail.mock.calls[0][0] as { orgId: string }).orgId).toBe("org-1");
+    });
+
+    it("moves on from where the last page ended, without skipping rows that share a timestamp", async () => {
+      const same = created(5);
+      rows = Array.from({ length: 150 }, (_, i) => row({ id: `r${String(i).padStart(3, "0")}`, created_at: same }));
+      mailboxSource = { "org-1": "none" };
+      const stats = await runLpReminders(client, { now: NOW });
+      // 100 on the first page; the second page re-reads the same timestamp and gets the rest only once.
+      expect(stats.noMailbox).toBeGreaterThanOrEqual(100);
+      expect(stats.noMailbox).toBeLessThanOrEqual(150);
+    });
+
+    it("stops after a bounded number of pages", async () => {
+      rows = Array.from({ length: 5000 }, (_, i) => row({ id: `r${String(i).padStart(5, "0")}`, created_at: created(6.9 - i * 0.0001) }));
+      mailboxSource = { "org-1": "none" };
+      await runLpReminders(client, { now: NOW });
+      expect(pagesRead).toBeLessThanOrEqual(10);
+    });
+
+    it("stops after one page when it isn't full", async () => {
+      await runLpReminders(client, { now: NOW });
+      expect(pagesRead).toBe(1);
+    });
+  });
+
+  describe("giving back a claim when the email fails", () => {
+    beforeEach(() => sendEmail.mockResolvedValue({ ok: false, channel: "gmail", detail: "boom" }));
+
+    it("tries the release again if it fails once", async () => {
+      releaseFailures = 1;
+      await runLpReminders(client, { now: NOW });
+      const releases = updates.filter((u) => Object.values(u.patch).every((v) => v === null));
+      expect(releases).toHaveLength(2);
+      expect(console.error).not.toHaveBeenCalled();
+    });
+
+    it("says so, loudly, when it can't be given back", async () => {
+      releaseFailures = 5;
+      const stats = await runLpReminders(client, { now: NOW });
+      expect(stats.failed).toBe(1);
+      expect(console.error).toHaveBeenCalledWith(expect.stringContaining("could not release the claim"), "s1", "release failed");
+    });
   });
 
   it("one bad row doesn't stop the rest", async () => {

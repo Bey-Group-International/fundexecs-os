@@ -18,8 +18,9 @@ import { dueReminder, reminderEmail, type ReminderDay } from "@/lib/lp-reminders
 
 type Client = SupabaseClient<any, any, any>;
 
-/** Rows looked at per sweep. Most are not yet due. */
-const SWEEP_LIMIT = 100;
+/** Rows read per page, and pages per sweep. Most rows are not yet due. */
+const PAGE_SIZE = 100;
+const MAX_PAGES = 10;
 
 export interface LpReminderStats {
   /** Reminders emailed this sweep. */
@@ -44,28 +45,64 @@ interface Row {
   reminded_day6_at: string | null;
 }
 
+/**
+ * LPs who might be due a reminder, oldest first, read a page at a time. Paging
+ * matters: LPs of an organization with no mailbox are skipped but stay eligible,
+ * and a single page of them would otherwise crowd newer LPs out of every sweep.
+ * Never throws; a failed page ends the read with what was found so far.
+ */
+async function loadCandidates(client: Client, now: Date): Promise<Row[]> {
+  const rows: Row[] = [];
+  const seen = new Set<string>();
+  let cursor: string | null = null;
+  for (let page = 0; page < MAX_PAGES; page++) {
+    try {
+      let q = client
+        .from("lp_onboarding_sessions")
+        .select("id, organization_id, lp_name, lp_email, token, review_state, status, created_at, expires_at, reminded_day3_at, reminded_day6_at")
+        .in("review_state", ["not_started", "in_progress"])
+        .neq("status", "expired")
+        .gt("expires_at", now.toISOString())
+        .lte("created_at", new Date(now.getTime() - 3 * 86_400_000).toISOString())
+        .or("reminded_day3_at.is.null,reminded_day6_at.is.null");
+      // The next page starts where this one ended. Rows sharing that exact
+      // timestamp are read again and dropped below, so none is skipped.
+      if (cursor) q = q.gte("created_at", cursor);
+      const { data, error } = await q.order("created_at", { ascending: true }).order("id", { ascending: true }).limit(PAGE_SIZE);
+      if (error) throw new Error(error.message);
+      const batch = (data ?? []) as Row[];
+      const fresh = batch.filter((r) => !seen.has(r.id));
+      fresh.forEach((r) => seen.add(r.id));
+      rows.push(...fresh);
+      if (batch.length < PAGE_SIZE || fresh.length === 0) break;
+      cursor = batch[batch.length - 1].created_at;
+    } catch (err) {
+      console.error("[lp-reminders] lookup failed", err);
+      break;
+    }
+  }
+  return rows;
+}
+
+/** Gives a reminder's claim back so the next sweep tries again. Tried twice; a claim that can't be released is logged. */
+async function releaseClaim(client: Client, id: string, stamp: string, columns: string[]): Promise<void> {
+  const release = Object.fromEntries(columns.map((c) => [c, null]));
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      const { error } = await client.from("lp_onboarding_sessions").update(release).eq("id", id).eq(columns[0], stamp);
+      if (!error) return;
+      if (attempt === 1) console.error("[lp-reminders] could not release the claim for", id, error.message);
+    } catch (err) {
+      if (attempt === 1) console.error("[lp-reminders] could not release the claim for", id, err);
+    }
+  }
+}
+
 export async function runLpReminders(client: Client, opts: { now?: Date } = {}): Promise<LpReminderStats> {
   const now = opts.now ?? new Date();
   const stats: LpReminderStats = { reminded: 0, noMailbox: 0, failed: 0 };
 
-  let rows: Row[] = [];
-  try {
-    const { data, error } = await client
-      .from("lp_onboarding_sessions")
-      .select("id, organization_id, lp_name, lp_email, token, review_state, status, created_at, expires_at, reminded_day3_at, reminded_day6_at")
-      .in("review_state", ["not_started", "in_progress"])
-      .neq("status", "expired")
-      .gt("expires_at", now.toISOString())
-      .lte("created_at", new Date(now.getTime() - 3 * 86_400_000).toISOString())
-      .or("reminded_day3_at.is.null,reminded_day6_at.is.null")
-      .order("created_at", { ascending: true })
-      .limit(SWEEP_LIMIT);
-    if (error) throw new Error(error.message);
-    rows = (data ?? []) as Row[];
-  } catch (err) {
-    console.error("[lp-reminders] lookup failed", err);
-    return stats;
-  }
+  const rows = await loadCandidates(client, now);
 
   const mailbox = new Map<string, boolean>();
   const orgNames = new Map<string, string>();
@@ -135,9 +172,7 @@ export async function runLpReminders(client: Client, opts: { now?: Date } = {}):
 
       // Not sent: give the claim back so the next sweep tries again.
       stats.failed += 1;
-      const release: Record<string, null> = { [`reminded_day${day}_at`]: null };
-      if (patch.reminded_day3_at) release.reminded_day3_at = null;
-      await client.from("lp_onboarding_sessions").update(release).eq("id", row.id).eq(`reminded_day${day}_at`, stamp);
+      await releaseClaim(client, row.id, stamp, patch.reminded_day3_at && day === 6 ? [`reminded_day6_at`, "reminded_day3_at"] : [`reminded_day${day}_at`]);
     } catch (err) {
       stats.failed += 1;
       console.error("[lp-reminders] could not remind", row.id, err);
