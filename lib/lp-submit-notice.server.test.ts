@@ -195,6 +195,28 @@ describe("notifyTeamOfSubmission", () => {
     expect(inserts).toHaveLength(0);
   });
 
+  it("records the notice as one system entry with counts, not an address per person", async () => {
+    sendEmail.mockResolvedValueOnce({ ok: false }).mockResolvedValueOnce({ ok: true });
+    await notifyTeamOfSubmission(client, { ...args, resubmitted: true });
+    const entries = inserts.filter((i) => i.table === "onboarding_audit_log");
+    expect(entries).toHaveLength(1);
+    expect(entries[0].row).toMatchObject({
+      organization_id: "org-1",
+      session_id: "s1",
+      actor_id: null,
+      actor_kind: "system",
+      action: "email.sent",
+      detail: { kind: "team_notice", sent: 1, failed: 1, resubmitted: true },
+    });
+    expect(JSON.stringify(entries)).not.toMatch(/@x\.com|Olive|Adam/);
+  });
+
+  it("records no notice when nobody was emailed", async () => {
+    people = [{ id: "p1", email: null, full_name: null }];
+    await notifyTeamOfSubmission(client, args);
+    expect(inserts.filter((i) => i.table === "onboarding_audit_log")).toHaveLength(0);
+  });
+
   it("never throws when the mailbox itself throws", async () => {
     sendEmail.mockRejectedValue(new Error("smtp down"));
     await expect(notifyTeamOfSubmission(client, args)).resolves.toEqual({ inbox: true, sent: 0, failed: 0 });

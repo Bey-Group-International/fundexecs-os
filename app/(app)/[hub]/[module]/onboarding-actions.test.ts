@@ -45,6 +45,10 @@ let refreshResult: unknown = { ok: true, state: "verified", url: null };
 const refreshIdentity = jest.fn(async (..._a: unknown[]) => refreshResult);
 jest.mock("@/lib/lp-identity.server", () => ({ refreshIdentityCheck: (...a: unknown[]) => refreshIdentity(...a) }));
 
+const recordAudit = jest.fn(async (..._a: unknown[]) => true);
+jest.mock("@/lib/lp-audit.server", () => ({ recordAudit: (...a: unknown[]) => recordAudit(...a) }));
+const audited = () => recordAudit.mock.calls.map((c) => c[1] as Record<string, unknown>);
+
 let ofacResult: unknown = { ok: true, flagged: 0, screened: 2, wrote: true };
 const runOfac = jest.fn(async (..._a: unknown[]) => ofacResult);
 jest.mock("@/lib/ofac.server", () => ({ runOfacScreen: (...a: unknown[]) => runOfac(...a) }));
@@ -63,6 +67,7 @@ beforeEach(() => {
   writeError = null;
   upserted = null;
   inserted = null;
+  recordAudit.mockClear();
   for (const k of Object.keys(sessionFilters)) delete sessionFilters[k];
   jest.spyOn(console, "error").mockImplementation(() => undefined);
 });
@@ -241,6 +246,18 @@ describe("refreshIdentityCheckAction", () => {
     expect(await refreshIdentityCheckAction("s1")).toEqual({ ok: true, verified: false });
   });
 
+  it("records who asked for the refresh, and what it found, on the row the system wrote", async () => {
+    refreshResult = { ok: true, state: "processing", url: null };
+    await refreshIdentityCheckAction("s1");
+    expect(recordAudit).toHaveBeenCalledWith(SERVICE_CLIENT, { orgId: "org-1", sessionId: "s1", action: "check.refreshed", actorKind: "user", actorId: "user-1", detail: { state: "processing" } });
+  });
+
+  it("records nothing for a refresh that failed", async () => {
+    refreshResult = { ok: false, error: "We couldn't reach the verification service. Try again in a moment." };
+    await refreshIdentityCheckAction("s1");
+    expect(recordAudit).not.toHaveBeenCalled();
+  });
+
   it("passes on a failure to reach Stripe", async () => {
     refreshResult = { ok: false, error: "We couldn't reach the verification service. Try again in a moment." };
     expect(await refreshIdentityCheckAction("s1")).toEqual({ ok: false, error: expect.stringContaining("couldn't reach") });
@@ -261,7 +278,7 @@ describe("runOfacScreenAction", () => {
 
   it("screens this organization's LP and reports what it found", async () => {
     expect(await runOfacScreenAction("s1")).toEqual({ ok: true, flagged: 0, screened: 2, wrote: true });
-    expect(runOfac).toHaveBeenCalledWith(SERVICE_CLIENT, "s1", "org-1");
+    expect(runOfac).toHaveBeenCalledWith(SERVICE_CLIENT, "s1", "org-1", { actor: { kind: "user", id: "user-1" } });
     ofacResult = { ok: true, flagged: 1, screened: 2, wrote: false };
     expect(await runOfacScreenAction("s1")).toEqual({ ok: true, flagged: 1, screened: 2, wrote: false });
   });

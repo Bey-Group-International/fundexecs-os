@@ -9,6 +9,9 @@ jest.mock("@/lib/email", () => ({
   sendEmail: (a: unknown) => sendEmail(a),
 }));
 
+const recordAudit = jest.fn(async (..._a: unknown[]) => true);
+jest.mock("@/lib/lp-audit.server", () => ({ recordAudit: (...a: unknown[]) => recordAudit(...a) }));
+
 import { runLpReminders } from "./lp-reminders.server";
 
 const DAY = 86_400_000;
@@ -111,6 +114,7 @@ beforeEach(() => {
   releaseFailures = 0;
   mailboxSource = { "org-1": "org-oauth" };
   sendEmail.mockClear();
+  recordAudit.mockClear();
   sendEmail.mockResolvedValue({ ok: true, channel: "gmail", detail: "sent" });
   jest.spyOn(console, "error").mockImplementation(() => undefined);
 });
@@ -124,6 +128,36 @@ describe("runLpReminders", () => {
     const mail = sendEmail.mock.calls[0][0] as { orgId: string; to: { email: string }; htmlBody: string; allowFallback: boolean };
     expect(mail).toMatchObject({ orgId: "org-1", to: { email: "jo@example.com" }, allowFallback: false });
     expect(mail.htmlBody).toContain("https://app.example.com/lp/tok-1");
+  });
+
+  describe("the audit trail", () => {
+    it("records each reminder as the system's, with its day and whether it went", async () => {
+      await runLpReminders(client, { now: NOW });
+      expect(recordAudit).toHaveBeenCalledTimes(1);
+      expect(recordAudit).toHaveBeenCalledWith(client, { orgId: "org-1", sessionId: "s1", action: "email.sent", actorKind: "system", detail: { kind: "reminder", day: 3, ok: true } });
+    });
+
+    it("records a reminder that failed to send", async () => {
+      sendEmail.mockResolvedValue({ ok: false, channel: "gmail", detail: "boom" });
+      await runLpReminders(client, { now: NOW });
+      expect(recordAudit.mock.calls[0][1]).toMatchObject({ detail: { kind: "reminder", ok: false } });
+    });
+
+    it("records nothing where no email was attempted: no mailbox, or a claim someone else won", async () => {
+      mailboxSource = { "org-1": "none" };
+      await runLpReminders(client, { now: NOW });
+      mailboxSource = { "org-1": "org-oauth" };
+      claimResult = [];
+      await runLpReminders(client, { now: NOW });
+      expect(recordAudit).not.toHaveBeenCalled();
+    });
+
+    it("never records the LP's address or the link", async () => {
+      await runLpReminders(client, { now: NOW });
+      const logged = JSON.stringify(recordAudit.mock.calls);
+      expect(logged).not.toContain("jo@example.com");
+      expect(logged).not.toContain("tok-1");
+    });
   });
 
   it("claims the reminder before sending, and only if nobody else already has", async () => {

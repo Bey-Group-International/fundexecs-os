@@ -12,6 +12,7 @@ import { createServerClient, createServiceClient, hasSupabaseServiceEnv } from "
 import type { LpReviewState } from "@/lib/supabase/database.types";
 import { refreshIdentityCheck } from "@/lib/lp-identity.server";
 import { runOfacScreen } from "@/lib/ofac.server";
+import { recordAudit } from "@/lib/lp-audit.server";
 import {
   approvalBlocker,
   availableDecisions,
@@ -156,8 +157,18 @@ export async function refreshIdentityCheckAction(sessionId: unknown): Promise<On
     // write goes through the service role, after the checks above, scoped to this
     // organization.
     if (!hasSupabaseServiceEnv()) return { ok: false, error: GENERIC };
-    const res = await refreshIdentityCheck(createServiceClient(), sessionId, who.ctx.orgId);
+    const service = createServiceClient();
+    const res = await refreshIdentityCheck(service, sessionId, who.ctx.orgId);
     if (!res.ok) return res;
+    // The result row carries no person (see above), so who asked is recorded here.
+    await recordAudit(service, {
+      orgId: who.ctx.orgId,
+      sessionId,
+      action: "check.refreshed",
+      actorKind: "user",
+      actorId: who.ctx.userId,
+      detail: { state: res.state },
+    });
     revalidatePath(PAGE);
     return { ok: true, verified: res.state === "verified" };
   } catch (err) {
@@ -185,7 +196,7 @@ export async function runOfacScreenAction(
     // signed-in user write rows stamped with their own id), so the write goes
     // through the service role, after the checks above, scoped to this organization.
     if (!hasSupabaseServiceEnv()) return { ok: false, error: GENERIC };
-    const res = await runOfacScreen(createServiceClient(), sessionId, who.ctx.orgId);
+    const res = await runOfacScreen(createServiceClient(), sessionId, who.ctx.orgId, { actor: { kind: "user", id: who.ctx.userId } });
     if (!res.ok) return res;
     revalidatePath(PAGE);
     return { ok: true, flagged: res.flagged, screened: res.screened, wrote: res.wrote };

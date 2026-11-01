@@ -14,6 +14,7 @@ import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { sendEmail } from "@/lib/email";
 import { getAppUrl } from "@/lib/integrations/adapters/app-url";
+import { recordAudit } from "@/lib/lp-audit.server";
 import { inboxAlert, noticeRecipients, submissionNotice, type NoticeMember } from "@/lib/lp-submit-notice";
 
 type Client = SupabaseClient<any, any, any>;
@@ -89,6 +90,14 @@ export async function notifyTeamOfSubmission(
       if (sent.ok) result.sent += 1;
       else result.failed += 1;
     }
+    // One entry for the notice, not one per person: who was told is the team, not an address.
+    await recordAudit(client, {
+      orgId: args.orgId,
+      sessionId: args.sessionId,
+      action: "email.sent",
+      actorKind: "system",
+      detail: { kind: "team_notice", sent: result.sent, failed: result.failed, resubmitted: args.resubmitted },
+    });
   } catch (err) {
     console.error("[lp-submit-notice] could not notify the team", err);
   }

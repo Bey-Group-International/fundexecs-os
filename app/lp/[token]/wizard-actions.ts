@@ -18,6 +18,7 @@ import { stripeIdentityProvider } from "@/lib/providers/stripe-identity";
 import { identityOutcome, type IdentityState } from "@/lib/lp-identity";
 import { readIdentityCheck, refreshIdentityCheck } from "@/lib/lp-identity.server";
 import { runOfacScreen } from "@/lib/ofac.server";
+import { recordAudit } from "@/lib/lp-audit.server";
 import { notifyTeamOfSubmission } from "@/lib/lp-submit-notice.server";
 import {
   ACCREDITATION_BASIS_LABEL,
@@ -92,6 +93,13 @@ export async function requestAccessCodeAction(
         `<p>It works for 15 minutes. If you didn't ask for it, you can ignore this email.</p>`,
       allowFallback: true,
     });
+    await recordAudit(supabase, {
+      orgId: session.organization_id,
+      sessionId: session.id,
+      action: "code.requested",
+      actorKind: "lp",
+      detail: { emailed: sent.ok },
+    });
     return { ok: true, sent: sent.ok, maskedEmail: maskEmail(session.lp_email) };
   } catch (err) {
     console.error("requestAccessCodeAction failed", err);
@@ -107,8 +115,16 @@ export async function verifyAccessCodeAction(token: string, code: string): Promi
     if (!session || session.review_state === "rejected") return { ok: false, error: UNAVAILABLE };
 
     const verified = await verifyCode(supabase, session, code);
-    if (!verified.ok) return verified;
+    if (!verified.ok) {
+      // Only a wrong guess is recorded: each spends one of five tries, so a probe leaves a bounded trail
+      // while an expired or locked code (which can be retried without limit) cannot flood the log.
+      if (verified.reason === "wrong") {
+        await recordAudit(supabase, { orgId: session.organization_id, sessionId: session.id, action: "code.wrong", actorKind: "lp" });
+      }
+      return { ok: false, error: verified.error };
+    }
 
+    await recordAudit(supabase, { orgId: session.organization_id, sessionId: session.id, action: "code.verified", actorKind: "lp" });
     await grantLpPass(session.id);
     // The first time an LP gets in, the review is under way. The change is logged by the database.
     if (session.review_state === "not_started") {
@@ -398,7 +414,7 @@ export async function submitWizardAction(token: string): Promise<WizardResult> {
     // from the sanctions check, and a failure here changes nothing for the LP.
     try {
       after(async () => {
-        await runOfacScreen(ctx.supabase, ctx.session.id, ctx.session.organization_id);
+        await runOfacScreen(ctx.supabase, ctx.session.id, ctx.session.organization_id, { actor: { kind: "system" } });
       });
     } catch (err) {
       console.error("submitWizardAction could not schedule the OFAC screen", err);

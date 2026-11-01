@@ -143,7 +143,7 @@ describe("issuing and verifying a code", () => {
       afterRead = null;
     };
     const res = await verifyCode(fake(), session, issued.code, clock + 1000);
-    expect(res).toEqual({ ok: false, error: "That code has already been used. Ask for a new one." });
+    expect(res).toEqual({ ok: false, error: "That code has already been used. Ask for a new one.", reason: "used" });
   });
 
   it("accepts a code typed with a space", async () => {
@@ -166,11 +166,11 @@ describe("issuing and verifying a code", () => {
     if (!issued.ok) throw new Error("expected a code");
     const wrong = issued.code === "000000" ? "111111" : "000000";
     for (let i = 0; i < 5; i++) {
-      expect(await verifyCode(fake(), session, wrong, clock + 1000)).toEqual({ ok: false, error: "That code isn't right." });
+      expect(await verifyCode(fake(), session, wrong, clock + 1000)).toEqual({ ok: false, error: "That code isn't right.", reason: "wrong" });
     }
     expect(codes[0].attempts).toBe(5);
     const locked = await verifyCode(fake(), session, issued.code, clock + 1000);
-    expect(locked).toEqual({ ok: false, error: "Too many wrong codes. Ask for a new one." });
+    expect(locked).toEqual({ ok: false, error: "Too many wrong codes. Ask for a new one.", reason: "locked" });
   });
 
   it("rejects an expired code", async () => {

@@ -14,6 +14,7 @@ import { requireFeatureAccess } from "@/lib/feature-access.server";
 import type { DealStage } from "@/lib/supabase/database.types";
 import { LINK_TTL_DAYS } from "@/lib/lp-wizard";
 import { carryForwardChecks } from "@/lib/lp-reuse.server";
+import { recordAudit } from "@/lib/lp-audit.server";
 
 // Build › Profile edits are handled by `saveOrgProfile`
 // (app/(app)/build/profile/actions.ts), the single canonical profile action
@@ -413,7 +414,17 @@ export async function createLpInviteAction(formData: FormData) {
     const token = session.token as string;
     // A returning LP keeps their earlier ID verification. Best-effort: it never fails the invite.
     if (session.id && hasSupabaseServiceEnv()) {
-      await carryForwardChecks(createServiceClient(), { orgId, sessionId: session.id as string, email: lpEmail });
+      const service = createServiceClient();
+      const carried = await carryForwardChecks(service, { orgId, sessionId: session.id as string, email: lpEmail });
+      // Who sent the invite. Best-effort: the invite exists either way.
+      await recordAudit(service, {
+        orgId,
+        sessionId: session.id as string,
+        action: "link.created",
+        actorKind: "user",
+        actorId: auth.ctx.userId,
+        detail: { source: "allocator", has_fund: Boolean(fundId), has_investor: Boolean(investorId), carried: carried.length },
+      });
     }
     const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
     const portalUrl = `${appUrl}/lp/${token}`;

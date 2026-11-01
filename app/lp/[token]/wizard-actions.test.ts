@@ -11,6 +11,10 @@ jest.mock("next/server", () => ({
 const runOfacScreen = jest.fn(async (..._a: unknown[]) => ({ ok: true }));
 jest.mock("@/lib/ofac.server", () => ({ runOfacScreen: (...a: unknown[]) => runOfacScreen(...a) }));
 
+const recordAudit = jest.fn(async (..._a: unknown[]) => true);
+jest.mock("@/lib/lp-audit.server", () => ({ recordAudit: (...a: unknown[]) => recordAudit(...a) }));
+const audited = () => recordAudit.mock.calls.map((c) => c[1] as { action: string; actorKind: string; orgId: string; sessionId: string; detail?: Record<string, unknown> });
+
 const notifyTeam = jest.fn(async (..._a: unknown[]) => ({ sent: 1, failed: 0 }));
 jest.mock("@/lib/lp-submit-notice.server", () => ({ notifyTeamOfSubmission: (...a: unknown[]) => notifyTeam(...a) }));
 
@@ -120,6 +124,7 @@ beforeEach(() => {
   afterTasks.length = 0;
   runOfacScreen.mockClear();
   notifyTeam.mockClear();
+  recordAudit.mockClear();
   idConfigured = false;
   idCheck = null;
   idRefresh = { ok: true, state: "needs_input", url: "https://verify.stripe.com/start/abc" };
@@ -198,6 +203,24 @@ describe("requestAccessCodeAction", () => {
     expect(sendEmail).not.toHaveBeenCalled();
   });
 
+  it("records the request as the LP's, and whether the email went, but never the code", async () => {
+    await requestAccessCodeAction("tok");
+    expect(audited()).toEqual([{ orgId: "org-1", sessionId: "s1", action: "code.requested", actorKind: "lp", detail: { emailed: true } }]);
+    expect(JSON.stringify(recordAudit.mock.calls)).not.toContain("123456");
+    recordAudit.mockClear();
+    sendEmail.mockResolvedValueOnce({ ok: false, channel: "none", detail: "no mailbox" });
+    await requestAccessCodeAction("tok");
+    expect(audited()[0].detail).toEqual({ emailed: false });
+  });
+
+  it("records nothing for a request the rate limit refused or a link that isn't available", async () => {
+    issue = { ok: false, error: "A code was just sent." };
+    await requestAccessCodeAction("tok");
+    session = null;
+    await requestAccessCodeAction("tok");
+    expect(recordAudit).not.toHaveBeenCalled();
+  });
+
   it("refuses an unknown or rejected link", async () => {
     session = null;
     expect(await requestAccessCodeAction("tok")).toEqual(UNAVAILABLE);
@@ -222,9 +245,31 @@ describe("verifyAccessCodeAction", () => {
   });
 
   it("grants nothing for a wrong code", async () => {
-    verify = { ok: false, error: "That code isn't right." };
+    verify = { ok: false, error: "That code isn't right.", reason: "wrong" };
     expect(await verifyAccessCodeAction("tok", "000000")).toEqual({ ok: false, error: "That code isn't right." });
     expect(grant).not.toHaveBeenCalled();
+  });
+
+  it("records a wrong guess and a success as the LP's, and never what was typed", async () => {
+    verify = { ok: false, error: "That code isn't right.", reason: "wrong" };
+    await verifyAccessCodeAction("tok", "000000");
+    expect(audited()).toEqual([{ orgId: "org-1", sessionId: "s1", action: "code.wrong", actorKind: "lp" }]);
+    expect(JSON.stringify(recordAudit.mock.calls)).not.toContain("000000");
+    recordAudit.mockClear();
+    verify = { ok: true };
+    await verifyAccessCodeAction("tok", "123456");
+    expect(audited()).toEqual([{ orgId: "org-1", sessionId: "s1", action: "code.verified", actorKind: "lp" }]);
+  });
+
+  it.each(["expired", "locked", "used", "format"])("does not record a %s code, so an unlimited retry can't flood the log", async (reason) => {
+    verify = { ok: false, error: "nope", reason };
+    await verifyAccessCodeAction("tok", "123456");
+    expect(recordAudit).not.toHaveBeenCalled();
+  });
+
+  it("does not hand the reason to the browser", async () => {
+    verify = { ok: false, error: "That code isn't right.", reason: "wrong" };
+    expect(await verifyAccessCodeAction("tok", "000000")).not.toHaveProperty("reason");
   });
 
   it("grants nothing on a rejected or unknown link", async () => {
@@ -535,7 +580,7 @@ describe("the OFAC first-pass screen on submit", () => {
     expect(runOfacScreen).not.toHaveBeenCalled();
     expect(afterTasks).toHaveLength(2);
     await Promise.all(afterTasks.map((t) => t()));
-    expect(runOfacScreen).toHaveBeenCalledWith(expect.anything(), "s1", "org-1");
+    expect(runOfacScreen).toHaveBeenCalledWith(expect.anything(), "s1", "org-1", { actor: { kind: "system" } });
   });
 
   it("never holds up or fails a submission", async () => {
