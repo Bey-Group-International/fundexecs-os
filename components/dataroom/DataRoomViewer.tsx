@@ -1,11 +1,22 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useTransition,
+} from "react";
 import { useRouter } from "next/navigation";
 import { MarkdownRenderer } from "./MarkdownRenderer";
 import { ViewerGate } from "./ViewerGate";
 import type { GateConfig } from "./ViewerGate";
-import { recordRoomOpen, signRoomDocument, trackReading } from "./viewer-actions";
+import {
+  recordRoomOpen,
+  signRoomDocument,
+  trackReading,
+} from "./viewer-actions";
 import { ReadingClock } from "@/lib/data-room-engagement";
 import { FilePreview } from "@/components/documents/FilePreview";
 import type { PreviewKind } from "@/lib/document-files";
@@ -88,7 +99,11 @@ export interface ViewControls {
   singleDocument: boolean;
 }
 
-const DEFAULT_CONTROLS: ViewControls = { allowDownload: true, watermark: false, singleDocument: false };
+const DEFAULT_CONTROLS: ViewControls = {
+  allowDownload: true,
+  watermark: false,
+  singleDocument: false,
+};
 
 export interface ViewerSection {
   key: string;
@@ -193,29 +208,50 @@ export function DataRoomViewer({
   const nav: NavItem[] = useMemo(() => {
     const items: NavItem[] = [];
     // A single-document link has no firm overview to show — just the document.
-    if (!viewControls.singleDocument) items.push({ key: "overview", label: "Overview" });
+    if (!viewControls.singleDocument)
+      items.push({ key: "overview", label: "Overview" });
     // Everything published, in the order and grouping the GP's Room contents
     // shows, so a reader can see the whole room without opening each section.
     const total = docSections.reduce((n, s) => n + s.docs.length, 0);
-    if (!viewControls.singleDocument && total > 0) items.push({ key: ALL_DOCS_KEY, label: "All documents", count: total });
-    if (blended.dealCount > 0) items.push({ key: "track_record", label: "Track Record" });
+    if (!viewControls.singleDocument && total > 0)
+      items.push({ key: ALL_DOCS_KEY, label: "All documents", count: total });
+    if (blended.dealCount > 0)
+      items.push({ key: "track_record", label: "Track Record" });
     if (thesis) items.push({ key: "thesis", label: "Investment Thesis" });
     if (team.length > 0) items.push({ key: "team", label: "Team" });
-    if (entities.length > 0) items.push({ key: "structure", label: "Structure" });
+    if (entities.length > 0)
+      items.push({ key: "structure", label: "Structure" });
     for (const s of docSections) {
-      if (s.docs.length > 0) items.push({ key: docNavKey(s.key), label: s.label, docs: s.docs } as NavItem);
+      if (s.docs.length > 0)
+        items.push({
+          key: docNavKey(s.key),
+          label: s.label,
+          docs: s.docs,
+        } as NavItem);
     }
     return items;
-  }, [blended.dealCount, thesis, team.length, entities.length, docSections, viewControls.singleDocument]);
+  }, [
+    blended.dealCount,
+    thesis,
+    team.length,
+    entities.length,
+    docSections,
+    viewControls.singleDocument,
+  ]);
 
   const focusDocSection = focusDocumentId
     ? docSections.find((s) => s.docs.some((d) => d.id === focusDocumentId))
     : undefined;
-  const focusSection = focusDocSection ? docNavKey(focusDocSection.key) : undefined;
+  const focusSection = focusDocSection
+    ? docNavKey(focusDocSection.key)
+    : undefined;
   // A reader opens on the room's contents (what the GP published), or on the
   // document a link points at. Overview is one click away.
   const [selected, setSelected] = useState<string>(
-    focusSection ?? nav.find((n) => n.key === ALL_DOCS_KEY)?.key ?? nav[0]?.key ?? "overview",
+    focusSection ??
+      nav.find((n) => n.key === ALL_DOCS_KEY)?.key ??
+      nav[0]?.key ??
+      "overview",
   );
   const mainRef = useRef<HTMLElement>(null);
   const shellRef = useRef<HTMLDivElement>(null);
@@ -238,7 +274,9 @@ export function DataRoomViewer({
   // runs after the render that already dropped the section, so the viewer would
   // paint one frame with an empty pane and no nav item highlighted.
   const effectiveSelected =
-    nav.length === 0 || nav.some((n) => n.key === selected) ? selected : nav[0].key;
+    nav.length === 0 || nav.some((n) => n.key === selected)
+      ? selected
+      : nav[0].key;
 
   // ---------------------------------------------------------------------------
   // Reading time, per document
@@ -276,7 +314,9 @@ export function DataRoomViewer({
       let bestPx = 0;
       pane.querySelectorAll<HTMLElement>("[data-doc-id]").forEach((el) => {
         const r = el.getBoundingClientRect();
-        const px = Math.min(r.bottom, box.bottom, window.innerHeight) - Math.max(r.top, box.top, 0);
+        const px =
+          Math.min(r.bottom, box.bottom, window.innerHeight) -
+          Math.max(r.top, box.top, 0);
         if (px > bestPx) {
           bestPx = px;
           best = el.dataset.docId ?? null;
@@ -287,20 +327,35 @@ export function DataRoomViewer({
     const tick = () => {
       const now = Date.now();
       // Scrolling a PDF happens inside its frame, where this page hears nothing.
-      if (document.activeElement instanceof HTMLIFrameElement && pane?.contains(document.activeElement)) clock.input(now);
+      if (
+        document.activeElement instanceof HTMLIFrameElement &&
+        pane?.contains(document.activeElement)
+      )
+        clock.input(now);
       clock.tick(now, inView(), document.visibilityState === "visible");
     };
     const flush = () => {
       tick();
       const entries = clock.drain();
-      if (entries.length) void trackReading(token, visitorId, entries).catch(() => undefined);
+      if (entries.length)
+        void trackReading(token, visitorId, entries).catch(() => undefined);
     };
     flushReading.current = flush;
 
     const onInput = () => clock.input(Date.now());
-    const onVisibility = () => (document.visibilityState === "hidden" ? flush() : tick());
-    const events = ["scroll", "wheel", "keydown", "pointerdown", "pointermove", "touchstart"] as const;
-    events.forEach((e) => window.addEventListener(e, onInput, { passive: true, capture: true }));
+    const onVisibility = () =>
+      document.visibilityState === "hidden" ? flush() : tick();
+    const events = [
+      "scroll",
+      "wheel",
+      "keydown",
+      "pointerdown",
+      "pointermove",
+      "touchstart",
+    ] as const;
+    events.forEach((e) =>
+      window.addEventListener(e, onInput, { passive: true, capture: true }),
+    );
     document.addEventListener("visibilitychange", onVisibility);
     window.addEventListener("pagehide", flush);
     tick();
@@ -312,7 +367,9 @@ export function DataRoomViewer({
 
     return () => {
       window.clearInterval(timer);
-      events.forEach((e) => window.removeEventListener(e, onInput, { capture: true }));
+      events.forEach((e) =>
+        window.removeEventListener(e, onInput, { capture: true }),
+      );
       document.removeEventListener("visibilitychange", onVisibility);
       window.removeEventListener("pagehide", flush);
       flush();
@@ -329,7 +386,8 @@ export function DataRoomViewer({
       setSidebarOpen(false);
       // A new section starts at its top, not wherever the last one was scrolled.
       if (mainRef.current) mainRef.current.scrollTop = 0;
-      if (!preview && document.scrollingElement) document.scrollingElement.scrollTop = 0;
+      if (!preview && document.scrollingElement)
+        document.scrollingElement.scrollTop = 0;
     },
     [effectiveSelected, preview],
   );
@@ -355,7 +413,10 @@ export function DataRoomViewer({
     return (
       <>
         {/* Blurred background preview — org name/initial only, never confidential */}
-        <div className="flex min-h-screen flex-col bg-surface-0 text-fg-primary select-none pointer-events-none blur-sm opacity-40" aria-hidden>
+        <div
+          className="flex min-h-screen flex-col bg-surface-0 text-fg-primary select-none pointer-events-none blur-sm opacity-40"
+          aria-hidden
+        >
           <header className="flex shrink-0 items-center gap-4 border-b border-line px-4 py-3">
             <div className="flex min-w-0 flex-1 items-center gap-3">
               <span
@@ -364,7 +425,9 @@ export function DataRoomViewer({
               >
                 {org.name.charAt(0).toUpperCase()}
               </span>
-              <p className="truncate font-display text-sm font-semibold text-fg-primary">{org.name}</p>
+              <p className="truncate font-display text-sm font-semibold text-fg-primary">
+                {org.name}
+              </p>
             </div>
           </header>
         </div>
@@ -422,7 +485,11 @@ export function DataRoomViewer({
         <div className="flex min-w-0 flex-1 items-center gap-3">
           {org.logo_url ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={org.logo_url} alt="" className="h-8 w-8 shrink-0 rounded-lg object-contain" />
+            <img
+              src={org.logo_url}
+              alt=""
+              className="h-8 w-8 shrink-0 rounded-lg object-contain"
+            />
           ) : (
             <span
               className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg font-display text-sm font-semibold text-surface-0"
@@ -432,7 +499,9 @@ export function DataRoomViewer({
             </span>
           )}
           <div className="min-w-0">
-            <p className="truncate font-display text-sm font-semibold text-fg-primary">{org.name}</p>
+            <p className="truncate font-display text-sm font-semibold text-fg-primary">
+              {org.name}
+            </p>
             {org.tagline ? (
               <p className="truncate text-xs text-fg-muted">{org.tagline}</p>
             ) : null}
@@ -446,7 +515,11 @@ export function DataRoomViewer({
               : "border-line bg-surface-1 text-fg-muted"
           }`}
         >
-          {preview ? "Preview" : viewControls.allowDownload ? "Read-only" : "View-only"}
+          {preview
+            ? "Preview"
+            : viewControls.allowDownload
+              ? "Read-only"
+              : "View-only"}
         </span>
       </header>
 
@@ -474,7 +547,9 @@ export function DataRoomViewer({
           }
         >
           <div className="relative z-10 flex flex-1 flex-col overflow-y-auto py-4">
-            <p className="px-4 pb-2 font-mono text-[11px] uppercase tracking-[0.16em] text-fg-muted">Contents</p>
+            <p className="px-4 pb-2 font-mono text-[11px] uppercase tracking-[0.16em] text-fg-muted">
+              Contents
+            </p>
             <nav className="flex flex-col gap-0.5 px-2">
               {nav.map((item) => {
                 const active = item.key === effectiveSelected;
@@ -485,18 +560,31 @@ export function DataRoomViewer({
                     onClick={() => handleSelect(item.key)}
                     className={`
                       w-full rounded-lg px-3 py-3 text-left text-sm transition lg:py-2
-                      ${active
-                        ? "bg-surface-0 font-medium text-fg-primary"
-                        : "text-fg-secondary hover:bg-surface-0/60 hover:text-fg-primary"}
+                      ${
+                        active
+                          ? "bg-surface-0 font-medium text-fg-primary"
+                          : "text-fg-secondary hover:bg-surface-0/60 hover:text-fg-primary"
+                      }
                     `}
-                    style={active ? { borderLeft: `2px solid ${accent}`, paddingLeft: "10px" } : undefined}
+                    style={
+                      active
+                        ? {
+                            borderLeft: `2px solid ${accent}`,
+                            paddingLeft: "10px",
+                          }
+                        : undefined
+                    }
                   >
                     {item.label}
                     {"docs" in item && item.docs.length > 1 ? (
-                      <span className="ml-2 font-mono text-[11px] text-fg-muted">{item.docs.length}</span>
+                      <span className="ml-2 font-mono text-[11px] text-fg-muted">
+                        {item.docs.length}
+                      </span>
                     ) : null}
                     {"count" in item ? (
-                      <span className="ml-2 font-mono text-[11px] text-fg-muted">{item.count}</span>
+                      <span className="ml-2 font-mono text-[11px] text-fg-muted">
+                        {item.count}
+                      </span>
                     ) : null}
                   </button>
                 );
@@ -506,7 +594,9 @@ export function DataRoomViewer({
 
           <div className="shrink-0 border-t border-line px-4 py-3">
             {viewerEmail ? (
-              <p className="truncate font-mono text-[11px] text-fg-muted">{viewerEmail}</p>
+              <p className="truncate font-mono text-[11px] text-fg-muted">
+                {viewerEmail}
+              </p>
             ) : null}
             <p className="font-mono text-[11px] uppercase tracking-wider text-fg-muted">
               FundExecs OS
@@ -515,7 +605,10 @@ export function DataRoomViewer({
         </aside>
 
         {/* Content panel */}
-        <main ref={mainRef} className="min-w-0 flex-1 overflow-y-auto px-4 py-6 sm:px-6 sm:py-8 lg:px-10">
+        <main
+          ref={mainRef}
+          className="min-w-0 flex-1 overflow-y-auto px-4 py-6 sm:px-6 sm:py-8 lg:px-10"
+        >
           <ContentPanel
             selected={effectiveSelected}
             org={org}
@@ -576,9 +669,15 @@ function ContentPanel({
       <div className="max-w-2xl">
         <SectionHeader title="Overview" accent={accent} />
         <div className="mt-4 space-y-3 text-sm text-fg-secondary">
-          {org.tagline ? <p className="text-base font-medium text-fg-primary">{org.tagline}</p> : null}
+          {org.tagline ? (
+            <p className="text-base font-medium text-fg-primary">
+              {org.tagline}
+            </p>
+          ) : null}
           <p className="font-mono text-[11px] uppercase tracking-wider text-fg-muted">
-            {[org.entity_type, org.jurisdiction, org.website].filter(Boolean).join("  ·  ") || "—"}
+            {[org.entity_type, org.jurisdiction, org.website]
+              .filter(Boolean)
+              .join("  ·  ") || "—"}
           </p>
           {org.legal_name ? (
             <p className="text-xs text-fg-muted">{org.legal_name}</p>
@@ -590,8 +689,20 @@ function ContentPanel({
 
   if (selected === "track_record") {
     const rows = [
-      { v: blended.weightedGrossIrr != null ? `${blended.weightedGrossIrr.toFixed(0)}%` : "—", l: "Gross IRR" },
-      { v: blended.pooledMoic != null ? `${blended.pooledMoic.toFixed(1)}x` : "—", l: "MOIC" },
+      {
+        v:
+          blended.weightedGrossIrr != null
+            ? `${blended.weightedGrossIrr.toFixed(0)}%`
+            : "—",
+        l: "Gross IRR",
+      },
+      {
+        v:
+          blended.pooledMoic != null
+            ? `${blended.pooledMoic.toFixed(1)}x`
+            : "—",
+        l: "MOIC",
+      },
       { v: blended.dpi != null ? `${blended.dpi.toFixed(2)}x` : "—", l: "DPI" },
       { v: compactUsd(blended.totalInvested) ?? "—", l: "Invested" },
     ];
@@ -600,15 +711,25 @@ function ContentPanel({
         <SectionHeader title="Track Record" accent={accent} />
         <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
           {rows.map((m) => (
-            <div key={m.l} className="rounded-xl border border-line bg-surface-1 px-4 py-3 text-center" style={{ boxShadow: "0 1px 4px rgba(0,0,0,0.12)" }}>
-              <p className="font-display text-2xl font-semibold text-fg-primary">{m.v}</p>
-              <p className="mt-1 font-mono text-[11px] uppercase tracking-wider text-fg-muted">{m.l}</p>
+            <div
+              key={m.l}
+              className="rounded-xl border border-line bg-surface-1 px-4 py-3 text-center"
+              style={{ boxShadow: "0 1px 4px rgba(0,0,0,0.12)" }}
+            >
+              <p className="font-display text-2xl font-semibold text-fg-primary">
+                {m.v}
+              </p>
+              <p className="mt-1 font-mono text-[11px] uppercase tracking-wider text-fg-muted">
+                {m.l}
+              </p>
             </div>
           ))}
         </div>
         <p className="mt-3 font-mono text-[11px] uppercase tracking-wider text-fg-muted">
           {blended.dealCount} deals · {blended.realizedCount} realized
-          {blended.vintageRange ? ` · vintages ${blended.vintageRange.from}–${blended.vintageRange.to}` : ""}
+          {blended.vintageRange
+            ? ` · vintages ${blended.vintageRange.from}–${blended.vintageRange.to}`
+            : ""}
         </p>
       </div>
     );
@@ -623,18 +744,28 @@ function ContentPanel({
       <div className="max-w-2xl">
         <SectionHeader title="Investment Thesis" accent={accent} />
         <div className="mt-4 space-y-3">
-          <p className="text-base font-semibold text-fg-primary">{thesis.title}</p>
+          <p className="text-base font-semibold text-fg-primary">
+            {thesis.title}
+          </p>
           {thesis.summary ? (
-            <p className="text-sm leading-relaxed text-fg-secondary">{thesis.summary}</p>
+            <p className="text-sm leading-relaxed text-fg-secondary">
+              {thesis.summary}
+            </p>
           ) : null}
           <p className="font-mono text-[11px] uppercase tracking-wider text-fg-muted">
             {[
               thesis.asset_classes?.join(", "),
               thesis.geographies?.join(", "),
               checkSize.length ? checkSize.join("–") : null,
-              thesis.target_irr != null ? `${thesis.target_irr}% target IRR` : null,
-              thesis.target_moic != null ? `${thesis.target_moic}x target MOIC` : null,
-            ].filter(Boolean).join("  ·  ") || "—"}
+              thesis.target_irr != null
+                ? `${thesis.target_irr}% target IRR`
+                : null,
+              thesis.target_moic != null
+                ? `${thesis.target_moic}x target MOIC`
+                : null,
+            ]
+              .filter(Boolean)
+              .join("  ·  ") || "—"}
           </p>
         </div>
       </div>
@@ -647,9 +778,14 @@ function ContentPanel({
         <SectionHeader title="Team" accent={accent} />
         <div className="mt-4 flex flex-wrap gap-2">
           {team.map((m, i) => (
-            <span key={i} className="rounded-full border border-line bg-surface-1 px-3 py-1.5 text-sm">
+            <span
+              key={i}
+              className="rounded-full border border-line bg-surface-1 px-3 py-1.5 text-sm"
+            >
               <span className="font-medium text-fg-primary">{m.name}</span>
-              {m.title ? <span className="text-fg-muted"> · {m.title}</span> : null}
+              {m.title ? (
+                <span className="text-fg-muted"> · {m.title}</span>
+              ) : null}
             </span>
           ))}
         </div>
@@ -663,9 +799,14 @@ function ContentPanel({
         <SectionHeader title="Structure" accent={accent} />
         <div className="mt-4 space-y-2">
           {entities.map((e, i) => (
-            <div key={i} className="rounded-lg border border-line bg-surface-1 px-4 py-2.5">
+            <div
+              key={i}
+              className="rounded-lg border border-line bg-surface-1 px-4 py-2.5"
+            >
               <p className="text-sm font-medium text-fg-primary">{e.name}</p>
-              {e.entity_type ? <p className="text-xs text-fg-muted">{e.entity_type}</p> : null}
+              {e.entity_type ? (
+                <p className="text-xs text-fg-muted">{e.entity_type}</p>
+              ) : null}
             </div>
           ))}
         </div>
@@ -681,26 +822,28 @@ function ContentPanel({
           {docSections
             .filter((sec) => sec.docs.length > 0)
             .map((sec) => (
-            <div key={sec.key}>
-              <p className="mb-2 font-mono text-[11px] uppercase tracking-[0.16em] text-fg-muted">{sec.label}</p>
-              <div className="space-y-4">
-                {sec.docs.map((doc) => (
-                  <DocCard
-                    key={doc.id}
-                    doc={doc}
-                    token={token}
-                    accent={accent}
-                    preview={preview}
-                    controls={controls}
-                    viewerLabel={viewerLabel}
-                    signerEmail={signerEmail}
-                    // A long list of open file previews is not a list: the reader opens the ones they want.
-                    startOpen={false}
-                  />
-                ))}
+              <div key={sec.key}>
+                <p className="mb-2 font-mono text-[11px] uppercase tracking-[0.16em] text-fg-muted">
+                  {sec.label}
+                </p>
+                <div className="space-y-4">
+                  {sec.docs.map((doc) => (
+                    <DocCard
+                      key={doc.id}
+                      doc={doc}
+                      token={token}
+                      accent={accent}
+                      preview={preview}
+                      controls={controls}
+                      viewerLabel={viewerLabel}
+                      signerEmail={signerEmail}
+                      // A long list of open file previews is not a list: the reader opens the ones they want.
+                      startOpen={false}
+                    />
+                  ))}
+                </div>
               </div>
-            </div>
-          ))}
+            ))}
         </div>
       </div>
     );
@@ -725,7 +868,11 @@ function ContentPanel({
             viewerLabel={viewerLabel}
             signerEmail={signerEmail}
             // One document on the page, or the one a link pointed at: open it.
-            startOpen={controls.singleDocument || doc.id === focusDocumentId || sec.docs.length === 1}
+            startOpen={
+              controls.singleDocument ||
+              doc.id === focusDocumentId ||
+              sec.docs.length === 1
+            }
           />
         ))}
       </div>
@@ -736,8 +883,13 @@ function ContentPanel({
 function SectionHeader({ title, accent }: { title: string; accent: string }) {
   return (
     <div className="flex items-center gap-3 border-b border-line pb-4">
-      <span className="h-5 w-0.5 rounded-full" style={{ backgroundColor: accent }} />
-      <h1 className="font-display text-lg font-semibold tracking-tight text-fg-primary">{title}</h1>
+      <span
+        className="h-5 w-0.5 rounded-full"
+        style={{ backgroundColor: accent }}
+      />
+      <h1 className="font-display text-lg font-semibold tracking-tight text-fg-primary">
+        {title}
+      </h1>
     </div>
   );
 }
@@ -769,7 +921,8 @@ function DocCard({
   const previewable = Boolean(doc.uploaded) && kind !== "none";
   const [showFile, setShowFile] = useState(startOpen && previewable);
   const fileUrl = `/dataroom/${token}/d/${doc.id}`;
-  const btn = "inline-flex min-h-11 items-center rounded-lg border px-3 py-1.5 font-mono text-[11px] uppercase tracking-wider transition hover:bg-surface-0 sm:min-h-0";
+  const btn =
+    "inline-flex min-h-11 items-center rounded-lg border px-3 py-1.5 font-mono text-[11px] uppercase tracking-wider transition hover:bg-surface-0 sm:min-h-0";
 
   return (
     <div
@@ -782,7 +935,9 @@ function DocCard({
         <span className="font-mono text-[11px] text-fg-muted">
           {locked ? "🔒" : href ? (doc.uploaded ? "▤" : "↗") : "≡"}
         </span>
-        <p className="min-w-[9rem] flex-1 break-words text-sm font-medium text-fg-primary">{doc.name}</p>
+        <p className="min-w-[9rem] flex-1 break-words text-sm font-medium text-fg-primary">
+          {doc.name}
+        </p>
         {doc.requiresSignature ? (
           <span
             className="shrink-0 rounded-full border px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider"
@@ -823,7 +978,10 @@ function DocCard({
           </a>
         ) : null}
         {doc.uploaded && !preview && controls.allowDownload ? (
-          <a href={`${fileUrl}?download=1`} className={`${btn} border-line text-fg-muted`}>
+          <a
+            href={`${fileUrl}?download=1`}
+            className={`${btn} border-line text-fg-muted`}
+          >
             Download
           </a>
         ) : null}
@@ -839,7 +997,13 @@ function DocCard({
       </div>
 
       {locked ? (
-        <SignatureLock token={token} doc={doc} accent={accent} preview={preview} viewerEmail={signerEmail} />
+        <SignatureLock
+          token={token}
+          doc={doc}
+          accent={accent}
+          preview={preview}
+          viewerEmail={signerEmail}
+        />
       ) : null}
 
       {showFile && previewable && !preview ? (
@@ -850,7 +1014,9 @@ function DocCard({
             previewUrl={`${fileUrl}/preview`}
             name={doc.name}
             viewOnly={!controls.allowDownload}
-            overlayLabel={controls.watermark ? viewerLabel || "Confidential" : null}
+            overlayLabel={
+              controls.watermark ? viewerLabel || "Confidential" : null
+            }
           />
           {!controls.allowDownload ? (
             <p className="mt-2 font-mono text-[10px] uppercase tracking-wider text-fg-muted">
@@ -870,7 +1036,9 @@ function DocCard({
       {/* No content, no link */}
       {!locked && !doc.content && !href ? (
         <div className="border-t border-line/50 px-5 py-3">
-          <p className="text-xs text-fg-muted">Document content not yet available.</p>
+          <p className="text-xs text-fg-muted">
+            Document content not yet available.
+          </p>
         </div>
       ) : null}
     </div>
@@ -905,13 +1073,18 @@ function SignatureLock({
   // link has no email gate to take it from.
   const needsEmail = !viewerEmail || !viewerEmail.includes("@");
   const trimmed = name.trim();
-  const canSubmit = trimmed.length > 0 && agreed && (!needsEmail || email.trim().length > 0) && !pending;
+  const canSubmit =
+    trimmed.length > 0 &&
+    agreed &&
+    (!needsEmail || email.trim().length > 0) &&
+    !pending;
 
   if (preview) {
     return (
       <div className="border-t border-line/50 bg-surface-0 px-5 py-4">
         <p className="text-xs text-fg-muted">
-          Readers must sign this file before it opens. They will see a signature form here.
+          Readers must sign this file before it opens. They will see a signature
+          form here.
         </p>
       </div>
     );
@@ -933,10 +1106,13 @@ function SignatureLock({
 
   return (
     <div className="border-t border-line/50 bg-surface-0 px-4 py-5 sm:px-5">
-      <p className="text-sm font-medium text-fg-primary">Sign to open this document</p>
+      <p className="text-sm font-medium text-fg-primary">
+        Sign to open this document
+      </p>
       <p className="mt-1 text-xs text-fg-secondary">
-        The sender needs your signature on <span className="text-fg-primary">{doc.name}</span> before you can read it.
-        Your name, the time and a fingerprint of the file are recorded.
+        The sender needs your signature on{" "}
+        <span className="text-fg-primary">{doc.name}</span> before you can read
+        it. Your name, the time and a fingerprint of the file are recorded.
       </p>
       <div className="mt-4 max-w-sm space-y-3">
         {needsEmail ? (
@@ -959,8 +1135,16 @@ function SignatureLock({
           className="w-full rounded-lg border border-line bg-surface-1 px-3 py-2.5 text-base text-fg-primary sm:text-sm placeholder:text-fg-muted focus:border-gold-400 focus:outline-none"
         />
         <label className="flex items-start gap-3 py-1 text-xs text-fg-secondary">
-          <input type="checkbox" checked={agreed} onChange={(e) => setAgreed(e.target.checked)} className="mt-0.5 h-5 w-5 shrink-0" />
-          <span>I have read and agree to this document, and I intend my typed name to be my signature.</span>
+          <input
+            type="checkbox"
+            checked={agreed}
+            onChange={(e) => setAgreed(e.target.checked)}
+            className="mt-0.5 h-5 w-5 shrink-0"
+          />
+          <span>
+            I have read and agree to this document, and I intend my typed name
+            to be my signature.
+          </span>
         </label>
         {error ? <p className="text-xs text-red-400">{error}</p> : null}
         <button
