@@ -23,6 +23,7 @@ import {
 import { runBookingRequestExpiry, type RequestExpiryStats } from "@/lib/meetings/booking-expiry.server";
 import { runBookingRequestReminders, type RequestReminderStats } from "@/lib/meetings/booking-request-reminder.server";
 import { runLpReminders, type LpReminderStats } from "@/lib/lp-reminders.server";
+import { purgeAbandonedLps } from "@/lib/lp-retention.server";
 import { runRecordingSweep, type RecordingSweepStats } from "@/lib/meetings/recording-sweep.server";
 import { runStaleMeetingSweep, type StaleMeetingSweepStats } from "@/lib/meetings/stale-meeting-sweep.server";
 import { runFailedReportRetry, type FailedReportRetryStats } from "@/lib/meetings/failed-report-retry.server";
@@ -395,6 +396,18 @@ export async function GET(request: Request) {
     console.error("lp_reminders failed", e);
   }
 
+  // Onboarding links nobody ever used, deleted once well past expiry (SOC 2 G-1).
+  let lpAbandonedPurged = 0;
+  let lpAbandonedPurgeFailed = false;
+  try {
+    const purge = await purgeAbandonedLps(supabase);
+    lpAbandonedPurged = purge.count;
+    lpAbandonedPurgeFailed = purge.failed;
+  } catch (e) {
+    lpAbandonedPurgeFailed = true;
+    console.error("lp_retention failed", e);
+  }
+
   // Booking requests the host never answered, closed once their time has come
   // so the invitee hears back instead of waiting on a meeting that is over.
   let bookingRequestsExpired: RequestExpiryStats = { expired: 0, notified: 0, failed: 0 };
@@ -503,7 +516,8 @@ export async function GET(request: Request) {
   try {
     await recordCronRun(supabase, {
       job: "cron",
-      status: "ok",
+      // A failed retention purge must not look like a healthy run.
+      status: lpAbandonedPurgeFailed ? "error" : "ok",
       detail: {
         swept: due.length,
         scannedOrgs: radar.scannedOrgs,
@@ -540,6 +554,8 @@ export async function GET(request: Request) {
         failedReportsRetried: failedReports.retried,
         failedReportsPending: failedReports.candidates,
         failedReportsBillingBlocked: failedReports.billingBlocked,
+        lpAbandonedPurged,
+        lpAbandonedPurgeFailed,
         calendarEventIdsReattached: calendarRepair.reattached,
         calendarEventIdsMissing: calendarRepair.noEvent,
         calendarEventIdRepairFailures: calendarRepair.failed,
@@ -564,5 +580,5 @@ export async function GET(request: Request) {
     // best-effort: never let health tracking break the cron response
   }
 
-  return NextResponse.json({ swept: due.length, results, radar, pulse, escalated, inboxApprovals, webhooks, proactive, reminders, bookingConfirmations, bookingRequestReminders, lpReminders, bookingRequestsExpired, recordings, staleMeetings, failedReports, calendarRepair, subscriptions, settledInvoices, nativeCollections, networkAutomations });
+  return NextResponse.json({ swept: due.length, results, radar, pulse, escalated, inboxApprovals, webhooks, proactive, reminders, bookingConfirmations, bookingRequestReminders, lpReminders, lpAbandonedPurged, lpAbandonedPurgeFailed, bookingRequestsExpired, recordings, staleMeetings, failedReports, calendarRepair, subscriptions, settledInvoices, nativeCollections, networkAutomations });
 }
