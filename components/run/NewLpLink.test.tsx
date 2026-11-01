@@ -2,7 +2,7 @@ const refresh = jest.fn();
 jest.mock("next/navigation", () => ({ useRouter: () => ({ refresh }) }));
 
 const create = jest.fn(
-  async (_i: unknown): Promise<{ ok: true; sessionId: string; url: string; carried: Array<{ kind: string; checkedAt: string; expiresAt: string }> } | { ok: false; error: string }> => ({
+  async (_i: unknown): Promise<{ ok: true; sessionId: string; url: string; carried: Array<{ kind: string; checkedAt: string; expiresAt: string; namesMatch?: boolean }> } | { ok: false; error: string }> => ({
     ok: true,
     sessionId: "s9",
     url: "https://app.example.com/lp/tok-abc",
@@ -117,22 +117,36 @@ describe("NewLpLink", () => {
     openForm();
     fill();
     await make();
-    expect(screen.queryByText(/carries over/)).toBeNull();
+    expect(screen.queryByText(/not used yet/)).toBeNull();
   });
 
-  it("tells the fund manager when a returning LP keeps their ID verification, and that the rest runs again", async () => {
+  it("tells the fund manager an earlier ID check is waiting for their confirmation, and is NOT used yet", async () => {
     create.mockResolvedValueOnce({
       ok: true,
       sessionId: "s9",
       url: "https://app.example.com/lp/tok-abc",
-      carried: [{ kind: "identity", checkedAt: "2026-07-24T00:00:00Z", expiresAt: "2027-07-24T00:00:00Z" }],
+      carried: [{ kind: "identity", checkedAt: "2026-07-24T00:00:00Z", expiresAt: "2027-07-24T00:00:00Z", namesMatch: true }],
     });
     openForm();
     fill();
     await make();
-    expect(screen.getByRole("status")).toHaveTextContent(/ID verification of Jul 2[34], 2026 carries over/);
-    expect(screen.getByRole("status")).toHaveTextContent(/won't repeat it/);
-    expect(screen.getByRole("status")).toHaveTextContent(/Screening and accreditation still run again/);
+    expect(screen.getByRole("status")).toHaveTextContent(/ID check of Jul 2[34], 2026/);
+    expect(screen.getByRole("status")).toHaveTextContent(/not used yet/);
+    expect(screen.getByRole("status")).toHaveTextContent(/confirm it is the same person/);
+    expect(screen.getByRole("status")).not.toHaveTextContent(/names .* differ/);
+  });
+
+  it("warns when the names on the two onboardings differ", async () => {
+    create.mockResolvedValueOnce({
+      ok: true,
+      sessionId: "s9",
+      url: "https://app.example.com/lp/tok-abc",
+      carried: [{ kind: "identity", checkedAt: "2026-07-24T00:00:00Z", expiresAt: "2027-07-24T00:00:00Z", namesMatch: false }],
+    });
+    openForm();
+    fill();
+    await make();
+    expect(screen.getByRole("status")).toHaveTextContent(/names on the two onboardings differ/);
   });
 
   it("starts over for another LP", async () => {

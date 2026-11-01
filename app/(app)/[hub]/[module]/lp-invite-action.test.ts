@@ -34,7 +34,7 @@ jest.mock("@/lib/lp-audit.server", () => ({ recordAudit: (...a: unknown[]) => re
 const audited = () => recordAudit.mock.calls.map((c) => c[1] as Record<string, unknown>);
 
 const carryForward = jest.fn(async (..._a: unknown[]) => []);
-jest.mock("@/lib/lp-reuse.server", () => ({ carryForwardChecks: (...a: unknown[]) => carryForward(...a) }));
+jest.mock("@/lib/lp-reuse.server", () => ({ proposeCarryover: (...a: unknown[]) => carryForward(...a) }));
 
 import { createLpInviteAction } from "./actions";
 
@@ -91,7 +91,7 @@ describe("who may send an invite (the session holds the LP's email and link toke
 describe("a returning LP invited from an allocator's page", () => {
   it("keeps their earlier ID verification, as for a link made in Run › Onboarding", async () => {
     await createLpInviteAction(form());
-    expect(carryForward).toHaveBeenCalledWith({ service: true }, { orgId: "org-1", sessionId: "s9", email: "ops@calpers.ca.gov" });
+    expect(carryForward).toHaveBeenCalledWith({ service: true }, { orgId: "org-1", sessionId: "s9", email: "ops@calpers.ca.gov", lpName: "Calpers" });
   });
 
   it("records who sent the invite and from where, without the name or address", async () => {

@@ -1,4 +1,4 @@
-import { REUSABLE_CHECK_KINDS, REUSE_WINDOW_DAYS, escapeLike, normalizeEmail, reusableChecks, type PriorCheck, type PriorSession } from "./lp-reuse";
+import { REUSABLE_CHECK_KINDS, REUSE_WINDOW_DAYS, canConfirmCarryover, escapeLike, namesMatch, normalizeEmail, reusableChecks, type PriorCheck, type PriorSession } from "./lp-reuse";
 
 const DAY = 86_400_000;
 const NOW = Date.parse("2026-11-01T12:00:00Z");
@@ -105,5 +105,31 @@ describe("email helpers", () => {
   it("escapes LIKE wildcards so an address can't match a different one", () => {
     expect(escapeLike("a_b%c\\d@x.com")).toBe("a\\_b\\%c\\\\d@x.com");
     expect(escapeLike("plain@x.com")).toBe("plain@x.com");
+  });
+});
+
+describe("namesMatch", () => {
+  it("ignores case, accents, punctuation and word order", () => {
+    expect(namesMatch("Jo Bloggs", "  jo   BLOGGS ")).toBe(true);
+    expect(namesMatch("José Núñez", "Jose Nunez")).toBe(true);
+    expect(namesMatch("Bloggs, Jo", "Jo Bloggs")).toBe(true);
+    expect(namesMatch("Acme Capital, L.P.", "ACME CAPITAL LP")).toBe(true);
+  });
+  it("calls different names different, and never matches an empty name", () => {
+    expect(namesMatch("Jo Bloggs", "Joe Bloggs")).toBe(false);
+    expect(namesMatch("Jo Bloggs", "Jo Smith")).toBe(false);
+    expect(namesMatch("", "")).toBe(false);
+    expect(namesMatch(null, "Jo")).toBe(false);
+  });
+});
+
+describe("canConfirmCarryover", () => {
+  const future = new Date(Date.now() + 86_400_000).toISOString();
+  const past = new Date(Date.now() - 86_400_000).toISOString();
+  it("allows only an open proposal that has not lapsed", () => {
+    expect(canConfirmCarryover({ status: "proposed", expires_at: future }, Date.now())).toBe(true);
+    expect(canConfirmCarryover({ status: "proposed", expires_at: past }, Date.now())).toBe(false);
+    expect(canConfirmCarryover({ status: "confirmed", expires_at: future }, Date.now())).toBe(false);
+    expect(canConfirmCarryover({ status: "declined", expires_at: future }, Date.now())).toBe(false);
   });
 });

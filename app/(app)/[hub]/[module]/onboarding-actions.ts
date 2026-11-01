@@ -13,6 +13,7 @@ import type { LpReviewState } from "@/lib/supabase/database.types";
 import { refreshIdentityCheck } from "@/lib/lp-identity.server";
 import { runOfacScreen } from "@/lib/ofac.server";
 import { recordAudit } from "@/lib/lp-audit.server";
+import { decideCarryover, type DecideOutcome } from "@/lib/lp-reuse.server";
 import {
   approvalBlocker,
   availableDecisions,
@@ -203,5 +204,50 @@ export async function runOfacScreenAction(
   } catch (err) {
     console.error("runOfacScreenAction threw", err);
     return { ok: false, error: GENERIC };
+  }
+}
+
+const CARRYOVER_MESSAGE: Record<DecideOutcome, { ok: boolean; text: string }> = {
+  confirmed: { ok: true, text: "Confirmed. The earlier ID check now counts, dated as it was." },
+  declined: { ok: true, text: "Declined. The LP will verify their ID again." },
+  not_found: { ok: false, text: "There is nothing waiting to confirm for this LP." },
+  expired: { ok: false, text: "That earlier ID check has expired, so it can't be reused. The LP will verify again." },
+  already_has_check: { ok: false, text: "This LP already has an ID check of their own, so the earlier one wasn't needed." },
+  error: { ok: false, text: GENERIC },
+};
+
+/**
+ * A returning LP's earlier ID check is only a proposal until a person confirms it
+ * is the same individual (SOC 2 gap G-9). Owner/admin only; the LP must be this
+ * organization's. Confirming writes the clear check; declining leaves the LP to
+ * verify for themselves. Either way it is recorded in the activity log.
+ */
+export async function decideCarryoverAction(sessionId: unknown, decision: unknown): Promise<{ ok: boolean; message: string }> {
+  const who = await authorize();
+  if (!who.ok) return { ok: false, message: who.error };
+  if (typeof sessionId !== "string" || !sessionId) return { ok: false, message: "That LP wasn't found." };
+  if (decision !== "confirm" && decision !== "decline") return { ok: false, message: GENERIC };
+  try {
+    const supabase = await createServerClient();
+    if (!(await sessionStage(supabase, sessionId, who.ctx.orgId))) return { ok: false, message: "That LP wasn't found." };
+    if (!hasSupabaseServiceEnv()) return { ok: false, message: GENERIC };
+    const service = createServiceClient();
+    const outcome = await decideCarryover(service, { orgId: who.ctx.orgId, sessionId, decision, actorId: who.ctx.userId });
+    if (outcome === "confirmed" || outcome === "declined") {
+      await recordAudit(service, {
+        orgId: who.ctx.orgId,
+        sessionId,
+        action: outcome === "confirmed" ? "carryover.confirmed" : "carryover.declined",
+        actorKind: "user",
+        actorId: who.ctx.userId,
+        detail: { kind: "identity" },
+      });
+      revalidatePath(PAGE);
+    }
+    const m = CARRYOVER_MESSAGE[outcome];
+    return { ok: m.ok, message: m.text };
+  } catch (err) {
+    console.error("decideCarryoverAction threw", err);
+    return { ok: false, message: GENERIC };
   }
 }

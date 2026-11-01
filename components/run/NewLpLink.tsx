@@ -25,7 +25,7 @@ export function NewLpLink({ funds }: { funds: { id: string; name: string }[] }) 
   const [fundId, setFundId] = useState("");
   const [commitment, setCommitment] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const [made, setMade] = useState<{ sessionId: string; url: string; carried: Array<{ kind: string; checkedAt: string; expiresAt: string }> } | null>(null);
+  const [made, setMade] = useState<{ sessionId: string; url: string; carried: Array<{ kind: string; checkedAt: string; expiresAt: string; namesMatch?: boolean }> } | null>(null);
   const [note, setNote] = useState<{ tone: "ok" | "error"; text: string } | null>(null);
   const [copied, setCopied] = useState(false);
   const [pending, startTransition] = useTransition();
@@ -103,10 +103,11 @@ export function NewLpLink({ funds }: { funds: { id: string; name: string }[] }) 
             Send this link to {lpName}. They&apos;ll confirm it&apos;s them with a code we email, then complete the setup. It works for {LINK_TTL_DAYS} days.
           </p>
           {made.carried.some((c) => c.kind === "identity") ? (
-            <p role="status" className="text-sm text-emerald-300">
-              {lpName} was approved before, so their ID verification of{" "}
-              {new Date(made.carried.find((c) => c.kind === "identity")!.checkedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}{" "}
-              carries over and they won&apos;t repeat it. Screening and accreditation still run again.
+            <p role="status" className="text-sm text-amber-300">
+              {lpName} was approved before, with an ID check of{" "}
+              {new Date(made.carried.find((c) => c.kind === "identity")!.checkedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}.
+              It is not used yet: open their card below and confirm it is the same person. Until you do, they&apos;ll verify their ID themselves.
+              {made.carried.find((c) => c.kind === "identity")!.namesMatch === false ? " The names on the two onboardings differ." : ""}
             </p>
           ) : null}
           <p className="break-all rounded-lg border border-line bg-surface-0 px-3 py-2 font-mono text-[11px] text-fg-primary">{made.url}</p>

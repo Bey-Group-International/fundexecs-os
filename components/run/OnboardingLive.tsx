@@ -76,7 +76,7 @@ async function loadFunds(orgId: string): Promise<{ id: string; name: string }[]>
 async function loadLps(orgId: string): Promise<ReviewLp[]> {
   try {
     const supabase = await createServerClient();
-    const [sessionsRes, checksRes, decisionsRes, auditRes, profilesRes, ownersRes, consentsRes] = await Promise.all([
+    const [sessionsRes, checksRes, decisionsRes, auditRes, profilesRes, ownersRes, consentsRes, carryoverRes] = await Promise.all([
       supabase
         .from("lp_onboarding_sessions")
         .select("id, lp_name, lp_email, status, review_state, lp_type, owner_threshold_pct, token, expires_at, reminded_day3_at, reminded_day6_at")
@@ -88,7 +88,12 @@ async function loadLps(orgId: string): Promise<ReviewLp[]> {
       supabase.from("lp_onboarding_profiles").select("*").eq("organization_id", orgId),
       supabase.from("lp_onboarding_owners").select("*").eq("organization_id", orgId).order("created_at", { ascending: true }),
       supabase.from("lp_onboarding_consents").select("*").eq("organization_id", orgId).order("consented_at", { ascending: true }),
+      // Earlier ID checks waiting for a person to confirm they are the same individual.
+      supabase.from("lp_identity_carryover").select("session_id, prior_name, names_match, checked_at, expires_at, method").eq("organization_id", orgId).eq("status", "proposed"),
     ]);
+    const carryovers = new Map(
+      ((carryoverRes?.data ?? []) as Array<{ session_id: string; prior_name: string | null; names_match: boolean; checked_at: string; expires_at: string; method: string }>).map((c) => [c.session_id, c]),
+    );
 
     const checks = groupBy((checksRes.data ?? []) as OnboardingCheck[]);
     const decisions = groupBy((decisionsRes.data ?? []) as OnboardingDecision[]);
@@ -98,6 +103,15 @@ async function loadLps(orgId: string): Promise<ReviewLp[]> {
     const consents = groupBy((consentsRes.data ?? []) as LpOnboardingConsent[]);
 
     return ((sessionsRes.data ?? []) as SessionRow[]).map((s) => ({
+      carryover: carryovers.has(s.id)
+        ? {
+            priorName: carryovers.get(s.id)!.prior_name,
+            namesMatch: carryovers.get(s.id)!.names_match,
+            checkedAt: carryovers.get(s.id)!.checked_at,
+            expiresAt: carryovers.get(s.id)!.expires_at,
+            method: carryovers.get(s.id)!.method,
+          }
+        : null,
       id: s.id,
       lpName: s.lp_name,
       lpEmail: s.lp_email,

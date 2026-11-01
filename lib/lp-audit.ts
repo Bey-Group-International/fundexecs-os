@@ -26,6 +26,12 @@ export const AUDIT_ACTIONS = [
   "check.screen_run",
   /** A fund manager asked for the ID verification result to be refreshed. */
   "check.refreshed",
+  /** An earlier ID check was found for a returning LP and put to a fund manager to confirm. */
+  "carryover.proposed",
+  /** A fund manager confirmed it is the same person; the earlier check now counts. */
+  "carryover.confirmed",
+  /** A fund manager declined it; the LP verifies again. */
+  "carryover.declined",
 ] as const;
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];
 

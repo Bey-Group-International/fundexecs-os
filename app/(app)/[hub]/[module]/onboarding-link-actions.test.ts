@@ -44,7 +44,7 @@ const audited = () => recordAudit.mock.calls.map((c) => c[1] as Record<string, u
 
 let carryResult: unknown[] = [];
 const carryForward = jest.fn(async (..._a: unknown[]) => carryResult);
-jest.mock("@/lib/lp-reuse.server", () => ({ carryForwardChecks: (...a: unknown[]) => carryForward(...a) }));
+jest.mock("@/lib/lp-reuse.server", () => ({ proposeCarryover: (...a: unknown[]) => carryForward(...a) }));
 
 import { createLpLinkAction, emailLpLinkAction, generateAccessCodeAction } from "./onboarding-link-actions";
 
@@ -110,7 +110,7 @@ describe("createLpLinkAction", () => {
     carryResult = [{ kind: "identity", checkedAt: "2026-07-24T00:00:00Z", expiresAt: "2027-07-24T00:00:00Z" }];
     const res = await createLpLinkAction(link);
     expect(res).toMatchObject({ ok: true, carried: carryResult });
-    expect(carryForward).toHaveBeenCalledWith({ service: true }, { orgId: "org-1", sessionId: "s9", email: "ops@calpers.ca.gov" });
+    expect(carryForward).toHaveBeenCalledWith({ service: true }, { orgId: "org-1", sessionId: "s9", email: "ops@calpers.ca.gov", lpName: "Calpers" });
   });
 
   it("does not look for an earlier onboarding when the link wasn't made", async () => {

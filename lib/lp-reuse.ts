@@ -1,6 +1,12 @@
 // lib/lp-reuse.ts
-// When a returning LP is sent a new link, what from their last onboarding may
-// carry over so they don't repeat it. Pure, so the rules are tested on their own.
+// When a returning LP is sent a new link, what from their last onboarding MAY be
+// reused so they don't repeat it. Pure, so the rules are tested on their own.
+//
+// NOTHING IS REUSED UNTIL A PERSON CONFIRMS IT (SOC 2 gap G-9). The email address
+// is only a hint that this might be the same person: it can change hands, or be
+// mistyped into someone else's. So these rules produce a PROPOSAL, shown to the
+// fund manager beside the earlier onboarding's name; only their confirmation
+// writes the check (lib/lp-reuse.server.ts).
 //
 // WHAT CARRIES OVER: the government-ID check only. It records who a person IS,
 // which doesn't change between onboardings.
@@ -27,6 +33,8 @@ const SUMMARY_MAX = 500;
 export interface PriorSession {
   id: string;
   review_state: string;
+  /** The name on that onboarding, so a person can compare it with the new one. */
+  lp_name?: string | null;
 }
 
 export interface PriorCheck {
@@ -51,6 +59,8 @@ export interface CarriedCheck {
   /** The earlier of the original expiry and a year after it was cleared. */
   expires_at: string;
   fromSessionId: string;
+  /** The name on the onboarding it came from, if known. */
+  fromName: string | null;
 }
 
 const day = (iso: string) => new Date(iso).toISOString().slice(0, 10);
@@ -85,6 +95,7 @@ export function reusableChecks(sessions: PriorSession[], checks: PriorCheck[], n
         checked_at: c.checked_at,
         expires_at: new Date(expiry).toISOString(),
         fromSessionId: c.session_id,
+        fromName: sessions.find((x) => x.id === c.session_id)?.lp_name ?? null,
       };
     }
     if (best) out.push(best);
@@ -98,4 +109,39 @@ export const normalizeEmail = (email: unknown): string => (typeof email === "str
 /** Escapes % _ and \ so an email can't act as a pattern in a LIKE comparison. */
 export function escapeLike(value: string): string {
   return value.replace(/[\\%_]/g, (ch) => `\\${ch}`);
+}
+
+/** A name as compared: trimmed, lower-cased, accents and punctuation dropped, spaces collapsed. */
+export function normalizeName(name: unknown): string {
+  if (typeof name !== "string") return "";
+  return name
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    // Dots and apostrophes vanish ("L.P." is "LP", "O'Brien" is "OBrien"); other punctuation separates words.
+    .replace(/[.'\u2019]/g, "")
+    .replace(/[^a-z0-9\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/**
+ * Whether two onboardings name the same party, ignoring case, accents, punctuation
+ * and word order. It only SETS EXPECTATIONS for the person confirming ("names
+ * differ") and never decides anything; a nickname or a re-registered entity will
+ * read as different, and that is the right side to err on.
+ */
+export function namesMatch(a: unknown, b: unknown): boolean {
+  const x = normalizeName(a);
+  const y = normalizeName(b);
+  if (!x || !y) return false;
+  if (x === y) return true;
+  return [...x.split(" ")].sort().join(" ") === [...y.split(" ")].sort().join(" ");
+}
+
+export type CarryoverStatus = "proposed" | "confirmed" | "declined";
+
+/** Whether a proposal can still be confirmed: it is open, and the check has not lapsed since. */
+export function canConfirmCarryover(p: { status: string; expires_at: string }, now: number): boolean {
+  return p.status === "proposed" && new Date(p.expires_at).getTime() > now;
 }

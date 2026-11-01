@@ -11,7 +11,7 @@ import { escapeHtml, sendEmail } from "@/lib/email";
 import { getAppUrl } from "@/lib/integrations/adapters/app-url";
 import { issueCode } from "@/lib/lp-access.server";
 import { recordAudit } from "@/lib/lp-audit.server";
-import { carryForwardChecks, type CarriedSummary } from "@/lib/lp-reuse.server";
+import { proposeCarryover, type CarriedSummary } from "@/lib/lp-reuse.server";
 import { LINK_TTL_DAYS, validateLinkInput } from "@/lib/lp-wizard";
 
 const PAGE = "/run/onboarding";
@@ -66,9 +66,9 @@ export async function createLpLinkAction(input: unknown): Promise<CreateLinkResu
       console.error("createLpLinkAction failed", { code: error?.code, message: error?.message });
       return { ok: false, error: GENERIC };
     }
-    // A returning LP keeps their earlier ID verification. Best-effort: it never fails the link.
+    // A returning LP's earlier ID verification is found and put to a fund manager to confirm; nothing is reused until they do. Best-effort: it never fails the link.
     const service = hasSupabaseServiceEnv() ? createServiceClient() : null;
-    const carried = service ? await carryForwardChecks(service, { orgId: who.ctx.orgId, sessionId: row.id, email: v.lpEmail }) : [];
+    const carried = service ? await proposeCarryover(service, { orgId: who.ctx.orgId, sessionId: row.id, email: v.lpEmail, lpName: v.lpName }) : [];
     // Who made the link. Best-effort: the link exists either way.
     if (service) {
       await recordAudit(service, {
