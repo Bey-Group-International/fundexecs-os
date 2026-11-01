@@ -3,9 +3,10 @@
 jest.mock("next/cache", () => ({ revalidatePath: jest.fn() }));
 jest.mock("next/navigation", () => ({ redirect: jest.fn() }));
 
+let role: string | null = "admin";
 jest.mock("@/lib/auth", () => ({
   getSessionContext: jest.fn(),
-  requireOrgContext: async () => ({ ok: true, ctx: { orgId: "org-1", userId: "user-1", role: "admin" } }),
+  requireOrgContext: async () => ({ ok: true, ctx: { orgId: "org-1", userId: "user-1", role } }),
 }));
 
 let inserted: Record<string, unknown> | null = null;
@@ -45,6 +46,7 @@ const form = () => {
 };
 
 beforeEach(() => {
+  role = "admin";
   inserted = null;
   serviceEnv = true;
   dispatch.mockClear();
@@ -68,6 +70,21 @@ describe("createLpInviteAction", () => {
     expect(body).toContain("expires in 7 days");
     expect(body).toContain("code we email you");
     expect(body).not.toContain("30 days");
+  });
+});
+
+describe("who may send an invite (the session holds the LP's email and link token)", () => {
+  it.each(["owner", "admin"])("lets an %s", async (r) => {
+    role = r;
+    expect(await createLpInviteAction(form())).toMatchObject({ ok: true });
+  });
+
+  it.each(["member", "viewer", null])("refuses a %s, before anything is written or sent", async (r) => {
+    role = r;
+    expect(await createLpInviteAction(form())).toEqual({ error: "Only organization owners and admins can invite LPs." });
+    expect(inserted).toBeNull();
+    expect(dispatch).not.toHaveBeenCalled();
+    expect(recordAudit).not.toHaveBeenCalled();
   });
 });
 

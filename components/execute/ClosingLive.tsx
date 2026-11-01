@@ -1,13 +1,18 @@
 // components/execute/ClosingLive.tsx
 // Execute › Closing — live data wiring for the LP Onboarding + Contract
 // Lifecycle boards. Server component: resolves org context, reads the
-// lp_onboarding_sessions and contracts tables (RLS-enforced, request-scoped
-// client), resolves fund/investor names, and maps each row onto the shape the
-// presentational boards expect. Every read is best-effort — any failure (no
+// LP sessions and contracts (RLS-enforced, request-scoped client), resolves
+// fund/investor names, and maps each row onto the shape the presentational
+// boards expect.
+//
+// LP sessions carry the LP's email and link token, so only owners and admins
+// read the table. Everyone else reads lp_onboarding_session_overview, which
+// has the same board without either (SOC 2 gap G-6). Every read is best-effort — any failure (no
 // org, query error, exception) degrades to an empty board rather than throwing,
 // so the closing page always renders its existing empty states.
 import { createServerClient } from "@/lib/supabase/server";
 import { getSessionContext } from "@/lib/auth";
+import { canAdminOrg } from "@/lib/rbac";
 import { LPOnboardingStatus } from "@/components/execute/LPOnboardingStatus";
 import { ContractStatusBoard } from "@/components/execute/ContractStatusBoard";
 import type { OnboardingStatus } from "@/lib/lp-onboarding";
@@ -19,13 +24,17 @@ import type { ContractStatus, DocumentType } from "@/lib/contracts";
 interface OnboardingSessionRow {
   id: string;
   lp_name: string;
-  lp_email: string;
+  /** Not in the overview a non-admin reads. */
+  lp_email?: string;
   status: OnboardingStatus;
   fund_id: string | null;
   commitment_amount: number | null;
   expires_at: string;
-  token: string;
 }
+
+/** What the board needs; the link token is not one of them. */
+export const CLOSING_ADMIN_COLUMNS = "id, lp_name, lp_email, status, fund_id, commitment_amount, expires_at";
+export const CLOSING_MEMBER_COLUMNS = "id, lp_name, status, fund_id, commitment_amount, expires_at";
 
 interface ContractRow {
   id: string;
@@ -43,12 +52,11 @@ interface ContractRow {
 interface OnboardingSessionProp {
   id: string;
   lpName: string;
-  lpEmail: string;
+  lpEmail?: string;
   status: OnboardingStatus;
   fundName?: string;
   commitmentAmount?: number | null;
   expiresAt: string;
-  token: string;
 }
 
 interface ContractProp {
@@ -78,13 +86,13 @@ async function loadClosingData(): Promise<ClosingData> {
     const orgId = ctx.orgId;
 
     const supabase = await createServerClient();
+    const isAdmin = canAdminOrg(ctx.role);
 
     const [sessionsRes, contractsRes, fundsRes, investorsRes] = await Promise.all([
+      // The overview isn't in the generated types; read it untyped.
       supabase
-        .from("lp_onboarding_sessions")
-        .select(
-          "id, lp_name, lp_email, status, fund_id, commitment_amount, expires_at, token",
-        )
+        .from((isAdmin ? "lp_onboarding_sessions" : "lp_onboarding_session_overview") as never)
+        .select(isAdmin ? CLOSING_ADMIN_COLUMNS : CLOSING_MEMBER_COLUMNS)
         .eq("organization_id", orgId)
         .order("created_at", { ascending: false }),
       supabase
@@ -111,12 +119,11 @@ async function loadClosingData(): Promise<ClosingData> {
     const sessions: OnboardingSessionProp[] = sessionRows.map((r) => ({
       id: r.id,
       lpName: r.lp_name,
-      lpEmail: r.lp_email,
+      ...(r.lp_email ? { lpEmail: r.lp_email } : {}),
       status: r.status,
       fundName: (r.fund_id ? fundName.get(r.fund_id) : undefined) ?? undefined,
       commitmentAmount: r.commitment_amount,
       expiresAt: r.expires_at,
-      token: r.token,
     }));
 
     const contracts: ContractProp[] = contractRows.map((r) => ({
