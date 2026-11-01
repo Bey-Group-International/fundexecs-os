@@ -2779,6 +2779,19 @@ export type EarnExplanation = {
   created_at: string;
 };
 
+// A team member with no FundExecs login (supabase/migrations
+// 20261101120000_team_profiles). Not a seat; never in organization_members.
+export type TeamProfile = Timestamps & {
+  id: string;
+  organization_id: string;
+  full_name: string;
+  title: string | null;
+  email: string | null;
+  bio: string | null;
+  avatar_url: string | null;
+  created_by: string | null;
+};
+
 type TableShape<Row> = {
   Row: Row;
   Insert: Partial<Row>;
@@ -3451,6 +3464,7 @@ export type Database = {
       prompts: TableShape<Prompt>;
       tasks: TableShape<Task>;
       team_tasks: TableShape<TeamTask>;
+      team_profiles: TableShape<TeamProfile>;
       task_handoffs: TableShape<TaskHandoff>;
       approvals: TableShape<Approval>;
       task_events: TableShape<TaskEvent>;

@@ -34,11 +34,31 @@ function isAdmin(role: MemberRole | null): boolean {
  * that the target is actually a member of the caller's org -- an admin of org A
  * must not be able to rewrite a principal in org B by id.
  */
+type Target = { orgId: string; targetId: string; isSelf: boolean; profileId?: string };
+
 async function resolveTarget(
   formData: FormData,
-): Promise<{ orgId: string; targetId: string; isSelf: boolean } | { error: string }> {
+): Promise<Target | { error: string }> {
   const ctx = await getSessionContext();
   if (!ctx?.orgId) return { error: "No active organization." };
+
+  // A no-login team profile (Build > Team). Admin only, and the profile must
+  // belong to the caller's org -- the same cross-org guard as a member below.
+  const profileId = String(formData.get("team_profile_id") ?? "").trim();
+  if (profileId) {
+    if (!isAdmin(ctx.role)) {
+      return { error: "Only admins and owners can change a team profile's photo." };
+    }
+    const supabase = await createServerClient();
+    const { data: profile } = await supabase
+      .from("team_profiles")
+      .select("id")
+      .eq("organization_id", ctx.orgId)
+      .eq("id", profileId)
+      .maybeSingle();
+    if (!profile) return { error: "That team profile was not found." };
+    return { orgId: ctx.orgId, targetId: profileId, isSelf: false, profileId };
+  }
 
   const requested = String(formData.get("principal_id") ?? "").trim();
   if (!requested || requested === ctx.userId) {
@@ -64,7 +84,16 @@ async function resolveTarget(
 // Writing another principal's row needs the service client -- `principals`
 // RLS is self-only (principals_update_self, 0010_rls). Only ever reached after
 // the admin guard in resolveTarget.
-async function writeAvatarUrl(targetId: string, isSelf: boolean, value: string | null) {
+async function writeAvatarUrl(target: Target, value: string | null) {
+  const { targetId, isSelf } = target;
+  if (target.profileId) {
+    // Admin-gated by RLS (team_profiles_update), so the user client is enough.
+    const supabase = await createServerClient();
+    return supabase
+      .from("team_profiles")
+      .update({ avatar_url: value, updated_at: new Date().toISOString() })
+      .eq("id", targetId);
+  }
   const db = isSelf ? await createServerClient() : createServiceClient();
   return db
     .from("principals")
@@ -96,7 +125,7 @@ export async function uploadAvatar(formData: FormData): Promise<{ error?: string
   }
 
   const supabase = await createServerClient();
-  const path = avatarObjectPath(target.orgId, target.targetId);
+  const path = avatarObjectPath(target.orgId, target.targetId, Boolean(target.profileId));
 
   // Deterministic path + upsert: one object per member, replaced in place, so a
   // re-upload can never leave an orphan behind.
@@ -112,7 +141,7 @@ export async function uploadAvatar(formData: FormData): Promise<{ error?: string
   const url = publicUrl?.publicUrl ?? null;
   if (!url) return { error: "Could not upload that photo. Please try again." };
 
-  const { error: dbError } = await writeAvatarUrl(target.targetId, target.isSelf, url);
+  const { error: dbError } = await writeAvatarUrl(target, url);
   if (dbError) {
     console.error("[uploadAvatar]", dbError.message);
     return { error: "Photo uploaded, but the profile could not be saved. Please try again." };
@@ -130,7 +159,7 @@ export async function removeAvatar(formData: FormData): Promise<{ error?: string
   const target = await resolveTarget(formData);
   if ("error" in target) return { error: target.error };
 
-  const { error: dbError } = await writeAvatarUrl(target.targetId, target.isSelf, null);
+  const { error: dbError } = await writeAvatarUrl(target, null);
   if (dbError) {
     console.error("[removeAvatar]", dbError.message);
     return { error: "Could not remove that photo. Please try again." };
@@ -141,7 +170,7 @@ export async function removeAvatar(formData: FormData): Promise<{ error?: string
   const supabase = await createServerClient();
   const { error: storageError } = await supabase.storage
     .from(MEMBER_AVATAR_BUCKET)
-    .remove([avatarObjectPath(target.orgId, target.targetId)]);
+    .remove([avatarObjectPath(target.orgId, target.targetId, Boolean(target.profileId))]);
   if (storageError) console.warn("[removeAvatar] storage", storageError.message);
 
   for (const p of REVALIDATE_PATHS) revalidatePath(p);

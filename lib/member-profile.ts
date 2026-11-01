@@ -16,3 +16,14 @@ export function normalizeBio(raw: unknown): string | null {
   if (!text) return null;
   return text.slice(0, MAX_BIO_LENGTH);
 }
+
+/**
+ * Normalize an optional email: trim, lowercase, and require a plausible shape.
+ * Returns null for empty or malformed input so the caller can tell the two
+ * apart by checking whether anything was submitted.
+ */
+export function normalizeEmail(raw: unknown): string | null {
+  const email = String(raw ?? "").trim().toLowerCase();
+  if (!email || email.length > 254) return null;
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ? email : null;
+}
