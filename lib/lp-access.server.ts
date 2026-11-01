@@ -25,13 +25,64 @@ import {
 
 type Client = SupabaseClient<Database>;
 
-/** Keyed from the service-role key, like the data room's gate pass, so nothing new needs provisioning. */
-function secret(label: string): string {
-  return createHmac("sha256", label).update(process.env.SUPABASE_SERVICE_ROLE_KEY ?? "").digest("hex");
+/**
+ * What codes and passes are signed with.
+ *
+ * LP_ACCESS_SECRET is a key kept for this one job. Until it is set the service-role
+ * key is used instead, so deploying this changes nothing by itself; the fallback is
+ * the weakness SOC 2 gap G-5 describes (whoever holds that key can forge a pass, and
+ * rotating it silently invalidates every open code and pass). Once the dedicated key
+ * is set, the service-role key is no longer accepted for anything here.
+ *
+ * Rotating: put the old value in LP_ACCESS_SECRET_PREVIOUS and the new one in
+ * LP_ACCESS_SECRET. New codes and passes use the new key; ones made under the old
+ * key still verify until they expire (15 minutes for a code, 6 hours for a pass),
+ * then remove the old one. A key shorter than 32 characters is ignored, not used.
+ *
+ * With no usable key at all, nothing is signed and nothing verifies: an empty key
+ * would let anyone mint a pass.
+ */
+export const MIN_ACCESS_SECRET_LENGTH = 32;
+
+function usable(v: string | undefined): string | null {
+  const t = (v ?? "").trim();
+  return t.length >= MIN_ACCESS_SECRET_LENGTH ? t : null;
 }
 
+/** Key material, signing key first. */
+function keyMaterial(): string[] {
+  const current = usable(process.env.LP_ACCESS_SECRET);
+  if (current) {
+    const previous = usable(process.env.LP_ACCESS_SECRET_PREVIOUS);
+    return previous && previous !== current ? [current, previous] : [current];
+  }
+  const fallback = (process.env.SUPABASE_SERVICE_ROLE_KEY ?? "").trim();
+  return fallback ? [fallback] : [];
+}
+
+function secretFrom(label: string, material: string): string {
+  return createHmac("sha256", label).update(material).digest("hex");
+}
+
+/** Every key a signature might have been made with, signing key first. */
+function secrets(label: string): string[] {
+  return keyMaterial().map((m) => secretFrom(label, m));
+}
+
+function signingSecret(label: string): string {
+  const [first] = secrets(label);
+  if (!first) throw new Error("No key is configured for LP access codes (set LP_ACCESS_SECRET)");
+  return first;
+}
+
+/** What is stored for a code. Always under the signing key. */
 export function hashCode(sessionId: string, code: string): string {
-  return createHmac("sha256", secret("fx-lp-code")).update(`${sessionId}:${code}`).digest("hex");
+  return createHmac("sha256", signingSecret("fx-lp-code")).update(`${sessionId}:${code}`).digest("hex");
+}
+
+/** Whether a stored hash is this code's, under the signing key or the previous one. */
+function codeMatches(sessionId: string, code: string, stored: string): boolean {
+  return secrets("fx-lp-code").some((k) => safeEqual(createHmac("sha256", k).update(`${sessionId}:${code}`).digest("hex"), stored));
 }
 
 function safeEqual(a: string, b: string): boolean {
@@ -142,7 +193,7 @@ export async function verifyCode(
     return { ok: false, error: "Too many wrong codes. Ask for a new one.", reason: "locked" };
   }
 
-  if (!safeEqual(hashCode(session.id, code), row.code_hash)) {
+  if (!codeMatches(session.id, code, row.code_hash)) {
     // Spend the try only if nobody else spent it first, so parallel guesses cannot beat the limit.
     await supabase
       .from("lp_link_codes")
@@ -176,7 +227,7 @@ interface PassPayload {
 
 function signPass(p: PassPayload): string {
   const body = Buffer.from(JSON.stringify(p), "utf8").toString("base64url");
-  const mac = createHmac("sha256", secret("fx-lp-pass")).update(body).digest("base64url");
+  const mac = createHmac("sha256", signingSecret("fx-lp-pass")).update(body).digest("base64url");
   return `${body}.${mac}`;
 }
 
@@ -184,8 +235,9 @@ function readPassValue(value: string, now: number): PassPayload | null {
   const dot = value.lastIndexOf(".");
   if (dot < 0) return null;
   const body = value.slice(0, dot);
-  const mac = createHmac("sha256", secret("fx-lp-pass")).update(body).digest("base64url");
-  if (!safeEqual(value.slice(dot + 1), mac)) return null;
+  const given = value.slice(dot + 1);
+  const ok = secrets("fx-lp-pass").some((k) => safeEqual(given, createHmac("sha256", k).update(body).digest("base64url")));
+  if (!ok) return null;
   try {
     const p = JSON.parse(Buffer.from(body, "base64url").toString("utf8")) as PassPayload;
     if (typeof p.sid !== "string" || typeof p.iat !== "number") return null;
