@@ -9,6 +9,7 @@
 // or after the fund manager asked for changes. Once submitted it is read-only
 // until the fund manager decides.
 import { revalidatePath } from "next/cache";
+import { after } from "next/server";
 import { createServiceClient, hasSupabaseServiceEnv } from "@/lib/supabase/server";
 import { escapeHtml, sendEmail } from "@/lib/email";
 import { getLinkSession, grantLpPass, hasLpPass, issueCode, verifyCode, type LinkSession } from "@/lib/lp-access.server";
@@ -16,6 +17,7 @@ import { getAppUrl } from "@/lib/integrations/adapters/app-url";
 import { stripeIdentityProvider } from "@/lib/providers/stripe-identity";
 import { identityOutcome, type IdentityState } from "@/lib/lp-identity";
 import { readIdentityCheck, refreshIdentityCheck } from "@/lib/lp-identity.server";
+import { runOfacScreen } from "@/lib/ofac.server";
 import {
   ACCREDITATION_BASIS_LABEL,
   CONSENT_TEXT_VERSION,
@@ -389,6 +391,17 @@ export async function submitWizardAction(token: string): Promise<WizardResult> {
       } as never,
       { onConflict: "session_id,kind", ignoreDuplicates: true },
     );
+
+    // Screen the names against OFAC's list once the LP has their answer, so the
+    // download never delays it. Best-effort: the fund manager can run it again
+    // from the sanctions check, and a failure here changes nothing for the LP.
+    try {
+      after(async () => {
+        await runOfacScreen(ctx.supabase, ctx.session.id, ctx.session.organization_id);
+      });
+    } catch (err) {
+      console.error("submitWizardAction could not schedule the OFAC screen", err);
+    }
 
     revalidatePath(`/lp/${token}`);
     revalidatePath("/run/onboarding");

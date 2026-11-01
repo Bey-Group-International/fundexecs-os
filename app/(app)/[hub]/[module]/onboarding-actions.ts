@@ -11,6 +11,7 @@ import { requireOrgAdmin } from "@/lib/rbac";
 import { createServerClient } from "@/lib/supabase/server";
 import type { LpReviewState } from "@/lib/supabase/database.types";
 import { refreshIdentityCheck } from "@/lib/lp-identity.server";
+import { runOfacScreen } from "@/lib/ofac.server";
 import {
   approvalBlocker,
   availableDecisions,
@@ -156,6 +157,31 @@ export async function refreshIdentityCheckAction(sessionId: unknown): Promise<On
     return { ok: true, verified: res.state === "verified" };
   } catch (err) {
     console.error("refreshIdentityCheckAction threw", err);
+    return { ok: false, error: GENERIC };
+  }
+}
+
+/**
+ * Runs the first-pass OFAC screen for an LP: their name, their signatory and
+ * everyone they listed. It flags a possible match on the sanctions check and
+ * never clears it. The automatic screen on submission can be repeated here, for
+ * example after the LP changes their answers or the list is updated.
+ */
+export async function runOfacScreenAction(
+  sessionId: unknown,
+): Promise<OnboardingActionResult & { flagged?: number; screened?: number; wrote?: boolean }> {
+  const who = await authorize();
+  if (!who.ok) return who;
+  if (typeof sessionId !== "string" || !sessionId) return { ok: false, error: "That LP wasn't found." };
+  try {
+    const supabase = await createServerClient();
+    if (!(await sessionStage(supabase, sessionId, who.ctx.orgId))) return { ok: false, error: "That LP wasn't found." };
+    const res = await runOfacScreen(supabase, sessionId, who.ctx.orgId);
+    if (!res.ok) return res;
+    revalidatePath(PAGE);
+    return { ok: true, flagged: res.flagged, screened: res.screened, wrote: res.wrote };
+  } catch (err) {
+    console.error("runOfacScreenAction threw", err);
     return { ok: false, error: GENERIC };
   }
 }

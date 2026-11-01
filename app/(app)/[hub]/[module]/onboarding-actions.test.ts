@@ -41,7 +41,11 @@ let refreshResult: unknown = { ok: true, state: "verified", url: null };
 const refreshIdentity = jest.fn(async (..._a: unknown[]) => refreshResult);
 jest.mock("@/lib/lp-identity.server", () => ({ refreshIdentityCheck: (...a: unknown[]) => refreshIdentity(...a) }));
 
-import { recordOnboardingCheck, recordOnboardingDecision, refreshIdentityCheckAction } from "./onboarding-actions";
+let ofacResult: unknown = { ok: true, flagged: 0, screened: 2, wrote: true };
+const runOfac = jest.fn(async (..._a: unknown[]) => ofacResult);
+jest.mock("@/lib/ofac.server", () => ({ runOfacScreen: (...a: unknown[]) => runOfac(...a) }));
+
+import { recordOnboardingCheck, recordOnboardingDecision, refreshIdentityCheckAction, runOfacScreenAction } from "./onboarding-actions";
 
 const allClear = () =>
   ["identity", "sanctions", "pep", "adverse_media", "accreditation"].map((kind) => ({ kind, status: "clear", expires_at: null }));
@@ -66,6 +70,7 @@ describe.each([
   ["recordOnboardingCheck", () => recordOnboardingCheck(check)],
   ["recordOnboardingDecision", () => recordOnboardingDecision(decision)],
   ["refreshIdentityCheckAction", () => refreshIdentityCheckAction("s1")],
+  ["runOfacScreenAction", () => runOfacScreenAction("s1")],
 ])("%s access", (_name, call) => {
   it("needs a signed-in member of an organization", async () => {
     auth = { ok: false, status: 401, error: "Not authenticated" };
@@ -240,5 +245,30 @@ describe("refreshIdentityCheckAction", () => {
     expect((await refreshIdentityCheckAction(undefined)).ok).toBe(false);
     expect((await refreshIdentityCheckAction("")).ok).toBe(false);
     expect(refreshIdentity).not.toHaveBeenCalled();
+  });
+});
+
+describe("runOfacScreenAction", () => {
+  beforeEach(() => {
+    ofacResult = { ok: true, flagged: 0, screened: 2, wrote: true };
+    runOfac.mockClear();
+  });
+
+  it("screens this organization's LP and reports what it found", async () => {
+    expect(await runOfacScreenAction("s1")).toEqual({ ok: true, flagged: 0, screened: 2, wrote: true });
+    expect(runOfac).toHaveBeenCalledWith(expect.anything(), "s1", "org-1");
+    ofacResult = { ok: true, flagged: 1, screened: 2, wrote: false };
+    expect(await runOfacScreenAction("s1")).toEqual({ ok: true, flagged: 1, screened: 2, wrote: false });
+  });
+
+  it("passes on a failure to get the list", async () => {
+    ofacResult = { ok: false, error: "Couldn't get OFAC's list just now." };
+    expect(await runOfacScreenAction("s1")).toEqual({ ok: false, error: expect.stringContaining("OFAC's list") });
+  });
+
+  it("refuses a missing id without screening", async () => {
+    expect((await runOfacScreenAction(undefined)).ok).toBe(false);
+    expect((await runOfacScreenAction("")).ok).toBe(false);
+    expect(runOfac).not.toHaveBeenCalled();
   });
 });

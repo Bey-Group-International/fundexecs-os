@@ -1,10 +1,12 @@
 const recordCheck = jest.fn(async (_input: unknown): Promise<{ ok: true } | { ok: false; error: string }> => ({ ok: true }));
 const refreshIdentity = jest.fn(async (_id: string): Promise<{ ok: true; verified?: boolean } | { ok: false; error: string }> => ({ ok: true, verified: true }));
+const runOfac = jest.fn(async (_id: string): Promise<{ ok: true; flagged?: number; screened?: number; wrote?: boolean } | { ok: false; error: string }> => ({ ok: true, flagged: 0, screened: 2, wrote: true }));
 const recordDecision = jest.fn(async (_input: unknown): Promise<{ ok: true } | { ok: false; error: string }> => ({ ok: true }));
 jest.mock("@/app/(app)/[hub]/[module]/onboarding-actions", () => ({
   recordOnboardingCheck: (i: unknown) => recordCheck(i),
   recordOnboardingDecision: (i: unknown) => recordDecision(i),
   refreshIdentityCheckAction: (id: string) => refreshIdentity(id),
+  runOfacScreenAction: (id: string) => runOfac(id),
 }));
 
 const emailLink = jest.fn(async (_id: string): Promise<{ ok: true; sent: boolean } | { ok: false; error: string }> => ({ ok: true, sent: true }));
@@ -46,6 +48,7 @@ const lp = (over: Partial<ReviewLp> = {}): ReviewLp => ({
 const open = () => fireEvent.click(screen.getByRole("button", { name: /Calpers Pension/ }));
 
 beforeEach(() => {
+  runOfac.mockClear();
   refreshIdentity.mockClear();
   emailLink.mockClear();
   makeCode.mockClear();
@@ -345,5 +348,46 @@ describe("an ID check from Stripe Identity", () => {
     open();
     expect(screen.queryByText("Stripe Identity")).toBeNull();
     expect(screen.queryByRole("button", { name: "Refresh Stripe result" })).toBeNull();
+  });
+});
+
+describe("the OFAC first-pass screen on the sanctions check", () => {
+  const run = async () => {
+    render(<OnboardingReview lps={[lp()]} />);
+    open();
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Run OFAC screen" }));
+    });
+  };
+
+  it("is offered on the sanctions check only, and says it flags without clearing", () => {
+    render(<OnboardingReview lps={[lp()]} />);
+    open();
+    expect(screen.getAllByRole("button", { name: "Run OFAC screen" })).toHaveLength(1);
+    expect(screen.getByText(/It flags; it never clears/)).toBeInTheDocument();
+  });
+
+  it("runs the screen for this LP, and says a clean result is not a clearance", async () => {
+    await run();
+    expect(runOfac).toHaveBeenCalledWith("s1");
+    expect(screen.getByText(/No possible match\. This is not a clearance/)).toBeInTheDocument();
+  });
+
+  it("says when names were flagged", async () => {
+    runOfac.mockResolvedValueOnce({ ok: true, flagged: 2, screened: 3, wrote: true });
+    await run();
+    expect(screen.getByRole("alert")).toHaveTextContent("2 possible matches flagged");
+  });
+
+  it("says a result the fund manager recorded was left alone", async () => {
+    runOfac.mockResolvedValueOnce({ ok: true, flagged: 1, screened: 2, wrote: false });
+    await run();
+    expect(screen.getByRole("alert")).toHaveTextContent("your recorded result was left as it is");
+  });
+
+  it("shows why it couldn't run", async () => {
+    runOfac.mockResolvedValueOnce({ ok: false, error: "Couldn't get OFAC's list just now." });
+    await run();
+    expect(screen.getByRole("alert")).toHaveTextContent("Couldn't get OFAC's list");
   });
 });
