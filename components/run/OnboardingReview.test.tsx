@@ -21,6 +21,9 @@ jest.mock("@/app/(app)/[hub]/[module]/onboarding-link-actions", () => ({
 }));
 
 // inputClass comes from a module that also holds server actions; the build tests mock it the same way.
+jest.mock("@/app/(app)/[hub]/[module]/onboarding-erase-actions", () => ({
+  eraseLpAction: jest.fn(async () => ({ ok: true, message: "Erased." })),
+}));
 jest.mock("@/components/build/actions", () => ({}));
 
 import { act, fireEvent, render, screen, within } from "@testing-library/react";

@@ -13,6 +13,7 @@ import {
   refreshIdentityCheckAction,
   runOfacScreenAction,
 } from "@/app/(app)/[hub]/[module]/onboarding-actions";
+import { eraseLpAction } from "@/app/(app)/[hub]/[module]/onboarding-erase-actions";
 import { OnboardingLinkPanel } from "@/components/run/OnboardingLinkPanel";
 import { OnboardingSubmission, type SubmissionView } from "@/components/run/OnboardingSubmission";
 import {
@@ -242,6 +243,48 @@ function CheckRow({ lpId, info, check }: { lpId: string; info: (typeof CHECK_KIN
   );
 }
 
+function EraseLp({ lp }: { lp: ReviewLp }) {
+  const [open, setOpen] = useState(false);
+  const [typed, setTyped] = useState("");
+  const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
+  const [pending, startTransition] = useTransition();
+
+  const erase = () =>
+    startTransition(async () => {
+      setMessage(null);
+      const res = await eraseLpAction(lp.id, typed).catch(() => ({ ok: false, message: "Couldn't erase. Try again." }));
+      setMessage({ ok: res.ok, text: res.message });
+    });
+
+  return (
+    <div className="rounded-lg border border-line bg-surface-0 p-3">
+      <button type="button" onClick={() => setOpen((o) => !o)} className="text-xs text-fg-muted hover:text-fg-secondary">
+        {open ? "Hide" : "Erase this LP's data…"}
+      </button>
+      {open ? (
+        <div className="mt-2 grid gap-2">
+          <p className="text-xs text-fg-muted">
+            Deletes this LP&apos;s details, owners, consents, checks and decisions. It can&apos;t be undone. LPs who are approved,
+            have committed capital or have a flagged result are kept. Type <span className="text-fg-secondary">{lp.lpName}</span> to confirm.
+          </p>
+          <input aria-label="Type the LP's name to confirm" value={typed} onChange={(e) => setTyped(e.target.value)} className={`${inputClass} sm:w-72`} />
+          <button
+            type="button"
+            disabled={pending || typed.trim().length === 0}
+            onClick={erase}
+            className="w-fit rounded-lg border border-red-500/40 bg-red-500/10 px-3 py-1.5 font-mono text-[11px] uppercase tracking-wider text-red-300 transition hover:bg-red-500/20 disabled:opacity-50"
+          >
+            {pending ? "Erasing…" : "Erase"}
+          </button>
+        </div>
+      ) : null}
+      {message ? (
+        <p role={message.ok ? "status" : "alert"} className={`mt-2 text-xs ${message.ok ? "text-emerald-300" : "text-amber-400"}`}>{message.text}</p>
+      ) : null}
+    </div>
+  );
+}
+
 function DecisionForm({ lp, blocker }: { lp: ReviewLp; blocker: string | null }) {
   const options = availableDecisions(lp.reviewState);
   const stageNote = decisionStageNote(lp.reviewState);
@@ -356,6 +399,7 @@ function LpCard({ lp }: { lp: ReviewLp }) {
             <CheckRow key={info.kind} lpId={lp.id} info={info} check={byKind.get(info.kind)} />
           ))}
           <DecisionForm lp={lp} blocker={blocker} />
+          <EraseLp lp={lp} />
 
           {lp.decisions.length ? (
             <div>
