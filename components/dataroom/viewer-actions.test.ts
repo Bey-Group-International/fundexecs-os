@@ -1,4 +1,7 @@
 jest.mock("server-only", () => ({}), { virtual: true });
+// The real gate module is used below, and it now refuses to sign without a key
+// (it used to fall back to an empty one, a secret that is public in the repo).
+process.env.SUPABASE_SERVICE_ROLE_KEY = "test-service-role-key";
 jest.mock("next/headers", () => ({ headers: async () => new Headers(), cookies: async () => ({ get: () => undefined, set: () => undefined }) }));
 
 let shareRow: Record<string, unknown> | null = null;
