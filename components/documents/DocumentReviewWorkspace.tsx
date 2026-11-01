@@ -386,7 +386,7 @@ function SharePanel({ docId, defaults, links }: { docId: string; defaults: Share
             {toggle("requireEmail", "Ask for the reader's email")}
             {toggle("requireNda", "Require NDA before viewing")}
             {toggle("allowDownload", "Allow download (off = view-only)")}
-            {toggle("watermark", "Watermark PDFs with the reader's email")}
+            {toggle("watermark", "Watermark files with the reader's email")}
             {toggle("notifyOnOpen", "Tell me when it's opened")}
           </div>
           {error ? <p className="text-xs text-red-300">{error}</p> : null}

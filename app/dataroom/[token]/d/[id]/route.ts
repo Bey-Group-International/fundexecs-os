@@ -1,13 +1,24 @@
 import { NextResponse } from "next/server";
-import { resolveSharedDocument, watermarkLabel } from "@/lib/data-room-access.server";
+import {
+  resolveSharedDocument,
+  watermarkLabel,
+} from "@/lib/data-room-access.server";
 import {
   DOCUMENT_BUCKET,
   downloadFileName,
   fileExtension,
   isExternalLink,
   isUploadedFile,
+  previewKindFor,
 } from "@/lib/document-files";
 import { signDocumentUrl } from "@/lib/document-storage.server";
+import {
+  MAX_IMAGE_BYTES,
+  MAX_TEXT_BYTES,
+  watermarkImage,
+  watermarkPlan,
+  watermarkText,
+} from "@/lib/file-watermark.server";
 import { MAX_WATERMARK_BYTES, watermarkPdf } from "@/lib/pdf-watermark.server";
 import { checkRateLimit, clientIp, rateLimitHeaders } from "@/lib/rate-limit";
 
@@ -23,7 +34,10 @@ function safeHref(url: string | null): string | null {
 function refuse(message: string, status: number): Response {
   return new NextResponse(message, {
     status,
-    headers: { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-store" },
+    headers: {
+      "Content-Type": "text/plain; charset=utf-8",
+      "Cache-Control": "no-store",
+    },
   });
 }
 
@@ -40,9 +54,16 @@ function refuse(message: string, status: number): Response {
 //   (neither)    — open in a new tab. On a view-only link this goes back to the
 //                  viewer instead of handing out the raw file.
 //
-// A watermarked link never hands out a signed Storage URL for a PDF: the bytes
-// are stamped here and streamed, so there is no unmarked copy to intercept.
-export async function GET(req: Request, props: { params: Promise<{ token: string; id: string }> }) {
+// A watermarked link never hands out a signed Storage URL for a file it can mark
+// (PDF, image, .txt/.md): the bytes are stamped here and streamed, so there is no
+// unmarked copy to intercept. A file it cannot mark (Office, CSV, RTF, video) is
+// not handed out as bytes either: it is read in the viewer, which draws the
+// reader's label over it. Video is the one exception, served to the viewer's own
+// player (?embed=1) because it cannot be read any other way.
+export async function GET(
+  req: Request,
+  props: { params: Promise<{ token: string; id: string }> },
+) {
   const params = await props.params;
   const url = new URL(req.url);
   const roomUrl = new URL(`/dataroom/${params.token}`, req.url);
@@ -62,7 +83,11 @@ export async function GET(req: Request, props: { params: Promise<{ token: string
   if (!access.ok) {
     // "We couldn't check" is not "you may not have this": a redirect to the room
     // would send a reader with a good link round in a circle during an outage.
-    if (access.unavailable) return refuse("This document is temporarily unavailable. Please try again.", 503);
+    if (access.unavailable)
+      return refuse(
+        "This document is temporarily unavailable. Please try again.",
+        503,
+      );
     return NextResponse.redirect(roomUrl);
   }
   const { supabase, share, doc, roomId, viewerEmail } = access;
@@ -73,11 +98,21 @@ export async function GET(req: Request, props: { params: Promise<{ token: string
   const allowDownload = share.allow_download ?? true;
 
   if (wantsDownload && !allowDownload) {
-    return refuse("Downloads are turned off for this link. You can read the document in the data room.", 403);
+    return refuse(
+      "Downloads are turned off for this link. You can read the document in the data room.",
+      403,
+    );
   }
-  if (!embed && !wantsDownload && !allowDownload && isUploadedFile(doc.storage_key)) {
+  if (
+    !embed &&
+    !wantsDownload &&
+    !allowDownload &&
+    isUploadedFile(doc.storage_key)
+  ) {
     // View-only: reading happens inside the viewer, not in a bare browser tab.
-    return NextResponse.redirect(new URL(`/dataroom/${params.token}?doc=${doc.id}`, req.url));
+    return NextResponse.redirect(
+      new URL(`/dataroom/${params.token}?doc=${doc.id}`, req.url),
+    );
   }
 
   // Log opens and downloads, not the viewer's embed fetches — those follow a
@@ -94,7 +129,10 @@ export async function GET(req: Request, props: { params: Promise<{ token: string
         action: wantsDownload ? "download" : "open",
         viewer_email: viewerEmail,
       } as never)
-      .then(() => undefined, () => undefined);
+      .then(
+        () => undefined,
+        () => undefined,
+      );
   }
 
   const external = safeHref(doc.storage_key);
@@ -103,29 +141,89 @@ export async function GET(req: Request, props: { params: Promise<{ token: string
 
   const fileName = downloadFileName(doc.name, doc.storage_key);
 
-  if ((share.watermark ?? false) && fileExtension(doc.storage_key) === ".pdf") {
-    const { data: blob, error } = await supabase.storage.from(DOCUMENT_BUCKET).download(doc.storage_key);
-    if (error || !blob) return refuse("This document is temporarily unavailable.", 503);
-    if (blob.size > MAX_WATERMARK_BYTES) {
-      // Fail closed: a watermarked link never falls back to an unmarked copy.
-      return refuse("This document is too large to watermark. Ask the sender for a copy.", 413);
-    }
-    try {
-      const stamped = await watermarkPdf(
-        new Uint8Array(await blob.arrayBuffer()),
-        watermarkLabel(share, viewerEmail),
-      );
-      const disposition = wantsDownload ? "attachment" : "inline";
-      return new NextResponse(Buffer.from(stamped), {
+  if (share.watermark ?? false) {
+    const plan = watermarkPlan(doc.storage_key);
+    const label = watermarkLabel(share, viewerEmail);
+    const disposition = wantsDownload ? "attachment" : "inline";
+    const send = (
+      body: Buffer | Uint8Array,
+      contentType: string,
+      name: string,
+    ) =>
+      new NextResponse(Buffer.from(body), {
         headers: {
-          "Content-Type": "application/pdf",
-          "Content-Disposition": `${disposition}; filename*=UTF-8''${encodeURIComponent(fileName)}`,
+          "Content-Type": contentType,
+          "Content-Disposition": `${disposition}; filename*=UTF-8''${encodeURIComponent(name)}`,
           "Cache-Control": "private, no-store",
           "X-Content-Type-Options": "nosniff",
         },
       });
-    } catch {
-      return refuse("This document could not be prepared for viewing. Ask the sender for a copy.", 422);
+
+    if (plan === "none") {
+      // Bytes that cannot carry a mark are not served on a watermarked link.
+      if (previewKindFor(doc.storage_key) === "video" && embed) {
+        // fall through to the signed URL below
+      } else if (wantsDownload || embed) {
+        return refuse(
+          "This file type can't be watermarked, so it can only be read in the data room, not downloaded.",
+          403,
+        );
+      } else {
+        return NextResponse.redirect(
+          new URL(`/dataroom/${params.token}?doc=${doc.id}`, req.url),
+        );
+      }
+    } else {
+      const { data: blob, error } = await supabase.storage
+        .from(DOCUMENT_BUCKET)
+        .download(doc.storage_key);
+      if (error || !blob)
+        return refuse("This document is temporarily unavailable.", 503);
+      const limit =
+        plan === "pdf"
+          ? MAX_WATERMARK_BYTES
+          : plan === "image"
+            ? MAX_IMAGE_BYTES
+            : MAX_TEXT_BYTES;
+      if (blob.size > limit) {
+        // Fail closed: a watermarked link never falls back to an unmarked copy.
+        return refuse(
+          "This document is too large to watermark. Ask the sender for a copy.",
+          413,
+        );
+      }
+      try {
+        const raw = new Uint8Array(await blob.arrayBuffer());
+        if (plan === "pdf") {
+          return send(
+            await watermarkPdf(raw, label),
+            "application/pdf",
+            fileName,
+          );
+        }
+        if (plan === "image") {
+          const stamped = await watermarkImage(
+            raw,
+            label,
+            fileExtension(doc.storage_key),
+          );
+          return send(
+            stamped.bytes,
+            stamped.contentType,
+            downloadFileName(doc.name, `x${stamped.ext}`),
+          );
+        }
+        return send(
+          watermarkText(raw, label),
+          "text/plain; charset=utf-8",
+          fileName,
+        );
+      } catch {
+        return refuse(
+          "This document could not be prepared for viewing. Ask the sender for a copy.",
+          422,
+        );
+      }
     }
   }
 

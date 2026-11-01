@@ -600,7 +600,7 @@ function CreateShareForm({
             onChange={(e) => setWatermark(e.target.checked)}
             className="h-3.5 w-3.5 accent-gold-400"
           />
-          <span className="text-sm text-fg-secondary">Watermark PDFs with the reader&apos;s email and time</span>
+          <span className="text-sm text-fg-secondary">Watermark files with the reader&apos;s email and time</span>
         </label>
         {watermark && !requireEmail ? (
           <p className="text-[11px] text-amber-400/80">
