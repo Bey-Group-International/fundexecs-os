@@ -40,6 +40,9 @@ export const INBOX_CHANNELS: Record<InboxChannel, ChannelMeta> = {
   // Market Pulse: the daily digest of mandate-matched findings and high-fit
   // alerts (lib/pulse.server.ts).
   pulse: { channel: "pulse", label: "Market Pulse", category: "messaging", icon: "◐" },
+  // An LP has submitted their onboarding and is waiting for review
+  // (lib/lp-submit-notice.server.ts).
+  lp_onboarding: { channel: "lp_onboarding", label: "LP onboarding", category: "messaging", icon: "◒" },
   // Accounting: Xero invoices, bills, and overdue/awaiting-approval alerts.
   xero: { channel: "xero", label: "Xero", category: "finance", icon: "▤" },
   // Payments: Jax transactions, statements, and payment-status alerts.

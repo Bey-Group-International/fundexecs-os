@@ -14,11 +14,13 @@ import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { sendEmail } from "@/lib/email";
 import { getAppUrl } from "@/lib/integrations/adapters/app-url";
-import { noticeRecipients, submissionNotice, type NoticeMember } from "@/lib/lp-submit-notice";
+import { inboxAlert, noticeRecipients, submissionNotice, type NoticeMember } from "@/lib/lp-submit-notice";
 
 type Client = SupabaseClient<any, any, any>;
 
 export interface SubmissionNoticeResult {
+  /** An Inbox thread was posted. */
+  inbox: boolean;
   /** People emailed. */
   sent: number;
   /** People who should have been, but the send failed. */
@@ -29,12 +31,12 @@ export async function notifyTeamOfSubmission(
   client: Client,
   args: { sessionId: string; orgId: string; resubmitted: boolean },
 ): Promise<SubmissionNoticeResult> {
-  const result: SubmissionNoticeResult = { sent: 0, failed: 0 };
+  const result: SubmissionNoticeResult = { inbox: false, sent: 0, failed: 0 };
   try {
     const [sessionRes, orgRes, membersRes] = await Promise.all([
       client
         .from("lp_onboarding_sessions")
-        .select("lp_name, lp_type")
+        .select("lp_name, lp_type, investor_id")
         .eq("id", args.sessionId)
         .eq("organization_id", args.orgId)
         .maybeSingle(),
@@ -43,12 +45,17 @@ export async function notifyTeamOfSubmission(
       client.from("organization_members").select("role, principal_id").eq("organization_id", args.orgId).in("role", ["owner", "admin"]).order("role", { ascending: true }).limit(100),
     ]);
     // A failed read is a failure, not an empty answer: nothing is sent on a guess, and the cause is logged.
+    // The Inbox alert needs only the session, so the other two reads are checked after it is posted:
+    // a failed team or organization read can't hide the alert.
     if (sessionRes.error) throw new Error(sessionRes.error.message);
-    if (orgRes.error) throw new Error(orgRes.error.message);
-    if (membersRes.error) throw new Error(membersRes.error.message);
-    const session = sessionRes.data as { lp_name: string; lp_type: string | null } | null;
+    const session = sessionRes.data as { lp_name: string; lp_type: string | null; investor_id: string | null } | null;
     if (!session) return result;
 
+    // The Inbox alert first: it needs no mailbox, so it lands even where email can't.
+    result.inbox = await postInboxAlert(client, args.orgId, session, args.resubmitted);
+
+    if (orgRes.error) throw new Error(orgRes.error.message);
+    if (membersRes.error) throw new Error(membersRes.error.message);
     const members = (membersRes.data ?? []) as Array<{ role: string; principal_id: string }>;
     if (members.length === 0) return result;
     const { data: people, error: peopleError } = await client
@@ -86,4 +93,52 @@ export async function notifyTeamOfSubmission(
     console.error("[lp-submit-notice] could not notify the team", err);
   }
   return result;
+}
+
+/**
+ * One Inbox thread per submission (a resubmission is a new event). Never throws:
+ * if it can't be posted, the email still goes. Linked to the investor record when
+ * the LP came from one, so the thread opens into that context.
+ */
+async function postInboxAlert(
+  client: Client,
+  orgId: string,
+  session: { lp_name: string; lp_type: string | null; investor_id: string | null },
+  resubmitted: boolean,
+): Promise<boolean> {
+  try {
+    const copy = inboxAlert({ lpName: session.lp_name, lpType: session.lp_type, resubmitted });
+    const { data, error } = await client
+      .from("inbox_threads")
+      .insert({
+        organization_id: orgId,
+        channel: "lp_onboarding",
+        category: "messaging",
+        subject: copy.subject,
+        counterparty_name: session.lp_name,
+        preview: copy.preview,
+        intent: "LP onboarding",
+        ai_summary: copy.preview,
+        priority: 80,
+        status: "open",
+        unread: true,
+        investor_id: session.investor_id,
+        last_message_at: new Date().toISOString(),
+      })
+      .select("id")
+      .single();
+    if (error || !data) throw new Error(error?.message ?? "no thread returned");
+    const { error: messageError } = await client.from("inbox_messages").insert({
+      organization_id: orgId,
+      thread_id: (data as { id: string }).id,
+      direction: "inbound",
+      author: "LP onboarding",
+      body: copy.body,
+    });
+    if (messageError) throw new Error(messageError.message);
+    return true;
+  } catch (err) {
+    console.error("[lp-submit-notice] could not post the Inbox alert", err);
+    return false;
+  }
 }

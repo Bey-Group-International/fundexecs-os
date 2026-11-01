@@ -1,4 +1,4 @@
-import { MAX_NOTICE_RECIPIENTS, noticeRecipients, submissionNotice } from "./lp-submit-notice";
+import { inboxAlert, MAX_NOTICE_RECIPIENTS, noticeRecipients, submissionNotice } from "./lp-submit-notice";
 
 const m = (role: string, email: string | null, full_name: string | null = null) => ({ role, email, full_name });
 
@@ -71,5 +71,31 @@ describe("submissionNotice", () => {
   it("carries nothing the LP entered beyond name and type", () => {
     const n = submissionNotice(base);
     expect(n.htmlBody).not.toMatch(/ssn|tax|passport|address|phone|owner/i);
+  });
+});
+
+describe("inboxAlert", () => {
+  const base = { lpName: "Jo Park", lpType: "individual", resubmitted: false };
+
+  it("says who submitted and that it's waiting, and nothing else", () => {
+    const a = inboxAlert(base);
+    expect(a.subject).toBe("Jo Park submitted their onboarding");
+    expect(a.body).toContain("Jo Park (Individual)");
+    expect(a.body).toMatch(/nothing is approved until you do it/);
+    expect(a.body).not.toMatch(/ssn|tax|passport|address|phone/i);
+  });
+
+  it("says so for a resubmission", () => {
+    expect(inboxAlert({ ...base, resubmitted: true }).subject).toBe("Jo Park resubmitted their onboarding");
+  });
+
+  it("keeps the subject to one line, caps a long name, and survives a blank one", () => {
+    expect(inboxAlert({ ...base, lpName: "Jo\r\nPark" }).subject).toBe("Jo Park submitted their onboarding");
+    expect(inboxAlert({ ...base, lpName: "x".repeat(500) }).subject.length).toBeLessThan(160);
+    expect(inboxAlert({ ...base, lpName: "  " }).subject).toBe("An LP submitted their onboarding");
+  });
+
+  it("ignores a type it doesn't know", () => {
+    expect(inboxAlert({ ...base, lpType: "mystery" }).body).not.toContain("mystery");
   });
 });
