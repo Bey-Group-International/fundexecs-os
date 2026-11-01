@@ -8,6 +8,7 @@
 // The wizard is writable only while the review state is open: before submission,
 // or after the fund manager asked for changes. Once submitted it is read-only
 // until the fund manager decides.
+import { openProfileRow, sealProfileWrite } from "@/lib/lp-pii";
 import { revalidatePath } from "next/cache";
 import { after } from "next/server";
 import { createServiceClient, hasSupabaseServiceEnv } from "@/lib/supabase/server";
@@ -154,7 +155,7 @@ export async function saveDetailsAction(token: string, input: unknown): Promise<
         legal_name: d.legalName,
         entity_type: d.entityType,
         country: d.country,
-        contact_phone: d.contactPhone,
+        ...sealProfileWrite(ctx.session.id, { contact_phone: d.contactPhone }),
         signatory_name: d.signatoryName,
         signatory_title: d.signatoryTitle,
       } as never,
@@ -251,7 +252,7 @@ export async function saveAccreditationAction(token: string, input: unknown): Pr
         session_id: ctx.session.id,
         organization_id: ctx.session.organization_id,
         accreditation_basis: parsed.value.basis,
-        source_of_funds: parsed.value.sourceOfFunds,
+        ...sealProfileWrite(ctx.session.id, { source_of_funds: parsed.value.sourceOfFunds }),
         accreditation_statement_at: new Date().toISOString(),
       } as never,
       { onConflict: "session_id" },
@@ -371,7 +372,9 @@ export async function submitWizardAction(token: string): Promise<WizardResult> {
       ctx.supabase.from("lp_onboarding_consents").select("scope, text_version").eq("session_id", ctx.session.id),
       identityEnabled ? readIdentityCheck(ctx.supabase, ctx.session.id) : Promise.resolve(null),
     ]);
-    const profile = (profileRes.data ?? null) as WizardData["profile"] & { accreditation_basis: keyof typeof ACCREDITATION_BASIS_LABEL | null };
+    // source_of_funds is stored encrypted; the readiness check needs its length.
+    const profileRow = profileRes.data ? openProfileRow(profileRes.data as unknown as { session_id: string }, ctx.session.id) : null;
+    const profile = (profileRow ?? null) as unknown as WizardData["profile"] & { accreditation_basis: keyof typeof ACCREDITATION_BASIS_LABEL | null };
     const missing = incompleteSteps({
       lpType: ctx.session.lp_type as LpType,
       profile,

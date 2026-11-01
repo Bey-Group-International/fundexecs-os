@@ -275,11 +275,14 @@ describe("the signing key", () => {
     expect(hashCode("s1", "123456")).not.toBe(h);
   });
 
-  it("ignores a dedicated key that is too short, and says nothing is weaker than the fallback", () => {
-    useOnly("too-short");
+  it("ignores a dedicated key that is too short, and says so rather than failing silently", () => {
+    const warn = jest.spyOn(console, "warn").mockImplementation(() => undefined);
+    useOnly("too-short-key-here");
     const withShort = hashCode("s1", "123456");
     useOnly(undefined);
     expect(withShort).toBe(hashCode("s1", "123456")); // still the service-role key
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining("LP_ACCESS_SECRET is shorter than 32"));
+    warn.mockRestore();
   });
 
   it("a pass made under the service-role key stops working once a dedicated key is set", async () => {

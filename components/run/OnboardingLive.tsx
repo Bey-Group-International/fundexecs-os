@@ -8,6 +8,7 @@
 //
 // Reads are best-effort, so a failed query shows the empty state instead of
 // throwing.
+import { openProfileRow } from "@/lib/lp-pii";
 import Link from "next/link";
 import { createServerClient } from "@/lib/supabase/server";
 import { getSessionContext } from "@/lib/auth";
@@ -92,7 +93,7 @@ async function loadLps(orgId: string): Promise<ReviewLp[]> {
     const checks = groupBy((checksRes.data ?? []) as OnboardingCheck[]);
     const decisions = groupBy((decisionsRes.data ?? []) as OnboardingDecision[]);
     const audit = groupBy((auditRes.data ?? []) as OnboardingAuditEntry[]);
-    const profiles = new Map(((profilesRes.data ?? []) as LpOnboardingProfile[]).map((p) => [p.session_id, p]));
+    const profiles = new Map(((profilesRes.data ?? []) as LpOnboardingProfile[]).map((p) => [p.session_id, openProfileRow(p)]));
     const owners = groupBy((ownersRes.data ?? []) as LpOnboardingOwner[]);
     const consents = groupBy((consentsRes.data ?? []) as LpOnboardingConsent[]);
 

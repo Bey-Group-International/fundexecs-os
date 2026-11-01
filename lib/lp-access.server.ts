@@ -43,17 +43,24 @@ type Client = SupabaseClient<Database>;
  * would let anyone mint a pass.
  */
 export const MIN_ACCESS_SECRET_LENGTH = 32;
+const warned = new Set<string>();
 
-function usable(v: string | undefined): string | null {
+function usable(v: string | undefined, name?: string): string | null {
   const t = (v ?? "").trim();
-  return t.length >= MIN_ACCESS_SECRET_LENGTH ? t : null;
+  if (t.length >= MIN_ACCESS_SECRET_LENGTH) return t;
+  // Set, but too short to trust: say so, rather than silently signing with something else.
+  if (name && t.length > 0 && !warned.has(name)) {
+    warned.add(name);
+    console.warn(`[lp-access] ${name} is shorter than ${MIN_ACCESS_SECRET_LENGTH} characters and is being ignored`);
+  }
+  return null;
 }
 
 /** Key material, signing key first. */
 function keyMaterial(): string[] {
-  const current = usable(process.env.LP_ACCESS_SECRET);
+  const current = usable(process.env.LP_ACCESS_SECRET, "LP_ACCESS_SECRET");
   if (current) {
-    const previous = usable(process.env.LP_ACCESS_SECRET_PREVIOUS);
+    const previous = usable(process.env.LP_ACCESS_SECRET_PREVIOUS, "LP_ACCESS_SECRET_PREVIOUS");
     return previous && previous !== current ? [current, previous] : [current];
   }
   const fallback = (process.env.SUPABASE_SERVICE_ROLE_KEY ?? "").trim();

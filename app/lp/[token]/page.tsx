@@ -1,6 +1,7 @@
 // app/lp/[token]/page.tsx
 // Public LP onboarding portal — token-gated, no login required.
 // The token is the sole auth mechanism; all DB calls use the service-role client.
+import { openProfileRow } from "@/lib/lp-pii";
 import { createServiceClient, hasSupabaseServiceEnv } from "@/lib/supabase/server";
 import { LPPortalFlow } from "@/components/lp-portal/LPPortalFlow";
 import { LPAccessGate } from "@/components/lp-portal/LPAccessGate";
@@ -128,7 +129,7 @@ export default async function LPOnboardingPortal(props: { params: Promise<{ toke
       supabase.from("lp_onboarding_owners").select("*").eq("session_id", sessionId).order("created_at", { ascending: true }),
       supabase.from("lp_onboarding_consents").select("*").eq("session_id", sessionId).order("consented_at", { ascending: true }),
     ]);
-    const p = (profileRes.data ?? null) as Record<string, string | null> | null;
+    const p = (profileRes.data ? openProfileRow(profileRes.data as { session_id: string }, sessionId) : null) as Record<string, string | null> | null;
     // Until the LP has saved their details, suggest what the fund manager already has on file for them.
     const suggested = p
       ? {}
