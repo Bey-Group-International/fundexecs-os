@@ -32,6 +32,7 @@ import {
   type WizardStepKey,
 } from "@/lib/lp-wizard";
 import { goTo } from "@/lib/browser-navigate";
+import type { DetailsPrefill } from "@/lib/lp-prefill";
 import type { IdentityState } from "@/lib/lp-identity";
 import type { LpAccreditationBasis, LpEntityType, LpType } from "@/lib/supabase/database.types";
 
@@ -79,6 +80,7 @@ export function LPWizard({
   changesRequested,
   identity,
   initial,
+  suggested = {},
 }: {
   token: string;
   lpType: LpType;
@@ -87,11 +89,18 @@ export function LPWizard({
   /** Whether online ID verification is set up, and where this LP's verification stands. */
   identity: { enabled: boolean; state: IdentityState };
   initial: WizardInitial;
+  /**
+   * What the fund manager already has on file, offered to seed the details form. These are not
+   * saved answers: they never count towards a step being done, and they stop being offered once
+   * the LP has saved their details.
+   */
+  suggested?: DetailsPrefill;
 }) {
   const router = useRouter();
   const steps = stepsFor(lpType, identity.enabled);
 
   const [data, setData] = useState(initial);
+  const [offered, setOffered] = useState(suggested);
   const [idState, setIdState] = useState<IdentityState>(identity.state);
   const missingNow = (d: WizardInitial, idVerified: boolean) =>
     incompleteSteps({
@@ -149,7 +158,7 @@ export function LPWizard({
         })}
       </ol>
 
-      {step === "details" ? <DetailsStep token={token} lpType={lpType} data={data} onSaved={(d) => { setData(d); next(); }} /> : null}
+      {step === "details" ? <DetailsStep token={token} lpType={lpType} data={data} suggested={offered} onSaved={(d) => { setData(d); setOffered({}); next(); }} /> : null}
       {step === "owners" ? <OwnersStep token={token} thresholdPct={ownerThresholdPct} data={data} onSaved={(d) => { setData(d); next(); }} /> : null}
       {step === "consent" ? <ConsentStep token={token} data={data} onChange={setData} onContinue={next} /> : null}
       {step === "identity" ? (
@@ -210,14 +219,43 @@ function ErrorLine({ error }: { error: string | null }) {
 
 // ---- steps -----------------------------------------------------------------
 
-function DetailsStep({ token, lpType, data, onSaved }: { token: string; lpType: LpType; data: WizardInitial; onSaved: (d: WizardInitial) => void }) {
-  const [f, setF] = useState(data);
+/** Fills only what the LP hasn't already answered. The legal name is seeded by the page, where an unsaved default already lives. */
+function seedFrom(data: WizardInitial, s: DetailsPrefill): WizardInitial {
+  return {
+    ...data,
+    entityType: data.entityType || s.entityType || "",
+    contactPhone: data.contactPhone || s.contactPhone || "",
+    signatoryName: data.signatoryName || s.signatoryName || "",
+    signatoryTitle: data.signatoryTitle || s.signatoryTitle || "",
+  };
+}
+
+function DetailsStep({
+  token,
+  lpType,
+  data,
+  suggested,
+  onSaved,
+}: {
+  token: string;
+  lpType: LpType;
+  data: WizardInitial;
+  suggested: DetailsPrefill;
+  onSaved: (d: WizardInitial) => void;
+}) {
+  const [f, setF] = useState(() => seedFrom(data, suggested));
+  const hasSuggestions = Object.keys(suggested).length > 0;
   const { error, pending, run } = useSave();
   const types = ENTITY_TYPES_BY_LP_TYPE[lpType];
   const needsSignatory = lpType !== "individual";
 
   return (
     <Section title="Your details" hint={lpType === "individual" ? "Who you are, as it appears on your ID." : "The investing entity, and the person who signs for it."}>
+      {hasSuggestions ? (
+        <p role="status" className="rounded-lg border border-gold-500/30 bg-gold-500/5 px-3 py-2 text-sm text-fg-secondary">
+          We&apos;ve filled in some details your fund manager already has on file. Check each one and correct anything that&apos;s out of date; nothing is saved until you continue.
+        </p>
+      ) : null}
       <label className="block">
         <span className={label}>{lpType === "individual" ? "Full legal name" : "Entity legal name"}</span>
         <input aria-label="Legal name" value={f.legalName} maxLength={200} onChange={(e) => setF({ ...f, legalName: e.target.value })} className={`${field} mt-1`} />

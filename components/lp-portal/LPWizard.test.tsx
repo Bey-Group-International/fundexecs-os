@@ -123,6 +123,56 @@ describe("your details", () => {
   });
 });
 
+describe("details suggested from the fund manager's records", () => {
+  const suggested = { legalName: "Harbor LLC", entityType: "family_office" as const, contactPhone: "+1 555 0100", signatoryName: "Dana Harbor", signatoryTitle: "Managing Director" };
+  const entityInitial = { ...blank, legalName: "Harbor LLC" };
+  const val = (name: string) => (screen.getByLabelText(name) as HTMLInputElement | HTMLSelectElement).value;
+
+  it("seeds the empty fields and says where they came from", () => {
+    wizard({ lpType: "entity", initial: entityInitial, suggested });
+    expect(val("Legal name")).toBe("Harbor LLC");
+    expect(val("Investor type")).toBe("family_office");
+    expect(val("Phone")).toBe("+1 555 0100");
+    expect(val("Signatory name")).toBe("Dana Harbor");
+    expect(val("Signatory title")).toBe("Managing Director");
+    expect(screen.getByRole("status")).toHaveTextContent(/already has on file/);
+    expect(screen.getByRole("status")).toHaveTextContent(/nothing is saved until you continue/);
+  });
+
+  it("does not count a suggestion as an answer: the details step stays open and country stays blank", () => {
+    wizard({ lpType: "entity", initial: entityInitial, suggested });
+    expect(screen.getByRole("heading", { name: /Your details/ })).toBeInTheDocument();
+    expect(val("Country")).toBe("");
+  });
+
+  it("never overwrites something the LP already answered", () => {
+    wizard({ lpType: "entity", initial: { ...entityInitial, contactPhone: "+44 20 7946 0000", signatoryName: "Sam Lee" }, suggested });
+    expect(val("Phone")).toBe("+44 20 7946 0000");
+    expect(val("Signatory name")).toBe("Sam Lee");
+    expect(val("Signatory title")).toBe("Managing Director");
+  });
+
+  it("sends what the LP ends up with, after they correct a suggestion", async () => {
+    wizard({ lpType: "entity", initial: entityInitial, suggested });
+    fireEvent.change(screen.getByLabelText("Signatory name"), { target: { value: "Pat Quinn" } });
+    fireEvent.change(screen.getByLabelText("Country"), { target: { value: "US" } });
+    await click(/Save and continue/);
+    expect(saveDetails).toHaveBeenCalledWith("tok", {
+      legalName: "Harbor LLC",
+      entityType: "family_office",
+      country: "US",
+      contactPhone: "+1 555 0100",
+      signatoryName: "Pat Quinn",
+      signatoryTitle: "Managing Director",
+    });
+  });
+
+  it("shows no note when nothing was suggested", () => {
+    wizard({ lpType: "entity", initial: entityInitial });
+    expect(screen.queryByText(/already has on file/)).not.toBeInTheDocument();
+  });
+});
+
 describe("owners", () => {
   const entity = { ...blank, legalName: "Acme LLC", entityType: "company" as const, country: "US", signatoryName: "Jo", signatoryTitle: "Manager" };
   it("explains the threshold the fund manager set", () => {

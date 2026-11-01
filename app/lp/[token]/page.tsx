@@ -9,6 +9,7 @@ import { hasLpPass } from "@/lib/lp-access.server";
 import { maskEmail } from "@/lib/lp-wizard";
 import { stripeIdentityProvider } from "@/lib/providers/stripe-identity";
 import { readIdentityCheck } from "@/lib/lp-identity.server";
+import { loadDetailsPrefill } from "@/lib/lp-prefill.server";
 import type { IdentityState } from "@/lib/lp-identity";
 import type { LpType } from "@/lib/supabase/database.types";
 import { renderDocumentTemplate } from "@/lib/document-templates";
@@ -128,8 +129,12 @@ export default async function LPOnboardingPortal(props: { params: Promise<{ toke
       supabase.from("lp_onboarding_consents").select("*").eq("session_id", sessionId).order("consented_at", { ascending: true }),
     ]);
     const p = (profileRes.data ?? null) as Record<string, string | null> | null;
+    // Until the LP has saved their details, suggest what the fund manager already has on file for them.
+    const suggested = p
+      ? {}
+      : await loadDetailsPrefill(supabase, { orgId, investorId: (sessionRow!.investor_id as string | null) ?? null, lpType: sessionRow!.lp_type as LpType });
     const initial: WizardInitial = {
-      legalName: p?.legal_name ?? lpName,
+      legalName: p?.legal_name ?? suggested.legalName ?? lpName,
       entityType: (p?.entity_type ?? (sessionRow!.lp_type === "individual" ? "individual" : "")) as WizardInitial["entityType"],
       country: p?.country ?? "",
       contactPhone: p?.contact_phone ?? "",
@@ -159,6 +164,7 @@ export default async function LPOnboardingPortal(props: { params: Promise<{ toke
         changesRequested={reviewState === "changes_requested"}
         identity={{ enabled: identityEnabled, state: identityState }}
         initial={initial}
+        suggested={suggested}
       />
     );
   }
