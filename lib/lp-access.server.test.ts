@@ -240,3 +240,94 @@ describe("the LP's pass", () => {
     expect(await hasLpPass("s1", clock)).toBe(false);
   });
 });
+
+// SOC 2 gap G-5: what codes and passes are signed with.
+describe("the signing key", () => {
+  const A = "a".repeat(40);
+  const B = "b".repeat(40);
+  const saved = { dedicated: process.env.LP_ACCESS_SECRET, previous: process.env.LP_ACCESS_SECRET_PREVIOUS, service: process.env.SUPABASE_SERVICE_ROLE_KEY };
+  const set = (name: string, v: string | undefined) => (v === undefined ? delete process.env[name] : (process.env[name] = v));
+  afterEach(() => {
+    set("LP_ACCESS_SECRET", saved.dedicated);
+    set("LP_ACCESS_SECRET_PREVIOUS", saved.previous);
+    set("SUPABASE_SERVICE_ROLE_KEY", saved.service);
+    jar.clear();
+  });
+  const useOnly = (dedicated?: string, previous?: string) => {
+    set("LP_ACCESS_SECRET", dedicated);
+    set("LP_ACCESS_SECRET_PREVIOUS", previous);
+  };
+
+  it("falls back to the service-role key until a dedicated key is set, so deploying changes nothing", () => {
+    useOnly(undefined);
+    const before = hashCode("s1", "123456");
+    set("SUPABASE_SERVICE_ROLE_KEY", "a-different-service-key");
+    expect(hashCode("s1", "123456")).not.toBe(before);
+  });
+
+  it("once a dedicated key is set, the service-role key no longer matters", () => {
+    useOnly(A);
+    const h = hashCode("s1", "123456");
+    set("SUPABASE_SERVICE_ROLE_KEY", "something-else-entirely");
+    expect(hashCode("s1", "123456")).toBe(h);
+    set("SUPABASE_SERVICE_ROLE_KEY", saved.service);
+    useOnly(B);
+    expect(hashCode("s1", "123456")).not.toBe(h);
+  });
+
+  it("ignores a dedicated key that is too short, and says so rather than failing silently", () => {
+    const warn = jest.spyOn(console, "warn").mockImplementation(() => undefined);
+    useOnly("too-short-key-here");
+    const withShort = hashCode("s1", "123456");
+    useOnly(undefined);
+    expect(withShort).toBe(hashCode("s1", "123456")); // still the service-role key
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining("LP_ACCESS_SECRET is shorter than 32"));
+    warn.mockRestore();
+  });
+
+  it("a pass made under the service-role key stops working once a dedicated key is set", async () => {
+    useOnly(undefined);
+    await grantLpPass("s1", clock);
+    expect(await hasLpPass("s1", clock + 1000)).toBe(true);
+    useOnly(A);
+    expect(await hasLpPass("s1", clock + 1000)).toBe(false);
+  });
+
+  it("a code issued under the old key still verifies during a rotation, and not after", async () => {
+    useOnly(A);
+    const issued = await issueCode(fake(), session, "email", null, clock);
+    if (!issued.ok) throw new Error("expected a code");
+    useOnly(B, A); // rotated: new key, old one kept for now
+    expect(await verifyCode(fake(), session, issued.code, clock + 1000)).toEqual({ ok: true });
+
+    codes = [];
+    useOnly(A);
+    const again = await issueCode(fake(), session, "email", null, clock);
+    if (!again.ok) throw new Error("expected a code");
+    useOnly(B); // old key removed
+    expect((await verifyCode(fake(), session, again.code, clock + 1000)).ok).toBe(false);
+  });
+
+  it("a pass made under the old key still works during a rotation, and not after; new passes use the new key", async () => {
+    useOnly(A);
+    await grantLpPass("s1", clock);
+    useOnly(B, A);
+    expect(await hasLpPass("s1", clock + 1000)).toBe(true);
+    await grantLpPass("s2", clock);
+    useOnly(B); // old key removed
+    expect(await hasLpPass("s1", clock + 1000)).toBe(false);
+    expect(await hasLpPass("s2", clock + 1000)).toBe(true);
+  });
+
+  it("with no usable key it signs nothing and accepts nothing, rather than using an empty key", async () => {
+    useOnly(undefined);
+    set("SUPABASE_SERVICE_ROLE_KEY", undefined);
+    expect(() => hashCode("s1", "123456")).toThrow(/LP_ACCESS_SECRET/);
+    await expect(grantLpPass("s1", clock)).rejects.toThrow(/LP_ACCESS_SECRET/);
+    // A value an attacker would build against an empty key is not accepted.
+    const body = Buffer.from(JSON.stringify({ sid: "s1", iat: clock }), "utf8").toString("base64url");
+    const mac = require("crypto").createHmac("sha256", require("crypto").createHmac("sha256", "fx-lp-pass").update("").digest("hex")).update(body).digest("base64url");
+    jar.set("fx_lp_s1", { value: `${body}.${mac}` });
+    expect(await hasLpPass("s1", clock)).toBe(false);
+  });
+});
