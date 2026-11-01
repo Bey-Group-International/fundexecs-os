@@ -25,9 +25,16 @@ import {
 
 type Client = SupabaseClient<Database>;
 
-/** Keyed from the service-role key, like the data room's gate pass, so nothing new needs provisioning. */
+/**
+ * Keyed from LP_ACCESS_SECRET when set. Falls back to the service-role key so
+ * nothing breaks before it is provisioned. A dedicated secret matters because
+ * rotating the service-role key would otherwise silently invalidate every open
+ * code and pass, and anyone holding that key could forge a pass. Switching the
+ * key (either direction) invalidates codes (15 min) and passes (6 h) in flight.
+ */
 function secret(label: string): string {
-  return createHmac("sha256", label).update(process.env.SUPABASE_SERVICE_ROLE_KEY ?? "").digest("hex");
+  const key = process.env.LP_ACCESS_SECRET?.trim() || process.env.SUPABASE_SERVICE_ROLE_KEY || "";
+  return createHmac("sha256", label).update(key).digest("hex");
 }
 
 export function hashCode(sessionId: string, code: string): string {
