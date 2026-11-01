@@ -66,6 +66,19 @@ describe("the overview a non-admin member reads", () => {
     expect(text).toMatch(/create or replace view public\.lp_onboarding_session_overview\s+with \(security_barrier = true\) as/i);
   });
 
+  it("is read-only for signed-in users, by the last grants any migration gives it", () => {
+    // Supabase grants every privilege on a new object by default, and a view over
+    // one table is auto-updatable: without the revoke below, a member could write
+    // sessions through it. The later migration has to take them away again.
+    const later = sql
+      .filter((s) => s.f > "20261101070000_lp_sessions_admin_only.sql")
+      .map((s) => s.text)
+      .join("\n");
+    expect(later).toMatch(/revoke all on public\.lp_onboarding_session_overview from authenticated/i);
+    expect(later).toMatch(/grant select on public\.lp_onboarding_session_overview to authenticated/i);
+    expect(later).not.toMatch(/grant (insert|update|delete|all)[^;]*lp_onboarding_session_overview/i);
+  });
+
   it("is not readable by anyone signed out", () => {
     expect(text).toMatch(/revoke all on public\.lp_onboarding_session_overview from anon/i);
     expect(text).toMatch(/grant select on public\.lp_onboarding_session_overview to authenticated/i);
