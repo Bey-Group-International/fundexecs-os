@@ -176,19 +176,44 @@ export async function MaterialsModule({ roomId }: { roomId?: string } = {}) {
   const unfinished = unfinishedPublications(published);
   const empty = emptyPublications(published);
 
-  const signersByDoc = new Map<string, { name: string; email: string; signedAt: string }[]>();
+  const signersByDoc = new Map<string, { name: string; email: string; signedAt: string; envelopeId?: string; envelopeStatus?: string }[]>();
+  const addSigner = (docId: string, s: { name: string; email: string; signedAt: string; envelopeId?: string; envelopeStatus?: string }) => {
+    const list = signersByDoc.get(docId) ?? [];
+    // One entry per person, however many links they signed through; the envelope flow's entry wins.
+    const at = list.findIndex((x) => x.email.toLowerCase() === s.email.toLowerCase());
+    if (at === -1) list.push(s);
+    else if (s.envelopeId && !list[at].envelopeId) list[at] = s;
+    signersByDoc.set(docId, list);
+  };
   for (const r of (signaturesRes.data ?? []) as {
     document_id: string;
     signer_name: string;
     signer_email: string;
     signed_at: string;
   }[]) {
-    const list = signersByDoc.get(r.document_id) ?? [];
-    // One entry per person, however many links they signed through.
-    if (!list.some((x) => x.email.toLowerCase() === r.signer_email.toLowerCase())) {
-      list.push({ name: r.signer_name, email: r.signer_email, signedAt: r.signed_at });
+    addSigner(r.document_id, { name: r.signer_name, email: r.signer_email, signedAt: r.signed_at });
+  }
+  // Readers who signed through the shared signing flow, on this room's links.
+  const roomShareIds = ((sharesRes.data ?? []) as { id: string }[]).map((x) => x.id);
+  if (roomShareIds.length) {
+    const { data: envs } = await supabase
+      .from("envelopes")
+      .select("id, status, data_room_document_id, envelope_recipients(name, email, role, status, signed_at)")
+      .eq("organization_id", orgId)
+      .in("data_room_share_id", roomShareIds)
+      .neq("status", "voided")
+      .order("created_at", { ascending: false });
+    for (const e of (envs ?? []) as unknown as {
+      id: string;
+      status: string;
+      data_room_document_id: string | null;
+      envelope_recipients: { name: string; email: string; role: string; status: string; signed_at: string | null }[];
+    }[]) {
+      const reader = e.envelope_recipients.find((r) => r.role === "signer" && r.status === "signed" && r.signed_at);
+      if (e.data_room_document_id && reader) {
+        addSigner(e.data_room_document_id, { name: reader.name, email: reader.email, signedAt: reader.signed_at!, envelopeId: e.id, envelopeStatus: e.status });
+      }
     }
-    signersByDoc.set(r.document_id, list);
   }
 
   const contentSections: RoomContentSection[] = roomSections.map((s) => ({
@@ -201,6 +226,7 @@ export async function MaterialsModule({ roomId }: { roomId?: string } = {}) {
       hasBody: Boolean(d.storageKey) || d.hasContent,
       isLink: Boolean(d.storageKey),
       requireSignature: Boolean(d.requireSignature),
+      hasSignatureBlocks: Boolean(d.hasSignatureBlocks),
       signers: signersByDoc.get(d.id) ?? [],
     })),
   }));

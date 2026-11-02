@@ -6,6 +6,7 @@
 // change a document's text you go to Documents; this page never edits content.
 import { useState, useTransition } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { unpublishDocument, moveRoomDocument, publishDocument, setDocumentSignature } from "./room-actions";
 import type { DocumentStatus } from "@/lib/supabase/database.types";
 import { ActionError, useActionError } from "./use-action-error";
@@ -20,8 +21,10 @@ export interface RoomContentDoc {
   isLink: boolean;
   /** Readers must sign this file before it opens. */
   requireSignature: boolean;
+  /** The owner has placed the signature blocks readers will sign on. */
+  hasSignatureBlocks: boolean;
   /** Who has signed it, newest first, one entry per person. */
-  signers: { name: string; email: string; signedAt: string }[];
+  signers: { name: string; email: string; signedAt: string; envelopeId?: string; envelopeStatus?: string }[];
 }
 
 export interface RoomContentSection {
@@ -65,8 +68,10 @@ function DocRow({
   /** Open this document in Preview as LP. */
   onPreview?: (documentId: string) => void;
 }) {
+  const router = useRouter();
   const [pending, startTransition] = useTransition();
   const { error, run } = useActionError();
+  const placeHref = `/document/${doc.id}/signature?room=${roomId}`;
 
   function act(fn: (fd: FormData) => Promise<void>, failure: string, extra?: Record<string, string>) {
     const fd = new FormData();
@@ -105,15 +110,21 @@ function DocRow({
         type="button"
         disabled={pending}
         aria-pressed={doc.requireSignature}
-        onClick={() =>
-          act(setDocumentSignature, "Couldn't change the signature requirement. Try again.", {
-            required: doc.requireSignature ? "0" : "1",
-          })
-        }
+        onClick={() => {
+          const fd = new FormData();
+          fd.set("room_id", roomId);
+          fd.set("document_id", doc.id);
+          fd.set("required", doc.requireSignature ? "0" : "1");
+          startTransition(async () => {
+            const ok = await run(() => setDocumentSignature(fd), "Couldn't change the signature requirement. Try again.");
+            // Turning it on leads straight to placing the signature blocks on the file.
+            if (ok && !doc.requireSignature) router.push(placeHref);
+          });
+        }}
         title={
           doc.requireSignature
             ? "Readers must sign this file before it opens. Click to stop requiring it."
-            : "Require readers to sign this file before it opens (e.g. an NDA)."
+            : "Require readers to sign this file before it opens (e.g. an NDA). You then place the signature blocks on it."
         }
         className={`shrink-0 rounded-md border px-2 py-1 font-mono text-[11px] uppercase tracking-wider transition disabled:opacity-40 ${
           doc.requireSignature
@@ -123,6 +134,17 @@ function DocRow({
       >
         {doc.requireSignature ? `Signature on · ${doc.signers.length} signed` : "Require signature"}
       </button>
+      {doc.requireSignature ? (
+        <Link
+          href={placeHref}
+          title={doc.hasSignatureBlocks ? "Move or change the signature blocks" : "Readers cannot sign until you place the signature blocks"}
+          className={`shrink-0 rounded-md border px-2 py-1 font-mono text-[11px] uppercase tracking-wider transition ${
+            doc.hasSignatureBlocks ? "border-line text-fg-muted hover:text-fg-primary" : "border-amber-500/40 bg-amber-500/10 text-amber-400"
+          }`}
+        >
+          {doc.hasSignatureBlocks ? "Blocks" : "Place blocks"}
+        </Link>
+      ) : null}
 
       {/* Reordering moves a document relative to its real neighbours in the
           room, which a filtered view is not showing — the arrows would appear
@@ -179,8 +201,24 @@ function DocRow({
         </summary>
         <ul className="mt-1.5 space-y-0.5 pb-1 text-xs text-fg-secondary">
           {doc.signers.map((s) => (
-            <li key={s.email}>
+            <li key={s.envelopeId ?? s.email}>
               {s.name} <span className="text-fg-muted">· {s.email} · {s.signedAt.slice(0, 10)}</span>
+              {s.envelopeId && s.envelopeStatus === "partially_signed" ? (
+                <>
+                  {" "}
+                  <Link href={`/envelopes/${s.envelopeId}/countersign`} className="font-mono text-[11px] uppercase tracking-wider text-gold-300 hover:underline">
+                    Countersign →
+                  </Link>
+                </>
+              ) : null}
+              {s.envelopeId && s.envelopeStatus === "completed" ? (
+                <>
+                  {" "}
+                  <a href={`/api/envelopes/${s.envelopeId}/executed`} className="font-mono text-[11px] uppercase tracking-wider text-gold-300 hover:underline">
+                    Executed PDF →
+                  </a>
+                </>
+              ) : null}
             </li>
           ))}
         </ul>

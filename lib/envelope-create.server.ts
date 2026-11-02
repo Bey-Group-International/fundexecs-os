@@ -22,10 +22,17 @@ export interface NewEnvelope {
   signaturePage?: SignaturePageSpec;
   recipients: { name: string; email: string; routingOrder?: number }[];
   lpSessionId?: string | null;
+  /** Further columns to set on the envelope row (what it is for). */
+  extra?: Record<string, unknown>;
 }
 
 export type CreatedEnvelope =
-  | { ok: true; envelopeId: string; recipients: { id: string; name: string; email: string; routing_order: number; signing_token: string }[] }
+  | {
+      ok: true;
+      envelopeId: string;
+      recipients: { id: string; name: string; email: string; routing_order: number; signing_token: string }[];
+      ownerRecipientId: string;
+    }
   | { ok: false; status: number; error: string };
 
 export async function createEnvelope(supabase: SupabaseClient, input: NewEnvelope): Promise<CreatedEnvelope> {
@@ -39,6 +46,7 @@ export async function createEnvelope(supabase: SupabaseClient, input: NewEnvelop
       created_by: input.creator.id,
       status: "draft",
       ...(input.lpSessionId ? { lp_session_id: input.lpSessionId } : {}),
+      ...(input.extra ?? {}),
     })
     .select("id")
     .single();
@@ -61,14 +69,18 @@ export async function createEnvelope(supabase: SupabaseClient, input: NewEnvelop
 
   // The account owner signs last.
   const ownerName = input.creator.name || (input.creator.email ?? "Account owner").split("@")[0];
-  const { error: ownerErr } = await supabase.from("envelope_recipients").insert({
-    envelope_id: envelopeId,
-    name: ownerName,
-    email: input.creator.email ?? "",
-    routing_order: 1000,
-    role: "owner",
-  });
-  if (ownerErr) {
+  const { data: ownerRow, error: ownerErr } = await supabase
+    .from("envelope_recipients")
+    .insert({
+      envelope_id: envelopeId,
+      name: ownerName,
+      email: input.creator.email ?? "",
+      routing_order: 1000,
+      role: "owner",
+    })
+    .select("id")
+    .single();
+  if (ownerErr || !ownerRow) {
     console.error("createEnvelope: owner", ownerErr);
     return { ok: false, status: 500, error: "Failed to add the countersigner" };
   }
@@ -85,5 +97,5 @@ export async function createEnvelope(supabase: SupabaseClient, input: NewEnvelop
 
   await supabase.from("envelope_events").insert({ envelope_id: envelopeId, event_type: "created", metadata: { actor: input.creator.id } });
 
-  return { ok: true, envelopeId, recipients: inserted as never };
+  return { ok: true, envelopeId, recipients: inserted as never, ownerRecipientId: (ownerRow as { id: string }).id };
 }

@@ -146,6 +146,34 @@ describe("a file that requires a signature", () => {
     expect(allDocs(payload)[0]).toMatchObject({ content: SECRET_TEXT, hasFile: true, requiresSignature: true, signed: true });
   });
 
+  it("opens for a reader who signed through the signing flow, countersigned or not", async () => {
+    const db = fakeDb(
+      tables([LOCKED], {
+        envelopes: [{ id: "e1", data_room_share_id: SHARE, data_room_document_id: "doc-a", reader_email: "lp@example.com", status: "partially_signed" }],
+        envelope_recipients: [{ envelope_id: "e1", role: "signer", status: "signed" }],
+      }),
+    );
+    const payload = await buildViewerPayload(db.client as never, ORG, ROOM, null, null, { shareId: SHARE, email: "LP@example.com" });
+    expect(JSON.stringify(payload)).toContain(SECRET_TEXT);
+  });
+
+  it("stays locked while the reader's own signature is still missing, or the request was voided", async () => {
+    const unsigned = fakeDb(
+      tables([LOCKED], {
+        envelopes: [{ id: "e1", data_room_share_id: SHARE, data_room_document_id: "doc-a", reader_email: "lp@example.com", status: "sent" }],
+        envelope_recipients: [{ envelope_id: "e1", role: "signer", status: "pending" }],
+      }),
+    );
+    expect(JSON.stringify(await buildViewerPayload(unsigned.client as never, ORG, ROOM, null, null, { shareId: SHARE, email: "lp@example.com" }))).not.toContain(SECRET_TEXT);
+    const voided = fakeDb(
+      tables([LOCKED], {
+        envelopes: [{ id: "e1", data_room_share_id: SHARE, data_room_document_id: "doc-a", reader_email: "lp@example.com", status: "voided" }],
+        envelope_recipients: [{ envelope_id: "e1", role: "signer", status: "signed" }],
+      }),
+    );
+    expect(JSON.stringify(await buildViewerPayload(voided.client as never, ORG, ROOM, null, null, { shareId: SHARE, email: "lp@example.com" }))).not.toContain(SECRET_TEXT);
+  });
+
   it("stays locked for a different reader, and for the same email on a different link", async () => {
     const sig = { share_id: SHARE, document_id: "doc-a", signer_email: "lp@example.com" };
     const other = fakeDb(tables([LOCKED], { data_room_document_signatures: [sig] }));

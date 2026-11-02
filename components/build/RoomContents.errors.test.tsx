@@ -1,5 +1,6 @@
 const unpublishDocument = jest.fn();
 const publishDocument = jest.fn();
+jest.mock("next/navigation", () => ({ useRouter: () => ({ push: jest.fn(), refresh: jest.fn() }) }));
 jest.mock("./room-actions", () => ({
   unpublishDocument: (...a: unknown[]) => unpublishDocument(...a),
   publishDocument: (...a: unknown[]) => publishDocument(...a),
@@ -11,7 +12,7 @@ jest.mock("next/link", () => ({ __esModule: true, default: ({ children, href }: 
 import { render, screen, fireEvent } from "@testing-library/react";
 import { RoomContents } from "./RoomContents";
 
-const doc = { id: "d1", name: "Deck", status: "ready" as const, hasBody: true, isLink: false, requireSignature: false, signers: [] };
+const doc = { id: "d1", name: "Deck", status: "ready" as const, hasBody: true, isLink: false, requireSignature: false, hasSignatureBlocks: false, signers: [] };
 
 describe("room action failures", () => {
   beforeEach(() => jest.clearAllMocks());
