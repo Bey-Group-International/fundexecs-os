@@ -48,8 +48,14 @@ export async function renameRoom(formData: FormData): Promise<void> {
     ? String(formData.get("description") ?? "").trim() || null
     : undefined;
 
-  const patch: { name: string; description?: string | null } = { name };
+  // Written for the reader, so a limit and plain text: the viewer never renders markup.
+  const welcomeNote = formData.get("welcome_note") !== null
+    ? String(formData.get("welcome_note") ?? "").trim().slice(0, 1200) || null
+    : undefined;
+
+  const patch: { name: string; description?: string | null; welcome_note?: string | null } = { name };
   if (description !== undefined) patch.description = description;
+  if (welcomeNote !== undefined) patch.welcome_note = welcomeNote;
 
   const supabase = await createServerClient();
   const { error } = await supabase

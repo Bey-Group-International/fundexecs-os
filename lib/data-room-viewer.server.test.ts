@@ -12,6 +12,8 @@
  */
 jest.mock("server-only", () => ({}), { virtual: true });
 jest.mock("@/lib/email", () => ({ escapeHtml: (s: string) => s, sendEmail: jest.fn() }));
+// Signing the PDF is not what is under test, and its certificate library is heavy.
+jest.mock("@/lib/signing/seal.server", () => ({ sealPdf: async (pdf: Uint8Array) => ({ pdf, sealed: false }) }));
 
 import { buildViewerPayload, isRoomOpen, previousVisitAt } from "./data-room-viewer.server";
 import { DataRoomReadError } from "./data-room-errors";
@@ -34,7 +36,15 @@ interface FileSpec {
 
 function tables(files: FileSpec[], extra: Partial<Record<string, Row[]>> = {}, roomArchived = false) {
   return {
-    data_rooms: [{ id: ROOM, organization_id: ORG, archived_at: roomArchived ? "2026-01-01T00:00:00Z" : null }],
+    data_rooms: [
+      {
+        id: ROOM,
+        organization_id: ORG,
+        name: "Fund III Raise",
+        welcome_note: "  Start with the memo.  ",
+        archived_at: roomArchived ? "2026-01-01T00:00:00Z" : null,
+      },
+    ],
     organizations: [{ id: ORG, name: "Alpha Capital" }],
     investment_theses: [],
     track_records: [],
@@ -83,6 +93,28 @@ describe("the payload sent to the browser", () => {
     expect(wire).not.toContain(SECRET_PATH);
     expect(wire).not.toContain("secret-link");
     expect(wire).not.toContain("storage_key");
+  });
+});
+
+describe("the room's own page", () => {
+  it("carries the room's name and its welcome note, trimmed", async () => {
+    const { client } = fakeDb(tables([OPEN]));
+    const payload = await buildViewerPayload(client, ORG, ROOM, null);
+    expect(payload!.room).toEqual({ name: "Fund III Raise", welcomeNote: "Start with the memo." });
+  });
+
+  it("has no note when none was written", async () => {
+    const t = tables([OPEN]);
+    t.data_rooms[0].welcome_note = "   ";
+    const payload = await buildViewerPayload(fakeDb(t).client, ORG, ROOM, null);
+    expect(payload!.room.welcomeNote).toBeNull();
+  });
+
+  it("carries neither on a link to one document", async () => {
+    const { client } = fakeDb(tables([OPEN]));
+    const payload = await buildViewerPayload(client, ORG, ROOM, null, "doc-b");
+    expect(payload!.room).toEqual({ name: "", welcomeNote: null });
+    expect(JSON.stringify(payload)).not.toContain("Start with the memo");
   });
 });
 

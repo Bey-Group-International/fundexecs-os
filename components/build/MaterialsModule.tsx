@@ -262,12 +262,14 @@ export async function MaterialsModule({ roomId }: { roomId?: string } = {}) {
           id: r.id,
           name: r.name,
           description: r.description,
+          welcomeNote: r.welcome_note ?? null,
           isDefault: r.is_default,
         }))}
         current={{
           id: room.id,
           name: room.name,
           description: room.description,
+          welcomeNote: room.welcome_note ?? null,
           isDefault: room.is_default,
         }}
       />

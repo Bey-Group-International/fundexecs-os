@@ -112,6 +112,13 @@ const DEFAULT_CONTROLS: ViewControls = {
   singleDocument: false,
 };
 
+/** What the room says about itself, above its documents. */
+export interface ViewerRoom {
+  name: string;
+  /** The firm's note to the reader; null when none was written. */
+  welcomeNote: string | null;
+}
+
 export interface ViewerSection {
   key: string;
   label: string;
@@ -127,6 +134,8 @@ interface Props {
   team: ViewerTeamMember[];
   entities: ViewerEntity[];
   docSections: ViewerSection[];
+  /** The room's name and welcome note. Absent on a single-document link. */
+  room?: ViewerRoom | null;
   gateConfig: GateConfig;
   /** True only when the server has already verified every configured gate
    * for this visitor and therefore included real content in the props above.
@@ -173,17 +182,20 @@ function formatDocDate(iso: string | null | undefined): string {
   }).format(d);
 }
 
-/** Nav key of the "All documents" view: every published file, grouped as the room's Contents lists it. */
-const ALL_DOCS_KEY = "all";
-
 /**
- * Nav key of a document section. The Build-backed pages (overview, track_record,
- * thesis, team) and the document sections share names: a room's "Investment
- * Strategy & Thesis" documents are filed under `thesis`, the same key as the
- * firm's thesis page. Un-namespaced, selecting that section rendered the thesis
- * page instead, and the files in it were unreachable for the reader.
+ * Anchor of a document section on the page. Namespaced because the Build-backed
+ * pages (team, thesis, track record) and the document sections share names: a
+ * room's "Investment Strategy & Thesis" documents are filed under `thesis`, the
+ * same key as the firm's thesis page. They are one band, never two.
  */
-const docNavKey = (sectionKey: string) => `docs:${sectionKey}`;
+const sectionBand = (sectionKey: string) => `sec-${sectionKey}`;
+const TEAM_BAND = "team";
+const STRUCTURE_BAND = "structure";
+
+interface MenuItem {
+  key: string;
+  label: string;
+}
 
 const SECTION_ORDER = new Map(DATA_ROOM_SECTIONS.map((sec, i) => [sec.key, i]));
 const SECTION_LABELS = new Map(
@@ -215,13 +227,6 @@ function viewerSections(
   );
 }
 
-type NavItem =
-  | { key: "overview"; label: string }
-  | { key: "all"; label: string; count: number }
-  | { key: "team"; label: string }
-  | { key: "structure"; label: string }
-  | { key: string; label: string; docs: ViewerDoc[] };
-
 // ---------------------------------------------------------------------------
 // Main component
 // ---------------------------------------------------------------------------
@@ -235,6 +240,7 @@ export function DataRoomViewer({
   team,
   entities,
   docSections,
+  room = null,
   gateConfig,
   contentReady,
   preview = false,
@@ -262,61 +268,29 @@ export function DataRoomViewer({
     [docSections, thesis, blended],
   );
 
-  // Build nav
-  const nav: NavItem[] = useMemo(() => {
-    const items: NavItem[] = [];
-    // A single-document link has no firm overview to show — just the document.
-    if (!viewControls.singleDocument)
-      items.push({ key: "overview", label: "Overview" });
-    // Everything published, in the order and grouping the GP's Room contents
-    // shows, so a reader can see the whole room without opening each section.
-    const total = docSections.reduce((n, s) => n + s.docs.length, 0);
-    if (!viewControls.singleDocument && total > 0)
-      items.push({ key: ALL_DOCS_KEY, label: "All documents", count: total });
-    if (team.length > 0) items.push({ key: "team", label: "Team" });
+  // The room is one page: a hero, then each section as a band down a single
+  // scroll. The menu under the header jumps to a band and follows the scroll.
+  const total = docSections.reduce((n, s) => n + s.docs.length, 0);
+  const menu: MenuItem[] = useMemo(() => {
+    // A single-document link has no firm page to show: just the document.
+    if (viewControls.singleDocument) return [];
+    const items: MenuItem[] = sections.map((s) => ({
+      key: sectionBand(s.key),
+      label: s.label,
+    }));
+    if (team.length > 0) items.push({ key: TEAM_BAND, label: "Team" });
     if (entities.length > 0)
-      items.push({ key: "structure", label: "Structure" });
-    for (const s of sections) {
-      items.push({
-        key: docNavKey(s.key),
-        label: s.label,
-        docs: s.docs,
-      } as NavItem);
-    }
+      items.push({ key: STRUCTURE_BAND, label: "Structure" });
     return items;
-  }, [
-    team.length,
-    entities.length,
-    docSections,
-    sections,
-    viewControls.singleDocument,
-  ]);
+  }, [team.length, entities.length, sections, viewControls.singleDocument]);
 
-  const focusDocSection = focusDocumentId
-    ? docSections.find((s) => s.docs.some((d) => d.id === focusDocumentId))
-    : undefined;
-  const focusSection = focusDocSection
-    ? docNavKey(focusDocSection.key)
-    : undefined;
-  // A reader opens on the room's contents (what the GP published), or on the
-  // document a link points at. Overview is one click away. Only what the reader
-  // picks is stored: the default is derived from the content on every render, so
-  // a gated link, which first renders empty and then refreshes with the room,
-  // lands on the contents instead of keeping the empty render's Overview.
-  const [picked, setPicked] = useState<string | null>(null);
-  const selected =
-    picked ??
-    focusSection ??
-    nav.find((n) => n.key === ALL_DOCS_KEY)?.key ??
-    nav[0]?.key ??
-    "overview";
+  const [active, setActive] = useState<string | null>(null);
   const mainRef = useRef<HTMLElement>(null);
   const shellRef = useRef<HTMLDivElement>(null);
 
   // The full-screen viewer is an app shell: only the reading pane scrolls, so a
-  // wheel over the header or a short contents rail used to do nothing. Send it
-  // to the pane. Not in the GP preview — there the page around it scrolls — and
-  // not while the mobile drawer covers the pane.
+  // wheel over the header used to do nothing. Send it to the pane. Not in the GP
+  // preview — there the page around it scrolls.
   useEffect(() => {
     const shell = shellRef.current;
     const pane = mainRef.current;
@@ -324,16 +298,38 @@ export function DataRoomViewer({
     return forwardWheel(shell, pane);
   }, [contentReady, preview]);
 
-  // The nav can change under a live selection — most visibly in the GP preview,
-  // where scoping to a link removes the section being read. Resolve the
-  // selection during render rather than repairing it in an effect: an effect
-  // runs after the render that already dropped the section, so the viewer would
-  // paint one frame with an empty pane and no nav item highlighted.
-  const effectiveSelected =
-    nav.length === 0 || nav.some((n) => n.key === selected)
-      ? selected
-      : nav[0].key;
+  // Which band is being read, for the menu. A browser without the observer just
+  // has no highlight; the menu still works.
+  useEffect(() => {
+    const pane = mainRef.current;
+    if (!contentReady || !pane || menu.length === 0) return;
+    if (typeof IntersectionObserver === "undefined") return;
+    const visible = new Map<string, boolean>();
+    const io = new IntersectionObserver(
+      (entries) => {
+        for (const e of entries) {
+          const key = (e.target as HTMLElement).dataset.band;
+          if (key) visible.set(key, e.isIntersecting);
+        }
+        setActive(menu.find((m) => visible.get(m.key))?.key ?? null);
+      },
+      { root: pane, rootMargin: "-15% 0px -65% 0px" },
+    );
+    pane
+      .querySelectorAll<HTMLElement>("[data-band]")
+      .forEach((el) => io.observe(el));
+    return () => io.disconnect();
+  }, [contentReady, menu]);
 
+  // Open on the document a link points at (or a row clicked in Room contents).
+  useEffect(() => {
+    const pane = mainRef.current;
+    if (!contentReady || !focusDocumentId || !pane) return;
+    const el = Array.from(
+      pane.querySelectorAll<HTMLElement>("[data-doc-id]"),
+    ).find((d) => d.dataset.docId === focusDocumentId);
+    el?.scrollIntoView?.({ block: "start" });
+  }, [contentReady, focusDocumentId]);
   // ---------------------------------------------------------------------------
   // Reading time, per document
   // ---------------------------------------------------------------------------
@@ -433,19 +429,15 @@ export function DataRoomViewer({
     };
   }, [contentReady, preview, token, visitorId]);
 
-  const handleSelect = useCallback(
-    (key: string) => {
-      if (key === effectiveSelected) return;
-      // Credit the section being left before its documents leave the page.
-      flushReading.current();
-      setPicked(key);
-      // A new section starts at its top, not wherever the last one was scrolled.
-      if (mainRef.current) mainRef.current.scrollTop = 0;
-      if (!preview && document.scrollingElement)
-        document.scrollingElement.scrollTop = 0;
-    },
-    [effectiveSelected, preview],
-  );
+  const scrollToBand = useCallback((key: string) => {
+    const el = mainRef.current?.querySelector<HTMLElement>(
+      `[data-band="${key}"]`,
+    );
+    if (!el) return;
+    el.scrollIntoView?.({ behavior: "smooth", block: "start" });
+    setActive(key);
+  }, []);
+
 
   // Tell the server this reader is looking at the room, once per page view.
   // It alerts the link's creator on this reader's first open only.
@@ -507,24 +499,28 @@ export function DataRoomViewer({
   // Main viewer
   // ---------------------------------------------------------------------------
 
-  const current = nav.find((n) => n.key === effectiveSelected) ?? nav[0];
+  const latest = sections
+    .flatMap((sec) => sec.docs.map((d) => d.updatedAt ?? ""))
+    .filter(Boolean)
+    .sort()
+    .pop();
+  const contactEmail = team.find((m) => m.email)?.email ?? null;
+  const gutter = compact ? "px-4" : "px-4 sm:px-6 lg:px-10";
 
   return (
     <div
       ref={shellRef}
       className={`flex flex-col bg-surface-0 text-fg-primary ${
-        // Exactly the viewport, so the contents rail stays put and only the
-        // reading pane scrolls. With min-h-screen the row grew with its
-        // content and the whole window scrolled the rail away.
+        // Exactly the viewport, so the header and menu stay put and only the
+        // page scrolls.
         preview ? "h-full min-h-0" : "h-dvh print:h-auto"
       }`}
     >
       {/* Top bar */}
       <header
-        className="flex shrink-0 items-center gap-3 border-b border-line px-4 py-3 sm:gap-4 print:border-b-2"
+        className={`flex shrink-0 items-center gap-3 border-b border-line py-3 sm:gap-4 print:border-b-2 ${gutter}`}
         style={{ borderBottomColor: `${accent}33` }}
       >
-        {/* Logo / firm name */}
         <div className="flex min-w-0 flex-1 items-center gap-3">
           {org.logo_url ? (
             // eslint-disable-next-line @next/next/no-img-element
@@ -541,16 +537,10 @@ export function DataRoomViewer({
               {org.name.charAt(0).toUpperCase()}
             </span>
           )}
-          <div className="min-w-0">
-            <p className="truncate font-display text-sm font-semibold text-fg-primary">
-              {org.name}
-            </p>
-            {org.tagline ? (
-              <p className="truncate text-xs text-fg-muted">{org.tagline}</p>
-            ) : null}
-          </div>
+          <p className="truncate font-display text-sm font-semibold text-fg-primary">
+            {org.name}
+          </p>
         </div>
-
         <span
           className={`shrink-0 rounded-full border px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider ${
             preview
@@ -566,274 +556,65 @@ export function DataRoomViewer({
         </span>
       </header>
 
-      {/* On a phone the section tree is a selector under the header; the rail is
-          for wider screens. 16px text keeps iOS from zooming on focus. */}
-      {preview && !compact ? null : (
-        <div
-          className={`shrink-0 border-b border-line bg-surface-1 px-4 py-2 print:hidden ${compact ? "" : "lg:hidden"}`}
+      {/* The menu: a row that scrolls sideways on a phone and jumps to a band. */}
+      {menu.length > 0 ? (
+        <nav
+          aria-label="Sections"
+          className={`flex shrink-0 gap-1 overflow-x-auto border-b border-line bg-surface-1 py-1.5 print:hidden ${gutter}`}
         >
-          <label htmlFor="viewer-section" className="sr-only">
-            Section
-          </label>
-          <select
-            id="viewer-section"
-            value={effectiveSelected}
-            onChange={(e) => handleSelect(e.target.value)}
-            className="min-h-11 w-full rounded-md border border-line bg-surface-0 px-3 text-base text-fg-primary focus:outline-none"
-          >
-            {nav.map((item) => (
-              <option key={item.key} value={item.key}>
+          {menu.map((item) => {
+            const on = item.key === active;
+            return (
+              <button
+                key={item.key}
+                type="button"
+                onClick={() => scrollToBand(item.key)}
+                aria-current={on ? "true" : undefined}
+                className={`min-h-11 shrink-0 whitespace-nowrap rounded-md px-3 text-sm transition sm:min-h-9 ${
+                  on
+                    ? "bg-surface-0 font-medium text-fg-primary"
+                    : "text-fg-secondary hover:bg-surface-0/60 hover:text-fg-primary"
+                }`}
+                style={on ? { boxShadow: `inset 0 -2px 0 ${accent}` } : undefined}
+              >
                 {item.label}
-                {"count" in item ? ` (${item.count})` : ""}
-                {"docs" in item && item.docs.length > 1
-                  ? ` (${item.docs.length})`
-                  : ""}
-              </option>
-            ))}
-          </select>
-        </div>
-      )}
+              </button>
+            );
+          })}
+        </nav>
+      ) : null}
 
-      <div className="flex min-h-0 flex-1 overflow-hidden print:block print:overflow-visible">
-        {/* Sidebar */}
-        <aside
-          className={
-            preview
-              ? compact
-                ? "hidden"
-                : "relative flex w-48 shrink-0 flex-col border-r border-line bg-surface-1 print:hidden"
-              : "hidden w-56 shrink-0 flex-col border-r border-line bg-surface-1 lg:flex print:hidden"
-          }
-        >
-          <div className="relative z-10 flex flex-1 flex-col overflow-y-auto py-4">
-            <p className="px-4 pb-2 font-mono text-[11px] uppercase tracking-[0.16em] text-fg-muted">
-              Contents
-            </p>
-            <nav className="flex flex-col gap-0.5 px-2">
-              {nav.map((item) => {
-                const active = item.key === effectiveSelected;
-                return (
-                  <button
-                    key={item.key}
-                    type="button"
-                    onClick={() => handleSelect(item.key)}
-                    className={`
-                      w-full rounded-lg px-3 py-3 text-left text-sm transition lg:py-2
-                      ${
-                        active
-                          ? "bg-surface-0 font-medium text-fg-primary"
-                          : "text-fg-secondary hover:bg-surface-0/60 hover:text-fg-primary"
-                      }
-                    `}
-                    style={
-                      active
-                        ? {
-                            borderLeft: `2px solid ${accent}`,
-                            paddingLeft: "10px",
-                          }
-                        : undefined
-                    }
-                  >
-                    {item.label}
-                    {"docs" in item && item.docs.length > 1 ? (
-                      <span className="ml-2 font-mono text-[11px] text-fg-muted">
-                        {item.docs.length}
-                      </span>
-                    ) : null}
-                    {"count" in item ? (
-                      <span className="ml-2 font-mono text-[11px] text-fg-muted">
-                        {item.count}
-                      </span>
-                    ) : null}
-                  </button>
-                );
-              })}
-            </nav>
-          </div>
-
-          <div className="shrink-0 border-t border-line px-4 py-3">
-            {viewerEmail ? (
-              <p className="truncate font-mono text-[11px] text-fg-muted">
-                {viewerEmail}
-              </p>
-            ) : null}
-            <p className="font-mono text-[11px] uppercase tracking-wider text-fg-muted">
-              FundExecs OS
-            </p>
-          </div>
-        </aside>
-
-        {/* Content panel */}
-        <main
-          ref={mainRef}
-          className="min-w-0 flex-1 overflow-y-auto px-4 py-6 sm:px-6 sm:py-8 lg:px-10 print:overflow-visible print:p-0"
-        >
-          <ContentPanel
-            selected={effectiveSelected}
+      <main
+        ref={mainRef}
+        className="min-w-0 flex-1 overflow-y-auto print:overflow-visible"
+      >
+        {viewControls.singleDocument ? null : (
+          <Hero
             org={org}
+            room={room}
             blended={blended}
-            thesis={thesis}
-            team={team}
-            entities={entities}
-            docSections={sections}
-            token={token}
+            total={total}
+            latest={latest}
             accent={accent}
-            current={current}
-            preview={preview}
-            controls={viewControls}
-            viewerLabel={viewerLabel}
-            signerEmail={signerEmail}
-            focusDocumentId={focusDocumentId}
+            gutter={gutter}
+            compact={compact}
+            contactEmail={contactEmail}
+            hasSections={menu.length > 0}
+            onBrowse={() => menu[0] && scrollToBand(menu[0].key)}
           />
-          {/* On paper: who it was prepared for. The sidebar and buttons are gone. */}
-          {!preview ? (
-            <p className="mt-8 hidden border-t border-line pt-2 text-xs text-fg-muted print:block">
-              Confidential{viewerLabel ? ` · Prepared for ${viewerLabel}` : ""}{" "}
-              · {org.name}
-            </p>
-          ) : null}
-        </main>
-      </div>
-    </div>
-  );
-}
+        )}
 
-function ContentPanel({
-  selected,
-  org,
-  blended,
-  thesis,
-  team,
-  entities,
-  docSections,
-  token,
-  accent,
-  preview,
-  controls,
-  viewerLabel,
-  signerEmail,
-  focusDocumentId,
-}: {
-  selected: string;
-  org: ViewerOrg;
-  blended: ViewerTrackRecord;
-  thesis: ViewerThesis | null;
-  team: ViewerTeamMember[];
-  entities: ViewerEntity[];
-  docSections: ViewerSection[];
-  token: string;
-  accent: string;
-  preview?: boolean;
-  current: NavItem;
-  controls: ViewControls;
-  viewerLabel: string | null;
-  signerEmail: string | null;
-  focusDocumentId: string | null;
-}) {
-  if (selected === "overview") {
-    return (
-      <div className="max-w-2xl">
-        <SectionHeader title="Overview" accent={accent} />
-        <div className="mt-4 space-y-3 text-sm text-fg-secondary">
-          {org.tagline ? (
-            <p className="text-base font-medium text-fg-primary">
-              {org.tagline}
-            </p>
-          ) : null}
-          <p className="font-mono text-[11px] uppercase tracking-wider text-fg-muted">
-            {[org.entity_type, org.jurisdiction, org.website]
-              .filter(Boolean)
-              .join("  ·  ") || "—"}
-          </p>
-          {org.legal_name ? (
-            <p className="text-xs text-fg-muted">{org.legal_name}</p>
-          ) : null}
-        </div>
-      </div>
-    );
-  }
-
-  if (selected === "team") {
-    return (
-      <div className="max-w-2xl">
-        <SectionHeader title="Team" accent={accent} />
-        <div className="mt-4 flex flex-wrap gap-2">
-          {team.map((m, i) => (
-            <span
-              key={i}
-              className="rounded-full border border-line bg-surface-1 px-3 py-1.5 text-sm"
-            >
-              <span className="font-medium text-fg-primary">{m.name}</span>
-              {m.title ? (
-                <span className="text-fg-muted"> · {m.title}</span>
+        <div className={`mx-auto w-full max-w-5xl py-2 ${gutter}`}>
+          {sections.map((sec) => (
+            <Band key={sec.key} id={sectionBand(sec.key)} title={sec.label} accent={accent}>
+              {sec.key === BUILD_PAGE_SECTION.thesis && thesis ? (
+                <ThesisSummary thesis={thesis} />
               ) : null}
-            </span>
-          ))}
-        </div>
-      </div>
-    );
-  }
-
-  if (selected === "structure") {
-    return (
-      <div className="max-w-2xl">
-        <SectionHeader title="Structure" accent={accent} />
-        <div className="mt-4 space-y-2">
-          {entities.map((e, i) => (
-            <div
-              key={i}
-              className="rounded-lg border border-line bg-surface-1 px-4 py-2.5"
-            >
-              <p className="text-sm font-medium text-fg-primary">{e.name}</p>
-              {e.entity_type ? (
-                <p className="text-xs text-fg-muted">{e.entity_type}</p>
+              {sec.key === BUILD_PAGE_SECTION.trackRecord &&
+              blended.dealCount > 0 ? (
+                <TrackRecordSummary blended={blended} compact={compact} />
               ) : null}
-            </div>
-          ))}
-        </div>
-      </div>
-    );
-  }
-
-  if (selected === ALL_DOCS_KEY) {
-    const listed = docSections.filter((sec) => sec.docs.length > 0);
-    const total = listed.reduce((n, sec) => n + sec.docs.length, 0);
-    const latest = listed
-      .flatMap((sec) => sec.docs.map((d) => d.updatedAt ?? ""))
-      .filter(Boolean)
-      .sort()
-      .pop();
-    const facts = [
-      [org.entity_type, org.jurisdiction].filter(Boolean).join(" · "),
-      `${total} ${total === 1 ? "document" : "documents"}`,
-      latest ? `Updated ${formatDocDate(latest)}` : "",
-    ].filter(Boolean);
-    return (
-      <div className="max-w-4xl">
-        {/* The cover: whose room this is, in a line, before the index. */}
-        <div className="mb-8 border-b border-line pb-6">
-          <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-fg-muted">
-            Confidential · Data room
-          </p>
-          <p className="mt-2 font-display text-2xl font-semibold tracking-tight text-fg-primary sm:text-3xl">
-            {org.name}
-          </p>
-          {org.tagline ? (
-            <p className="mt-1 text-base text-fg-secondary">{org.tagline}</p>
-          ) : null}
-          <p className="mt-3 font-mono text-[11px] uppercase tracking-wider text-fg-muted">
-            {facts.join("  ·  ")}
-          </p>
-        </div>
-        <SectionHeader title="All documents" accent={accent} />
-        <div className="mt-4 space-y-6">
-          {listed.map((sec) => (
-            <div key={sec.key}>
-              <p className="mb-2 font-mono text-[11px] uppercase tracking-[0.16em] text-fg-muted">
-                {sec.label}
-                <span className="ml-2 text-fg-muted/70">{sec.docs.length}</span>
-              </p>
-              <div className="space-y-2">
+              <div className="mt-4 space-y-3">
                 {sec.docs.map((doc) => (
                   <DocCard
                     key={doc.id}
@@ -841,59 +622,262 @@ function ContentPanel({
                     token={token}
                     accent={accent}
                     preview={preview}
-                    controls={controls}
+                    controls={viewControls}
                     viewerLabel={viewerLabel}
                     signerEmail={signerEmail}
-                    // A long list of open file previews is not a list: the reader opens the ones they want.
-                    startOpen={false}
+                    // One document by its own link, or the one a link points at: open it.
+                    // A page of open previews is not a page: the reader opens what they want.
+                    startOpen={
+                      viewControls.singleDocument || doc.id === focusDocumentId
+                    }
                   />
                 ))}
               </div>
-            </div>
+            </Band>
           ))}
+
+          {team.length > 0 ? (
+            <Band id={TEAM_BAND} title="Team" accent={accent}>
+              <div className="mt-4 flex flex-wrap gap-2">
+                {team.map((m, i) => (
+                  <span
+                    key={i}
+                    className="rounded-full border border-line bg-surface-1 px-3 py-1.5 text-sm"
+                  >
+                    <span className="font-medium text-fg-primary">{m.name}</span>
+                    {m.title ? (
+                      <span className="text-fg-muted"> · {m.title}</span>
+                    ) : null}
+                  </span>
+                ))}
+              </div>
+            </Band>
+          ) : null}
+
+          {entities.length > 0 ? (
+            <Band id={STRUCTURE_BAND} title="Structure" accent={accent}>
+              <div className="mt-4 grid gap-2 sm:grid-cols-2">
+                {entities.map((e, i) => (
+                  <div
+                    key={i}
+                    className="rounded-lg border border-line bg-surface-1 px-4 py-2.5"
+                  >
+                    <p className="text-sm font-medium text-fg-primary">{e.name}</p>
+                    {e.entity_type ? (
+                      <p className="text-xs text-fg-muted">{e.entity_type}</p>
+                    ) : null}
+                  </div>
+                ))}
+              </div>
+            </Band>
+          ) : null}
+
+          {sections.length === 0 && team.length === 0 && entities.length === 0 ? (
+            <p className="py-12 text-center text-sm text-fg-muted">
+              Nothing has been published to this room yet.
+            </p>
+          ) : null}
+
+          <div className="flex items-center justify-between gap-3 border-t border-line py-6 print:hidden">
+            <p className="truncate font-mono text-[11px] text-fg-muted">
+              {viewerEmail ?? ""}
+            </p>
+            <p className="font-mono text-[11px] uppercase tracking-wider text-fg-muted">
+              FundExecs OS
+            </p>
+          </div>
+          {/* On paper: who it was prepared for. The menu and buttons are gone. */}
+          {!preview ? (
+            <p className="mt-2 hidden border-t border-line pt-2 text-xs text-fg-muted print:block">
+              Confidential{viewerLabel ? ` · Prepared for ${viewerLabel}` : ""} ·{" "}
+              {org.name}
+            </p>
+          ) : null}
         </div>
-      </div>
-    );
-  }
-
-  // Document section
-  const sec = docSections.find((s) => docNavKey(s.key) === selected);
-  if (!sec) return null;
-
-  return (
-    <div className="max-w-4xl">
-      <SectionHeader title={sec.label} accent={accent} />
-      {sec.key === BUILD_PAGE_SECTION.thesis && thesis ? (
-        <ThesisSummary thesis={thesis} />
-      ) : null}
-      {sec.key === BUILD_PAGE_SECTION.trackRecord && blended.dealCount > 0 ? (
-        <TrackRecordSummary blended={blended} />
-      ) : null}
-      <div className="mt-4 space-y-6">
-        {sec.docs.map((doc) => (
-          <DocCard
-            key={doc.id}
-            doc={doc}
-            token={token}
-            accent={accent}
-            preview={preview}
-            controls={controls}
-            viewerLabel={viewerLabel}
-            signerEmail={signerEmail}
-            // One document on the page, or the one a link pointed at: open it.
-            startOpen={
-              controls.singleDocument ||
-              doc.id === focusDocumentId ||
-              sec.docs.length === 1
-            }
-          />
-        ))}
-      </div>
+      </main>
     </div>
   );
 }
 
-function TrackRecordSummary({ blended }: { blended: ViewerTrackRecord }) {
+/** The room's front page: whose it is, a note from them, the numbers, and where to go next. */
+function Hero({
+  org,
+  room,
+  blended,
+  total,
+  latest,
+  accent,
+  gutter,
+  compact,
+  contactEmail,
+  hasSections,
+  onBrowse,
+}: {
+  org: ViewerOrg;
+  room: ViewerRoom | null;
+  blended: ViewerTrackRecord;
+  total: number;
+  latest: string | undefined;
+  accent: string;
+  gutter: string;
+  compact: boolean;
+  contactEmail: string | null;
+  hasSections: boolean;
+  onBrowse: () => void;
+}) {
+  const facts = [org.entity_type, org.jurisdiction, org.website]
+    .filter(Boolean)
+    .join("  ·  ");
+  const stats: { v: string; l: string }[] = [];
+  if (blended.dealCount > 0) {
+    if (blended.weightedGrossIrr != null)
+      stats.push({ v: `${blended.weightedGrossIrr.toFixed(0)}%`, l: "Gross IRR" });
+    if (blended.pooledMoic != null)
+      stats.push({ v: `${blended.pooledMoic.toFixed(1)}x`, l: "MOIC" });
+    if (blended.dpi != null)
+      stats.push({ v: `${blended.dpi.toFixed(2)}x`, l: "DPI" });
+    const invested = compactUsd(blended.totalInvested);
+    if (invested) stats.push({ v: invested, l: "Invested" });
+  }
+  if (total > 0)
+    stats.push({ v: String(total), l: total === 1 ? "Document" : "Documents" });
+  if (latest && formatDocDate(latest))
+    stats.push({ v: formatDocDate(latest), l: "Last updated" });
+
+  const btn =
+    "inline-flex min-h-11 items-center justify-center rounded-md px-5 py-2 text-sm font-medium transition";
+  return (
+    <section
+      data-band="top"
+      aria-label="Overview"
+      className="border-b border-line"
+      style={{
+        backgroundImage: `radial-gradient(60rem 22rem at 15% -10%, ${accent}1f, transparent 70%)`,
+      }}
+    >
+      <div
+        className={`mx-auto w-full max-w-5xl ${gutter} ${compact ? "py-10" : "py-12 sm:py-16"}`}
+      >
+        <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-fg-muted">
+          Confidential · Data room{room?.name ? ` · ${room.name}` : ""}
+        </p>
+        <h1
+          className={`mt-3 font-display font-semibold tracking-tight text-fg-primary ${
+            compact ? "text-3xl" : "text-3xl sm:text-5xl"
+          }`}
+        >
+          {org.name}
+        </h1>
+        {org.tagline ? (
+          <p
+            className={`mt-3 max-w-2xl text-fg-secondary ${compact ? "text-base" : "text-base sm:text-xl"}`}
+          >
+            {org.tagline}
+          </p>
+        ) : null}
+        {facts ? (
+          <p className="mt-3 font-mono text-[11px] uppercase tracking-wider text-fg-muted">
+            {facts}
+          </p>
+        ) : null}
+        {org.legal_name ? (
+          <p className="mt-1 text-xs text-fg-muted">{org.legal_name}</p>
+        ) : null}
+
+        {room?.welcomeNote ? (
+          <div
+            className="mt-8 max-w-2xl rounded-xl border border-line bg-surface-1/80 p-5"
+            style={{ borderLeft: `3px solid ${accent}` }}
+          >
+            <p className="whitespace-pre-line text-sm leading-relaxed text-fg-secondary">
+              {room.welcomeNote}
+            </p>
+          </div>
+        ) : null}
+
+        {stats.length > 0 ? (
+          <dl
+            className={`mt-8 grid gap-3 ${
+              compact ? "grid-cols-2" : "grid-cols-2 sm:grid-cols-3 lg:grid-cols-6"
+            }`}
+          >
+            {stats.map((s) => (
+              <div
+                key={s.l}
+                className="rounded-xl border border-line bg-surface-1 px-4 py-3"
+                style={{ boxShadow: "0 1px 4px rgba(0,0,0,0.12)" }}
+              >
+                <dd className="whitespace-nowrap font-display text-lg font-semibold text-fg-primary">
+                  {s.v}
+                </dd>
+                <dt className="mt-1 font-mono text-[11px] uppercase tracking-wider text-fg-muted">
+                  {s.l}
+                </dt>
+              </div>
+            ))}
+          </dl>
+        ) : null}
+
+        {hasSections || contactEmail ? (
+          <div className="mt-8 flex flex-wrap gap-3 print:hidden">
+            {hasSections ? (
+              <button
+                type="button"
+                onClick={onBrowse}
+                className={`${btn} text-surface-0`}
+                style={{ backgroundColor: accent }}
+              >
+                View documents
+              </button>
+            ) : null}
+            {contactEmail ? (
+              <a
+                href={`mailto:${contactEmail}`}
+                className={`${btn} border border-line text-fg-primary hover:bg-surface-1`}
+              >
+                Contact the team
+              </a>
+            ) : null}
+          </div>
+        ) : null}
+      </div>
+    </section>
+  );
+}
+
+/** One section of the page: a heading, then whatever it holds. */
+function Band({
+  id,
+  title,
+  accent,
+  children,
+}: {
+  id: string;
+  title: string;
+  accent: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <section
+      id={id}
+      data-band={id}
+      aria-labelledby={`${id}-title`}
+      className="scroll-mt-4 border-b border-line/60 py-10 last:border-b-0"
+    >
+      <SectionHeader title={title} accent={accent} id={`${id}-title`} />
+      {children}
+    </section>
+  );
+}
+
+
+function TrackRecordSummary({
+  blended,
+  compact = false,
+}: {
+  blended: ViewerTrackRecord;
+  compact?: boolean;
+}) {
   const rows = [
     {
       v:
@@ -911,7 +895,9 @@ function TrackRecordSummary({ blended }: { blended: ViewerTrackRecord }) {
   ];
   return (
     <div className="mt-4 max-w-2xl">
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+      <div
+        className={`grid grid-cols-2 gap-3 ${compact ? "" : "sm:grid-cols-4"}`}
+      >
         {rows.map((m) => (
           <div
             key={m.l}
@@ -967,16 +953,27 @@ function ThesisSummary({ thesis }: { thesis: ViewerThesis }) {
   );
 }
 
-function SectionHeader({ title, accent }: { title: string; accent: string }) {
+function SectionHeader({
+  title,
+  accent,
+  id,
+}: {
+  title: string;
+  accent: string;
+  id?: string;
+}) {
   return (
     <div className="flex items-center gap-3 border-b border-line pb-4">
       <span
         className="h-5 w-0.5 rounded-full"
         style={{ backgroundColor: accent }}
       />
-      <h1 className="font-display text-lg font-semibold tracking-tight text-fg-primary">
+      <h2
+        id={id}
+        className="font-display text-xl font-semibold tracking-tight text-fg-primary"
+      >
         {title}
-      </h1>
+      </h2>
     </div>
   );
 }

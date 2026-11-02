@@ -13,6 +13,7 @@ export interface RoomOption {
   id: string;
   name: string;
   description: string | null;
+  welcomeNote?: string | null;
   isDefault: boolean;
 }
 
@@ -126,6 +127,19 @@ export function RoomSwitcher({ rooms, current }: { rooms: RoomOption[]; current:
               placeholder="Description (optional)"
               className="min-w-[14rem] flex-1 rounded-md border border-line bg-surface-0 px-3 py-2 text-sm text-fg-primary placeholder:text-fg-muted focus:border-gold-500/60 focus:outline-none"
             />
+            <label className="block w-full">
+              <span className="font-mono text-[11px] uppercase tracking-wider text-fg-muted">
+                Welcome note — shown to LPs at the top of the room
+              </span>
+              <textarea
+                name="welcome_note"
+                rows={3}
+                maxLength={1200}
+                defaultValue={current.welcomeNote ?? ""}
+                placeholder="A few lines to your investors: what this room is, what to read first."
+                className="mt-1 w-full rounded-md border border-line bg-surface-0 px-3 py-2 text-sm text-fg-primary placeholder:text-fg-muted focus:border-gold-500/60 focus:outline-none"
+              />
+            </label>
             <button
               type="submit"
               disabled={pending}
