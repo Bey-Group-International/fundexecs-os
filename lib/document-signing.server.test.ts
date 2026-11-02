@@ -185,14 +185,14 @@ describe("the signed copy once counter-signed", () => {
       storage: { from: () => ({ download: async () => ({ data: null }) }) },
     } as never;
     await buildSignedCopy(client, "sig-1");
-    const call = built.mock.calls.at(-1)![0];
+    const call = built.mock.calls.at(-1)![0] as unknown as { title: string; stamps: { label: string; name?: string; signaturePng?: string | null; signedAt?: string }[] };
     built.mockRestore();
     return call;
   };
 
   it("carries only the signer until the fund has counter-signed", async () => {
     const call = await stampsOf({});
-    expect(call.stamps.map((s: { label: string }) => s.label)).toEqual(["Signer"]);
+    expect(call.stamps.map((s) => s.label)).toEqual(["Signer"]);
     expect(call.title).toContain("signed by Jane");
   });
 
@@ -201,7 +201,7 @@ describe("the signed copy once counter-signed", () => {
       countersigner_name: "Fund Admin", countersigner_email: "a@fund.com",
       countersigned_at: "2026-11-03T09:00:00Z", countersignature_png: PNG,
     });
-    expect(call.stamps.map((s: { label: string }) => s.label)).toEqual(["Signer", "Countersigner (fund)"]);
+    expect(call.stamps.map((s) => s.label)).toEqual(["Signer", "Countersigner (fund)"]);
     expect(call.stamps[1]).toMatchObject({ name: "Fund Admin", signaturePng: PNG, signedAt: "2026-11-03T09:00:00Z" });
     expect(call.title).toContain("executed");
   });
