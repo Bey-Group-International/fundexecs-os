@@ -161,6 +161,7 @@ export async function runOfacScreen(
 
     // Every run is logged, including one that changes nothing: that is when an
     // auditor most needs to see that the screen ran, by whom, and against which list.
+    // `wrote` says whether it changed the check, so it is true only for a run about to.
     const audit = (wrote: boolean) =>
       recordAudit(client, {
         orgId,
@@ -188,6 +189,11 @@ export async function runOfacScreen(
       return { ok: true, flagged: result.flagged, screened: result.results.filter((r) => r.screened).length, wrote: false, result };
     }
 
+    // The entry goes in before the check changes, and a screen that cannot be logged
+    // does not change anything: a result that moved a check must always have a trace
+    // (SOC 2 G-7). If the save then fails, a second entry says so.
+    if (!(await audit(true))) return { ok: false, error: "Couldn't record the screen. Try again." };
+
     const patch = {
       status: outcome.status,
       method: "manual",
@@ -207,9 +213,15 @@ export async function runOfacScreen(
       : await client.from("onboarding_checks").insert({ ...patch, organization_id: orgId, session_id: sessionId, kind: "sanctions" });
     if (error) {
       console.error("[ofac] could not record the screen", { code: error.code, message: error.message });
+      await recordAudit(client, {
+        orgId,
+        sessionId,
+        action: "check.screen_failed",
+        ...(actor.kind === "user" ? { actorKind: "user" as const, actorId: actor.id } : { actorKind: "system" as const }),
+        detail: { status: outcome.status },
+      });
       return { ok: false, error: "Couldn't save the screen. Try again." };
     }
-    await audit(true);
     return { ok: true, flagged: result.flagged, screened: result.results.filter((r) => r.screened).length, wrote: true, result };
   } catch (err) {
     console.error("[ofac] screen threw", err);
