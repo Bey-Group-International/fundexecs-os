@@ -172,6 +172,7 @@ export function describeAudit(action: string, detail: unknown): string {
   if (action === "check.recorded") return `${kind} check recorded as ${String(d.status ?? "")}`;
   if (action === "check.updated") return `${kind} check changed from ${String(d.from ?? "")} to ${String(d.to ?? "")}`;
   if (action === "decision.recorded") return `Decision recorded: ${String(d.decision ?? "").replace("_", " ")}`;
+  if (action === "privacy.requested") return d.request === "erasure" ? "LP asked for their data to be erased" : "LP asked for a copy of their data";
   if (action === "data.viewed") return "Details opened by an owner or admin";
   return action;
 }

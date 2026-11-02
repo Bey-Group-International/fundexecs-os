@@ -5,6 +5,7 @@ import { openProfileRow } from "@/lib/lp-pii";
 import { createServiceClient, hasSupabaseServiceEnv } from "@/lib/supabase/server";
 import { LPPortalFlow } from "@/components/lp-portal/LPPortalFlow";
 import { LPAccessGate } from "@/components/lp-portal/LPAccessGate";
+import { LPDataRequest } from "@/components/lp-portal/LPDataRequest";
 import { LPWizard, type WizardInitial } from "@/components/lp-portal/LPWizard";
 import { hasLpPass } from "@/lib/lp-access.server";
 import { maskEmail } from "@/lib/lp-wizard";
@@ -192,6 +193,8 @@ export default async function LPOnboardingPortal(props: { params: Promise<{ toke
         </header>
 
         {await content()}
+        {/* Whoever has proved it is them can ask for their data, in any review state. */}
+        {(await hasLpPass(sessionId)) && <LPDataRequest token={params.token} />}
 
         <footer className="mt-12 border-t border-line pt-6 text-center">
           <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-fg-muted">
