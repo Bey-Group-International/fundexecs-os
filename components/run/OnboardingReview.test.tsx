@@ -1,12 +1,15 @@
 const recordCheck = jest.fn(async (_input: unknown): Promise<{ ok: true } | { ok: false; error: string }> => ({ ok: true }));
 const refreshIdentity = jest.fn(async (_id: string): Promise<{ ok: true; verified?: boolean } | { ok: false; error: string }> => ({ ok: true, verified: true }));
 const runOfac = jest.fn(async (_id: string): Promise<{ ok: true; flagged?: number; screened?: number; wrote?: boolean } | { ok: false; error: string }> => ({ ok: true, flagged: 0, screened: 2, wrote: true }));
+const runPep = jest.fn(async (_id: string): Promise<{ ok: true; flagged?: number; screened?: number; wrote?: boolean } | { ok: false; error: string }> => ({ ok: true, flagged: 0, screened: 2, wrote: true }));
 const recordDecision = jest.fn(async (_input: unknown): Promise<{ ok: true } | { ok: false; error: string }> => ({ ok: true }));
 jest.mock("@/app/(app)/[hub]/[module]/onboarding-actions", () => ({
   recordOnboardingCheck: (i: unknown) => recordCheck(i),
   recordOnboardingDecision: (i: unknown) => recordDecision(i),
   refreshIdentityCheckAction: (id: string) => refreshIdentity(id),
   runOfacScreenAction: (id: string) => runOfac(id),
+  runPepScreenAction: (id: string) => runPep(id),
+  decideCarryoverAction: jest.fn(),
 }));
 
 const emailLink = jest.fn(async (_id: string): Promise<{ ok: true; sent: boolean } | { ok: false; error: string }> => ({ ok: true, sent: true }));
@@ -52,6 +55,7 @@ const open = () => fireEvent.click(screen.getByRole("button", { name: /Calpers P
 
 beforeEach(() => {
   runOfac.mockClear();
+  runPep.mockClear();
   refreshIdentity.mockClear();
   emailLink.mockClear();
   makeCode.mockClear();
@@ -367,7 +371,7 @@ describe("the OFAC first-pass screen on the sanctions check", () => {
     render(<OnboardingReview lps={[lp()]} />);
     open();
     expect(screen.getAllByRole("button", { name: "Run OFAC screen" })).toHaveLength(1);
-    expect(screen.getByText(/It flags; it never clears/)).toBeInTheDocument();
+    expect(screen.getByText(/First pass on names against the SDN list\. It flags; it never clears/)).toBeInTheDocument();
   });
 
   it("runs the screen for this LP, and says a clean result is not a clearance", async () => {
@@ -448,5 +452,41 @@ describe("risk-based routing", () => {
     fireEvent.change(screen.getByLabelText("Decision"), { target: { value: "rejected" } });
     fireEvent.change(screen.getByLabelText("Reasoning"), { target: { value: "No." } });
     expect(screen.getByRole("button", { name: "Record decision" })).not.toBeDisabled();
+  });
+});
+
+describe("the PEP screen", () => {
+  const openPep = () => {
+    render(<OnboardingReview lps={[lp({ checks: [] })]} />);
+    open();
+  };
+  it("is offered on the PEP check only, and says that it sends names out", () => {
+    openPep();
+    expect(screen.getAllByRole("button", { name: "Run PEP screen" })).toHaveLength(1);
+    expect(screen.getByText(/Sends the LP's and owners' names to your screening provider/)).toBeInTheDocument();
+  });
+  it("reports a possible match without calling it a clearance", async () => {
+    runPep.mockResolvedValueOnce({ ok: true, flagged: 1, screened: 2, wrote: true });
+    openPep();
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Run PEP screen" }));
+    });
+    expect(runPep).toHaveBeenCalledWith("s1");
+    expect(screen.getByText(/1 possible match flagged/)).toBeInTheDocument();
+  });
+  it("says 'no possible match' is not a clearance", async () => {
+    openPep();
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Run PEP screen" }));
+    });
+    expect(screen.getByText(/No possible match\. This is not a clearance/)).toBeInTheDocument();
+  });
+  it("shows why a screen could not run", async () => {
+    runPep.mockResolvedValueOnce({ ok: false, error: "PEP screening isn't set up for this workspace. Record your own PEP result." });
+    openPep();
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Run PEP screen" }));
+    });
+    expect(screen.getByRole("alert")).toHaveTextContent(/isn't set up/);
   });
 });
