@@ -3,9 +3,9 @@
 // components/execute/LPOnboardingStatus.tsx
 // LP onboarding status board — shows all active onboarding sessions with progress.
 import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import type { OnboardingStatus } from "@/lib/lp-onboarding";
-import { countersignSubscriptionAction } from "@/components/execute/countersign-actions";
-import { SignaturePad } from "@/components/signing/SignaturePad";
+import { prepareSubscriptionAgreement } from "@/components/execute/subscription-agreement-actions";
 import { buildOnboardingSteps, onboardingProgressPct } from "@/lib/lp-onboarding";
 
 interface Session {
@@ -17,11 +17,10 @@ interface Session {
   fundName?: string;
   commitmentAmount?: number | null;
   expiresAt: string;
-  /** When each side signed the subscription agreement; absent until they have. */
-  lpSignedAt?: string | null;
-  gpSignedAt?: string | null;
-  /** The viewer may countersign (owner or admin). */
-  canCountersign?: boolean;
+  /** The LP's subscription agreement envelope, once one has been prepared. */
+  agreement?: { envelopeId: string; status: string } | null;
+  /** The viewer may prepare, send and countersign it (owner or admin). */
+  canManageAgreement?: boolean;
 }
 
 const STATUS_COLOR: Record<OnboardingStatus, string> = {
@@ -44,59 +43,61 @@ function ProgressBar({ pct }: { pct: number }) {
   );
 }
 
-function SignatureRow({ session }: { session: Session }) {
-  const [name, setName] = useState("");
-  const [agreed, setAgreed] = useState(false);
-  const [png, setPng] = useState<string | null>(null);
+const link = "font-mono text-[11px] uppercase tracking-wider text-gold-300 hover:underline";
+
+// Where an LP's subscription agreement stands, and the next thing the fund does with it.
+function AgreementRow({ session }: { session: Session }) {
+  const router = useRouter();
   const [error, setError] = useState("");
   const [pending, startTransition] = useTransition();
-  if (!session.lpSignedAt) return null;
-  const day = (iso: string) => iso.slice(0, 10);
+  const a = session.agreement;
+  const manage = Boolean(session.canManageAgreement);
+
+  // Nothing to show until the LP is approved and ready for their agreement.
+  if (!a && session.status !== "accreditation") return null;
+
+  let line = "Not prepared yet";
+  let action: React.ReactNode = null;
+  if (!a) {
+    if (manage) {
+      action = (
+        <button
+          type="button"
+          disabled={pending}
+          onClick={() =>
+            startTransition(async () => {
+              setError("");
+              const r = await prepareSubscriptionAgreement(session.id);
+              if (r.ok) router.push(`/envelopes/${r.envelopeId}/place`);
+              else setError(r.error);
+            })
+          }
+          className="rounded-md border border-gold-500/40 bg-gold-500/10 px-2.5 py-1 font-mono text-[11px] uppercase tracking-wider text-gold-300 transition hover:bg-gold-500/20 disabled:opacity-40"
+        >
+          {pending ? "Preparing…" : "Prepare subscription agreement"}
+        </button>
+      );
+    }
+  } else if (a.status === "draft") {
+    line = "Prepared: signature blocks not placed or sent yet";
+    if (manage) action = <a className={link} href={`/envelopes/${a.envelopeId}/place`}>Place signature blocks and send →</a>;
+  } else if (a.status === "sent") {
+    line = "Sent: awaiting the LP's signature";
+    action = <a className={link} href={`/envelopes/${a.envelopeId}`}>View →</a>;
+  } else if (a.status === "partially_signed") {
+    line = "LP signed: awaiting the fund's countersignature";
+    if (manage) action = <a className={link} href={`/envelopes/${a.envelopeId}/countersign`}>Countersign →</a>;
+  } else if (a.status === "completed") {
+    line = "Fully signed";
+    action = <a className={link} href={`/api/envelopes/${a.envelopeId}/executed`}>Executed PDF →</a>;
+  }
 
   return (
     <div className="mt-3 rounded-lg border border-line bg-surface-0 p-3">
       <p className="font-mono text-[11px] uppercase tracking-wider text-fg-muted">Subscription agreement</p>
-      <p className="mt-1 text-xs text-fg-secondary">
-        LP signed {day(session.lpSignedAt)} ·{" "}
-        {session.gpSignedAt ? `Fund countersigned ${day(session.gpSignedAt)}` : "Awaiting fund countersignature"}
-      </p>
-      <a
-        href={`/api/lp-subscription/${session.id}`}
-        className="mt-1 inline-block font-mono text-[11px] uppercase tracking-wider text-gold-300 hover:underline"
-      >
-        {session.gpSignedAt ? "Executed PDF →" : "Signed-so-far PDF →"}
-      </a>
-      {!session.gpSignedAt && session.canCountersign ? (
-        <div className="mt-2 space-y-2">
-          <input
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="Your full name"
-            autoComplete="name"
-            className="w-full rounded-md border border-line bg-surface-1 px-2.5 py-1.5 text-xs text-fg-primary placeholder:text-fg-muted focus:border-gold-400 focus:outline-none"
-          />
-          <SignaturePad signerName={name} onChange={setPng} label="Fund signature" />
-          <label className="flex items-start gap-2 text-[11px] text-fg-secondary">
-            <input type="checkbox" checked={agreed} onChange={(e) => setAgreed(e.target.checked)} className="mt-0.5" />
-            <span>I countersign this agreement on behalf of the fund.</span>
-          </label>
-          {error ? <p className="text-[11px] text-red-400">{error}</p> : null}
-          <button
-            type="button"
-            disabled={pending || !agreed || !name.trim() || !png}
-            onClick={() =>
-              startTransition(async () => {
-                setError("");
-                const r = await countersignSubscriptionAction(session.id, name.trim(), png!, agreed);
-                if (!r.ok) setError(r.error);
-              })
-            }
-            className="rounded-md border border-gold-500/40 bg-gold-500/10 px-2.5 py-1 font-mono text-[11px] uppercase tracking-wider text-gold-300 transition hover:bg-gold-500/20 disabled:opacity-40"
-          >
-            {pending ? "Signing…" : "Countersign"}
-          </button>
-        </div>
-      ) : null}
+      <p className="mt-1 text-xs text-fg-secondary">{line}</p>
+      {action ? <div className="mt-1.5">{action}</div> : null}
+      {error ? <p className="mt-1 text-[11px] text-red-400">{error}</p> : null}
     </div>
   );
 }
@@ -152,7 +153,7 @@ function SessionCard({ session }: { session: Session }) {
         </p>
       )}
 
-      <SignatureRow session={session} />
+      <AgreementRow session={session} />
     </div>
   );
 }

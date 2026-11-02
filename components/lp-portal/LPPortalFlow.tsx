@@ -5,10 +5,10 @@
 // then the capital commitment. (Before approval the LP is in the setup wizard, in
 // LPWizard.tsx; approval moves the session to "accreditation", the first step here.)
 //   accreditation → subscription → committed → (operator closes → complete)
-import { SignaturePad } from "@/components/signing/SignaturePad";
+import { SigningSheet } from "@/components/signing/SigningSheet";
+import type { LpAgreementView } from "@/lib/lp-agreement.server";
 import { useState, useTransition } from "react";
 import {
-  signSubscriptionAction,
   confirmCapitalCommitmentAction,
 } from "@/app/lp/[token]/actions";
 import { buildOnboardingSteps, onboardingProgressPct, type OnboardingStatus } from "@/lib/lp-onboarding";
@@ -52,91 +52,74 @@ function SubscriptionStep({
   lpName,
   fundName,
   commitmentAmount,
-  subscriptionContent,
+  agreement,
   onDone,
 }: {
   token: string;
   lpName: string;
   fundName: string;
   commitmentAmount: number | null;
-  subscriptionContent: string;
+  agreement: LpAgreementView;
   onDone: () => void;
 }) {
-  const [agreed, setAgreed] = useState(false);
-  const [typedName, setTypedName] = useState("");
-  const [signaturePng, setSignaturePng] = useState<string | null>(null);
-  const [pending, startTransition] = useTransition();
-  const [error, setError] = useState<string | null>(null);
+  void token;
+  const heading = (
+    <>
+      <h2 className="font-display text-xl font-semibold text-fg-primary">Subscription Agreement</h2>
+      <p className="mt-1 text-sm text-fg-secondary">
+        Your subscription agreement for <strong className="text-fg-primary">{fundName}</strong>.
+        {commitmentAmount ? ` Your commitment amount is $${Number(commitmentAmount).toLocaleString("en-US")}.` : ""}
+      </p>
+    </>
+  );
 
-  function handleSign() {
-    if (!agreed || !typedName.trim() || !signaturePng) return;
-    setError(null);
-    startTransition(async () => {
-      const result = await signSubscriptionAction(token, typedName.trim(), signaturePng, agreed);
-      if ("error" in result) {
-        setError(result.error);
-      } else {
-        onDone();
-      }
-    });
+  if (agreement.state === "ready") {
+    return (
+      <div>
+        {heading}
+        <div className="mt-5">
+          <SigningSheet
+            pdfSrc={`/api/sign/${agreement.signingToken}/pdf`}
+            blocks={agreement.blocks}
+            done={[]}
+            signerName={lpName}
+            submitLabel="Sign and send back"
+            onSubmit={async (signatureData, fieldResponses) => {
+              const res = await fetch(`/api/sign/${agreement.signingToken}/complete`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ signatureData, fieldResponses }),
+              });
+              if (!res.ok) return ((await res.json().catch(() => ({}))) as { error?: string }).error ?? `Server error ${res.status}`;
+              onDone();
+              return null;
+            }}
+          />
+        </div>
+      </div>
+    );
   }
 
   return (
     <div>
-      <h2 className="font-display text-xl font-semibold text-fg-primary">Subscription Agreement</h2>
-      <p className="mt-1 text-sm text-fg-secondary">
-        Review your subscription agreement for <strong className="text-fg-primary">{fundName}</strong>.
-        {commitmentAmount
-          ? ` Your commitment amount is $${Number(commitmentAmount).toLocaleString("en-US")}.`
-          : ""}
-      </p>
-
-      {/* Document preview */}
-      <div className="mt-5 max-h-72 overflow-y-auto rounded-xl border border-line bg-surface-2 px-5 py-4">
-        <pre className="whitespace-pre-wrap font-mono text-[11px] leading-relaxed text-fg-secondary">
-          {subscriptionContent ||
-            `SUBSCRIPTION AGREEMENT\n\n${fundName}\n\nInvestor: ${lpName}\n\nThis subscription agreement (the "Agreement") is entered into between the above-named investor ("Investor") and the General Partner of ${fundName}.\n\nBy executing this Agreement, the Investor agrees to purchase a limited partnership interest in ${fundName} on the terms and conditions set forth in the Limited Partnership Agreement.`}
-        </pre>
+      {heading}
+      <div className="mt-5 rounded-xl border border-line bg-surface-2 px-5 py-6 text-center">
+        <p className="text-sm text-fg-primary">
+          {agreement.state === "preparing"
+            ? "Your agreement is being prepared."
+            : agreement.state === "signed"
+              ? "You have signed. The fund will countersign and you will be emailed the finished agreement."
+              : "Your agreement is fully signed."}
+        </p>
+        <p className="mt-1 text-xs text-fg-muted">
+          {agreement.state === "preparing" ? `${fundName} will email you when it is ready to sign. You can come back to this link then.` : null}
+        </p>
+        {agreement.state === "completed" ? (
+          <a href={agreement.copyUrl} className="mt-3 inline-block font-mono text-[11px] uppercase tracking-wider text-gold-300 hover:underline">
+            Download the signed agreement (PDF) →
+          </a>
+        ) : null}
       </div>
-
-      <label className="mt-4 flex items-start gap-3 cursor-pointer">
-        <input
-          type="checkbox"
-          checked={agreed}
-          onChange={(e) => setAgreed(e.target.checked)}
-          className="mt-0.5 shrink-0 accent-amber-400"
-        />
-        <span className="text-xs text-fg-secondary">
-          I, <strong className="text-fg-primary">{lpName}</strong>, have read and agree to the terms of the subscription agreement for{" "}
-          <strong className="text-fg-primary">{fundName}</strong>. I understand this constitutes a legally binding commitment.
-        </span>
-      </label>
-
-      <label className="mt-4 block">
-        <span className="mb-1.5 block text-xs font-medium text-fg-secondary">Your full legal name</span>
-        <input
-          type="text"
-          autoComplete="name"
-          value={typedName}
-          onChange={(e) => setTypedName(e.target.value)}
-          placeholder={lpName}
-          className="w-full rounded-lg border border-line bg-surface-1 px-3 py-2.5 text-sm text-fg-primary placeholder:text-fg-muted focus:border-gold-400 focus:outline-none"
-        />
-      </label>
-
-      <div className="mt-4">
-        <SignaturePad signerName={typedName || lpName} onChange={setSignaturePng} label="Your signature" />
-      </div>
-
-      {error && <p className="mt-3 font-mono text-[11px] text-status-danger">{error}</p>}
-
-      <button
-        onClick={handleSign}
-        disabled={!agreed || !typedName.trim() || !signaturePng || pending}
-        className="mt-5 w-full rounded-lg border border-gold-500/40 bg-gold-500/10 py-2.5 font-mono text-[11px] uppercase tracking-wider text-gold-300 transition hover:bg-gold-500/20 disabled:opacity-40"
-      >
-        {pending ? "Signing…" : "✍ Sign subscription agreement →"}
-      </button>
     </div>
   );
 }
@@ -261,7 +244,7 @@ export interface LPPortalFlowProps {
   fundName: string;
   commitmentAmount: number | null;
   wireInstructions: Record<string, string>;
-  subscriptionContent: string;
+  agreement: LpAgreementView;
 }
 
 export function LPPortalFlow({
@@ -271,7 +254,7 @@ export function LPPortalFlow({
   fundName,
   commitmentAmount,
   wireInstructions,
-  subscriptionContent,
+  agreement,
 }: LPPortalFlowProps) {
   const [status, setStatus] = useState<OnboardingStatus>(initialStatus);
 
@@ -289,7 +272,7 @@ export function LPPortalFlow({
           lpName={lpName}
           fundName={fundName}
           commitmentAmount={commitmentAmount}
-          subscriptionContent={subscriptionContent}
+          agreement={agreement}
           onDone={() => advance("subscription")}
         />
       )}

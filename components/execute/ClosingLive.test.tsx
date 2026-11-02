@@ -28,6 +28,9 @@ jest.mock("@/lib/supabase/server", () => ({
       const q: Record<string, unknown> = {
         select: (c: string) => ((rec.columns = c), q),
         eq: () => q,
+        // The agreement lookup narrows envelopes to LP agreements that are not voided.
+        not: () => q,
+        neq: () => q,
         order: () => q,
         then: (res: (v: unknown) => unknown) => Promise.resolve(result()).then(res),
       };
@@ -75,6 +78,15 @@ describe("Execute › Closing LP sessions", () => {
     expect(sessions[0]).toMatchObject({ lpName: "Calpers" });
     expect(sessions[0]).not.toHaveProperty("lpEmail");
   });
+
+  it.each([["owner", true], ["admin", true], ["member", false], ["viewer", false]])(
+    "%s may manage the subscription agreement: %s",
+    async (r, allowed) => {
+      role = r as string;
+      const sessions = sessionsGiven(await ClosingLive());
+      expect(sessions[0]).toMatchObject({ canManageAgreement: allowed });
+    },
+  );
 
   it("never selects or passes on the link token, for anyone", async () => {
     expect(CLOSING_ADMIN_COLUMNS).not.toMatch(/token/);

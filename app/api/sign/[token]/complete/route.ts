@@ -91,7 +91,7 @@ export async function POST(
     // Fetch envelope to check status
     const { data: envelope, error: envelopeError } = await supabase
       .from('envelopes')
-      .select('id, status')
+      .select('id, status, lp_session_id')
       .eq('id', recipient.envelope_id)
       .single()
 
@@ -282,6 +282,11 @@ export async function POST(
     // Tell the owner it is their turn (or, if this was the last signature, send the signed copy).
     try {
       const { after } = await import('next/server')
+      const lpSessionId = (envelope as { lp_session_id?: string | null }).lp_session_id
+      if (lpSessionId) {
+        const { onLpAgreementSigned } = await import('@/lib/lp-agreement.server')
+        after(() => onLpAgreementSigned(supabase as never, lpSessionId).catch(() => undefined))
+      }
       const { notifyOwnerToCountersign, notifyCompleted } = await import('@/lib/envelope-notify.server')
       after(() => (envelopeCompleted ? notifyCompleted(envelope.id) : notifyOwnerToCountersign(envelope.id)).catch(() => undefined))
     } catch {

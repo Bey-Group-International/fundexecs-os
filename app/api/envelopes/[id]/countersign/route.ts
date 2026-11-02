@@ -31,8 +31,8 @@ export async function POST(req: Request, props: { params: Promise<{ id: string }
 
   const supabase = await createServerClient();
   // Row-level security keeps this to the member's own organization.
-  const { data: env } = await supabase.from("envelopes").select("id, status, organization_id").eq("id", id).maybeSingle();
-  const envelope = env as { id: string; status: string; organization_id: string } | null;
+  const { data: env } = await supabase.from("envelopes").select("id, status, organization_id, lp_session_id").eq("id", id).maybeSingle();
+  const envelope = env as { id: string; status: string; organization_id: string; lp_session_id: string | null } | null;
   if (!envelope || envelope.organization_id !== ctx.orgId) return NextResponse.json({ ok: false, error: "Not found" }, { status: 404 });
   if (envelope.status === "completed") return NextResponse.json({ ok: false, error: "This document is already fully signed." }, { status: 409 });
   if (envelope.status !== "partially_signed") {
@@ -91,6 +91,12 @@ export async function POST(req: Request, props: { params: Promise<{ id: string }
     const { after } = await import("next/server");
     const { notifyCompleted } = await import("@/lib/envelope-notify.server");
     after(() => notifyCompleted(id).catch(() => undefined));
+    if (envelope.lp_session_id) {
+      const sessionId = envelope.lp_session_id;
+      const { onLpAgreementCountersigned } = await import("@/lib/lp-agreement.server");
+      const { createServiceClient } = await import("@/lib/supabase/server");
+      after(() => onLpAgreementCountersigned(createServiceClient(), sessionId, ctx.userId).catch(() => undefined));
+    }
   } catch {
     // Outside a request: nothing to schedule.
   }
