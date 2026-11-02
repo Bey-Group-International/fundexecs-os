@@ -202,25 +202,39 @@ export async function runOfacScreen(
       expires_at: null,
       recorded_by: null,
     };
-    const { error } = row
-      ? await client
-          .from("onboarding_checks")
-          .update(patch)
-          .eq("session_id", sessionId)
-          .eq("organization_id", orgId)
-          .eq("kind", "sanctions")
-          .eq("status", row.status)
-      : await client.from("onboarding_checks").insert({ ...patch, organization_id: orgId, session_id: sessionId, kind: "sanctions" });
-    if (error) {
-      console.error("[ofac] could not record the screen", { code: error.code, message: error.message });
-      await recordAudit(client, {
+    // The update names everything the decision was made on: the status, the note and who
+    // recorded it. If a person changed the check since it was read (or while the entry
+    // was being written), nothing matches and nothing is overwritten.
+    let changed = false;
+    let error: { code?: string; message: string } | null = null;
+    if (row) {
+      let q = client
+        .from("onboarding_checks")
+        .update(patch)
+        .eq("session_id", sessionId)
+        .eq("organization_id", orgId)
+        .eq("kind", "sanctions")
+        .eq("status", row.status);
+      q = row.summary === null ? q.is("summary", null) : q.eq("summary", row.summary);
+      q = row.recorded_by === null ? q.is("recorded_by", null) : q.eq("recorded_by", row.recorded_by);
+      const res = (await q.select("session_id")) as { data?: unknown[] | null; error: { code?: string; message: string } | null };
+      error = res.error;
+      changed = !res.error && Array.isArray(res.data) && res.data.length === 0;
+    } else {
+      const res = await client.from("onboarding_checks").insert({ ...patch, organization_id: orgId, session_id: sessionId, kind: "sanctions" });
+      error = res.error;
+    }
+    if (error || changed) {
+      if (error) console.error("[ofac] could not record the screen", { code: error.code, message: error.message });
+      const failureRecorded = await recordAudit(client, {
         orgId,
         sessionId,
         action: "check.screen_failed",
         ...(actor.kind === "user" ? { actorKind: "user" as const, actorId: actor.id } : { actorKind: "system" as const }),
-        detail: { status: outcome.status },
+        detail: { status: outcome.status, reason: changed ? "changed_meanwhile" : "save_failed" },
       });
-      return { ok: false, error: "Couldn't save the screen. Try again." };
+      if (!failureRecorded) console.error("[ofac] could not record the screen failure", { status: outcome.status });
+      return { ok: false, error: changed ? "The check changed while it was being screened, so nothing was overwritten. Run the screen again." : "Couldn't save the screen. Try again." };
     }
     return { ok: true, flagged: result.flagged, screened: result.results.filter((r) => r.screened).length, wrote: true, result };
   } catch (err) {
