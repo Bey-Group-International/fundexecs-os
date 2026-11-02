@@ -13,6 +13,7 @@
 import { revalidatePath } from "next/cache";
 import { createServiceClient, hasSupabaseServiceEnv } from "@/lib/supabase/server";
 import { getLinkSession, hasLpPass } from "@/lib/lp-access.server";
+import { agreementExecuted } from "@/lib/lp-agreement.server";
 
 async function getApprovedSession(token: string) {
   if (!hasSupabaseServiceEnv()) return null;
@@ -32,6 +33,10 @@ export async function confirmCapitalCommitmentAction(
     const ctx = await getApprovedSession(token);
     if (!ctx) return { error: "Invalid or expired link" };
     if (ctx.session.status !== "subscription") return { error: "Not at commitment step" };
+    // Closing gate: the commitment waits for the fund's countersignature.
+    if (!(await agreementExecuted(ctx.supabase, ctx.session.id))) {
+      return { error: "The fund has not countersigned your agreement yet. You can confirm once it has." };
+    }
 
     const { error } = await ctx.supabase
       .from("lp_onboarding_sessions")
