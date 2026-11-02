@@ -225,21 +225,27 @@ describe("a document section that shares its name with a Build page", () => {
     "Firm Overview Deck",
   );
   const THESIS = {
-    strategy: "Build page strategy text",
-    edge: null,
-    targetReturns: null,
-    sectors: [],
-    geographies: [],
-  } as never;
+    title: "Build thesis title",
+    summary: "Build thesis summary text",
+    asset_classes: ["Private credit"],
+    geographies: null,
+    target_irr: 18,
+    target_moic: null,
+    check_size_min: null,
+    check_size_max: null,
+  };
 
-  function withBuildPages(docSections: ViewerSection[]) {
+  function withBuildPages(
+    docSections: ViewerSection[],
+    build: { thesis?: typeof THESIS | null; deals?: number } = {},
+  ) {
     return (
       <DataRoomViewer
         token="preview"
         shareId="preview"
         org={ORG}
-        blended={{ ...BLENDED, dealCount: 2 }}
-        thesis={THESIS}
+        blended={{ ...BLENDED, dealCount: build.deals ?? 2 }}
+        thesis={build.thesis === undefined ? THESIS : build.thesis}
         team={[{ name: "Pat Principal", title: "Partner", bio: null } as never]}
         entities={[]}
         docSections={docSections}
@@ -285,16 +291,71 @@ describe("a document section that shares its name with a Build page", () => {
     },
   );
 
-  it("still opens the Build pages from their own nav entries", () => {
+  it("has one entry for the thesis and one for the track record, not a page and a section each", () => {
+    render(withBuildPages([THESIS_DOCS, TRACK_DOCS]));
+    const labels = screen.getAllByRole("button").map((b) => b.textContent);
+    expect(labels.filter((l) => /Investment/.test(l ?? ""))).toHaveLength(1);
+    expect(labels.filter((l) => /Track Record/.test(l ?? ""))).toHaveLength(1);
+    expect(
+      screen.queryByRole("button", { name: /^Investment Thesis$/ }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /^Track Record$/ }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("shows the Build thesis and the thesis documents together in one section", () => {
     render(withBuildPages([THESIS_DOCS]));
     fireEvent.click(
-      screen.getByRole("button", { name: /^Investment Thesis$/ }),
+      screen.getByRole("button", {
+        name: (n) => n.startsWith("Investment Strategy"),
+      }),
     );
+    expect(screen.getByText("Build thesis title")).toBeInTheDocument();
+    expect(screen.getByText("Build thesis summary text")).toBeInTheDocument();
     expect(
-      screen.getByRole("heading", { level: 1, name: "Investment Thesis" }),
+      screen.getByText("Fund I Investment Memorandum"),
     ).toBeInTheDocument();
+  });
+
+  it("shows the Build track record and the track record documents together in one section", () => {
+    render(withBuildPages([TRACK_DOCS], { deals: 3 }));
+    fireEvent.click(
+      screen.getByRole("button", { name: (n) => n.startsWith("Track Record") }),
+    );
+    expect(screen.getByText("Gross IRR")).toBeInTheDocument();
+    expect(screen.getByText(/3 deals/)).toBeInTheDocument();
     expect(
-      screen.queryByText("Fund I Investment Memorandum"),
+      screen.getByText("Fund I Assumptions and Model Package"),
+    ).toBeInTheDocument();
+  });
+
+  it("offers the thesis section from Build alone, with no document filed there", () => {
+    render(withBuildPages([], { deals: 0 }));
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: (n) => n.startsWith("Investment Strategy"),
+      }),
+    );
+    expect(screen.getByText("Build thesis summary text")).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", {
+        name: (n) => n.startsWith("Track Record"),
+      }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("offers neither section when Build has nothing and no document is filed there", () => {
+    render(withBuildPages([], { thesis: null, deals: 0 }));
+    expect(
+      screen.queryByRole("button", {
+        name: (n) => n.startsWith("Investment Strategy"),
+      }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", {
+        name: (n) => n.startsWith("Track Record"),
+      }),
     ).not.toBeInTheDocument();
   });
 });

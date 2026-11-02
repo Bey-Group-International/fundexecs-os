@@ -162,3 +162,90 @@ export function shareExposure(share: ShareLike, sections: RoomSection[]): RoomSe
 export function shareDocCount(share: ShareLike, sections: RoomSection[]): number {
   return shareExposure(share, sections).reduce((n, s) => n + s.docs.length, 0);
 }
+
+/** A page the reader sees that comes from Build, not from a published document. */
+export interface BuildContentRow {
+  key: "overview" | "thesis" | "track_record" | "team" | "structure";
+  label: string;
+  /** What it holds now, or what is missing. */
+  detail: string;
+  /** Nothing entered in Build yet, so a reader sees no such page or section. */
+  empty: boolean;
+  /** Where to edit it. */
+  href: string;
+  /** The entry a reader finds it under. */
+  shownUnder: string;
+}
+
+const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
+
+/**
+ * The Build-sourced pages of a room, for the GP's Room contents. These are what
+ * Preview as LP shows beyond the published documents. The thesis and track
+ * record are always listed so a gap is visible; the rest only when they hold
+ * something.
+ */
+export function buildContentRows(src: {
+  tagline: string | null;
+  thesisTitle: string | null;
+  dealCount: number;
+  weightedGrossIrr: number | null;
+  teamCount: number;
+  entityCount: number;
+}): BuildContentRow[] {
+  const rows: BuildContentRow[] = [
+    {
+      key: "overview",
+      label: "Firm overview",
+      detail: src.tagline || "From Firm Identity",
+      empty: false,
+      href: "/build/profile",
+      shownUnder: "Overview",
+    },
+    {
+      key: "thesis",
+      label: "Investment thesis",
+      detail: src.thesisTitle ?? "Not set up yet",
+      empty: src.thesisTitle === null,
+      href: "/build/thesis",
+      shownUnder: sectionLabel("thesis"),
+    },
+    {
+      key: "track_record",
+      label: "Track record",
+      detail:
+        src.dealCount > 0
+          ? [
+              plural(src.dealCount, "deal", "deals"),
+              src.weightedGrossIrr != null ? `${src.weightedGrossIrr.toFixed(0)}% gross IRR` : null,
+            ]
+              .filter(Boolean)
+              .join(" · ")
+          : "No deals entered yet",
+      empty: src.dealCount === 0,
+      href: "/build/track_record",
+      shownUnder: sectionLabel("track_record"),
+    },
+  ];
+  if (src.teamCount > 0) {
+    rows.push({
+      key: "team",
+      label: "Team",
+      detail: plural(src.teamCount, "person", "people"),
+      empty: false,
+      href: "/build/team",
+      shownUnder: "Team",
+    });
+  }
+  if (src.entityCount > 0) {
+    rows.push({
+      key: "structure",
+      label: "Structure",
+      detail: plural(src.entityCount, "entity", "entities"),
+      empty: false,
+      href: "/build/entity",
+      shownUnder: "Structure",
+    });
+  }
+  return rows;
+}

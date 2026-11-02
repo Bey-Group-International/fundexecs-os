@@ -13,6 +13,7 @@ import {
   sectionsAllowedBy,
   sectionLabel,
   roomSectionKey,
+  buildContentRows,
   type RoomDocument,
 } from "@/lib/data-rooms";
 
@@ -210,5 +211,36 @@ describe("roomSectionKey", () => {
     expect(roomSectionKey("")).toBe("other");
     expect(roomSectionKey(null)).toBe("other");
     expect(roomSectionKey(undefined)).toBe("other");
+  });
+});
+
+describe("buildContentRows", () => {
+  const base = { tagline: null, thesisTitle: null, dealCount: 0, weightedGrossIrr: null, teamCount: 0, entityCount: 0 };
+  const row = (rows: ReturnType<typeof buildContentRows>, key: string) => rows.find((r) => r.key === key);
+
+  it("always lists the thesis and the track record, flagged empty when Build has nothing", () => {
+    const rows = buildContentRows(base);
+    expect(row(rows, "thesis")).toMatchObject({ empty: true, href: "/build/thesis", shownUnder: "Investment Strategy & Thesis" });
+    expect(row(rows, "track_record")).toMatchObject({ empty: true, href: "/build/track_record", shownUnder: "Track Record & Performance" });
+  });
+
+  it("describes what Build holds once it has it", () => {
+    const rows = buildContentRows({ ...base, thesisTitle: "Private credit, lower mid-market", dealCount: 3, weightedGrossIrr: 18.4 });
+    expect(row(rows, "thesis")).toMatchObject({ empty: false, detail: "Private credit, lower mid-market" });
+    expect(row(rows, "track_record")).toMatchObject({ empty: false, detail: "3 deals · 18% gross IRR" });
+  });
+
+  it("uses the singular for one", () => {
+    expect(row(buildContentRows({ ...base, dealCount: 1 }), "track_record")?.detail).toBe("1 deal");
+    expect(row(buildContentRows({ ...base, teamCount: 1 }), "team")?.detail).toBe("1 person");
+    expect(row(buildContentRows({ ...base, entityCount: 1 }), "structure")?.detail).toBe("1 entity");
+  });
+
+  it("lists the team and structure only when they hold something", () => {
+    expect(row(buildContentRows(base), "team")).toBeUndefined();
+    expect(row(buildContentRows(base), "structure")).toBeUndefined();
+    const rows = buildContentRows({ ...base, teamCount: 4, entityCount: 2 });
+    expect(row(rows, "team")?.detail).toBe("4 people");
+    expect(row(rows, "structure")?.detail).toBe("2 entities");
   });
 });

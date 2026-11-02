@@ -11,6 +11,7 @@
 import { useMemo, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { RoomContents, type RoomContentSection, type AvailableDoc } from "./RoomContents";
+import type { BuildContentRow } from "@/lib/data-rooms";
 
 type Tab = "contents" | "sharing" | "activity" | "preview";
 
@@ -27,6 +28,8 @@ interface Props {
   roomDescription: string | null;
   sections: RoomContentSection[];
   available: AvailableDoc[];
+  /** Build-sourced pages a reader sees beyond the published documents. */
+  fromBuild?: BuildContentRow[];
   warnings: RoomWarnings;
   coverage: { weightedPercent: number; readyCount: number; total: number };
   activeLinkCount: number;
@@ -68,6 +71,7 @@ export function RoomWorkspace({
   roomDescription,
   sections,
   available,
+  fromBuild,
   warnings,
   coverage,
   activeLinkCount,
@@ -298,6 +302,7 @@ export function RoomWorkspace({
               roomId={roomId}
               sections={filtered}
               available={available}
+              fromBuild={filtering ? undefined : fromBuild}
               hideAddFromLibrary={filtering}
               hideReorder={filtering}
             />

@@ -15,6 +15,7 @@ import type {
 import { computeBuildReadiness } from "@/lib/build-readiness";
 import {
   sectionLabel,
+  buildContentRows,
   groupRoomDocuments,
   summarizeRoom,
   unfinishedPublications,
@@ -290,6 +291,18 @@ export async function MaterialsModule({ roomId }: { roomId?: string } = {}) {
         roomDescription={room.description}
         sections={contentSections}
         available={available}
+        fromBuild={
+          payload
+            ? buildContentRows({
+                tagline: payload.org.tagline,
+                thesisTitle: payload.thesis?.title ?? null,
+                dealCount: payload.blended.dealCount,
+                weightedGrossIrr: payload.blended.weightedGrossIrr,
+                teamCount: payload.team.length,
+                entityCount: payload.entities.length,
+              })
+            : undefined
+        }
         warnings={{
           unfinished: unfinished.map((d) => d.id),
           empty: empty.map((d) => d.id),

@@ -21,6 +21,7 @@ import { ReadingClock } from "@/lib/data-room-engagement";
 import { FilePreview } from "@/components/documents/FilePreview";
 import type { PreviewKind } from "@/lib/document-files";
 import { forwardWheel } from "@/lib/wheel-forward";
+import { DATA_ROOM_SECTIONS } from "@/lib/data-room";
 
 /** Per-browser reader id, so a first-open alert fires once per reader. */
 const VISITOR_KEY = "fx-dataroom-visitor";
@@ -163,11 +164,39 @@ const ALL_DOCS_KEY = "all";
  */
 const docNavKey = (sectionKey: string) => `docs:${sectionKey}`;
 
+const SECTION_ORDER = new Map(DATA_ROOM_SECTIONS.map((sec, i) => [sec.key, i]));
+const SECTION_LABELS = new Map(
+  DATA_ROOM_SECTIONS.map((sec) => [sec.key, sec.label]),
+);
+
+/**
+ * The sections a reader can open: the room's document sections, plus
+ * "Investment Strategy & Thesis" and "Track Record & Performance" whenever Build
+ * has a thesis or track record, even if no document is filed there. Build's data
+ * and the documents for a topic are one section, not two entries in the nav.
+ */
+function viewerSections(
+  docSections: ViewerSection[],
+  thesis: ViewerThesis | null,
+  blended: ViewerTrackRecord,
+): ViewerSection[] {
+  const out = docSections.filter((sec) => sec.docs.length > 0);
+  const ensure = (key: string, hasBuildData: boolean) => {
+    if (hasBuildData && !out.some((sec) => sec.key === key)) {
+      out.push({ key, label: SECTION_LABELS.get(key) ?? key, docs: [] });
+    }
+  };
+  ensure("thesis", thesis !== null);
+  ensure("track_record", blended.dealCount > 0);
+  return out.sort(
+    (a, b) =>
+      (SECTION_ORDER.get(a.key) ?? 99) - (SECTION_ORDER.get(b.key) ?? 99),
+  );
+}
+
 type NavItem =
   | { key: "overview"; label: string }
   | { key: "all"; label: string; count: number }
-  | { key: "track_record"; label: string }
-  | { key: "thesis"; label: string }
   | { key: "team"; label: string }
   | { key: "structure"; label: string }
   | { key: string; label: string; docs: ViewerDoc[] };
@@ -204,6 +233,13 @@ export function DataRoomViewer({
   // Stable session ID for this page load.
   const sessionId = useMemo(() => crypto.randomUUID(), []);
 
+  // What a reader can open: documents by section, with Build's thesis and track
+  // record folded into their own sections.
+  const sections = useMemo(
+    () => viewerSections(docSections, thesis, blended),
+    [docSections, thesis, blended],
+  );
+
   // Build nav
   const nav: NavItem[] = useMemo(() => {
     const items: NavItem[] = [];
@@ -215,27 +251,22 @@ export function DataRoomViewer({
     const total = docSections.reduce((n, s) => n + s.docs.length, 0);
     if (!viewControls.singleDocument && total > 0)
       items.push({ key: ALL_DOCS_KEY, label: "All documents", count: total });
-    if (blended.dealCount > 0)
-      items.push({ key: "track_record", label: "Track Record" });
-    if (thesis) items.push({ key: "thesis", label: "Investment Thesis" });
     if (team.length > 0) items.push({ key: "team", label: "Team" });
     if (entities.length > 0)
       items.push({ key: "structure", label: "Structure" });
-    for (const s of docSections) {
-      if (s.docs.length > 0)
-        items.push({
-          key: docNavKey(s.key),
-          label: s.label,
-          docs: s.docs,
-        } as NavItem);
+    for (const s of sections) {
+      items.push({
+        key: docNavKey(s.key),
+        label: s.label,
+        docs: s.docs,
+      } as NavItem);
     }
     return items;
   }, [
-    blended.dealCount,
-    thesis,
     team.length,
     entities.length,
     docSections,
+    sections,
     viewControls.singleDocument,
   ]);
 
@@ -620,7 +651,7 @@ export function DataRoomViewer({
             thesis={thesis}
             team={team}
             entities={entities}
-            docSections={docSections}
+            docSections={sections}
             token={token}
             accent={accent}
             current={current}
@@ -686,91 +717,6 @@ function ContentPanel({
           {org.legal_name ? (
             <p className="text-xs text-fg-muted">{org.legal_name}</p>
           ) : null}
-        </div>
-      </div>
-    );
-  }
-
-  if (selected === "track_record") {
-    const rows = [
-      {
-        v:
-          blended.weightedGrossIrr != null
-            ? `${blended.weightedGrossIrr.toFixed(0)}%`
-            : "—",
-        l: "Gross IRR",
-      },
-      {
-        v:
-          blended.pooledMoic != null
-            ? `${blended.pooledMoic.toFixed(1)}x`
-            : "—",
-        l: "MOIC",
-      },
-      { v: blended.dpi != null ? `${blended.dpi.toFixed(2)}x` : "—", l: "DPI" },
-      { v: compactUsd(blended.totalInvested) ?? "—", l: "Invested" },
-    ];
-    return (
-      <div className="max-w-2xl">
-        <SectionHeader title="Track Record" accent={accent} />
-        <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
-          {rows.map((m) => (
-            <div
-              key={m.l}
-              className="rounded-xl border border-line bg-surface-1 px-4 py-3 text-center"
-              style={{ boxShadow: "0 1px 4px rgba(0,0,0,0.12)" }}
-            >
-              <p className="font-display text-2xl font-semibold text-fg-primary">
-                {m.v}
-              </p>
-              <p className="mt-1 font-mono text-[11px] uppercase tracking-wider text-fg-muted">
-                {m.l}
-              </p>
-            </div>
-          ))}
-        </div>
-        <p className="mt-3 font-mono text-[11px] uppercase tracking-wider text-fg-muted">
-          {blended.dealCount} deals · {blended.realizedCount} realized
-          {blended.vintageRange
-            ? ` · vintages ${blended.vintageRange.from}–${blended.vintageRange.to}`
-            : ""}
-        </p>
-      </div>
-    );
-  }
-
-  if (selected === "thesis" && thesis) {
-    const checkSize = [
-      compactUsd(thesis.check_size_min),
-      compactUsd(thesis.check_size_max),
-    ].filter(Boolean);
-    return (
-      <div className="max-w-2xl">
-        <SectionHeader title="Investment Thesis" accent={accent} />
-        <div className="mt-4 space-y-3">
-          <p className="text-base font-semibold text-fg-primary">
-            {thesis.title}
-          </p>
-          {thesis.summary ? (
-            <p className="text-sm leading-relaxed text-fg-secondary">
-              {thesis.summary}
-            </p>
-          ) : null}
-          <p className="font-mono text-[11px] uppercase tracking-wider text-fg-muted">
-            {[
-              thesis.asset_classes?.join(", "),
-              thesis.geographies?.join(", "),
-              checkSize.length ? checkSize.join("–") : null,
-              thesis.target_irr != null
-                ? `${thesis.target_irr}% target IRR`
-                : null,
-              thesis.target_moic != null
-                ? `${thesis.target_moic}x target MOIC`
-                : null,
-            ]
-              .filter(Boolean)
-              .join("  ·  ") || "—"}
-          </p>
         </div>
       </div>
     );
@@ -860,6 +806,12 @@ function ContentPanel({
   return (
     <div className="max-w-4xl">
       <SectionHeader title={sec.label} accent={accent} />
+      {sec.key === "thesis" && thesis ? (
+        <ThesisSummary thesis={thesis} />
+      ) : null}
+      {sec.key === "track_record" && blended.dealCount > 0 ? (
+        <TrackRecordSummary blended={blended} />
+      ) : null}
       <div className="mt-4 space-y-6">
         {sec.docs.map((doc) => (
           <DocCard
@@ -880,6 +832,80 @@ function ContentPanel({
           />
         ))}
       </div>
+    </div>
+  );
+}
+
+function TrackRecordSummary({ blended }: { blended: ViewerTrackRecord }) {
+  const rows = [
+    {
+      v:
+        blended.weightedGrossIrr != null
+          ? `${blended.weightedGrossIrr.toFixed(0)}%`
+          : "—",
+      l: "Gross IRR",
+    },
+    {
+      v: blended.pooledMoic != null ? `${blended.pooledMoic.toFixed(1)}x` : "—",
+      l: "MOIC",
+    },
+    { v: blended.dpi != null ? `${blended.dpi.toFixed(2)}x` : "—", l: "DPI" },
+    { v: compactUsd(blended.totalInvested) ?? "—", l: "Invested" },
+  ];
+  return (
+    <div className="mt-4 max-w-2xl">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        {rows.map((m) => (
+          <div
+            key={m.l}
+            className="rounded-xl border border-line bg-surface-1 px-4 py-3 text-center"
+            style={{ boxShadow: "0 1px 4px rgba(0,0,0,0.12)" }}
+          >
+            <p className="font-display text-2xl font-semibold text-fg-primary">
+              {m.v}
+            </p>
+            <p className="mt-1 font-mono text-[11px] uppercase tracking-wider text-fg-muted">
+              {m.l}
+            </p>
+          </div>
+        ))}
+      </div>
+      <p className="mt-3 font-mono text-[11px] uppercase tracking-wider text-fg-muted">
+        {blended.dealCount} deals · {blended.realizedCount} realized
+        {blended.vintageRange
+          ? ` · vintages ${blended.vintageRange.from}–${blended.vintageRange.to}`
+          : ""}
+      </p>
+    </div>
+  );
+}
+
+function ThesisSummary({ thesis }: { thesis: ViewerThesis }) {
+  const checkSize = [
+    compactUsd(thesis.check_size_min),
+    compactUsd(thesis.check_size_max),
+  ].filter(Boolean);
+  return (
+    <div className="mt-4 max-w-2xl space-y-3">
+      <p className="text-base font-semibold text-fg-primary">{thesis.title}</p>
+      {thesis.summary ? (
+        <p className="text-sm leading-relaxed text-fg-secondary">
+          {thesis.summary}
+        </p>
+      ) : null}
+      <p className="font-mono text-[11px] uppercase tracking-wider text-fg-muted">
+        {[
+          thesis.asset_classes?.join(", "),
+          thesis.geographies?.join(", "),
+          checkSize.length ? checkSize.join("–") : null,
+          thesis.target_irr != null ? `${thesis.target_irr}% target IRR` : null,
+          thesis.target_moic != null
+            ? `${thesis.target_moic}x target MOIC`
+            : null,
+        ]
+          .filter(Boolean)
+          .join("  ·  ") || "—"}
+      </p>
     </div>
   );
 }
