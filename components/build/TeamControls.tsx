@@ -573,7 +573,7 @@ function YourProfile({
 function InviteForm({ seats }: { seats: SeatInfo }) {
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState(false);
+  const [success, setSuccess] = useState<string | null>(null);
   const formRef = useRef<HTMLFormElement>(null);
 
   const unlimited = seats.limit === null;
@@ -589,13 +589,13 @@ function InviteForm({ seats }: { seats: SeatInfo }) {
       ref={formRef}
       action={(fd) => {
         setError(null);
-        setSuccess(false);
+        setSuccess(null);
         startTransition(async () => {
           const res = await inviteMember(fd);
           if (res.error) {
             setError(res.error);
           } else {
-            setSuccess(true);
+            setSuccess(res.notice ?? "Member added.");
             formRef.current?.reset();
           }
         });
@@ -606,16 +606,9 @@ function InviteForm({ seats }: { seats: SeatInfo }) {
         <div>
           <p className="text-sm font-medium text-fg-primary">Invite member</p>
           <p className="mt-0.5 text-xs text-fg-muted">
-            Enter your teammate&apos;s email. They&apos;ll need a FundExecs account —{" "}
-            <a
-              href="https://fundexecs.com"
-              className="text-gold-300 underline hover:text-gold-300"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              share fundexecs.com
-            </a>{" "}
-            so they can sign up first.
+            Enter your teammate&apos;s email. We&apos;ll email them to sign in; if they
+            don&apos;t have an account yet, they join automatically the first time they
+            sign in with that address.
           </p>
         </div>
         <span
@@ -660,9 +653,7 @@ function InviteForm({ seats }: { seats: SeatInfo }) {
         <p className="text-xs text-status-danger sm:col-span-3">{error}</p>
       ) : null}
       {success ? (
-        <p className="text-xs text-status-success sm:col-span-3">
-          Member added.
-        </p>
+        <p className="text-xs text-status-success sm:col-span-3">{success}</p>
       ) : null}
     </form>
   );

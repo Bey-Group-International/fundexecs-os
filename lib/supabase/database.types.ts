@@ -2816,6 +2816,20 @@ export type TeamProfile = Timestamps & {
   created_by: string | null;
 };
 
+// Pending Team invites for people without an account yet (supabase/migrations
+// 20261103120000_organization_invites.sql). Written only via the service role.
+export type OrganizationInviteRow = {
+  id: string;
+  organization_id: string;
+  email: string;
+  role: MemberRole;
+  invited_by: string | null;
+  invited_by_platform_admin: boolean;
+  created_at: string;
+  expires_at: string;
+  accepted_at: string | null;
+};
+
 type TableShape<Row> = {
   Row: Row;
   Insert: Partial<Row>;
@@ -3475,6 +3489,7 @@ export type Database = {
       access_requests: TableShape<AccessRequest>;
       organizations: TableShape<Organization>;
       organization_members: TableShape<OrganizationMember>;
+      organization_invites: TableShape<OrganizationInviteRow>;
       investment_theses: TableShape<InvestmentThesis>;
       track_records: TableShape<TrackRecord>;
       investors: TableShape<Investor>;

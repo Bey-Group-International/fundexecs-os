@@ -8,6 +8,7 @@ import { grantTrialCreditsIfEligible } from "@/lib/trial";
 import { notifyNewSignupOnce } from "@/lib/admin/signup-alert";
 import { enforceAccessGate } from "@/lib/access-requests";
 import { sanitizeNextPath } from "@/lib/safe-next-path";
+import { claimPendingInvites } from "@/lib/team-invites.server";
 
 // OAuth callback (Google) and email OTP verification callback.
 // Supabase redirects here with either:
@@ -37,6 +38,7 @@ export async function GET(request: Request) {
       // BEFORE the session is allowed to stand.
       const blocked = await enforceAccessOrSignOut(supabase);
       if (blocked) return NextResponse.redirect(`${origin}${blocked}`);
+      await claimInvitesForSession(supabase);
       await maybeGrantTrial(supabase);
       return NextResponse.redirect(`${origin}${next}`);
     }
@@ -51,6 +53,7 @@ export async function GET(request: Request) {
     if (!error) {
       const blocked = await enforceAccessOrSignOut(supabase);
       if (blocked) return NextResponse.redirect(`${origin}${blocked}`);
+      await claimInvitesForSession(supabase);
       await maybeGrantTrial(supabase);
       return NextResponse.redirect(`${origin}${next}`);
     }
@@ -62,6 +65,25 @@ export async function GET(request: Request) {
   return NextResponse.redirect(
     `${origin}/login?error=${encodeURIComponent("Invalid callback parameters.")}`,
   );
+}
+
+/**
+ * Attach the just-signed-in user to any organization that invited their
+ * address. Runs after the access gate and before the trial grant, so an invited
+ * person arrives already inside the organization instead of at onboarding.
+ */
+async function claimInvitesForSession(
+  supabase: Awaited<ReturnType<typeof createServerClient>>,
+): Promise<void> {
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return;
+  await claimPendingInvites({
+    userId: user.id,
+    email: user.email,
+    emailConfirmed: Boolean(user.email_confirmed_at),
+  });
 }
 
 /**

@@ -1,5 +1,6 @@
 "use server";
 
+import { claimPendingInvites } from "@/lib/team-invites.server";
 import { redirect } from "next/navigation";
 import { headers } from "next/headers";
 import { createServerClient, hasSupabaseServerEnv } from "@/lib/supabase/server";
@@ -80,6 +81,16 @@ export async function signIn(formData: FormData) {
   if (blocked) {
     await supabase.auth.signOut();
     redirect(blocked);
+  }
+
+  // Attach them to any organization that invited this address (see
+  // lib/team-invites.server). Same step as the OAuth callback.
+  if (data.user) {
+    await claimPendingInvites({
+      userId: data.user.id,
+      email: data.user.email,
+      emailConfirmed: Boolean(data.user.email_confirmed_at),
+    });
   }
 
   // Same deep-link courtesy as the Google path: honor where they were headed.
