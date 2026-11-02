@@ -45,6 +45,7 @@ let writeError: { code: string; message: string } | null;
 let checkReads: Array<Record<string, unknown>>;
 // Audit rows are kept apart, so assertions about the check row stay about the check row.
 let audits: Array<Record<string, unknown>>;
+let auditError: { code: string; message: string } | null;
 const client = {
   from(table: string) {
     const filters: Record<string, unknown> = {};
@@ -55,15 +56,16 @@ const client = {
       update: (row: Record<string, unknown>) => ((op = "update"), writes.push({ table, op, row, filters }), q),
       insert: (row: Record<string, unknown>) => {
         op = "insert";
-        if (table === "onboarding_audit_log") audits.push(row);
-        else writes.push({ table, op, row, filters });
+        if (table === "onboarding_audit_log") {
+          if (!auditError) audits.push(row);
+        } else writes.push({ table, op, row, filters });
         return q;
       },
       maybeSingle: async () => {
         if (table === "onboarding_checks") checkReads.push({ ...filters });
         return { data: (tables[table] as unknown) ?? null };
       },
-      then: (resolve: (v: unknown) => void) => resolve(op === "select" ? { data: tables[table] ?? [], error: null } : { error: writeError }),
+      then: (resolve: (v: unknown) => void) => resolve(op === "select" ? { data: tables[table] ?? [], error: null } : { error: table === "onboarding_audit_log" ? auditError : writeError }),
     };
     return q;
   },
@@ -90,6 +92,7 @@ beforeEach(() => {
   };
   writes = [];
   audits = [];
+  auditError = null;
   checkReads = [];
   writeError = null;
   jest.spyOn(console, "error").mockImplementation(() => undefined);
@@ -279,11 +282,27 @@ describe("runOfacScreen", () => {
       expect(audits).toEqual([]);
     });
 
-    it("records nothing for a run whose result could not be saved", async () => {
+    it("logs a run before it changes the check, and says so afterwards if the save fails", async () => {
       writeError = { code: "42501", message: "denied" };
+      const res = await runOfacScreen(client, "s1", "org-1", { now: NOW, actor: { kind: "user", id: "user-7" } });
+      expect(res).toEqual({ ok: false, error: "Couldn't save the screen. Try again." });
+      expect(audits.map((a) => a.action)).toEqual(["check.screen_run", "check.screen_failed"]);
+      expect(audits[1]).toMatchObject({ actor_id: "user-7", actor_kind: "user", detail: { status: "pending" } });
+    });
+
+    it("does not change the check when the entry cannot be written", async () => {
+      auditError = { code: "42501", message: "denied" };
       const res = await runOfacScreen(client, "s1", "org-1", { now: NOW });
-      expect(res.ok).toBe(false);
-      expect(audits).toEqual([]);
+      expect(res).toEqual({ ok: false, error: "Couldn't record the screen. Try again." });
+      expect(writes).toEqual([]);
+    });
+
+    it("still reports a run that changed nothing when its entry cannot be written: nothing changed to account for", async () => {
+      tables.onboarding_checks = { status: "clear", summary: "Checked Dow Jones", recorded_by: "user-1" };
+      auditError = { code: "42501", message: "denied" };
+      const res = await runOfacScreen(client, "s1", "org-1", { now: NOW });
+      expect(res).toMatchObject({ ok: true, wrote: false });
+      expect(writes).toEqual([]);
     });
   });
 

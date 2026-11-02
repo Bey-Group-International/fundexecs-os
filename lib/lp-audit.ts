@@ -26,6 +26,8 @@ export const AUDIT_ACTIONS = [
   "check.screen_run",
   /** A fund manager asked for the ID verification result to be refreshed. */
   "check.refreshed",
+  /** The OFAC screen decided to change a check but the change could not be saved. Follows a check.screen_run that said wrote: true. */
+  "check.screen_failed",
   /** An earlier ID check was found for a returning LP and put to a fund manager to confirm. */
   "carryover.proposed",
   /** A fund manager confirmed it is the same person; the earlier check now counts. */
