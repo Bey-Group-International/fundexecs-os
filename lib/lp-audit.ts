@@ -34,6 +34,10 @@ export const AUDIT_ACTIONS = [
   "carryover.declined",
   /** An LP at elevated or high risk was approved: the tier and how many reasons, never the reasons. */
   "risk.assessed",
+  /** The LP signed the subscription agreement. */
+  "subscription.signed",
+  /** The fund countersigned it. */
+  "subscription.countersigned",
 ] as const;
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];
 
