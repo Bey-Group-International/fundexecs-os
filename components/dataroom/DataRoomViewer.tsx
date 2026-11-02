@@ -458,7 +458,7 @@ export function DataRoomViewer({
 
   if (!contentReady) {
     return (
-      <>
+      <div className="fx-room">
         {/* Blurred background preview — org name/initial only, never confidential */}
         <div
           className="flex min-h-screen flex-col bg-surface-0 text-fg-primary select-none pointer-events-none blur-sm opacity-40"
@@ -491,7 +491,7 @@ export function DataRoomViewer({
             router.refresh();
           }}
         />
-      </>
+      </div>
     );
   }
 
@@ -510,7 +510,7 @@ export function DataRoomViewer({
   return (
     <div
       ref={shellRef}
-      className={`flex flex-col bg-surface-0 text-fg-primary ${
+      className={`fx-room flex flex-col bg-surface-0 text-fg-primary ${
         // Exactly the viewport, so the header and menu stay put and only the
         // page scrolls.
         preview ? "h-full min-h-0" : "h-dvh print:h-auto"
