@@ -145,3 +145,36 @@ export async function buildSignedPdf(input: ExecutedPdfInput): Promise<Uint8Arra
 
   return pdf.save();
 }
+
+/** A plain document PDF from text (an agreement we generate), to be placed on and signed. */
+export async function buildDocumentPdf(input: { title: string; text: string }): Promise<Uint8Array> {
+  const pdf = await PDFDocument.create();
+  pdf.setTitle(winAnsi(input.title));
+  pdf.setProducer("FundExecs");
+  const regular = await pdf.embedFont(StandardFonts.Helvetica);
+  const bold = await pdf.embedFont(StandardFonts.HelveticaBold);
+  const [W, H, M] = [612, 792, 56];
+  let page = pdf.addPage([W, H]);
+  let y = H - M;
+  const draw = (text: string, font: PDFFont, size: number, gap = 0) => {
+    for (const l of wrap(winAnsi(text), font, size, W - 2 * M)) {
+      if (y < M + size) {
+        page = pdf.addPage([W, H]);
+        y = H - M;
+      }
+      page.drawText(l, { x: M, y: y - size, size, font, color: rgb(0.1, 0.1, 0.1) });
+      y -= size * 1.45;
+    }
+    y -= gap;
+  };
+  for (const raw of input.text.split(/\r?\n/)) {
+    const heading = /^#{1,6}\s+/.test(raw);
+    const text = raw.replace(/^#+\s*/, "").replace(/\*\*/g, "");
+    if (!text.trim()) {
+      y -= 6;
+      continue;
+    }
+    draw(text, heading ? bold : regular, heading ? 13 : 10.5, heading ? 4 : 0);
+  }
+  return pdf.save();
+}

@@ -321,7 +321,8 @@ export function EnvelopeDetail({ envelope, recipients, events }: Props) {
   const [actionError, setActionError] = useState<string | null>(null);
   const [actionSuccess, setActionSuccess] = useState<string | null>(null);
 
-  const canSend = envelope.status === "draft";
+  // Sending needs signature blocks placed first, so a draft is sent from the placement screen.
+  const canSend = false;
   const canVoid = envelope.status !== "voided" && envelope.status !== "completed";
 
   // -------------------------------------------------------------------------
@@ -473,6 +474,24 @@ export function EnvelopeDetail({ envelope, recipients, events }: Props) {
                   </>
                 )}
               </button>
+            )}
+
+            {envelope.status === "draft" && (
+              <a
+                href={`/envelopes/${envelope.id}/place`}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-gold-500 px-3 py-2 text-sm font-semibold text-on-gold transition hover:brightness-110 focus:outline-none focus-visible:ring-2"
+              >
+                Open document and place signature blocks
+              </a>
+            )}
+
+            {envelope.status === "partially_signed" && (
+              <a
+                href={`/envelopes/${envelope.id}/countersign`}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-gold-500 px-3 py-2 text-sm font-semibold text-on-gold transition hover:brightness-110 focus:outline-none focus-visible:ring-2"
+              >
+                Countersign
+              </a>
             )}
 
             {(envelope.status === "partially_signed" || envelope.status === "completed") && (

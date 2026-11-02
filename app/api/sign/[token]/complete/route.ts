@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { missingRequiredFields, type EnvelopeFieldRequirement } from '@/lib/envelope-signing'
 import { checkRateLimit, rateLimitHeaders } from '@/lib/rate-limit'
+import { parseSignaturePng } from '@/lib/signing/signature-image'
 
 export const runtime = 'nodejs'
 
@@ -58,11 +59,14 @@ export async function POST(
     if (!signatureData || typeof signatureData !== 'string') {
       return NextResponse.json({ ok: false, error: 'signatureData is required' }, { status: 400 })
     }
-    // The signing UI won't submit without initials either — the server has to
-    // match, or a crafted POST records a legally weaker signature than any
-    // real signer could produce.
-    if (!initialsData || typeof initialsData !== 'string') {
-      return NextResponse.json({ ok: false, error: 'initialsData is required' }, { status: 400 })
+    // The signature must be a real, small PNG: it is stamped onto the document.
+    if (!parseSignaturePng(signatureData)) {
+      return NextResponse.json({ ok: false, error: 'signatureData must be a PNG image' }, { status: 400 })
+    }
+    // Initials are only needed when the document has an initials block (checked with
+    // the required fields below).
+    if (initialsData !== undefined && typeof initialsData !== 'string') {
+      return NextResponse.json({ ok: false, error: 'initialsData must be an image' }, { status: 400 })
     }
     const responses: Record<string, string> =
       fieldResponses && typeof fieldResponses === 'object' ? fieldResponses : {}
@@ -144,7 +148,7 @@ export async function POST(
     // but the server is what makes the signed record defensible.
     const { data: fieldRows, error: fieldsError } = await supabase
       .from('envelope_fields')
-      .select('id, field_type, label, required')
+      .select('id, field_type, label, required, prefill, locked')
       .eq('recipient_id', recipient.id)
 
     if (fieldsError) {
@@ -152,9 +156,17 @@ export async function POST(
       return NextResponse.json({ ok: false, error: 'Internal server error' }, { status: 500 })
     }
 
-    const missing = missingRequiredFields((fieldRows ?? []) as EnvelopeFieldRequirement[], {
+    const fieldList = (fieldRows ?? []) as (EnvelopeFieldRequirement & { prefill?: string | null; locked?: boolean })[]
+    // What the server decides, not the browser: a locked block keeps the owner's value,
+    // and a date-and-time block is stamped with the moment of signing.
+    const stampedAt = new Date().toISOString()
+    for (const f of fieldList) {
+      if (f.field_type === 'datetime') responses[f.id] = stampedAt
+      else if (f.locked && f.prefill) responses[f.id] = f.prefill
+    }
+    const missing = missingRequiredFields(fieldList, {
       signatureData,
-      initialsData,
+      initialsData: initialsData ?? null,
       fieldResponses: responses,
     })
     if (missing.length > 0) {
@@ -192,7 +204,7 @@ export async function POST(
         status: 'signed',
         signed_at: now,
         signature_data: signatureData,
-        initials_data: initialsData,
+        initials_data: initialsData ?? null,
         ip_address: ipAddress,
       })
       .eq('id', recipient.id)
@@ -265,6 +277,15 @@ export async function POST(
       if (partialError) {
         console.error('POST /api/sign/[token]/complete partialError:', partialError)
       }
+    }
+
+    // Tell the owner it is their turn (or, if this was the last signature, send the signed copy).
+    try {
+      const { after } = await import('next/server')
+      const { notifyOwnerToCountersign, notifyCompleted } = await import('@/lib/envelope-notify.server')
+      after(() => (envelopeCompleted ? notifyCompleted(envelope.id) : notifyOwnerToCountersign(envelope.id)).catch(() => undefined))
+    } catch {
+      // Outside a request (tests): there is nothing to schedule.
     }
 
     return NextResponse.json({ ok: true, envelopeCompleted })

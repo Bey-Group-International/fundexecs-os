@@ -3,7 +3,9 @@
 
 export interface EnvelopeFieldRequirement {
   id: string
-  field_type: 'signature' | 'initials' | 'text' | 'date' | 'checkbox'
+  field_type:
+    | 'signature' | 'initials' | 'text' | 'date' | 'checkbox'
+    | 'name' | 'datetime' | 'company' | 'title' | 'address'
   label: string | null
   required: boolean
 }
@@ -32,6 +34,8 @@ export function missingRequiredFields(
   const missing: string[] = []
   for (const field of fields) {
     if (!field.required) continue
+    // A date-and-time block fills itself when the signature is recorded.
+    if (field.field_type === 'datetime') continue
     const satisfied =
       field.field_type === 'signature'
         ? Boolean(args.signatureData)
