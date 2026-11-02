@@ -8,11 +8,13 @@
 import "server-only";
 import { createHash, createHmac, timingSafeEqual } from "crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFPage } from "pdf-lib";
 import { escapeHtml, sendEmail } from "@/lib/email";
 import { formatSignedAt } from "@/lib/nda";
 import { recordAudit } from "@/lib/lp-audit.server";
 import { subscriptionAgreementText } from "@/lib/lp-subscription";
+import { parseSignaturePng } from "@/lib/signing/signature-image";
+import { buildSignedPdf } from "@/lib/signing/executed-pdf.server";
+import { sealPdf } from "@/lib/signing/seal.server";
 import { SITE_URL } from "@/lib/site";
 
 type Client = SupabaseClient;
@@ -65,12 +67,17 @@ export function agreementFor(f: SessionFacts, now: Date = new Date()): string {
   );
 }
 
-function checkName(raw: string, agreed: boolean): { ok: true; name: string } | { ok: false; error: string } {
+function checkSigner(
+  raw: string,
+  agreed: boolean,
+  signaturePng: unknown,
+): { ok: true; name: string; png: string } | { ok: false; error: string } {
   const name = raw.trim().replace(/\s+/g, " ");
   if (!name) return { ok: false, error: "Type your full name to sign." };
   if (name.length > 120) return { ok: false, error: "That name is too long." };
+  if (!parseSignaturePng(signaturePng)) return { ok: false, error: "Draw or type your signature to sign." };
   if (!agreed) return { ok: false, error: "Tick the box to confirm you agree." };
-  return { ok: true, name };
+  return { ok: true, name, png: signaturePng as string };
 }
 
 async function insertSignature(
@@ -83,6 +90,7 @@ async function insertSignature(
     email: string;
     ipHint: string | null;
     text: string;
+    signaturePng: string;
     now: Date;
   },
 ): Promise<SignResult> {
@@ -98,6 +106,7 @@ async function insertSignature(
       ip_hint: row.ipHint,
       agreement_text: row.text,
       agreement_sha256: sha256(row.text),
+      signature_png: row.signaturePng,
       agreed: true,
     })
     .select("id")
@@ -121,9 +130,9 @@ async function insertSignature(
 /** The LP signs. Their email is the one the fund manager invited, never one from the form. */
 export async function signAsLp(
   client: Client,
-  input: { facts: SessionFacts; signerName: string; agreed: boolean; ipHint: string | null; now?: Date },
+  input: { facts: SessionFacts; signerName: string; signaturePng: string; agreed: boolean; ipHint: string | null; now?: Date },
 ): Promise<SignResult> {
-  const v = checkName(input.signerName, input.agreed);
+  const v = checkSigner(input.signerName, input.agreed, input.signaturePng);
   if (!v.ok) return v;
   const now = input.now ?? new Date();
   return insertSignature(client, {
@@ -134,6 +143,7 @@ export async function signAsLp(
     email: input.facts.lp_email,
     ipHint: input.ipHint,
     text: agreementFor(input.facts, now),
+    signaturePng: v.png,
     now,
   });
 }
@@ -145,9 +155,9 @@ export async function signAsLp(
  */
 export async function countersign(
   client: Client,
-  input: { orgId: string; sessionId: string; signerName: string; signerEmail: string; agreed: boolean; now?: Date },
+  input: { orgId: string; sessionId: string; signerName: string; signaturePng: string; signerEmail: string; agreed: boolean; now?: Date },
 ): Promise<SignResult> {
-  const v = checkName(input.signerName, input.agreed);
+  const v = checkSigner(input.signerName, input.agreed, input.signaturePng);
   if (!v.ok) return v;
   const { data } = await client
     .from("lp_subscription_signatures")
@@ -166,6 +176,7 @@ export async function countersign(
     email: input.signerEmail,
     ipHint: null,
     text: lpText,
+    signaturePng: v.png,
     now: input.now ?? new Date(),
   });
 }
@@ -183,95 +194,54 @@ interface SigRow {
   ip_hint: string | null;
   agreement_text: string;
   agreement_sha256: string;
+  signature_png: string | null;
   copy_sent_at: string | null;
 }
 
 async function loadSignatures(client: Client, sessionId: string, orgId?: string): Promise<SigRow[]> {
   let q = client
     .from("lp_subscription_signatures")
-    .select("id, organization_id, session_id, party, signer_name, signer_email, signed_at, ip_hint, agreement_text, agreement_sha256, copy_sent_at")
+    .select("id, organization_id, session_id, party, signer_name, signer_email, signed_at, ip_hint, agreement_text, agreement_sha256, signature_png, copy_sent_at")
     .eq("session_id", sessionId);
   if (orgId) q = q.eq("organization_id", orgId);
   const { data } = await q;
   return (data ?? []) as SigRow[];
 }
 
-const winAnsi = (s: string) => s.replace(/[‘’]/g, "'").replace(/[“”]/g, '"').replace(/[–—]/g, "-").replace(/[^\x20-\x7E\xA0-\xFF]/g, "?");
-
-function wrap(text: string, font: PDFFont, size: number, width: number): string[] {
-  const out: string[] = [];
-  for (const para of text.split(/\r?\n/)) {
-    let line = "";
-    for (const word of para.split(/\s+/).filter(Boolean)) {
-      const next = line ? `${line} ${word}` : word;
-      if (font.widthOfTextAtSize(next, size) <= width) {
-        line = next;
-        continue;
-      }
-      if (line) out.push(line);
-      let w = word;
-      while (font.widthOfTextAtSize(w, size) > width && w.length > 1) {
-        let cut = w.length - 1;
-        while (cut > 1 && font.widthOfTextAtSize(w.slice(0, cut), size) > width) cut--;
-        out.push(w.slice(0, cut));
-        w = w.slice(cut);
-      }
-      line = w;
-    }
-    out.push(line);
-  }
-  return out;
-}
-
-/** The agreement followed by each signature page. A countersignature appears only once it exists. */
-export async function buildExecutedPdf(client: Client, sessionId: string, orgId?: string): Promise<{ pdf: Uint8Array; lpName: string } | null> {
+/**
+ * The executed agreement: the text, then a signature page with each party's drawn
+ * signature beside their name and time, sealed with the deploy's certificate when
+ * one is configured. A countersignature appears only once it exists.
+ */
+export async function buildExecutedPdf(
+  client: Client,
+  sessionId: string,
+  orgId?: string,
+): Promise<{ pdf: Uint8Array; lpName: string; sealed: boolean } | null> {
   const sigs = await loadSignatures(client, sessionId, orgId);
   const lp = sigs.find((s) => s.party === "lp");
   if (!lp) return null;
   const gp = sigs.find((s) => s.party === "gp");
-
-  const pdf = await PDFDocument.create();
-  pdf.setTitle(`Subscription Agreement - ${winAnsi(lp.signer_name)}`);
-  pdf.setProducer("FundExecs");
-  const regular = await pdf.embedFont(StandardFonts.Helvetica);
-  const bold = await pdf.embedFont(StandardFonts.HelveticaBold);
-  const mono = await pdf.embedFont(StandardFonts.Courier);
-  const [W, H, M] = [612, 792, 56];
-  let page: PDFPage = pdf.addPage([W, H]);
-  let y = H - M;
-  const line = (text: string, o: { font?: PDFFont; size?: number; gap?: number; color?: number } = {}) => {
-    const font = o.font ?? regular;
-    const size = o.size ?? 10.5;
-    for (const l of wrap(winAnsi(text), font, size, W - 2 * M)) {
-      if (y < M + size) {
-        page = pdf.addPage([W, H]);
-        y = H - M;
-      }
-      page.drawText(l, { x: M, y: y - size, size, font, color: rgb(o.color ?? 0.1, o.color ?? 0.1, o.color ?? 0.1) });
-      y -= size * 1.45;
-    }
-    y -= o.gap ?? 0;
-  };
-
-  // The template is markdown; strip the marks so the page reads as a document.
-  line(lp.agreement_text.replace(/^#+\s*/gm, "").replace(/\*\*/g, ""), { gap: 18 });
-
-  line("Signatures", { font: bold, size: 13, gap: 6 });
-  for (const [label, s] of [["Investor", lp], ["Fund", gp]] as const) {
-    if (!s) {
-      line(`${label}: awaiting countersignature`, { color: 0.4, gap: 8 });
-      continue;
-    }
-    line(`${label}: ${s.signer_name}`, { font: bold });
-    line(`Email: ${s.signer_email}`);
-    line(`Signed at: ${formatSignedAt(s.signed_at)}`);
-    if (s.ip_hint) line(`Network: ${s.ip_hint}.x (partial address)`);
-    line(`Signature record ${s.id}`, { size: 8, color: 0.5, gap: 8 });
-  }
-  y -= 4;
-  line("Agreement fingerprint (SHA-256):", { size: 9, color: 0.4 });
-  line(lp.agreement_sha256, { font: mono, size: 8.5, color: 0.25 });
-  return { pdf: await pdf.save(), lpName: lp.signer_name };
+  const stamp = (label: string, s: SigRow) => ({
+    label,
+    name: s.signer_name,
+    email: s.signer_email,
+    signedAt: s.signed_at,
+    ipHint: s.ip_hint,
+    signaturePng: s.signature_png,
+  });
+  const built = await buildSignedPdf({
+    title: `Subscription Agreement - ${lp.signer_name}`,
+    text: lp.agreement_text,
+    stamps: [stamp("Investor", lp), ...(gp ? [stamp("Fund", gp)] : [])],
+    awaiting: gp ? [] : ["Fund"],
+    fingerprint: lp.agreement_sha256,
+    recordId: lp.id,
+  });
+  // Only an agreement both sides have signed is sealed as executed.
+  if (!gp) return { pdf: built, lpName: lp.signer_name, sealed: false };
+  const sealed = await sealPdf(built, { reason: "Executed subscription agreement", name: "FundExecs OS" });
+  return { pdf: sealed.pdf, lpName: lp.signer_name, sealed: sealed.sealed };
 }
 
 // ─── Copy links for the LP (who has no account) ──────────────────────────────

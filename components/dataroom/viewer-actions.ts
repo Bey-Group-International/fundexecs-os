@@ -97,6 +97,7 @@ export async function signRoomDocument(
     orgId: access.share.organization_id,
     doc: access.doc,
     signerName: String(formData.get("signer_name") ?? ""),
+    signaturePng: String(formData.get("signature") ?? ""),
     agreed: formData.get("agree") === "1",
     email,
     ipHint,

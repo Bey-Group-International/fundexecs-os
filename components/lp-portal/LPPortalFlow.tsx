@@ -5,6 +5,7 @@
 // then the capital commitment. (Before approval the LP is in the setup wizard, in
 // LPWizard.tsx; approval moves the session to "accreditation", the first step here.)
 //   accreditation → subscription → committed → (operator closes → complete)
+import { SignaturePad } from "@/components/signing/SignaturePad";
 import { useState, useTransition } from "react";
 import {
   signSubscriptionAction,
@@ -63,14 +64,15 @@ function SubscriptionStep({
 }) {
   const [agreed, setAgreed] = useState(false);
   const [typedName, setTypedName] = useState("");
+  const [signaturePng, setSignaturePng] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
 
   function handleSign() {
-    if (!agreed || !typedName.trim()) return;
+    if (!agreed || !typedName.trim() || !signaturePng) return;
     setError(null);
     startTransition(async () => {
-      const result = await signSubscriptionAction(token, typedName.trim(), agreed);
+      const result = await signSubscriptionAction(token, typedName.trim(), signaturePng, agreed);
       if ("error" in result) {
         setError(result.error);
       } else {
@@ -111,7 +113,7 @@ function SubscriptionStep({
       </label>
 
       <label className="mt-4 block">
-        <span className="mb-1.5 block text-xs font-medium text-fg-secondary">Type your full name to sign</span>
+        <span className="mb-1.5 block text-xs font-medium text-fg-secondary">Your full legal name</span>
         <input
           type="text"
           autoComplete="name"
@@ -122,11 +124,15 @@ function SubscriptionStep({
         />
       </label>
 
+      <div className="mt-4">
+        <SignaturePad signerName={typedName || lpName} onChange={setSignaturePng} label="Your signature" />
+      </div>
+
       {error && <p className="mt-3 font-mono text-[11px] text-status-danger">{error}</p>}
 
       <button
         onClick={handleSign}
-        disabled={!agreed || !typedName.trim() || pending}
+        disabled={!agreed || !typedName.trim() || !signaturePng || pending}
         className="mt-5 w-full rounded-lg border border-gold-500/40 bg-gold-500/10 py-2.5 font-mono text-[11px] uppercase tracking-wider text-gold-300 transition hover:bg-gold-500/20 disabled:opacity-40"
       >
         {pending ? "Signing…" : "✍ Sign subscription agreement →"}

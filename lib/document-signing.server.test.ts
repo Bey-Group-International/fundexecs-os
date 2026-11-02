@@ -1,4 +1,5 @@
 jest.mock("server-only", () => ({}), { virtual: true });
+jest.mock("@/lib/signing/seal.server", () => ({ sealPdf: async (pdf: Uint8Array) => ({ pdf, sealed: false }) }));
 jest.mock("@/lib/email", () => ({ sendEmail: jest.fn(async () => ({ ok: true })), escapeHtml: (s: string) => s }));
 import { createHash } from "crypto";
 import { fingerprintDocument, signDocument } from "./document-signing.server";
@@ -24,6 +25,7 @@ function client(insertError: { code: string } | null = null) {
   return { from: () => q } as never;
 }
 
+const PNG = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
 const doc = { id: "doc-1", name: "NDA.pdf", storage_key: "https://example.com/nda", content: null };
 const base = {
   shareId: "s1",
@@ -31,6 +33,7 @@ const base = {
   orgId: "o1",
   doc,
   signerName: "  Jane   Smith ",
+  signaturePng: PNG,
   agreed: true,
   email: "Jane@LP.com",
   ipHint: "203.0.113",
@@ -48,8 +51,16 @@ describe("signDocument", () => {
       document_id: "doc-1",
       file_name: "NDA.pdf",
       file_sha256: createHash("sha256").update("https://example.com/nda").digest("hex"),
+      signature_png: PNG,
       agreed: true,
     });
+  });
+
+  it("refuses a missing or non-PNG signature", async () => {
+    for (const bad of ["", "data:image/png;base64,AAAA", "data:text/html;base64,PGI+"]) {
+      expect((await signDocument(client(), { ...base, signaturePng: bad })).ok).toBe(false);
+    }
+    expect(inserted).toBeNull();
   });
 
   it("refuses a missing name, missing consent and missing email", async () => {

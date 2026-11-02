@@ -5,6 +5,7 @@
 import { useState, useTransition } from "react";
 import type { OnboardingStatus } from "@/lib/lp-onboarding";
 import { countersignSubscriptionAction } from "@/components/execute/countersign-actions";
+import { SignaturePad } from "@/components/signing/SignaturePad";
 import { buildOnboardingSteps, onboardingProgressPct } from "@/lib/lp-onboarding";
 
 interface Session {
@@ -46,6 +47,7 @@ function ProgressBar({ pct }: { pct: number }) {
 function SignatureRow({ session }: { session: Session }) {
   const [name, setName] = useState("");
   const [agreed, setAgreed] = useState(false);
+  const [png, setPng] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [pending, startTransition] = useTransition();
   if (!session.lpSignedAt) return null;
@@ -73,6 +75,7 @@ function SignatureRow({ session }: { session: Session }) {
             autoComplete="name"
             className="w-full rounded-md border border-line bg-surface-1 px-2.5 py-1.5 text-xs text-fg-primary placeholder:text-fg-muted focus:border-gold-400 focus:outline-none"
           />
+          <SignaturePad signerName={name} onChange={setPng} label="Fund signature" />
           <label className="flex items-start gap-2 text-[11px] text-fg-secondary">
             <input type="checkbox" checked={agreed} onChange={(e) => setAgreed(e.target.checked)} className="mt-0.5" />
             <span>I countersign this agreement on behalf of the fund.</span>
@@ -80,11 +83,11 @@ function SignatureRow({ session }: { session: Session }) {
           {error ? <p className="text-[11px] text-red-400">{error}</p> : null}
           <button
             type="button"
-            disabled={pending || !agreed || !name.trim()}
+            disabled={pending || !agreed || !name.trim() || !png}
             onClick={() =>
               startTransition(async () => {
                 setError("");
-                const r = await countersignSubscriptionAction(session.id, name.trim(), agreed);
+                const r = await countersignSubscriptionAction(session.id, name.trim(), png!, agreed);
                 if (!r.ok) setError(r.error);
               })
             }

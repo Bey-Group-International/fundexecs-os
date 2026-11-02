@@ -13,6 +13,7 @@ import { createServerClient, createServiceClient, hasSupabaseServiceEnv } from "
 export async function countersignSubscriptionAction(
   sessionId: string,
   signerName: string,
+  signaturePng: string,
   agreed: boolean,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const generic = { ok: false as const, error: "We couldn't record your countersignature. Please try again." };
@@ -39,6 +40,7 @@ export async function countersignSubscriptionAction(
     orgId: ctx.orgId,
     sessionId,
     signerName,
+    signaturePng,
     signerEmail: ctx.email,
     agreed: agreed === true,
   });
