@@ -9,6 +9,7 @@ import {
   useTransition,
 } from "react";
 import { useRouter } from "next/navigation";
+import { SignaturePad } from "@/components/signing/SignaturePad";
 import { MarkdownRenderer } from "./MarkdownRenderer";
 import { ViewerGate } from "./ViewerGate";
 import type { GateConfig } from "./ViewerGate";
@@ -1169,6 +1170,7 @@ function SignatureLock({
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [agreed, setAgreed] = useState(false);
+  const [png, setPng] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [pending, startTransition] = useTransition();
   // The server takes the email from the reader's gate pass; ask only when the
@@ -1199,6 +1201,7 @@ function SignatureLock({
       const fd = new FormData();
       fd.set("signer_name", trimmed);
       fd.set("agree", agreed ? "1" : "0");
+      fd.set("signature", png ?? "");
       if (needsEmail) fd.set("email", email.trim());
       const result = await signRoomDocument(token, doc.id, fd);
       if (result.ok) router.refresh();
@@ -1216,7 +1219,7 @@ function SignatureLock({
         <span className="text-fg-primary">{doc.name}</span> before you can read
         it. Your name, the time and a fingerprint of the file are recorded.
       </p>
-      <div className="mt-4 max-w-sm space-y-3">
+      <div className="mt-4 max-w-md space-y-3">
         {needsEmail ? (
           <input
             type="email"

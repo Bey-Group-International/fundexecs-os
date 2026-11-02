@@ -8,7 +8,7 @@
 // SHA-256 as it stands now, kept on the row. The browser supplies only the
 // typed name and the "I agree" tick.
 import "server-only";
-import { createHash } from "crypto";
+import { createHash, createHmac, timingSafeEqual } from "crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { DOCUMENT_BUCKET, isUploadedFile } from "@/lib/document-files";
 import { escapeHtml, sendEmail } from "@/lib/email";
@@ -16,6 +16,10 @@ import { selectInBatches } from "@/lib/supabase/batch";
 import { DataRoomReadError } from "@/lib/data-room-errors";
 import { normalizeEmail } from "@/lib/crm/contact-match";
 import { formatSignedAt } from "@/lib/nda";
+import { SITE_URL } from "@/lib/site";
+import { parseSignaturePng } from "@/lib/signing/signature-image";
+import { buildSignedPdf } from "@/lib/signing/executed-pdf.server";
+import { sealPdf } from "@/lib/signing/seal.server";
 import type { Document } from "@/lib/supabase/database.types";
 
 // The signature tables are read through narrow shapes rather than the
@@ -82,6 +86,7 @@ export async function signDocument(
     orgId: string;
     doc: Pick<Document, "id" | "name" | "storage_key" | "content">;
     signerName: string;
+    signaturePng: string;
     agreed: boolean;
     email: string | null;
     ipHint: string | null;
@@ -91,6 +96,7 @@ export async function signDocument(
   const name = input.signerName.trim().replace(/\s+/g, " ");
   if (!name) return { ok: false, error: "Type your full name to sign." };
   if (name.length > 120) return { ok: false, error: "That name is too long." };
+  if (!parseSignaturePng(input.signaturePng)) return { ok: false, error: "Draw or type your signature to sign." };
   if (!input.agreed) return { ok: false, error: "Tick the box to confirm you agree." };
   if (!input.email) return { ok: false, error: "Enter your email first, then sign." };
 
@@ -112,6 +118,7 @@ export async function signDocument(
       ip_hint: input.ipHint,
       file_name: input.doc.name,
       file_sha256: hash,
+      signature_png: input.signaturePng,
       agreed: true,
     })
     .select("id")
@@ -146,6 +153,8 @@ interface SignatureRow {
   signed_at: string;
   file_name: string;
   file_sha256: string;
+  signature_png: string | null;
+  ip_hint: string | null;
   copy_sent_at: string | null;
 }
 
@@ -159,7 +168,7 @@ export async function afterDocumentSigned(client: Client, signatureId: string): 
   const { data } = await client
     .from("data_room_document_signatures")
     .select(
-      "id, organization_id, room_id, document_id, share_id, signer_name, signer_email, signed_at, file_name, file_sha256, copy_sent_at",
+      "id, organization_id, room_id, document_id, share_id, signer_name, signer_email, signed_at, file_name, file_sha256, signature_png, ip_hint, copy_sent_at",
     )
     .eq("id", signatureId)
     .maybeSingle();
@@ -184,6 +193,7 @@ export async function afterDocumentSigned(client: Client, signatureId: string): 
       subject: `You signed ${sig.file_name} — ${orgName}`,
       htmlBody: `<p>Hi ${escapeHtml(sig.signer_name)},</p>
 <p>This confirms you signed <strong>${escapeHtml(sig.file_name)}</strong> in <strong>${escapeHtml(roomName)}</strong> (${escapeHtml(orgName)}) on ${escapeHtml(when)}.</p>
+<p><a href="${signedCopyUrl(sig.id)}">Download your signed copy (PDF)</a></p>
 <p style="font-size:12px;color:#666">Fingerprint of the file you signed (SHA-256):<br><code>${escapeHtml(sig.file_sha256)}</code></p>`,
       allowFallback: true,
     }).catch(() => ({ ok: false }));
@@ -231,4 +241,83 @@ export async function afterDocumentSigned(client: Client, signatureId: string): 
       })
       .then(() => undefined, () => undefined);
   }
+}
+
+// ─── The signed copy ─────────────────────────────────────────────────────────
+
+function copySecret(): string {
+  return createHmac("sha256", "fx-doc-signature-copy").update(process.env.SUPABASE_SERVICE_ROLE_KEY ?? "").digest("hex");
+}
+export function signedCopyToken(signatureId: string): string {
+  return createHmac("sha256", copySecret()).update(signatureId).digest("base64url");
+}
+export function signedCopyTokenValid(signatureId: string, token: string | null | undefined): boolean {
+  if (!token) return false;
+  const a = Buffer.from(token);
+  const b = Buffer.from(signedCopyToken(signatureId));
+  return a.length === b.length && timingSafeEqual(a, b);
+}
+export function signedCopyUrl(signatureId: string): string {
+  return `${SITE_URL}/api/dataroom/doc-signature/${signatureId}?t=${signedCopyToken(signatureId)}`;
+}
+
+/**
+ * The file the signer signed with their signature page appended (their own PDF
+ * stays as it was; any other kind of file gets a record page naming it), sealed
+ * when the deploy has a certificate.
+ */
+export async function buildSignedCopy(
+  client: Client,
+  signatureId: string,
+  orgId?: string,
+): Promise<{ pdf: Uint8Array; signerName: string; sealed: boolean } | null> {
+  let q = client
+    .from("data_room_document_signatures")
+    .select("id, organization_id, document_id, signer_name, signer_email, signed_at, ip_hint, file_name, file_sha256, signature_png")
+    .eq("id", signatureId);
+  if (orgId) q = q.eq("organization_id", orgId);
+  const { data } = await q.maybeSingle();
+  const sig = data as {
+    id: string; organization_id: string; document_id: string; signer_name: string; signer_email: string;
+    signed_at: string; ip_hint: string | null; file_name: string; file_sha256: string; signature_png: string | null;
+  } | null;
+  if (!sig) return null;
+
+  const { data: docRow } = await client
+    .from("documents")
+    .select("storage_key, content, name")
+    .eq("id", sig.document_id)
+    .maybeSingle();
+  const doc = docRow as Pick<Document, "storage_key" | "content" | "name"> | null;
+
+  let basePdf: Uint8Array | undefined;
+  if (doc?.storage_key && isUploadedFile(doc.storage_key) && /\.pdf$/i.test(doc.storage_key)) {
+    const { data: blob } = await client.storage.from(DOCUMENT_BUCKET).download(doc.storage_key);
+    if (blob && blob.size <= MAX_HASH_BYTES) basePdf = new Uint8Array(await blob.arrayBuffer());
+  }
+  let built: Uint8Array;
+  try {
+    built = await buildSignedPdf({
+      title: `${sig.file_name} - signed by ${sig.signer_name}`,
+      ...(basePdf ? { basePdf } : { text: doc?.content?.trim() ? doc.content : `Signed document: ${sig.file_name}` }),
+      stamps: [
+        { label: "Signer", name: sig.signer_name, email: sig.signer_email, signedAt: sig.signed_at, ipHint: sig.ip_hint, signaturePng: sig.signature_png },
+      ],
+      fingerprint: sig.file_sha256,
+      recordId: sig.id,
+    });
+  } catch {
+    // An unreadable or encrypted PDF: fall back to the record page alone.
+    built = await buildSignedPdf({
+      title: sig.file_name,
+      text: `Signed document: ${sig.file_name}`,
+      stamps: [
+        { label: "Signer", name: sig.signer_name, email: sig.signer_email, signedAt: sig.signed_at, ipHint: sig.ip_hint, signaturePng: sig.signature_png },
+      ],
+      fingerprint: sig.file_sha256,
+      recordId: sig.id,
+    });
+  }
+  const sealed = await sealPdf(built, { reason: `Signed ${sig.file_name}`, name: "FundExecs OS" });
+  return { pdf: sealed.pdf, signerName: sig.signer_name, sealed: sealed.sealed };
 }

@@ -44,7 +44,7 @@ beforeEach(() => {
 afterEach(() => jest.restoreAllMocks());
 
 describe.each([
-  ["signSubscriptionAction", (t: string) => signSubscriptionAction(t, "Jane Smith", true), "accreditation", { status: "subscription" }],
+  ["signSubscriptionAction", (t: string) => signSubscriptionAction(t, "Jane Smith", "data:image/png;base64,x", true), "accreditation", { status: "subscription" }],
   ["confirmCapitalCommitmentAction", confirmCapitalCommitmentAction, "subscription", { status: "committed" }],
 ] as const)("%s", (_n, action, stage, expected) => {
   it("moves an approved LP on", async () => {
@@ -90,14 +90,14 @@ describe.each([
 describe("signSubscriptionAction signature record", () => {
   it("records the typed name, consent and a partial IP before moving on", async () => {
     session = approved();
-    expect(await signSubscriptionAction("tok", "Jane Smith", true)).toEqual({ ok: true });
-    expect(signAsLp).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ signerName: "Jane Smith", agreed: true, ipHint: "203.0.113" }));
+    expect(await signSubscriptionAction("tok", "Jane Smith", "data:image/png;base64,x", true)).toEqual({ ok: true });
+    expect(signAsLp).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ signerName: "Jane Smith", signaturePng: "data:image/png;base64,x", agreed: true, ipHint: "203.0.113" }));
   });
 
   it("does not advance the LP when the signature is refused", async () => {
     session = approved();
     signResult = { ok: false, error: "Type your full name to sign." };
-    expect(await signSubscriptionAction("tok", "", true)).toEqual({ error: "Type your full name to sign." });
+    expect(await signSubscriptionAction("tok", "", "", true)).toEqual({ error: "Type your full name to sign." });
     expect(updated).toBeNull();
   });
 });

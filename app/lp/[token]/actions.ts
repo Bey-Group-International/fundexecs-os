@@ -29,6 +29,7 @@ async function getApprovedSession(token: string) {
 export async function signSubscriptionAction(
   token: string,
   signerName: string,
+  signaturePng: string,
   agreed: boolean,
 ): Promise<{ ok: boolean } | { error: string }> {
   try {
@@ -52,7 +53,7 @@ export async function signSubscriptionAction(
     const { loadSessionFacts, signAsLp, afterSigned } = await import("@/lib/lp-subscription-signing.server");
     const facts = await loadSessionFacts(ctx.supabase, ctx.session.id);
     if (!facts) return { error: "Failed to record signature" };
-    const signed = await signAsLp(ctx.supabase, { facts, signerName, agreed: agreed === true, ipHint });
+    const signed = await signAsLp(ctx.supabase, { facts, signerName, signaturePng, agreed: agreed === true, ipHint });
     if (!signed.ok) return { error: signed.error };
 
     const { error } = await ctx.supabase

@@ -475,6 +475,15 @@ export function EnvelopeDetail({ envelope, recipients, events }: Props) {
               </button>
             )}
 
+            {(envelope.status === "partially_signed" || envelope.status === "completed") && (
+              <a
+                href={`/api/envelopes/${envelope.id}/executed`}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-line px-3 py-2 text-sm text-fg-secondary transition hover:bg-surface-2 focus:outline-none focus-visible:ring-2"
+              >
+                {envelope.status === "completed" ? "Download executed PDF" : "Download signed-so-far PDF"}
+              </a>
+            )}
+
             {canVoid && (
               <button
                 type="button"
