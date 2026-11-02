@@ -189,17 +189,170 @@ describe("a live reader", () => {
 });
 
 describe("mobile navigation", () => {
-  it("closes from a backdrop that is not inside the transformed sidebar", () => {
-    const { container } = render(view([FINANCIALS], false));
-    fireEvent.click(screen.getByRole("button", { name: "Toggle navigation" }));
-    const backdrop = screen.getByRole("button", { name: "Close navigation" });
-    // A fixed child of a transformed ancestor covers only that ancestor, so a
-    // tap on the page behind the open menu would never reach it.
-    expect(container.querySelector("aside")?.contains(backdrop)).toBe(false);
-    fireEvent.click(backdrop);
+  // Below the desktop breakpoint the contents rail is hidden and a selector under
+  // the header takes its place, so there is no slide-out menu to open or dismiss.
+  it("offers the sections as a selector, and choosing one opens it", () => {
+    render(view([FINANCIALS, LEGAL], false));
+    const select = screen.getByRole("combobox", { name: "Section" });
+    expect(
+      Array.from(select.querySelectorAll("option")).map((o) => o.textContent),
+    ).toEqual([
+      "Overview",
+      "All documents (2)",
+      // The room's own section order, not the order they were given in.
+      "Legal & Structure",
+      "Financials & Audits",
+    ]);
+    fireEvent.change(select, { target: { value: "docs:legal" } });
+    expect(
+      screen.getByRole("heading", { level: 1, name: "Legal & Structure" }),
+    ).toBeInTheDocument();
+    expect(select).toHaveValue("docs:legal");
+  });
+
+  it("has no slide-out menu to toggle or dismiss", () => {
+    render(view([FINANCIALS], false));
+    expect(
+      screen.queryByRole("button", { name: "Toggle navigation" }),
+    ).toBeNull();
     expect(
       screen.queryByRole("button", { name: "Close navigation" }),
     ).toBeNull();
+  });
+
+  it("keeps the rail off phones and off paper", () => {
+    const { container } = render(view([FINANCIALS], false));
+    const aside = container.querySelector("aside")!;
+    expect(aside.className).toMatch(/\bhidden\b/);
+    expect(aside.className).toMatch(/lg:flex/);
+    expect(aside.className).toMatch(/print:hidden/);
+  });
+
+  it("is not shown in the GP preview, which keeps its own rail", () => {
+    render(view([FINANCIALS], true));
+    expect(screen.queryByRole("combobox", { name: "Section" })).toBeNull();
+  });
+});
+
+describe("the institutional index", () => {
+  const dated = (
+    over: Partial<ViewerSection["docs"][number]> & { id: string; name: string },
+  ) => ({
+    content: "x",
+    hasFile: false,
+    doc_type: "marketing",
+    ...over,
+  });
+  const MARKETING = {
+    key: "marketing",
+    label: "Marketing & Materials",
+    docs: [
+      dated({
+        id: "a",
+        name: "Executive Summary",
+        updatedAt: "2026-10-12T09:00:00Z",
+        isNew: true,
+      }),
+      dated({
+        id: "b",
+        name: "Fund I Teaser",
+        updatedAt: "2026-09-01T09:00:00Z",
+        isNew: false,
+      }),
+    ],
+  };
+
+  it("opens with a cover: the firm, what it is, how much is in the room and when it last changed", () => {
+    render(
+      <DataRoomViewer
+        token="t"
+        shareId="s"
+        org={{
+          ...ORG,
+          tagline: "Culture, Capital, and Control",
+          entity_type: "LP",
+          jurisdiction: "Delaware",
+        }}
+        blended={BLENDED}
+        thesis={null}
+        team={[]}
+        entities={[]}
+        docSections={[MARKETING]}
+        gateConfig={{
+          requireEmail: false,
+          requireNda: false,
+          ndaText: null,
+          passwordProtected: false,
+        }}
+        contentReady
+      />,
+    );
+    expect(screen.getByText("Confidential · Data room")).toBeInTheDocument();
+    expect(
+      screen.getByText("Culture, Capital, and Control", {
+        selector: "p.text-base",
+      }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        /LP · Delaware\s+·\s+2 documents\s+·\s+Updated Oct 12, 2026/,
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("dates every document, in a form that reads the same on server and browser", () => {
+    render(view([MARKETING]));
+    expect(screen.getByText("Oct 12, 2026")).toHaveAttribute(
+      "datetime",
+      "2026-10-12T09:00:00Z",
+    );
+    expect(screen.getByText("Sep 1, 2026")).toBeInTheDocument();
+  });
+
+  it("marks only what is new since the reader's last visit", () => {
+    render(view([MARKETING]));
+    expect(screen.getAllByText("New")).toHaveLength(1);
+    const row = screen.getByText("Executive Summary").closest("[data-doc-id]")!;
+    expect(row).toHaveTextContent("New");
+    expect(
+      screen.getByText("Fund I Teaser").closest("[data-doc-id]"),
+    ).not.toHaveTextContent("New");
+  });
+
+  it("shows no date or marker for a document without one", () => {
+    render(
+      view([section("legal", "Legal & Structure", "Formation Documents")]),
+    );
+    expect(screen.queryByText("New")).toBeNull();
+    expect(document.querySelector("time")).toBeNull();
+  });
+
+  it("states on paper who the room was prepared for, and not in the GP preview", () => {
+    const { rerender } = render(
+      <DataRoomViewer
+        token="t"
+        shareId="s"
+        org={ORG}
+        blended={BLENDED}
+        thesis={null}
+        team={[]}
+        entities={[]}
+        docSections={[MARKETING]}
+        viewerLabel="lp@example.com"
+        gateConfig={{
+          requireEmail: false,
+          requireNda: false,
+          ndaText: null,
+          passwordProtected: false,
+        }}
+        contentReady
+      />,
+    );
+    const footer = screen.getByText(/Prepared for lp@example.com/);
+    expect(footer.className).toMatch(/print:block/);
+    expect(footer.className).toMatch(/\bhidden\b/);
+    rerender(view([MARKETING], true));
+    expect(screen.queryByText(/Prepared for/)).toBeNull();
   });
 });
 

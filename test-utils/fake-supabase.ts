@@ -8,9 +8,10 @@
 //    says nothing when it truncates (PostgREST's behaviour).
 //  - URL length: an `.in()` carrying more than `maxInIds` ids fails.
 //  - failure injection: name a table in `fail` and every read of it errors.
+//  - lt: strict less-than, on strings (ISO timestamps compare correctly)
 //  - writes: `.insert()` is recorded in `inserts` and answers success.
 //
-// It is deliberately small. It models filters by equality, `.in`, `.is` and
+// It is deliberately small. It models filters by equality, `.in`, `.is`, `.lt` and
 // `.ilike` (equality, case-insensitively), ordering, ranges and
 // maybeSingle, and nothing else, so a query that needs more fails loudly here
 // rather than passing against a fake that quietly answers it.
@@ -50,6 +51,7 @@ export function fakeDb(tables: Record<string, Row[]>, options: FakeDbOptions = {
       select: () => q,
       eq: (c: string, v: unknown) => ((rows = rows.filter((r) => r[c] === v)), q),
       is: (c: string, v: unknown) => ((rows = rows.filter((r) => (r[c] ?? null) === v)), q),
+      lt: (c: string, v: unknown) => ((rows = rows.filter((r) => (r[c] as string) < (v as string))), q),
       in: (c: string, vals: unknown[]) => {
         inSize = vals.length;
         if (vals.length > maxInIds) tooLong = true;

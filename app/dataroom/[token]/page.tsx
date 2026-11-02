@@ -1,6 +1,6 @@
 import { createServiceClient, hasSupabaseServiceEnv } from "@/lib/supabase/server";
 import { gateSatisfied, readGatePass } from "@/lib/data-room-gate";
-import { buildViewerPayload, EMPTY_BLENDED } from "@/lib/data-room-viewer.server";
+import { buildViewerPayload, EMPTY_BLENDED, previousVisitAt } from "@/lib/data-room-viewer.server";
 import { DataRoomReadError, logReadFailure, orThrowRead } from "@/lib/data-room-errors";
 import type { Organization, DataRoomShare } from "@/lib/supabase/database.types";
 import { DataRoomViewer } from "@/components/dataroom/DataRoomViewer";
@@ -148,13 +148,14 @@ async function renderDataRoom(props: {
 
   // One builder serves this page and the GP-side preview, so "what will they
   // see?" is answered by the same code that renders what they do see.
+  const lastVisitAt = await previousVisitAt(supabase, share.id, pass?.email ?? null);
   const payload = await buildViewerPayload(
     supabase,
     orgId,
     roomId,
     share.allowed_sections ?? null,
     share.document_id ?? null,
-    { shareId: share.id, email: pass?.email ?? null },
+    { shareId: share.id, email: pass?.email ?? null, lastVisitAt },
   );
   if (!payload) return <Unavailable />;
   // A single-document link shows the document and nothing of the firm's room.

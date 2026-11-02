@@ -13,7 +13,7 @@
 jest.mock("server-only", () => ({}), { virtual: true });
 jest.mock("@/lib/email", () => ({ escapeHtml: (s: string) => s, sendEmail: jest.fn() }));
 
-import { buildViewerPayload, isRoomOpen } from "./data-room-viewer.server";
+import { buildViewerPayload, isRoomOpen, previousVisitAt } from "./data-room-viewer.server";
 import { DataRoomReadError } from "./data-room-errors";
 import { fakeDb, type Row } from "../test-utils/fake-supabase";
 
@@ -289,5 +289,82 @@ describe("the firm's Build pages follow a link's section allowlist", () => {
     expect(p!.blended.dealCount).toBe(0);
     expect(p!.entities).toEqual([]);
     expect(p!.team).toEqual([]);
+  });
+});
+
+describe("what changed since a reader's previous visit", () => {
+  const withDates = (dates: Record<string, string>) => {
+    const t = tables([
+      { id: "old", name: "Old deck", content: "a" },
+      { id: "fresh", name: "Fresh memo", content: "b" },
+    ]);
+    t.documents = t.documents.map((d) => ({ ...d, updated_at: dates[d.id as string] }));
+    return fakeDb(t).client;
+  };
+  const dates = { old: "2026-09-01T00:00:00Z", fresh: "2026-10-20T00:00:00Z" };
+  const find = (p: Awaited<ReturnType<typeof buildViewerPayload>>, id: string) => allDocs(p).find((d) => d.id === id)!;
+
+  it("marks only what changed after the previous visit, and gives every document its date", async () => {
+    const p = await buildViewerPayload(withDates(dates), ORG, ROOM, null, null, { shareId: SHARE, email: "lp@example.com", lastVisitAt: "2026-10-01T00:00:00Z" });
+    expect(find(p, "fresh")).toMatchObject({ isNew: true, updatedAt: dates.fresh });
+    expect(find(p, "old")).toMatchObject({ isNew: false, updatedAt: dates.old });
+  });
+
+  it("marks nothing on a first visit, when there is no previous one", async () => {
+    const p = await buildViewerPayload(withDates(dates), ORG, ROOM, null, null, { shareId: SHARE, email: "lp@example.com", lastVisitAt: null });
+    expect(allDocs(p).every((d) => d.isNew === false)).toBe(true);
+    expect(find(p, "fresh").updatedAt).toBe(dates.fresh);
+  });
+
+  it("marks nothing in the GP preview, which has no reader", async () => {
+    const p = await buildViewerPayload(withDates(dates), ORG, ROOM, null);
+    expect(allDocs(p).every((d) => d.isNew === false)).toBe(true);
+  });
+
+  it("does not mark a document changed exactly at the previous visit", async () => {
+    const p = await buildViewerPayload(withDates(dates), ORG, ROOM, null, null, { shareId: SHARE, email: "lp@example.com", lastVisitAt: dates.fresh });
+    expect(find(p, "fresh").isNew).toBe(false);
+  });
+
+  it("still marks a locked document, which shows its name and date but nothing of itself", async () => {
+    const t = tables([LOCKED]);
+    t.documents = t.documents.map((d) => ({ ...d, updated_at: "2026-10-20T00:00:00Z" }));
+    const p = await buildViewerPayload(fakeDb(t).client, ORG, ROOM, null, null, { shareId: SHARE, email: "lp@example.com", lastVisitAt: "2026-10-01T00:00:00Z" });
+    expect(allDocs(p)[0]).toMatchObject({ content: null, hasFile: false, isNew: true });
+  });
+});
+
+describe("previousVisitAt", () => {
+  const ago = (minutes: number) => new Date(Date.now() - minutes * 60_000).toISOString();
+  const views = (rows: { share_id?: string; viewer_email: string | null; created_at: string }[]) =>
+    fakeDb({ data_room_views: rows.map((r) => ({ share_id: SHARE, ...r })) }).client;
+
+  it("is the reader's latest earlier visit on this link", async () => {
+    const client = views([
+      { viewer_email: "lp@example.com", created_at: ago(60 * 24 * 5) },
+      { viewer_email: "lp@example.com", created_at: ago(60 * 24 * 2) },
+    ]);
+    const got = await previousVisitAt(client, SHARE, "lp@example.com");
+    expect(Math.abs(new Date(got!).getTime() - (Date.now() - 2 * 24 * 60 * 60_000))).toBeLessThan(5_000);
+  });
+
+  it("does not count the visit in progress", async () => {
+    const client = views([{ viewer_email: "lp@example.com", created_at: ago(5) }]);
+    expect(await previousVisitAt(client, SHARE, "lp@example.com")).toBeNull();
+  });
+
+  it("is null for a reader with no email, and ignores other readers and other links", async () => {
+    const client = views([
+      { viewer_email: "other@example.com", created_at: ago(60 * 24) },
+      { share_id: "share-2", viewer_email: "lp@example.com", created_at: ago(60 * 24) },
+    ]);
+    expect(await previousVisitAt(client, SHARE, null)).toBeNull();
+    expect(await previousVisitAt(client, SHARE, "lp@example.com")).toBeNull();
+  });
+
+  it("is null, not an error, when the lookup fails", async () => {
+    const db = fakeDb({ data_room_views: [] });
+    db.fail["data_room_views"] = "08006";
+    expect(await previousVisitAt(db.client, SHARE, "lp@example.com")).toBeNull();
   });
 });

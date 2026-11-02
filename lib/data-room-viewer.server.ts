@@ -96,6 +96,48 @@ export async function isRoomOpen(
   return Boolean(data);
 }
 
+/**
+ * When a document last changed, and whether that is after this reader's previous
+ * visit. A first visit has no previous one, so nothing is marked new: marking
+ * everything would say nothing.
+ */
+function changeInfo(
+  d: { updated_at?: string | null; created_at?: string | null },
+  lastVisitAt: string | null | undefined,
+): { updatedAt: string | null; isNew: boolean } {
+  const updatedAt = d.updated_at ?? d.created_at ?? null;
+  const isNew =
+    Boolean(lastVisitAt && updatedAt) &&
+    new Date(updatedAt as string).getTime() > new Date(lastVisitAt as string).getTime();
+  return { updatedAt, isNew };
+}
+
+/**
+ * When this reader was last here, for marking what changed since. Rows from the
+ * last half hour are this visit (the page can render more than once, and reading
+ * time is recorded as it goes), so they do not count. Only a reader who passed an
+ * email gate can be recognised, and only a failed or empty lookup is "no previous
+ * visit": a cosmetic marker must never take the room down.
+ */
+export async function previousVisitAt(
+  supabase: Client,
+  shareId: string,
+  email: string | null,
+): Promise<string | null> {
+  if (!email) return null;
+  const cutoff = new Date(Date.now() - 30 * 60_000).toISOString();
+  const { data, error } = await supabase
+    .from("data_room_views")
+    .select("created_at")
+    .eq("share_id", shareId)
+    .eq("viewer_email", email)
+    .lt("created_at", cutoff)
+    .order("created_at", { ascending: false })
+    .limit(1);
+  if (error) return null;
+  return ((data ?? []) as { created_at: string }[])[0]?.created_at ?? null;
+}
+
 export async function buildViewerPayload(
   supabase: Client,
   orgId: string,
@@ -109,7 +151,7 @@ export async function buildViewerPayload(
    * and file reference withheld from the payload) unless this reader has
    * signed on this link. Omitted — the GP preview — means unsigned.
    */
-  reader: { shareId: string; email: string | null } | null = null,
+  reader: { shareId: string; email: string | null; lastVisitAt?: string | null } | null = null,
 ): Promise<ViewerPayload | null> {
   if (!(await isRoomOpen(supabase, orgId, roomId))) return null;
 
@@ -271,6 +313,7 @@ export async function buildViewerPayload(
           uploaded: false,
           requiresSignature: true,
           signed: false,
+          ...changeInfo(d, reader?.lastVisitAt),
         }
       : {
       id: d.id,
@@ -281,6 +324,7 @@ export async function buildViewerPayload(
       preview_kind: previewKindFor(d.storage_key),
       uploaded: isUploadedFile(d.storage_key),
       ...(needsSignature.has(d.id) ? { requiresSignature: true, signed: true } : {}),
+      ...changeInfo(d, reader?.lastVisitAt),
     };
     const bucket = docsBySection.get(k);
     if (bucket) bucket.push(doc);
