@@ -11,7 +11,9 @@
 import { openProfileRow } from "@/lib/lp-pii";
 import { assessRisk, riskLists } from "@/lib/lp-risk";
 import Link from "next/link";
-import { createServerClient } from "@/lib/supabase/server";
+import { after } from "next/server";
+import { createServerClient, createServiceClient } from "@/lib/supabase/server";
+import { recordReviewViews } from "@/lib/lp-audit.server";
 import { getSessionContext } from "@/lib/auth";
 import { canAdminOrg } from "@/lib/rbac";
 import { OnboardingReview, type ReviewLp } from "@/components/run/OnboardingReview";
@@ -85,7 +87,8 @@ async function loadLps(orgId: string): Promise<ReviewLp[]> {
         .order("created_at", { ascending: false }),
       supabase.from("onboarding_checks").select("*").eq("organization_id", orgId),
       supabase.from("onboarding_decisions").select("*").eq("organization_id", orgId).order("decided_at", { ascending: false }),
-      supabase.from("onboarding_audit_log").select("*").eq("organization_id", orgId).order("created_at", { ascending: false }).limit(300),
+      // Views are logged for the auditor, not shown here: they would crowd out what happened to the LP.
+      supabase.from("onboarding_audit_log").select("*").eq("organization_id", orgId).neq("action", "data.viewed").order("created_at", { ascending: false }).limit(300),
       supabase.from("lp_onboarding_profiles").select("*").eq("organization_id", orgId),
       supabase.from("lp_onboarding_owners").select("*").eq("organization_id", orgId).order("created_at", { ascending: true }),
       supabase.from("lp_onboarding_consents").select("*").eq("organization_id", orgId).order("consented_at", { ascending: true }),
@@ -216,6 +219,15 @@ export async function OnboardingLive() {
   }
 
   const [lps, funds] = await Promise.all([loadLps(ctx.orgId), loadFunds(ctx.orgId)]);
+
+  // Opening this page shows every LP's details, so say who looked (SOC 2 gap G-2).
+  // After the response, so it never slows or stops the page.
+  const orgId = ctx.orgId;
+  const actorId = ctx.userId;
+  const viewed = lps.map((l) => l.id);
+  if (viewed.length > 0 && actorId) {
+    after(() => recordReviewViews(createServiceClient(), { orgId, actorId, sessionIds: viewed }));
+  }
 
   return (
     <Shell>
