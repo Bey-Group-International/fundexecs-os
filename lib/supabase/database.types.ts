@@ -927,6 +927,12 @@ export type DataRoomDocumentSignature = {
   file_sha256: string;
   agreed: boolean;
   copy_sent_at: string | null;
+  // The fund's counter-signature (migration 20261103090000). All null until it is made.
+  countersigner_name: string | null;
+  countersigner_email: string | null;
+  countersigner_user_id: string | null;
+  countersigned_at: string | null;
+  countersign_copy_sent_at: string | null;
 };
 
 export type DataRoomShare = {

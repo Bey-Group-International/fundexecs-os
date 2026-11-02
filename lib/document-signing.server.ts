@@ -243,6 +243,130 @@ export async function afterDocumentSigned(client: Client, signatureId: string): 
   }
 }
 
+// ─── The fund's counter-signature ────────────────────────────────────────────
+
+export type CountersignDocumentResult = { ok: true; signatureId: string } | { ok: false; error: string };
+
+/**
+ * The fund counter-signs a reader's signature. The caller has already checked the
+ * member may (owner or admin, confirmed email); this records it. The update only
+ * lands while the signature is still awaiting one, so two members signing at once
+ * cannot overwrite each other: the second is told it is already done.
+ */
+export async function countersignDocument(
+  client: Client,
+  input: {
+    orgId: string;
+    signatureId: string;
+    signerName: string;
+    signaturePng: string;
+    signerEmail: string;
+    userId: string;
+    agreed: boolean;
+    now?: Date;
+  },
+): Promise<CountersignDocumentResult> {
+  const name = input.signerName.trim().replace(/\s+/g, " ");
+  if (!name) return { ok: false, error: "Type your full name to counter-sign." };
+  if (name.length > 120) return { ok: false, error: "That name is too long." };
+  if (!parseSignaturePng(input.signaturePng)) return { ok: false, error: "Draw or type your signature to counter-sign." };
+  if (!input.agreed) return { ok: false, error: "Tick the box to confirm." };
+
+  const now = input.now ?? new Date();
+  const { data, error } = await client
+    .from("data_room_document_signatures")
+    .update({
+      countersigner_name: name,
+      countersigner_email: normalizeEmail(input.signerEmail),
+      countersigner_user_id: input.userId,
+      countersigned_at: now.toISOString(),
+      countersignature_png: input.signaturePng,
+    })
+    .eq("id", input.signatureId)
+    .eq("organization_id", input.orgId)
+    .is("countersigned_at", null)
+    .select("id")
+    .maybeSingle();
+  const id = (data as { id: string } | null)?.id;
+  if (id) return { ok: true, signatureId: id };
+  if (error) return { ok: false, error: "We couldn't record your counter-signature. Please try again." };
+
+  // Nothing was updated and nothing failed: it was already counter-signed, or it is not ours.
+  const { data: existing } = await client
+    .from("data_room_document_signatures")
+    .select("countersigned_at")
+    .eq("id", input.signatureId)
+    .eq("organization_id", input.orgId)
+    .maybeSingle();
+  const row = existing as { countersigned_at: string | null } | null;
+  if (row?.countersigned_at) return { ok: false, error: "This has already been counter-signed." };
+  return { ok: false, error: "We couldn't find that signature." };
+}
+
+/**
+ * After a counter-signature, best effort (it stands whether or not this succeeds):
+ * the executed copy's link to the person who signed and to the member who
+ * counter-signed.
+ */
+export async function afterDocumentCountersigned(client: Client, signatureId: string): Promise<void> {
+  const { data } = await client
+    .from("data_room_document_signatures")
+    .select(
+      "id, organization_id, room_id, signer_name, signer_email, file_name, countersigner_name, countersigner_email, countersigned_at, countersign_copy_sent_at",
+    )
+    .eq("id", signatureId)
+    .maybeSingle();
+  const sig = data as {
+    id: string;
+    organization_id: string;
+    room_id: string;
+    signer_name: string;
+    signer_email: string;
+    file_name: string;
+    countersigner_name: string | null;
+    countersigner_email: string | null;
+    countersigned_at: string | null;
+    countersign_copy_sent_at: string | null;
+  } | null;
+  if (!sig?.countersigned_at || sig.countersign_copy_sent_at) return;
+
+  const [{ data: orgData }, { data: roomData }] = await Promise.all([
+    client.from("organizations").select("name").eq("id", sig.organization_id).maybeSingle(),
+    client.from("data_rooms").select("name").eq("id", sig.room_id).maybeSingle(),
+  ]);
+  const orgName = (orgData as { name: string } | null)?.name ?? "the fund";
+  const roomName = (roomData as { name: string } | null)?.name ?? "the data room";
+  const when = formatSignedAt(sig.countersigned_at);
+  const link = signedCopyUrl(sig.id);
+  const body = (greeting: string) => `<p>${greeting}</p>
+<p><strong>${escapeHtml(sig.file_name)}</strong> in <strong>${escapeHtml(roomName)}</strong> was signed by ${escapeHtml(sig.signer_name)} and counter-signed by ${escapeHtml(sig.countersigner_name ?? "the fund")} (${escapeHtml(orgName)}) on ${escapeHtml(when)}.</p>
+<p><a href="${link}">Download the executed copy (PDF)</a></p>`;
+
+  const toSigner = await sendEmail({
+    orgId: sig.organization_id,
+    to: { name: sig.signer_name, email: sig.signer_email },
+    subject: `Executed: ${sig.file_name} — ${orgName}`,
+    htmlBody: body(`Hi ${escapeHtml(sig.signer_name)},`),
+    allowFallback: true,
+  }).catch(() => ({ ok: false }));
+  if (sig.countersigner_email) {
+    await sendEmail({
+      orgId: sig.organization_id,
+      to: { name: sig.countersigner_name ?? "", email: sig.countersigner_email },
+      subject: `You counter-signed ${sig.file_name}`,
+      htmlBody: body(`Hi ${escapeHtml(sig.countersigner_name ?? "")},`),
+      allowFallback: true,
+    }).catch(() => undefined);
+  }
+  if (toSigner.ok) {
+    await client
+      .from("data_room_document_signatures")
+      .update({ countersign_copy_sent_at: new Date().toISOString() })
+      .eq("id", sig.id)
+      .then(() => undefined, () => undefined);
+  }
+}
+
 // ─── The signed copy ─────────────────────────────────────────────────────────
 
 function copySecret(): string {
@@ -273,13 +397,16 @@ export async function buildSignedCopy(
 ): Promise<{ pdf: Uint8Array; signerName: string; sealed: boolean } | null> {
   let q = client
     .from("data_room_document_signatures")
-    .select("id, organization_id, document_id, signer_name, signer_email, signed_at, ip_hint, file_name, file_sha256, signature_png")
+    .select(
+      "id, organization_id, document_id, signer_name, signer_email, signed_at, ip_hint, file_name, file_sha256, signature_png, countersigner_name, countersigner_email, countersigned_at, countersignature_png",
+    )
     .eq("id", signatureId);
   if (orgId) q = q.eq("organization_id", orgId);
   const { data } = await q.maybeSingle();
   const sig = data as {
     id: string; organization_id: string; document_id: string; signer_name: string; signer_email: string;
     signed_at: string; ip_hint: string | null; file_name: string; file_sha256: string; signature_png: string | null;
+    countersigner_name: string | null; countersigner_email: string | null; countersigned_at: string | null; countersignature_png: string | null;
   } | null;
   if (!sig) return null;
 
@@ -290,6 +417,12 @@ export async function buildSignedCopy(
     .maybeSingle();
   const doc = docRow as Pick<Document, "storage_key" | "content" | "name"> | null;
 
+  const counterStamps =
+    sig.countersigned_at && sig.countersigner_name
+      ? [{ label: "Countersigner (fund)", name: sig.countersigner_name, email: sig.countersigner_email ?? "", signedAt: sig.countersigned_at, ipHint: null, signaturePng: sig.countersignature_png }]
+      : [];
+  const executed = counterStamps.length > 0;
+
   let basePdf: Uint8Array | undefined;
   if (doc?.storage_key && isUploadedFile(doc.storage_key) && /\.pdf$/i.test(doc.storage_key)) {
     const { data: blob } = await client.storage.from(DOCUMENT_BUCKET).download(doc.storage_key);
@@ -298,10 +431,11 @@ export async function buildSignedCopy(
   let built: Uint8Array;
   try {
     built = await buildSignedPdf({
-      title: `${sig.file_name} - signed by ${sig.signer_name}`,
+      title: `${sig.file_name} - ${executed ? "executed" : `signed by ${sig.signer_name}`}`,
       ...(basePdf ? { basePdf } : { text: doc?.content?.trim() ? doc.content : `Signed document: ${sig.file_name}` }),
       stamps: [
         { label: "Signer", name: sig.signer_name, email: sig.signer_email, signedAt: sig.signed_at, ipHint: sig.ip_hint, signaturePng: sig.signature_png },
+        ...counterStamps,
       ],
       fingerprint: sig.file_sha256,
       recordId: sig.id,
@@ -313,11 +447,12 @@ export async function buildSignedCopy(
       text: `Signed document: ${sig.file_name}`,
       stamps: [
         { label: "Signer", name: sig.signer_name, email: sig.signer_email, signedAt: sig.signed_at, ipHint: sig.ip_hint, signaturePng: sig.signature_png },
+        ...counterStamps,
       ],
       fingerprint: sig.file_sha256,
       recordId: sig.id,
     });
   }
-  const sealed = await sealPdf(built, { reason: `Signed ${sig.file_name}`, name: "FundExecs OS" });
+  const sealed = await sealPdf(built, { reason: `${executed ? "Executed" : "Signed"} ${sig.file_name}`, name: "FundExecs OS" });
   return { pdf: sealed.pdf, signerName: sig.signer_name, sealed: sealed.sealed };
 }
