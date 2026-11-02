@@ -43,6 +43,8 @@ export interface SeatInfo {
   used: number;
   /** Seat allotment for the current plan. `null` = unlimited. */
   limit: number | null;
+  /** Name to show in place of "unlimited" when the viewer is a platform admin. */
+  adminPlanName?: string;
 }
 
 interface TeamControlsProps {
@@ -577,7 +579,9 @@ function InviteForm({ seats }: { seats: SeatInfo }) {
   const unlimited = seats.limit === null;
   const full = !unlimited && seats.used >= (seats.limit ?? 0);
   const seatLabel = unlimited
-    ? `${seats.used} seat${seats.used === 1 ? "" : "s"} used · unlimited`
+    ? `${seats.used} seat${seats.used === 1 ? "" : "s"} used · ${
+        seats.adminPlanName ? `${seats.adminPlanName} plan, unlimited` : "unlimited"
+      }`
     : `${seats.used} of ${seats.limit} seats used`;
 
   return (

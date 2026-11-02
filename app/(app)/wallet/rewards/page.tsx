@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getSessionContext } from "@/lib/auth";
 import { getWallet } from "@/lib/wallet";
+import { ADMIN_PLAN_NAME, isPlatformAdmin } from "@/lib/platform-admin";
 import { compoundingProfile } from "@/lib/compounding";
 import {
   PLAN_BY_KEY,
@@ -34,7 +35,11 @@ export default async function WalletRewardsPage() {
   const currentPlan = wallet?.plan ?? null;
   const months = currentPlan ? tenureMonths(wallet?.plan_started_at) : 0;
   const loyalty = loyaltyBonus(months);
-  const planName = currentPlan ? PLAN_BY_KEY[currentPlan as keyof typeof PLAN_BY_KEY]?.name : null;
+  const planName = isPlatformAdmin(ctx)
+    ? ADMIN_PLAN_NAME
+    : currentPlan
+      ? PLAN_BY_KEY[currentPlan as keyof typeof PLAN_BY_KEY]?.name
+      : null;
   const standing = TIER_META[profile.tier];
 
   return (
@@ -85,7 +90,9 @@ export default async function WalletRewardsPage() {
             <span className="ml-1 text-sm font-normal text-fg-muted">/mo</span>
           </p>
           <p className="mt-2 text-xs leading-5 text-fg-secondary">
-            {currentPlan
+            {isPlatformAdmin(ctx) && !currentPlan
+              ? `${ADMIN_PLAN_NAME} plan: unrestricted access, no subscription needed.`
+              : currentPlan
               ? `${months} month${months === 1 ? "" : "s"} on ${planName ?? "plan"}. Grows +${LOYALTY_STEP} credits each month, up to ${formatCredits(LOYALTY_CAP)}/mo.`
               : `Stay subscribed and earn +${LOYALTY_STEP} bonus credits per month of tenure, up to ${formatCredits(LOYALTY_CAP)}/mo.`}
           </p>
