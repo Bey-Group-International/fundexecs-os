@@ -11,7 +11,7 @@ import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { blendTrackRecord } from "@/lib/track-record";
 import { DATA_ROOM_SECTIONS } from "@/lib/data-room";
-import { roomSectionKey, sectionsAllowedBy } from "@/lib/data-rooms";
+import { buildPagesAllowedBy, roomSectionKey, sectionsAllowedBy } from "@/lib/data-rooms";
 import { selectAllPages, selectInBatches } from "@/lib/supabase/batch";
 import { DataRoomReadError } from "@/lib/data-room-errors";
 import { isUploadedFile, previewKindFor } from "@/lib/document-files";
@@ -297,6 +297,12 @@ export async function buildViewerPayload(
     })).filter((s) => s.docs.length > 0),
   );
 
+  // The firm's Build pages follow the link's section allowlist, as the documents
+  // do. A single-document link shows its document and nothing else of the firm.
+  const pages = documentId
+    ? { thesis: false, trackRecord: false, team: false, structure: false }
+    : buildPagesAllowedBy(allowedSections);
+
   return {
     org: {
       name: org.name,
@@ -308,16 +314,26 @@ export async function buildViewerPayload(
       brand_color: org.brand_color ?? null,
       logo_url: org.logo_url ?? null,
     },
-    blended: {
-      dealCount: blended.dealCount,
-      realizedCount: blended.realizedCount,
-      weightedGrossIrr: blended.weightedGrossIrr ?? null,
-      pooledMoic: blended.pooledMoic ?? null,
-      dpi: blended.dpi ?? null,
-      totalInvested: blended.totalInvested ?? null,
-      vintageRange: blended.vintageRange ?? null,
-    },
-    thesis: thesis
+    blended: pages.trackRecord
+      ? {
+          dealCount: blended.dealCount,
+          realizedCount: blended.realizedCount,
+          weightedGrossIrr: blended.weightedGrossIrr ?? null,
+          pooledMoic: blended.pooledMoic ?? null,
+          dpi: blended.dpi ?? null,
+          totalInvested: blended.totalInvested ?? null,
+          vintageRange: blended.vintageRange ?? null,
+        }
+      : {
+          dealCount: 0,
+          realizedCount: 0,
+          weightedGrossIrr: null,
+          pooledMoic: null,
+          dpi: null,
+          totalInvested: null,
+          vintageRange: null,
+        },
+    thesis: thesis && pages.thesis
       ? {
           title: thesis.title,
           summary: thesis.summary ?? null,
@@ -329,7 +345,9 @@ export async function buildViewerPayload(
           check_size_max: thesis.check_size_max ?? null,
         }
       : null,
-    team: [
+    team: !pages.team
+      ? []
+      : [
       ...members.map((m) => {
         const p = byId.get(m.principal_id);
         return {
@@ -340,10 +358,12 @@ export async function buildViewerPayload(
       }),
       ...profiles.map((t) => ({ name: t.full_name, title: t.title, email: t.email })),
     ],
-    entities: entities.map((e) => ({
-      name: e.name,
-      entity_type: (e as { entity_type?: string | null }).entity_type ?? null,
-    })),
+    entities: !pages.structure
+      ? []
+      : entities.map((e) => ({
+          name: e.name,
+          entity_type: (e as { entity_type?: string | null }).entity_type ?? null,
+        })),
     docSections,
   };
 }

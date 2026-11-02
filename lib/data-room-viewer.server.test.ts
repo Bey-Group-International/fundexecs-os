@@ -233,3 +233,61 @@ describe("a single-document link", () => {
     expect(allDocs(payload).map((d) => d.id)).toEqual(["draft"]);
   });
 });
+
+describe("the firm's Build pages follow a link's section allowlist", () => {
+  const build = {
+    investment_theses: [{ organization_id: ORG, title: "Lower mid-market credit", summary: "s", is_active: true, created_at: "2026-01-01" }],
+    track_records: [{ organization_id: ORG, vintage_year: 2020, deal_name: "A", gross_irr: 20, moic: 2, invested: 100, realized: true }],
+    entities: [{ organization_id: ORG, name: "Fund I LP", entity_type: "lp" }],
+    team_profiles: [{ organization_id: ORG, full_name: "Pat Principal", title: "Partner", email: null, created_at: "2026-01-01" }],
+  };
+  const files = [{ id: "t", name: "Terms", doc_type: "fund_terms", content: "a" }, { id: "m", name: "Deck", doc_type: "marketing", content: "b" }];
+  const payloadFor = (allowed: string[] | null, documentId: string | null = null) => {
+    const { client } = fakeDb(tables(files, build));
+    return buildViewerPayload(client, ORG, ROOM, allowed, documentId);
+  };
+
+  it("shows every Build page on an unrestricted link", async () => {
+    const p = await payloadFor(null);
+    expect(p!.thesis?.title).toBe("Lower mid-market credit");
+    expect(p!.blended.dealCount).toBe(1);
+    expect(p!.entities).toHaveLength(1);
+    expect(p!.team).toHaveLength(1);
+  });
+
+  it("shows a Build page only when its section is allowed", async () => {
+    const p = await payloadFor(["thesis", "legal"]);
+    expect(p!.thesis).not.toBeNull();
+    expect(p!.entities).toHaveLength(1);
+    expect(p!.blended.dealCount).toBe(0);
+    expect(p!.team).toEqual([]);
+  });
+
+  it("hides every Build page on a link limited to other sections", async () => {
+    const p = await payloadFor(["marketing"]);
+    expect(p!.thesis).toBeNull();
+    expect(p!.blended.dealCount).toBe(0);
+    expect(p!.entities).toEqual([]);
+    expect(p!.team).toEqual([]);
+    // The firm's own identity still shows.
+    expect(p!.org.name).toBe("Alpha Capital");
+    expect(allDocs(p).map((d) => d.id)).toEqual(["m"]);
+  });
+
+  it("hides every Build page on an empty allowlist, which allows nothing", async () => {
+    const p = await payloadFor([]);
+    expect(p!.thesis).toBeNull();
+    expect(p!.blended.dealCount).toBe(0);
+    expect(p!.entities).toEqual([]);
+    expect(p!.team).toEqual([]);
+  });
+
+  it("shows a single-document link only its document, none of the firm's Build pages", async () => {
+    const p = await payloadFor(null, "t");
+    expect(allDocs(p).map((d) => d.id)).toEqual(["t"]);
+    expect(p!.thesis).toBeNull();
+    expect(p!.blended.dealCount).toBe(0);
+    expect(p!.entities).toEqual([]);
+    expect(p!.team).toEqual([]);
+  });
+});

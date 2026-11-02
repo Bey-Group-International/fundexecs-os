@@ -14,6 +14,7 @@ import {
   sectionLabel,
   roomSectionKey,
   buildContentRows,
+  buildPagesAllowedBy,
   type RoomDocument,
 } from "@/lib/data-rooms";
 
@@ -242,5 +243,31 @@ describe("buildContentRows", () => {
     const rows = buildContentRows({ ...base, teamCount: 4, entityCount: 2 });
     expect(row(rows, "team")?.detail).toBe("4 people");
     expect(row(rows, "structure")?.detail).toBe("2 entities");
+  });
+});
+
+describe("buildPagesAllowedBy", () => {
+  const all = { thesis: true, trackRecord: true, team: true, structure: true };
+  const none = { thesis: false, trackRecord: false, team: false, structure: false };
+
+  it("shows every Build page when the link is unrestricted", () => {
+    expect(buildPagesAllowedBy(null)).toEqual(all);
+    expect(buildPagesAllowedBy(undefined)).toEqual(all);
+  });
+
+  it("shows none of them when the link allows nothing", () => {
+    expect(buildPagesAllowedBy([])).toEqual(none);
+  });
+
+  it("shows a page only when its own section is allowed", () => {
+    expect(buildPagesAllowedBy(["thesis"])).toEqual({ ...none, thesis: true });
+    expect(buildPagesAllowedBy(["track_record"])).toEqual({ ...none, trackRecord: true });
+    expect(buildPagesAllowedBy(["team"])).toEqual({ ...none, team: true });
+    // Structure is filed under Legal & Structure.
+    expect(buildPagesAllowedBy(["legal"])).toEqual({ ...none, structure: true });
+  });
+
+  it("is not opened by sections that have no Build page", () => {
+    expect(buildPagesAllowedBy(["marketing", "fund_terms", "other"])).toEqual(none);
   });
 });

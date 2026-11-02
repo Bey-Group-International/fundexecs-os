@@ -57,10 +57,13 @@ function DocRow({
   roomId,
   doc,
   hideReorder,
+  onPreview,
 }: {
   roomId: string;
   doc: RoomContentDoc;
   hideReorder?: boolean;
+  /** Open this document in Preview as LP. */
+  onPreview?: (documentId: string) => void;
 }) {
   const [pending, startTransition] = useTransition();
   const { error, run } = useActionError();
@@ -148,6 +151,16 @@ function DocRow({
         </div>
       )}
 
+      {onPreview ? (
+        <button
+          type="button"
+          onClick={() => onPreview(doc.id)}
+          title="See this document as an LP does"
+          className="shrink-0 rounded-md border border-line px-2 py-1 font-mono text-[11px] uppercase tracking-wider text-fg-muted transition hover:border-gold-500/40 hover:text-gold-300"
+        >
+          Preview
+        </button>
+      ) : null}
       <button
         type="button"
         disabled={pending}
@@ -321,6 +334,7 @@ export function RoomContents({
   sections,
   available,
   fromBuild,
+  onPreview,
   hideAddFromLibrary,
   hideReorder,
 }: {
@@ -329,6 +343,8 @@ export function RoomContents({
   available: AvailableDoc[];
   /** Build-sourced pages the reader sees. Left out while the pane is filtered. */
   fromBuild?: BuildContentRow[];
+  /** Open a document in Preview as LP. */
+  onPreview?: (documentId: string) => void;
   /** Suppressed while the pane is filtered — publishing into a partial view of
    * the room reads as publishing into the filter. */
   hideAddFromLibrary?: boolean;
@@ -356,7 +372,7 @@ export function RoomContents({
               </p>
               <div className="flex flex-col gap-1.5">
                 {s.docs.map((d) => (
-                  <DocRow key={d.id} roomId={roomId} doc={d} hideReorder={hideReorder} />
+                  <DocRow key={d.id} roomId={roomId} doc={d} hideReorder={hideReorder} onPreview={onPreview} />
                 ))}
               </div>
             </div>

@@ -150,6 +150,34 @@ export function sectionsAllowedBy<S extends { key: string }>(
 }
 
 /**
+ * Which of the firm's Build pages a link's section allowlist lets a reader see.
+ *
+ * Each page belongs to a section: the thesis page to "Investment Strategy &
+ * Thesis", the track record to "Track Record & Performance", the team to "Team &
+ * Governance", the structure to "Legal & Structure". A link that does not allow
+ * the section does not show the page either. `null`/`undefined` is unrestricted,
+ * and `[]` allows nothing, as in sectionsAllowedBy. The overview is the firm's
+ * identity, not a section, so it is not governed here and always shows.
+ */
+export function buildPagesAllowedBy(allowed: string[] | null | undefined): {
+  thesis: boolean;
+  trackRecord: boolean;
+  team: boolean;
+  structure: boolean;
+} {
+  if (allowed === null || allowed === undefined) {
+    return { thesis: true, trackRecord: true, team: true, structure: true };
+  }
+  const set = new Set(allowed);
+  return {
+    thesis: set.has("thesis"),
+    trackRecord: set.has("track_record"),
+    team: set.has("team"),
+    structure: set.has("legal"),
+  };
+}
+
+/**
  * What a link actually exposes: the room's published sections narrowed by the
  * link's own allowlist. `allowed_sections: null` means every published section.
  * Answers the question a GP asks before sending — "what does this person see?"

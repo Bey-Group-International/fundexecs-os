@@ -9,7 +9,7 @@ jest.mock("next/link", () => ({
   default: ({ children, href }: { children: React.ReactNode; href: string }) => <a href={href}>{children}</a>,
 }));
 
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { RoomContents } from "./RoomContents";
 import { buildContentRows } from "@/lib/data-rooms";
 
@@ -34,5 +34,21 @@ describe("the From Build rows in Room contents", () => {
   it("is absent when no rows are passed", () => {
     render(<RoomContents roomId="r1" sections={[]} available={[]} />);
     expect(screen.queryByText(/From Build/)).not.toBeInTheDocument();
+  });
+});
+
+describe("the Preview button on a published document", () => {
+  const doc = { id: "d1", name: "Deck", status: "ready" as const, hasBody: true, isLink: false, requireSignature: false, signers: [] };
+
+  it("asks for that document in the preview", () => {
+    const onPreview = jest.fn();
+    render(<RoomContents roomId="r1" sections={[{ key: "marketing", label: "Marketing", docs: [doc] }]} available={[]} onPreview={onPreview} />);
+    fireEvent.click(screen.getByRole("button", { name: "Preview" }));
+    expect(onPreview).toHaveBeenCalledWith("d1");
+  });
+
+  it("is absent when no handler is given", () => {
+    render(<RoomContents roomId="r1" sections={[{ key: "marketing", label: "Marketing", docs: [doc] }]} available={[]} />);
+    expect(screen.queryByRole("button", { name: "Preview" })).not.toBeInTheDocument();
   });
 });
