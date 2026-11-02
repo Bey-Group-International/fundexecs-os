@@ -178,6 +178,39 @@ describe("the room as one page", () => {
   });
 });
 
+describe("the room's own type and palette", () => {
+  it("scopes the room, ready or behind a gate, to the fx-room class and nothing outside it", () => {
+    const { container, rerender } = render(view([FINANCIALS], false));
+    expect(container.firstElementChild).toHaveClass("fx-room");
+    rerender(
+      <DataRoomViewer
+        token="t"
+        shareId="s"
+        org={ORG}
+        blended={BLENDED}
+        thesis={null}
+        team={[]}
+        entities={[]}
+        docSections={[]}
+        gateConfig={{ requireEmail: true, requireNda: false, ndaText: null, passwordProtected: false }}
+        contentReady={false}
+      />,
+    );
+    expect(container.firstElementChild).toHaveClass("fx-room");
+  });
+
+  it("sets the serif, the sans and the white palette on that class only", () => {
+    const css = require("fs").readFileSync(require("path").join(process.cwd(), "app/globals.css"), "utf8") as string;
+    const block = css.match(/\.fx-room \{([^}]*)\}/)![1];
+    expect(block).toMatch(/--font-display:\s*var\(--font-room-serif\)/);
+    expect(block).toMatch(/--font-sans:\s*var\(--font-room-sans\)/);
+    expect(block).toMatch(/--font-mono:\s*var\(--font-room-sans\)/);
+    expect(block).toMatch(/--fx-surface-0:\s*255 255 255/);
+    // The app's own tokens are untouched.
+    expect(css).toMatch(/:root \{[^}]*--fx-surface-0: 240 245 252/);
+  });
+});
+
 describe("the hero", () => {
   const props = (over: object = {}) => ({
     token: "t",

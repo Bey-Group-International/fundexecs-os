@@ -1,5 +1,11 @@
 import type { Metadata } from "next";
-import { Space_Grotesk, DM_Sans, JetBrains_Mono } from "next/font/google";
+import {
+  Space_Grotesk,
+  DM_Sans,
+  JetBrains_Mono,
+  Playfair_Display,
+  Inter,
+} from "next/font/google";
 import {
   SITE_DESCRIPTION,
   SITE_NAME,
@@ -38,6 +44,21 @@ const mono = JetBrains_Mono({
   subsets: ["latin"],
   variable: "--font-mono",
   display: "swap",
+});
+// The investor-facing data room (.fx-room in globals.css) sets its own type: a
+// serif for headings and a neutral sans for text. preload is off so no other
+// page pays for them: a font file is fetched only when text in it is drawn.
+const roomSerif = Playfair_Display({
+  subsets: ["latin"],
+  variable: "--font-room-serif",
+  display: "swap",
+  preload: false,
+});
+const roomSans = Inter({
+  subsets: ["latin"],
+  variable: "--font-room-sans",
+  display: "swap",
+  preload: false,
 });
 
 export const metadata: Metadata = {
@@ -137,7 +158,7 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${display.variable} ${sans.variable} ${mono.variable}`}
+      className={`${display.variable} ${sans.variable} ${mono.variable} ${roomSerif.variable} ${roomSans.variable}`}
       suppressHydrationWarning
     >
       <head>

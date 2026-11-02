@@ -428,6 +428,34 @@ body {
   }
 }
 
+/* The investor-facing data room. Only this subtree changes: a serif for headings
+   (the font-display class), a neutral sans for text, and the small spaced-out
+   labels (font-mono) set in that same sans instead of a monospace. Page colour is
+   white with cool grey panels. The accent is not touched here: the viewer reads
+   the firm's brand colour, or gold when there is none. The rest of the app keeps
+   its own type and palette. */
+.fx-room {
+  --font-display: var(--font-room-serif), Georgia, "Times New Roman", serif;
+  --font-sans: var(--font-room-sans), system-ui, sans-serif;
+  --font-mono: var(--font-room-sans), system-ui, sans-serif;
+  --fx-surface-0: 255 255 255;
+  --fx-surface-1: 248 249 251;
+  --fx-surface-2: 238 241 246;
+  font-family: var(--font-sans);
+}
+.fx-room .font-display {
+  letter-spacing: -0.01em;
+}
+/* The serif's default figures are old-style (2.4x, $42.0M sit at uneven heights).
+   Figures in a fund's materials are lining. */
+.fx-room {
+  font-variant-numeric: lining-nums;
+}
+.fx-room .font-mono {
+  letter-spacing: 0.12em;
+  font-weight: 500;
+}
+
 /* Print: the investor one-pager exports as a clean light document. App chrome
    opts out via print:hidden in the authed layout. */
 @media print {
