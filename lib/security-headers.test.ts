@@ -2,7 +2,10 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
 
-const { SITE_HEADERS, lpHeaders, lpContentSecurityPolicy, securityHeaderRules } = require("./security-headers.cjs") as {
+const { SITE_HEADERS, lpHeaders, lpContentSecurityPolicy, lpNonceReportOnlyPolicy, isLpPath, LP_CSP_REPORT_PATH, securityHeaderRules } = require("./security-headers.cjs") as {
+  lpNonceReportOnlyPolicy: (nonce: string, o?: { dev?: boolean }) => string;
+  isLpPath: (p: string) => boolean;
+  LP_CSP_REPORT_PATH: string;
   SITE_HEADERS: Array<{ key: string; value: string }>;
   lpHeaders: (o?: { dev?: boolean }) => Array<{ key: string; value: string }>;
   lpContentSecurityPolicy: (o?: { dev?: boolean }) => string;
@@ -95,6 +98,48 @@ describe("the investor pages' Content-Security-Policy", () => {
     expect(prod["script-src"]).not.toContain("'unsafe-eval'");
     expect(directives(lpContentSecurityPolicy({ dev: true }))["script-src"]).toContain("'unsafe-eval'");
     expect(JSON.stringify(securityHeaderRules({ dev: false }))).not.toContain("unsafe-eval");
+  });
+});
+
+describe("the nonce policy sent report-only (SOC 2 G-4)", () => {
+  const directives = (csp: string): Record<string, string[]> =>
+    Object.fromEntries(
+      csp
+        .split(";")
+        .map((d) => d.trim().split(/\s+/))
+        .map(([n, ...v]) => [n, v]),
+    );
+  const enforced = directives(lpContentSecurityPolicy());
+  const reportOnly = directives(lpNonceReportOnlyPolicy("N0nce"));
+
+  it("replaces unsafe-inline in script-src with this request's nonce and strict-dynamic", () => {
+    expect(reportOnly["script-src"]).toEqual(["'self'", "'nonce-N0nce'", "'strict-dynamic'"]);
+    expect(reportOnly["script-src"]).not.toContain("'unsafe-inline'");
+  });
+
+  it("differs from the enforced policy in nothing else but where it reports", () => {
+    const { "script-src": _a, ...restEnforced } = enforced;
+    const { "script-src": _b, "report-uri": reportUri, ...restReportOnly } = reportOnly;
+    expect(restReportOnly).toEqual(restEnforced);
+    expect(reportUri).toEqual([LP_CSP_REPORT_PATH]);
+  });
+
+  it("reports to this site only, and keeps eval to development", () => {
+    expect(LP_CSP_REPORT_PATH).toBe("/api/csp-report");
+    expect(lpNonceReportOnlyPolicy("n")).not.toContain("unsafe-eval");
+    expect(directives(lpNonceReportOnlyPolicy("n", { dev: true }))["script-src"]).toContain("'unsafe-eval'");
+  });
+
+  it("leaves the enforced policy exactly as it was", () => {
+    expect(lpContentSecurityPolicy()).toBe(
+      "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self'; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'",
+    );
+  });
+
+  it("applies to the investor pages and nothing that merely starts with /lp", () => {
+    expect(isLpPath("/lp")).toBe(true);
+    expect(isLpPath("/lp/abc")).toBe(true);
+    for (const p of ["/lpx", "/lpx/abc", "/", "/api/lp/abc", "/run/lp"]) expect(isLpPath(p)).toBe(false);
   });
 });
 
