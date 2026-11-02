@@ -26,6 +26,7 @@ import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { RoomPreview, type PreviewPayload, type PreviewShare } from "./RoomPreview";
 
 const payload: PreviewPayload = {
+  room: { name: "Fund III Raise", welcomeNote: null },
   org: { name: "Alpha", tagline: null, legal_name: null, entity_type: null, jurisdiction: null, website: null, brand_color: null, logo_url: null },
   blended: { dealCount: 3, realizedCount: 1, weightedGrossIrr: 20, pooledMoic: 2, dpi: 1, totalInvested: 100, vintageRange: null },
   thesis: { title: "Credit", summary: null, asset_classes: null, geographies: null, target_irr: null, target_moic: null, check_size_min: null, check_size_max: null },

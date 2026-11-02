@@ -877,6 +877,8 @@ export type DataRoom = {
   organization_id: string;
   name: string;
   description: string | null;
+  /** Shown to LPs under the room's headline (migration 20261103100000). */
+  welcome_note: string | null;
   is_default: boolean;
   archived_at: string | null;
   created_by: string | null;

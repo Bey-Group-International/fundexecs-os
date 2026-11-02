@@ -171,6 +171,7 @@ async function renderDataRoom(props: {
       team={single ? [] : payload.team}
       entities={single ? [] : payload.entities}
       docSections={payload.docSections}
+      room={single ? null : payload.room}
       gateConfig={gateConfig}
       viewControls={viewControls}
       viewerLabel={pass?.email ?? share.recipient_email ?? null}

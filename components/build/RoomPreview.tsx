@@ -22,6 +22,7 @@ import {
   type ViewerTeamMember,
   type ViewerEntity,
   type ViewerSection,
+  type ViewerRoom,
 } from "@/components/dataroom/DataRoomViewer";
 
 export interface PreviewShare {
@@ -39,6 +40,7 @@ export interface PreviewPayload {
   team: ViewerTeamMember[];
   entities: ViewerEntity[];
   docSections: ViewerSection[];
+  room: ViewerRoom;
 }
 
 const NO_DEALS: ViewerTrackRecord = {
@@ -205,6 +207,7 @@ export function RoomPreview({ roomId, shares, active, focusDocumentId = null, fo
               team={pages.team ? payload.team : []}
               entities={pages.structure ? payload.entities : []}
               docSections={scoped}
+              room={payload.room}
               focusDocumentId={focusDocumentId}
               gateConfig={{
                 requireEmail: false,

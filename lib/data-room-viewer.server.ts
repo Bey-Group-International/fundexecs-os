@@ -27,6 +27,7 @@ import type {
 } from "@/lib/supabase/database.types";
 import type {
   ViewerOrg,
+  ViewerRoom,
   ViewerTrackRecord,
   ViewerThesis,
   ViewerTeamMember,
@@ -37,6 +38,7 @@ import type {
 
 export interface ViewerPayload {
   org: ViewerOrg;
+  room: ViewerRoom;
   blended: ViewerTrackRecord;
   thesis: ViewerThesis | null;
   team: ViewerTeamMember[];
@@ -357,7 +359,23 @@ export async function buildViewerPayload(
     ? { thesis: false, trackRecord: false, team: false, structure: false }
     : buildPagesAllowedBy(allowedSections);
 
+  // The room's headline and welcome note. A single-document link shows the
+  // document alone, so it carries neither.
+  let room: ViewerRoom = { name: "", welcomeNote: null };
+  if (!documentId) {
+    const { data: roomRow, error: roomErr } = await supabase
+      .from("data_rooms")
+      .select("name, welcome_note")
+      .eq("id", roomId)
+      .eq("organization_id", orgId)
+      .maybeSingle();
+    if (roomErr) throw new DataRoomReadError("room", roomErr);
+    const r = roomRow as { name: string; welcome_note: string | null } | null;
+    room = { name: r?.name ?? "", welcomeNote: r?.welcome_note?.trim() || null };
+  }
+
   return {
+    room,
     org: {
       name: org.name,
       tagline: org.tagline ?? null,
