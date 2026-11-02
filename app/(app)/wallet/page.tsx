@@ -3,6 +3,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getSessionContext } from "@/lib/auth";
 import { getWallet } from "@/lib/wallet";
+import { ADMIN_PLAN_NAME, isPlatformAdmin } from "@/lib/platform-admin";
 import { recentSpend } from "@/lib/credits";
 import {
   PLANS,
@@ -76,7 +77,11 @@ export default async function WalletPage(
 
   const months = currentPlan ? tenureMonths(wallet?.plan_started_at) : 0;
   const loyalty = loyaltyBonus(months);
-  const planName = currentPlan ? PLAN_BY_KEY[currentPlan as keyof typeof PLAN_BY_KEY]?.name : null;
+  const planName = isPlatformAdmin(ctx)
+    ? ADMIN_PLAN_NAME
+    : currentPlan
+      ? PLAN_BY_KEY[currentPlan as keyof typeof PLAN_BY_KEY]?.name
+      : null;
   const recommendedPlan = PLAN_BY_KEY[recommendedKey as keyof typeof PLAN_BY_KEY];
 
   const plans: PlanView[] = PLANS.map((p) => ({

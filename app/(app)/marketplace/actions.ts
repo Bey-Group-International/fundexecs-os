@@ -135,7 +135,10 @@ export async function createListing(formData: FormData): Promise<{ error?: strin
   // Lock the listing stake. Reputable orgs post less; if the required stake is
   // 0, skip locking. Stake writes use the service client (credit movements need
   // the service role). A guard inside lockStake rejects insufficient balance.
-  const requiredStake = requiredListingStake(await compoundingProfile(ctx.orgId));
+  // Platform admins have unrestricted access, so they list without escrowing credits.
+  const requiredStake = isPlatformAdmin(ctx)
+    ? 0
+    : requiredListingStake(await compoundingProfile(ctx.orgId));
   if (requiredStake > 0) {
     try {
       await lockStake(createServiceClient(), {

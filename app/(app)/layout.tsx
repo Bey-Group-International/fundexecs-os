@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { getSessionContext } from "@/lib/auth";
 import { enforceMfa } from "@/lib/mfa.server";
-import { isPlatformAdmin as isPlatformAdminUser } from "@/lib/platform-admin";
+import { ADMIN_PLAN_NAME, isPlatformAdmin as isPlatformAdminUser } from "@/lib/platform-admin";
 import { countPendingAccessRequests } from "@/lib/admin/access-requests";
 import { signOut } from "@/app/login/actions";
 import { HUB_BY_KEY } from "@/lib/hubs";
@@ -147,7 +147,11 @@ export default async function AppLayout({
   const name = principal?.full_name?.trim() || ctx.email.split("@")[0] || "Account";
   const balance = wallet?.credits ?? 0;
   const planKey = wallet?.plan as PlanKey | null;
-  const planName = planKey ? PLAN_BY_KEY[planKey]?.name ?? "Free" : "Free";
+  const planName = isPlatformAdmin
+    ? ADMIN_PLAN_NAME
+    : planKey
+      ? PLAN_BY_KEY[planKey]?.name ?? "Free"
+      : "Free";
 
   const candidates = (recentSessions ?? []) as {
     id: string;
