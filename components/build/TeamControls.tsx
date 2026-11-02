@@ -16,6 +16,7 @@ import {
   updateTeamProfile,
   deleteTeamProfile,
   giveProfileAccess,
+  resendInvite,
 } from "./team-actions";
 
 export interface TeamMemberView {
@@ -27,6 +28,15 @@ export interface TeamMemberView {
   bio: string | null;
   avatarUrl: string | null;
   role: MemberRole;
+}
+
+/** An invite sent to an address with no account yet; joins on first sign-in. */
+export interface PendingInviteView {
+  inviteId: string;
+  email: string;
+  role: MemberRole;
+  /** ISO timestamp the invite was created or last refreshed. */
+  sentAt: string;
 }
 
 /** A person on the team with no login: display data only, no seat. */
@@ -50,6 +60,8 @@ export interface SeatInfo {
 interface TeamControlsProps {
   members: TeamMemberView[];
   profiles: TeamProfileView[];
+  /** Admin-only; empty for everyone else. */
+  pendingInvites?: PendingInviteView[];
   currentUserId: string;
   currentRole: MemberRole | null;
   ownProfile: {
@@ -120,6 +132,7 @@ function RoleBadge({ role }: { role: MemberRole }) {
 export function TeamControls({
   members,
   profiles,
+  pendingInvites = [],
   currentUserId,
   currentRole,
   ownProfile,
@@ -179,6 +192,31 @@ export function TeamControls({
             Members
           </p>
           {regular.map(renderMember)}
+        </div>
+      ) : null}
+
+      {isAdmin && pendingInvites.length > 0 ? (
+        <div className="flex flex-col gap-2">
+          <p className="px-1 font-mono text-[11px] uppercase tracking-wider text-fg-muted">
+            Pending invites · join on first sign-in
+          </p>
+          {pendingInvites.map((inv) => (
+            <div
+              key={inv.inviteId}
+              className="flex items-center gap-3 rounded-xl border border-dashed border-line bg-surface-1 p-3"
+            >
+              <div className="min-w-0">
+                <p className="truncate text-sm text-fg-primary">{inv.email}</p>
+                <p className="text-xs text-fg-muted">
+                  Invited {new Date(inv.sentAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                </p>
+              </div>
+              <div className="ml-auto flex shrink-0 items-center gap-2">
+                <RoleBadge role={inv.role} />
+                <ResendButton target={{ inviteId: inv.inviteId }} />
+              </div>
+            </div>
+          ))}
         </div>
       ) : null}
 
@@ -659,6 +697,46 @@ function InviteForm({ seats }: { seats: SeatInfo }) {
   );
 }
 
+// --- Remind ---------------------------------------------------------------
+// Re-sends the "you've been added" email to a member or a waiting invite.
+function ResendButton({ target }: { target: { memberId: string } | { inviteId: string } }) {
+  const [pending, startTransition] = useTransition();
+  const [status, setStatus] = useState<{ ok: boolean; text: string } | null>(null);
+
+  return (
+    <form
+      action={(fd) => {
+        for (const [k, v] of Object.entries(target)) fd.set(k, v);
+        setStatus(null);
+        startTransition(async () => {
+          const res = await resendInvite(fd);
+          setStatus(
+            res.error ? { ok: false, text: res.error } : { ok: true, text: res.notice ?? "Reminder sent." },
+          );
+        });
+      }}
+      className="flex items-center gap-2"
+    >
+      {status ? (
+        <span
+          role="status"
+          className={`max-w-[14rem] truncate text-xs ${status.ok ? "text-status-success" : "text-status-danger"}`}
+          title={status.text}
+        >
+          {status.ok ? "Sent ✓" : status.text}
+        </span>
+      ) : null}
+      <button
+        disabled={pending}
+        title="Email them the invite again"
+        className="rounded-md border border-line px-2 py-1 text-xs text-fg-secondary transition hover:border-gold-500/40 hover:text-gold-300 disabled:opacity-50"
+      >
+        {pending ? "Sending…" : "Remind"}
+      </button>
+    </form>
+  );
+}
+
 // --- Admin member row -----------------------------------------------------
 function AdminMemberRow({
   member,
@@ -707,6 +785,7 @@ function AdminMemberRow({
 
       <div className="ml-auto flex shrink-0 items-center gap-2">
         <RoleBadge role={member.role} />
+        {!isSelf && member.email ? <ResendButton target={{ memberId: member.memberId }} /> : null}
         <form
           action={(fd) => {
             fd.set("memberId", member.memberId);
