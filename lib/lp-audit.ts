@@ -40,6 +40,8 @@ export const AUDIT_ACTIONS = [
   "subscription.countersigned",
   /** An owner or admin opened the review list, which shows this LP's details. Once per person, LP and hour. */
   "data.viewed",
+  /** The LP asked, from their link, for a copy of their data or for it to be erased. detail.request says which. */
+  "privacy.requested",
 ] as const;
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];
 

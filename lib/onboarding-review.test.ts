@@ -142,6 +142,8 @@ describe("describeAudit", () => {
     expect(describeAudit("check.recorded", { kind: "identity", status: "clear" })).toBe("Identity check recorded as clear");
     expect(describeAudit("check.updated", { kind: "pep", from: "pending", to: "flagged" })).toBe("Politically exposed check changed from pending to flagged");
     expect(describeAudit("decision.recorded", { decision: "more_info" })).toBe("Decision recorded: more info");
+    expect(describeAudit("privacy.requested", { request: "erasure" })).toBe("LP asked for their data to be erased");
+    expect(describeAudit("privacy.requested", { request: "access" })).toBe("LP asked for a copy of their data");
     expect(describeAudit("something.else", null)).toBe("something.else");
   });
 });
