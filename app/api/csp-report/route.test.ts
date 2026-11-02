@@ -35,6 +35,26 @@ describe("POST /api/csp-report", () => {
     expect(warn).not.toHaveBeenCalled();
   });
 
+  it("enforces the limit on the bytes received: a streamed body with no declared length, and multibyte text whose length is under the limit", async () => {
+    const enc = new TextEncoder();
+    let pulled = 0;
+    const big = new ReadableStream<Uint8Array>({
+      pull(c) {
+        pulled += 1;
+        c.enqueue(enc.encode("x".repeat(1024)));
+        if (pulled > 5000) c.close();
+      },
+    });
+    const res = await POST(new Request("https://app.test/api/csp-report", { method: "POST", body: big, duplex: "half" } as RequestInit));
+    expect(res.status).toBe(204);
+    expect(pulled).toBeLessThan(50); // stopped at the limit, did not read to the end
+    // valid JSON, under the limit in characters, over it in bytes: not parsed, not logged
+    const euros = JSON.stringify({ ...report, pad: "€".repeat(MAX_REPORT_BYTES / 2) });
+    expect(euros.length).toBeLessThan(MAX_REPORT_BYTES);
+    expect((await post(euros)).status).toBe(204);
+    expect(warn).not.toHaveBeenCalled();
+  });
+
   it("logs at most 60 lines a minute per instance", async () => {
     for (let i = 0; i < 100; i++) await post(JSON.stringify(report));
     expect(warn).toHaveBeenCalledTimes(60);

@@ -99,3 +99,33 @@ export function createLogLimiter(max: number, windowMs: number) {
     },
   };
 }
+
+/**
+ * The request body as text, or null if it is longer than `maxBytes`. The limit is on the bytes
+ * actually received, counted as they arrive, and reading stops (and the stream is cancelled) the
+ * moment it is exceeded: a declared Content-Length can be missing or wrong, and a string's length
+ * is UTF-16 units, not the UTF-8 bytes on the wire. A request with no body reads as "".
+ */
+export async function readCappedBody(request: Request, maxBytes: number): Promise<string | null> {
+  if (!request.body) return "";
+  const reader = request.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    total += value.byteLength;
+    if (total > maxBytes) {
+      await reader.cancel().catch(() => undefined);
+      return null;
+    }
+    chunks.push(value);
+  }
+  const all = new Uint8Array(total);
+  let at = 0;
+  for (const c of chunks) {
+    all.set(c, at);
+    at += c.byteLength;
+  }
+  return new TextDecoder("utf-8").decode(all);
+}

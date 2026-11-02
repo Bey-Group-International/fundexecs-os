@@ -1,4 +1,5 @@
-import { createLogLimiter, MAX_VIOLATIONS_PER_REPORT, summarizeCspReport } from "./csp-report";
+/** @jest-environment node */
+import { createLogLimiter, MAX_VIOLATIONS_PER_REPORT, readCappedBody, summarizeCspReport } from "./csp-report";
 
 const legacy = (over: Record<string, unknown> = {}) => ({
   "csp-report": {
@@ -70,5 +71,64 @@ describe("createLogLimiter", () => {
     expect([l.allow(0), l.allow(1), l.allow(2), l.allow(3)]).toEqual([true, true, true, false]);
     expect(l.allow(999)).toBe(false);
     expect([l.allow(1000), l.allow(1001), l.allow(1002), l.allow(1003)]).toEqual([true, true, true, false]);
+  });
+});
+
+describe("readCappedBody", () => {
+  const enc = new TextEncoder();
+  const req = (body: BodyInit | null) => new Request("https://app.test/x", { method: "POST", body, ...(body instanceof ReadableStream ? { duplex: "half" } : {}) } as RequestInit);
+  /** A stream of the given chunks that records how many were pulled and whether it was cancelled. */
+  const stream = (chunks: Uint8Array[]) => {
+    const seen = { pulled: 0, cancelled: false };
+    let i = 0;
+    const body = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        if (i >= chunks.length) return controller.close();
+        seen.pulled += 1;
+        controller.enqueue(chunks[i++]);
+      },
+      cancel() {
+        seen.cancelled = true;
+      },
+    });
+    return { body, seen };
+  };
+
+  it("returns the text of a body within the limit, however it is chunked", async () => {
+    expect(await readCappedBody(req('{"a":1}'), 100)).toBe('{"a":1}');
+    const { body } = stream([enc.encode('{"a"'), enc.encode(":1}")]);
+    expect(await readCappedBody(req(body), 100)).toBe('{"a":1}');
+  });
+
+  it("accepts a body of exactly the limit and refuses one byte more", async () => {
+    expect(await readCappedBody(req("x".repeat(10)), 10)).toBe("x".repeat(10));
+    expect(await readCappedBody(req("x".repeat(11)), 10)).toBeNull();
+  });
+
+  it("counts bytes, not characters: multibyte text over the limit in bytes is refused although its length is under it", async () => {
+    const euros = "€".repeat(4000); // 4000 characters, 12000 bytes
+    expect(euros.length).toBeLessThan(8 * 1024);
+    expect(await readCappedBody(req(euros), 8 * 1024)).toBeNull();
+    expect(await readCappedBody(req("€".repeat(2000)), 8 * 1024)).toBe("€".repeat(2000));
+  });
+
+  it("decodes a multibyte character split across chunks", async () => {
+    const bytes = enc.encode("a€b");
+    const { body } = stream([bytes.slice(0, 2), bytes.slice(2)]);
+    expect(await readCappedBody(req(body), 100)).toBe("a€b");
+  });
+
+  it("stops reading and cancels the stream as soon as the limit is passed, whatever the request declared", async () => {
+    const chunks = Array.from({ length: 1000 }, () => enc.encode("x".repeat(100)));
+    const { body, seen } = stream(chunks);
+    expect(await readCappedBody(req(body), 250)).toBeNull();
+    expect(seen.cancelled).toBe(true);
+    // 250 bytes allows two chunks, the third crosses the limit; nothing like all 1000 is read.
+    expect(seen.pulled).toBeLessThan(10);
+  });
+
+  it("reads a request with no body, or an empty one, as empty text", async () => {
+    expect(await readCappedBody(new Request("https://app.test/x", { method: "POST" }), 10)).toBe("");
+    expect(await readCappedBody(req(""), 10)).toBe("");
   });
 });
