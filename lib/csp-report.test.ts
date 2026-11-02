@@ -1,4 +1,4 @@
-import { MAX_VIOLATIONS_PER_REPORT, summarizeCspReport } from "./csp-report";
+import { createLogLimiter, MAX_VIOLATIONS_PER_REPORT, summarizeCspReport } from "./csp-report";
 
 const legacy = (over: Record<string, unknown> = {}) => ({
   "csp-report": {
@@ -61,5 +61,14 @@ describe("summarizeCspReport", () => {
 
   it("returns nothing for anything it does not recognise", () => {
     for (const v of [null, undefined, 3, "x", [], {}, [{}], { "csp-report": "x" }, { "csp-report": null }]) expect(summarizeCspReport(v)).toEqual([]);
+  });
+});
+
+describe("createLogLimiter", () => {
+  it("allows a fixed number per window and starts again when the window ends", () => {
+    const l = createLogLimiter(3, 1000);
+    expect([l.allow(0), l.allow(1), l.allow(2), l.allow(3)]).toEqual([true, true, true, false]);
+    expect(l.allow(999)).toBe(false);
+    expect([l.allow(1000), l.allow(1001), l.allow(1002), l.allow(1003)]).toEqual([true, true, true, false]);
   });
 });

@@ -7,30 +7,11 @@
 // it stores nothing, answers 204 to everything, ignores large bodies unread, and logs at most
 // a fixed number of lines a minute per server instance.
 import { NextResponse } from "next/server";
-import { MAX_REPORT_BYTES, summarizeCspReport } from "@/lib/csp-report";
+import { createLogLimiter, MAX_REPORT_BYTES, summarizeCspReport } from "@/lib/csp-report";
 
 export const dynamic = "force-dynamic";
 
-const LOG_WINDOW_MS = 60_000;
-const MAX_LOGS_PER_WINDOW = 60;
-let windowStart = 0;
-let logged = 0;
-
-function mayLog(now: number): boolean {
-  if (now - windowStart >= LOG_WINDOW_MS) {
-    windowStart = now;
-    logged = 0;
-  }
-  if (logged >= MAX_LOGS_PER_WINDOW) return false;
-  logged += 1;
-  return true;
-}
-
-/** Test seam: forget the rate-limit window. */
-export function resetCspReportLimit(): void {
-  windowStart = 0;
-  logged = 0;
-}
+const limiter = createLogLimiter(60, 60_000);
 
 export async function POST(request: Request) {
   try {
@@ -40,7 +21,7 @@ export async function POST(request: Request) {
     if (text.length > MAX_REPORT_BYTES) return new NextResponse(null, { status: 204 });
     const violations = summarizeCspReport(JSON.parse(text));
     for (const v of violations) {
-      if (!mayLog(Date.now())) break;
+      if (!limiter.allow(Date.now())) break;
       console.warn("[csp-report]", v);
     }
   } catch {

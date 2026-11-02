@@ -78,3 +78,24 @@ export function summarizeCspReport(json: unknown): CspViolation[] {
   }
   return out;
 }
+
+/**
+ * A fixed number of log lines per window, for one server instance. The report endpoint is public, so
+ * what it writes to a log is capped rather than left to whoever posts to it. Lives here, not in the
+ * route file, because Next.js allows a route file to export only its handlers and a few settings.
+ */
+export function createLogLimiter(max: number, windowMs: number) {
+  let start = 0;
+  let used = 0;
+  return {
+    allow(now: number): boolean {
+      if (now - start >= windowMs) {
+        start = now;
+        used = 0;
+      }
+      if (used >= max) return false;
+      used += 1;
+      return true;
+    },
+  };
+}

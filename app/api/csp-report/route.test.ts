@@ -1,13 +1,15 @@
 /** @jest-environment node */
 import { MAX_REPORT_BYTES } from "@/lib/csp-report";
-import { POST, resetCspReportLimit } from "./route";
 
 const report = { "csp-report": { "document-uri": "https://app.test/lp/SECRET", "effective-directive": "script-src-elem", "blocked-uri": "inline", "line-number": 1, "column-number": 2, disposition: "report" } };
+let POST: (r: Request) => Promise<Response>;
 const post = (body: string, headers: Record<string, string> = {}) => POST(new Request("https://app.test/api/csp-report", { method: "POST", body, headers }));
 
 let warn: jest.SpyInstance;
-beforeEach(() => {
-  resetCspReportLimit();
+beforeEach(async () => {
+  // A fresh module each time: the log limit is per server instance, and so per module.
+  jest.resetModules();
+  ({ POST } = await import("./route"));
   warn = jest.spyOn(console, "warn").mockImplementation(() => undefined);
 });
 afterEach(() => jest.restoreAllMocks());
@@ -36,5 +38,12 @@ describe("POST /api/csp-report", () => {
   it("logs at most 60 lines a minute per instance", async () => {
     for (let i = 0; i < 100; i++) await post(JSON.stringify(report));
     expect(warn).toHaveBeenCalledTimes(60);
+  });
+});
+
+describe("the route file", () => {
+  it("exports only what Next.js allows a route file to export (anything else fails the production build)", async () => {
+    const mod = await import("./route");
+    expect(Object.keys(mod).sort()).toEqual(["POST", "dynamic"]);
   });
 });
