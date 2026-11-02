@@ -38,8 +38,21 @@ export const AUDIT_ACTIONS = [
   "subscription.signed",
   /** The fund countersigned it. */
   "subscription.countersigned",
+  /** An owner or admin opened the review list, which shows this LP's details. Once per person, LP and hour. */
+  "data.viewed",
 ] as const;
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];
+
+/** An owner or admin who keeps a review page open is one view, not one per refresh. */
+export const VIEW_DEDUPE_MS = 60 * 60 * 1000;
+/** The most LPs one page load records, so a huge organization cannot write an unbounded batch. */
+export const MAX_VIEWS_PER_LOAD = 200;
+
+/** The sessions still to record: those shown, minus those this person already viewed within the window. */
+export function sessionsToLogViews(shown: readonly string[], recentlyViewed: Iterable<string>): string[] {
+  const seen = new Set(recentlyViewed);
+  return [...new Set(shown)].filter((id) => id && !seen.has(id)).slice(0, MAX_VIEWS_PER_LOAD);
+}
 
 export type AuditDetail = Record<string, string | number | boolean>;
 

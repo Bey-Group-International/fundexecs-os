@@ -5,6 +5,7 @@ import { createServerClient, createServiceClient } from "@/lib/supabase/server";
 import { getSessionContext } from "@/lib/auth";
 import { planSeatLimit, seatLimitReached } from "@/lib/billing";
 import { isPlatformAdmin } from "@/lib/platform-admin";
+import { savePendingInvite, sendMemberAddedEmail } from "@/lib/team-invites.server";
 import {
   createTeamTask,
   normalizeTeamTaskPriority,
@@ -203,7 +204,7 @@ export async function removeMember(formData: FormData): Promise<void> {
 // only. principals are 1:1 with auth.users, so only existing users can join.
 export async function inviteMember(
   formData: FormData,
-): Promise<{ error?: string }> {
+): Promise<{ error?: string; notice?: string }> {
   const ctx = await getSessionContext();
   if (!ctx?.orgId) return { error: "No active organization." };
   // Admin guard MUST pass before we touch the service client.
@@ -229,7 +230,7 @@ async function addMemberByEmail(
   ctx: AdminCtx,
   email: string,
   role: MemberRole,
-): Promise<{ error?: string }> {
+): Promise<{ error?: string; notice?: string }> {
   // Cross-org principal lookup needs the service client (RLS would hide
   // principals outside the caller's org). Only reached after the admin guard.
   const svc = createServiceClient();
@@ -239,22 +240,17 @@ async function addMemberByEmail(
     .eq("email", email)
     .maybeSingle();
 
-  if (!principal) {
-    return {
-      error:
-        "No FundExecs account uses that email yet. Ask them to sign up first.",
-    };
-  }
-
   // Avoid the unique-constraint round-trip when we can, and handle the race.
-  const { data: existing } = await svc
-    .from("organization_members")
-    .select("id")
-    .eq("organization_id", ctx.orgId)
-    .eq("principal_id", principal.id)
-    .maybeSingle();
-  if (existing) {
-    return { error: "That person is already a member of this organization." };
+  if (principal) {
+    const { data: existing } = await svc
+      .from("organization_members")
+      .select("id")
+      .eq("organization_id", ctx.orgId)
+      .eq("principal_id", principal.id)
+      .maybeSingle();
+    if (existing) {
+      return { error: "That person is already a member of this organization." };
+    }
   }
 
   // Seat limit: an org can only add members up to its plan's seat allotment.
@@ -270,11 +266,48 @@ async function addMemberByEmail(
     .from("organization_members")
     .select("id", { count: "exact", head: true })
     .eq("organization_id", ctx.orgId);
+  // Invites still waiting for a sign-in hold a seat too, or an org could stack
+  // pending invites past its allotment and claim them all later.
+  const { count: pendingCount } = await svc
+    .from("organization_invites")
+    .select("id", { count: "exact", head: true })
+    .eq("organization_id", ctx.orgId)
+    .is("accepted_at", null)
+    .gt("expires_at", new Date().toISOString());
   // Platform admins are not bound by the seat allotment.
-  if (!isPlatformAdmin(ctx) && seatLimitReached(wallet?.plan, memberCount ?? 0)) {
+  if (
+    !isPlatformAdmin(ctx) &&
+    seatLimitReached(wallet?.plan, (memberCount ?? 0) + (pendingCount ?? 0))
+  ) {
     const limit = planSeatLimit(wallet?.plan);
     return {
       error: `Your plan includes ${limit} seat${limit === 1 ? "" : "s"}. Upgrade your plan to add more members.`,
+    };
+  }
+
+  // No account yet: hold the invite, email them, and attach them when they sign
+  // in with this address (lib/team-invites.server.claimPendingInvites).
+  if (!principal) {
+    const saved = await savePendingInvite(svc, {
+      orgId: ctx.orgId,
+      email,
+      role,
+      invitedBy: ctx.userId,
+      byPlatformAdmin: isPlatformAdmin(ctx),
+    });
+    if (saved.error) return { error: saved.error };
+    const mail = await sendMemberAddedEmail(svc, {
+      orgId: ctx.orgId,
+      email,
+      role,
+      inviterId: ctx.userId,
+      pending: true,
+    });
+    revalidatePath(TEAM);
+    return {
+      notice: mail.sent
+        ? `Invite emailed to ${email}. They join automatically when they sign in.`
+        : `Invite saved for ${email}, but the email could not be sent (connect a mailbox in Settings → Integrations). They join automatically when they sign in.`,
     };
   }
 
@@ -294,8 +327,20 @@ async function addMemberByEmail(
 
   await mergeProfile(svc, ctx.orgId, principal.id, email);
 
+  const mail = await sendMemberAddedEmail(svc, {
+    orgId: ctx.orgId,
+    email,
+    role,
+    inviterId: ctx.userId,
+    pending: false,
+  });
+
   revalidatePath(TEAM);
-  return {};
+  return {
+    notice: mail.sent
+      ? `Added, and ${email} was emailed.`
+      : "Added. The email could not be sent (connect a mailbox in Settings → Integrations), so let them know directly.",
+  };
 }
 
 // Fold a no-login profile into the account that now owns its email: fill the

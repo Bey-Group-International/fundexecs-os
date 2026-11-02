@@ -14,6 +14,7 @@
 // Server-only by construction: every read/write goes through the service-role
 // client, which is never present in the browser bundle. The queue table also
 // carries RLS with no policies, so a leaked anon key buys nothing.
+import { hasPlatformAdminInvite } from "@/lib/team-invites.server";
 import { createHash, randomBytes } from "crypto";
 import { createServiceClient, hasSupabaseServiceEnv } from "@/lib/supabase/server";
 import { sendEmail } from "@/lib/email";
@@ -423,6 +424,21 @@ export async function enforceAccessGate(args: {
         .eq("email", email)
         .maybeSingle();
       requestStatus = (request?.status as AccessRequestStatus | undefined) ?? null;
+    }
+
+    // A pending invite from a platform admin stands in for approval (an org
+    // admin's does not). A decline still wins, so it is checked first.
+    if (
+      requestStatus !== "declined" &&
+      args.emailConfirmed &&
+      email &&
+      (await hasPlatformAdminInvite(supabase, email))
+    ) {
+      await supabase
+        .from("principals")
+        .update({ access_approved_at: new Date().toISOString() })
+        .eq("id", args.userId);
+      return null;
     }
 
     const decision = decideAccess({

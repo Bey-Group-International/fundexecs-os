@@ -1,11 +1,22 @@
-let ctx: { orgId: string | null; role: string | null } | null = { orgId: "org-1", role: "admin" };
+let ctx: { orgId: string | null; role: string | null; userId?: string } | null = { orgId: "org-1", role: "admin", userId: "u1" };
+const viewCalls: Array<{ orgId: string; actorId: string; sessionIds: readonly string[] }> = [];
+let neqFilters: Array<[string, string]> = [];
 let failReads = false;
 let reads: string[] = [];
 let orgFilters: string[] = [];
 const tables: Record<string, unknown[]> = {};
 
 jest.mock("@/lib/auth", () => ({ getSessionContext: async () => ctx }));
+// after() runs the callback straight away here, so the test can see what it recorded.
+jest.mock("next/server", () => ({ after: (fn: () => unknown) => void fn() }));
+jest.mock("@/lib/lp-audit.server", () => ({
+  recordReviewViews: async (_c: unknown, o: { orgId: string; actorId: string; sessionIds: readonly string[] }) => {
+    viewCalls.push(o);
+    return o.sessionIds.length;
+  },
+}));
 jest.mock("@/lib/supabase/server", () => ({
+  createServiceClient: () => ({}),
   createServerClient: async () => ({
     from: (table: string) => {
       reads.push(table);
@@ -15,6 +26,7 @@ jest.mock("@/lib/supabase/server", () => ({
           if (c === "organization_id") orgFilters.push(v);
           return q;
         },
+        neq: (c: string, v: string) => (neqFilters.push([c, v]), q),
         order: () => q,
         limit: () => q,
         then: (resolve: (v: unknown) => void, reject: (e: unknown) => void) => {
@@ -62,7 +74,9 @@ import { render, screen } from "@testing-library/react";
 import { OnboardingLive } from "./OnboardingLive";
 
 beforeEach(() => {
-  ctx = { orgId: "org-1", role: "admin" };
+  ctx = { orgId: "org-1", role: "admin", userId: "u1" };
+  viewCalls.length = 0;
+  neqFilters = [];
   failReads = false;
   reads = [];
   orgFilters = [];
@@ -156,5 +170,26 @@ describe("Run › Onboarding", () => {
     failReads = true;
     render(await OnboardingLive());
     expect(screen.getByText("No LPs are being onboarded yet.")).toBeInTheDocument();
+  });
+
+  it("records who opened the page, one entry per LP shown (SOC 2 G-2)", async () => {
+    tables.lp_onboarding_sessions = [session(), session({ id: "s2", lp_name: "Ilpa Fund" })];
+    render(await OnboardingLive());
+    expect(viewCalls).toEqual([{ orgId: "org-1", actorId: "u1", sessionIds: ["s1", "s2"] }]);
+  });
+
+  it("keeps view entries out of the activity it shows", async () => {
+    tables.lp_onboarding_sessions = [session()];
+    render(await OnboardingLive());
+    expect(neqFilters).toContainEqual(["action", "data.viewed"]);
+  });
+
+  it("records nothing when there is nobody to show, or the viewer is not an owner or admin", async () => {
+    render(await OnboardingLive());
+    expect(viewCalls).toEqual([]);
+    ctx = { orgId: "org-1", role: "member", userId: "u2" };
+    tables.lp_onboarding_sessions = [session()];
+    render(await OnboardingLive());
+    expect(viewCalls).toEqual([]);
   });
 });
