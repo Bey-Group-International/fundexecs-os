@@ -52,3 +52,16 @@ describe("the Preview button on a published document", () => {
     expect(screen.queryByRole("button", { name: "Preview" })).not.toBeInTheDocument();
   });
 });
+
+describe("when Build cannot be read", () => {
+  it("says so, rather than showing nothing as though nothing came from Build", () => {
+    render(<RoomContents roomId="r1" sections={[]} available={[]} fromBuildUnavailable />);
+    expect(screen.getByRole("status")).toHaveTextContent(/Couldn't load what Build contributes/);
+  });
+
+  it("labels the rows by what a link allows, not as shown to every reader", () => {
+    render(<RoomContents roomId="r1" sections={[]} available={[]} fromBuild={buildContentRows(src)} />);
+    expect(screen.getByText(/shown where a link allows the section/)).toBeInTheDocument();
+    expect(screen.queryByText(/every reader/)).toBeNull();
+  });
+});

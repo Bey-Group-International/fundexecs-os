@@ -32,6 +32,8 @@ interface Props {
   available: AvailableDoc[];
   /** Build-sourced pages a reader sees beyond the published documents. */
   fromBuild?: BuildContentRow[];
+  /** Build could not be read, so no rows are shown rather than empty ones. */
+  fromBuildUnavailable?: boolean;
   warnings: RoomWarnings;
   coverage: { weightedPercent: number; readyCount: number; total: number };
   activeLinkCount: number;
@@ -75,6 +77,7 @@ export function RoomWorkspace({
   sections,
   available,
   fromBuild,
+  fromBuildUnavailable,
   warnings,
   coverage,
   activeLinkCount,
@@ -86,6 +89,7 @@ export function RoomWorkspace({
   const [tab, setTab] = useState<Tab>("contents");
   // The document a row in Room contents asked to see in the preview.
   const [previewDoc, setPreviewDoc] = useState<string | null>(null);
+  const [previewRequest, setPreviewRequest] = useState(0);
   const [query, setQuery] = useState("");
   const [section, setSection] = useState<string | null>(null);
   const [needsAttention, setNeedsAttention] = useState(false);
@@ -308,8 +312,10 @@ export function RoomWorkspace({
               sections={filtered}
               available={available}
               fromBuild={filtering ? undefined : fromBuild}
+              fromBuildUnavailable={!filtering && fromBuildUnavailable}
               onPreview={(id) => {
                 setPreviewDoc(id);
+                setPreviewRequest((n) => n + 1);
                 setTab("preview");
               }}
               hideAddFromLibrary={filtering}
@@ -341,6 +347,7 @@ export function RoomWorkspace({
               shares={previewShares}
               active={tab === "preview"}
               focusDocumentId={previewDoc}
+              focusRequest={previewRequest}
               loadPreview={loadRoomPreview}
             />
           </div>

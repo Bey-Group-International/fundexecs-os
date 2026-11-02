@@ -15,6 +15,7 @@ import {
   roomSectionKey,
   buildContentRows,
   buildPagesAllowedBy,
+  BUILD_PAGE_SECTION,
   type RoomDocument,
 } from "@/lib/data-rooms";
 
@@ -269,5 +270,17 @@ describe("buildPagesAllowedBy", () => {
 
   it("is not opened by sections that have no Build page", () => {
     expect(buildPagesAllowedBy(["marketing", "fund_terms", "other"])).toEqual(none);
+  });
+});
+
+describe("BUILD_PAGE_SECTION", () => {
+  it("is read from the Build module behind each section, so the mapping lives in one place", () => {
+    expect(BUILD_PAGE_SECTION).toEqual({
+      thesis: "thesis",
+      trackRecord: "track_record",
+      team: "team",
+      // The entity module is filed under Legal & Structure.
+      structure: "legal",
+    });
   });
 });

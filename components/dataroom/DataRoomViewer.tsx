@@ -22,6 +22,7 @@ import { FilePreview } from "@/components/documents/FilePreview";
 import type { PreviewKind } from "@/lib/document-files";
 import { forwardWheel } from "@/lib/wheel-forward";
 import { DATA_ROOM_SECTIONS } from "@/lib/data-room";
+import { BUILD_PAGE_SECTION } from "@/lib/data-rooms";
 
 /** Per-browser reader id, so a first-open alert fires once per reader. */
 const VISITOR_KEY = "fx-dataroom-visitor";
@@ -144,6 +145,8 @@ interface Props {
   signerEmail?: string | null;
   /** Open on this document's section (the `?doc=` a view-only open redirects to). */
   focusDocumentId?: string | null;
+  /** Lay out as on a phone whatever the window width: the section selector, no rail. */
+  compact?: boolean;
 }
 
 function compactUsd(n: number | null): string | null {
@@ -203,8 +206,8 @@ function viewerSections(
       out.push({ key, label: SECTION_LABELS.get(key) ?? key, docs: [] });
     }
   };
-  ensure("thesis", thesis !== null);
-  ensure("track_record", blended.dealCount > 0);
+  ensure(BUILD_PAGE_SECTION.thesis, thesis !== null);
+  ensure(BUILD_PAGE_SECTION.trackRecord, blended.dealCount > 0);
   return out.sort(
     (a, b) =>
       (SECTION_ORDER.get(a.key) ?? 99) - (SECTION_ORDER.get(b.key) ?? 99),
@@ -238,6 +241,7 @@ export function DataRoomViewer({
   viewerLabel = null,
   signerEmail = null,
   focusDocumentId = null,
+  compact = false,
 }: Props) {
   const accent =
     org.brand_color && /^#[0-9a-fA-F]{3,8}$/.test(org.brand_color)
@@ -563,8 +567,10 @@ export function DataRoomViewer({
 
       {/* On a phone the section tree is a selector under the header; the rail is
           for wider screens. 16px text keeps iOS from zooming on focus. */}
-      {preview ? null : (
-        <div className="shrink-0 border-b border-line bg-surface-1 px-4 py-2 lg:hidden print:hidden">
+      {preview && !compact ? null : (
+        <div
+          className={`shrink-0 border-b border-line bg-surface-1 px-4 py-2 print:hidden ${compact ? "" : "lg:hidden"}`}
+        >
           <label htmlFor="viewer-section" className="sr-only">
             Section
           </label>
@@ -592,7 +598,9 @@ export function DataRoomViewer({
         <aside
           className={
             preview
-              ? "relative flex w-48 shrink-0 flex-col border-r border-line bg-surface-1 print:hidden"
+              ? compact
+                ? "hidden"
+                : "relative flex w-48 shrink-0 flex-col border-r border-line bg-surface-1 print:hidden"
               : "hidden w-56 shrink-0 flex-col border-r border-line bg-surface-1 lg:flex print:hidden"
           }
         >
@@ -854,10 +862,10 @@ function ContentPanel({
   return (
     <div className="max-w-4xl">
       <SectionHeader title={sec.label} accent={accent} />
-      {sec.key === "thesis" && thesis ? (
+      {sec.key === BUILD_PAGE_SECTION.thesis && thesis ? (
         <ThesisSummary thesis={thesis} />
       ) : null}
-      {sec.key === "track_record" && blended.dealCount > 0 ? (
+      {sec.key === BUILD_PAGE_SECTION.trackRecord && blended.dealCount > 0 ? (
         <TrackRecordSummary blended={blended} />
       ) : null}
       <div className="mt-4 space-y-6">

@@ -326,11 +326,32 @@ describe("what changed since a reader's previous visit", () => {
     expect(find(p, "fresh").isNew).toBe(false);
   });
 
-  it("still marks a locked document, which shows its name and date but nothing of itself", async () => {
+  it("gives a locked document no date and no marker: nothing of it leaves the server, including when it changed", async () => {
     const t = tables([LOCKED]);
     t.documents = t.documents.map((d) => ({ ...d, updated_at: "2026-10-20T00:00:00Z" }));
     const p = await buildViewerPayload(fakeDb(t).client, ORG, ROOM, null, null, { shareId: SHARE, email: "lp@example.com", lastVisitAt: "2026-10-01T00:00:00Z" });
-    expect(allDocs(p)[0]).toMatchObject({ content: null, hasFile: false, isNew: true });
+    const doc = allDocs(p)[0];
+    expect(doc).toMatchObject({ content: null, hasFile: false });
+    expect(doc.updatedAt).toBeUndefined();
+    expect(doc.isNew).toBeUndefined();
+    expect(JSON.stringify(p)).not.toContain("2026-10-20");
+  });
+
+  it("marks an old document that was published into the room after the reader's last visit", async () => {
+    const t = tables([{ id: "late", name: "Late addition", content: "x" }]);
+    t.documents = t.documents.map((d) => ({ ...d, updated_at: "2026-01-01T00:00:00Z" }));
+    t.data_room_documents = t.data_room_documents.map((m) => ({ ...m, created_at: "2026-10-25T00:00:00Z" }));
+    const p = await buildViewerPayload(fakeDb(t).client, ORG, ROOM, null, null, { shareId: SHARE, email: "lp@example.com", lastVisitAt: "2026-10-01T00:00:00Z" });
+    // Its own date is old, and it still reads as new to this reader.
+    expect(find(p, "late")).toMatchObject({ isNew: true, updatedAt: "2026-01-01T00:00:00Z" });
+  });
+
+  it("does not mark an old document that was already in the room at the last visit", async () => {
+    const t = tables([{ id: "early", name: "Early", content: "x" }]);
+    t.documents = t.documents.map((d) => ({ ...d, updated_at: "2026-01-01T00:00:00Z" }));
+    t.data_room_documents = t.data_room_documents.map((m) => ({ ...m, created_at: "2026-02-01T00:00:00Z" }));
+    const p = await buildViewerPayload(fakeDb(t).client, ORG, ROOM, null, null, { shareId: SHARE, email: "lp@example.com", lastVisitAt: "2026-10-01T00:00:00Z" });
+    expect(find(p, "early").isNew).toBe(false);
   });
 });
 

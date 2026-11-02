@@ -301,7 +301,7 @@ function FromBuild({ rows }: { rows: BuildContentRow[] }) {
   return (
     <div className="mb-4">
       <p className="mb-1.5 font-mono text-[11px] uppercase tracking-[0.16em] text-fg-muted">
-        From Build · shown to every reader
+        From Build · shown where a link allows the section
       </p>
       <div className="flex flex-col gap-1.5">
         {rows.map((r) => (
@@ -334,6 +334,7 @@ export function RoomContents({
   sections,
   available,
   fromBuild,
+  fromBuildUnavailable,
   onPreview,
   hideAddFromLibrary,
   hideReorder,
@@ -343,6 +344,8 @@ export function RoomContents({
   available: AvailableDoc[];
   /** Build-sourced pages the reader sees. Left out while the pane is filtered. */
   fromBuild?: BuildContentRow[];
+  /** Build could not be read, so the rows above are missing rather than empty. */
+  fromBuildUnavailable?: boolean;
   /** Open a document in Preview as LP. */
   onPreview?: (documentId: string) => void;
   /** Suppressed while the pane is filtered — publishing into a partial view of
@@ -356,6 +359,11 @@ export function RoomContents({
   return (
     <div>
       {fromBuild && fromBuild.length > 0 ? <FromBuild rows={fromBuild} /> : null}
+      {fromBuildUnavailable ? (
+        <p role="status" className="mb-4 rounded-xl border border-dashed border-line px-3 py-2.5 text-sm text-amber-400">
+          Couldn&apos;t load what Build contributes to this room. Reload to try again.
+        </p>
+      ) : null}
       {count === 0 ? (
         <div className="rounded-xl border border-dashed border-line bg-surface-0 px-4 py-6 text-center">
           <p className="text-sm text-fg-secondary">This room is empty.</p>

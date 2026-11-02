@@ -9,7 +9,9 @@
 //
 // The payload is loaded when the pane is opened, not with the page: it carries
 // every published document's text, and most visits to this page never open the
-// preview. It is fetched again on each opening so it is never stale.
+// preview. It is fetched again on each opening, so what shows is current once it
+// loads; the previous answer for the same room stays up meanwhile. An answer for
+// another room is never shown, and a failed load clears it rather than leaving it.
 import { useEffect, useMemo, useRef, useState } from "react";
 import { buildPagesAllowedBy, sectionsAllowedBy } from "@/lib/data-rooms";
 import {
@@ -58,12 +60,16 @@ interface Props {
   active: boolean;
   /** Open on this document (from a row in Room contents). */
   focusDocumentId?: string | null;
+  /** Counts each request to open on a document, so asking for the same one again reopens it. */
+  focusRequest?: number;
   loadPreview: (roomId: string) => Promise<PreviewPayload | null>;
 }
 
-export function RoomPreview({ roomId, shares, active, focusDocumentId = null, loadPreview }: Props) {
+export function RoomPreview({ roomId, shares, active, focusDocumentId = null, focusRequest = 0, loadPreview }: Props) {
   const [shareId, setShareId] = useState<string>("");
-  const [payload, setPayload] = useState<PreviewPayload | null>(null);
+  const [loaded, setLoaded] = useState<{ roomId: string; payload: PreviewPayload } | null>(null);
+  // Only ever this room's own answer.
+  const payload = loaded && loaded.roomId === roomId ? loaded.payload : null;
   const [status, setStatus] = useState<"idle" | "loading" | "ready" | "error">("idle");
   const [width, setWidth] = useState<Width>("desktop");
   const [fullscreen, setFullscreen] = useState(false);
@@ -78,11 +84,12 @@ export function RoomPreview({ roomId, shares, active, focusDocumentId = null, lo
     loadPreview(roomId).then(
       (result) => {
         if (mine !== request.current) return;
-        setPayload(result);
+        setLoaded(result ? { roomId, payload: result } : null);
         setStatus(result ? "ready" : "error");
       },
       () => {
         if (mine !== request.current) return;
+        setLoaded(null);
         setStatus("error");
       },
     );
@@ -188,7 +195,8 @@ export function RoomPreview({ roomId, shares, active, focusDocumentId = null, lo
           {payload ? (
             <DataRoomViewer
               // A new focus (a row clicked in Room contents) reopens the viewer on it.
-              key={focusDocumentId ?? "room"}
+              key={`${focusDocumentId ?? "room"}:${focusRequest}`}
+              compact={width === "phone"}
               token="preview"
               shareId="preview"
               org={payload.org}

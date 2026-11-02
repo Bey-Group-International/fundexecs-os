@@ -7,6 +7,7 @@ jest.mock("@/components/dataroom/DataRoomViewer", () => ({
     entities: unknown[];
     docSections: { key: string }[];
     focusDocumentId: string | null;
+    compact?: boolean;
   }) => (
     <div
       data-testid="viewer"
@@ -16,6 +17,7 @@ jest.mock("@/components/dataroom/DataRoomViewer", () => ({
       data-entities={p.entities.length}
       data-sections={p.docSections.map((s) => s.key).join(",")}
       data-focus={p.focusDocumentId ?? ""}
+      data-compact={String(p.compact ?? false)}
     />
   ),
 }));
@@ -139,5 +141,48 @@ describe("size", () => {
     expect(screen.getByRole("button", { name: "Exit full screen" })).toHaveAttribute("aria-pressed", "true");
     fireEvent.keyDown(window, { key: "Escape" });
     expect(screen.getByRole("button", { name: "Full screen" })).toHaveAttribute("aria-pressed", "false");
+  });
+});
+
+describe("never showing the wrong or an outdated answer", () => {
+  it("does not show one room's documents in another room", async () => {
+    const loadPreview = jest.fn(async () => payload);
+    const { rerender } = render(<RoomPreview roomId="r1" shares={SHARES} active loadPreview={loadPreview} />);
+    await waitFor(() => expect(viewer()).toBeInTheDocument());
+    // Switch rooms with the pane closed: room 1's answer must not appear for room 2.
+    rerender(<RoomPreview roomId="r2" shares={SHARES} active={false} loadPreview={loadPreview} />);
+    expect(screen.queryByTestId("viewer")).toBeNull();
+  });
+
+  it("drops the old preview when the reload fails, instead of leaving it up", async () => {
+    const loadPreview = jest.fn<Promise<PreviewPayload | null>, []>().mockResolvedValueOnce(payload).mockResolvedValueOnce(null);
+    const { rerender } = render(<RoomPreview roomId="r1" shares={SHARES} active loadPreview={loadPreview} />);
+    await waitFor(() => expect(viewer()).toBeInTheDocument());
+    rerender(<RoomPreview roomId="r1" shares={SHARES} active={false} loadPreview={loadPreview} />);
+    rerender(<RoomPreview roomId="r1" shares={SHARES} active loadPreview={loadPreview} />);
+    await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("Preview unavailable."));
+    expect(screen.queryByTestId("viewer")).toBeNull();
+  });
+});
+
+describe("asking for the same document again", () => {
+  it("reopens the viewer on it each time, not only the first", async () => {
+    const loadPreview = jest.fn(async () => payload);
+    const { rerender } = render(<RoomPreview roomId="r1" shares={SHARES} active focusDocumentId="t1" focusRequest={1} loadPreview={loadPreview} />);
+    await waitFor(() => expect(viewer()).toBeInTheDocument());
+    const first = viewer();
+    rerender(<RoomPreview roomId="r1" shares={SHARES} active focusDocumentId="t1" focusRequest={1} loadPreview={loadPreview} />);
+    expect(viewer()).toBe(first);
+    rerender(<RoomPreview roomId="r1" shares={SHARES} active focusDocumentId="t1" focusRequest={2} loadPreview={loadPreview} />);
+    expect(viewer()).not.toBe(first);
+  });
+});
+
+describe("phone width", () => {
+  it("asks the viewer for its phone layout, since the window itself is still wide", async () => {
+    setup({ active: true });
+    await waitFor(() => expect(viewer()).toHaveAttribute("data-compact", "false"));
+    fireEvent.click(screen.getByRole("button", { name: "Phone" }));
+    expect(viewer()).toHaveAttribute("data-compact", "true");
   });
 });

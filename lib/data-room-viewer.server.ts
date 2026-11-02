@@ -103,12 +103,18 @@ export async function isRoomOpen(
  */
 function changeInfo(
   d: { updated_at?: string | null; created_at?: string | null },
+  addedToRoomAt: string | null | undefined,
   lastVisitAt: string | null | undefined,
 ): { updatedAt: string | null; isNew: boolean } {
   const updatedAt = d.updated_at ?? d.created_at ?? null;
-  const isNew =
-    Boolean(lastVisitAt && updatedAt) &&
-    new Date(updatedAt as string).getTime() > new Date(lastVisitAt as string).getTime();
+  // New is whichever is later: the document changed, or it was published into
+  // this room. An old document published after the reader's last visit is new to
+  // them, though its own date is old.
+  const latest = [updatedAt, addedToRoomAt]
+    .filter((t): t is string => Boolean(t))
+    .map((t) => new Date(t).getTime())
+    .sort((a, b) => b - a)[0];
+  const isNew = Boolean(lastVisitAt) && latest !== undefined && latest > new Date(lastVisitAt as string).getTime();
   return { updatedAt, isNew };
 }
 
@@ -155,7 +161,7 @@ export async function buildViewerPayload(
 ): Promise<ViewerPayload | null> {
   if (!(await isRoomOpen(supabase, orgId, roomId))) return null;
 
-  let manifest: { document_id: string; sort_order: number }[];
+  let manifest: { document_id: string; sort_order: number; created_at?: string }[];
   // For a room link the signature requirement comes from the SAME read as the
   // membership: two reads could straddle an unpublish, leaving a document that is
   // still returned below but absent from the requirement lookup, so it would be
@@ -171,10 +177,11 @@ export async function buildViewerPayload(
       document_id: string;
       sort_order: number;
       require_signature: boolean;
+      created_at: string;
     }>((from, to) =>
       supabase
         .from("data_room_documents")
-        .select("document_id, sort_order, require_signature")
+        .select("document_id, sort_order, require_signature, created_at")
         .eq("organization_id", orgId)
         .eq("room_id", roomId)
         .order("sort_order", { ascending: true })
@@ -186,11 +193,13 @@ export async function buildViewerPayload(
       document_id: string;
       sort_order: number;
       require_signature: boolean;
+      created_at: string;
     }[];
     manifest = rows;
     manifestSig = rows;
   }
   const manifestOrder = new Map(manifest.map((m) => [m.document_id, m.sort_order ?? 0]));
+  const addedToRoom = new Map(manifest.map((m) => [m.document_id, m.created_at]));
 
   // Which of these files need a signature, and which this reader has signed.
   // The manifest row is the source of truth even for a single-document link.
@@ -313,7 +322,8 @@ export async function buildViewerPayload(
           uploaded: false,
           requiresSignature: true,
           signed: false,
-          ...changeInfo(d, reader?.lastVisitAt),
+          // Nothing of a locked file leaves the server, and that includes when it
+          // last changed: an unsigned reader must not learn a side letter was revised.
         }
       : {
       id: d.id,
@@ -324,7 +334,7 @@ export async function buildViewerPayload(
       preview_kind: previewKindFor(d.storage_key),
       uploaded: isUploadedFile(d.storage_key),
       ...(needsSignature.has(d.id) ? { requiresSignature: true, signed: true } : {}),
-      ...changeInfo(d, reader?.lastVisitAt),
+      ...changeInfo(d, addedToRoom.get(d.id), reader?.lastVisitAt),
     };
     const bucket = docsBySection.get(k);
     if (bucket) bucket.push(doc);

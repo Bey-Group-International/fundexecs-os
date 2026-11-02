@@ -285,6 +285,7 @@ export async function MaterialsModule({ roomId }: { roomId?: string } = {}) {
         sections={contentSections}
         available={available}
         fromBuild={buildSummary ? buildContentRows(buildSummary) : undefined}
+        fromBuildUnavailable={buildSummary === null}
         warnings={{
           unfinished: unfinished.map((d) => d.id),
           empty: empty.map((d) => d.id),

@@ -228,6 +228,34 @@ describe("mobile navigation", () => {
     expect(aside.className).toMatch(/print:hidden/);
   });
 
+  it("shows the phone layout in the preview when asked, whatever the window width", () => {
+    const { container } = render(
+      <DataRoomViewer
+        token="preview"
+        shareId="preview"
+        org={ORG}
+        blended={BLENDED}
+        thesis={null}
+        team={[]}
+        entities={[]}
+        docSections={[FINANCIALS, LEGAL]}
+        compact
+        preview
+        contentReady
+        gateConfig={{
+          requireEmail: false,
+          requireNda: false,
+          ndaText: null,
+          passwordProtected: false,
+        }}
+      />,
+    );
+    expect(
+      screen.getByRole("combobox", { name: "Section" }),
+    ).toBeInTheDocument();
+    expect(container.querySelector("aside")?.className).toMatch(/\bhidden\b/);
+  });
+
   it("is not shown in the GP preview, which keeps its own rail", () => {
     render(view([FINANCIALS], true));
     expect(screen.queryByRole("combobox", { name: "Section" })).toBeNull();

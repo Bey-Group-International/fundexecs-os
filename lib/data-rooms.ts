@@ -150,6 +150,24 @@ export function sectionsAllowedBy<S extends { key: string }>(
 }
 
 /**
+ * The section each Build page belongs to, read from DATA_ROOM_SECTIONS (which names
+ * the Build module behind a section) so the mapping lives in one place: the thesis
+ * module's section, the track record's, the team's, and the entity module's, which
+ * is "Legal & Structure".
+ */
+const sectionOfBuildModule = (module: string): string => {
+  const found = DATA_ROOM_SECTIONS.find((s) => s.buildModule === module);
+  if (!found) throw new Error(`No data room section is backed by the "${module}" Build module`);
+  return found.key;
+};
+export const BUILD_PAGE_SECTION = {
+  thesis: sectionOfBuildModule("thesis"),
+  trackRecord: sectionOfBuildModule("track_record"),
+  team: sectionOfBuildModule("team"),
+  structure: sectionOfBuildModule("entity"),
+} as const;
+
+/**
  * Which of the firm's Build pages a link's section allowlist lets a reader see.
  *
  * Each page belongs to a section: the thesis page to "Investment Strategy &
@@ -170,10 +188,10 @@ export function buildPagesAllowedBy(allowed: string[] | null | undefined): {
   }
   const set = new Set(allowed);
   return {
-    thesis: set.has("thesis"),
-    trackRecord: set.has("track_record"),
-    team: set.has("team"),
-    structure: set.has("legal"),
+    thesis: set.has(BUILD_PAGE_SECTION.thesis),
+    trackRecord: set.has(BUILD_PAGE_SECTION.trackRecord),
+    team: set.has(BUILD_PAGE_SECTION.team),
+    structure: set.has(BUILD_PAGE_SECTION.structure),
   };
 }
 
@@ -236,7 +254,7 @@ export function buildContentRows(src: {
       detail: src.thesisTitle ?? "Not set up yet",
       empty: src.thesisTitle === null,
       href: "/build/thesis",
-      shownUnder: sectionLabel("thesis"),
+      shownUnder: sectionLabel(BUILD_PAGE_SECTION.thesis),
     },
     {
       key: "track_record",
@@ -252,7 +270,7 @@ export function buildContentRows(src: {
           : "No deals entered yet",
       empty: src.dealCount === 0,
       href: "/build/track_record",
-      shownUnder: sectionLabel("track_record"),
+      shownUnder: sectionLabel(BUILD_PAGE_SECTION.trackRecord),
     },
   ];
   if (src.teamCount > 0) {
