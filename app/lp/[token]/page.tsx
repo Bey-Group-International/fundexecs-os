@@ -13,7 +13,7 @@ import { readIdentityCheck } from "@/lib/lp-identity.server";
 import { loadDetailsPrefill } from "@/lib/lp-prefill.server";
 import type { IdentityState } from "@/lib/lp-identity";
 import type { LpType } from "@/lib/supabase/database.types";
-import { renderDocumentTemplate } from "@/lib/document-templates";
+import { subscriptionAgreementText } from "@/lib/lp-subscription";
 import type { OnboardingStatus } from "@/lib/lp-onboarding";
 
 export const dynamic = "force-dynamic";
@@ -170,15 +170,12 @@ export default async function LPOnboardingPortal(props: { params: Promise<{ toke
     );
   }
 
-  const subscriptionContent = renderDocumentTemplate("subscription_agreement", {
+  const subscriptionContent = subscriptionAgreementText({
     fundName,
     orgName,
     jurisdiction,
-    effectiveDate: new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" }),
     investorName: lpName,
-    commitmentAmount: commitmentAmount
-      ? `$${Number(commitmentAmount).toLocaleString("en-US")}`
-      : undefined,
+    commitmentAmount,
   });
 
   return (

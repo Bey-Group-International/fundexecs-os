@@ -896,6 +896,22 @@ export type DataRoomDocument = {
   require_signature: boolean;
 };
 
+// A party's signature on an LP's subscription agreement (migration 20261102120000).
+export type LpSubscriptionSignature = {
+  id: string;
+  organization_id: string;
+  session_id: string;
+  party: "lp" | "gp";
+  signer_name: string;
+  signer_email: string;
+  signed_at: string;
+  ip_hint: string | null;
+  agreement_text: string;
+  agreement_sha256: string;
+  agreed: boolean;
+  copy_sent_at: string | null;
+};
+
 // One reader's signature on one file in one link (migration 20261031120000).
 export type DataRoomDocumentSignature = {
   id: string;
@@ -3502,6 +3518,7 @@ export type Database = {
       data_rooms: TableShape<DataRoom>;
       data_room_documents: TableShape<DataRoomDocument>;
       data_room_document_signatures: TableShape<DataRoomDocumentSignature>;
+      lp_subscription_signatures: TableShape<LpSubscriptionSignature>;
       data_room_shares: TableShape<DataRoomShare>;
       data_room_views: TableShape<DataRoomView>;
       data_room_open_alerts: TableShape<DataRoomOpenAlert>;

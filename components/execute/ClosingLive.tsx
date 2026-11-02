@@ -57,6 +57,9 @@ interface OnboardingSessionProp {
   fundName?: string;
   commitmentAmount?: number | null;
   expiresAt: string;
+  lpSignedAt?: string | null;
+  gpSignedAt?: string | null;
+  canCountersign?: boolean;
 }
 
 interface ContractProp {
@@ -113,6 +116,16 @@ async function loadClosingData(): Promise<ClosingData> {
       ((investorsRes.data ?? []) as { id: string; name: string }[]).map((i) => [i.id, i.name]),
     );
 
+    // Who has signed each subscription agreement (members read these through RLS).
+    const sigRes = await supabase
+      .from("lp_subscription_signatures")
+      .select("session_id, party, signed_at")
+      .eq("organization_id", orgId);
+    const signedAt = new Map<string, { lp?: string; gp?: string }>();
+    for (const r of (sigRes.data ?? []) as { session_id: string; party: "lp" | "gp"; signed_at: string }[]) {
+      signedAt.set(r.session_id, { ...signedAt.get(r.session_id), [r.party]: r.signed_at });
+    }
+
     const sessionRows = (sessionsRes.data ?? []) as OnboardingSessionRow[];
     const contractRows = (contractsRes.data ?? []) as ContractRow[];
 
@@ -124,6 +137,9 @@ async function loadClosingData(): Promise<ClosingData> {
       fundName: (r.fund_id ? fundName.get(r.fund_id) : undefined) ?? undefined,
       commitmentAmount: r.commitment_amount,
       expiresAt: r.expires_at,
+      lpSignedAt: signedAt.get(r.id)?.lp ?? null,
+      gpSignedAt: signedAt.get(r.id)?.gp ?? null,
+      canCountersign: isAdmin,
     }));
 
     const contracts: ContractProp[] = contractRows.map((r) => ({

@@ -62,14 +62,15 @@ function SubscriptionStep({
   onDone: () => void;
 }) {
   const [agreed, setAgreed] = useState(false);
+  const [typedName, setTypedName] = useState("");
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
 
   function handleSign() {
-    if (!agreed) return;
+    if (!agreed || !typedName.trim()) return;
     setError(null);
     startTransition(async () => {
-      const result = await signSubscriptionAction(token);
+      const result = await signSubscriptionAction(token, typedName.trim(), agreed);
       if ("error" in result) {
         setError(result.error);
       } else {
@@ -109,11 +110,23 @@ function SubscriptionStep({
         </span>
       </label>
 
+      <label className="mt-4 block">
+        <span className="mb-1.5 block text-xs font-medium text-fg-secondary">Type your full name to sign</span>
+        <input
+          type="text"
+          autoComplete="name"
+          value={typedName}
+          onChange={(e) => setTypedName(e.target.value)}
+          placeholder={lpName}
+          className="w-full rounded-lg border border-line bg-surface-1 px-3 py-2.5 text-sm text-fg-primary placeholder:text-fg-muted focus:border-gold-400 focus:outline-none"
+        />
+      </label>
+
       {error && <p className="mt-3 font-mono text-[11px] text-status-danger">{error}</p>}
 
       <button
         onClick={handleSign}
-        disabled={!agreed || pending}
+        disabled={!agreed || !typedName.trim() || pending}
         className="mt-5 w-full rounded-lg border border-gold-500/40 bg-gold-500/10 py-2.5 font-mono text-[11px] uppercase tracking-wider text-gold-300 transition hover:bg-gold-500/20 disabled:opacity-40"
       >
         {pending ? "Signing…" : "✍ Sign subscription agreement →"}

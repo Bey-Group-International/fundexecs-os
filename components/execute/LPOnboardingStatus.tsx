@@ -2,7 +2,9 @@
 
 // components/execute/LPOnboardingStatus.tsx
 // LP onboarding status board — shows all active onboarding sessions with progress.
+import { useState, useTransition } from "react";
 import type { OnboardingStatus } from "@/lib/lp-onboarding";
+import { countersignSubscriptionAction } from "@/components/execute/countersign-actions";
 import { buildOnboardingSteps, onboardingProgressPct } from "@/lib/lp-onboarding";
 
 interface Session {
@@ -14,6 +16,11 @@ interface Session {
   fundName?: string;
   commitmentAmount?: number | null;
   expiresAt: string;
+  /** When each side signed the subscription agreement; absent until they have. */
+  lpSignedAt?: string | null;
+  gpSignedAt?: string | null;
+  /** The viewer may countersign (owner or admin). */
+  canCountersign?: boolean;
 }
 
 const STATUS_COLOR: Record<OnboardingStatus, string> = {
@@ -32,6 +39,61 @@ function ProgressBar({ pct }: { pct: number }) {
         className="h-full rounded-full bg-gold-500/70 transition-all duration-500"
         style={{ width: `${pct}%` }}
       />
+    </div>
+  );
+}
+
+function SignatureRow({ session }: { session: Session }) {
+  const [name, setName] = useState("");
+  const [agreed, setAgreed] = useState(false);
+  const [error, setError] = useState("");
+  const [pending, startTransition] = useTransition();
+  if (!session.lpSignedAt) return null;
+  const day = (iso: string) => iso.slice(0, 10);
+
+  return (
+    <div className="mt-3 rounded-lg border border-line bg-surface-0 p-3">
+      <p className="font-mono text-[11px] uppercase tracking-wider text-fg-muted">Subscription agreement</p>
+      <p className="mt-1 text-xs text-fg-secondary">
+        LP signed {day(session.lpSignedAt)} ·{" "}
+        {session.gpSignedAt ? `Fund countersigned ${day(session.gpSignedAt)}` : "Awaiting fund countersignature"}
+      </p>
+      <a
+        href={`/api/lp-subscription/${session.id}`}
+        className="mt-1 inline-block font-mono text-[11px] uppercase tracking-wider text-gold-300 hover:underline"
+      >
+        {session.gpSignedAt ? "Executed PDF →" : "Signed-so-far PDF →"}
+      </a>
+      {!session.gpSignedAt && session.canCountersign ? (
+        <div className="mt-2 space-y-2">
+          <input
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="Your full name"
+            autoComplete="name"
+            className="w-full rounded-md border border-line bg-surface-1 px-2.5 py-1.5 text-xs text-fg-primary placeholder:text-fg-muted focus:border-gold-400 focus:outline-none"
+          />
+          <label className="flex items-start gap-2 text-[11px] text-fg-secondary">
+            <input type="checkbox" checked={agreed} onChange={(e) => setAgreed(e.target.checked)} className="mt-0.5" />
+            <span>I countersign this agreement on behalf of the fund.</span>
+          </label>
+          {error ? <p className="text-[11px] text-red-400">{error}</p> : null}
+          <button
+            type="button"
+            disabled={pending || !agreed || !name.trim()}
+            onClick={() =>
+              startTransition(async () => {
+                setError("");
+                const r = await countersignSubscriptionAction(session.id, name.trim(), agreed);
+                if (!r.ok) setError(r.error);
+              })
+            }
+            className="rounded-md border border-gold-500/40 bg-gold-500/10 px-2.5 py-1 font-mono text-[11px] uppercase tracking-wider text-gold-300 transition hover:bg-gold-500/20 disabled:opacity-40"
+          >
+            {pending ? "Signing…" : "Countersign"}
+          </button>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -86,6 +148,8 @@ function SessionCard({ session }: { session: Session }) {
           ${session.commitmentAmount.toLocaleString()} committed
         </p>
       )}
+
+      <SignatureRow session={session} />
     </div>
   );
 }
