@@ -2852,6 +2852,9 @@ export type Envelope = {
   created_at: string;
   updated_at: string;
   recipient_count?: number | null;
+  /** The PDF being signed, in the documents bucket (migration 20261102180000). */
+  pdf_storage_key?: string | null;
+  document_sha256?: string | null;
 };
 
 export type EnvelopeRecipient = {
@@ -2870,6 +2873,8 @@ export type EnvelopeRecipient = {
   user_agent: string | null;
   signature_data: string | null;
   initials_data: string | null;
+  /** 'signer' (a recipient) or 'owner' (the account owner countersigning). */
+  role?: string;
   created_at: string;
 };
 
@@ -2886,6 +2891,9 @@ export type EnvelopeField = {
   label: string | null;
   required: boolean;
   response: string | null;
+  /** A value the owner fills in beforehand, and whether the signer can change it. */
+  prefill?: string | null;
+  locked?: boolean;
   created_at: string;
 };
 

@@ -80,7 +80,10 @@ function request(body: unknown): NextRequest {
 }
 
 const params = { params: Promise.resolve({ token: 'tok-1' }) };
-const GOOD_BODY = { signatureData: 'data:image/png;base64,SIG', initialsData: 'data:image/png;base64,INI' };
+// A real 1x1 PNG: the server only accepts signatures that are actual, small PNG images.
+const PNG =
+  'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=='
+const GOOD_BODY = { signatureData: PNG, initialsData: PNG };
 
 beforeEach(() => {
   jest.clearAllMocks();
@@ -89,11 +92,34 @@ beforeEach(() => {
 });
 
 describe('POST /api/sign/[token]/complete', () => {
-  it('rejects a missing initialsData (parity with the signing UI contract)', async () => {
+  it('rejects a signature that is not a real PNG image', async () => {
     makeSupabase({});
-    const res = await POST(request({ signatureData: 'sig' }), params);
-    expect(res.status).toBe(400);
+    for (const bad of ['sig', 'data:image/png;base64,AAAA', 'data:text/html;base64,PGI+']) {
+      const res = await POST(request({ signatureData: bad }), params);
+      expect(res.status).toBe(400);
+    }
     expect(from).not.toHaveBeenCalled();
+  });
+
+  it('does not require initials unless the document has an initials block', async () => {
+    makeSupabase({
+      recipient: { id: 'r1', status: 'pending', envelope_id: 'e1' },
+      envelope: { id: 'e1', status: 'sent' },
+      fields: [],
+      allRecipients: [{ id: 'r1', status: 'signed' }],
+    });
+    const res = await POST(request({ signatureData: PNG }), params);
+    expect(res.status).toBe(200);
+  });
+
+  it('requires initials when the document has an initials block', async () => {
+    makeSupabase({
+      recipient: { id: 'r1', status: 'pending', envelope_id: 'e1' },
+      envelope: { id: 'e1', status: 'sent' },
+      fields: [{ id: 'f1', field_type: 'initials', label: 'Initials', required: true }],
+    });
+    const res = await POST(request({ signatureData: PNG }), params);
+    expect(res.status).toBe(400);
   });
 
   it('rejects signing a DRAFT envelope — recipient tokens exist before send', async () => {

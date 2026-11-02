@@ -18,8 +18,14 @@ interface FormState {
   title: string;
   message: string;
   documentContent: string;
+  /** An uploaded PDF, base64, and its file name. Without one the text above becomes the PDF. */
+  pdfBase64: string | null;
+  pdfName: string | null;
   recipients: Recipient[];
 }
+
+// Requests to the server are limited to about 4.5 MB, and base64 adds a third.
+const MAX_PDF_BYTES = 3 * 1024 * 1024;
 
 // ---------------------------------------------------------------------------
 // Step indicator
@@ -107,12 +113,24 @@ interface Step1Props {
 function Step1Document({ state, onChange, onNext }: Step1Props) {
   const [touched, setTouched] = useState(false);
   const titleError = touched && state.title.trim() === "" ? "Title is required." : null;
-  const contentError =
-    touched && state.documentContent.trim() === "" ? "Document content is required." : null;
+  const hasDocument = Boolean(state.pdfBase64) || state.documentContent.trim() !== "";
+  const contentError = touched && !hasDocument ? "Upload a PDF or enter the document text." : null;
+  const [fileError, setFileError] = useState<string | null>(null);
+
+  async function pickPdf(file: File | null) {
+    setFileError(null);
+    if (!file) return;
+    if (file.type !== "application/pdf" && !file.name.toLowerCase().endsWith(".pdf")) return setFileError("That is not a PDF.");
+    if (file.size > MAX_PDF_BYTES) return setFileError("That PDF is over 3 MB. Compress it and try again.");
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    let bin = "";
+    for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+    onChange({ pdfBase64: btoa(bin), pdfName: file.name, documentContent: state.documentContent || `PDF: ${file.name}` });
+  }
 
   function handleNext() {
     setTouched(true);
-    if (state.title.trim() === "" || state.documentContent.trim() === "") return;
+    if (state.title.trim() === "" || !hasDocument) return;
     onNext();
   }
 
@@ -163,10 +181,36 @@ function Step1Document({ state, onChange, onNext }: Step1Props) {
 
       <div className="flex flex-col gap-1.5">
         <label
+          htmlFor="env-pdf"
+          className="font-mono text-[11px] uppercase tracking-widest text-[var(--color-fg-muted)]"
+        >
+          Upload a PDF <span className="font-sans normal-case tracking-normal">(up to 3 MB)</span>
+        </label>
+        <input
+          id="env-pdf"
+          type="file"
+          accept="application/pdf,.pdf"
+          onChange={(e) => void pickPdf(e.target.files?.[0] ?? null)}
+          className="text-sm text-[var(--color-fg-secondary)] file:mr-3 file:rounded-md file:border file:border-[var(--color-line)] file:bg-[var(--color-surface-0)] file:px-3 file:py-1.5 file:text-sm file:text-[var(--color-fg-primary)]"
+        />
+        {state.pdfName ? (
+          <p className="text-xs text-[var(--color-fg-secondary)]">
+            {state.pdfName}{" "}
+            <button type="button" className="underline" onClick={() => onChange({ pdfBase64: null, pdfName: null, documentContent: state.documentContent.startsWith("PDF: ") ? "" : state.documentContent })}>
+              remove
+            </button>
+          </p>
+        ) : null}
+        {fileError ? <p role="alert" className="text-xs text-[var(--color-status-danger)]">{fileError}</p> : null}
+        <p className="text-xs text-[var(--color-fg-muted)]">Or write the document below and it becomes a PDF you place signature blocks on.</p>
+      </div>
+
+      <div className="flex flex-col gap-1.5">
+        <label
           htmlFor="env-content"
           className="font-mono text-[11px] uppercase tracking-widest text-[var(--color-fg-muted)]"
         >
-          Document content <span className="text-[var(--color-status-danger)]">*</span>
+          Document text {state.pdfBase64 ? null : <span className="text-[var(--color-status-danger)]">*</span>}
         </label>
         <textarea
           id="env-content"
@@ -379,12 +423,12 @@ interface Step3Props {
   state: FormState;
   onBack: () => void;
   onSaveDraft: () => void;
-  onSend: () => void;
+  onContinue: () => void;
   isPending: boolean;
   error: string | null;
 }
 
-function Step3Review({ state, onBack, onSaveDraft, onSend, isPending, error }: Step3Props) {
+function Step3Review({ state, onBack, onSaveDraft, onContinue, isPending, error }: Step3Props) {
   return (
     <section className="flex flex-col gap-6">
       {/* Document summary */}
@@ -397,9 +441,13 @@ function Step3Review({ state, onBack, onSaveDraft, onSend, isPending, error }: S
           <p className="mt-1.5 text-sm text-[var(--color-fg-secondary)]">{state.message}</p>
         )}
         <div className="mt-3 rounded-md border border-[var(--color-line)] bg-[var(--color-surface-0)] px-3 py-2">
-          <pre className="max-h-40 overflow-auto font-mono text-[11px] leading-relaxed text-[var(--color-fg-secondary)] whitespace-pre-wrap">
-            {state.documentContent}
-          </pre>
+          {state.pdfName ? (
+            <p className="text-sm text-[var(--color-fg-secondary)]">PDF: {state.pdfName}</p>
+          ) : (
+            <pre className="max-h-40 overflow-auto font-mono text-[11px] leading-relaxed text-[var(--color-fg-secondary)] whitespace-pre-wrap">
+              {state.documentContent}
+            </pre>
+          )}
         </div>
       </div>
 
@@ -432,6 +480,11 @@ function Step3Review({ state, onBack, onSaveDraft, onSend, isPending, error }: S
         </ol>
       </div>
 
+      <p className="text-sm text-[var(--color-fg-secondary)]">
+        Next you open the document, click where each signature block goes, and send it. The recipient signs and
+        sends it back, then you countersign.
+      </p>
+
       {/* Error */}
       {error && (
         <p
@@ -463,11 +516,11 @@ function Step3Review({ state, onBack, onSaveDraft, onSend, isPending, error }: S
           </button>
           <button
             type="button"
-            onClick={onSend}
+            onClick={onContinue}
             disabled={isPending}
             className="rounded-md bg-gold-500 px-4 py-2 text-sm font-medium text-[var(--color-surface-0)] transition hover:bg-gold-400 disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-gold-400"
           >
-            {isPending ? "Sending…" : "Send for Signature"}
+            {isPending ? "Preparing…" : "Open document and place signature blocks"}
           </button>
         </div>
       </div>
@@ -489,6 +542,8 @@ export function EnvelopeWizard() {
     title: "",
     message: "",
     documentContent: "",
+    pdfBase64: null,
+    pdfName: null,
     recipients: [newRecipient(1)],
   });
 
@@ -496,18 +551,20 @@ export function EnvelopeWizard() {
     setFormState((prev) => ({ ...prev, ...patch }));
   }
 
-  async function submit(send: boolean) {
+  async function submit(next: "detail" | "place") {
     setError(null);
     const payload = {
       title: formState.title,
       message: formState.message,
       documentContent: formState.documentContent,
+      ...(formState.pdfBase64 ? { pdfBase64: formState.pdfBase64 } : {}),
       recipients: formState.recipients.map(({ name, email, routingOrder }) => ({
         name,
         email,
         routingOrder,
       })),
-      send,
+      // Nothing is sent from here: blocks are placed on the document first.
+      send: false,
     };
 
     const res = await fetch("/api/envelopes/create", {
@@ -529,23 +586,23 @@ export function EnvelopeWizard() {
 
     const data = (await res.json()) as { envelopeId?: string };
     if (!data.envelopeId) throw new Error("No envelope ID returned.");
-    router.push(`/envelopes/${data.envelopeId}`);
+    router.push(next === "place" ? `/envelopes/${data.envelopeId}/place` : `/envelopes/${data.envelopeId}`);
   }
 
   function handleSaveDraft() {
     startTransition(async () => {
       try {
-        await submit(false);
+        await submit("detail");
       } catch (err) {
         setError(err instanceof Error ? err.message : "Something went wrong.");
       }
     });
   }
 
-  function handleSend() {
+  function handleContinue() {
     startTransition(async () => {
       try {
-        await submit(true);
+        await submit("place");
       } catch (err) {
         setError(err instanceof Error ? err.message : "Something went wrong.");
       }
@@ -562,7 +619,7 @@ export function EnvelopeWizard() {
           New Envelope
         </h1>
         <p className="mt-1 text-sm text-[var(--color-fg-secondary)]">
-          Add your document, specify signers, then send or save as a draft.
+          Add your document and the signer, then open it and place signature blocks.
         </p>
       </header>
 
@@ -589,7 +646,7 @@ export function EnvelopeWizard() {
             state={formState}
             onBack={() => setStep(2)}
             onSaveDraft={handleSaveDraft}
-            onSend={handleSend}
+            onContinue={handleContinue}
             isPending={isPending}
             error={error}
           />

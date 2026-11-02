@@ -1,5 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 import SigningExperience from "./SigningExperience";
+import { PdfSigning } from "./PdfSigning";
 
 export const dynamic = "force-dynamic";
 
@@ -15,6 +16,12 @@ export interface SigningData {
   signingToken: string;
   status: string;
   signedAt: string | null;
+  /** The envelope has a PDF the owner placed signature blocks on. */
+  hasPdf: boolean;
+  blocks: {
+    id: string; type: string; page: number; xPct: number; yPct: number;
+    widthPct: number; heightPct: number; required: boolean; prefill: string | null; locked: boolean;
+  }[];
 }
 
 async function fetchSigningData(token: string): Promise<SigningData | null> {
@@ -27,7 +34,7 @@ async function fetchSigningData(token: string): Promise<SigningData | null> {
   const { data: recipient, error } = await supabase
     .from("envelope_recipients")
     .select(`id, name, email, status, signed_at, envelope_id,
-      envelopes (id, title, document_content, message, status)`)
+      envelopes (id, title, document_content, message, status, pdf_storage_key)`)
     .eq("signing_token", token)
     .limit(1)
     .maybeSingle();
@@ -36,11 +43,25 @@ async function fetchSigningData(token: string): Promise<SigningData | null> {
 
   const env = recipient.envelopes as unknown as {
     id: string; title: string; document_content: string;
-    message: string | null; status: string;
+    message: string | null; status: string; pdf_storage_key: string | null;
   } | null;
   if (!env || env.status === "voided") return null;
 
+  const { data: fieldRows } = await supabase
+    .from("envelope_fields")
+    .select("id, field_type, page, x_pct, y_pct, width_pct, height_pct, required, prefill, locked")
+    .eq("recipient_id", recipient.id as string);
+  const blocks = ((fieldRows ?? []) as {
+    id: string; field_type: string; page: number; x_pct: number; y_pct: number;
+    width_pct: number; height_pct: number; required: boolean; prefill: string | null; locked: boolean;
+  }[]).map((f) => ({
+    id: f.id, type: f.field_type, page: f.page, xPct: f.x_pct, yPct: f.y_pct,
+    widthPct: f.width_pct, heightPct: f.height_pct, required: f.required, prefill: f.prefill, locked: f.locked,
+  }));
+
   return {
+    hasPdf: Boolean(env.pdf_storage_key),
+    blocks,
     recipientId: recipient.id as string,
     recipientName: recipient.name as string,
     recipientEmail: recipient.email as string,
@@ -131,13 +152,17 @@ export default async function SignPage(
   }
 
   return (
-    <SignPageShell>
-      <SigningExperience data={signingData} token={token} />
+    <SignPageShell wide={signingData.hasPdf}>
+      {signingData.hasPdf ? (
+        <PdfSigning data={signingData} token={token} />
+      ) : (
+        <SigningExperience data={signingData} token={token} />
+      )}
     </SignPageShell>
   );
 }
 
-function SignPageShell({ children }: { children: React.ReactNode }) {
+function SignPageShell({ children, wide = false }: { children: React.ReactNode; wide?: boolean }) {
   return (
     <div className="min-h-screen bg-surface-0 flex flex-col">
       {/* Header bar */}
@@ -161,7 +186,7 @@ function SignPageShell({ children }: { children: React.ReactNode }) {
 
       {/* Page body */}
       <main className="flex-1 flex items-start justify-center px-4 py-8">
-        <div className="w-full max-w-3xl">{children}</div>
+        <div className={`w-full ${wide ? "max-w-5xl" : "max-w-3xl"}`}>{children}</div>
       </main>
 
       {/* Footer */}

@@ -1,0 +1,71 @@
+jest.mock("server-only", () => ({}), { virtual: true });
+import { PDFDocument } from "pdf-lib";
+import { stampBlocks } from "./stamp.server";
+import { buildDocumentPdf } from "./executed-pdf.server";
+import { BLOCKS, blockSpec, clampBlock, newBlockAt, formatBlockDateTime } from "./blocks";
+import { missingRequiredFields } from "../envelope-signing";
+
+const PNG =
+  "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
+
+describe("blocks", () => {
+  it("offers exactly the six blocks, and old types behave like their nearest block", () => {
+    expect(BLOCKS.map((b) => b.type)).toEqual(["name", "signature", "datetime", "company", "title", "address"]);
+    expect(blockSpec("initials")?.type).toBe("signature");
+    expect(blockSpec("date")?.type).toBe("datetime");
+    expect(blockSpec("nope")).toBeNull();
+  });
+
+  it("keeps a block wholly on its page, whatever the browser sends", () => {
+    const b = clampBlock({ xPct: 98, yPct: -5, widthPct: 30, heightPct: 4 });
+    expect(b.xPct).toBe(70);
+    expect(b.yPct).toBe(0);
+    expect(clampBlock({ xPct: NaN, yPct: NaN, widthPct: NaN, heightPct: NaN }).widthPct).toBe(20);
+  });
+
+  it("centres a new block on the click", () => {
+    const b = newBlockAt("signature", 50, 50);
+    expect(b.xPct + b.widthPct / 2).toBeCloseTo(50);
+    expect(b.yPct + b.heightPct / 2).toBeCloseTo(50);
+  });
+
+  it("formats a date-and-time block in UTC", () => {
+    expect(formatBlockDateTime("2026-11-02T14:03:09.000Z")).toBe("Nov 2, 2026, 14:03:09 UTC");
+  });
+});
+
+describe("required blocks", () => {
+  const f = (id: string, field_type: never, required = true) => ({ id, field_type, label: null, required });
+  it("auto-fills date-and-time, needs the signature image, and needs text for the rest", () => {
+    const fields = [f("a", "name" as never), f("b", "signature" as never), f("c", "datetime" as never), f("d", "address" as never)];
+    expect(missingRequiredFields(fields, { signatureData: "", initialsData: null, fieldResponses: {} })).toEqual(["name", "signature", "address"]);
+    expect(missingRequiredFields(fields, { signatureData: PNG, initialsData: null, fieldResponses: { a: "Jane", d: "1 Main St" } })).toEqual([]);
+  });
+});
+
+describe("stampBlocks", () => {
+  it("writes text and the drawn signature at the placed positions on the right page", async () => {
+    const base = await buildDocumentPdf({ title: "Agreement", text: "# Agreement\n\n" + "Clause.\n".repeat(120) });
+    const before = await PDFDocument.load(base);
+    expect(before.getPageCount()).toBeGreaterThan(1);
+    const out = await stampBlocks(base, [
+      { page: 1, xPct: 10, yPct: 80, widthPct: 26, heightPct: 7, type: "signature", value: null, signaturePng: PNG },
+      { page: 1, xPct: 10, yPct: 70, widthPct: 24, heightPct: 3.5, type: "name", value: "Jane Smith" },
+      { page: 2, xPct: 50, yPct: 10, widthPct: 34, heightPct: 8, type: "address", value: "1 Main Street\nWilmington, DE 19801" },
+      { page: 99, xPct: 0, yPct: 0, widthPct: 10, heightPct: 4, type: "name", value: "ignored: no such page" },
+    ]);
+    const after = await PDFDocument.load(out);
+    expect(after.getPageCount()).toBe(before.getPageCount());
+    expect(Buffer.from(out).includes(Buffer.from("/Subtype /Image"))).toBe(true);
+    expect(out.length).toBeGreaterThan(base.length);
+  });
+
+  it("skips an empty value and a bad signature image without failing", async () => {
+    const base = await buildDocumentPdf({ title: "A", text: "x" });
+    const out = await stampBlocks(base, [
+      { page: 1, xPct: 10, yPct: 10, widthPct: 20, heightPct: 4, type: "company", value: "  " },
+      { page: 1, xPct: 10, yPct: 20, widthPct: 20, heightPct: 6, type: "signature", value: null, signaturePng: "data:image/png;base64,AAAA" },
+    ]);
+    expect(Buffer.from(out).includes(Buffer.from("/Subtype /Image"))).toBe(false);
+  });
+});

@@ -45,7 +45,7 @@ export default async function EnvelopeDetailPage(
     (supabase as Awaited<ReturnType<typeof createServerClient>> & {
       from(t: string): any;
     })
-      .from("signing_envelopes")
+      .from("envelopes")
       .select("*")
       .eq("id", params.id)
       .eq("organization_id", ctx.orgId)
@@ -53,14 +53,14 @@ export default async function EnvelopeDetailPage(
     (supabase as Awaited<ReturnType<typeof createServerClient>> & {
       from(t: string): any;
     })
-      .from("signing_recipients")
+      .from("envelope_recipients")
       .select("*")
       .eq("envelope_id", params.id)
       .order("routing_order", { ascending: true }),
     (supabase as Awaited<ReturnType<typeof createServerClient>> & {
       from(t: string): any;
     })
-      .from("signing_events")
+      .from("envelope_events")
       .select("*")
       .eq("envelope_id", params.id)
       .order("created_at", { ascending: true }),
@@ -69,6 +69,7 @@ export default async function EnvelopeDetailPage(
   const envelope = envRes.data as EnvelopeRow | null;
   if (!envelope) notFound();
 
+  // The countersigner is shown last, labelled as you, not by the placeholder email address.
   const recipients = (recipRes.data ?? []) as RecipientRow[];
   const events = (eventsRes.data ?? []) as EnvelopeEvent[];
 

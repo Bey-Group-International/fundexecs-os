@@ -2,6 +2,8 @@ import { cookies } from 'next/headers'
 import { NextResponse } from 'next/server'
 import { createServerClient } from '@supabase/ssr'
 import { sendEmail, buildSigningInvitationHtml } from '@/lib/email'
+import { buildDocumentPdf } from '@/lib/signing/executed-pdf.server'
+import { isPdfBytes, storeEnvelopePdf } from '@/lib/envelope-pdf.server'
 
 export const runtime = 'nodejs'
 
@@ -15,6 +17,8 @@ interface CreateEnvelopeBody {
   title: string
   message?: string
   documentContent: string
+  /** An uploaded PDF, base64. Without it the PDF is built from documentContent. */
+  pdfBase64?: string
   recipients: Recipient[]
   send?: boolean
 }
@@ -23,7 +27,7 @@ export async function POST(request: Request) {
   try {
     const body: CreateEnvelopeBody = await request.json()
 
-    const { title, message, documentContent, recipients, send = false } = body
+    const { title, message, documentContent, pdfBase64, recipients, send = false } = body
 
     // Validate required fields
     if (!title || typeof title !== 'string' || !title.trim()) {
@@ -138,6 +142,40 @@ export async function POST(request: Request) {
         { status: 500 }
       )
     }
+
+    // The account owner is the last signer: they countersign after the recipients.
+    const ownerName =
+      (user.user_metadata?.full_name as string | undefined) || (user.email ?? 'Account owner').split('@')[0]
+    const { error: ownerError } = await supabase.from('envelope_recipients').insert({
+      envelope_id: envelopeId,
+      name: ownerName,
+      email: user.email ?? '',
+      routing_order: 1000,
+      role: 'owner',
+    })
+    if (ownerError) {
+      console.error('ownerError', ownerError)
+      return NextResponse.json({ ok: false, error: 'Failed to add the countersigner' }, { status: 500 })
+    }
+
+    // The document itself, as a PDF the owner places signature blocks on.
+    let pdfBytes: Uint8Array
+    if (pdfBase64) {
+      pdfBytes = new Uint8Array(Buffer.from(pdfBase64, 'base64'))
+      if (!isPdfBytes(pdfBytes)) {
+        return NextResponse.json({ ok: false, error: 'That file is not a PDF' }, { status: 400 })
+      }
+    } else {
+      pdfBytes = await buildDocumentPdf({ title: title.trim(), text: documentContent })
+    }
+    const stored = await storeEnvelopePdf(envelopeId, pdfBytes)
+    if (!stored) {
+      return NextResponse.json({ ok: false, error: 'Could not store the document (is it over 25 MB?)' }, { status: 400 })
+    }
+    await supabase
+      .from('envelopes')
+      .update({ pdf_storage_key: stored.key, document_sha256: stored.sha256 })
+      .eq('id', envelopeId)
 
     // Insert 'created' event. envelope_events has no created_by column
     // (20260701250000_envelopes.sql) — the actor rides in metadata, and the
