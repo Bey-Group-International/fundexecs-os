@@ -20,6 +20,13 @@ import { mfaEnforcementEnabled, mfaGate } from "@/lib/mfa";
 
 const ADMIN_DOMAIN = "beygroupintl.com";
 
+/**
+ * The plan name shown for platform admins. Display only: it is not a PlanKey and
+ * is never written to wallets.plan — their access comes from isPlatformAdmin, not
+ * from a billing row.
+ */
+export const ADMIN_PLAN_NAME = "Admin";
+
 function splitEmails(raw: string | undefined): string[] {
   return (raw ?? "")
     .split(",")

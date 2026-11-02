@@ -3,6 +3,7 @@ import { getSessionContext } from "@/lib/auth";
 import { createServerClient } from "@/lib/supabase/server";
 import { getWallet } from "@/lib/wallet";
 import { planSeatLimit } from "@/lib/billing";
+import { isPlatformAdmin } from "@/lib/platform-admin";
 import { avatarUrlWithVersion } from "@/lib/avatar";
 import type { OrganizationMember, Principal, TeamProfile } from "@/lib/supabase/database.types";
 import { ModuleHeader } from "./DraftWithEarn";
@@ -65,7 +66,11 @@ export async function TeamModule() {
   };
 
   const wallet = await getWallet(ctx.orgId);
-  const seats = { used: members.length, limit: planSeatLimit(wallet?.plan) };
+  // Platform admins are not bound by the seat allotment (see team-actions).
+  const seats = {
+    used: members.length,
+    limit: isPlatformAdmin(ctx) ? null : planSeatLimit(wallet?.plan),
+  };
 
   return (
     <div>
