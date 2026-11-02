@@ -26,6 +26,8 @@ export interface RoomDocument {
   hasContent: boolean;
   /** Readers must sign this file before it opens. */
   requireSignature?: boolean;
+  /** The owner has placed the signature blocks readers will sign on. */
+  hasSignatureBlocks?: boolean;
 }
 
 export interface RoomSection {

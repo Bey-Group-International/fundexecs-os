@@ -50,6 +50,7 @@ export function fakeDb(tables: Record<string, Row[]>, options: FakeDbOptions = {
     const q: Record<string, unknown> = {
       select: () => q,
       eq: (c: string, v: unknown) => ((rows = rows.filter((r) => r[c] === v)), q),
+      neq: (c: string, v: unknown) => ((rows = rows.filter((r) => (r[c] ?? null) !== v)), q),
       is: (c: string, v: unknown) => ((rows = rows.filter((r) => (r[c] ?? null) === v)), q),
       lt: (c: string, v: unknown) => ((rows = rows.filter((r) => (r[c] as string) < (v as string))), q),
       in: (c: string, vals: unknown[]) => {

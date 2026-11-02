@@ -194,7 +194,7 @@ export async function unpublishDocument(formData: FormData): Promise<void> {
  * opens, e.g. an NDA. Takes effect on every link into the room at once. Existing
  * signatures are kept, so turning it back on does not make anyone sign twice.
  */
-export async function setDocumentSignature(formData: FormData): Promise<void> {
+export async function setDocumentSignature(formData: FormData): Promise<{ ok: false; error: string } | void> {
   const ctx = await getSessionContext();
   if (!ctx?.orgId) return;
   const roomId = String(formData.get("room_id") ?? "");
@@ -203,6 +203,19 @@ export async function setDocumentSignature(formData: FormData): Promise<void> {
   if (!roomId || !documentId) return;
 
   const supabase = await createServerClient();
+  if (required) {
+    // Signing happens on the file's own pages, so it must be a PDF or a written document.
+    const { data: doc } = await supabase
+      .from("documents")
+      .select("storage_key, content")
+      .eq("id", documentId)
+      .eq("organization_id", ctx.orgId)
+      .maybeSingle();
+    const { canCarrySignature } = await import("@/lib/room-signing.server");
+    if (!doc || !canCarrySignature(doc as { storage_key: string | null; content: string | null })) {
+      return { ok: false, error: "Only a PDF or a written document can require a signature. Convert this file to PDF first." };
+    }
+  }
   const { error } = await supabase
     .from("data_room_documents")
     .update({ require_signature: required })

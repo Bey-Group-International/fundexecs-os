@@ -896,6 +896,8 @@ export type DataRoomDocument = {
   created_at: string;
   /** Readers must sign this file before it opens (migration 20261031120000). */
   require_signature: boolean;
+  /** Signature blocks the owner placed on the file, for the reader and the owner (migration 20261103120000). */
+  signature_blocks?: unknown[] | null;
 };
 
 // A party's signature on an LP's subscription agreement (migration 20261102120000).
@@ -2873,6 +2875,10 @@ export type Envelope = {
   document_sha256?: string | null;
   /** Set when this is an LP's subscription agreement (migration 20261102210000). */
   lp_session_id?: string | null;
+  /** Set when this is a reader's signature on a data-room file (migration 20261103120000). */
+  data_room_share_id?: string | null;
+  data_room_document_id?: string | null;
+  reader_email?: string | null;
 };
 
 export type EnvelopeRecipient = {

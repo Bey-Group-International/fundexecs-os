@@ -8,6 +8,8 @@
  */
 const trackReading = jest.fn(async () => undefined);
 const recordRoomOpen = jest.fn(async () => undefined);
+// pdf.js needs a real browser module system; the signing sheet is not what this test is about.
+jest.mock("@/components/signing/PdfPages", () => ({ PdfPages: () => null }));
 jest.mock("./viewer-actions", () => ({
   trackReading: (...args: unknown[]) => trackReading(...(args as [])),
   recordRoomOpen: (...args: unknown[]) => recordRoomOpen(...(args as [])),

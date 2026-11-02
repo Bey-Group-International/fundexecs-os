@@ -19,5 +19,13 @@ export default async function PlaceBlocksPage(props: { params: Promise<{ id: str
   if (!env) notFound();
   // Blocks are placed before sending; after that the document is read-only.
   if (env.status !== "draft" || !env.pdf_storage_key) redirect(`/envelopes/${id}`);
-  return <BlockPlacer envelopeId={env.id} title={env.title} />;
+  return (
+    <BlockPlacer
+      title={env.title}
+      fieldsUrl={`/api/envelopes/${env.id}/fields`}
+      pdfUrl={`/api/envelopes/${env.id}/pdf`}
+      sendUrl={`/api/envelopes/${env.id}/send`}
+      doneHref={`/envelopes/${env.id}`}
+    />
+  );
 }

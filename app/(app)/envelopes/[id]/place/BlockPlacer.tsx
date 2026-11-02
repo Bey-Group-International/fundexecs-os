@@ -33,7 +33,23 @@ const TINT = ["#C9A227", "#3B82F6"]; // recipient, owner
 let counter = 0;
 const nextKey = () => `b${Date.now().toString(36)}${counter++}`;
 
-export function BlockPlacer({ envelopeId, title }: { envelopeId: string; title: string }) {
+export interface BlockPlacerProps {
+  title: string;
+  /** Where the blocks and parties are read and saved (an envelope's, or a room file's). */
+  fieldsUrl: string;
+  /** The document's pages. */
+  pdfUrl: string;
+  /** Present for an envelope: the owner sends it from here. Absent for a room file's template. */
+  sendUrl?: string;
+  /** Where to go once it is sent or finished. */
+  doneHref: string;
+  /** Pre-fill a name block with the party's name (an envelope knows it; a template does not). */
+  prefillNames?: boolean;
+  /** A line under the title. */
+  hint?: string;
+}
+
+export function BlockPlacer({ title, fieldsUrl, pdfUrl, sendUrl, doneHref, prefillNames = true, hint }: BlockPlacerProps) {
   const router = useRouter();
   const [parties, setParties] = useState<Party[]>([]);
   const [blocks, setBlocks] = useState<Block[]>([]);
@@ -46,7 +62,7 @@ export function BlockPlacer({ envelopeId, title }: { envelopeId: string; title: 
   const drag = useRef<{ key: string; startX: number; startY: number; x0: number; y0: number; w: number; h: number } | null>(null);
 
   const load = useCallback(async () => {
-    const res = await fetch(`/api/envelopes/${envelopeId}/fields`, { cache: "no-store" });
+    const res = await fetch(fieldsUrl, { cache: "no-store" });
     if (!res.ok) return setError("Could not load this document.");
     const j = (await res.json()) as {
       recipients: Party[];
@@ -71,7 +87,7 @@ export function BlockPlacer({ envelopeId, title }: { envelopeId: string; title: 
           locked: f.locked,
         })),
     );
-  }, [envelopeId]);
+  }, [fieldsUrl]);
 
   useEffect(() => {
     void load();
@@ -88,7 +104,7 @@ export function BlockPlacer({ envelopeId, title }: { envelopeId: string; title: 
     const pos = newBlockAt(tool, xPct, yPct);
     const target = party(partyId);
     // A name block starts with the signer's name, which they can still change.
-    const prefill = tool === "name" ? target?.name ?? "" : "";
+    const prefill = prefillNames && tool === "name" ? target?.name ?? "" : "";
     const b: Block = { key: nextKey(), recipientId: partyId, type: tool, page, ...pos, required: true, prefill, locked: false };
     setBlocks((cur) => [...cur, b]);
     setSelected(b.key);
@@ -100,7 +116,7 @@ export function BlockPlacer({ envelopeId, title }: { envelopeId: string; title: 
   }
 
   function save(): Promise<boolean> {
-    return fetch(`/api/envelopes/${envelopeId}/fields`, {
+    return fetch(fieldsUrl, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -135,9 +151,9 @@ export function BlockPlacer({ envelopeId, title }: { envelopeId: string; title: 
     if (miss) return setError(miss);
     startTransition(async () => {
       if (!(await save())) return;
-      const res = await fetch(`/api/envelopes/${envelopeId}/send`, { method: "POST" });
-      if (!res.ok) return setError(((await res.json().catch(() => ({}))) as { error?: string }).error ?? "Could not send the document.");
-      router.push(`/envelopes/${envelopeId}`);
+      const res = sendUrl ? await fetch(sendUrl, { method: "POST" }) : null;
+      if (res && !res.ok) return setError(((await res.json().catch(() => ({}))) as { error?: string }).error ?? "Could not send the document.");
+      router.push(doneHref);
       router.refresh();
     });
   }
@@ -168,13 +184,13 @@ export function BlockPlacer({ envelopeId, title }: { envelopeId: string; title: 
       <header className="mb-4 flex flex-wrap items-center gap-3">
         <div className="min-w-0 flex-1">
           <h1 className="truncate font-display text-xl font-semibold text-fg-primary">{title}</h1>
-          <p className="text-sm text-fg-secondary">Click a block, then click the page where it goes. Drag to move.</p>
+          <p className="text-sm text-fg-secondary">{hint ?? "Click a block, then click the page where it goes. Drag to move."}</p>
         </div>
         <button type="button" onClick={onSave} disabled={pending} className="rounded-lg border border-line px-4 py-2 text-sm text-fg-secondary hover:bg-surface-2 disabled:opacity-50">
           Save
         </button>
         <button type="button" onClick={onSend} disabled={pending} className="rounded-lg bg-gold-500 px-4 py-2 text-sm font-semibold text-on-gold hover:brightness-110 disabled:opacity-50">
-          {pending ? "Working…" : "Send for signature"}
+          {pending ? "Working…" : sendUrl ? "Send for signature" : "Save and finish"}
         </button>
       </header>
       {error ? <p role="alert" className="mb-3 rounded-lg border border-status-danger/40 bg-status-danger/10 px-3 py-2 text-sm text-status-danger">{error}</p> : null}
@@ -255,7 +271,7 @@ export function BlockPlacer({ envelopeId, title }: { envelopeId: string; title: 
         </aside>
 
         <div className="rounded-xl bg-surface-2 p-3">
-          <PdfPages src={`/api/envelopes/${envelopeId}/pdf`}>
+          <PdfPages src={pdfUrl}>
             {({ page, width, height }) => (
               <div
                 className={`absolute inset-0 ${tool ? "cursor-crosshair" : ""}`}

@@ -2,6 +2,7 @@
 
 import { headers } from "next/headers";
 import { createServiceClient } from "@/lib/supabase/server";
+import type { ReaderSigningView } from "@/lib/room-signing.server";
 
 /**
  * Signs the link's NDA for this reader and emails them their copy.
@@ -47,27 +48,29 @@ export async function recordNdaSignature(formData: FormData): Promise<{ ok: true
 }
 
 /**
- * Signs one file that the room requires a signature on, for this reader.
+ * Opens the signing of one file the room requires a signature on, for this reader.
  *
- * Same trust model as the link NDA: the browser sends only the typed name, the
- * "I agree" tick and, when the link has no email gate, an email. The time is
- * the server's; the signer's email is the gate pass's when there is one; and
- * what is recorded is the SHA-256 of the file as it stands now. Access is
- * resolved by the same function the file routes use, so only a reader who
- * could otherwise reach this file (live link, gates passed, published) can
- * sign it.
+ * The reader gets their own copy of the file with the owner's signature blocks on it,
+ * already sent, and signs it on its pages (the shared envelope flow). The browser sends
+ * only the reader's name and, when the link has no email gate, an email. Access is
+ * resolved by the same function the file routes use, so only a reader who could
+ * otherwise reach this file (live link, gates passed, published) can start.
  */
-export async function signRoomDocument(
+export async function startRoomDocumentSigning(
   token: string,
   documentId: string,
   formData: FormData,
-): Promise<{ ok: true } | { ok: false; error: string }> {
-  const generic = { ok: false as const, error: "We couldn't record your signature. Please try again." };
+): Promise<ReaderSigningView> {
+  const generic = { ok: false as const, error: "We couldn't open this document for signing. Please try again." };
   if (typeof token !== "string" || !token || typeof documentId !== "string") return generic;
 
   const { resolveSharedDocument } = await import("@/lib/data-room-access.server");
   const access = await resolveSharedDocument(token, documentId, { skipSignature: true });
   if (!access.ok || !access.signatureRequired) return generic;
+
+  const name = String(formData.get("signer_name") ?? "").trim().replace(/\s+/g, " ");
+  if (!name) return { ok: false, error: "Type your full name to continue." };
+  if (name.length > 120) return { ok: false, error: "That name is too long." };
 
   const { readGatePass, grantGate } = await import("@/lib/data-room-gate");
   const pass = await readGatePass(access.share.id);
@@ -78,38 +81,19 @@ export async function signRoomDocument(
     email = typed;
   }
 
-  let ipHint: string | null = null;
-  try {
-    const headersList = await headers();
-    const rawIp = headersList.get("x-forwarded-for")?.split(",")[0]?.trim() ?? headersList.get("x-real-ip") ?? null;
-    if (rawIp) {
-      const parts = rawIp.split(".");
-      ipHint = parts.length === 4 ? parts.slice(0, 3).join(".") : rawIp.split(":").slice(0, 3).join(":");
-    }
-  } catch {
-    // headers() unavailable in some edge environments; skip
-  }
-
-  const { signDocument, afterDocumentSigned } = await import("@/lib/document-signing.server");
-  const result = await signDocument(access.supabase as never, {
-    shareId: access.share.id,
+  const { startReaderSigning } = await import("@/lib/room-signing.server");
+  const view = await startReaderSigning(createServiceClient(), {
+    share: { id: access.share.id, organization_id: access.share.organization_id, created_by: access.share.created_by ?? null },
     roomId: access.roomId,
-    orgId: access.share.organization_id,
     doc: access.doc,
-    signerName: String(formData.get("signer_name") ?? ""),
-    signaturePng: String(formData.get("signature") ?? ""),
-    agreed: formData.get("agree") === "1",
-    email,
-    ipHint,
+    readerName: name,
+    readerEmail: email,
   });
-  if (!result.ok) return result;
+  if (!view.ok) return view;
 
-  // Remember the email so the file's routes know who signed.
+  // Remember the email so the file's routes know who is signing.
   if (!pass?.email) await grantGate(access.share.id, { email });
-  const { after } = await import("next/server");
-  const sigId = result.signatureId;
-  after(() => afterDocumentSigned(access.supabase as never, sigId).then(() => undefined, () => undefined));
-  return { ok: true };
+  return view;
 }
 
 /**

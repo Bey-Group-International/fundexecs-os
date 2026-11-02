@@ -1,3 +1,4 @@
+jest.mock("next/navigation", () => ({ useRouter: () => ({ push: jest.fn(), refresh: jest.fn() }) }));
 jest.mock("./room-actions", () => ({
   unpublishDocument: jest.fn(),
   publishDocument: jest.fn(),
@@ -38,7 +39,7 @@ describe("the From Build rows in Room contents", () => {
 });
 
 describe("the Preview button on a published document", () => {
-  const doc = { id: "d1", name: "Deck", status: "ready" as const, hasBody: true, isLink: false, requireSignature: false, signers: [] };
+  const doc = { id: "d1", name: "Deck", status: "ready" as const, hasBody: true, isLink: false, requireSignature: false, hasSignatureBlocks: false, signers: [] };
 
   it("asks for that document in the preview", () => {
     const onPreview = jest.fn();

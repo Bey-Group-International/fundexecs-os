@@ -80,10 +80,11 @@ export async function loadRoomDocuments(orgId: string, roomId: string): Promise<
     document_id: string;
     sort_order: number;
     require_signature: boolean;
+    signature_blocks: unknown;
   }>((from, to) =>
     supabase
       .from("data_room_documents")
-      .select("document_id, sort_order, require_signature")
+      .select("document_id, sort_order, require_signature, signature_blocks")
       .eq("organization_id", orgId)
       .eq("room_id", roomId)
       .order("sort_order", { ascending: true })
@@ -92,7 +93,7 @@ export async function loadRoomDocuments(orgId: string, roomId: string): Promise<
   // Throw rather than return []: a failed read shown as an empty room reads as
   // "nothing is published", and the operator may re-publish over it.
   if (manifestErr) throw new Error(`Couldn't load the room's documents: ${manifestErr.message}`);
-  const rows = (manifest ?? []) as { document_id: string; sort_order: number; require_signature: boolean }[];
+  const rows = (manifest ?? []) as { document_id: string; sort_order: number; require_signature: boolean; signature_blocks: unknown }[];
   if (rows.length === 0) return [];
 
   const { data: docRows, error: docsErr } = await selectInBatches<Document>(
@@ -119,6 +120,7 @@ export async function loadRoomDocuments(orgId: string, roomId: string): Promise<
         storageKey: d.storage_key ?? null,
         hasContent: Boolean(d.content && d.content.trim()),
         requireSignature: Boolean(r.require_signature),
+        hasSignatureBlocks: Array.isArray(r.signature_blocks) && r.signature_blocks.length > 0,
       } satisfies RoomDocument,
     ];
   });

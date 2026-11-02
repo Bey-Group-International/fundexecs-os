@@ -9,13 +9,14 @@ import {
   useTransition,
 } from "react";
 import { useRouter } from "next/navigation";
-import { SignaturePad } from "@/components/signing/SignaturePad";
+import { SigningSheet } from "@/components/signing/SigningSheet";
+import type { ReaderSigningView } from "@/lib/room-signing.server";
 import { MarkdownRenderer } from "./MarkdownRenderer";
 import { ViewerGate } from "./ViewerGate";
 import type { GateConfig } from "./ViewerGate";
 import {
   recordRoomOpen,
-  signRoomDocument,
+  startRoomDocumentSigning,
   trackReading,
 } from "./viewer-actions";
 import { ReadingClock } from "@/lib/data-room-engagement";
@@ -1146,9 +1147,11 @@ function DocCard({
 }
 
 /**
- * The lock on a file that needs the reader's signature. Nothing of the file is
- * in the page until they sign; signing records their name, the time and the
- * file's fingerprint on the server, then reloads the room with the file open.
+ * The lock on a file that needs the reader's signature. Nothing of the file is in the
+ * page until they sign. They give their name (and an email if the link has no email
+ * gate), then the document opens on its own pages with the sender's signature blocks
+ * on it: they fill them in, sign, and send it back. The room then reloads with the
+ * file open; the sender is told and countersigns.
  */
 function SignatureLock({
   token,
@@ -1166,55 +1169,69 @@ function SignatureLock({
   const router = useRouter();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
-  const [agreed, setAgreed] = useState(false);
-  const [png, setPng] = useState<string | null>(null);
+  const [view, setView] = useState<Extract<ReaderSigningView, { state: "ready" }> | null>(null);
   const [error, setError] = useState("");
   const [pending, startTransition] = useTransition();
   // The server takes the email from the reader's gate pass; ask only when the
   // link has no email gate to take it from.
   const needsEmail = !viewerEmail || !viewerEmail.includes("@");
-  const trimmed = name.trim();
-  const canSubmit =
-    trimmed.length > 0 &&
-    agreed &&
-    (!needsEmail || email.trim().length > 0) &&
-    !pending;
+  const canStart = name.trim().length > 0 && (!needsEmail || email.trim().length > 0) && !pending;
 
   if (preview) {
     return (
       <div className="border-t border-line/50 bg-surface-0 px-5 py-4">
         <p className="text-xs text-fg-muted">
-          Readers must sign this file before it opens. They will see a signature
-          form here.
+          Readers must sign this file before it opens. They will see the document with your signature blocks on it.
         </p>
       </div>
     );
   }
 
-  function submit() {
-    if (!canSubmit) return;
+  function start() {
+    if (!canStart) return;
     setError("");
     startTransition(async () => {
       const fd = new FormData();
-      fd.set("signer_name", trimmed);
-      fd.set("agree", agreed ? "1" : "0");
-      fd.set("signature", png ?? "");
+      fd.set("signer_name", name.trim());
       if (needsEmail) fd.set("email", email.trim());
-      const result = await signRoomDocument(token, doc.id, fd);
-      if (result.ok) router.refresh();
-      else setError(result.error);
+      const result = await startRoomDocumentSigning(token, doc.id, fd);
+      if (!result.ok) return setError(result.error);
+      // Already signed in an earlier visit: the room just needs to reload with the file open.
+      if (result.state === "signed") return router.refresh();
+      setView(result);
     });
+  }
+
+  if (view) {
+    return (
+      <div className="border-t border-line/50 bg-surface-0 px-3 py-4 sm:px-5">
+        <SigningSheet
+          pdfSrc={`/api/sign/${view.signingToken}/pdf`}
+          blocks={view.blocks}
+          done={[]}
+          signerName={name.trim()}
+          submitLabel="Sign and open"
+          onSubmit={async (signatureData, fieldResponses) => {
+            const res = await fetch(`/api/sign/${view.signingToken}/complete`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ signatureData, fieldResponses }),
+            });
+            if (!res.ok) return ((await res.json().catch(() => ({}))) as { error?: string }).error ?? `Server error ${res.status}`;
+            router.refresh();
+            return null;
+          }}
+        />
+      </div>
+    );
   }
 
   return (
     <div className="border-t border-line/50 bg-surface-0 px-4 py-5 sm:px-5">
-      <p className="text-sm font-medium text-fg-primary">
-        Sign to open this document
-      </p>
+      <p className="text-sm font-medium text-fg-primary">Sign to open this document</p>
       <p className="mt-1 text-xs text-fg-secondary">
-        The sender needs your signature on{" "}
-        <span className="text-fg-primary">{doc.name}</span> before you can read
-        it. Your name, the time and a fingerprint of the file are recorded.
+        The sender needs your signature on <span className="text-fg-primary">{doc.name}</span> before you can read it.
+        You will sign on the document itself.
       </p>
       <div className="mt-4 max-w-md space-y-3">
         {needsEmail ? (
@@ -1233,30 +1250,18 @@ function SignatureLock({
           placeholder="Your full name"
           value={name}
           onChange={(e) => setName(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && submit()}
+          onKeyDown={(e) => e.key === "Enter" && start()}
           className="w-full rounded-lg border border-line bg-surface-1 px-3 py-2.5 text-base text-fg-primary sm:text-sm placeholder:text-fg-muted focus:border-gold-400 focus:outline-none"
         />
-        <label className="flex items-start gap-3 py-1 text-xs text-fg-secondary">
-          <input
-            type="checkbox"
-            checked={agreed}
-            onChange={(e) => setAgreed(e.target.checked)}
-            className="mt-0.5 h-5 w-5 shrink-0"
-          />
-          <span>
-            I have read and agree to this document, and I intend my typed name
-            to be my signature.
-          </span>
-        </label>
-        {error ? <p className="text-xs text-red-400">{error}</p> : null}
+        {error ? <p role="alert" className="text-xs text-red-400">{error}</p> : null}
         <button
           type="button"
-          onClick={submit}
-          disabled={!canSubmit}
+          onClick={start}
+          disabled={!canStart}
           className="min-h-11 w-full rounded-lg py-2.5 text-sm font-medium text-surface-0 transition hover:opacity-90 disabled:opacity-50"
           style={{ backgroundColor: accent }}
         >
-          {pending ? "Signing…" : "Sign and open"}
+          {pending ? "Opening…" : "Review and sign"}
         </button>
       </div>
     </div>

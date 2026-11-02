@@ -15,6 +15,9 @@ jest.mock("@/components/dataroom/viewer-actions", () => ({
 }));
 jest.mock("@/components/build/materials-actions", () => ({ verifySharePassword: jest.fn() }));
 jest.mock("next/navigation", () => ({ useRouter: () => ({ refresh: jest.fn() }) }));
+// pdf.js's worker is loaded with import.meta, which ts-jest's CommonJS output
+// cannot parse. The signing sheet is not part of these layout checks.
+jest.mock("@/components/signing/PdfPages", () => ({ PdfPages: () => null }));
 
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
