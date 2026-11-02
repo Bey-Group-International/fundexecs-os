@@ -285,3 +285,24 @@ describe("gateDecision — blast-radius layer", () => {
     ).toBe(true);
   });
 });
+
+describe("gateDecision — platform admin", () => {
+  it("lets a platform admin send Tier-2 actions without sign-off", () => {
+    const d = gateDecision("send_outreach", undefined, undefined, { platformAdmin: true });
+    expect(d.tier).toBe(2);
+    expect(d.requiresApproval).toBe(false);
+  });
+
+  it("does not relax Tier 3 for a platform admin", () => {
+    expect(
+      gateDecision("move_capital", undefined, undefined, { platformAdmin: true }).requiresApproval,
+    ).toBe(true);
+  });
+
+  it("still gates Tier 2 for everyone else", () => {
+    expect(gateDecision("send_outreach", undefined, undefined, {}).requiresApproval).toBe(true);
+    expect(
+      gateDecision("send_outreach", undefined, undefined, { platformAdmin: false }).requiresApproval,
+    ).toBe(true);
+  });
+});

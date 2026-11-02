@@ -1,5 +1,6 @@
 "use server";
 
+import { isPlatformAdmin } from "@/lib/platform-admin";
 import { revalidatePath } from "next/cache";
 import { createServerClient } from "@/lib/supabase/server";
 import { requireOrgContext } from "@/lib/auth";
@@ -123,6 +124,7 @@ async function performThreadAction(
   // do-not-contact blast-radius rule can revoke a pre-authorized auto-send.
   let decision = gateDecision(action, mandate, backing, {
     targetDomain: t.counterparty_email ?? undefined,
+    platformAdmin: isPlatformAdmin(auth.ctx),
   });
   // A reply on a conversation with a known contact the firm has written to
   // before goes straight out (lib/inbox/known-contact.server.ts). Only a Tier-2

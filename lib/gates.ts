@@ -174,6 +174,9 @@ export interface GateContext {
   // The count of automated Tier-2 sends already made today. Used against
   // `blastRadius.maxOutreachPerDay`.
   sendsToday?: number;
+  // The actor is a confirmed platform admin (lib/platform-admin). Tier 2 then
+  // needs no sign-off. Tier 3 is unaffected: it is never delegable.
+  platformAdmin?: boolean;
 }
 
 // Reduce a raw domain or email to a bare, comparable hostname: lowercase, no
@@ -288,6 +291,12 @@ export function gateDecision(
       requiresApproval: true,
       reason: "Capital- or compliance-binding — this always requires you.",
     };
+  }
+
+  // Platform admins have unrestricted access: external-facing (Tier 2) actions
+  // go without sign-off. Set only by callers that hold a confirmed admin session.
+  if (context?.platformAdmin) {
+    return { tier, requiresApproval: false, reason: "Platform admin — unrestricted access." };
   }
 
   // Tier 2: gated unless a mandate pre-authorizes this exact action within a

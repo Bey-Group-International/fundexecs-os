@@ -16,7 +16,6 @@
 // reaches the browser — so the ONLY thing standing between a normal user and
 // every org's data is this check. Keep it strict.
 import { getSessionContext, type SessionContext } from "@/lib/auth";
-import { mfaEnforcementEnabled, mfaGate } from "@/lib/mfa";
 
 const ADMIN_DOMAIN = "beygroupintl.com";
 
@@ -99,11 +98,8 @@ export async function requirePlatformAdmin(): Promise<PlatformAdminGate> {
   const ctx = await getSessionContext();
   if (!ctx) return { ok: false, status: 401 };
   if (!isPlatformAdmin(ctx)) return { ok: false, status: 403 };
-  // Cross-tenant access: a second factor is always required here, whatever the
-  // person's role in their own organization.
-  if (ctx.mfa) {
-    const gate = mfaGate({ ...ctx.mfa, required: mfaEnforcementEnabled() });
-    if (gate !== "ok") return { ok: false, status: 403, mfaRequired: true };
-  }
+  // No second factor is demanded here: platform admins are trusted by
+  // confirmed-email domain alone (an owner decision). mfaRequired stays in the
+  // gate type so callers that map it keep compiling.
   return { ok: true, ctx };
 }

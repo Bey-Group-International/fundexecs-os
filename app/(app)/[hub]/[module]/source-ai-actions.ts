@@ -1,5 +1,6 @@
 "use server";
 
+import { isPlatformAdmin } from "@/lib/platform-admin";
 import { revalidatePath } from "next/cache";
 import { createServerClient } from "@/lib/supabase/server";
 import { requireOrgContext } from "@/lib/auth";
@@ -508,7 +509,9 @@ export async function queueSourceAction(args: {
   const supabase = await createServerClient();
   const orgId = auth.ctx.orgId;
   const mandate = await getActiveMandate(supabase, orgId);
-  const decision = gateDecision(args.action, mandate);
+  const decision = gateDecision(args.action, mandate, undefined, {
+    platformAdmin: isPlatformAdmin(auth.ctx),
+  });
 
   const title = `${args.label} — ${args.name}`;
   const { data: task, error } = await supabase
