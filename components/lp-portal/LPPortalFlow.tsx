@@ -219,6 +219,20 @@ function WireStep({
   );
 }
 
+function AwaitingCountersignature({ fundName }: { fundName: string }) {
+  return (
+    <div className="py-6">
+      <h2 className="font-display text-xl font-semibold text-fg-primary">Waiting for the fund to countersign</h2>
+      <p className="mt-2 max-w-md text-sm text-fg-secondary">
+        You have signed your subscription agreement. <strong className="text-fg-primary">{fundName}</strong> now
+        countersigns it. Your wire instructions and the commitment step open as soon as it does, and you will be
+        emailed the fully signed copy.
+      </p>
+      <p className="mt-4 font-mono text-[11px] uppercase tracking-wider text-gold-300/70">Awaiting countersignature</p>
+    </div>
+  );
+}
+
 function CommittedScreen({ fundName }: { fundName: string }) {
   return (
     <div className="flex flex-col items-center py-8 text-center">
@@ -245,6 +259,8 @@ export interface LPPortalFlowProps {
   commitmentAmount: number | null;
   wireInstructions: Record<string, string>;
   agreement: LpAgreementView;
+  /** The LP has signed but the fund has not: the commitment and wire details wait. */
+  awaitingCountersignature?: boolean;
 }
 
 export function LPPortalFlow({
@@ -255,6 +271,7 @@ export function LPPortalFlow({
   commitmentAmount,
   wireInstructions,
   agreement,
+  awaitingCountersignature = false,
 }: LPPortalFlowProps) {
   const [status, setStatus] = useState<OnboardingStatus>(initialStatus);
 
@@ -277,7 +294,9 @@ export function LPPortalFlow({
         />
       )}
 
-      {status === "subscription" && (
+      {status === "subscription" && awaitingCountersignature && <AwaitingCountersignature fundName={fundName} />}
+
+      {status === "subscription" && !awaitingCountersignature && (
         <WireStep
           token={token}
           fundName={fundName}

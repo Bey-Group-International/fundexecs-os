@@ -18,6 +18,8 @@ jest.mock("@/lib/supabase/server", () => ({
   }),
 }));
 jest.mock("@/lib/lp-access.server", () => ({ getLinkSession: async () => session, hasLpPass: async () => pass }));
+let executed = true;
+jest.mock("@/lib/lp-agreement.server", () => ({ agreementExecuted: async () => executed }));
 
 import { confirmCapitalCommitmentAction } from "./actions";
 
@@ -26,6 +28,7 @@ const approved = (over: Record<string, unknown> = {}) => ({ id: "s1", status: "a
 beforeEach(() => {
   session = approved();
   pass = true;
+  executed = true;
   updated = null;
   updateError = null;
   jest.spyOn(console, "error").mockImplementation(() => undefined);
@@ -44,6 +47,13 @@ describe.each([
   it.each(["not_started", "in_progress", "submitted", "changes_requested", "rejected"])("refuses an LP who is %s, whatever the link says", async (state) => {
     session = approved({ status: stage, review_state: state });
     expect(await action("tok")).toEqual({ error: "Invalid or expired link" });
+    expect(updated).toBeNull();
+  });
+
+  it("holds the commitment until the fund has countersigned", async () => {
+    session = approved({ status: stage });
+    executed = false;
+    expect(await action("tok")).toEqual({ error: expect.stringContaining("countersigned") });
     expect(updated).toBeNull();
   });
 

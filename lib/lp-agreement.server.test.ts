@@ -2,7 +2,7 @@ jest.mock("server-only", () => ({}), { virtual: true });
 jest.mock("@/lib/lp-audit.server", () => ({ recordAudit: jest.fn(async () => true) }));
 jest.mock("@/lib/envelope-notify.server", () => ({ envelopeCopyUrl: (id: string) => `https://x/copy/${id}` }));
 import { PDFDocument } from "pdf-lib";
-import { AGREEMENT_SIGNATURE_PAGE, agreementText, loadLpAgreementView, readyForAgreement, type AgreementFacts } from "./lp-agreement.server";
+import { AGREEMENT_SIGNATURE_PAGE, agreementExecuted, agreementText, loadLpAgreementView, readyForAgreement, type AgreementFacts } from "./lp-agreement.server";
 import { buildDocumentPdf } from "./signing/executed-pdf.server";
 
 jest.mock("./signing/executed-pdf.server", () => jest.requireActual("./signing/executed-pdf.server"));
@@ -72,5 +72,24 @@ describe("loadLpAgreementView", () => {
   it("shows signed once the LP has, and the executed copy once the fund has too", async () => {
     expect(await loadLpAgreementView(client({ envelopes: { id: "e1", title: "T", status: "partially_signed" }, envelope_recipients: { ...rec, status: "signed" } }), "s1")).toEqual({ state: "signed" });
     expect(await loadLpAgreementView(client({ envelopes: { id: "e1", title: "T", status: "completed" }, envelope_recipients: { ...rec, status: "signed" } }), "s1")).toEqual({ state: "completed", copyUrl: "https://x/copy/e1" });
+  });
+});
+
+describe("agreementExecuted (the closing gate)", () => {
+  const rows = (data: unknown, error: unknown = null) =>
+    ({ from: () => { const q: Record<string, unknown> = { select: () => q, eq: () => q, neq: () => q, then: (res: (v: unknown) => unknown) => Promise.resolve({ data, error }).then(res) }; return q; } }) as never;
+
+  it("opens once the agreement is fully signed", async () => {
+    expect(await agreementExecuted(rows([{ status: "completed" }]), "s1")).toBe(true);
+  });
+  it("stays closed while the fund has yet to countersign", async () => {
+    expect(await agreementExecuted(rows([{ status: "partially_signed" }]), "s1")).toBe(false);
+    expect(await agreementExecuted(rows([{ status: "sent" }]), "s1")).toBe(false);
+  });
+  it("leaves LPs with no agreement envelope on their old path", async () => {
+    expect(await agreementExecuted(rows([]), "s1")).toBe(true);
+  });
+  it("fails closed when the read fails", async () => {
+    expect(await agreementExecuted(rows(null, { message: "boom" }), "s1")).toBe(false);
   });
 });

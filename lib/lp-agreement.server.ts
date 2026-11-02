@@ -117,6 +117,24 @@ async function crmEntry(client: Client, f: AgreementFacts, direction: "inbound" 
   }
 }
 
+/**
+ * The closing gate: an LP's commitment and wire details wait for the fund's countersignature.
+ * True once the agreement is fully signed, or when no agreement envelope exists at all
+ * (LPs who signed before the shared flow existed keep their path). A voided envelope does
+ * not count as one.
+ */
+export async function agreementExecuted(client: Client, sessionId: string): Promise<boolean> {
+  const { data, error } = await client
+    .from("envelopes")
+    .select("status")
+    .eq("lp_session_id", sessionId)
+    .neq("status", "voided");
+  // Unreadable is not executed: fail closed so wire details never leak on an error.
+  if (error) return false;
+  const rows = (data ?? []) as { status: string }[];
+  return rows.length === 0 || rows.every((r) => r.status === "completed");
+}
+
 // ─── What the LP sees in their portal ────────────────────────────────────────
 
 export interface LpAgreementBlock {

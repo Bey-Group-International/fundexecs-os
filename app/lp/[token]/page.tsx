@@ -14,7 +14,7 @@ import { readIdentityCheck } from "@/lib/lp-identity.server";
 import { loadDetailsPrefill } from "@/lib/lp-prefill.server";
 import type { IdentityState } from "@/lib/lp-identity";
 import type { LpType } from "@/lib/supabase/database.types";
-import { loadLpAgreementView } from "@/lib/lp-agreement.server";
+import { agreementExecuted, loadLpAgreementView } from "@/lib/lp-agreement.server";
 import type { OnboardingStatus } from "@/lib/lp-onboarding";
 
 export const dynamic = "force-dynamic";
@@ -95,6 +95,8 @@ export default async function LPOnboardingPortal(props: { params: Promise<{ toke
     if (reviewState === "approved") {
       // The agreement is an envelope the fund prepares and sends: show where it stands.
       const agreement = await loadLpAgreementView(supabase, sessionId);
+      // The closing gate: wire details are not sent to the browser until the fund countersigns.
+      const executed = await agreementExecuted(supabase, sessionId);
       return (
         <LPPortalFlow
           token={params.token}
@@ -102,7 +104,8 @@ export default async function LPOnboardingPortal(props: { params: Promise<{ toke
           lpName={lpName}
           fundName={fundName}
           commitmentAmount={commitmentAmount}
-          wireInstructions={wireInstructions}
+          wireInstructions={executed ? wireInstructions : {}}
+          awaitingCountersignature={!executed}
           agreement={agreement}
         />
       );
