@@ -15,16 +15,15 @@ import type {
 import { computeBuildReadiness } from "@/lib/build-readiness";
 import {
   sectionLabel,
+  buildContentRows,
   groupRoomDocuments,
   summarizeRoom,
   unfinishedPublications,
   emptyPublications,
 } from "@/lib/data-rooms";
-import { listRooms, pickRoom, loadRoomDocuments } from "@/lib/data-rooms.server";
-import { buildViewerPayload } from "@/lib/data-room-viewer.server";
-import { DataRoomReadError, logReadFailure } from "@/lib/data-room-errors";
+import { listRooms, pickRoom, loadRoomDocuments, loadBuildPageSummary } from "@/lib/data-rooms.server";
 import { selectAllPages } from "@/lib/supabase/batch";
-import { RoomPreview, type PreviewShare } from "./RoomPreview";
+import type { PreviewShare } from "./RoomPreview";
 import { ShareControls } from "./ShareControls";
 import { ViewerAnalytics } from "./ViewerAnalytics";
 import { NdaSignatures } from "./NdaSignatures";
@@ -76,7 +75,7 @@ export async function MaterialsModule({ roomId }: { roomId?: string } = {}) {
     );
   }
 
-  const [published, libraryRes, sharesRes, payload, reviewsRes, signaturesRes] = await Promise.all([
+  const [published, libraryRes, sharesRes, buildSummary, reviewsRes, signaturesRes] = await Promise.all([
     loadRoomDocuments(orgId, room.id),
     // Paged: the library can outgrow one request's max_rows, and a truncated list
     // would hide documents from "Publish from library" with no sign anything is
@@ -97,15 +96,10 @@ export async function MaterialsModule({ roomId }: { roomId?: string } = {}) {
       .eq("organization_id", orgId)
       .eq("room_id", room.id)
       .order("created_at", { ascending: false }),
-    // The preview is built by the same function the live room uses, with no
-    // section allowlist — the widest view any link into this room can give.
-    buildViewerPayload(supabase, orgId, room.id, null).catch((error: unknown) => {
-      // The preview is a convenience pane: a failed read shows "Preview
-      // unavailable" and is logged, and does not take the whole page down.
-      if (!(error instanceof DataRoomReadError)) throw error;
-      logReadFailure(error);
-      return null;
-    }),
+    // Only the few numbers the "From Build" rows need. The full preview is
+    // loaded when the Preview tab opens (room-preview-actions), not on every
+    // visit to this page.
+    loadBuildPageSummary(orgId),
     supabase
       .from("document_reviews")
       .select("document_id, storage_key, suggested_section, recommendations")
@@ -290,6 +284,8 @@ export async function MaterialsModule({ roomId }: { roomId?: string } = {}) {
         roomDescription={room.description}
         sections={contentSections}
         available={available}
+        fromBuild={buildSummary ? buildContentRows(buildSummary) : undefined}
+        fromBuildUnavailable={buildSummary === null}
         warnings={{
           unfinished: unfinished.map((d) => d.id),
           empty: empty.map((d) => d.id),
@@ -337,23 +333,7 @@ export async function MaterialsModule({ roomId }: { roomId?: string } = {}) {
             <NdaSignatures roomId={room.id} />
           </div>
         }
-        preview={
-          payload ? (
-            <RoomPreview
-              org={payload.org}
-              blended={payload.blended}
-              thesis={payload.thesis}
-              team={payload.team}
-              entities={payload.entities}
-              docSections={payload.docSections}
-              shares={previewShares}
-            />
-          ) : (
-            <div className="flex h-full items-center justify-center px-6 text-center">
-              <p className="text-sm text-fg-muted">Preview unavailable.</p>
-            </div>
-          )
-        }
+        previewShares={previewShares}
       />
     </div>
   );

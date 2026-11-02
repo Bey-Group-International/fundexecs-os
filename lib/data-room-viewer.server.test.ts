@@ -13,7 +13,7 @@
 jest.mock("server-only", () => ({}), { virtual: true });
 jest.mock("@/lib/email", () => ({ escapeHtml: (s: string) => s, sendEmail: jest.fn() }));
 
-import { buildViewerPayload, isRoomOpen } from "./data-room-viewer.server";
+import { buildViewerPayload, isRoomOpen, previousVisitAt } from "./data-room-viewer.server";
 import { DataRoomReadError } from "./data-room-errors";
 import { fakeDb, type Row } from "../test-utils/fake-supabase";
 
@@ -231,5 +231,161 @@ describe("a single-document link", () => {
     const { client } = fakeDb(t);
     const payload = await buildViewerPayload(client, ORG, ROOM, ["marketing"], "draft");
     expect(allDocs(payload).map((d) => d.id)).toEqual(["draft"]);
+  });
+});
+
+describe("the firm's Build pages follow a link's section allowlist", () => {
+  const build = {
+    investment_theses: [{ organization_id: ORG, title: "Lower mid-market credit", summary: "s", is_active: true, created_at: "2026-01-01" }],
+    track_records: [{ organization_id: ORG, vintage_year: 2020, deal_name: "A", gross_irr: 20, moic: 2, invested: 100, realized: true }],
+    entities: [{ organization_id: ORG, name: "Fund I LP", entity_type: "lp" }],
+    team_profiles: [{ organization_id: ORG, full_name: "Pat Principal", title: "Partner", email: null, created_at: "2026-01-01" }],
+  };
+  const files = [{ id: "t", name: "Terms", doc_type: "fund_terms", content: "a" }, { id: "m", name: "Deck", doc_type: "marketing", content: "b" }];
+  const payloadFor = (allowed: string[] | null, documentId: string | null = null) => {
+    const { client } = fakeDb(tables(files, build));
+    return buildViewerPayload(client, ORG, ROOM, allowed, documentId);
+  };
+
+  it("shows every Build page on an unrestricted link", async () => {
+    const p = await payloadFor(null);
+    expect(p!.thesis?.title).toBe("Lower mid-market credit");
+    expect(p!.blended.dealCount).toBe(1);
+    expect(p!.entities).toHaveLength(1);
+    expect(p!.team).toHaveLength(1);
+  });
+
+  it("shows a Build page only when its section is allowed", async () => {
+    const p = await payloadFor(["thesis", "legal"]);
+    expect(p!.thesis).not.toBeNull();
+    expect(p!.entities).toHaveLength(1);
+    expect(p!.blended.dealCount).toBe(0);
+    expect(p!.team).toEqual([]);
+  });
+
+  it("hides every Build page on a link limited to other sections", async () => {
+    const p = await payloadFor(["marketing"]);
+    expect(p!.thesis).toBeNull();
+    expect(p!.blended.dealCount).toBe(0);
+    expect(p!.entities).toEqual([]);
+    expect(p!.team).toEqual([]);
+    // The firm's own identity still shows.
+    expect(p!.org.name).toBe("Alpha Capital");
+    expect(allDocs(p).map((d) => d.id)).toEqual(["m"]);
+  });
+
+  it("hides every Build page on an empty allowlist, which allows nothing", async () => {
+    const p = await payloadFor([]);
+    expect(p!.thesis).toBeNull();
+    expect(p!.blended.dealCount).toBe(0);
+    expect(p!.entities).toEqual([]);
+    expect(p!.team).toEqual([]);
+  });
+
+  it("shows a single-document link only its document, none of the firm's Build pages", async () => {
+    const p = await payloadFor(null, "t");
+    expect(allDocs(p).map((d) => d.id)).toEqual(["t"]);
+    expect(p!.thesis).toBeNull();
+    expect(p!.blended.dealCount).toBe(0);
+    expect(p!.entities).toEqual([]);
+    expect(p!.team).toEqual([]);
+  });
+});
+
+describe("what changed since a reader's previous visit", () => {
+  const withDates = (dates: Record<string, string>) => {
+    const t = tables([
+      { id: "old", name: "Old deck", content: "a" },
+      { id: "fresh", name: "Fresh memo", content: "b" },
+    ]);
+    t.documents = t.documents.map((d) => ({ ...d, updated_at: dates[d.id as string] }));
+    return fakeDb(t).client;
+  };
+  const dates = { old: "2026-09-01T00:00:00Z", fresh: "2026-10-20T00:00:00Z" };
+  const find = (p: Awaited<ReturnType<typeof buildViewerPayload>>, id: string) => allDocs(p).find((d) => d.id === id)!;
+
+  it("marks only what changed after the previous visit, and gives every document its date", async () => {
+    const p = await buildViewerPayload(withDates(dates), ORG, ROOM, null, null, { shareId: SHARE, email: "lp@example.com", lastVisitAt: "2026-10-01T00:00:00Z" });
+    expect(find(p, "fresh")).toMatchObject({ isNew: true, updatedAt: dates.fresh });
+    expect(find(p, "old")).toMatchObject({ isNew: false, updatedAt: dates.old });
+  });
+
+  it("marks nothing on a first visit, when there is no previous one", async () => {
+    const p = await buildViewerPayload(withDates(dates), ORG, ROOM, null, null, { shareId: SHARE, email: "lp@example.com", lastVisitAt: null });
+    expect(allDocs(p).every((d) => d.isNew === false)).toBe(true);
+    expect(find(p, "fresh").updatedAt).toBe(dates.fresh);
+  });
+
+  it("marks nothing in the GP preview, which has no reader", async () => {
+    const p = await buildViewerPayload(withDates(dates), ORG, ROOM, null);
+    expect(allDocs(p).every((d) => d.isNew === false)).toBe(true);
+  });
+
+  it("does not mark a document changed exactly at the previous visit", async () => {
+    const p = await buildViewerPayload(withDates(dates), ORG, ROOM, null, null, { shareId: SHARE, email: "lp@example.com", lastVisitAt: dates.fresh });
+    expect(find(p, "fresh").isNew).toBe(false);
+  });
+
+  it("gives a locked document no date and no marker: nothing of it leaves the server, including when it changed", async () => {
+    const t = tables([LOCKED]);
+    t.documents = t.documents.map((d) => ({ ...d, updated_at: "2026-10-20T00:00:00Z" }));
+    const p = await buildViewerPayload(fakeDb(t).client, ORG, ROOM, null, null, { shareId: SHARE, email: "lp@example.com", lastVisitAt: "2026-10-01T00:00:00Z" });
+    const doc = allDocs(p)[0];
+    expect(doc).toMatchObject({ content: null, hasFile: false });
+    expect(doc.updatedAt).toBeUndefined();
+    expect(doc.isNew).toBeUndefined();
+    expect(JSON.stringify(p)).not.toContain("2026-10-20");
+  });
+
+  it("marks an old document that was published into the room after the reader's last visit", async () => {
+    const t = tables([{ id: "late", name: "Late addition", content: "x" }]);
+    t.documents = t.documents.map((d) => ({ ...d, updated_at: "2026-01-01T00:00:00Z" }));
+    t.data_room_documents = t.data_room_documents.map((m) => ({ ...m, created_at: "2026-10-25T00:00:00Z" }));
+    const p = await buildViewerPayload(fakeDb(t).client, ORG, ROOM, null, null, { shareId: SHARE, email: "lp@example.com", lastVisitAt: "2026-10-01T00:00:00Z" });
+    // Its own date is old, and it still reads as new to this reader.
+    expect(find(p, "late")).toMatchObject({ isNew: true, updatedAt: "2026-01-01T00:00:00Z" });
+  });
+
+  it("does not mark an old document that was already in the room at the last visit", async () => {
+    const t = tables([{ id: "early", name: "Early", content: "x" }]);
+    t.documents = t.documents.map((d) => ({ ...d, updated_at: "2026-01-01T00:00:00Z" }));
+    t.data_room_documents = t.data_room_documents.map((m) => ({ ...m, created_at: "2026-02-01T00:00:00Z" }));
+    const p = await buildViewerPayload(fakeDb(t).client, ORG, ROOM, null, null, { shareId: SHARE, email: "lp@example.com", lastVisitAt: "2026-10-01T00:00:00Z" });
+    expect(find(p, "early").isNew).toBe(false);
+  });
+});
+
+describe("previousVisitAt", () => {
+  const ago = (minutes: number) => new Date(Date.now() - minutes * 60_000).toISOString();
+  const views = (rows: { share_id?: string; viewer_email: string | null; created_at: string }[]) =>
+    fakeDb({ data_room_views: rows.map((r) => ({ share_id: SHARE, ...r })) }).client;
+
+  it("is the reader's latest earlier visit on this link", async () => {
+    const client = views([
+      { viewer_email: "lp@example.com", created_at: ago(60 * 24 * 5) },
+      { viewer_email: "lp@example.com", created_at: ago(60 * 24 * 2) },
+    ]);
+    const got = await previousVisitAt(client, SHARE, "lp@example.com");
+    expect(Math.abs(new Date(got!).getTime() - (Date.now() - 2 * 24 * 60 * 60_000))).toBeLessThan(5_000);
+  });
+
+  it("does not count the visit in progress", async () => {
+    const client = views([{ viewer_email: "lp@example.com", created_at: ago(5) }]);
+    expect(await previousVisitAt(client, SHARE, "lp@example.com")).toBeNull();
+  });
+
+  it("is null for a reader with no email, and ignores other readers and other links", async () => {
+    const client = views([
+      { viewer_email: "other@example.com", created_at: ago(60 * 24) },
+      { share_id: "share-2", viewer_email: "lp@example.com", created_at: ago(60 * 24) },
+    ]);
+    expect(await previousVisitAt(client, SHARE, null)).toBeNull();
+    expect(await previousVisitAt(client, SHARE, "lp@example.com")).toBeNull();
+  });
+
+  it("is null, not an error, when the lookup fails", async () => {
+    const db = fakeDb({ data_room_views: [] });
+    db.fail["data_room_views"] = "08006";
+    expect(await previousVisitAt(db.client, SHARE, "lp@example.com")).toBeNull();
   });
 });

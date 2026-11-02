@@ -13,6 +13,9 @@ import {
   sectionsAllowedBy,
   sectionLabel,
   roomSectionKey,
+  buildContentRows,
+  buildPagesAllowedBy,
+  BUILD_PAGE_SECTION,
   type RoomDocument,
 } from "@/lib/data-rooms";
 
@@ -210,5 +213,74 @@ describe("roomSectionKey", () => {
     expect(roomSectionKey("")).toBe("other");
     expect(roomSectionKey(null)).toBe("other");
     expect(roomSectionKey(undefined)).toBe("other");
+  });
+});
+
+describe("buildContentRows", () => {
+  const base = { tagline: null, thesisTitle: null, dealCount: 0, weightedGrossIrr: null, teamCount: 0, entityCount: 0 };
+  const row = (rows: ReturnType<typeof buildContentRows>, key: string) => rows.find((r) => r.key === key);
+
+  it("always lists the thesis and the track record, flagged empty when Build has nothing", () => {
+    const rows = buildContentRows(base);
+    expect(row(rows, "thesis")).toMatchObject({ empty: true, href: "/build/thesis", shownUnder: "Investment Strategy & Thesis" });
+    expect(row(rows, "track_record")).toMatchObject({ empty: true, href: "/build/track_record", shownUnder: "Track Record & Performance" });
+  });
+
+  it("describes what Build holds once it has it", () => {
+    const rows = buildContentRows({ ...base, thesisTitle: "Private credit, lower mid-market", dealCount: 3, weightedGrossIrr: 18.4 });
+    expect(row(rows, "thesis")).toMatchObject({ empty: false, detail: "Private credit, lower mid-market" });
+    expect(row(rows, "track_record")).toMatchObject({ empty: false, detail: "3 deals · 18% gross IRR" });
+  });
+
+  it("uses the singular for one", () => {
+    expect(row(buildContentRows({ ...base, dealCount: 1 }), "track_record")?.detail).toBe("1 deal");
+    expect(row(buildContentRows({ ...base, teamCount: 1 }), "team")?.detail).toBe("1 person");
+    expect(row(buildContentRows({ ...base, entityCount: 1 }), "structure")?.detail).toBe("1 entity");
+  });
+
+  it("lists the team and structure only when they hold something", () => {
+    expect(row(buildContentRows(base), "team")).toBeUndefined();
+    expect(row(buildContentRows(base), "structure")).toBeUndefined();
+    const rows = buildContentRows({ ...base, teamCount: 4, entityCount: 2 });
+    expect(row(rows, "team")?.detail).toBe("4 people");
+    expect(row(rows, "structure")?.detail).toBe("2 entities");
+  });
+});
+
+describe("buildPagesAllowedBy", () => {
+  const all = { thesis: true, trackRecord: true, team: true, structure: true };
+  const none = { thesis: false, trackRecord: false, team: false, structure: false };
+
+  it("shows every Build page when the link is unrestricted", () => {
+    expect(buildPagesAllowedBy(null)).toEqual(all);
+    expect(buildPagesAllowedBy(undefined)).toEqual(all);
+  });
+
+  it("shows none of them when the link allows nothing", () => {
+    expect(buildPagesAllowedBy([])).toEqual(none);
+  });
+
+  it("shows a page only when its own section is allowed", () => {
+    expect(buildPagesAllowedBy(["thesis"])).toEqual({ ...none, thesis: true });
+    expect(buildPagesAllowedBy(["track_record"])).toEqual({ ...none, trackRecord: true });
+    expect(buildPagesAllowedBy(["team"])).toEqual({ ...none, team: true });
+    // Structure is filed under Legal & Structure.
+    expect(buildPagesAllowedBy(["legal"])).toEqual({ ...none, structure: true });
+  });
+
+  it("is not opened by sections that have no Build page", () => {
+    expect(buildPagesAllowedBy(["marketing", "fund_terms", "other"])).toEqual(none);
+  });
+});
+
+describe("BUILD_PAGE_SECTION", () => {
+  it("is read from the Build module behind each section, so the mapping lives in one place", () => {
+    expect(BUILD_PAGE_SECTION).toEqual({
+      thesis: "thesis",
+      trackRecord: "track_record",
+      team: "team",
+      // The entity module is filed under Legal & Structure.
+      structure: "legal",
+    });
   });
 });

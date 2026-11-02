@@ -11,6 +11,9 @@
 import { useMemo, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { RoomContents, type RoomContentSection, type AvailableDoc } from "./RoomContents";
+import type { BuildContentRow } from "@/lib/data-rooms";
+import { RoomPreview, type PreviewShare } from "./RoomPreview";
+import { loadRoomPreview } from "./room-preview-actions";
 
 type Tab = "contents" | "sharing" | "activity" | "preview";
 
@@ -27,13 +30,18 @@ interface Props {
   roomDescription: string | null;
   sections: RoomContentSection[];
   available: AvailableDoc[];
+  /** Build-sourced pages a reader sees beyond the published documents. */
+  fromBuild?: BuildContentRow[];
+  /** Build could not be read, so no rows are shown rather than empty ones. */
+  fromBuildUnavailable?: boolean;
   warnings: RoomWarnings;
   coverage: { weightedPercent: number; readyCount: number; total: number };
   activeLinkCount: number;
   nextGap: string | null;
   sharing: ReactNode;
   activity: ReactNode;
-  preview: ReactNode;
+  /** Live links the preview can be scoped to. */
+  previewShares: PreviewShare[];
 }
 
 function CoverageArc({ percent }: { percent: number }) {
@@ -68,15 +76,20 @@ export function RoomWorkspace({
   roomDescription,
   sections,
   available,
+  fromBuild,
+  fromBuildUnavailable,
   warnings,
   coverage,
   activeLinkCount,
   nextGap,
   sharing,
   activity,
-  preview,
+  previewShares,
 }: Props) {
   const [tab, setTab] = useState<Tab>("contents");
+  // The document a row in Room contents asked to see in the preview.
+  const [previewDoc, setPreviewDoc] = useState<string | null>(null);
+  const [previewRequest, setPreviewRequest] = useState(0);
   const [query, setQuery] = useState("");
   const [section, setSection] = useState<string | null>(null);
   const [needsAttention, setNeedsAttention] = useState(false);
@@ -298,6 +311,13 @@ export function RoomWorkspace({
               roomId={roomId}
               sections={filtered}
               available={available}
+              fromBuild={filtering ? undefined : fromBuild}
+              fromBuildUnavailable={!filtering && fromBuildUnavailable}
+              onPreview={(id) => {
+                setPreviewDoc(id);
+                setPreviewRequest((n) => n + 1);
+                setTab("preview");
+              }}
               hideAddFromLibrary={filtering}
               hideReorder={filtering}
             />
@@ -322,7 +342,14 @@ export function RoomWorkspace({
             </p>
           </div>
           <div className="h-[min(42rem,calc(100dvh-var(--app-header-h)-8rem))] min-h-[24rem] overflow-hidden rounded-2xl border border-line" style={{ boxShadow: "0 2px 12px rgba(0,0,0,0.15)" }}>
-            {preview}
+            <RoomPreview
+              roomId={roomId}
+              shares={previewShares}
+              active={tab === "preview"}
+              focusDocumentId={previewDoc}
+              focusRequest={previewRequest}
+              loadPreview={loadRoomPreview}
+            />
           </div>
         </div>
       </div>

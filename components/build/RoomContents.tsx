@@ -9,6 +9,7 @@ import Link from "next/link";
 import { unpublishDocument, moveRoomDocument, publishDocument, setDocumentSignature } from "./room-actions";
 import type { DocumentStatus } from "@/lib/supabase/database.types";
 import { ActionError, useActionError } from "./use-action-error";
+import type { BuildContentRow } from "@/lib/data-rooms";
 
 export interface RoomContentDoc {
   id: string;
@@ -56,10 +57,13 @@ function DocRow({
   roomId,
   doc,
   hideReorder,
+  onPreview,
 }: {
   roomId: string;
   doc: RoomContentDoc;
   hideReorder?: boolean;
+  /** Open this document in Preview as LP. */
+  onPreview?: (documentId: string) => void;
 }) {
   const [pending, startTransition] = useTransition();
   const { error, run } = useActionError();
@@ -147,6 +151,16 @@ function DocRow({
         </div>
       )}
 
+      {onPreview ? (
+        <button
+          type="button"
+          onClick={() => onPreview(doc.id)}
+          title="See this document as an LP does"
+          className="shrink-0 rounded-md border border-line px-2 py-1 font-mono text-[11px] uppercase tracking-wider text-fg-muted transition hover:border-gold-500/40 hover:text-gold-300"
+        >
+          Preview
+        </button>
+      ) : null}
       <button
         type="button"
         disabled={pending}
@@ -279,16 +293,61 @@ function AddFromLibrary({ roomId, available }: { roomId: string; available: Avai
   );
 }
 
+/**
+ * What a reader sees that comes from Build rather than from a published
+ * document. Read-only here: edit it in Build.
+ */
+function FromBuild({ rows }: { rows: BuildContentRow[] }) {
+  return (
+    <div className="mb-4">
+      <p className="mb-1.5 font-mono text-[11px] uppercase tracking-[0.16em] text-fg-muted">
+        From Build · shown where a link allows the section
+      </p>
+      <div className="flex flex-col gap-1.5">
+        {rows.map((r) => (
+          <div
+            key={r.key}
+            className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-xl border border-line bg-surface-1 px-3 py-2.5"
+          >
+            <span className="min-w-[8rem] text-sm font-medium text-fg-primary">{r.label}</span>
+            <span className={`min-w-0 flex-1 truncate text-sm ${r.empty ? "text-amber-400" : "text-fg-secondary"}`}>
+              {r.detail}
+            </span>
+            <span className="shrink-0 font-mono text-[11px] uppercase tracking-wider text-fg-muted">
+              Under {r.shownUnder}
+            </span>
+            <Link
+              href={r.href}
+              className="shrink-0 font-mono text-[11px] uppercase tracking-wider text-gold-300 hover:underline"
+            >
+              {r.empty ? "Add in Build →" : "Edit in Build →"}
+            </Link>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export function RoomContents({
   roomId,
   sections,
   available,
+  fromBuild,
+  fromBuildUnavailable,
+  onPreview,
   hideAddFromLibrary,
   hideReorder,
 }: {
   roomId: string;
   sections: RoomContentSection[];
   available: AvailableDoc[];
+  /** Build-sourced pages the reader sees. Left out while the pane is filtered. */
+  fromBuild?: BuildContentRow[];
+  /** Build could not be read, so the rows above are missing rather than empty. */
+  fromBuildUnavailable?: boolean;
+  /** Open a document in Preview as LP. */
+  onPreview?: (documentId: string) => void;
   /** Suppressed while the pane is filtered — publishing into a partial view of
    * the room reads as publishing into the filter. */
   hideAddFromLibrary?: boolean;
@@ -299,6 +358,12 @@ export function RoomContents({
 
   return (
     <div>
+      {fromBuild && fromBuild.length > 0 ? <FromBuild rows={fromBuild} /> : null}
+      {fromBuildUnavailable ? (
+        <p role="status" className="mb-4 rounded-xl border border-dashed border-line px-3 py-2.5 text-sm text-amber-400">
+          Couldn&apos;t load what Build contributes to this room. Reload to try again.
+        </p>
+      ) : null}
       {count === 0 ? (
         <div className="rounded-xl border border-dashed border-line bg-surface-0 px-4 py-6 text-center">
           <p className="text-sm text-fg-secondary">This room is empty.</p>
@@ -315,7 +380,7 @@ export function RoomContents({
               </p>
               <div className="flex flex-col gap-1.5">
                 {s.docs.map((d) => (
-                  <DocRow key={d.id} roomId={roomId} doc={d} hideReorder={hideReorder} />
+                  <DocRow key={d.id} roomId={roomId} doc={d} hideReorder={hideReorder} onPreview={onPreview} />
                 ))}
               </div>
             </div>

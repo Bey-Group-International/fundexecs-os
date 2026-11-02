@@ -11,7 +11,7 @@ import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { blendTrackRecord } from "@/lib/track-record";
 import { DATA_ROOM_SECTIONS } from "@/lib/data-room";
-import { roomSectionKey, sectionsAllowedBy } from "@/lib/data-rooms";
+import { buildPagesAllowedBy, roomSectionKey, sectionsAllowedBy } from "@/lib/data-rooms";
 import { selectAllPages, selectInBatches } from "@/lib/supabase/batch";
 import { DataRoomReadError } from "@/lib/data-room-errors";
 import { isUploadedFile, previewKindFor } from "@/lib/document-files";
@@ -96,6 +96,54 @@ export async function isRoomOpen(
   return Boolean(data);
 }
 
+/**
+ * When a document last changed, and whether that is after this reader's previous
+ * visit. A first visit has no previous one, so nothing is marked new: marking
+ * everything would say nothing.
+ */
+function changeInfo(
+  d: { updated_at?: string | null; created_at?: string | null },
+  addedToRoomAt: string | null | undefined,
+  lastVisitAt: string | null | undefined,
+): { updatedAt: string | null; isNew: boolean } {
+  const updatedAt = d.updated_at ?? d.created_at ?? null;
+  // New is whichever is later: the document changed, or it was published into
+  // this room. An old document published after the reader's last visit is new to
+  // them, though its own date is old.
+  const latest = [updatedAt, addedToRoomAt]
+    .filter((t): t is string => Boolean(t))
+    .map((t) => new Date(t).getTime())
+    .sort((a, b) => b - a)[0];
+  const isNew = Boolean(lastVisitAt) && latest !== undefined && latest > new Date(lastVisitAt as string).getTime();
+  return { updatedAt, isNew };
+}
+
+/**
+ * When this reader was last here, for marking what changed since. Rows from the
+ * last half hour are this visit (the page can render more than once, and reading
+ * time is recorded as it goes), so they do not count. Only a reader who passed an
+ * email gate can be recognised, and only a failed or empty lookup is "no previous
+ * visit": a cosmetic marker must never take the room down.
+ */
+export async function previousVisitAt(
+  supabase: Client,
+  shareId: string,
+  email: string | null,
+): Promise<string | null> {
+  if (!email) return null;
+  const cutoff = new Date(Date.now() - 30 * 60_000).toISOString();
+  const { data, error } = await supabase
+    .from("data_room_views")
+    .select("created_at")
+    .eq("share_id", shareId)
+    .eq("viewer_email", email)
+    .lt("created_at", cutoff)
+    .order("created_at", { ascending: false })
+    .limit(1);
+  if (error) return null;
+  return ((data ?? []) as { created_at: string }[])[0]?.created_at ?? null;
+}
+
 export async function buildViewerPayload(
   supabase: Client,
   orgId: string,
@@ -109,11 +157,11 @@ export async function buildViewerPayload(
    * and file reference withheld from the payload) unless this reader has
    * signed on this link. Omitted — the GP preview — means unsigned.
    */
-  reader: { shareId: string; email: string | null } | null = null,
+  reader: { shareId: string; email: string | null; lastVisitAt?: string | null } | null = null,
 ): Promise<ViewerPayload | null> {
   if (!(await isRoomOpen(supabase, orgId, roomId))) return null;
 
-  let manifest: { document_id: string; sort_order: number }[];
+  let manifest: { document_id: string; sort_order: number; created_at?: string }[];
   // For a room link the signature requirement comes from the SAME read as the
   // membership: two reads could straddle an unpublish, leaving a document that is
   // still returned below but absent from the requirement lookup, so it would be
@@ -129,10 +177,11 @@ export async function buildViewerPayload(
       document_id: string;
       sort_order: number;
       require_signature: boolean;
+      created_at: string;
     }>((from, to) =>
       supabase
         .from("data_room_documents")
-        .select("document_id, sort_order, require_signature")
+        .select("document_id, sort_order, require_signature, created_at")
         .eq("organization_id", orgId)
         .eq("room_id", roomId)
         .order("sort_order", { ascending: true })
@@ -144,11 +193,13 @@ export async function buildViewerPayload(
       document_id: string;
       sort_order: number;
       require_signature: boolean;
+      created_at: string;
     }[];
     manifest = rows;
     manifestSig = rows;
   }
   const manifestOrder = new Map(manifest.map((m) => [m.document_id, m.sort_order ?? 0]));
+  const addedToRoom = new Map(manifest.map((m) => [m.document_id, m.created_at]));
 
   // Which of these files need a signature, and which this reader has signed.
   // The manifest row is the source of truth even for a single-document link.
@@ -271,6 +322,8 @@ export async function buildViewerPayload(
           uploaded: false,
           requiresSignature: true,
           signed: false,
+          // Nothing of a locked file leaves the server, and that includes when it
+          // last changed: an unsigned reader must not learn a side letter was revised.
         }
       : {
       id: d.id,
@@ -281,6 +334,7 @@ export async function buildViewerPayload(
       preview_kind: previewKindFor(d.storage_key),
       uploaded: isUploadedFile(d.storage_key),
       ...(needsSignature.has(d.id) ? { requiresSignature: true, signed: true } : {}),
+      ...changeInfo(d, addedToRoom.get(d.id), reader?.lastVisitAt),
     };
     const bucket = docsBySection.get(k);
     if (bucket) bucket.push(doc);
@@ -297,6 +351,12 @@ export async function buildViewerPayload(
     })).filter((s) => s.docs.length > 0),
   );
 
+  // The firm's Build pages follow the link's section allowlist, as the documents
+  // do. A single-document link shows its document and nothing else of the firm.
+  const pages = documentId
+    ? { thesis: false, trackRecord: false, team: false, structure: false }
+    : buildPagesAllowedBy(allowedSections);
+
   return {
     org: {
       name: org.name,
@@ -308,16 +368,26 @@ export async function buildViewerPayload(
       brand_color: org.brand_color ?? null,
       logo_url: org.logo_url ?? null,
     },
-    blended: {
-      dealCount: blended.dealCount,
-      realizedCount: blended.realizedCount,
-      weightedGrossIrr: blended.weightedGrossIrr ?? null,
-      pooledMoic: blended.pooledMoic ?? null,
-      dpi: blended.dpi ?? null,
-      totalInvested: blended.totalInvested ?? null,
-      vintageRange: blended.vintageRange ?? null,
-    },
-    thesis: thesis
+    blended: pages.trackRecord
+      ? {
+          dealCount: blended.dealCount,
+          realizedCount: blended.realizedCount,
+          weightedGrossIrr: blended.weightedGrossIrr ?? null,
+          pooledMoic: blended.pooledMoic ?? null,
+          dpi: blended.dpi ?? null,
+          totalInvested: blended.totalInvested ?? null,
+          vintageRange: blended.vintageRange ?? null,
+        }
+      : {
+          dealCount: 0,
+          realizedCount: 0,
+          weightedGrossIrr: null,
+          pooledMoic: null,
+          dpi: null,
+          totalInvested: null,
+          vintageRange: null,
+        },
+    thesis: thesis && pages.thesis
       ? {
           title: thesis.title,
           summary: thesis.summary ?? null,
@@ -329,7 +399,9 @@ export async function buildViewerPayload(
           check_size_max: thesis.check_size_max ?? null,
         }
       : null,
-    team: [
+    team: !pages.team
+      ? []
+      : [
       ...members.map((m) => {
         const p = byId.get(m.principal_id);
         return {
@@ -340,10 +412,12 @@ export async function buildViewerPayload(
       }),
       ...profiles.map((t) => ({ name: t.full_name, title: t.title, email: t.email })),
     ],
-    entities: entities.map((e) => ({
-      name: e.name,
-      entity_type: (e as { entity_type?: string | null }).entity_type ?? null,
-    })),
+    entities: !pages.structure
+      ? []
+      : entities.map((e) => ({
+          name: e.name,
+          entity_type: (e as { entity_type?: string | null }).entity_type ?? null,
+        })),
     docSections,
   };
 }

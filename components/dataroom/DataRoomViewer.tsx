@@ -21,6 +21,8 @@ import { ReadingClock } from "@/lib/data-room-engagement";
 import { FilePreview } from "@/components/documents/FilePreview";
 import type { PreviewKind } from "@/lib/document-files";
 import { forwardWheel } from "@/lib/wheel-forward";
+import { DATA_ROOM_SECTIONS } from "@/lib/data-room";
+import { BUILD_PAGE_SECTION } from "@/lib/data-rooms";
 
 /** Per-browser reader id, so a first-open alert fires once per reader. */
 const VISITOR_KEY = "fx-dataroom-visitor";
@@ -89,6 +91,10 @@ export interface ViewerDoc {
   requiresSignature?: boolean;
   /** They have. When false and required, content and file are withheld. */
   signed?: boolean;
+  /** When the document last changed (ISO). */
+  updatedAt?: string | null;
+  /** Changed since this reader's previous visit. Never set on a first visit. */
+  isNew?: boolean;
 }
 
 /** Per-link controls set when the link was created. */
@@ -139,6 +145,8 @@ interface Props {
   signerEmail?: string | null;
   /** Open on this document's section (the `?doc=` a view-only open redirects to). */
   focusDocumentId?: string | null;
+  /** Lay out as on a phone whatever the window width: the section selector, no rail. */
+  compact?: boolean;
 }
 
 function compactUsd(n: number | null): string | null {
@@ -149,6 +157,19 @@ function compactUsd(n: number | null): string | null {
     notation: "compact",
     maximumFractionDigits: 1,
   }).format(n);
+}
+
+/** "Oct 12, 2026". UTC, so the server and the browser print the same day. */
+function formatDocDate(iso: string | null | undefined): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    timeZone: "UTC",
+  }).format(d);
 }
 
 /** Nav key of the "All documents" view: every published file, grouped as the room's Contents lists it. */
@@ -163,11 +184,39 @@ const ALL_DOCS_KEY = "all";
  */
 const docNavKey = (sectionKey: string) => `docs:${sectionKey}`;
 
+const SECTION_ORDER = new Map(DATA_ROOM_SECTIONS.map((sec, i) => [sec.key, i]));
+const SECTION_LABELS = new Map(
+  DATA_ROOM_SECTIONS.map((sec) => [sec.key, sec.label]),
+);
+
+/**
+ * The sections a reader can open: the room's document sections, plus
+ * "Investment Strategy & Thesis" and "Track Record & Performance" whenever Build
+ * has a thesis or track record, even if no document is filed there. Build's data
+ * and the documents for a topic are one section, not two entries in the nav.
+ */
+function viewerSections(
+  docSections: ViewerSection[],
+  thesis: ViewerThesis | null,
+  blended: ViewerTrackRecord,
+): ViewerSection[] {
+  const out = docSections.filter((sec) => sec.docs.length > 0);
+  const ensure = (key: string, hasBuildData: boolean) => {
+    if (hasBuildData && !out.some((sec) => sec.key === key)) {
+      out.push({ key, label: SECTION_LABELS.get(key) ?? key, docs: [] });
+    }
+  };
+  ensure(BUILD_PAGE_SECTION.thesis, thesis !== null);
+  ensure(BUILD_PAGE_SECTION.trackRecord, blended.dealCount > 0);
+  return out.sort(
+    (a, b) =>
+      (SECTION_ORDER.get(a.key) ?? 99) - (SECTION_ORDER.get(b.key) ?? 99),
+  );
+}
+
 type NavItem =
   | { key: "overview"; label: string }
   | { key: "all"; label: string; count: number }
-  | { key: "track_record"; label: string }
-  | { key: "thesis"; label: string }
   | { key: "team"; label: string }
   | { key: "structure"; label: string }
   | { key: string; label: string; docs: ViewerDoc[] };
@@ -192,6 +241,7 @@ export function DataRoomViewer({
   viewerLabel = null,
   signerEmail = null,
   focusDocumentId = null,
+  compact = false,
 }: Props) {
   const accent =
     org.brand_color && /^#[0-9a-fA-F]{3,8}$/.test(org.brand_color)
@@ -204,6 +254,13 @@ export function DataRoomViewer({
   // Stable session ID for this page load.
   const sessionId = useMemo(() => crypto.randomUUID(), []);
 
+  // What a reader can open: documents by section, with Build's thesis and track
+  // record folded into their own sections.
+  const sections = useMemo(
+    () => viewerSections(docSections, thesis, blended),
+    [docSections, thesis, blended],
+  );
+
   // Build nav
   const nav: NavItem[] = useMemo(() => {
     const items: NavItem[] = [];
@@ -215,27 +272,22 @@ export function DataRoomViewer({
     const total = docSections.reduce((n, s) => n + s.docs.length, 0);
     if (!viewControls.singleDocument && total > 0)
       items.push({ key: ALL_DOCS_KEY, label: "All documents", count: total });
-    if (blended.dealCount > 0)
-      items.push({ key: "track_record", label: "Track Record" });
-    if (thesis) items.push({ key: "thesis", label: "Investment Thesis" });
     if (team.length > 0) items.push({ key: "team", label: "Team" });
     if (entities.length > 0)
       items.push({ key: "structure", label: "Structure" });
-    for (const s of docSections) {
-      if (s.docs.length > 0)
-        items.push({
-          key: docNavKey(s.key),
-          label: s.label,
-          docs: s.docs,
-        } as NavItem);
+    for (const s of sections) {
+      items.push({
+        key: docNavKey(s.key),
+        label: s.label,
+        docs: s.docs,
+      } as NavItem);
     }
     return items;
   }, [
-    blended.dealCount,
-    thesis,
     team.length,
     entities.length,
     docSections,
+    sections,
     viewControls.singleDocument,
   ]);
 
@@ -259,7 +311,6 @@ export function DataRoomViewer({
     "overview";
   const mainRef = useRef<HTMLElement>(null);
   const shellRef = useRef<HTMLDivElement>(null);
-  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   // The full-screen viewer is an app shell: only the reading pane scrolls, so a
   // wheel over the header or a short contents rail used to do nothing. Send it
@@ -268,9 +319,9 @@ export function DataRoomViewer({
   useEffect(() => {
     const shell = shellRef.current;
     const pane = mainRef.current;
-    if (!contentReady || preview || sidebarOpen || !shell || !pane) return;
+    if (!contentReady || preview || !shell || !pane) return;
     return forwardWheel(shell, pane);
-  }, [contentReady, preview, sidebarOpen]);
+  }, [contentReady, preview]);
 
   // The nav can change under a live selection — most visibly in the GP preview,
   // where scoping to a link removes the section being read. Resolve the
@@ -387,7 +438,6 @@ export function DataRoomViewer({
       // Credit the section being left before its documents leave the page.
       flushReading.current();
       setPicked(key);
-      setSidebarOpen(false);
       // A new section starts at its top, not wherever the last one was scrolled.
       if (mainRef.current) mainRef.current.scrollTop = 0;
       if (!preview && document.scrollingElement)
@@ -465,26 +515,14 @@ export function DataRoomViewer({
         // Exactly the viewport, so the contents rail stays put and only the
         // reading pane scrolls. With min-h-screen the row grew with its
         // content and the whole window scrolled the rail away.
-        preview ? "h-full min-h-0" : "h-dvh"
+        preview ? "h-full min-h-0" : "h-dvh print:h-auto"
       }`}
     >
       {/* Top bar */}
       <header
-        className="flex shrink-0 items-center gap-3 border-b border-line px-4 py-3 sm:gap-4"
+        className="flex shrink-0 items-center gap-3 border-b border-line px-4 py-3 sm:gap-4 print:border-b-2"
         style={{ borderBottomColor: `${accent}33` }}
       >
-        {/* Mobile sidebar toggle */}
-        <button
-          type="button"
-          onClick={() => setSidebarOpen((v) => !v)}
-          className={`flex h-11 w-11 shrink-0 flex-col items-center justify-center rounded-lg border border-line text-fg-muted lg:hidden ${preview ? "hidden" : ""}`}
-          aria-label="Toggle navigation"
-        >
-          <span className="block h-0.5 w-4 bg-current mb-1" />
-          <span className="block h-0.5 w-4 bg-current mb-1" />
-          <span className="block h-0.5 w-4 bg-current" />
-        </button>
-
         {/* Logo / firm name */}
         <div className="flex min-w-0 flex-1 items-center gap-3">
           {org.logo_url ? (
@@ -527,27 +565,43 @@ export function DataRoomViewer({
         </span>
       </header>
 
-      <div className="flex min-h-0 flex-1 overflow-hidden">
-        {/* Mobile close overlay. A sibling of the sidebar, not a child: the sidebar
-            is transformed, which makes a fixed child cover only the sidebar, so a
-            tap on the page behind it never closed the navigation. */}
-        {sidebarOpen && !preview ? (
-          <button
-            type="button"
-            className="fixed inset-0 z-20 bg-slate-900/40 lg:hidden"
-            onClick={() => setSidebarOpen(false)}
-            aria-label="Close navigation"
-          />
-        ) : null}
+      {/* On a phone the section tree is a selector under the header; the rail is
+          for wider screens. 16px text keeps iOS from zooming on focus. */}
+      {preview && !compact ? null : (
+        <div
+          className={`shrink-0 border-b border-line bg-surface-1 px-4 py-2 print:hidden ${compact ? "" : "lg:hidden"}`}
+        >
+          <label htmlFor="viewer-section" className="sr-only">
+            Section
+          </label>
+          <select
+            id="viewer-section"
+            value={effectiveSelected}
+            onChange={(e) => handleSelect(e.target.value)}
+            className="min-h-11 w-full rounded-md border border-line bg-surface-0 px-3 text-base text-fg-primary focus:outline-none"
+          >
+            {nav.map((item) => (
+              <option key={item.key} value={item.key}>
+                {item.label}
+                {"count" in item ? ` (${item.count})` : ""}
+                {"docs" in item && item.docs.length > 1
+                  ? ` (${item.docs.length})`
+                  : ""}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
+
+      <div className="flex min-h-0 flex-1 overflow-hidden print:block print:overflow-visible">
         {/* Sidebar */}
         <aside
           className={
             preview
-              ? "relative flex w-48 shrink-0 flex-col border-r border-line bg-surface-1"
-              : `
-            fixed inset-y-0 left-0 z-30 flex w-64 flex-col border-r border-line bg-surface-1 pt-16 transition-transform duration-200 lg:relative lg:inset-auto lg:z-auto lg:flex lg:w-56 lg:shrink-0 lg:pt-0 lg:translate-x-0
-            ${sidebarOpen ? "translate-x-0" : "-translate-x-full"}
-          `
+              ? compact
+                ? "hidden"
+                : "relative flex w-48 shrink-0 flex-col border-r border-line bg-surface-1 print:hidden"
+              : "hidden w-56 shrink-0 flex-col border-r border-line bg-surface-1 lg:flex print:hidden"
           }
         >
           <div className="relative z-10 flex flex-1 flex-col overflow-y-auto py-4">
@@ -611,7 +665,7 @@ export function DataRoomViewer({
         {/* Content panel */}
         <main
           ref={mainRef}
-          className="min-w-0 flex-1 overflow-y-auto px-4 py-6 sm:px-6 sm:py-8 lg:px-10"
+          className="min-w-0 flex-1 overflow-y-auto px-4 py-6 sm:px-6 sm:py-8 lg:px-10 print:overflow-visible print:p-0"
         >
           <ContentPanel
             selected={effectiveSelected}
@@ -620,7 +674,7 @@ export function DataRoomViewer({
             thesis={thesis}
             team={team}
             entities={entities}
-            docSections={docSections}
+            docSections={sections}
             token={token}
             accent={accent}
             current={current}
@@ -630,6 +684,13 @@ export function DataRoomViewer({
             signerEmail={signerEmail}
             focusDocumentId={focusDocumentId}
           />
+          {/* On paper: who it was prepared for. The sidebar and buttons are gone. */}
+          {!preview ? (
+            <p className="mt-8 hidden border-t border-line pt-2 text-xs text-fg-muted print:block">
+              Confidential{viewerLabel ? ` · Prepared for ${viewerLabel}` : ""}{" "}
+              · {org.name}
+            </p>
+          ) : null}
         </main>
       </div>
     </div>
@@ -691,91 +752,6 @@ function ContentPanel({
     );
   }
 
-  if (selected === "track_record") {
-    const rows = [
-      {
-        v:
-          blended.weightedGrossIrr != null
-            ? `${blended.weightedGrossIrr.toFixed(0)}%`
-            : "—",
-        l: "Gross IRR",
-      },
-      {
-        v:
-          blended.pooledMoic != null
-            ? `${blended.pooledMoic.toFixed(1)}x`
-            : "—",
-        l: "MOIC",
-      },
-      { v: blended.dpi != null ? `${blended.dpi.toFixed(2)}x` : "—", l: "DPI" },
-      { v: compactUsd(blended.totalInvested) ?? "—", l: "Invested" },
-    ];
-    return (
-      <div className="max-w-2xl">
-        <SectionHeader title="Track Record" accent={accent} />
-        <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
-          {rows.map((m) => (
-            <div
-              key={m.l}
-              className="rounded-xl border border-line bg-surface-1 px-4 py-3 text-center"
-              style={{ boxShadow: "0 1px 4px rgba(0,0,0,0.12)" }}
-            >
-              <p className="font-display text-2xl font-semibold text-fg-primary">
-                {m.v}
-              </p>
-              <p className="mt-1 font-mono text-[11px] uppercase tracking-wider text-fg-muted">
-                {m.l}
-              </p>
-            </div>
-          ))}
-        </div>
-        <p className="mt-3 font-mono text-[11px] uppercase tracking-wider text-fg-muted">
-          {blended.dealCount} deals · {blended.realizedCount} realized
-          {blended.vintageRange
-            ? ` · vintages ${blended.vintageRange.from}–${blended.vintageRange.to}`
-            : ""}
-        </p>
-      </div>
-    );
-  }
-
-  if (selected === "thesis" && thesis) {
-    const checkSize = [
-      compactUsd(thesis.check_size_min),
-      compactUsd(thesis.check_size_max),
-    ].filter(Boolean);
-    return (
-      <div className="max-w-2xl">
-        <SectionHeader title="Investment Thesis" accent={accent} />
-        <div className="mt-4 space-y-3">
-          <p className="text-base font-semibold text-fg-primary">
-            {thesis.title}
-          </p>
-          {thesis.summary ? (
-            <p className="text-sm leading-relaxed text-fg-secondary">
-              {thesis.summary}
-            </p>
-          ) : null}
-          <p className="font-mono text-[11px] uppercase tracking-wider text-fg-muted">
-            {[
-              thesis.asset_classes?.join(", "),
-              thesis.geographies?.join(", "),
-              checkSize.length ? checkSize.join("–") : null,
-              thesis.target_irr != null
-                ? `${thesis.target_irr}% target IRR`
-                : null,
-              thesis.target_moic != null
-                ? `${thesis.target_moic}x target MOIC`
-                : null,
-            ]
-              .filter(Boolean)
-              .join("  ·  ") || "—"}
-          </p>
-        </div>
-      </div>
-    );
-  }
-
   if (selected === "team") {
     return (
       <div className="max-w-2xl">
@@ -819,35 +795,61 @@ function ContentPanel({
   }
 
   if (selected === ALL_DOCS_KEY) {
+    const listed = docSections.filter((sec) => sec.docs.length > 0);
+    const total = listed.reduce((n, sec) => n + sec.docs.length, 0);
+    const latest = listed
+      .flatMap((sec) => sec.docs.map((d) => d.updatedAt ?? ""))
+      .filter(Boolean)
+      .sort()
+      .pop();
+    const facts = [
+      [org.entity_type, org.jurisdiction].filter(Boolean).join(" · "),
+      `${total} ${total === 1 ? "document" : "documents"}`,
+      latest ? `Updated ${formatDocDate(latest)}` : "",
+    ].filter(Boolean);
     return (
       <div className="max-w-4xl">
+        {/* The cover: whose room this is, in a line, before the index. */}
+        <div className="mb-8 border-b border-line pb-6">
+          <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-fg-muted">
+            Confidential · Data room
+          </p>
+          <p className="mt-2 font-display text-2xl font-semibold tracking-tight text-fg-primary sm:text-3xl">
+            {org.name}
+          </p>
+          {org.tagline ? (
+            <p className="mt-1 text-base text-fg-secondary">{org.tagline}</p>
+          ) : null}
+          <p className="mt-3 font-mono text-[11px] uppercase tracking-wider text-fg-muted">
+            {facts.join("  ·  ")}
+          </p>
+        </div>
         <SectionHeader title="All documents" accent={accent} />
         <div className="mt-4 space-y-6">
-          {docSections
-            .filter((sec) => sec.docs.length > 0)
-            .map((sec) => (
-              <div key={sec.key}>
-                <p className="mb-2 font-mono text-[11px] uppercase tracking-[0.16em] text-fg-muted">
-                  {sec.label}
-                </p>
-                <div className="space-y-4">
-                  {sec.docs.map((doc) => (
-                    <DocCard
-                      key={doc.id}
-                      doc={doc}
-                      token={token}
-                      accent={accent}
-                      preview={preview}
-                      controls={controls}
-                      viewerLabel={viewerLabel}
-                      signerEmail={signerEmail}
-                      // A long list of open file previews is not a list: the reader opens the ones they want.
-                      startOpen={false}
-                    />
-                  ))}
-                </div>
+          {listed.map((sec) => (
+            <div key={sec.key}>
+              <p className="mb-2 font-mono text-[11px] uppercase tracking-[0.16em] text-fg-muted">
+                {sec.label}
+                <span className="ml-2 text-fg-muted/70">{sec.docs.length}</span>
+              </p>
+              <div className="space-y-2">
+                {sec.docs.map((doc) => (
+                  <DocCard
+                    key={doc.id}
+                    doc={doc}
+                    token={token}
+                    accent={accent}
+                    preview={preview}
+                    controls={controls}
+                    viewerLabel={viewerLabel}
+                    signerEmail={signerEmail}
+                    // A long list of open file previews is not a list: the reader opens the ones they want.
+                    startOpen={false}
+                  />
+                ))}
               </div>
-            ))}
+            </div>
+          ))}
         </div>
       </div>
     );
@@ -860,6 +862,12 @@ function ContentPanel({
   return (
     <div className="max-w-4xl">
       <SectionHeader title={sec.label} accent={accent} />
+      {sec.key === BUILD_PAGE_SECTION.thesis && thesis ? (
+        <ThesisSummary thesis={thesis} />
+      ) : null}
+      {sec.key === BUILD_PAGE_SECTION.trackRecord && blended.dealCount > 0 ? (
+        <TrackRecordSummary blended={blended} />
+      ) : null}
       <div className="mt-4 space-y-6">
         {sec.docs.map((doc) => (
           <DocCard
@@ -880,6 +888,80 @@ function ContentPanel({
           />
         ))}
       </div>
+    </div>
+  );
+}
+
+function TrackRecordSummary({ blended }: { blended: ViewerTrackRecord }) {
+  const rows = [
+    {
+      v:
+        blended.weightedGrossIrr != null
+          ? `${blended.weightedGrossIrr.toFixed(0)}%`
+          : "—",
+      l: "Gross IRR",
+    },
+    {
+      v: blended.pooledMoic != null ? `${blended.pooledMoic.toFixed(1)}x` : "—",
+      l: "MOIC",
+    },
+    { v: blended.dpi != null ? `${blended.dpi.toFixed(2)}x` : "—", l: "DPI" },
+    { v: compactUsd(blended.totalInvested) ?? "—", l: "Invested" },
+  ];
+  return (
+    <div className="mt-4 max-w-2xl">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        {rows.map((m) => (
+          <div
+            key={m.l}
+            className="rounded-xl border border-line bg-surface-1 px-4 py-3 text-center"
+            style={{ boxShadow: "0 1px 4px rgba(0,0,0,0.12)" }}
+          >
+            <p className="font-display text-2xl font-semibold text-fg-primary">
+              {m.v}
+            </p>
+            <p className="mt-1 font-mono text-[11px] uppercase tracking-wider text-fg-muted">
+              {m.l}
+            </p>
+          </div>
+        ))}
+      </div>
+      <p className="mt-3 font-mono text-[11px] uppercase tracking-wider text-fg-muted">
+        {blended.dealCount} deals · {blended.realizedCount} realized
+        {blended.vintageRange
+          ? ` · vintages ${blended.vintageRange.from}–${blended.vintageRange.to}`
+          : ""}
+      </p>
+    </div>
+  );
+}
+
+function ThesisSummary({ thesis }: { thesis: ViewerThesis }) {
+  const checkSize = [
+    compactUsd(thesis.check_size_min),
+    compactUsd(thesis.check_size_max),
+  ].filter(Boolean);
+  return (
+    <div className="mt-4 max-w-2xl space-y-3">
+      <p className="text-base font-semibold text-fg-primary">{thesis.title}</p>
+      {thesis.summary ? (
+        <p className="text-sm leading-relaxed text-fg-secondary">
+          {thesis.summary}
+        </p>
+      ) : null}
+      <p className="font-mono text-[11px] uppercase tracking-wider text-fg-muted">
+        {[
+          thesis.asset_classes?.join(", "),
+          thesis.geographies?.join(", "),
+          checkSize.length ? checkSize.join("–") : null,
+          thesis.target_irr != null ? `${thesis.target_irr}% target IRR` : null,
+          thesis.target_moic != null
+            ? `${thesis.target_moic}x target MOIC`
+            : null,
+        ]
+          .filter(Boolean)
+          .join("  ·  ") || "—"}
+      </p>
     </div>
   );
 }
@@ -926,22 +1008,29 @@ function DocCard({
   const [showFile, setShowFile] = useState(startOpen && previewable);
   const fileUrl = `/dataroom/${token}/d/${doc.id}`;
   const btn =
-    "inline-flex min-h-11 items-center rounded-lg border px-3 py-1.5 font-mono text-[11px] uppercase tracking-wider transition hover:bg-surface-0 sm:min-h-0";
+    "inline-flex min-h-11 items-center rounded-md border px-3 py-1.5 font-mono text-[11px] uppercase tracking-wider transition hover:bg-surface-0 sm:min-h-0 print:hidden";
 
   return (
     <div
       data-doc-id={doc.id}
-      className="overflow-hidden rounded-xl border border-line bg-surface-1"
-      style={{ boxShadow: "0 1px 4px rgba(0,0,0,0.1)" }}
+      className="overflow-hidden rounded-md border border-line bg-surface-1 print:break-inside-avoid"
     >
       {/* Doc header */}
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-2 px-4 py-3 sm:px-5">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2 px-4 py-2.5 sm:px-5">
         <span className="font-mono text-[11px] text-fg-muted">
           {locked ? "🔒" : href ? (doc.uploaded ? "▤" : "↗") : "≡"}
         </span>
         <p className="min-w-[9rem] flex-1 break-words text-sm font-medium text-fg-primary">
           {doc.name}
         </p>
+        {doc.isNew ? (
+          <span
+            className="shrink-0 rounded-sm px-1.5 py-0.5 font-mono text-[10px] font-semibold uppercase tracking-wider text-surface-0"
+            style={{ backgroundColor: accent }}
+          >
+            New
+          </span>
+        ) : null}
         {doc.requiresSignature ? (
           <span
             className="shrink-0 rounded-full border px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider"
@@ -949,6 +1038,15 @@ function DocCard({
           >
             {doc.signed ? "Signed" : "Signature required"}
           </span>
+        ) : null}
+        {doc.updatedAt && formatDocDate(doc.updatedAt) ? (
+          <time
+            dateTime={doc.updatedAt}
+            title="Last updated"
+            className="shrink-0 font-mono text-[11px] tabular-nums text-fg-muted"
+          >
+            {formatDocDate(doc.updatedAt)}
+          </time>
         ) : null}
         {doc.content ? (
           <button

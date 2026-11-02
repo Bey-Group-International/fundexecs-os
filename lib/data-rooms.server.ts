@@ -7,6 +7,8 @@ import { getSessionContext } from "@/lib/auth";
 import { DEFAULT_ROOM_NAME, type RoomDocument } from "@/lib/data-rooms";
 import type { DataRoom, Document } from "@/lib/supabase/database.types";
 import { selectAllPages, selectInBatches } from "@/lib/supabase/batch";
+import { blendTrackRecord } from "@/lib/track-record";
+import { logReadFailure, DataRoomReadError } from "@/lib/data-room-errors";
 
 /**
  * The org's live rooms, default first. Creates the default room on first visit
@@ -136,4 +138,50 @@ export async function publishedRoomsByDocument(orgId: string): Promise<Map<strin
     else out.set(r.document_id, [r.room_id]);
   }
   return out;
+}
+
+/**
+ * What the Build pages hold, in the few numbers Room contents lists them by.
+ * Light on purpose: the full preview is loaded when the Preview tab opens, and
+ * this runs on every visit to the page. An errored read gives null rather than
+ * zeros, so a failure never reads as "nothing set up yet".
+ */
+export async function loadBuildPageSummary(orgId: string): Promise<{
+  tagline: string | null;
+  thesisTitle: string | null;
+  dealCount: number;
+  weightedGrossIrr: number | null;
+  teamCount: number;
+  entityCount: number;
+} | null> {
+  const supabase = await createServerClient();
+  const [org, thesis, records, members, profiles, entities] = await Promise.all([
+    supabase.from("organizations").select("tagline").eq("id", orgId).maybeSingle(),
+    supabase
+      .from("investment_theses")
+      .select("title")
+      .eq("organization_id", orgId)
+      .order("is_active", { ascending: false })
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+    supabase.from("track_records").select("*").eq("organization_id", orgId),
+    supabase.from("organization_members").select("id", { count: "exact", head: true }).eq("organization_id", orgId),
+    supabase.from("team_profiles").select("id", { count: "exact", head: true }).eq("organization_id", orgId),
+    supabase.from("entities").select("id", { count: "exact", head: true }).eq("organization_id", orgId),
+  ]);
+  const failed = [org, thesis, records, members, profiles, entities].find((r) => r.error);
+  if (failed?.error) {
+    logReadFailure(new DataRoomReadError("build-summary", failed.error));
+    return null;
+  }
+  const blended = blendTrackRecord((records.data ?? []) as Parameters<typeof blendTrackRecord>[0]);
+  return {
+    tagline: (org.data as { tagline?: string | null } | null)?.tagline ?? null,
+    thesisTitle: (thesis.data as { title?: string } | null)?.title ?? null,
+    dealCount: blended.dealCount,
+    weightedGrossIrr: blended.weightedGrossIrr ?? null,
+    teamCount: (members.count ?? 0) + (profiles.count ?? 0),
+    entityCount: entities.count ?? 0,
+  };
 }

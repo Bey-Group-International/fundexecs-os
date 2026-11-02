@@ -150,6 +150,52 @@ export function sectionsAllowedBy<S extends { key: string }>(
 }
 
 /**
+ * The section each Build page belongs to, read from DATA_ROOM_SECTIONS (which names
+ * the Build module behind a section) so the mapping lives in one place: the thesis
+ * module's section, the track record's, the team's, and the entity module's, which
+ * is "Legal & Structure".
+ */
+const sectionOfBuildModule = (module: string): string => {
+  const found = DATA_ROOM_SECTIONS.find((s) => s.buildModule === module);
+  if (!found) throw new Error(`No data room section is backed by the "${module}" Build module`);
+  return found.key;
+};
+export const BUILD_PAGE_SECTION = {
+  thesis: sectionOfBuildModule("thesis"),
+  trackRecord: sectionOfBuildModule("track_record"),
+  team: sectionOfBuildModule("team"),
+  structure: sectionOfBuildModule("entity"),
+} as const;
+
+/**
+ * Which of the firm's Build pages a link's section allowlist lets a reader see.
+ *
+ * Each page belongs to a section: the thesis page to "Investment Strategy &
+ * Thesis", the track record to "Track Record & Performance", the team to "Team &
+ * Governance", the structure to "Legal & Structure". A link that does not allow
+ * the section does not show the page either. `null`/`undefined` is unrestricted,
+ * and `[]` allows nothing, as in sectionsAllowedBy. The overview is the firm's
+ * identity, not a section, so it is not governed here and always shows.
+ */
+export function buildPagesAllowedBy(allowed: string[] | null | undefined): {
+  thesis: boolean;
+  trackRecord: boolean;
+  team: boolean;
+  structure: boolean;
+} {
+  if (allowed === null || allowed === undefined) {
+    return { thesis: true, trackRecord: true, team: true, structure: true };
+  }
+  const set = new Set(allowed);
+  return {
+    thesis: set.has(BUILD_PAGE_SECTION.thesis),
+    trackRecord: set.has(BUILD_PAGE_SECTION.trackRecord),
+    team: set.has(BUILD_PAGE_SECTION.team),
+    structure: set.has(BUILD_PAGE_SECTION.structure),
+  };
+}
+
+/**
  * What a link actually exposes: the room's published sections narrowed by the
  * link's own allowlist. `allowed_sections: null` means every published section.
  * Answers the question a GP asks before sending — "what does this person see?"
@@ -161,4 +207,91 @@ export function shareExposure(share: ShareLike, sections: RoomSection[]): RoomSe
 /** Count of documents a link exposes. */
 export function shareDocCount(share: ShareLike, sections: RoomSection[]): number {
   return shareExposure(share, sections).reduce((n, s) => n + s.docs.length, 0);
+}
+
+/** A page the reader sees that comes from Build, not from a published document. */
+export interface BuildContentRow {
+  key: "overview" | "thesis" | "track_record" | "team" | "structure";
+  label: string;
+  /** What it holds now, or what is missing. */
+  detail: string;
+  /** Nothing entered in Build yet, so a reader sees no such page or section. */
+  empty: boolean;
+  /** Where to edit it. */
+  href: string;
+  /** The entry a reader finds it under. */
+  shownUnder: string;
+}
+
+const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
+
+/**
+ * The Build-sourced pages of a room, for the GP's Room contents. These are what
+ * Preview as LP shows beyond the published documents. The thesis and track
+ * record are always listed so a gap is visible; the rest only when they hold
+ * something.
+ */
+export function buildContentRows(src: {
+  tagline: string | null;
+  thesisTitle: string | null;
+  dealCount: number;
+  weightedGrossIrr: number | null;
+  teamCount: number;
+  entityCount: number;
+}): BuildContentRow[] {
+  const rows: BuildContentRow[] = [
+    {
+      key: "overview",
+      label: "Firm overview",
+      detail: src.tagline || "From Firm Identity",
+      empty: false,
+      href: "/build/profile",
+      shownUnder: "Overview",
+    },
+    {
+      key: "thesis",
+      label: "Investment thesis",
+      detail: src.thesisTitle ?? "Not set up yet",
+      empty: src.thesisTitle === null,
+      href: "/build/thesis",
+      shownUnder: sectionLabel(BUILD_PAGE_SECTION.thesis),
+    },
+    {
+      key: "track_record",
+      label: "Track record",
+      detail:
+        src.dealCount > 0
+          ? [
+              plural(src.dealCount, "deal", "deals"),
+              src.weightedGrossIrr != null ? `${src.weightedGrossIrr.toFixed(0)}% gross IRR` : null,
+            ]
+              .filter(Boolean)
+              .join(" · ")
+          : "No deals entered yet",
+      empty: src.dealCount === 0,
+      href: "/build/track_record",
+      shownUnder: sectionLabel(BUILD_PAGE_SECTION.trackRecord),
+    },
+  ];
+  if (src.teamCount > 0) {
+    rows.push({
+      key: "team",
+      label: "Team",
+      detail: plural(src.teamCount, "person", "people"),
+      empty: false,
+      href: "/build/team",
+      shownUnder: "Team",
+    });
+  }
+  if (src.entityCount > 0) {
+    rows.push({
+      key: "structure",
+      label: "Structure",
+      detail: plural(src.entityCount, "entity", "entities"),
+      empty: false,
+      href: "/build/entity",
+      shownUnder: "Structure",
+    });
+  }
+  return rows;
 }
