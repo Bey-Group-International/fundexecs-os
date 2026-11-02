@@ -27,6 +27,7 @@ import type { PreviewShare } from "./RoomPreview";
 import { ShareControls } from "./ShareControls";
 import { ViewerAnalytics } from "./ViewerAnalytics";
 import { NdaSignatures } from "./NdaSignatures";
+import { RoomSignatures } from "./RoomSignatures";
 import { AuditExport } from "./AuditExport";
 import { RoomSwitcher } from "./RoomSwitcher";
 import { RoomWorkspace } from "./RoomWorkspace";
@@ -330,6 +331,7 @@ export async function MaterialsModule({ roomId }: { roomId?: string } = {}) {
           <div className="space-y-6">
             <AuditExport roomId={room.id} roomName={room.name} />
             <ViewerAnalytics roomId={room.id} />
+            <RoomSignatures roomId={room.id} />
             <NdaSignatures roomId={room.id} />
           </div>
         }
