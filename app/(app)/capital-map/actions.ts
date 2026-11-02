@@ -1,5 +1,6 @@
 "use server";
 
+import { isPlatformAdmin } from "@/lib/platform-admin";
 import { revalidatePath } from "next/cache";
 import { createServerClient } from "@/lib/supabase/server";
 import { requireOrgContext } from "@/lib/auth";
@@ -88,6 +89,7 @@ export async function queueNextAction(
   // rule can revoke a pre-authorized auto-send to a forbidden counterparty.
   const decision = gateDecision(action, mandate, undefined, {
     targetDomain: investor.contact_email ?? undefined,
+    platformAdmin: isPlatformAdmin(auth.ctx),
   });
 
   const title = `${label} — ${investor.name}`;

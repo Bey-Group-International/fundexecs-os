@@ -5,6 +5,7 @@
 // route, the only thing the product could do with it was put it on the
 // clipboard — so the host opened another application, pasted it, and typed in
 // the addresses of people this meeting already knows.
+import { isPlatformAdmin } from "@/lib/platform-admin";
 import { NextRequest, NextResponse } from "next/server";
 import { requireOrgContext } from "@/lib/auth";
 import { logId } from "@/lib/log-safe";
@@ -156,7 +157,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   // per attendee, each on that attendee's thread for this meeting — instead of
   // an immediate send; nothing reaches anybody until it is approved.
   const mandate = await getActiveMandate(supabase, auth.ctx.orgId);
-  if (gateDecision("send_reply", mandate).requiresApproval) {
+  if (gateDecision("send_reply", mandate, undefined, { platformAdmin: isPlatformAdmin(auth.ctx) }).requiresApproval) {
     let queued = 0;
     // Known contacts the firm has written to before skip the hold and go now
     // (lib/inbox/known-contact.server.ts), so a gated follow-up can be both.
