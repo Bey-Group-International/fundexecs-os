@@ -13,7 +13,7 @@ import { readIdentityCheck } from "@/lib/lp-identity.server";
 import { loadDetailsPrefill } from "@/lib/lp-prefill.server";
 import type { IdentityState } from "@/lib/lp-identity";
 import type { LpType } from "@/lib/supabase/database.types";
-import { subscriptionAgreementText } from "@/lib/lp-subscription";
+import { loadLpAgreementView } from "@/lib/lp-agreement.server";
 import type { OnboardingStatus } from "@/lib/lp-onboarding";
 
 export const dynamic = "force-dynamic";
@@ -92,6 +92,8 @@ export default async function LPOnboardingPortal(props: { params: Promise<{ toke
       return <LPAccessGate token={params.token} maskedEmail={maskEmail(sessionRow!.lp_email as string)} />;
     }
     if (reviewState === "approved") {
+      // The agreement is an envelope the fund prepares and sends: show where it stands.
+      const agreement = await loadLpAgreementView(supabase, sessionId);
       return (
         <LPPortalFlow
           token={params.token}
@@ -100,7 +102,7 @@ export default async function LPOnboardingPortal(props: { params: Promise<{ toke
           fundName={fundName}
           commitmentAmount={commitmentAmount}
           wireInstructions={wireInstructions}
-          subscriptionContent={subscriptionContent}
+          agreement={agreement}
         />
       );
     }
@@ -169,14 +171,6 @@ export default async function LPOnboardingPortal(props: { params: Promise<{ toke
       />
     );
   }
-
-  const subscriptionContent = subscriptionAgreementText({
-    fundName,
-    orgName,
-    jurisdiction,
-    investorName: lpName,
-    commitmentAmount,
-  });
 
   return (
     <main className="min-h-screen bg-surface-0 text-fg-primary">

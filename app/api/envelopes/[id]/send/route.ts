@@ -46,9 +46,9 @@ export async function POST(_req: Request, props: { params: Promise<{ id: string 
   const [{ data: pre }, { data: placed }, { data: current }] = await Promise.all([
     supabase.from("envelope_recipients").select("id, name, role").eq("envelope_id", envelopeId),
     supabase.from("envelope_fields").select("recipient_id, field_type").eq("envelope_id", envelopeId),
-    supabase.from("envelopes").select("status, pdf_storage_key").eq("id", envelopeId).eq("organization_id", orgId).maybeSingle(),
+    supabase.from("envelopes").select("status, pdf_storage_key, lp_session_id").eq("id", envelopeId).eq("organization_id", orgId).maybeSingle(),
   ]);
-  const cur = current as { status: string; pdf_storage_key: string | null } | null;
+  const cur = current as { status: string; pdf_storage_key: string | null; lp_session_id: string | null } | null;
   if (!cur) return NextResponse.json({ error: "Envelope not found" }, { status: 404 });
   if (cur.status !== "draft") return NextResponse.json({ error: "This document has already been sent." }, { status: 409 });
   if (cur.pdf_storage_key) {
@@ -94,11 +94,21 @@ export async function POST(_req: Request, props: { params: Promise<{ id: string 
   // Build signing URLs
   const baseUrl = process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, "") ?? "";
 
+  // An LP's agreement is signed inside their portal (behind its emailed-code check), so
+  // they are sent the portal link, never the bare signing link.
+  let portalUrl: string | null = null;
+  if (cur.lp_session_id) {
+    const { createServiceClient } = await import("@/lib/supabase/server");
+    const { data: sess } = await createServiceClient().from("lp_onboarding_sessions").select("token").eq("id", cur.lp_session_id).maybeSingle();
+    const t = (sess as { token: string } | null)?.token;
+    if (t) portalUrl = `${baseUrl}/lp/${t}`;
+  }
+
   const signingUrls = rows.map((r) => ({
     recipientId: r.id,
     name: r.name,
     email: r.email,
-    url: `${baseUrl}/sign/${r.signing_token}`,
+    url: portalUrl ?? `${baseUrl}/sign/${r.signing_token}`,
   }));
 
   // Send invitation emails from the org's own connected mailbox.
@@ -108,7 +118,7 @@ export async function POST(_req: Request, props: { params: Promise<{ id: string 
         sendEmail({
           orgId,
           to: { name, email },
-          subject: `You have been invited to sign: ${envelope.title ?? "Document"}`,
+          subject: portalUrl ? "Your subscription agreement is ready to sign" : `You have been invited to sign: ${envelope.title ?? "Document"}`,
           htmlBody: buildSigningInvitationHtml({
             recipientName: name,
             documentTitle: envelope.title ?? "Document",

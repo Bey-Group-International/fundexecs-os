@@ -2857,6 +2857,8 @@ export type Envelope = {
   /** The PDF being signed, in the documents bucket (migration 20261102180000). */
   pdf_storage_key?: string | null;
   document_sha256?: string | null;
+  /** Set when this is an LP's subscription agreement (migration 20261102210000). */
+  lp_session_id?: string | null;
 };
 
 export type EnvelopeRecipient = {

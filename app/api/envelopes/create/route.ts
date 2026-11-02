@@ -2,8 +2,8 @@ import { cookies } from 'next/headers'
 import { NextResponse } from 'next/server'
 import { createServerClient } from '@supabase/ssr'
 import { sendEmail, buildSigningInvitationHtml } from '@/lib/email'
-import { buildDocumentPdf } from '@/lib/signing/executed-pdf.server'
-import { isPdfBytes, storeEnvelopePdf } from '@/lib/envelope-pdf.server'
+import { createEnvelope } from '@/lib/envelope-create.server'
+import { isPdfBytes } from '@/lib/envelope-pdf.server'
 
 export const runtime = 'nodejs'
 
@@ -98,97 +98,32 @@ export async function POST(request: Request) {
 
     const organizationId = memberRow.organization_id
 
-    // Insert envelope row
-    const { data: envelope, error: envelopeError } = await supabase
-      .from('envelopes')
-      .insert({
-        title: title.trim(),
-        message: message ?? null,
-        document_content: documentContent,
-        organization_id: organizationId,
-        created_by: user.id,
-        status: 'draft',
-      })
-      .select('id')
-      .single()
-
-    if (envelopeError || !envelope) {
-      console.error('envelopeError', envelopeError)
-      return NextResponse.json(
-        { ok: false, error: envelopeError?.message ?? 'Failed to create envelope' },
-        { status: 500 }
-      )
-    }
-
-    const envelopeId = envelope.id
-
-    // Insert recipient rows
-    const recipientRows = recipients.map((r, index) => ({
-      envelope_id: envelopeId,
-      name: r.name,
-      email: r.email,
-      routing_order: r.routingOrder ?? index + 1,
-    }))
-
-    const { data: insertedRecipients, error: recipientsError } = await supabase
-      .from('envelope_recipients')
-      .insert(recipientRows)
-      .select('id, name, email, routing_order, signing_token')
-
-    if (recipientsError || !insertedRecipients) {
-      console.error('recipientsError', recipientsError)
-      return NextResponse.json(
-        { ok: false, error: recipientsError?.message ?? 'Failed to insert recipients' },
-        { status: 500 }
-      )
-    }
-
-    // The account owner is the last signer: they countersign after the recipients.
-    const ownerName =
-      (user.user_metadata?.full_name as string | undefined) || (user.email ?? 'Account owner').split('@')[0]
-    const { error: ownerError } = await supabase.from('envelope_recipients').insert({
-      envelope_id: envelopeId,
-      name: ownerName,
-      email: user.email ?? '',
-      routing_order: 1000,
-      role: 'owner',
-    })
-    if (ownerError) {
-      console.error('ownerError', ownerError)
-      return NextResponse.json({ ok: false, error: 'Failed to add the countersigner' }, { status: 500 })
-    }
-
-    // The document itself, as a PDF the owner places signature blocks on.
-    let pdfBytes: Uint8Array
+    let pdfBytes: Uint8Array | undefined
     if (pdfBase64) {
       pdfBytes = new Uint8Array(Buffer.from(pdfBase64, 'base64'))
       if (!isPdfBytes(pdfBytes)) {
         return NextResponse.json({ ok: false, error: 'That file is not a PDF' }, { status: 400 })
       }
-    } else {
-      pdfBytes = await buildDocumentPdf({ title: title.trim(), text: documentContent })
     }
-    const stored = await storeEnvelopePdf(envelopeId, pdfBytes)
-    if (!stored) {
-      return NextResponse.json({ ok: false, error: 'Could not store the document (is it over 25 MB?)' }, { status: 400 })
-    }
-    await supabase
-      .from('envelopes')
-      .update({ pdf_storage_key: stored.key, document_sha256: stored.sha256 })
-      .eq('id', envelopeId)
 
-    // Insert 'created' event. envelope_events has no created_by column
-    // (20260701250000_envelopes.sql) — the actor rides in metadata, and the
-    // old insert that named created_by errored (swallowed) on every create.
-    const { error: createdEventError } = await supabase.from('envelope_events').insert({
-      envelope_id: envelopeId,
-      event_type: 'created',
-      metadata: { actor: user.id },
+    const created = await createEnvelope(supabase as never, {
+      orgId: organizationId,
+      creator: {
+        id: user.id,
+        email: user.email ?? null,
+        name: (user.user_metadata?.full_name as string | undefined) ?? null,
+      },
+      title,
+      message,
+      documentContent,
+      pdfBytes,
+      recipients,
     })
-
-    if (createdEventError) {
-      console.error('createdEventError', createdEventError)
+    if (!created.ok) {
+      return NextResponse.json({ ok: false, error: created.error }, { status: created.status })
     }
+    const envelopeId = created.envelopeId
+    const insertedRecipients = created.recipients
 
     // If send=true, update status and insert 'sent' event
     if (send) {

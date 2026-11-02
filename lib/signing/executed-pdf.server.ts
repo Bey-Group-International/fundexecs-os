@@ -146,8 +146,16 @@ export async function buildSignedPdf(input: ExecutedPdfInput): Promise<Uint8Arra
   return pdf.save();
 }
 
+/**
+ * Labelled lines for a signature page: who signs, and what goes beside their name. The
+ * owner clicks each line to put a block on it; the lines only show where.
+ */
+export interface SignaturePageSpec {
+  parties: { label: string; lines: string[] }[];
+}
+
 /** A plain document PDF from text (an agreement we generate), to be placed on and signed. */
-export async function buildDocumentPdf(input: { title: string; text: string }): Promise<Uint8Array> {
+export async function buildDocumentPdf(input: { title: string; text: string; signaturePage?: SignaturePageSpec }): Promise<Uint8Array> {
   const pdf = await PDFDocument.create();
   pdf.setTitle(winAnsi(input.title));
   pdf.setProducer("FundExecs");
@@ -175,6 +183,29 @@ export async function buildDocumentPdf(input: { title: string; text: string }): 
       continue;
     }
     draw(text, heading ? bold : regular, heading ? 13 : 10.5, heading ? 4 : 0);
+  }
+
+  if (input.signaturePage) {
+    page = pdf.addPage([W, H]);
+    y = H - M;
+    draw("Signature page", bold, 16, 8);
+    draw("IN WITNESS WHEREOF, the parties have executed this agreement as of the date signed below.", regular, 10.5, 14);
+    for (const party of input.signaturePage.parties) {
+      if (y < M + 40 + party.lines.length * 34) {
+        page = pdf.addPage([W, H]);
+        y = H - M;
+      }
+      draw(party.label, bold, 12, 6);
+      for (const line of party.lines) {
+        // A rule to sign on, with its label beneath.
+        const isSignature = /signature/i.test(line);
+        y -= isSignature ? 34 : 22;
+        page.drawLine({ start: { x: M, y }, end: { x: M + 260, y }, thickness: 0.6, color: rgb(0.4, 0.4, 0.4) });
+        page.drawText(winAnsi(line), { x: M, y: y - 10, size: 8.5, font: regular, color: rgb(0.4, 0.4, 0.4) });
+        y -= 12;
+      }
+      y -= 22;
+    }
   }
   return pdf.save();
 }
