@@ -1,4 +1,4 @@
-import { AUDIT_ACTIONS, auditRow, cleanDetail } from "./lp-audit";
+import { AUDIT_ACTIONS, auditRow, cleanDetail, MAX_VIEWS_PER_LOAD, sessionsToLogViews } from "./lp-audit";
 
 describe("cleanDetail", () => {
   it("keeps short codes, numbers and booleans", () => {
@@ -65,5 +65,24 @@ describe("auditRow", () => {
 
   it("doesn't overlap the actions the database triggers write", () => {
     for (const a of AUDIT_ACTIONS) expect(a).not.toMatch(/^(check\.(recorded|updated)|decision\.|consent\.|review\.)/);
+  });
+});
+
+describe("data.viewed", () => {
+  it("is an action the app may write, as a signed-in person", () => {
+    expect(auditRow({ orgId: "o", sessionId: "s", action: "data.viewed", actorKind: "user", actorId: "u1" })).toMatchObject({ action: "data.viewed", actor_kind: "user", actor_id: "u1", detail: {} });
+    expect(auditRow({ orgId: "o", sessionId: "s", action: "data.viewed", actorKind: "user", actorId: "" })).toBeNull();
+  });
+});
+
+describe("sessionsToLogViews", () => {
+  it("skips LPs already recorded in the window, and repeats", () => {
+    expect(sessionsToLogViews(["a", "b", "b", "c"], ["b"])).toEqual(["a", "c"]);
+    expect(sessionsToLogViews(["a"], ["a"])).toEqual([]);
+    expect(sessionsToLogViews([], [])).toEqual([]);
+  });
+  it("caps one load", () => {
+    const many = Array.from({ length: MAX_VIEWS_PER_LOAD + 50 }, (_, i) => `s${i}`);
+    expect(sessionsToLogViews(many, [])).toHaveLength(MAX_VIEWS_PER_LOAD);
   });
 });
