@@ -583,6 +583,13 @@ describe("the OFAC first-pass screen on submit", () => {
     expect(runOfacScreen).toHaveBeenCalledWith(expect.anything(), "s1", "org-1", { actor: { kind: "system" } });
   });
 
+  it("says in the log when the automatic screen did not run, and still never affects the submission", async () => {
+    runOfacScreen.mockResolvedValueOnce({ ok: false, error: "Couldn't record the screen. Try again." } as never);
+    expect(await submitWizardAction("tok")).toEqual({ ok: true });
+    await Promise.all(afterTasks.map((t) => t()));
+    expect(console.error).toHaveBeenCalledWith("[wizard] the automatic OFAC screen did not run", { session: "s1", error: "Couldn't record the screen. Try again." });
+  });
+
   it("never holds up or fails a submission", async () => {
     afterThrows = true;
     expect(await submitWizardAction("tok")).toEqual({ ok: true });

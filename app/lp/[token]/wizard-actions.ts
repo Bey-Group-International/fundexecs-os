@@ -417,7 +417,10 @@ export async function submitWizardAction(token: string): Promise<WizardResult> {
     // from the sanctions check, and a failure here changes nothing for the LP.
     try {
       after(async () => {
-        await runOfacScreen(ctx.supabase, ctx.session.id, ctx.session.organization_id, { actor: { kind: "system" } });
+        const screened = await runOfacScreen(ctx.supabase, ctx.session.id, ctx.session.organization_id, { actor: { kind: "system" } });
+        // The sanctions check stays as it was (pending until someone records it), so approval is still
+        // blocked. Say in the log that the automatic screen did not run, so it isn't mistaken for a clean one.
+        if (!screened.ok) console.error("[wizard] the automatic OFAC screen did not run", { session: ctx.session.id, error: screened.error });
       });
     } catch (err) {
       console.error("submitWizardAction could not schedule the OFAC screen", err);

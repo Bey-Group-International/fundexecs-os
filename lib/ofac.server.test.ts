@@ -45,6 +45,10 @@ let writeError: { code: string; message: string } | null;
 let checkReads: Array<Record<string, unknown>>;
 // Audit rows are kept apart, so assertions about the check row stay about the check row.
 let audits: Array<Record<string, unknown>>;
+let updateMatches: boolean;
+/** Audit writes after this many have been written are refused (null: none are). */
+let auditFailsFrom: number | null;
+let auditRefused: boolean;
 let auditError: { code: string; message: string } | null;
 const client = {
   from(table: string) {
@@ -53,11 +57,13 @@ const client = {
     const q: Record<string, unknown> = {
       select: () => q,
       eq: (c: string, v: unknown) => ((filters[c] = v), q),
+      is: (c: string, v: unknown) => ((filters[c] = v === null ? "IS NULL" : v), q),
       update: (row: Record<string, unknown>) => ((op = "update"), writes.push({ table, op, row, filters }), q),
       insert: (row: Record<string, unknown>) => {
         op = "insert";
         if (table === "onboarding_audit_log") {
-          if (!auditError) audits.push(row);
+          auditRefused = !!auditError || (auditFailsFrom !== null && audits.length >= auditFailsFrom);
+          if (!auditRefused) audits.push(row);
         } else writes.push({ table, op, row, filters });
         return q;
       },
@@ -65,7 +71,12 @@ const client = {
         if (table === "onboarding_checks") checkReads.push({ ...filters });
         return { data: (tables[table] as unknown) ?? null };
       },
-      then: (resolve: (v: unknown) => void) => resolve(op === "select" ? { data: tables[table] ?? [], error: null } : { error: table === "onboarding_audit_log" ? auditError : writeError }),
+      then: (resolve: (v: unknown) => void) =>
+        resolve(
+          op === "select"
+            ? { data: tables[table] ?? [], error: null }
+            : { error: table === "onboarding_audit_log" ? (auditRefused ? auditError ?? { code: "42501", message: "denied" } : null) : writeError, ...(op === "update" && table === "onboarding_checks" && !writeError ? { data: updateMatches ? [{ session_id: "s1" }] : [] } : {}) },
+        ),
     };
     return q;
   },
@@ -92,6 +103,9 @@ beforeEach(() => {
   };
   writes = [];
   audits = [];
+  updateMatches = true;
+  auditFailsFrom = null;
+  auditRefused = false;
   auditError = null;
   checkReads = [];
   writeError = null;
@@ -288,6 +302,33 @@ describe("runOfacScreen", () => {
       expect(res).toEqual({ ok: false, error: "Couldn't save the screen. Try again." });
       expect(audits.map((a) => a.action)).toEqual(["check.screen_run", "check.screen_failed"]);
       expect(audits[1]).toMatchObject({ actor_id: "user-7", actor_kind: "user", detail: { status: "pending" } });
+    });
+
+    it("only overwrites the check it read: status, note and who recorded it must still match", async () => {
+      tables.onboarding_checks = { status: "pending", summary: null, recorded_by: null };
+      await runOfacScreen(client, "s1", "org-1", { now: NOW });
+      expect(writes[0].filters).toMatchObject({ status: "pending", summary: "IS NULL", recorded_by: "IS NULL" });
+      writes.length = 0;
+      tables.onboarding_checks = { status: "flagged", summary: `${SCREEN_PREFIX} earlier flag`, recorded_by: null };
+      await runOfacScreen(client, "s1", "org-1", { now: NOW });
+      expect(writes[0].filters).toMatchObject({ status: "flagged", summary: `${SCREEN_PREFIX} earlier flag`, recorded_by: "IS NULL" });
+    });
+
+    it("overwrites nothing and says so when a person changed the check meanwhile", async () => {
+      tables.onboarding_checks = { status: "pending", summary: null, recorded_by: null };
+      updateMatches = false;
+      const res = await runOfacScreen(client, "s1", "org-1", { now: NOW, actor: { kind: "user", id: "user-7" } });
+      expect(res).toMatchObject({ ok: false, error: expect.stringContaining("nothing was overwritten") });
+      expect(audits.map((a) => a.action)).toEqual(["check.screen_run", "check.screen_failed"]);
+      expect(audits[1]).toMatchObject({ actor_id: "user-7", detail: { status: "pending", reason: "changed_meanwhile" } });
+    });
+
+    it("says in the log when even the failure entry cannot be written", async () => {
+      writeError = { code: "42501", message: "denied" };
+      auditFailsFrom = 1; // the run's own entry is written; the failure entry after it is refused
+      await runOfacScreen(client, "s1", "org-1", { now: NOW });
+      expect(audits.map((a) => a.action)).toEqual(["check.screen_run"]);
+      expect(console.error).toHaveBeenCalledWith("[ofac] could not record the screen failure", { status: "pending" });
     });
 
     it("does not change the check when the entry cannot be written", async () => {
