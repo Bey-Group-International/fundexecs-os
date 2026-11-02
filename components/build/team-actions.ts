@@ -5,6 +5,7 @@ import { createServerClient, createServiceClient } from "@/lib/supabase/server";
 import { getSessionContext } from "@/lib/auth";
 import { planSeatLimit, seatLimitReached } from "@/lib/billing";
 import { isPlatformAdmin } from "@/lib/platform-admin";
+import { checkRateLimit } from "@/lib/rate-limit";
 import { savePendingInvite, sendMemberAddedEmail } from "@/lib/team-invites.server";
 import {
   createTeamTask,
@@ -217,6 +218,90 @@ export async function inviteMember(
   if (!email) return { error: "Enter an email address." };
   const role = parseRole(formData.get("role")) ?? "member";
   return addMemberByEmail(ctx as AdminCtx, email, role);
+}
+
+// 4b. Remind someone they were added. Admin/owner only. Works on an existing
+// member (memberId) or an invite still waiting for a sign-in (inviteId), and
+// only ever mails an address already on this organization's team. Best-effort
+// rate limit per address so a double click or a script cannot spam anyone.
+export async function resendInvite(
+  formData: FormData,
+): Promise<{ error?: string; notice?: string }> {
+  const ctx = await getSessionContext();
+  if (!ctx?.orgId) return { error: "No active organization." };
+  if (!isAdmin(ctx.role)) return { error: "Only admins and owners can send reminders." };
+
+  const memberId = String(formData.get("memberId") ?? "").trim();
+  const inviteId = String(formData.get("inviteId") ?? "").trim();
+  if (!memberId && !inviteId) return { error: "Choose who to remind." };
+
+  const svc = createServiceClient();
+  let email: string;
+  let role: MemberRole;
+  let pending = false;
+
+  if (inviteId) {
+    const { data: invite } = await svc
+      .from("organization_invites")
+      .select("id, email, role, accepted_at")
+      .eq("id", inviteId)
+      .eq("organization_id", ctx.orgId)
+      .maybeSingle();
+    if (!invite || invite.accepted_at) return { error: "That invite is no longer pending." };
+    email = invite.email;
+    role = invite.role;
+    pending = true;
+  } else {
+    const { data: member } = await svc
+      .from("organization_members")
+      .select("principal_id, role")
+      .eq("id", memberId)
+      .eq("organization_id", ctx.orgId)
+      .maybeSingle();
+    if (!member) return { error: "That member isn't on this team." };
+    if (member.principal_id === ctx.userId) return { error: "You don't need to remind yourself." };
+    const { data: principal } = await svc
+      .from("principals")
+      .select("email")
+      .eq("id", member.principal_id)
+      .maybeSingle();
+    if (!principal?.email) return { error: "That member has no email address on file." };
+    email = principal.email.trim().toLowerCase();
+    role = member.role;
+  }
+
+  const limited = checkRateLimit({
+    key: `team-invite-resend:${ctx.orgId}:${email}`,
+    limit: 1,
+    windowMs: 5 * 60_000,
+  });
+  if (!limited.ok) {
+    return { error: `A reminder was just sent to ${email}. Try again in a few minutes.` };
+  }
+
+  // A reminder on a waiting invite also gives it a fresh 30 days.
+  if (pending) {
+    await svc
+      .from("organization_invites")
+      .update({ expires_at: new Date(Date.now() + 30 * 86_400_000).toISOString() })
+      .eq("id", inviteId);
+  }
+
+  const mail = await sendMemberAddedEmail(svc, {
+    orgId: ctx.orgId,
+    email,
+    role,
+    inviterId: ctx.userId,
+    pending,
+    reminder: true,
+  });
+  revalidatePath(TEAM);
+  return mail.sent
+    ? { notice: `Reminder sent to ${email}.` }
+    : {
+        error:
+          "The reminder couldn't be sent. Connect a mailbox in Settings → Integrations, or let them know directly.",
+      };
 }
 
 type AdminCtx = NonNullable<Awaited<ReturnType<typeof getSessionContext>>> & {

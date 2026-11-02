@@ -1,13 +1,18 @@
 import { redirect } from "next/navigation";
 import { getSessionContext } from "@/lib/auth";
-import { createServerClient } from "@/lib/supabase/server";
+import { createServerClient, createServiceClient } from "@/lib/supabase/server";
 import { getWallet } from "@/lib/wallet";
 import { planSeatLimit } from "@/lib/billing";
 import { ADMIN_PLAN_NAME, isPlatformAdmin } from "@/lib/platform-admin";
 import { avatarUrlWithVersion } from "@/lib/avatar";
 import type { OrganizationMember, Principal, TeamProfile } from "@/lib/supabase/database.types";
 import { ModuleHeader } from "./DraftWithEarn";
-import { TeamControls, type TeamMemberView, type TeamProfileView } from "./TeamControls";
+import {
+  TeamControls,
+  type PendingInviteView,
+  type TeamMemberView,
+  type TeamProfileView,
+} from "./TeamControls";
 
 export async function TeamModule() {
   const ctx = await getSessionContext();
@@ -55,6 +60,26 @@ export async function TeamModule() {
     avatarUrl: t.avatar_url ? avatarUrlWithVersion(t.avatar_url, t.updated_at) : null,
   }));
 
+  // Pending invites are admin-only (RLS), so read them with the service role
+  // after checking the role here.
+  const viewerIsAdmin = ctx.role === "owner" || ctx.role === "admin";
+  let pendingInvites: PendingInviteView[] = [];
+  if (viewerIsAdmin) {
+    const { data: inviteData } = await createServiceClient()
+      .from("organization_invites")
+      .select("id, email, role, created_at, expires_at")
+      .eq("organization_id", ctx.orgId)
+      .is("accepted_at", null)
+      .gt("expires_at", new Date().toISOString())
+      .order("created_at", { ascending: true });
+    pendingInvites = (inviteData ?? []).map((i) => ({
+      inviteId: i.id,
+      email: i.email,
+      role: i.role,
+      sentAt: i.created_at,
+    }));
+  }
+
   const self = byId.get(ctx.userId);
   const ownProfile = {
     full_name: self?.full_name ?? null,
@@ -90,6 +115,7 @@ export async function TeamModule() {
         <TeamControls
           members={memberViews}
           profiles={profileViews}
+          pendingInvites={pendingInvites}
           currentUserId={ctx.userId}
           currentRole={ctx.role}
           ownProfile={ownProfile}

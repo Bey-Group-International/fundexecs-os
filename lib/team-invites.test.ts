@@ -60,4 +60,11 @@ describe("memberAddedEmail", () => {
     const { subject } = memberAddedEmail({ ...base, inviterName: null, role: "member", pending: false });
     expect(subject).toBe("A teammate added you to Acme Capital on FundExecs OS");
   });
+
+  it("labels a reminder as one and keeps the sign-in link", () => {
+    const { subject, html } = memberAddedEmail({ ...base, role: "member", pending: true, reminder: true });
+    expect(subject).toBe("Reminder: join Acme Capital on FundExecs OS");
+    expect(html).toContain("Reminder: Dana added you to Acme Capital");
+    expect(html).toContain("/login");
+  });
 });

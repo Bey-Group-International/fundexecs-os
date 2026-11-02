@@ -74,6 +74,7 @@ export async function sendMemberAddedEmail(
     role: MemberRole;
     inviterId: string | null;
     pending: boolean;
+    reminder?: boolean;
   },
 ): Promise<MemberAddedResult> {
   try {
@@ -93,6 +94,7 @@ export async function sendMemberAddedEmail(
       email: args.email,
       role: args.role,
       pending: args.pending,
+      reminder: args.reminder,
     });
     // The org's connected mailbox first; the deployment's backup sender when
     // that cannot send, because an invite nobody hears about strands the person.

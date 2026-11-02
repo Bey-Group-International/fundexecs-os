@@ -27,6 +27,8 @@ export interface MemberAddedEmailInput {
   role: MemberRole;
   /** No account yet: the invite is waiting for them to sign in. */
   pending: boolean;
+  /** A nudge to someone already told once ("Remind" on the Team page). */
+  reminder?: boolean;
 }
 
 /**
@@ -56,7 +58,9 @@ export function memberAddedEmail(input: MemberAddedEmailInput): { subject: strin
   <div style="max-width:560px;margin:0 auto;background:#111111;border:1px solid #222222;border-radius:12px;overflow:hidden;">
     <div style="padding:6px 24px;background:#F59E0B;"><span style="font-size:11px;font-weight:700;letter-spacing:0.1em;color:#0a0a0a;text-transform:uppercase;">FundExecs OS</span></div>
     <div style="padding:32px 24px;">
-      <h1 style="margin:0 0 8px;font-size:22px;color:#F5F5F5;font-weight:700;">${who} added you to ${org}</h1>
+      <h1 style="margin:0 0 8px;font-size:22px;color:#F5F5F5;font-weight:700;">${
+        input.reminder ? `Reminder: ${who} added you to ${org}` : `${who} added you to ${org}`
+      }</h1>
       <p style="margin:0 0 12px;font-size:15px;color:#AAAAAA;">${roleLine}</p>
       <p style="margin:0;font-size:15px;color:#AAAAAA;">${next}</p>
       <a href="${escapeHtml(url)}" style="display:inline-block;background:#F59E0B;color:#0a0a0a;text-decoration:none;padding:12px 24px;border-radius:8px;font-size:14px;font-weight:700;margin-top:24px;">Sign in to join</a>
@@ -67,5 +71,8 @@ export function memberAddedEmail(input: MemberAddedEmailInput): { subject: strin
 </body>
 </html>`;
 
-  return { subject: `${input.inviterName?.trim() || "A teammate"} added you to ${input.orgName} on FundExecs OS`, html };
+  const subject = input.reminder
+    ? `Reminder: join ${input.orgName} on FundExecs OS`
+    : `${input.inviterName?.trim() || "A teammate"} added you to ${input.orgName} on FundExecs OS`;
+  return { subject, html };
 }
