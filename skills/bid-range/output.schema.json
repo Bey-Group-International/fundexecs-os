@@ -1,70 +1,16 @@
 {
-  "type": "object",
-  "required": [
-    "base",
-    "walkAway",
-    "target",
-    "opening",
-    "walkAwayClearsBase",
-    "walkAwayClearsDownside",
-    "versusComps",
-    "hurdlesAreDefault",
-    "limitation",
-    "note",
-    "gate"
-  ],
   "properties": {
+    "adjustmentApplied": {
+      "type": "number"
+    },
     "base": {
       "type": "object"
     },
     "downside": {
       "type": "object"
     },
-    "adjustmentApplied": {
-      "type": "number"
-    },
-    "walkAway": {
-      "type": "object",
-      "required": [
-        "basis"
-      ]
-    },
-    "target": {
-      "type": "object",
-      "required": [
-        "basis"
-      ]
-    },
-    "opening": {
-      "type": "object",
-      "required": [
-        "basis"
-      ]
-    },
-    "walkAwayClearsBase": {
-      "type": "string",
-      "enum": [
-        "clears",
-        "misses",
-        "not-tested"
-      ]
-    },
-    "walkAwayClearsDownside": {
-      "type": "string",
-      "enum": [
-        "clears",
-        "misses",
-        "not-tested"
-      ]
-    },
-    "versusComps": {
-      "type": "string",
-      "enum": [
-        "below",
-        "within",
-        "above",
-        "not-supplied"
-      ]
+    "gate": {
+      "type": "string"
     },
     "hurdlesAreDefault": {
       "type": "boolean"
@@ -75,8 +21,31 @@
     "note": {
       "type": "string"
     },
-    "gate": {
+    "opening": {
+      "required": [ "basis" ],
+      "type": "object"
+    },
+    "target": {
+      "required": [ "basis" ],
+      "type": "object"
+    },
+    "versusComps": {
+      "enum": [ "below", "within", "above", "not-supplied" ],
+      "type": "string"
+    },
+    "walkAway": {
+      "required": [ "basis" ],
+      "type": "object"
+    },
+    "walkAwayClearsBase": {
+      "enum": [ "clears", "misses", "not-tested" ],
+      "type": "string"
+    },
+    "walkAwayClearsDownside": {
+      "enum": [ "clears", "misses", "not-tested" ],
       "type": "string"
     }
-  }
+  },
+  "required": [ "base", "walkAway", "target", "opening", "walkAwayClearsBase", "walkAwayClearsDownside", "versusComps", "hurdlesAreDefault", "limitation", "note", "gate" ],
+  "type": "object"
 }

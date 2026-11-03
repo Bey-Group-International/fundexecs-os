@@ -1,123 +1,115 @@
 {
-  "type": "object",
-  "required": [
-    "ebitda"
-  ],
   "properties": {
-    "ebitda": {
-      "type": "number",
-      "minimum": 0
-    },
-    "leverageMultiple": {
-      "type": "number",
-      "minimum": 0
-    },
-    "debtAmount": {
-      "type": "number",
-      "minimum": 0
-    },
-    "holdYears": {
-      "type": "number",
-      "minimum": 0
-    },
-    "exitMultiple": {
-      "type": "number",
-      "minimum": 0
-    },
-    "ebitdaGrowthRate": {
+    "annualDebtPaydown": {
+      "minimum": 0,
       "type": "number"
     },
-    "annualDebtPaydown": {
-      "type": "number",
-      "minimum": 0
-    },
-    "transactionFeesPct": {
-      "type": "number",
-      "minimum": 0,
-      "maximum": 1
-    },
-    "hurdles": {
-      "type": "object",
-      "required": [
-        "base",
-        "holdYears"
-      ],
+    "compsMultipleRange": {
       "properties": {
-        "base": {
-          "type": "object",
-          "properties": {
-            "irr": {
-              "type": "number",
-              "minimum": 0
-            },
-            "moic": {
-              "type": "number",
-              "minimum": 0
-            }
-          }
+        "high": {
+          "type": "number"
         },
-        "downside": {
-          "type": "object",
-          "properties": {
-            "irr": {
-              "type": "number",
-              "minimum": 0
-            },
-            "moic": {
-              "type": "number",
-              "minimum": 0
-            }
-          }
-        },
-        "holdYears": {
-          "type": "number",
-          "minimum": 0
+        "low": {
+          "type": "number"
         }
-      }
+      },
+      "required": [ "low", "high" ],
+      "type": "object"
+    },
+    "debtAmount": {
+      "minimum": 0,
+      "type": "number"
     },
     "downsideCase": {
-      "type": "object",
       "properties": {
         "ebitdaGrowthRate": {
           "type": "number"
         },
         "exitMultiple": {
-          "type": "number",
-          "minimum": 0
-        }
-      }
-    },
-    "compsMultipleRange": {
-      "type": "object",
-      "required": [
-        "low",
-        "high"
-      ],
-      "properties": {
-        "low": {
-          "type": "number"
-        },
-        "high": {
+          "minimum": 0,
           "type": "number"
         }
-      }
+      },
+      "type": "object"
     },
-    "redFlagPriceAdjustment": {
-      "type": "number",
-      "minimum": 0
-    },
-    "openingDiscountPct": {
-      "type": "number",
+    "ebitda": {
       "minimum": 0,
-      "maximum": 100
+      "type": "number"
     },
-    "targetDiscountPct": {
-      "type": "number",
+    "ebitdaGrowthRate": {
+      "type": "number"
+    },
+    "exitMultiple": {
       "minimum": 0,
-      "maximum": 100
+      "type": "number"
     },
     "gateOwner": {
       "type": "string"
+    },
+    "holdYears": {
+      "minimum": 0,
+      "type": "number"
+    },
+    "hurdles": {
+      "properties": {
+        "base": {
+          "properties": {
+            "irr": {
+              "minimum": 0,
+              "type": "number"
+            },
+            "moic": {
+              "minimum": 0,
+              "type": "number"
+            }
+          },
+          "type": "object"
+        },
+        "downside": {
+          "properties": {
+            "irr": {
+              "minimum": 0,
+              "type": "number"
+            },
+            "moic": {
+              "minimum": 0,
+              "type": "number"
+            }
+          },
+          "type": "object"
+        },
+        "holdYears": {
+          "minimum": 0,
+          "type": "number"
+        }
+      },
+      "required": [ "base", "holdYears" ],
+      "type": "object"
+    },
+    "leverageMultiple": {
+      "minimum": 0,
+      "type": "number"
+    },
+    "openingDiscountPct": {
+      "maximum": 100,
+      "minimum": 0,
+      "type": "number"
+    },
+    "redFlagPriceAdjustment": {
+      "minimum": 0,
+      "type": "number"
+    },
+    "targetDiscountPct": {
+      "maximum": 100,
+      "minimum": 0,
+      "type": "number"
+    },
+    "transactionFeesPct": {
+      "maximum": 1,
+      "minimum": 0,
+      "type": "number"
     }
-  }
+  },
+  "required": [ "ebitda" ],
+  "type": "object"
 }

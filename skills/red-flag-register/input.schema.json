@@ -1,84 +1,62 @@
 {
-  "type": "object",
-  "required": [
-    "findings",
-    "workstreamsRun"
-  ],
   "properties": {
-    "findings": {
-      "type": "array",
+    "expectedWorkstreams": {
       "items": {
-        "type": "object",
-        "required": [
-          "title",
-          "workstream",
-          "severity",
-          "impact"
-        ],
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "findings": {
+      "items": {
         "properties": {
-          "title": {
-            "type": "string",
-            "minLength": 1
-          },
-          "workstream": {
-            "type": "string",
-            "minLength": 1
-          },
-          "severity": {
-            "type": "string",
-            "enum": [
-              "red",
-              "amber"
-            ]
+          "evidenceGrade": {
+            "enum": [ "A", "B", "C", "U" ],
+            "type": "string"
           },
           "impact": {
-            "type": "string",
-            "enum": [
-              "walk-away",
-              "price",
-              "structure",
-              "spa-protection",
-              "100-day"
-            ]
-          },
-          "evidenceGrade": {
-            "type": "string",
-            "enum": [
-              "A",
-              "B",
-              "C",
-              "U"
-            ]
-          },
-          "priceImpact": {
-            "type": "number"
-          },
-          "treatment": {
+            "enum": [ "walk-away", "price", "structure", "spa-protection", "100-day" ],
             "type": "string"
           },
           "owner": {
             "type": "string"
           },
+          "priceImpact": {
+            "type": "number"
+          },
+          "severity": {
+            "enum": [ "red", "amber" ],
+            "type": "string"
+          },
           "sourceRef": {
             "type": "string"
+          },
+          "title": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "treatment": {
+            "type": "string"
+          },
+          "workstream": {
+            "minLength": 1,
+            "type": "string"
           }
-        }
-      }
-    },
-    "workstreamsRun": {
-      "type": "array",
-      "items": {
-        "type": "string"
-      }
-    },
-    "expectedWorkstreams": {
-      "type": "array",
-      "items": {
-        "type": "string"
-      }
+        },
+        "required": [ "title", "workstream", "severity", "impact" ],
+        "type": "object"
+      },
+      "type": "array"
     },
     "gateOwner": {
       "type": "string"
+    },
+    "workstreamsRun": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
     }
-  }
+  },
+  "required": [ "findings", "workstreamsRun" ],
+  "type": "object"
 }

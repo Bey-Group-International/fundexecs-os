@@ -1,25 +1,19 @@
 {
   "input": {
-    "findings": [
-      {
-        "title": "Customer concentration: top client 42%",
-        "workstream": "revenue-quality",
-        "severity": "amber",
-        "impact": "price",
-        "evidenceGrade": "A",
-        "priceImpact": 5,
-        "treatment": "Earn-out"
-      },
-      {
-        "title": "Undisclosed tax audit",
-        "workstream": "tax",
-        "severity": "red",
-        "impact": "walk-away"
-      }
-    ],
-    "workstreamsRun": [
-      "tax",
-      "revenue-quality"
-    ]
+    "findings": [ {
+      "evidenceGrade": "A",
+      "impact": "price",
+      "priceImpact": 5,
+      "severity": "amber",
+      "title": "Customer concentration: top client 42%",
+      "treatment": "Earn-out",
+      "workstream": "revenue-quality"
+    }, {
+      "impact": "walk-away",
+      "severity": "red",
+      "title": "Undisclosed tax audit",
+      "workstream": "tax"
+    } ],
+    "workstreamsRun": [ "tax", "revenue-quality" ]
   }
 }

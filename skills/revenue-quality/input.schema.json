@@ -1,69 +1,54 @@
 {
-  "type": "object",
-  "required": [
-    "years",
-    "reportedRevenue",
-    "customers"
-  ],
   "properties": {
-    "years": {
-      "type": "array",
-      "items": {
-        "type": "string",
-        "minLength": 1
-      }
-    },
-    "reportedRevenue": {
-      "type": "object"
-    },
     "customers": {
-      "type": "array",
       "items": {
-        "type": "object",
-        "required": [
-          "name",
-          "revenueByYear"
-        ],
         "properties": {
+          "changeOfControl": {
+            "enum": [ "yes", "no", "unknown" ],
+            "type": "string"
+          },
+          "contractEnd": {
+            "type": "string"
+          },
           "name": {
-            "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "type": "string"
+          },
+          "relatedGroup": {
+            "type": "string"
           },
           "revenueByYear": {
             "type": "object"
           },
           "revenueClass": {
-            "type": "string",
-            "enum": [
-              "contracted-recurring",
-              "repeat",
-              "one-off"
-            ]
-          },
-          "contractEnd": {
-            "type": "string"
-          },
-          "changeOfControl": {
-            "type": "string",
-            "enum": [
-              "yes",
-              "no",
-              "unknown"
-            ]
-          },
-          "relatedGroup": {
+            "enum": [ "contracted-recurring", "repeat", "one-off" ],
             "type": "string"
           }
-        }
-      }
-    },
-    "thresholdPct": {
-      "type": "number",
-      "minimum": 0,
-      "maximum": 100
+        },
+        "required": [ "name", "revenueByYear" ],
+        "type": "object"
+      },
+      "type": "array"
     },
     "gateOwner": {
       "type": "string"
+    },
+    "reportedRevenue": {
+      "type": "object"
+    },
+    "thresholdPct": {
+      "maximum": 100,
+      "minimum": 0,
+      "type": "number"
+    },
+    "years": {
+      "items": {
+        "minLength": 1,
+        "type": "string"
+      },
+      "type": "array"
     }
-  }
+  },
+  "required": [ "years", "reportedRevenue", "customers" ],
+  "type": "object"
 }
