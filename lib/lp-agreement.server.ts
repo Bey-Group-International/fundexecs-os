@@ -60,7 +60,7 @@ export function agreementText(f: AgreementFacts, now: Date = new Date()): string
 /** Where the owner will put blocks: the investor's lines, then the fund's. */
 export const AGREEMENT_SIGNATURE_PAGE: SignaturePageSpec = {
   parties: [
-    { label: "Investor", lines: ["Signature", "Name", "Title (if signing for an entity)", "Company", "Address", "Date and time"] },
+    { label: "Investor", lines: ["Signature", "Name", "Title (if signing for an entity)", "Company", "Address", "Email", "Phone", "Date and time"] },
     { label: "Fund", lines: ["Signature", "Name", "Title", "Date and time"] },
   ],
 };

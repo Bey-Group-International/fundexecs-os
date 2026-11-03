@@ -1,8 +1,9 @@
 "use client";
 
-// Open the document, click where each block goes, then send. The owner picks a block
-// type, picks who fills it (the recipient or themselves), and clicks the page. Blocks
-// can be dragged, and text blocks can carry a value the signer sees (optionally locked).
+// Open the document, click where each block goes, then send. One toolbar: a switch for
+// who fills the next block (the recipient or you), the block types, and the page. Pick a
+// type once (Signature to start), then every click on the page drops one there. Blocks can
+// be dragged; click one to change what it asks for (required, a pre-filled value, locked).
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { PdfPages } from "@/components/signing/PdfPages";
@@ -29,6 +30,7 @@ interface Block {
 }
 
 const TINT = ["#C9A227", "#3B82F6"]; // recipient, owner
+const PREFILLABLE = ["name", "company", "title", "address", "email", "phone"];
 
 let counter = 0;
 const nextKey = () => `b${Date.now().toString(36)}${counter++}`;
@@ -53,7 +55,7 @@ export function BlockPlacer({ title, fieldsUrl, pdfUrl, sendUrl, doneHref, prefi
   const router = useRouter();
   const [parties, setParties] = useState<Party[]>([]);
   const [blocks, setBlocks] = useState<Block[]>([]);
-  const [tool, setTool] = useState<BlockType | null>("signature");
+  const [tool, setTool] = useState<BlockType>("signature");
   const [partyId, setPartyId] = useState<string>("");
   const [selected, setSelected] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -93,6 +95,21 @@ export function BlockPlacer({ title, fieldsUrl, pdfUrl, sendUrl, doneHref, prefi
     void load();
   }, [load]);
 
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      const el = e.target as HTMLElement | null;
+      if (el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA")) return;
+      if (e.key === "Escape") setSelected(null);
+      if ((e.key === "Delete" || e.key === "Backspace") && selected) {
+        e.preventDefault();
+        setBlocks((cur) => cur.filter((b) => b.key !== selected));
+        setSelected(null);
+      }
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [selected]);
+
   const partyIndex = useMemo(() => new Map(parties.map((p, i) => [p.id, i === 0 ? 0 : p.role === "owner" ? 1 : 0])), [parties]);
   const sel = blocks.find((b) => b.key === selected) ?? null;
   const party = (id: string) => parties.find((p) => p.id === id);
@@ -100,14 +117,14 @@ export function BlockPlacer({ title, fieldsUrl, pdfUrl, sendUrl, doneHref, prefi
   const owner = parties.find((p) => p.role === "owner");
 
   function place(page: number, xPct: number, yPct: number) {
-    if (!tool || !partyId) return;
+    if (!partyId) return;
     const pos = newBlockAt(tool, xPct, yPct);
     const target = party(partyId);
-    // A name block starts with the signer's name, which they can still change.
-    const prefill = prefillNames && tool === "name" ? target?.name ?? "" : "";
+    // A name or email block starts with the person's own, which they can still change.
+    const prefill = prefillNames ? (tool === "name" ? target?.name : tool === "email" ? target?.email : "") ?? "" : "";
     const b: Block = { key: nextKey(), recipientId: partyId, type: tool, page, ...pos, required: true, prefill, locked: false };
     setBlocks((cur) => [...cur, b]);
-    setSelected(b.key);
+    setSelected(null);
     setNotice(null);
   }
 
@@ -179,12 +196,17 @@ export function BlockPlacer({ title, fieldsUrl, pdfUrl, sendUrl, doneHref, prefi
 
   const tint = (id: string) => TINT[partyIndex.get(id) ?? 0] ?? TINT[0];
 
+  const who = [signer, owner].filter((p): p is Party => Boolean(p));
+  const hasSignature = (id: string) => blocks.some((b) => b.recipientId === id && b.type === "signature");
+  const activeParty = party(partyId);
+  const forLabel = activeParty?.role === "owner" ? "you" : activeParty?.name ?? "the recipient";
+
   return (
-    <div className="mx-auto max-w-7xl px-4 py-6">
+    <div className="mx-auto max-w-4xl px-4 py-6">
       <header className="mb-4 flex flex-wrap items-center gap-3">
         <div className="min-w-0 flex-1">
           <h1 className="truncate font-display text-xl font-semibold text-fg-primary">{title}</h1>
-          <p className="text-sm text-fg-secondary">{hint ?? "Click a block, then click the page where it goes. Drag to move."}</p>
+          {hint ? <p className="text-sm text-fg-secondary">{hint}</p> : null}
         </div>
         <button type="button" onClick={onSave} disabled={pending} className="rounded-lg border border-line px-4 py-2 text-sm text-fg-secondary hover:bg-surface-2 disabled:opacity-50">
           Save
@@ -196,90 +218,88 @@ export function BlockPlacer({ title, fieldsUrl, pdfUrl, sendUrl, doneHref, prefi
       {error ? <p role="alert" className="mb-3 rounded-lg border border-status-danger/40 bg-status-danger/10 px-3 py-2 text-sm text-status-danger">{error}</p> : null}
       {notice ? <p role="status" className="mb-3 text-sm text-fg-secondary">{notice}</p> : null}
 
-      <div className="grid gap-6 lg:grid-cols-[260px_1fr]">
-        <aside className="space-y-5 lg:sticky lg:top-4 lg:self-start">
-          <section>
-            <h2 className="mb-2 font-mono text-[11px] uppercase tracking-wider text-fg-muted">Who fills it</h2>
-            <div className="flex flex-col gap-1.5">
-              {[signer, owner].filter(Boolean).map((p) => (
-                <button
-                  key={p!.id}
-                  type="button"
-                  onClick={() => setPartyId(p!.id)}
-                  aria-pressed={partyId === p!.id}
-                  className={`flex items-center gap-2 rounded-lg border px-3 py-2 text-left text-sm transition ${partyId === p!.id ? "border-gold-500/60 bg-gold-500/10 text-fg-primary" : "border-line text-fg-secondary hover:bg-surface-2"}`}
-                >
-                  <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: tint(p!.id) }} />
-                  <span className="min-w-0 flex-1 truncate">{p!.role === "owner" ? "You (countersign)" : p!.name}</span>
-                </button>
-              ))}
-            </div>
-          </section>
-
-          <section>
-            <h2 className="mb-2 font-mono text-[11px] uppercase tracking-wider text-fg-muted">Blocks</h2>
-            <div className="grid grid-cols-2 gap-1.5">
-              {BLOCKS.map((b) => (
-                <button
-                  key={b.type}
-                  type="button"
-                  onClick={() => setTool(tool === b.type ? null : b.type)}
-                  aria-pressed={tool === b.type}
-                  className={`rounded-lg border px-2 py-2 text-xs transition ${tool === b.type ? "border-gold-500/60 bg-gold-500/10 text-fg-primary" : "border-line text-fg-secondary hover:bg-surface-2"}`}
-                >
-                  {b.label}
-                </button>
-              ))}
-            </div>
-            <p className="mt-2 text-xs text-fg-muted">{tool ? `Click the page to place a ${blockSpec(tool)!.label.toLowerCase()} block.` : "Pick a block to place."}</p>
-          </section>
-
-          {sel ? (
-            <section className="rounded-xl border border-line bg-surface-1 p-3">
-              <h2 className="mb-2 text-sm font-semibold text-fg-primary">{blockSpec(sel.type)!.label}</h2>
-              <p className="mb-2 text-xs text-fg-muted">For {party(sel.recipientId)?.role === "owner" ? "you" : party(sel.recipientId)?.name}</p>
-              <label className="mb-2 flex items-center gap-2 text-xs text-fg-secondary">
-                <input type="checkbox" checked={sel.required} onChange={(e) => patch(sel.key, { required: e.target.checked })} /> Required
-              </label>
-              {["name", "company", "title", "address"].includes(sel.type) ? (
-                <>
-                  <label className="mb-1 block text-xs text-fg-secondary">Pre-filled value</label>
-                  <textarea
-                    rows={sel.type === "address" ? 3 : 1}
-                    value={sel.prefill}
-                    onChange={(e) => patch(sel.key, { prefill: e.target.value })}
-                    className="w-full rounded-md border border-line bg-surface-0 px-2 py-1.5 text-xs text-fg-primary focus:border-gold-400 focus:outline-none"
-                  />
-                  <label className="mt-2 flex items-center gap-2 text-xs text-fg-secondary">
-                    <input type="checkbox" checked={sel.locked} disabled={!sel.prefill.trim()} onChange={(e) => patch(sel.key, { locked: e.target.checked })} /> Lock (signer cannot change it)
-                  </label>
-                </>
-              ) : null}
-              {sel.type === "datetime" ? <p className="text-xs text-fg-muted">Filled automatically when it is signed.</p> : null}
+      <div className="sticky top-0 z-10 mb-4 space-y-2 rounded-xl border border-line bg-surface-1/95 p-3 backdrop-blur">
+        <div className="flex flex-wrap items-center gap-3">
+          <div role="group" aria-label="Who fills the next block" className="inline-flex overflow-hidden rounded-lg border border-line">
+            {who.map((p) => (
               <button
+                key={p.id}
                 type="button"
-                onClick={() => {
-                  setBlocks((cur) => cur.filter((b) => b.key !== sel.key));
-                  setSelected(null);
-                }}
-                className="mt-3 text-xs text-status-danger underline underline-offset-2"
+                onClick={() => setPartyId(p.id)}
+                aria-pressed={partyId === p.id}
+                className={`flex items-center gap-2 px-3 py-1.5 text-sm transition ${partyId === p.id ? "bg-gold-500/15 text-fg-primary" : "text-fg-secondary hover:bg-surface-2"}`}
               >
-                Delete block
+                <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: tint(p.id) }} />
+                <span className="max-w-[10rem] truncate">{p.role === "owner" ? "Me" : p.name}</span>
+                {hasSignature(p.id) ? <span aria-label="has a signature block" className="text-emerald-400">✓</span> : <span aria-label="needs a signature block" className="text-amber-400">!</span>}
               </button>
-            </section>
-          ) : null}
-        </aside>
+            ))}
+          </div>
+          <div role="group" aria-label="Block to place" className="flex flex-wrap gap-1.5">
+            {BLOCKS.map((b) => (
+              <button
+                key={b.type}
+                type="button"
+                onClick={() => setTool(b.type)}
+                aria-pressed={tool === b.type}
+                className={`rounded-lg border px-2.5 py-1.5 text-xs transition ${tool === b.type ? "border-gold-500/60 bg-gold-500/10 text-fg-primary" : "border-line text-fg-secondary hover:bg-surface-2"}`}
+              >
+                {b.label}
+              </button>
+            ))}
+          </div>
+        </div>
+        <p className="text-xs text-fg-muted">
+          Click the page to place a <strong className="text-fg-secondary">{blockSpec(tool)!.label.toLowerCase()}</strong> block for {forLabel}. Drag a block to move it; click one to change it.
+        </p>
 
+        {sel ? (
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-line pt-2 text-xs text-fg-secondary">
+            <span className="font-semibold text-fg-primary">
+              {blockSpec(sel.type)!.label} <span className="font-normal text-fg-muted">for {party(sel.recipientId)?.role === "owner" ? "you" : party(sel.recipientId)?.name}</span>
+            </span>
+            <label className="flex items-center gap-1.5">
+              <input type="checkbox" checked={sel.required} onChange={(e) => patch(sel.key, { required: e.target.checked })} /> Required
+            </label>
+            {PREFILLABLE.includes(sel.type) ? (
+              <>
+                <input
+                  aria-label="Pre-filled value"
+                  placeholder="Pre-filled value (optional)"
+                  value={sel.prefill}
+                  onChange={(e) => patch(sel.key, { prefill: e.target.value })}
+                  className="min-w-[10rem] flex-1 rounded-md border border-line bg-surface-0 px-2 py-1 text-xs text-fg-primary focus:border-gold-400 focus:outline-none"
+                />
+                <label className="flex items-center gap-1.5">
+                  <input type="checkbox" checked={sel.locked} disabled={!sel.prefill.trim()} onChange={(e) => patch(sel.key, { locked: e.target.checked })} /> Lock
+                </label>
+              </>
+            ) : null}
+            {sel.type === "datetime" ? <span className="text-fg-muted">Filled automatically when it is signed.</span> : null}
+            <button
+              type="button"
+              onClick={() => {
+                setBlocks((cur) => cur.filter((b) => b.key !== sel.key));
+                setSelected(null);
+              }}
+              className="ml-auto text-status-danger underline underline-offset-2"
+            >
+              Delete
+            </button>
+          </div>
+        ) : null}
+      </div>
+
+      <div>
         <div className="rounded-xl bg-surface-2 p-3">
           <PdfPages src={pdfUrl}>
             {({ page, width, height }) => (
               <div
-                className={`absolute inset-0 ${tool ? "cursor-crosshair" : ""}`}
+                className="absolute inset-0 cursor-crosshair"
                 onPointerDown={(e) => {
                   if (e.target !== e.currentTarget) return;
                   const r = e.currentTarget.getBoundingClientRect();
-                  if (tool) place(page, ((e.clientX - r.left) / r.width) * 100, ((e.clientY - r.top) / r.height) * 100);
-                  else setSelected(null);
+                  place(page, ((e.clientX - r.left) / r.width) * 100, ((e.clientY - r.top) / r.height) * 100);
                 }}
               >
                 {blocks

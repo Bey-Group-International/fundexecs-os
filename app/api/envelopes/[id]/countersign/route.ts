@@ -4,6 +4,7 @@ import { canAdminOrg } from "@/lib/rbac";
 import { createServerClient } from "@/lib/supabase/server";
 import { missingRequiredFields, type EnvelopeFieldRequirement } from "@/lib/envelope-signing";
 import { parseSignaturePng } from "@/lib/signing/signature-image";
+import { blockValueProblem } from "@/lib/signing/blocks";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -60,6 +61,11 @@ export async function POST(req: Request, props: { params: Promise<{ id: string }
   }
   const missing = missingRequiredFields(fields, { signatureData, initialsData: null, fieldResponses: responses });
   if (missing.length) return NextResponse.json({ ok: false, error: `Required fields are incomplete: ${missing.join(", ")}` }, { status: 400 });
+
+  for (const f of fields) {
+    const problem = blockValueProblem(f.field_type, responses[f.id]);
+    if (problem) return NextResponse.json({ ok: false, error: problem }, { status: 400 });
+  }
 
   for (const f of fields) {
     if (responses[f.id] === undefined) continue;
