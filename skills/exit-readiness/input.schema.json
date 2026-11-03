@@ -1,0 +1,77 @@
+{
+  "properties": {
+    "company": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "equityStory": {
+      "items": {
+        "properties": {
+          "claim": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "proof": {
+            "type": "string"
+          }
+        },
+        "required": [ "claim" ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "gateOwner": {
+      "type": "string"
+    },
+    "items": {
+      "items": {
+        "properties": {
+          "area": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "costToClose": {
+            "minimum": 0,
+            "type": "number"
+          },
+          "critical": {
+            "type": "boolean"
+          },
+          "dueDate": {
+            "type": "string"
+          },
+          "evidence": {
+            "type": "string"
+          },
+          "id": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "owner": {
+            "type": "string"
+          },
+          "requirement": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "sourceRule": {
+            "type": "string"
+          },
+          "status": {
+            "enum": [ "met", "partial", "gap", "unknown" ],
+            "type": "string"
+          },
+          "weeksToClose": {
+            "minimum": 0,
+            "type": "number"
+          }
+        },
+        "required": [ "id", "area", "requirement", "status" ],
+        "type": "object"
+      },
+      "type": "array"
+    }
+  },
+  "required": [ "company", "items" ],
+  "type": "object"
+}

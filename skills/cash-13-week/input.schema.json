@@ -1,0 +1,76 @@
+{
+  "properties": {
+    "actualClosing": {
+      "items": {
+        "type": "number"
+      },
+      "type": "array"
+    },
+    "company": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "downsideReceiptsHaircutPct": {
+      "maximum": 100,
+      "minimum": 0,
+      "type": "number"
+    },
+    "facilityAvailable": {
+      "minimum": 0,
+      "type": "number"
+    },
+    "financing": {
+      "properties": {
+        "liquidityMinimum": {
+          "minimum": 0,
+          "type": "number"
+        }
+      },
+      "type": "object"
+    },
+    "gateOwner": {
+      "type": "string"
+    },
+    "openingCash": {
+      "type": "number"
+    },
+    "openingTiedToBank": {
+      "type": "boolean"
+    },
+    "priorForecastClosing": {
+      "items": {
+        "type": "number"
+      },
+      "type": "array"
+    },
+    "thinCollectionHistory": {
+      "type": "boolean"
+    },
+    "weeks": {
+      "items": {
+        "properties": {
+          "debtService": {
+            "minimum": 0,
+            "type": "number"
+          },
+          "oneOffs": {
+            "type": "number"
+          },
+          "payments": {
+            "minimum": 0,
+            "type": "number"
+          },
+          "receipts": {
+            "minimum": 0,
+            "type": "number"
+          }
+        },
+        "required": [ "receipts", "payments" ],
+        "type": "object"
+      },
+      "type": "array"
+    }
+  },
+  "required": [ "company", "openingCash", "weeks" ],
+  "type": "object"
+}

@@ -1,0 +1,57 @@
+# skills/kpi-variance/skill.yaml
+# Authoring spec for KPI Variance Tracking. The machine-readable manifest the runtime loads is
+# the TypeScript SkillDefinition in lib/skills/catalog/kpi-variance.ts; this YAML is the
+# human-facing contract and must stay consistent with it.
+# Origin: PE department pack · Execution + Portfolio. Rules re-implemented natively; no pack text is shipped.
+id: kpi-variance
+name: KPI Variance Tracking
+version: 1.0.0
+owner: fundexecs
+hub: execute
+
+applicable_executives:
+  - portfolio_ops
+
+supported_entity_types: [asset, company]
+
+required_inputs:
+  - company
+  - period
+  - kpis
+
+optional_inputs:
+  - kpiPolicy
+  - gateOwner
+
+outputs:
+  - rows
+  - materialCount
+  - policy
+  - gate
+
+artifact_types: [analysis]
+data_permissions: [asset:read]
+tools: []
+
+approval_tier: 1
+risk_classification: low
+execution_timeout_ms: 10000
+retry_policy:
+  max_attempts: 1
+  backoff_ms: 0
+
+provider_capabilities:
+  - financial_reasoning
+
+allowed_downstream_skills: [portfolio-review, value-creation, lp-update]
+
+prohibited_actions:
+  - sign_document
+  - move_capital
+  - distribute_report
+  - send_outreach
+
+input_schema: input.schema.json
+output_schema: output.schema.json
+policy: policy.yaml
+evaluation: evaluation.yaml

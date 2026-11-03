@@ -1,0 +1,33 @@
+{
+  "properties": {
+    "accuracy": {
+      "items": {
+        "required": [ "week", "forecast", "actual", "variance" ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "base": {
+      "required": [ "rows", "minClosing", "minWeek", "facilityDrawNeeded" ],
+      "type": "object"
+    },
+    "downside": {
+      "required": [ "rows", "minClosing", "minWeek", "facilityDrawNeeded" ],
+      "type": "object"
+    },
+    "gate": {
+      "type": "string"
+    },
+    "limitation": {
+      "type": "string"
+    },
+    "liquidityMinimum": {
+      "type": "number"
+    },
+    "openingTiedToBank": {
+      "type": "boolean"
+    }
+  },
+  "required": [ "base", "accuracy", "openingTiedToBank", "limitation", "gate" ],
+  "type": "object"
+}

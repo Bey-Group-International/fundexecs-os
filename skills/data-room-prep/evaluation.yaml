@@ -1,0 +1,7 @@
+# skills/data-room-prep/evaluation.yaml — acceptance criteria; exercised by lib/skills/catalog/pe-exit.test.ts
+criteria:
+  - gaps listed
+  - competitor-sensitive not staged flagged
+  - default request list labelled
+  - unknown request ids reported
+example: examples/example-1.json

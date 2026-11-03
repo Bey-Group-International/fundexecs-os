@@ -1,0 +1,29 @@
+# skills/exit-readiness/policy.yaml — enforced by lib/skills/runner.ts and lib/executives/registry.ts
+approval_tier: 1
+risk_classification: low
+
+allowed_executives:
+  - portfolio_ops
+  - diligence
+
+data_scopes:
+  - asset:read
+  - document:read
+
+prohibited_actions:
+  - send_outreach
+  - distribute_report
+  - share_materials
+  - sign_document
+  - move_capital
+
+guardrails:
+  - A requirement marked met without evidence is treated as unverified.
+  - Equity-story claims without proof are removed and listed, never softened.
+  - Timing is reported both as parallel and as serial; the optimistic one is not chosen for you.
+  - The deal lead decides launch timing.
+
+downstream:
+  - data-room-prep
+  - exit-routes
+  - ipo-readiness

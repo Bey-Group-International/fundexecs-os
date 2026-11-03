@@ -1,0 +1,44 @@
+{
+  "properties": {
+    "blindSpots": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "challengeNote": {
+      "type": "string"
+    },
+    "challenges": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "duplicatesMerged": {
+      "type": "integer"
+    },
+    "gate": {
+      "type": "string"
+    },
+    "register": {
+      "items": {
+        "required": [ "rank", "title", "severity", "impact", "evidenceGrade" ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "supportedPriceAdjustment": {
+      "type": "number"
+    },
+    "unsupportedPriceClaims": {
+      "items": {
+        "required": [ "title", "priceImpact", "evidenceGrade" ],
+        "type": "object"
+      },
+      "type": "array"
+    }
+  },
+  "required": [ "register", "blindSpots", "supportedPriceAdjustment", "unsupportedPriceClaims", "challenges", "gate" ],
+  "type": "object"
+}

@@ -1,0 +1,22 @@
+// Shared mandate fixture for the PE sourcing tests (not a test file itself).
+import type { MandateTests } from "./mandate-tests";
+
+export const FIXTURE: MandateTests = {
+  status: "approved",
+  approvedBy: "Partner A",
+  hardLimits: [
+    { id: "geo", label: "Geography", metric: "geography", allow: ["UK", "Germany"], source: "LPA 9.1" },
+    { id: "excl", label: "Excluded sectors", metric: "sector", deny: ["tobacco", "gambling"], source: "Side letter 2" },
+    { id: "ctrl", label: "Control", metric: "ownershipPct", band: { min: 51 }, source: "LPA 9.4" },
+    { id: "conc", label: "Concentration", metric: "equityChequePct", band: { max: 15 }, source: "LPA 7.2" },
+  ],
+  preferences: [
+    { id: "ebitda", label: "EBITDA", metric: "ebitda", strong: { min: 8, max: 20 }, acceptable: { min: 5, max: 25 }, weight: 50 },
+    { id: "margin", label: "Margin", metric: "ebitdaMargin", strong: { min: 20 }, acceptable: { min: 12 }, weight: 30 },
+    { id: "sector", label: "Sector", metric: "sector", strongValues: ["software"], acceptableValues: ["services"], weight: 20 },
+  ],
+  killFacts: [
+    { id: "cust", label: "Single customer above 40%", metric: "topCustomerPct", above: 40 },
+    { id: "roll", label: "Founder unwilling to roll equity", flag: true },
+  ],
+};

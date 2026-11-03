@@ -1,0 +1,7 @@
+# skills/red-flag-register/evaluation.yaml — acceptance criteria; exercised by lib/skills/catalog/pe-diligence-valuation.test.ts
+criteria:
+  - duplicates merged at worst case
+  - ranked by impact
+  - blind-spot workstreams named
+  - C/U evidence cannot support a price
+example: examples/example-1.json

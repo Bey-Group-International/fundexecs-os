@@ -1,0 +1,30 @@
+# skills/qoe-bridge/policy.yaml — enforced by lib/skills/runner.ts and lib/executives/registry.ts
+approval_tier: 1
+risk_classification: low
+
+allowed_executives:
+  - diligence
+  - analyst
+
+data_scopes:
+  - deal:read
+  - document:read
+
+prohibited_actions:
+  - send_outreach
+  - distribute_report
+  - sign_document
+  - move_capital
+  - capital_call
+
+guardrails:
+  - No adjustment is accepted without a document reference; an accepted call with no support is downgraded and does not move the number.
+  - Adjustments are listed individually, never netted.
+  - Management's stated adjusted EBITDA is reconciled against its own bridge.
+  - The adjusted figure is not IC-memo-ready until the financial DD lead signs it.
+
+downstream:
+  - bid-range
+  - red-flag-register
+  - ic-memo
+  - lbo

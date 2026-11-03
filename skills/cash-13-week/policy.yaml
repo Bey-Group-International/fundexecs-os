@@ -1,0 +1,26 @@
+# skills/cash-13-week/policy.yaml — enforced by lib/skills/runner.ts and lib/executives/registry.ts
+approval_tier: 1
+risk_classification: moderate
+
+allowed_executives:
+  - portfolio_ops
+  - fund_admin
+
+data_scopes:
+  - asset:read
+
+prohibited_actions:
+  - sign_document
+  - move_capital
+  - distribute_report
+  - send_outreach
+
+guardrails:
+  - Opening cash not tied to the bank statements is flagged.
+  - A downside receipts haircut is the user's number; it is never defaulted.
+  - Facility shortfall against the minimum is sized and compared with the available facility.
+  - The portfolio company CFO owns the forecast.
+
+downstream:
+  - covenant-watch
+  - portfolio-review

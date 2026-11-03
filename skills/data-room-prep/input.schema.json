@@ -1,0 +1,72 @@
+{
+  "properties": {
+    "company": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "documents": {
+      "items": {
+        "properties": {
+          "answers": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "name": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "redacted": {
+            "type": "boolean"
+          },
+          "sensitivity": {
+            "enum": [ "normal", "competitor-sensitive", "personal-data", "third-party-confidential" ],
+            "type": "string"
+          },
+          "staged": {
+            "type": "boolean"
+          },
+          "workstream": {
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [ "name", "workstream" ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "expectedRequests": {
+      "items": {
+        "properties": {
+          "id": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "request": {
+            "type": "string"
+          },
+          "workstream": {
+            "type": "string"
+          }
+        },
+        "required": [ "id", "workstream", "request" ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "gateOwner": {
+      "type": "string"
+    },
+    "qaOwner": {
+      "type": "string"
+    },
+    "qaResponseHours": {
+      "minimum": 0,
+      "type": "number"
+    }
+  },
+  "required": [ "company", "documents" ],
+  "type": "object"
+}

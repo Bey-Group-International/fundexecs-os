@@ -1,0 +1,60 @@
+# skills/red-flag-register/skill.yaml
+# Authoring spec for Red Flag Register. The machine-readable manifest the runtime loads is
+# the TypeScript SkillDefinition in lib/skills/catalog/red-flag-register.ts; this YAML is the
+# human-facing contract and must stay consistent with it.
+# Origin: PE department pack · Diligence + Valuation. Rules re-implemented natively; no pack text is shipped.
+id: red-flag-register
+name: Red Flag Register
+version: 1.0.0
+owner: fundexecs
+hub: run
+
+applicable_executives:
+  - diligence
+  - investment_committee
+
+supported_entity_types: [deal]
+
+required_inputs:
+  - findings
+  - workstreamsRun
+
+optional_inputs:
+  - expectedWorkstreams
+  - gateOwner
+
+outputs:
+  - register
+  - blindSpots
+  - supportedPriceAdjustment
+  - unsupportedPriceClaims
+  - challenges
+  - gate
+
+artifact_types: [risk_report]
+data_permissions: [deal:read, document:read]
+tools: []
+
+approval_tier: 1
+risk_classification: low
+execution_timeout_ms: 10000
+retry_policy:
+  max_attempts: 1
+  backoff_ms: 0
+
+provider_capabilities:
+  - structured_extraction
+
+allowed_downstream_skills: [bid-range, ic-memo]
+
+prohibited_actions:
+  - send_outreach
+  - distribute_report
+  - sign_document
+  - move_capital
+  - capital_call
+
+input_schema: input.schema.json
+output_schema: output.schema.json
+policy: policy.yaml
+evaluation: evaluation.yaml

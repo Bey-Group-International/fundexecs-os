@@ -1,0 +1,93 @@
+{
+  "properties": {
+    "company": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "equityInvested": {
+      "minimum": 0,
+      "type": "number"
+    },
+    "fundLifeRemainingMonths": {
+      "minimum": 0,
+      "type": "number"
+    },
+    "gateOwner": {
+      "type": "string"
+    },
+    "hurdles": {
+      "properties": {
+        "base": {
+          "properties": {
+            "irr": {
+              "type": "number"
+            },
+            "moic": {
+              "type": "number"
+            }
+          },
+          "type": "object"
+        },
+        "downside": {
+          "type": "object"
+        },
+        "holdYears": {
+          "type": "number"
+        }
+      },
+      "required": [ "base", "holdYears" ],
+      "type": "object"
+    },
+    "netDebtAtExit": {
+      "type": "number"
+    },
+    "ownershipPct": {
+      "maximum": 100,
+      "minimum": 0,
+      "type": "number"
+    },
+    "routes": {
+      "items": {
+        "properties": {
+          "basis": {
+            "type": "string"
+          },
+          "certainty": {
+            "enum": [ "high", "medium", "low" ],
+            "type": "string"
+          },
+          "costPct": {
+            "maximum": 100,
+            "minimum": 0,
+            "type": "number"
+          },
+          "evHigh": {
+            "minimum": 0,
+            "type": "number"
+          },
+          "evLow": {
+            "minimum": 0,
+            "type": "number"
+          },
+          "monthsToClose": {
+            "minimum": 0,
+            "type": "number"
+          },
+          "name": {
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [ "name", "evLow", "evHigh", "monthsToClose", "certainty", "costPct" ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "yearsHeld": {
+      "minimum": 0,
+      "type": "number"
+    }
+  },
+  "required": [ "company", "equityInvested", "ownershipPct", "netDebtAtExit", "yearsHeld", "routes" ],
+  "type": "object"
+}

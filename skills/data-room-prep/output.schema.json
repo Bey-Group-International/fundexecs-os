@@ -1,0 +1,49 @@
+{
+  "properties": {
+    "coverage": {
+      "items": {
+        "required": [ "requestId", "request", "status" ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "gaps": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "gate": {
+      "type": "string"
+    },
+    "index": {
+      "items": {
+        "required": [ "workstream", "documents" ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "limitation": {
+      "type": "string"
+    },
+    "qaLog": {
+      "items": {
+        "required": [ "ref", "question" ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "redactionList": {
+      "items": {
+        "required": [ "document", "sensitivity", "action" ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "requestListIsDefault": {
+      "type": "boolean"
+    }
+  },
+  "required": [ "index", "coverage", "gaps", "redactionList", "qaLog", "requestListIsDefault", "limitation", "gate" ],
+  "type": "object"
+}

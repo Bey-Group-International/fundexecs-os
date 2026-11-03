@@ -1,0 +1,94 @@
+{
+  "properties": {
+    "company": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "gateOwner": {
+      "type": "string"
+    },
+    "kpiPolicy": {
+      "properties": {
+        "materialityAbs": {
+          "minimum": 0,
+          "type": "number"
+        },
+        "materialityPct": {
+          "minimum": 0,
+          "type": "number"
+        },
+        "trendPeriods": {
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "required": [ "materialityPct" ],
+      "type": "object"
+    },
+    "kpis": {
+      "items": {
+        "properties": {
+          "actual": {
+            "type": "number"
+          },
+          "budget": {
+            "type": "number"
+          },
+          "classification": {
+            "enum": [ "timing", "one-off", "trend" ],
+            "type": "string"
+          },
+          "commentary": {
+            "type": "string"
+          },
+          "drivers": {
+            "items": {
+              "properties": {
+                "amount": {
+                  "type": "number"
+                },
+                "name": {
+                  "type": "string"
+                }
+              },
+              "required": [ "name", "amount" ],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "evidence": {
+            "type": "string"
+          },
+          "higherIsBetter": {
+            "type": "boolean"
+          },
+          "name": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "priorYear": {
+            "type": "number"
+          },
+          "series": {
+            "items": {
+              "type": "number"
+            },
+            "type": "array"
+          },
+          "unit": {
+            "type": "string"
+          }
+        },
+        "required": [ "name", "actual", "budget" ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "period": {
+      "minLength": 1,
+      "type": "string"
+    }
+  },
+  "required": [ "company", "period", "kpis" ],
+  "type": "object"
+}

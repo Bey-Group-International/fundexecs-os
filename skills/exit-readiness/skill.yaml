@@ -1,0 +1,62 @@
+# skills/exit-readiness/skill.yaml
+# Authoring spec for Exit Readiness & Equity Story. The machine-readable manifest the runtime loads is
+# the TypeScript SkillDefinition in lib/skills/catalog/exit-readiness.ts; this YAML is the
+# human-facing contract and must stay consistent with it.
+# Origin: PE department pack · Exit + IPO. Rules re-implemented natively; no pack text is shipped.
+id: exit-readiness
+name: Exit Readiness & Equity Story
+version: 1.0.0
+owner: fundexecs
+hub: execute
+
+applicable_executives:
+  - portfolio_ops
+  - diligence
+
+supported_entity_types: [asset, company]
+
+required_inputs:
+  - company
+  - items
+
+optional_inputs:
+  - equityStory
+  - gateOwner
+
+outputs:
+  - items
+  - counts
+  - ready
+  - blockers
+  - weeksIfParallel
+  - weeksIfSerial
+  - equityStory
+  - gate
+
+artifact_types: [analysis]
+data_permissions: [asset:read, document:read]
+tools: []
+
+approval_tier: 1
+risk_classification: low
+execution_timeout_ms: 10000
+retry_policy:
+  max_attempts: 1
+  backoff_ms: 0
+
+provider_capabilities:
+  - structured_extraction
+
+allowed_downstream_skills: [data-room-prep, exit-routes, ipo-readiness]
+
+prohibited_actions:
+  - send_outreach
+  - distribute_report
+  - share_materials
+  - sign_document
+  - move_capital
+
+input_schema: input.schema.json
+output_schema: output.schema.json
+policy: policy.yaml
+evaluation: evaluation.yaml

@@ -1,0 +1,28 @@
+# skills/ipo-readiness/policy.yaml — enforced by lib/skills/runner.ts and lib/executives/registry.ts
+approval_tier: 1
+risk_classification: moderate
+
+allowed_executives:
+  - portfolio_ops
+  - legal_closing
+
+data_scopes:
+  - asset:read
+  - document:read
+
+prohibited_actions:
+  - send_outreach
+  - distribute_report
+  - share_materials
+  - sign_document
+  - move_capital
+
+guardrails:
+  - The skill holds no listing rules; every requirement must cite its source rule or is flagged.
+  - Each gap needs a time estimate; timing is shown parallel and serial.
+  - Counsel and the sponsor confirm the requirements.
+  - The board decides whether to pursue the listing.
+
+downstream:
+  - exit-routes
+  - final-investment-report

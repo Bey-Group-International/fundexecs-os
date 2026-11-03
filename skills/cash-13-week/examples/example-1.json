@@ -1,0 +1,20 @@
+{
+  "input": {
+    "company": "Acme",
+    "facilityAvailable": 30,
+    "financing": {
+      "covenantWarnHeadroomPct": 20,
+      "liquidityMinimum": 40
+    },
+    "openingCash": 50,
+    "openingTiedToBank": true,
+    "weeks": [ {
+      "payments": 90,
+      "receipts": 100
+    }, {
+      "debtService": 20,
+      "payments": 90,
+      "receipts": 100
+    } ]
+  }
+}

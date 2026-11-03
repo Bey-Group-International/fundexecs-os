@@ -1,0 +1,28 @@
+{
+  "properties": {
+    "costMethod": {
+      "type": "string"
+    },
+    "flexibilityMethod": {
+      "type": "string"
+    },
+    "gate": {
+      "type": "string"
+    },
+    "limitation": {
+      "type": "string"
+    },
+    "policyIsDefault": {
+      "type": "boolean"
+    },
+    "rows": {
+      "items": {
+        "required": [ "lender", "allInCostPct", "costRank", "flexibilityScore", "flexibilityRank", "policyFlags", "downsideFlags", "cited" ],
+        "type": "object"
+      },
+      "type": "array"
+    }
+  },
+  "required": [ "rows", "costMethod", "flexibilityMethod", "policyIsDefault", "limitation", "gate" ],
+  "type": "object"
+}

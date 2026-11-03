@@ -1,0 +1,54 @@
+{
+  "properties": {
+    "customers": {
+      "items": {
+        "properties": {
+          "changeOfControl": {
+            "enum": [ "yes", "no", "unknown" ],
+            "type": "string"
+          },
+          "contractEnd": {
+            "type": "string"
+          },
+          "name": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "relatedGroup": {
+            "type": "string"
+          },
+          "revenueByYear": {
+            "type": "object"
+          },
+          "revenueClass": {
+            "enum": [ "contracted-recurring", "repeat", "one-off" ],
+            "type": "string"
+          }
+        },
+        "required": [ "name", "revenueByYear" ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "gateOwner": {
+      "type": "string"
+    },
+    "reportedRevenue": {
+      "type": "object"
+    },
+    "thresholdPct": {
+      "maximum": 100,
+      "minimum": 0,
+      "type": "number"
+    },
+    "years": {
+      "items": {
+        "minLength": 1,
+        "type": "string"
+      },
+      "type": "array"
+    }
+  },
+  "required": [ "years", "reportedRevenue", "customers" ],
+  "type": "object"
+}

@@ -1,0 +1,29 @@
+{
+  "properties": {
+    "gate": {
+      "type": "string"
+    },
+    "limitation": {
+      "type": "string"
+    },
+    "materialCount": {
+      "type": "integer"
+    },
+    "policy": {
+      "required": [ "materialityPct" ],
+      "type": "object"
+    },
+    "policyIsDefault": {
+      "type": "boolean"
+    },
+    "rows": {
+      "items": {
+        "required": [ "name", "actual", "budget", "varianceAbs", "direction", "material", "challenges" ],
+        "type": "object"
+      },
+      "type": "array"
+    }
+  },
+  "required": [ "rows", "materialCount", "policy", "policyIsDefault", "limitation", "gate" ],
+  "type": "object"
+}

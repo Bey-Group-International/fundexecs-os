@@ -1,0 +1,65 @@
+{
+  "properties": {
+    "company": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "exchange": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "gateOwner": {
+      "type": "string"
+    },
+    "items": {
+      "items": {
+        "properties": {
+          "area": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "costToClose": {
+            "minimum": 0,
+            "type": "number"
+          },
+          "critical": {
+            "type": "boolean"
+          },
+          "dueDate": {
+            "type": "string"
+          },
+          "evidence": {
+            "type": "string"
+          },
+          "id": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "owner": {
+            "type": "string"
+          },
+          "requirement": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "sourceRule": {
+            "type": "string"
+          },
+          "status": {
+            "enum": [ "met", "partial", "gap", "unknown" ],
+            "type": "string"
+          },
+          "weeksToClose": {
+            "minimum": 0,
+            "type": "number"
+          }
+        },
+        "required": [ "id", "area", "requirement", "status" ],
+        "type": "object"
+      },
+      "type": "array"
+    }
+  },
+  "required": [ "company", "exchange", "items" ],
+  "type": "object"
+}

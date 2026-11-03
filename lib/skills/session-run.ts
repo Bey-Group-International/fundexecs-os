@@ -15,6 +15,7 @@ import { EXECUTIVE_BY_KEY, type ExecutiveKey } from "@/lib/executives/registry";
 import { getSkill } from "./registry";
 import { executeSkillCore } from "./runner";
 import { persistSkillRun } from "./store";
+import { withOrgMandate } from "@/lib/pe/root-files.server";
 import type { SkillContext, SkillResult } from "./types";
 
 // Only these values exist in the artifact_type enum; fall back to 'analysis'.
@@ -68,7 +69,10 @@ export async function runSkillAttached(input: RunSkillAttachedInput): Promise<Ru
     workflowTaskId: input.workflowTaskId ?? null,
   };
 
-  const result = executeSkillCore(input.skillId, input.input, ctx);
+  // PE sourcing skills default their mandate to the org's stored root file
+  // (an explicit input always wins; no stored mandate leaves input untouched).
+  const skillInput = await withOrgMandate(input.orgId, input.skillId, input.input);
+  const result = executeSkillCore(input.skillId, skillInput, ctx);
   const skill = getSkill(input.skillId);
   const backingAgent = EXECUTIVE_BY_KEY[input.executive]?.backingAgent ?? null;
 
@@ -110,7 +114,7 @@ export async function runSkillAttached(input: RunSkillAttachedInput): Promise<Ru
       skillVersion: result.version,
       backingAgent,
       risk: skill?.manifest.riskClassification ?? "low",
-      input: input.input,
+      input: skillInput,
       result,
       artifactId,
     });

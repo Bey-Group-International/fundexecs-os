@@ -1,0 +1,84 @@
+{
+  "properties": {
+    "baseRatePct": {
+      "minimum": 0,
+      "type": "number"
+    },
+    "financing": {
+      "properties": {
+        "covenantWarnHeadroomPct": {
+          "type": "number"
+        },
+        "maxCallProtectionMonths": {
+          "type": "number"
+        },
+        "maxSeniorLeverage": {
+          "type": "number"
+        },
+        "maxTotalLeverage": {
+          "type": "number"
+        }
+      },
+      "type": "object"
+    },
+    "gateOwner": {
+      "type": "string"
+    },
+    "offers": {
+      "items": {
+        "properties": {
+          "amortPctPerYear": {
+            "minimum": 0,
+            "type": "number"
+          },
+          "callProtectionMonths": {
+            "minimum": 0,
+            "type": "number"
+          },
+          "covenant": {
+            "enum": [ "maintenance", "cov-lite" ],
+            "type": "string"
+          },
+          "covenantHeadroomPct": {
+            "type": "number"
+          },
+          "equityCure": {
+            "type": "boolean"
+          },
+          "lender": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "marginBps": {
+            "minimum": 0,
+            "type": "number"
+          },
+          "seniorLeverage": {
+            "minimum": 0,
+            "type": "number"
+          },
+          "sourceRef": {
+            "type": "string"
+          },
+          "tenorYears": {
+            "minimum": 0,
+            "type": "number"
+          },
+          "totalLeverage": {
+            "minimum": 0,
+            "type": "number"
+          },
+          "upfrontFeePct": {
+            "minimum": 0,
+            "type": "number"
+          }
+        },
+        "required": [ "lender", "seniorLeverage", "marginBps", "upfrontFeePct", "tenorYears", "amortPctPerYear", "covenant", "callProtectionMonths", "equityCure" ],
+        "type": "object"
+      },
+      "type": "array"
+    }
+  },
+  "required": [ "baseRatePct", "offers" ],
+  "type": "object"
+}

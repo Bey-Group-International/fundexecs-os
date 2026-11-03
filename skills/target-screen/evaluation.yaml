@@ -1,0 +1,7 @@
+# skills/target-screen/evaluation.yaml — acceptance criteria; exercised by lib/skills/catalog/pe-sourcing.test.ts
+criteria:
+  - hard-limit fail ends the screen
+  - empty fields are needs-data not guessed
+  - every fail cites its criterion
+  - survivors ranked by score
+example: examples/example-1.json

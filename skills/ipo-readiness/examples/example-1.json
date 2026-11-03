@@ -1,0 +1,16 @@
+{
+  "input": {
+    "company": "Acme",
+    "exchange": "LSE Main Market",
+    "items": [ {
+      "area": "Governance",
+      "dueDate": "2027-02-01",
+      "id": "g1",
+      "owner": "Chair",
+      "requirement": "Majority independent board",
+      "sourceRule": "UK Corporate Governance Code, Provision 11",
+      "status": "gap",
+      "weeksToClose": 12
+    } ]
+  }
+}

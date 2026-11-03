@@ -1,0 +1,60 @@
+# skills/revenue-quality/skill.yaml
+# Authoring spec for Revenue Quality & Customer Concentration. The machine-readable manifest the runtime loads is
+# the TypeScript SkillDefinition in lib/skills/catalog/revenue-quality.ts; this YAML is the
+# human-facing contract and must stay consistent with it.
+# Origin: PE department pack · Diligence + Valuation. Rules re-implemented natively; no pack text is shipped.
+id: revenue-quality
+name: Revenue Quality & Customer Concentration
+version: 1.0.0
+owner: fundexecs
+hub: run
+
+applicable_executives:
+  - diligence
+  - analyst
+
+supported_entity_types: [deal, company]
+
+required_inputs:
+  - years
+  - reportedRevenue
+  - customers
+
+optional_inputs:
+  - thresholdPct
+  - gateOwner
+
+outputs:
+  - byYear
+  - latestClassSplit
+  - retention
+  - keyCustomers
+  - gate
+
+artifact_types: [analysis]
+data_permissions: [deal:read, document:read]
+tools: []
+
+approval_tier: 1
+risk_classification: low
+execution_timeout_ms: 10000
+retry_policy:
+  max_attempts: 1
+  backoff_ms: 0
+
+provider_capabilities:
+  - financial_reasoning
+
+allowed_downstream_skills: [red-flag-register, bid-range, ic-memo]
+
+prohibited_actions:
+  - send_outreach
+  - distribute_report
+  - sign_document
+  - move_capital
+  - capital_call
+
+input_schema: input.schema.json
+output_schema: output.schema.json
+policy: policy.yaml
+evaluation: evaluation.yaml

@@ -1,0 +1,19 @@
+{
+  "input": {
+    "company": "Acme",
+    "equityInvested": 100,
+    "fundLifeRemainingMonths": 18,
+    "netDebtAtExit": 100,
+    "ownershipPct": 80,
+    "routes": [ {
+      "basis": "3 indicative bids",
+      "certainty": "high",
+      "costPct": 2,
+      "evHigh": 600,
+      "evLow": 500,
+      "monthsToClose": 9,
+      "name": "Trade sale"
+    } ],
+    "yearsHeld": 3
+  }
+}

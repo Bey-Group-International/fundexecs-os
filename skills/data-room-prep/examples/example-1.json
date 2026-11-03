@@ -1,0 +1,17 @@
+{
+  "input": {
+    "company": "Acme",
+    "documents": [ {
+      "answers": [ "fin-1" ],
+      "name": "Audit 2023-25.pdf",
+      "workstream": "financial"
+    }, {
+      "answers": [ "com-1" ],
+      "name": "Customer file.xlsx",
+      "sensitivity": "competitor-sensitive",
+      "workstream": "commercial"
+    } ],
+    "qaOwner": "VDR admin",
+    "qaResponseHours": 48
+  }
+}

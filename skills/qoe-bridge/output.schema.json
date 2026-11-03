@@ -1,0 +1,37 @@
+{
+  "properties": {
+    "addbacksNotAccepted": {
+      "type": "number"
+    },
+    "auditedTie": {
+      "type": "object"
+    },
+    "deltaVsManagement": {
+      "type": "number"
+    },
+    "diligenceAdjustedEbitda": {
+      "type": "number"
+    },
+    "gate": {
+      "type": "string"
+    },
+    "icMemoReady": {
+      "type": "boolean"
+    },
+    "managementBridgeCheck": {
+      "type": "object"
+    },
+    "reportedEbitda": {
+      "type": "number"
+    },
+    "rows": {
+      "items": {
+        "required": [ "origin", "label", "amount", "status", "grade", "inAdjustedEbitda" ],
+        "type": "object"
+      },
+      "type": "array"
+    }
+  },
+  "required": [ "reportedEbitda", "rows", "diligenceAdjustedEbitda", "addbacksNotAccepted", "icMemoReady", "gate" ],
+  "type": "object"
+}

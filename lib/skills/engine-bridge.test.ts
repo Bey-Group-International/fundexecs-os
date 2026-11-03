@@ -50,4 +50,34 @@ describe("detectSkillForStep", () => {
     const id = detectSkillForStep("Screen the deal");
     expect(id).toBe("screen-deal");
   });
+
+  it("detects the PE department skills", () => {
+    const cases: Array<[string, string]> = [
+      ["Prepare the final investment report", "final-investment-report"],
+      ["Set the bid price range and walk-away price", "bid-range"],
+      ["Compile the red flag register", "red-flag-register"],
+      ["Run the quality of earnings bridge", "qoe-bridge"],
+      ["Test customer concentration", "revenue-quality"],
+      ["Covenant headroom for Q4", "covenant-watch"],
+      ["Build the 13-week cash forecast", "cash-13-week"],
+      ["KPI variance for March", "kpi-variance"],
+      ["Compare the lender term sheets", "financing-terms"],
+      ["Assess IPO readiness", "ipo-readiness"],
+      ["Exit readiness and equity story", "exit-readiness"],
+      ["Exit options paper", "exit-routes"],
+      ["Data room preparation", "data-room-prep"],
+      ["First look at the teaser", "first-look"],
+      ["Define the mandate screen", "mandate-screen"],
+      ["Target screening of the CRM export", "target-screen"],
+    ];
+    for (const [step, id] of cases) expect([step, detectSkillForStep(step)]).toEqual([step, id]);
+  });
+
+  it("does not let the PE rules steal the existing routes", () => {
+    expect(detectSkillForStep("Bid range with IRR and MOIC")).toBe("bid-range"); // specific beats the generic returns rule
+    expect(detectSkillForStep("Estimate IRR and MOIC")).toBe("returns");
+    expect(detectSkillForStep("Mandate-fit check")).toBe("screen-deal");
+    expect(detectSkillForStep("Screen this opportunity against our mandate")).toBe("screen-deal");
+  });
 });
+

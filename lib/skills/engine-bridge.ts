@@ -16,6 +16,24 @@ import { getSkill } from "./registry";
 // conservative: a step must clearly BE the skill, or detection returns null and
 // the normal free-text path runs.
 const RULES: Array<{ skillId: string; pattern: RegExp }> = [
+  // PE department skills. Specific phrases only, and ahead of the generic rules
+  // below ("irr", "screen") so e.g. a bid-range step is not read as a returns case.
+  { skillId: "final-investment-report", pattern: /\bfinal\s+investment\s+report\b/i },
+  { skillId: "bid-range", pattern: /\b(bid\s+(price\s+)?range|walk[-\s]?away\s+price|maximum\s+(bid\s+)?price)\b/i },
+  { skillId: "red-flag-register", pattern: /\bred[-\s]?flag\s+register\b/i },
+  { skillId: "qoe-bridge", pattern: /\b(qoe|quality\s+of\s+earnings|ebitda\s+bridge)\b/i },
+  { skillId: "revenue-quality", pattern: /\b(customer\s+concentration|revenue\s+quality|net\s+revenue\s+retention|cohort\s+retention)\b/i },
+  { skillId: "covenant-watch", pattern: /\bcovenant\s+(watch|headroom|test(s|ing)?|monitoring)\b/i },
+  { skillId: "cash-13-week", pattern: /\b(13|thirteen)[-\s]week\s+(cash|forecast)/i },
+  { skillId: "kpi-variance", pattern: /\b(kpi\s+variance|budget[-\s]to[-\s]actual|variance\s+to\s+budget)\b/i },
+  { skillId: "financing-terms", pattern: /\b(financing\s+terms|term[-\s]sheet\s+comparison|compare\s+(the\s+)?(lender|term[-\s]sheet)s?)\b/i },
+  { skillId: "ipo-readiness", pattern: /\bipo\s+readiness\b/i },
+  { skillId: "exit-readiness", pattern: /\b(exit\s+readiness|equity\s+story)\b/i },
+  { skillId: "exit-routes", pattern: /\bexit\s+(strategy|routes?|options)\b/i },
+  { skillId: "data-room-prep", pattern: /\bdata[-\s]?room\s+(prep|preparation|index)\b/i },
+  { skillId: "first-look", pattern: /\b(first[-\s]look|go\s*\/\s*no[-\s]?go)\b/i },
+  { skillId: "mandate-screen", pattern: /\b(mandate\s+(screen|definition|tests?)|investment\s+mandate\s+(screen|definition))\b/i },
+  { skillId: "target-screen", pattern: /\b(target\s+screening|screen\s+(the\s+|a\s+)?(target|company)\s+list|screen\s+(the\s+)?targets)\b/i },
   { skillId: "ic-memo", pattern: /\b(ic[-\s]?memo|investment[-\s]committee\s+memo|ic\s+pre[-\s]?read|pre[-\s]?read)\b/i },
   { skillId: "dd-checklist", pattern: /\b(diligence\s+(checklist|request\s+list|list)|dd[-\s]?checklist|due[-\s]diligence\s+(list|checklist))\b/i },
   { skillId: "returns", pattern: /\b(returns?\s+(case|analysis|model)|lbo|irr|moic)\b/i },

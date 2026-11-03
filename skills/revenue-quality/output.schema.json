@@ -1,0 +1,35 @@
+{
+  "properties": {
+    "byYear": {
+      "items": {
+        "required": [ "year", "customerTotal" ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "gate": {
+      "type": "string"
+    },
+    "keyCustomers": {
+      "items": {
+        "required": [ "name", "sharePct", "changeOfControl" ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "latestClassSplit": {
+      "type": "object"
+    },
+    "limitation": {
+      "type": "string"
+    },
+    "retention": {
+      "type": "object"
+    },
+    "thresholdPct": {
+      "type": "number"
+    }
+  },
+  "required": [ "byYear", "latestClassSplit", "keyCustomers", "thresholdPct", "limitation", "gate" ],
+  "type": "object"
+}

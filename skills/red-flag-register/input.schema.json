@@ -1,0 +1,62 @@
+{
+  "properties": {
+    "expectedWorkstreams": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "findings": {
+      "items": {
+        "properties": {
+          "evidenceGrade": {
+            "enum": [ "A", "B", "C", "U" ],
+            "type": "string"
+          },
+          "impact": {
+            "enum": [ "walk-away", "price", "structure", "spa-protection", "100-day" ],
+            "type": "string"
+          },
+          "owner": {
+            "type": "string"
+          },
+          "priceImpact": {
+            "type": "number"
+          },
+          "severity": {
+            "enum": [ "red", "amber" ],
+            "type": "string"
+          },
+          "sourceRef": {
+            "type": "string"
+          },
+          "title": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "treatment": {
+            "type": "string"
+          },
+          "workstream": {
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [ "title", "workstream", "severity", "impact" ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "gateOwner": {
+      "type": "string"
+    },
+    "workstreamsRun": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    }
+  },
+  "required": [ "findings", "workstreamsRun" ],
+  "type": "object"
+}

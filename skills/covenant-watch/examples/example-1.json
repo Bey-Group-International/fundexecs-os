@@ -1,0 +1,29 @@
+{
+  "input": {
+    "company": "Acme",
+    "covenants": [ {
+      "clause": "CA cl. 22.2: Net Debt / Covenant EBITDA <= 4.50x",
+      "id": "lev",
+      "kind": "max",
+      "metric": "netLeverage",
+      "name": "Net leverage",
+      "threshold": 4.5
+    } ],
+    "cureOptions": [ "cl. 24: equity cure" ],
+    "periods": [ {
+      "addbacks": [ {
+        "amount": 1,
+        "clause": "cl. 1.1(c)",
+        "label": "Restructuring"
+      } ],
+      "ebitda": 10,
+      "label": "Q3",
+      "netDebt": 40
+    }, {
+      "ebitda": 9,
+      "forecast": true,
+      "label": "Q4F",
+      "netDebt": 40
+    } ]
+  }
+}

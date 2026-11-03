@@ -1,0 +1,7 @@
+# skills/final-investment-report/evaluation.yaml — acceptance criteria; exercised by lib/skills/catalog/pe-exit.test.ts
+criteria:
+  - bridge sums exactly
+  - IRR uses dates
+  - untied returns flagged
+  - thesis claim without outcome flagged
+example: examples/example-1.json

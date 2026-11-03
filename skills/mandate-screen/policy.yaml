@@ -1,0 +1,30 @@
+# skills/mandate-screen/policy.yaml — enforced by lib/skills/runner.ts and lib/executives/registry.ts
+approval_tier: 1
+risk_classification: low
+
+allowed_executives:
+  - deal_sourcer
+  - analyst
+  - investment_committee
+
+data_scopes:
+  - mandate:read
+
+prohibited_actions:
+  - send_outreach
+  - distribute_report
+  - sign_document
+  - move_capital
+  - capital_call
+
+guardrails:
+  - A criterion with no number is a blocker, never defaulted.
+  - A hard limit with no LPA clause or side-letter source is flagged as a preference in disguise.
+  - Contradictions (min above max, preference outside a hard band) are surfaced, not resolved silently.
+  - Sign-off is a human gate; the skill only reports readiness.
+
+downstream:
+  - target-screen
+  - first-look
+  - screen-deal
+  - ic-memo

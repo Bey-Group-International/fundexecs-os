@@ -1,0 +1,36 @@
+{
+  "properties": {
+    "basis": {
+      "enum": [ "approved-mandate", "default-screened" ],
+      "type": "string"
+    },
+    "gate": {
+      "type": "string"
+    },
+    "issues": {
+      "items": {
+        "required": [ "severity", "message" ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "openQuestions": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "readyForSignOff": {
+      "type": "boolean"
+    },
+    "rows": {
+      "items": {
+        "required": [ "id", "type", "criterion", "threshold", "source" ],
+        "type": "object"
+      },
+      "type": "array"
+    }
+  },
+  "required": [ "rows", "issues", "openQuestions", "readyForSignOff", "basis", "gate" ],
+  "type": "object"
+}

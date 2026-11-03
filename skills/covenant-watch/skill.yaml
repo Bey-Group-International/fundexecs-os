@@ -1,0 +1,60 @@
+# skills/covenant-watch/skill.yaml
+# Authoring spec for Covenant Watch. The machine-readable manifest the runtime loads is
+# the TypeScript SkillDefinition in lib/skills/catalog/covenant-watch.ts; this YAML is the
+# human-facing contract and must stay consistent with it.
+# Origin: PE department pack · Execution + Portfolio. Rules re-implemented natively; no pack text is shipped.
+id: covenant-watch
+name: Covenant Watch
+version: 1.0.0
+owner: fundexecs
+hub: execute
+
+applicable_executives:
+  - portfolio_ops
+  - fund_admin
+
+supported_entity_types: [asset, company]
+
+required_inputs:
+  - company
+  - covenants
+  - periods
+
+optional_inputs:
+  - cureOptions
+  - financing
+  - gateOwner
+
+outputs:
+  - covenants
+  - excludedAddbacks
+  - warnThresholdPct
+  - cureOptions
+  - gate
+
+artifact_types: [risk_report]
+data_permissions: [asset:read, document:read]
+tools: []
+
+approval_tier: 1
+risk_classification: moderate
+execution_timeout_ms: 10000
+retry_policy:
+  max_attempts: 1
+  backoff_ms: 0
+
+provider_capabilities:
+  - financial_reasoning
+
+allowed_downstream_skills: [portfolio-review, cash-13-week]
+
+prohibited_actions:
+  - sign_document
+  - move_capital
+  - distribute_report
+  - send_outreach
+
+input_schema: input.schema.json
+output_schema: output.schema.json
+policy: policy.yaml
+evaluation: evaluation.yaml

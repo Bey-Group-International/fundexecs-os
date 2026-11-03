@@ -42,6 +42,22 @@ import { ddPrep } from "./catalog/dd-prep";
 import { auditStatement } from "./catalog/audit-statement";
 import { sectorResearch } from "./catalog/sector-research";
 import { cim } from "./catalog/cim";
+import { mandateScreen } from "./catalog/mandate-screen";
+import { targetScreen } from "./catalog/target-screen";
+import { firstLook } from "./catalog/first-look";
+import { qoeBridge } from "./catalog/qoe-bridge";
+import { revenueQuality } from "./catalog/revenue-quality";
+import { redFlagRegister } from "./catalog/red-flag-register";
+import { bidRange } from "./catalog/bid-range";
+import { covenantWatch } from "./catalog/covenant-watch";
+import { kpiVariance } from "./catalog/kpi-variance";
+import { cash13Week } from "./catalog/cash-13-week";
+import { financingTerms } from "./catalog/financing-terms";
+import { exitReadiness } from "./catalog/exit-readiness";
+import { ipoReadiness } from "./catalog/ipo-readiness";
+import { exitRoutes } from "./catalog/exit-routes";
+import { dataRoomPrep } from "./catalog/data-room-prep";
+import { finalInvestmentReport } from "./catalog/final-investment-report";
 
 const SKILLS: Record<string, SkillDefinition> = {
   [screenDeal.manifest.id]: screenDeal as SkillDefinition,
@@ -93,6 +109,26 @@ const SKILLS: Record<string, SkillDefinition> = {
   [sectorResearch.manifest.id]: sectorResearch as SkillDefinition,
   // Communications CIM (draft-only; never invents financials or distributes).
   [cim.manifest.id]: cim as SkillDefinition,
+  // PE department · sourcing (mandate-as-tests; screen supplied lists, never invent a number).
+  [mandateScreen.manifest.id]: mandateScreen as SkillDefinition,
+  [targetScreen.manifest.id]: targetScreen as SkillDefinition,
+  [firstLook.manifest.id]: firstLook as SkillDefinition,
+  // PE department · diligence + valuation (support-gated: no accepted adjustment or price claim without evidence).
+  [qoeBridge.manifest.id]: qoeBridge as SkillDefinition,
+  [revenueQuality.manifest.id]: revenueQuality as SkillDefinition,
+  [redFlagRegister.manifest.id]: redFlagRegister as SkillDefinition,
+  [bidRange.manifest.id]: bidRange as SkillDefinition,
+  // PE department · execution + portfolio (quote the clause / cite the page; policy defaults are labelled).
+  [covenantWatch.manifest.id]: covenantWatch as SkillDefinition,
+  [kpiVariance.manifest.id]: kpiVariance as SkillDefinition,
+  [cash13Week.manifest.id]: cash13Week as SkillDefinition,
+  [financingTerms.manifest.id]: financingTerms as SkillDefinition,
+  // PE department · exit + IPO (proof-gated claims; no built-in market view or listing rules).
+  [exitReadiness.manifest.id]: exitReadiness as SkillDefinition,
+  [ipoReadiness.manifest.id]: ipoReadiness as SkillDefinition,
+  [exitRoutes.manifest.id]: exitRoutes as SkillDefinition,
+  [dataRoomPrep.manifest.id]: dataRoomPrep as SkillDefinition,
+  [finalInvestmentReport.manifest.id]: finalInvestmentReport as SkillDefinition,
 };
 
 export function getSkill(id: string): SkillDefinition | null {

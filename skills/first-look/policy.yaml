@@ -1,0 +1,31 @@
+# skills/first-look/policy.yaml — enforced by lib/skills/runner.ts and lib/executives/registry.ts
+approval_tier: 1
+risk_classification: low
+
+allowed_executives:
+  - deal_sourcer
+  - analyst
+  - investment_committee
+
+data_scopes:
+  - deal:read
+  - mandate:read
+
+prohibited_actions:
+  - send_outreach
+  - distribute_report
+  - sign_document
+  - move_capital
+  - capital_call
+
+guardrails:
+  - Adjusted EBITDA is a calculation from listed adjustments; the seller's figure is only a claim to reconcile.
+  - A number with no source reference is graded U and cannot support a go.
+  - A hard limit that cannot be tested yields ask-more, never a silent pass.
+  - The deal lead owns the go / no-go; the skill never approves anything.
+
+downstream:
+  - screen-deal
+  - returns
+  - dd-checklist
+  - ic-memo

@@ -1,0 +1,31 @@
+{
+  "properties": {
+    "fallback": {
+      "type": "string"
+    },
+    "gate": {
+      "type": "string"
+    },
+    "hurdlesAreDefault": {
+      "type": "boolean"
+    },
+    "limitation": {
+      "type": "string"
+    },
+    "orderingRule": {
+      "type": "string"
+    },
+    "primary": {
+      "type": "string"
+    },
+    "routes": {
+      "items": {
+        "required": [ "name", "basisCited", "proceedsLow", "proceedsHigh", "hurdleAtLow", "hurdleAtHigh", "certainty", "eligible", "notes" ],
+        "type": "object"
+      },
+      "type": "array"
+    }
+  },
+  "required": [ "routes", "orderingRule", "hurdlesAreDefault", "limitation", "gate" ],
+  "type": "object"
+}

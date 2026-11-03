@@ -1,0 +1,7 @@
+# skills/financing-terms/evaluation.yaml — acceptance criteria; exercised by lib/skills/catalog/pe-portfolio-execution.test.ts
+criteria:
+  - cost and flexibility ranked separately
+  - policy breaches flagged
+  - downside-biting terms flagged
+  - uncited terms marked
+example: examples/example-1.json

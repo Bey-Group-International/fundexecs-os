@@ -1,0 +1,68 @@
+{
+  "properties": {
+    "auditedEbitda": {
+      "type": "number"
+    },
+    "diligenceAdjustments": {
+      "items": {
+        "properties": {
+          "amount": {
+            "type": "number"
+          },
+          "grade": {
+            "enum": [ "A", "B", "C", "U" ],
+            "type": "string"
+          },
+          "label": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "support": {
+            "type": "string"
+          }
+        },
+        "required": [ "label", "amount" ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "gateOwner": {
+      "type": "string"
+    },
+    "managementAdjustedEbitda": {
+      "type": "number"
+    },
+    "managementAdjustments": {
+      "items": {
+        "properties": {
+          "amount": {
+            "type": "number"
+          },
+          "grade": {
+            "enum": [ "A", "B", "C", "U" ],
+            "type": "string"
+          },
+          "label": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "status": {
+            "enum": [ "accepted", "rejected", "unsupported" ],
+            "type": "string"
+          },
+          "support": {
+            "type": "string"
+          }
+        },
+        "required": [ "label", "amount" ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "reportedEbitda": {
+      "type": "number"
+    }
+  },
+  "required": [ "reportedEbitda" ],
+  "type": "object"
+}

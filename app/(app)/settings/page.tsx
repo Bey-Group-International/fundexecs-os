@@ -328,6 +328,16 @@ export default async function SettingsPage(props: {
             )}
 
             <NewMandateForm tier2Actions={TIER_2_ACTIONS} />
+
+            <Link
+              href="/settings/pe-firm"
+              className="fx-card mt-4 block p-4 text-sm text-fg-secondary transition hover:border-gold-500/40 hover:text-fg-primary"
+            >
+              <span className="font-medium text-fg-primary">PE department settings</span>
+              <span className="mt-1 block text-xs leading-snug">
+                Your investment mandate, return hurdles, financing limits and KPI rules. The PE skills test every deal against them.
+              </span>
+            </Link>
           </Section>
 
           {/* Integrations */}

@@ -1,0 +1,53 @@
+{
+  "properties": {
+    "basis": {
+      "enum": [ "approved-mandate", "default-screened" ],
+      "type": "string"
+    },
+    "counts": {
+      "required": [ "pass", "fail", "needsData" ],
+      "type": "object"
+    },
+    "gate": {
+      "type": "string"
+    },
+    "limitation": {
+      "type": "string"
+    },
+    "results": {
+      "items": {
+        "properties": {
+          "criteriaFailed": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "fieldsMissing": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "name": {
+            "type": "string"
+          },
+          "result": {
+            "enum": [ "pass", "fail", "needs-data" ],
+            "type": "string"
+          },
+          "score": {
+            "maximum": 100,
+            "minimum": 0,
+            "type": "number"
+          }
+        },
+        "required": [ "name", "result" ],
+        "type": "object"
+      },
+      "type": "array"
+    }
+  },
+  "required": [ "results", "counts", "basis", "limitation", "gate" ],
+  "type": "object"
+}

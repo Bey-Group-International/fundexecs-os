@@ -1,0 +1,29 @@
+# skills/revenue-quality/policy.yaml — enforced by lib/skills/runner.ts and lib/executives/registry.ts
+approval_tier: 1
+risk_classification: low
+
+allowed_executives:
+  - diligence
+  - analyst
+
+data_scopes:
+  - deal:read
+  - document:read
+
+prohibited_actions:
+  - send_outreach
+  - distribute_report
+  - sign_document
+  - move_capital
+  - capital_call
+
+guardrails:
+  - Customers under common ownership are concentrated together (relatedGroup).
+  - The customer file must tie to reported revenue; breaks are reported.
+  - Change-of-control is taken only as supplied; unconfirmed stays unknown.
+  - The deal lead decides whether concentration needs price, structure or a condition.
+
+downstream:
+  - red-flag-register
+  - bid-range
+  - ic-memo

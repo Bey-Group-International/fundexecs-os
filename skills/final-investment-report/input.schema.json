@@ -1,0 +1,131 @@
+{
+  "properties": {
+    "cashFlows": {
+      "items": {
+        "properties": {
+          "amount": {
+            "type": "number"
+          },
+          "date": {
+            "minLength": 8,
+            "type": "string"
+          }
+        },
+        "required": [ "date", "amount" ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "company": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "entry": {
+      "properties": {
+        "ebitda": {
+          "type": "number"
+        },
+        "multiple": {
+          "minimum": 0,
+          "type": "number"
+        },
+        "netDebt": {
+          "type": "number"
+        }
+      },
+      "required": [ "ebitda", "multiple", "netDebt" ],
+      "type": "object"
+    },
+    "exit": {
+      "properties": {
+        "ebitda": {
+          "type": "number"
+        },
+        "multiple": {
+          "minimum": 0,
+          "type": "number"
+        },
+        "netDebt": {
+          "type": "number"
+        }
+      },
+      "required": [ "ebitda", "multiple", "netDebt" ],
+      "type": "object"
+    },
+    "fundRecord": {
+      "properties": {
+        "irr": {
+          "type": "number"
+        },
+        "moic": {
+          "type": "number"
+        }
+      },
+      "type": "object"
+    },
+    "gateOwner": {
+      "type": "string"
+    },
+    "hurdles": {
+      "properties": {
+        "base": {
+          "properties": {
+            "irr": {
+              "type": "number"
+            },
+            "moic": {
+              "type": "number"
+            }
+          },
+          "type": "object"
+        },
+        "downside": {
+          "type": "object"
+        },
+        "holdYears": {
+          "type": "number"
+        }
+      },
+      "required": [ "base", "holdYears" ],
+      "type": "object"
+    },
+    "lessons": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "thesis": {
+      "items": {
+        "properties": {
+          "claim": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "evidence": {
+            "type": "string"
+          },
+          "outcome": {
+            "type": "string"
+          }
+        },
+        "required": [ "claim" ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "underwriting": {
+      "properties": {
+        "irr": {
+          "type": "number"
+        },
+        "moic": {
+          "type": "number"
+        }
+      },
+      "type": "object"
+    }
+  },
+  "required": [ "company", "cashFlows", "entry", "exit" ],
+  "type": "object"
+}

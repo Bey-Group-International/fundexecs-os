@@ -1,0 +1,27 @@
+# skills/covenant-watch/policy.yaml — enforced by lib/skills/runner.ts and lib/executives/registry.ts
+approval_tier: 1
+risk_classification: moderate
+
+allowed_executives:
+  - portfolio_ops
+  - fund_admin
+
+data_scopes:
+  - asset:read
+  - document:read
+
+prohibited_actions:
+  - sign_document
+  - move_capital
+  - distribute_report
+  - send_outreach
+
+guardrails:
+  - A covenant must quote its agreement clause; an unquoted covenant is not calculated.
+  - An EBITDA addback counts only when it cites the clause that permits it; others are excluded and listed.
+  - Cure options are quoted from the agreement, never assumed.
+  - The portfolio CFO and the fund's finance lead sign the compliance certificate.
+
+downstream:
+  - portfolio-review
+  - cash-13-week

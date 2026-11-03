@@ -1,0 +1,43 @@
+{
+  "properties": {
+    "bridge": {
+      "required": [ "valueCreated", "ebitdaGrowth", "multipleChange", "deleveraging", "sum", "ties" ],
+      "type": "object"
+    },
+    "fundTie": {
+      "type": "object"
+    },
+    "gate": {
+      "type": "string"
+    },
+    "hurdleVerdict": {
+      "enum": [ "clears", "misses", "not-tested" ],
+      "type": "string"
+    },
+    "lessons": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "limitation": {
+      "type": "string"
+    },
+    "realised": {
+      "required": [ "invested", "returned" ],
+      "type": "object"
+    },
+    "thesisReview": {
+      "items": {
+        "required": [ "claim", "reviewable" ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "versusUnderwriting": {
+      "type": "object"
+    }
+  },
+  "required": [ "realised", "hurdleVerdict", "bridge", "fundTie", "thesisReview", "lessons", "limitation", "gate" ],
+  "type": "object"
+}
