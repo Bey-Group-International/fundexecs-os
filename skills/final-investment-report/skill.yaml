@@ -1,0 +1,66 @@
+# skills/final-investment-report/skill.yaml
+# Authoring spec for Final Investment Report. The machine-readable manifest the runtime loads is
+# the TypeScript SkillDefinition in lib/skills/catalog/final-investment-report.ts; this YAML is the
+# human-facing contract and must stay consistent with it.
+# Origin: PE department pack · Exit + IPO. Rules re-implemented natively; no pack text is shipped.
+id: final-investment-report
+name: Final Investment Report
+version: 1.0.0
+owner: fundexecs
+hub: execute
+
+applicable_executives:
+  - investment_committee
+  - analyst
+
+supported_entity_types: [asset, company]
+
+required_inputs:
+  - company
+  - cashFlows
+  - entry
+  - exit
+
+optional_inputs:
+  - fundRecord
+  - underwriting
+  - thesis
+  - lessons
+  - hurdles
+  - gateOwner
+
+outputs:
+  - realised
+  - hurdleVerdict
+  - bridge
+  - fundTie
+  - thesisReview
+  - lessons
+  - gate
+
+artifact_types: [summary]
+data_permissions: [asset:read, valuation:read]
+tools: []
+
+approval_tier: 1
+risk_classification: moderate
+execution_timeout_ms: 10000
+retry_policy:
+  max_attempts: 1
+  backoff_ms: 0
+
+provider_capabilities:
+  - financial_reasoning
+
+allowed_downstream_skills: [lp-update]
+
+prohibited_actions:
+  - send_outreach
+  - distribute_report
+  - sign_document
+  - move_capital
+
+input_schema: input.schema.json
+output_schema: output.schema.json
+policy: policy.yaml
+evaluation: evaluation.yaml

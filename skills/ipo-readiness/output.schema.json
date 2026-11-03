@@ -1,0 +1,71 @@
+{
+  "type": "object",
+  "required": [
+    "items",
+    "counts",
+    "ready",
+    "blockers",
+    "exchange",
+    "uncitedRequirements",
+    "limitation",
+    "gate"
+  ],
+  "properties": {
+    "items": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "area",
+          "requirement",
+          "status",
+          "effectiveStatus",
+          "flags"
+        ]
+      }
+    },
+    "counts": {
+      "type": "object"
+    },
+    "ready": {
+      "type": "boolean"
+    },
+    "blockers": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "weeksIfParallel": {
+      "type": "number"
+    },
+    "weeksIfSerial": {
+      "type": "number"
+    },
+    "totalCostToClose": {
+      "type": "number"
+    },
+    "untimed": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "exchange": {
+      "type": "string"
+    },
+    "uncitedRequirements": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "limitation": {
+      "type": "string"
+    },
+    "gate": {
+      "type": "string"
+    }
+  }
+}

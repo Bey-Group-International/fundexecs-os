@@ -1,0 +1,72 @@
+{
+  "type": "object",
+  "required": [
+    "index",
+    "coverage",
+    "gaps",
+    "redactionList",
+    "qaLog",
+    "requestListIsDefault",
+    "limitation",
+    "gate"
+  ],
+  "properties": {
+    "index": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "workstream",
+          "documents"
+        ]
+      }
+    },
+    "coverage": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "requestId",
+          "request",
+          "status"
+        ]
+      }
+    },
+    "gaps": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "redactionList": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "document",
+          "sensitivity",
+          "action"
+        ]
+      }
+    },
+    "qaLog": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "ref",
+          "question"
+        ]
+      }
+    },
+    "requestListIsDefault": {
+      "type": "boolean"
+    },
+    "limitation": {
+      "type": "string"
+    },
+    "gate": {
+      "type": "string"
+    }
+  }
+}

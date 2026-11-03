@@ -1,0 +1,26 @@
+# skills/final-investment-report/policy.yaml — enforced by lib/skills/runner.ts and lib/executives/registry.ts
+approval_tier: 1
+risk_classification: moderate
+
+allowed_executives:
+  - investment_committee
+  - analyst
+
+data_scopes:
+  - asset:read
+  - valuation:read
+
+prohibited_actions:
+  - send_outreach
+  - distribute_report
+  - sign_document
+  - move_capital
+
+guardrails:
+  - IRR uses dated cash flows (act/365), never an annual approximation.
+  - The attribution sums exactly to value created and is labelled analytical, not causal.
+  - Returns that do not tie to the fund's records are flagged.
+  - Each entry-thesis claim needs a recorded outcome. The IC reviews the report.
+
+downstream:
+  - lp-update

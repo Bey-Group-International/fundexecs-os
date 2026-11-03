@@ -1,0 +1,7 @@
+# skills/exit-readiness/evaluation.yaml — acceptance criteria; exercised by lib/skills/catalog/pe-exit.test.ts
+criteria:
+  - met without evidence is unverified
+  - claims without proof removed
+  - timing reported parallel and serial
+  - unknown never read as met
+example: examples/example-1.json

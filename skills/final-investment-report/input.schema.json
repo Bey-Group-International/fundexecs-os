@@ -1,0 +1,152 @@
+{
+  "type": "object",
+  "required": [
+    "company",
+    "cashFlows",
+    "entry",
+    "exit"
+  ],
+  "properties": {
+    "company": {
+      "type": "string",
+      "minLength": 1
+    },
+    "cashFlows": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "date",
+          "amount"
+        ],
+        "properties": {
+          "date": {
+            "type": "string",
+            "minLength": 8
+          },
+          "amount": {
+            "type": "number"
+          }
+        }
+      }
+    },
+    "entry": {
+      "type": "object",
+      "required": [
+        "ebitda",
+        "multiple",
+        "netDebt"
+      ],
+      "properties": {
+        "ebitda": {
+          "type": "number"
+        },
+        "multiple": {
+          "type": "number",
+          "minimum": 0
+        },
+        "netDebt": {
+          "type": "number"
+        }
+      }
+    },
+    "exit": {
+      "type": "object",
+      "required": [
+        "ebitda",
+        "multiple",
+        "netDebt"
+      ],
+      "properties": {
+        "ebitda": {
+          "type": "number"
+        },
+        "multiple": {
+          "type": "number",
+          "minimum": 0
+        },
+        "netDebt": {
+          "type": "number"
+        }
+      }
+    },
+    "fundRecord": {
+      "type": "object",
+      "properties": {
+        "moic": {
+          "type": "number"
+        },
+        "irr": {
+          "type": "number"
+        }
+      }
+    },
+    "underwriting": {
+      "type": "object",
+      "properties": {
+        "moic": {
+          "type": "number"
+        },
+        "irr": {
+          "type": "number"
+        }
+      }
+    },
+    "thesis": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "claim"
+        ],
+        "properties": {
+          "claim": {
+            "type": "string",
+            "minLength": 1
+          },
+          "outcome": {
+            "type": "string"
+          },
+          "evidence": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "lessons": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "hurdles": {
+      "type": "object",
+      "required": [
+        "base",
+        "holdYears"
+      ],
+      "properties": {
+        "base": {
+          "type": "object",
+          "properties": {
+            "irr": {
+              "type": "number"
+            },
+            "moic": {
+              "type": "number"
+            }
+          }
+        },
+        "downside": {
+          "type": "object"
+        },
+        "holdYears": {
+          "type": "number"
+        }
+      }
+    },
+    "gateOwner": {
+      "type": "string"
+    }
+  }
+}

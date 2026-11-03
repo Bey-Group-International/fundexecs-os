@@ -53,6 +53,11 @@ import { covenantWatch } from "./catalog/covenant-watch";
 import { kpiVariance } from "./catalog/kpi-variance";
 import { cash13Week } from "./catalog/cash-13-week";
 import { financingTerms } from "./catalog/financing-terms";
+import { exitReadiness } from "./catalog/exit-readiness";
+import { ipoReadiness } from "./catalog/ipo-readiness";
+import { exitRoutes } from "./catalog/exit-routes";
+import { dataRoomPrep } from "./catalog/data-room-prep";
+import { finalInvestmentReport } from "./catalog/final-investment-report";
 
 const SKILLS: Record<string, SkillDefinition> = {
   [screenDeal.manifest.id]: screenDeal as SkillDefinition,
@@ -118,6 +123,12 @@ const SKILLS: Record<string, SkillDefinition> = {
   [kpiVariance.manifest.id]: kpiVariance as SkillDefinition,
   [cash13Week.manifest.id]: cash13Week as SkillDefinition,
   [financingTerms.manifest.id]: financingTerms as SkillDefinition,
+  // PE department · exit + IPO (proof-gated claims; no built-in market view or listing rules).
+  [exitReadiness.manifest.id]: exitReadiness as SkillDefinition,
+  [ipoReadiness.manifest.id]: ipoReadiness as SkillDefinition,
+  [exitRoutes.manifest.id]: exitRoutes as SkillDefinition,
+  [dataRoomPrep.manifest.id]: dataRoomPrep as SkillDefinition,
+  [finalInvestmentReport.manifest.id]: finalInvestmentReport as SkillDefinition,
 };
 
 export function getSkill(id: string): SkillDefinition | null {

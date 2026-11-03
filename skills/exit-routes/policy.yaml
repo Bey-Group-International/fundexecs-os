@@ -1,0 +1,29 @@
+# skills/exit-routes/policy.yaml — enforced by lib/skills/runner.ts and lib/executives/registry.ts
+approval_tier: 1
+risk_classification: moderate
+
+allowed_executives:
+  - analyst
+  - investment_committee
+
+data_scopes:
+  - asset:read
+  - valuation:read
+
+prohibited_actions:
+  - send_outreach
+  - distribute_report
+  - share_materials
+  - sign_document
+  - move_capital
+
+guardrails:
+  - Every value range must cite its basis; a route without one is not eligible.
+  - The hurdle is tested at the LOW end of the range and the fund-life constraint is explicit.
+  - No market view or probability is invented; certainty is the deal team's stated view.
+  - The IC approves the exit route.
+
+downstream:
+  - exit-readiness
+  - buyer-list
+  - final-investment-report

@@ -1,0 +1,47 @@
+{
+  "type": "object",
+  "required": [
+    "routes",
+    "orderingRule",
+    "hurdlesAreDefault",
+    "limitation",
+    "gate"
+  ],
+  "properties": {
+    "routes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "name",
+          "basisCited",
+          "proceedsLow",
+          "proceedsHigh",
+          "hurdleAtLow",
+          "hurdleAtHigh",
+          "certainty",
+          "eligible",
+          "notes"
+        ]
+      }
+    },
+    "primary": {
+      "type": "string"
+    },
+    "fallback": {
+      "type": "string"
+    },
+    "orderingRule": {
+      "type": "string"
+    },
+    "hurdlesAreDefault": {
+      "type": "boolean"
+    },
+    "limitation": {
+      "type": "string"
+    },
+    "gate": {
+      "type": "string"
+    }
+  }
+}

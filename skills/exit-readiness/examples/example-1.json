@@ -1,0 +1,32 @@
+{
+  "input": {
+    "company": "Acme",
+    "items": [
+      {
+        "id": "a",
+        "area": "Finance",
+        "requirement": "Audited accounts",
+        "status": "met",
+        "evidence": "Audit 2025"
+      },
+      {
+        "id": "b",
+        "area": "Legal",
+        "requirement": "Clean cap table",
+        "status": "gap",
+        "owner": "GC",
+        "dueDate": "2027-01-31",
+        "weeksToClose": 6
+      }
+    ],
+    "equityStory": [
+      {
+        "claim": "Market leader",
+        "proof": "Industry report p.4"
+      },
+      {
+        "claim": "Obvious winner"
+      }
+    ]
+  }
+}

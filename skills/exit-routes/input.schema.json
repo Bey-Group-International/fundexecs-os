@@ -1,0 +1,114 @@
+{
+  "type": "object",
+  "required": [
+    "company",
+    "equityInvested",
+    "ownershipPct",
+    "netDebtAtExit",
+    "yearsHeld",
+    "routes"
+  ],
+  "properties": {
+    "company": {
+      "type": "string",
+      "minLength": 1
+    },
+    "equityInvested": {
+      "type": "number",
+      "minimum": 0
+    },
+    "ownershipPct": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 100
+    },
+    "netDebtAtExit": {
+      "type": "number"
+    },
+    "yearsHeld": {
+      "type": "number",
+      "minimum": 0
+    },
+    "fundLifeRemainingMonths": {
+      "type": "number",
+      "minimum": 0
+    },
+    "routes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "name",
+          "evLow",
+          "evHigh",
+          "monthsToClose",
+          "certainty",
+          "costPct"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "evLow": {
+            "type": "number",
+            "minimum": 0
+          },
+          "evHigh": {
+            "type": "number",
+            "minimum": 0
+          },
+          "basis": {
+            "type": "string"
+          },
+          "monthsToClose": {
+            "type": "number",
+            "minimum": 0
+          },
+          "certainty": {
+            "type": "string",
+            "enum": [
+              "high",
+              "medium",
+              "low"
+            ]
+          },
+          "costPct": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 100
+          }
+        }
+      }
+    },
+    "hurdles": {
+      "type": "object",
+      "required": [
+        "base",
+        "holdYears"
+      ],
+      "properties": {
+        "base": {
+          "type": "object",
+          "properties": {
+            "irr": {
+              "type": "number"
+            },
+            "moic": {
+              "type": "number"
+            }
+          }
+        },
+        "downside": {
+          "type": "object"
+        },
+        "holdYears": {
+          "type": "number"
+        }
+      }
+    },
+    "gateOwner": {
+      "type": "string"
+    }
+  }
+}

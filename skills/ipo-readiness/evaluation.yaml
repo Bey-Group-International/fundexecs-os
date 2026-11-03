@@ -1,0 +1,7 @@
+# skills/ipo-readiness/evaluation.yaml — acceptance criteria; exercised by lib/skills/catalog/pe-exit.test.ts
+criteria:
+  - uncited requirement flagged
+  - met without evidence unverified
+  - no built-in listing rules
+  - timing parallel and serial
+example: examples/example-1.json

@@ -1,0 +1,62 @@
+# skills/data-room-prep/skill.yaml
+# Authoring spec for Data Room Preparation. The machine-readable manifest the runtime loads is
+# the TypeScript SkillDefinition in lib/skills/catalog/data-room-prep.ts; this YAML is the
+# human-facing contract and must stay consistent with it.
+# Origin: PE department pack · Exit + IPO. Rules re-implemented natively; no pack text is shipped.
+id: data-room-prep
+name: Data Room Preparation
+version: 1.0.0
+owner: fundexecs
+hub: execute
+
+applicable_executives:
+  - legal_closing
+  - diligence
+
+supported_entity_types: [asset, deal, company]
+
+required_inputs:
+  - company
+  - documents
+
+optional_inputs:
+  - expectedRequests
+  - qaOwner
+  - qaResponseHours
+  - gateOwner
+
+outputs:
+  - index
+  - coverage
+  - gaps
+  - redactionList
+  - qaLog
+  - gate
+
+artifact_types: [analysis]
+data_permissions: [document:read, data_room:read]
+tools: []
+
+approval_tier: 1
+risk_classification: moderate
+execution_timeout_ms: 10000
+retry_policy:
+  max_attempts: 1
+  backoff_ms: 0
+
+provider_capabilities:
+  - structured_extraction
+
+allowed_downstream_skills: [exit-readiness, buyer-list]
+
+prohibited_actions:
+  - send_outreach
+  - distribute_report
+  - share_materials
+  - sign_document
+  - move_capital
+
+input_schema: input.schema.json
+output_schema: output.schema.json
+policy: policy.yaml
+evaluation: evaluation.yaml

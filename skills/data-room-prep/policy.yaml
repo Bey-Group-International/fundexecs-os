@@ -1,0 +1,28 @@
+# skills/data-room-prep/policy.yaml — enforced by lib/skills/runner.ts and lib/executives/registry.ts
+approval_tier: 1
+risk_classification: moderate
+
+allowed_executives:
+  - legal_closing
+  - diligence
+
+data_scopes:
+  - document:read
+  - data_room:read
+
+prohibited_actions:
+  - send_outreach
+  - distribute_report
+  - share_materials
+  - sign_document
+  - move_capital
+
+guardrails:
+  - Every expected request maps to a document or a gap.
+  - Competitor-sensitive documents must be staged; personal data redacted; third-party-confidential items go to counsel.
+  - A generic default request list is labelled and is no substitute for the buyer's real list.
+  - Counsel approves the redaction list before the room opens.
+
+downstream:
+  - exit-readiness
+  - buyer-list

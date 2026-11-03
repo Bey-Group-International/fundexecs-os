@@ -1,0 +1,7 @@
+# skills/exit-routes/evaluation.yaml — acceptance criteria; exercised by lib/skills/catalog/pe-exit.test.ts
+criteria:
+  - route without basis not eligible
+  - fund-life miss flagged
+  - hurdle tested at low end
+  - ordering rule stated
+example: examples/example-1.json

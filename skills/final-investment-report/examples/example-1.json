@@ -1,0 +1,39 @@
+{
+  "input": {
+    "company": "Acme",
+    "cashFlows": [
+      {
+        "date": "2020-01-01",
+        "amount": -100
+      },
+      {
+        "date": "2025-01-01",
+        "amount": 300
+      }
+    ],
+    "entry": {
+      "ebitda": 10,
+      "multiple": 8,
+      "netDebt": 50
+    },
+    "exit": {
+      "ebitda": 16,
+      "multiple": 9,
+      "netDebt": 20
+    },
+    "fundRecord": {
+      "moic": 3,
+      "irr": 0.2457
+    },
+    "thesis": [
+      {
+        "claim": "Buy-and-build",
+        "outcome": "4 add-ons closed",
+        "evidence": "Board pack Q4"
+      }
+    ],
+    "lessons": [
+      "Integrate faster"
+    ]
+  }
+}
