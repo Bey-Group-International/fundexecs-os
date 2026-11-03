@@ -1,191 +1,63 @@
 {
-  "type": "object",
-  "required": [
-    "mandate"
-  ],
   "properties": {
+    "gateOwner": {
+      "type": "string"
+    },
     "mandate": {
-      "type": "object",
       "properties": {
-        "status": {
-          "type": "string",
-          "enum": [
-            "approved",
-            "draft"
-          ]
-        },
         "approvedBy": {
           "type": "string"
         },
         "hardLimits": {
-          "type": "array",
           "items": {
-            "type": "object",
-            "required": [
-              "id",
-              "label",
-              "metric"
-            ],
             "properties": {
-              "id": {
-                "type": "string",
-                "minLength": 1
-              },
-              "label": {
-                "type": "string",
-                "minLength": 1
-              },
-              "metric": {
-                "type": "string",
-                "enum": [
-                  "ebitda",
-                  "revenue",
-                  "revenueCagr3y",
-                  "ebitdaMargin",
-                  "recurringRevenuePct",
-                  "topCustomerPct",
-                  "equityChequePct",
-                  "ownershipPct",
-                  "sector",
-                  "geography",
-                  "dealType"
-                ]
+              "allow": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
               },
               "band": {
-                "type": "object",
                 "properties": {
-                  "min": {
-                    "type": "number"
-                  },
                   "max": {
                     "type": "number"
+                  },
+                  "min": {
+                    "type": "number"
                   }
-                }
-              },
-              "allow": {
-                "type": "array",
-                "items": {
-                  "type": "string"
-                }
+                },
+                "type": "object"
               },
               "deny": {
-                "type": "array",
                 "items": {
                   "type": "string"
-                }
+                },
+                "type": "array"
+              },
+              "id": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "label": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "metric": {
+                "enum": [ "ebitda", "revenue", "revenueCagr3y", "ebitdaMargin", "recurringRevenuePct", "topCustomerPct", "equityChequePct", "ownershipPct", "sector", "geography", "dealType" ],
+                "type": "string"
               },
               "source": {
                 "type": "string"
               }
-            }
-          }
-        },
-        "preferences": {
-          "type": "array",
-          "items": {
-            "type": "object",
-            "required": [
-              "id",
-              "label",
-              "metric",
-              "weight"
-            ],
-            "properties": {
-              "id": {
-                "type": "string",
-                "minLength": 1
-              },
-              "label": {
-                "type": "string",
-                "minLength": 1
-              },
-              "metric": {
-                "type": "string",
-                "enum": [
-                  "ebitda",
-                  "revenue",
-                  "revenueCagr3y",
-                  "ebitdaMargin",
-                  "recurringRevenuePct",
-                  "topCustomerPct",
-                  "equityChequePct",
-                  "ownershipPct",
-                  "sector",
-                  "geography",
-                  "dealType"
-                ]
-              },
-              "strong": {
-                "type": "object",
-                "properties": {
-                  "min": {
-                    "type": "number"
-                  },
-                  "max": {
-                    "type": "number"
-                  }
-                }
-              },
-              "acceptable": {
-                "type": "object",
-                "properties": {
-                  "min": {
-                    "type": "number"
-                  },
-                  "max": {
-                    "type": "number"
-                  }
-                }
-              },
-              "strongValues": {
-                "type": "array",
-                "items": {
-                  "type": "string"
-                }
-              },
-              "acceptableValues": {
-                "type": "array",
-                "items": {
-                  "type": "string"
-                }
-              },
-              "weight": {
-                "type": "number",
-                "minimum": 0
-              }
-            }
-          }
+            },
+            "required": [ "id", "label", "metric" ],
+            "type": "object"
+          },
+          "type": "array"
         },
         "killFacts": {
-          "type": "array",
           "items": {
-            "type": "object",
-            "required": [
-              "id",
-              "label"
-            ],
             "properties": {
-              "id": {
-                "type": "string",
-                "minLength": 1
-              },
-              "label": {
-                "type": "string",
-                "minLength": 1
-              },
-              "metric": {
-                "type": "string",
-                "enum": [
-                  "ebitda",
-                  "revenue",
-                  "revenueCagr3y",
-                  "ebitdaMargin",
-                  "recurringRevenuePct",
-                  "topCustomerPct",
-                  "equityChequePct",
-                  "ownershipPct"
-                ]
-              },
               "above": {
                 "type": "number"
               },
@@ -194,14 +66,92 @@
               },
               "flag": {
                 "type": "boolean"
+              },
+              "id": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "label": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "metric": {
+                "enum": [ "ebitda", "revenue", "revenueCagr3y", "ebitdaMargin", "recurringRevenuePct", "topCustomerPct", "equityChequePct", "ownershipPct" ],
+                "type": "string"
               }
-            }
-          }
+            },
+            "required": [ "id", "label" ],
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "preferences": {
+          "items": {
+            "properties": {
+              "acceptable": {
+                "properties": {
+                  "max": {
+                    "type": "number"
+                  },
+                  "min": {
+                    "type": "number"
+                  }
+                },
+                "type": "object"
+              },
+              "acceptableValues": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "id": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "label": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "metric": {
+                "enum": [ "ebitda", "revenue", "revenueCagr3y", "ebitdaMargin", "recurringRevenuePct", "topCustomerPct", "equityChequePct", "ownershipPct", "sector", "geography", "dealType" ],
+                "type": "string"
+              },
+              "strong": {
+                "properties": {
+                  "max": {
+                    "type": "number"
+                  },
+                  "min": {
+                    "type": "number"
+                  }
+                },
+                "type": "object"
+              },
+              "strongValues": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "weight": {
+                "minimum": 0,
+                "type": "number"
+              }
+            },
+            "required": [ "id", "label", "metric", "weight" ],
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "status": {
+          "enum": [ "approved", "draft" ],
+          "type": "string"
         }
-      }
-    },
-    "gateOwner": {
-      "type": "string"
+      },
+      "type": "object"
     }
-  }
+  },
+  "required": [ "mandate" ],
+  "type": "object"
 }

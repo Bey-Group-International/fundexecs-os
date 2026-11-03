@@ -9,13 +9,13 @@ disagree about what passes the mandate.
 
 ## Contract
 
-|                   |                                       |
-|-------------------|---------------------------------------|
-| **Approval tier** | 1 — internal, reversible analysis |
-| **Executives**    | deal_sourcer · analyst |
-| **Inputs**        | `mandate`, `targets` |
+|                   |                                                    |
+|-------------------|----------------------------------------------------|
+| **Approval tier** | 1 — internal, reversible analysis                  |
+| **Executives**    | deal_sourcer · analyst                             |
+| **Inputs**        | `mandate`, `targets`                               |
 | **Outputs**       | `results`, `counts`, `basis`, `limitation`, `gate` |
-| **Downstream**    | first-look, screen-deal, dd-checklist |
+| **Downstream**    | first-look, screen-deal, dd-checklist              |
 
 ## Guardrails
 

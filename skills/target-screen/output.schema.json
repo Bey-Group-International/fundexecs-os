@@ -1,73 +1,53 @@
 {
-  "type": "object",
-  "required": [
-    "results",
-    "counts",
-    "basis",
-    "limitation",
-    "gate"
-  ],
   "properties": {
-    "results": {
-      "type": "array",
-      "items": {
-        "type": "object",
-        "required": [
-          "name",
-          "result"
-        ],
-        "properties": {
-          "name": {
-            "type": "string"
-          },
-          "result": {
-            "type": "string",
-            "enum": [
-              "pass",
-              "fail",
-              "needs-data"
-            ]
-          },
-          "score": {
-            "type": "number",
-            "minimum": 0,
-            "maximum": 100
-          },
-          "criteriaFailed": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          },
-          "fieldsMissing": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          }
-        }
-      }
+    "basis": {
+      "enum": [ "approved-mandate", "default-screened" ],
+      "type": "string"
     },
     "counts": {
-      "type": "object",
-      "required": [
-        "pass",
-        "fail",
-        "needsData"
-      ]
+      "required": [ "pass", "fail", "needsData" ],
+      "type": "object"
     },
-    "basis": {
-      "type": "string",
-      "enum": [
-        "approved-mandate",
-        "default-screened"
-      ]
+    "gate": {
+      "type": "string"
     },
     "limitation": {
       "type": "string"
     },
-    "gate": {
-      "type": "string"
+    "results": {
+      "items": {
+        "properties": {
+          "criteriaFailed": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "fieldsMissing": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "name": {
+            "type": "string"
+          },
+          "result": {
+            "enum": [ "pass", "fail", "needs-data" ],
+            "type": "string"
+          },
+          "score": {
+            "maximum": 100,
+            "minimum": 0,
+            "type": "number"
+          }
+        },
+        "required": [ "name", "result" ],
+        "type": "object"
+      },
+      "type": "array"
     }
-  }
+  },
+  "required": [ "results", "counts", "basis", "limitation", "gate" ],
+  "type": "object"
 }

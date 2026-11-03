@@ -9,13 +9,13 @@ disagree about what passes the mandate.
 
 ## Contract
 
-|                   |                                       |
-|-------------------|---------------------------------------|
-| **Approval tier** | 1 — internal, reversible analysis |
-| **Executives**    | deal_sourcer · analyst · investment_committee |
-| **Inputs**        | `mandate`, `deal.name` |
+|                   |                                                                                                  |
+|-------------------|--------------------------------------------------------------------------------------------------|
+| **Approval tier** | 1 — internal, reversible analysis                                                                |
+| **Executives**    | deal_sourcer · analyst · investment_committee                                                    |
+| **Inputs**        | `mandate`, `deal.name`                                                                           |
 | **Outputs**       | `view`, `reason`, `ebitdaBridge`, `threeReasonsItCouldFail`, `threeFactsThatWouldKillIt`, `gate` |
-| **Downstream**    | screen-deal, returns, dd-checklist, ic-memo |
+| **Downstream**    | screen-deal, returns, dd-checklist, ic-memo                                                      |
 
 ## Guardrails
 

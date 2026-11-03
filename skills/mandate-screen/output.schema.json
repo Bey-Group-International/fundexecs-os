@@ -1,55 +1,36 @@
 {
-  "type": "object",
-  "required": [
-    "rows",
-    "issues",
-    "openQuestions",
-    "readyForSignOff",
-    "basis",
-    "gate"
-  ],
   "properties": {
-    "rows": {
-      "type": "array",
-      "items": {
-        "type": "object",
-        "required": [
-          "id",
-          "type",
-          "criterion",
-          "threshold",
-          "source"
-        ]
-      }
+    "basis": {
+      "enum": [ "approved-mandate", "default-screened" ],
+      "type": "string"
+    },
+    "gate": {
+      "type": "string"
     },
     "issues": {
-      "type": "array",
       "items": {
-        "type": "object",
-        "required": [
-          "severity",
-          "message"
-        ]
-      }
+        "required": [ "severity", "message" ],
+        "type": "object"
+      },
+      "type": "array"
     },
     "openQuestions": {
-      "type": "array",
       "items": {
         "type": "string"
-      }
+      },
+      "type": "array"
     },
     "readyForSignOff": {
       "type": "boolean"
     },
-    "basis": {
-      "type": "string",
-      "enum": [
-        "approved-mandate",
-        "default-screened"
-      ]
-    },
-    "gate": {
-      "type": "string"
+    "rows": {
+      "items": {
+        "required": [ "id", "type", "criterion", "threshold", "source" ],
+        "type": "object"
+      },
+      "type": "array"
     }
-  }
+  },
+  "required": [ "rows", "issues", "openQuestions", "readyForSignOff", "basis", "gate" ],
+  "type": "object"
 }
