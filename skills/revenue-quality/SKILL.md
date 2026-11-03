@@ -8,13 +8,13 @@ skill runtime (`lib/skills/runner.ts`) using the shared evidence grades (`lib/pe
 
 ## Contract
 
-|                   |                                       |
-|-------------------|---------------------------------------|
-| **Approval tier** | 1 — internal, reversible analysis |
-| **Executives**    | diligence · analyst |
-| **Inputs**        | `years`, `reportedRevenue`, `customers` |
+|                   |                                                                   |
+|-------------------|-------------------------------------------------------------------|
+| **Approval tier** | 1 — internal, reversible analysis                                 |
+| **Executives**    | diligence · analyst                                               |
+| **Inputs**        | `years`, `reportedRevenue`, `customers`                           |
 | **Outputs**       | `byYear`, `latestClassSplit`, `retention`, `keyCustomers`, `gate` |
-| **Downstream**    | red-flag-register, bid-range, ic-memo |
+| **Downstream**    | red-flag-register, bid-range, ic-memo                             |
 
 ## Guardrails
 

@@ -1,10 +1,17 @@
 {
   "input": {
+    "compsMultipleRange": {
+      "high": 11,
+      "low": 8
+    },
+    "downsideCase": {
+      "ebitdaGrowthRate": 0,
+      "exitMultiple": 8
+    },
     "ebitda": 10,
-    "leverageMultiple": 4,
-    "holdYears": 5,
     "ebitdaGrowthRate": 0.08,
     "exitMultiple": 9,
+    "holdYears": 5,
     "hurdles": {
       "base": {
         "irr": 0.2
@@ -14,14 +21,7 @@
       },
       "holdYears": 5
     },
-    "downsideCase": {
-      "ebitdaGrowthRate": 0,
-      "exitMultiple": 8
-    },
-    "redFlagPriceAdjustment": 5,
-    "compsMultipleRange": {
-      "low": 8,
-      "high": 11
-    }
+    "leverageMultiple": 4,
+    "redFlagPriceAdjustment": 5
   }
 }

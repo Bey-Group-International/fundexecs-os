@@ -1,61 +1,44 @@
 {
-  "type": "object",
-  "required": [
-    "register",
-    "blindSpots",
-    "supportedPriceAdjustment",
-    "unsupportedPriceClaims",
-    "challenges",
-    "gate"
-  ],
   "properties": {
-    "register": {
-      "type": "array",
+    "blindSpots": {
       "items": {
-        "type": "object",
-        "required": [
-          "rank",
-          "title",
-          "severity",
-          "impact",
-          "evidenceGrade"
-        ]
-      }
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "challengeNote": {
+      "type": "string"
+    },
+    "challenges": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
     },
     "duplicatesMerged": {
       "type": "integer"
     },
-    "blindSpots": {
-      "type": "array",
+    "gate": {
+      "type": "string"
+    },
+    "register": {
       "items": {
-        "type": "string"
-      }
+        "required": [ "rank", "title", "severity", "impact", "evidenceGrade" ],
+        "type": "object"
+      },
+      "type": "array"
     },
     "supportedPriceAdjustment": {
       "type": "number"
     },
     "unsupportedPriceClaims": {
-      "type": "array",
       "items": {
-        "type": "object",
-        "required": [
-          "title",
-          "priceImpact",
-          "evidenceGrade"
-        ]
-      }
-    },
-    "challenges": {
-      "type": "array",
-      "items": {
-        "type": "string"
-      }
-    },
-    "challengeNote": {
-      "type": "string"
-    },
-    "gate": {
-      "type": "string"
+        "required": [ "title", "priceImpact", "evidenceGrade" ],
+        "type": "object"
+      },
+      "type": "array"
     }
-  }
+  },
+  "required": [ "register", "blindSpots", "supportedPriceAdjustment", "unsupportedPriceClaims", "challenges", "gate" ],
+  "type": "object"
 }

@@ -1,51 +1,37 @@
 {
-  "type": "object",
-  "required": [
-    "reportedEbitda",
-    "rows",
-    "diligenceAdjustedEbitda",
-    "addbacksNotAccepted",
-    "icMemoReady",
-    "gate"
-  ],
   "properties": {
-    "reportedEbitda": {
+    "addbacksNotAccepted": {
       "type": "number"
     },
     "auditedTie": {
       "type": "object"
     },
-    "rows": {
-      "type": "array",
-      "items": {
-        "type": "object",
-        "required": [
-          "origin",
-          "label",
-          "amount",
-          "status",
-          "grade",
-          "inAdjustedEbitda"
-        ]
-      }
+    "deltaVsManagement": {
+      "type": "number"
     },
     "diligenceAdjustedEbitda": {
       "type": "number"
     },
-    "managementBridgeCheck": {
-      "type": "object"
-    },
-    "deltaVsManagement": {
-      "type": "number"
-    },
-    "addbacksNotAccepted": {
-      "type": "number"
+    "gate": {
+      "type": "string"
     },
     "icMemoReady": {
       "type": "boolean"
     },
-    "gate": {
-      "type": "string"
+    "managementBridgeCheck": {
+      "type": "object"
+    },
+    "reportedEbitda": {
+      "type": "number"
+    },
+    "rows": {
+      "items": {
+        "required": [ "origin", "label", "amount", "status", "grade", "inAdjustedEbitda" ],
+        "type": "object"
+      },
+      "type": "array"
     }
-  }
+  },
+  "required": [ "reportedEbitda", "rows", "diligenceAdjustedEbitda", "addbacksNotAccepted", "icMemoReady", "gate" ],
+  "type": "object"
 }

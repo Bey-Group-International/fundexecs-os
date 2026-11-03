@@ -1,90 +1,68 @@
 {
-  "type": "object",
-  "required": [
-    "reportedEbitda"
-  ],
   "properties": {
-    "reportedEbitda": {
-      "type": "number"
-    },
     "auditedEbitda": {
       "type": "number"
+    },
+    "diligenceAdjustments": {
+      "items": {
+        "properties": {
+          "amount": {
+            "type": "number"
+          },
+          "grade": {
+            "enum": [ "A", "B", "C", "U" ],
+            "type": "string"
+          },
+          "label": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "support": {
+            "type": "string"
+          }
+        },
+        "required": [ "label", "amount" ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "gateOwner": {
+      "type": "string"
     },
     "managementAdjustedEbitda": {
       "type": "number"
     },
     "managementAdjustments": {
-      "type": "array",
       "items": {
-        "type": "object",
-        "required": [
-          "label",
-          "amount"
-        ],
         "properties": {
-          "label": {
-            "type": "string",
-            "minLength": 1
-          },
           "amount": {
             "type": "number"
           },
-          "support": {
+          "grade": {
+            "enum": [ "A", "B", "C", "U" ],
             "type": "string"
           },
-          "grade": {
-            "type": "string",
-            "enum": [
-              "A",
-              "B",
-              "C",
-              "U"
-            ]
+          "label": {
+            "minLength": 1,
+            "type": "string"
           },
           "status": {
-            "type": "string",
-            "enum": [
-              "accepted",
-              "rejected",
-              "unsupported"
-            ]
-          }
-        }
-      }
-    },
-    "diligenceAdjustments": {
-      "type": "array",
-      "items": {
-        "type": "object",
-        "required": [
-          "label",
-          "amount"
-        ],
-        "properties": {
-          "label": {
-            "type": "string",
-            "minLength": 1
-          },
-          "amount": {
-            "type": "number"
+            "enum": [ "accepted", "rejected", "unsupported" ],
+            "type": "string"
           },
           "support": {
             "type": "string"
-          },
-          "grade": {
-            "type": "string",
-            "enum": [
-              "A",
-              "B",
-              "C",
-              "U"
-            ]
           }
-        }
-      }
+        },
+        "required": [ "label", "amount" ],
+        "type": "object"
+      },
+      "type": "array"
     },
-    "gateOwner": {
-      "type": "string"
+    "reportedEbitda": {
+      "type": "number"
     }
-  }
+  },
+  "required": [ "reportedEbitda" ],
+  "type": "object"
 }

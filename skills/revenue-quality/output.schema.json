@@ -1,49 +1,35 @@
 {
-  "type": "object",
-  "required": [
-    "byYear",
-    "latestClassSplit",
-    "keyCustomers",
-    "thresholdPct",
-    "limitation",
-    "gate"
-  ],
   "properties": {
     "byYear": {
-      "type": "array",
       "items": {
-        "type": "object",
-        "required": [
-          "year",
-          "customerTotal"
-        ]
-      }
+        "required": [ "year", "customerTotal" ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "gate": {
+      "type": "string"
+    },
+    "keyCustomers": {
+      "items": {
+        "required": [ "name", "sharePct", "changeOfControl" ],
+        "type": "object"
+      },
+      "type": "array"
     },
     "latestClassSplit": {
       "type": "object"
     },
-    "retention": {
-      "type": "object"
-    },
-    "keyCustomers": {
-      "type": "array",
-      "items": {
-        "type": "object",
-        "required": [
-          "name",
-          "sharePct",
-          "changeOfControl"
-        ]
-      }
-    },
-    "thresholdPct": {
-      "type": "number"
-    },
     "limitation": {
       "type": "string"
     },
-    "gate": {
-      "type": "string"
+    "retention": {
+      "type": "object"
+    },
+    "thresholdPct": {
+      "type": "number"
     }
-  }
+  },
+  "required": [ "byYear", "latestClassSplit", "keyCustomers", "thresholdPct", "limitation", "gate" ],
+  "type": "object"
 }
