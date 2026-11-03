@@ -1,0 +1,61 @@
+# skills/qoe-bridge/skill.yaml
+# Authoring spec for Quality of Earnings Bridge. The machine-readable manifest the runtime loads is
+# the TypeScript SkillDefinition in lib/skills/catalog/qoe-bridge.ts; this YAML is the
+# human-facing contract and must stay consistent with it.
+# Origin: PE department pack · Diligence + Valuation. Rules re-implemented natively; no pack text is shipped.
+id: qoe-bridge
+name: Quality of Earnings Bridge
+version: 1.0.0
+owner: fundexecs
+hub: run
+
+applicable_executives:
+  - diligence
+  - analyst
+
+supported_entity_types: [deal, company]
+
+required_inputs:
+  - reportedEbitda
+
+optional_inputs:
+  - auditedEbitda
+  - managementAdjustedEbitda
+  - managementAdjustments
+  - diligenceAdjustments
+  - gateOwner
+
+outputs:
+  - rows
+  - diligenceAdjustedEbitda
+  - deltaVsManagement
+  - addbacksNotAccepted
+  - gate
+
+artifact_types: [analysis]
+data_permissions: [deal:read, document:read]
+tools: []
+
+approval_tier: 1
+risk_classification: low
+execution_timeout_ms: 10000
+retry_policy:
+  max_attempts: 1
+  backoff_ms: 0
+
+provider_capabilities:
+  - financial_reasoning
+
+allowed_downstream_skills: [bid-range, red-flag-register, ic-memo, lbo]
+
+prohibited_actions:
+  - send_outreach
+  - distribute_report
+  - sign_document
+  - move_capital
+  - capital_call
+
+input_schema: input.schema.json
+output_schema: output.schema.json
+policy: policy.yaml
+evaluation: evaluation.yaml

@@ -9,6 +9,8 @@ import { resolveRootFiles, type ResolvedRootFiles, type RootFileRow } from "./ro
 
 /** Skills whose `mandate` input defaults to the organization's stored mandate. */
 export const MANDATE_BOUND_SKILLS = new Set(["mandate-screen", "target-screen", "first-look"]);
+/** Skills whose `hurdles` input defaults to the organization's stored return hurdles. */
+export const HURDLE_BOUND_SKILLS = new Set(["bid-range"]);
 
 export async function loadRootFiles(orgId: string): Promise<ResolvedRootFiles> {
   if (!hasSupabaseServiceEnv()) return resolveRootFiles([]);
@@ -27,10 +29,18 @@ export async function loadRootFiles(orgId: string): Promise<ResolvedRootFiles> {
  * leaves the input untouched (the schema then rejects it, which is the honest answer).
  */
 export async function withOrgMandate(orgId: string, skillId: string, input: unknown): Promise<unknown> {
-  if (!MANDATE_BOUND_SKILLS.has(skillId)) return input;
+  const mandateBound = MANDATE_BOUND_SKILLS.has(skillId);
+  const hurdleBound = HURDLE_BOUND_SKILLS.has(skillId);
+  if (!mandateBound && !hurdleBound) return input;
   if (!input || typeof input !== "object" || Array.isArray(input)) return input;
-  if ((input as Record<string, unknown>).mandate !== undefined) return input;
+  const obj = input as Record<string, unknown>;
+  const needMandate = mandateBound && obj.mandate === undefined;
+  const needHurdles = hurdleBound && obj.hurdles === undefined;
+  if (!needMandate && !needHurdles) return input;
   const root = await loadRootFiles(orgId);
-  if (!root.found.includes("mandate")) return input;
-  return { ...(input as Record<string, unknown>), mandate: root.mandate };
+  const out: Record<string, unknown> = { ...obj };
+  if (needMandate && root.found.includes("mandate")) out.mandate = root.mandate;
+  // Only an org's OWN hurdles are injected; otherwise the skill applies (and labels) the standing default.
+  if (needHurdles && !root.returnsAreDefault) out.hurdles = root.returns;
+  return out;
 }

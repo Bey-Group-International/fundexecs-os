@@ -1,0 +1,82 @@
+{
+  "type": "object",
+  "required": [
+    "base",
+    "walkAway",
+    "target",
+    "opening",
+    "walkAwayClearsBase",
+    "walkAwayClearsDownside",
+    "versusComps",
+    "hurdlesAreDefault",
+    "limitation",
+    "note",
+    "gate"
+  ],
+  "properties": {
+    "base": {
+      "type": "object"
+    },
+    "downside": {
+      "type": "object"
+    },
+    "adjustmentApplied": {
+      "type": "number"
+    },
+    "walkAway": {
+      "type": "object",
+      "required": [
+        "basis"
+      ]
+    },
+    "target": {
+      "type": "object",
+      "required": [
+        "basis"
+      ]
+    },
+    "opening": {
+      "type": "object",
+      "required": [
+        "basis"
+      ]
+    },
+    "walkAwayClearsBase": {
+      "type": "string",
+      "enum": [
+        "clears",
+        "misses",
+        "not-tested"
+      ]
+    },
+    "walkAwayClearsDownside": {
+      "type": "string",
+      "enum": [
+        "clears",
+        "misses",
+        "not-tested"
+      ]
+    },
+    "versusComps": {
+      "type": "string",
+      "enum": [
+        "below",
+        "within",
+        "above",
+        "not-supplied"
+      ]
+    },
+    "hurdlesAreDefault": {
+      "type": "boolean"
+    },
+    "limitation": {
+      "type": "string"
+    },
+    "note": {
+      "type": "string"
+    },
+    "gate": {
+      "type": "string"
+    }
+  }
+}

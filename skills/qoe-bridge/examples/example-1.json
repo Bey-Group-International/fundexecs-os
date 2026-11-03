@@ -1,0 +1,33 @@
+{
+  "input": {
+    "reportedEbitda": 10,
+    "auditedEbitda": 10,
+    "managementAdjustedEbitda": 13,
+    "managementAdjustments": [
+      {
+        "label": "Owner salary",
+        "amount": 1.5,
+        "status": "accepted",
+        "support": "TB 2024 acct 6010"
+      },
+      {
+        "label": "Pro-forma synergies",
+        "amount": 1,
+        "status": "accepted"
+      },
+      {
+        "label": "One-off legal",
+        "amount": 0.5,
+        "status": "rejected",
+        "support": "Invoice log"
+      }
+    ],
+    "diligenceAdjustments": [
+      {
+        "label": "Related-party rent below market",
+        "amount": -0.8,
+        "support": "Lease vs broker letter"
+      }
+    ]
+  }
+}

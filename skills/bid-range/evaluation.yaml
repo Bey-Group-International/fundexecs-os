@@ -1,0 +1,7 @@
+# skills/bid-range/evaluation.yaml — acceptance criteria; exercised by lib/skills/catalog/pe-diligence-valuation.test.ts
+criteria:
+  - walk-away clears or note says it does not
+  - uses the lbo core
+  - default hurdles labelled
+  - price adjustments tie to red flag register
+example: examples/example-1.json

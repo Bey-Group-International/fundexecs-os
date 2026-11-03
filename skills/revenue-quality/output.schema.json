@@ -1,0 +1,49 @@
+{
+  "type": "object",
+  "required": [
+    "byYear",
+    "latestClassSplit",
+    "keyCustomers",
+    "thresholdPct",
+    "limitation",
+    "gate"
+  ],
+  "properties": {
+    "byYear": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "year",
+          "customerTotal"
+        ]
+      }
+    },
+    "latestClassSplit": {
+      "type": "object"
+    },
+    "retention": {
+      "type": "object"
+    },
+    "keyCustomers": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "name",
+          "sharePct",
+          "changeOfControl"
+        ]
+      }
+    },
+    "thresholdPct": {
+      "type": "number"
+    },
+    "limitation": {
+      "type": "string"
+    },
+    "gate": {
+      "type": "string"
+    }
+  }
+}

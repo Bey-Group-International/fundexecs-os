@@ -1,0 +1,28 @@
+# skills/red-flag-register/policy.yaml — enforced by lib/skills/runner.ts and lib/executives/registry.ts
+approval_tier: 1
+risk_classification: low
+
+allowed_executives:
+  - diligence
+  - investment_committee
+
+data_scopes:
+  - deal:read
+  - document:read
+
+prohibited_actions:
+  - send_outreach
+  - distribute_report
+  - sign_document
+  - move_capital
+  - capital_call
+
+guardrails:
+  - A price claim resting on C / U evidence is excluded from the price adjustment and listed separately.
+  - Ungraded findings are U (untested) and labelled so.
+  - Workstreams that did not run are named as blind spots.
+  - The challenge pass is rule-based; run a second-model adversarial pass for IC.
+
+downstream:
+  - bid-range
+  - ic-memo

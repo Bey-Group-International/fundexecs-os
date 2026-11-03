@@ -6,6 +6,7 @@
 // speculative schema is committed here.
 
 import { EMPTY_MANDATE, parseMandateTests, type MandateTests } from "./mandate-tests";
+import { DEFAULT_RETURNS, parseReturnsHurdles, type ReturnsHurdles } from "./returns-hurdles";
 
 export const ROOT_FILE_KEYS = ["firm", "mandate", "returns", "evidence", "ic_memo", "kpi", "financing", "reporting"] as const;
 export type RootFileKey = (typeof ROOT_FILE_KEYS)[number];
@@ -23,6 +24,10 @@ export interface RootFileRow {
 export interface ResolvedRootFiles {
   /** The org's mandate, or an EMPTY draft when none is stored / parseable. */
   mandate: MandateTests;
+  /** The org's return hurdles, or the labelled standing defaults. */
+  returns: ReturnsHurdles;
+  /** True when `returns` is the standing default, not the firm's own. */
+  returnsAreDefault: boolean;
   /** Keys with a stored, non-empty row. */
   found: RootFileKey[];
   missing: RootFileKey[];
@@ -40,10 +45,16 @@ export function resolveRootFiles(rows: RootFileRow[] | null | undefined): Resolv
   const mandateParsed = byKey.has("mandate") ? parseMandateTests(byKey.get("mandate")!.content) : null;
   const mandateUsable = !!mandateParsed && mandateParsed.hardLimits.length + mandateParsed.preferences.length + mandateParsed.killFacts.length > 0;
 
+  const returnsParsed = byKey.has("returns") ? parseReturnsHurdles(byKey.get("returns")!.content) : null;
+
   const found: RootFileKey[] = [];
   for (const k of ROOT_FILE_KEYS) {
     if (k === "mandate") {
       if (mandateUsable) found.push(k);
+      continue;
+    }
+    if (k === "returns") {
+      if (returnsParsed) found.push(k);
       continue;
     }
     const c = byKey.get(k)?.content;
@@ -56,5 +67,5 @@ export function resolveRootFiles(rows: RootFileRow[] | null | undefined): Resolv
     `Not found: ${missing.length ? missing.join(", ") : "none"}` +
     (missing.length ? " — run on default settings." : ".");
 
-  return { mandate: mandateUsable ? mandateParsed! : EMPTY_MANDATE, found, missing, statusLine };
+  return { mandate: mandateUsable ? mandateParsed! : EMPTY_MANDATE, returns: returnsParsed ?? DEFAULT_RETURNS, returnsAreDefault: !returnsParsed, found, missing, statusLine };
 }

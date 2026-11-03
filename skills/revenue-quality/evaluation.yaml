@@ -1,0 +1,7 @@
+# skills/revenue-quality/evaluation.yaml — acceptance criteria; exercised by lib/skills/catalog/pe-diligence-valuation.test.ts
+criteria:
+  - concentration merges related groups
+  - tie-out difference reported
+  - unknown change-of-control stays unknown
+  - retention is a calculation
+example: examples/example-1.json

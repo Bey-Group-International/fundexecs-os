@@ -1,0 +1,29 @@
+# skills/bid-range/policy.yaml — enforced by lib/skills/runner.ts and lib/executives/registry.ts
+approval_tier: 1
+risk_classification: moderate
+
+allowed_executives:
+  - analyst
+  - investment_committee
+
+data_scopes:
+  - deal:read
+  - valuation:read
+
+prohibited_actions:
+  - send_outreach
+  - distribute_report
+  - sign_document
+  - move_capital
+  - capital_call
+  - submit_term_sheet
+
+guardrails:
+  - Walk-away is re-tested against the hurdles; the note says so plainly if it does not clear.
+  - Opening and target bids are computed only from discounts the deal team supplies, never invented.
+  - Default hurdles are labelled 'run on default settings'.
+  - The IC sets the price; this note informs it.
+
+downstream:
+  - ic-memo
+  - returns

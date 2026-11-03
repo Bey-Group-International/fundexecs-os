@@ -45,6 +45,10 @@ import { cim } from "./catalog/cim";
 import { mandateScreen } from "./catalog/mandate-screen";
 import { targetScreen } from "./catalog/target-screen";
 import { firstLook } from "./catalog/first-look";
+import { qoeBridge } from "./catalog/qoe-bridge";
+import { revenueQuality } from "./catalog/revenue-quality";
+import { redFlagRegister } from "./catalog/red-flag-register";
+import { bidRange } from "./catalog/bid-range";
 
 const SKILLS: Record<string, SkillDefinition> = {
   [screenDeal.manifest.id]: screenDeal as SkillDefinition,
@@ -100,6 +104,11 @@ const SKILLS: Record<string, SkillDefinition> = {
   [mandateScreen.manifest.id]: mandateScreen as SkillDefinition,
   [targetScreen.manifest.id]: targetScreen as SkillDefinition,
   [firstLook.manifest.id]: firstLook as SkillDefinition,
+  // PE department · diligence + valuation (support-gated: no accepted adjustment or price claim without evidence).
+  [qoeBridge.manifest.id]: qoeBridge as SkillDefinition,
+  [revenueQuality.manifest.id]: revenueQuality as SkillDefinition,
+  [redFlagRegister.manifest.id]: redFlagRegister as SkillDefinition,
+  [bidRange.manifest.id]: bidRange as SkillDefinition,
 };
 
 export function getSkill(id: string): SkillDefinition | null {

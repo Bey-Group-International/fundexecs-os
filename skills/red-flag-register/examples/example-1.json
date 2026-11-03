@@ -1,0 +1,25 @@
+{
+  "input": {
+    "findings": [
+      {
+        "title": "Customer concentration: top client 42%",
+        "workstream": "revenue-quality",
+        "severity": "amber",
+        "impact": "price",
+        "evidenceGrade": "A",
+        "priceImpact": 5,
+        "treatment": "Earn-out"
+      },
+      {
+        "title": "Undisclosed tax audit",
+        "workstream": "tax",
+        "severity": "red",
+        "impact": "walk-away"
+      }
+    ],
+    "workstreamsRun": [
+      "tax",
+      "revenue-quality"
+    ]
+  }
+}

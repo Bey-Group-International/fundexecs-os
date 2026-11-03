@@ -1,0 +1,90 @@
+{
+  "type": "object",
+  "required": [
+    "reportedEbitda"
+  ],
+  "properties": {
+    "reportedEbitda": {
+      "type": "number"
+    },
+    "auditedEbitda": {
+      "type": "number"
+    },
+    "managementAdjustedEbitda": {
+      "type": "number"
+    },
+    "managementAdjustments": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "label",
+          "amount"
+        ],
+        "properties": {
+          "label": {
+            "type": "string",
+            "minLength": 1
+          },
+          "amount": {
+            "type": "number"
+          },
+          "support": {
+            "type": "string"
+          },
+          "grade": {
+            "type": "string",
+            "enum": [
+              "A",
+              "B",
+              "C",
+              "U"
+            ]
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "accepted",
+              "rejected",
+              "unsupported"
+            ]
+          }
+        }
+      }
+    },
+    "diligenceAdjustments": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "label",
+          "amount"
+        ],
+        "properties": {
+          "label": {
+            "type": "string",
+            "minLength": 1
+          },
+          "amount": {
+            "type": "number"
+          },
+          "support": {
+            "type": "string"
+          },
+          "grade": {
+            "type": "string",
+            "enum": [
+              "A",
+              "B",
+              "C",
+              "U"
+            ]
+          }
+        }
+      }
+    },
+    "gateOwner": {
+      "type": "string"
+    }
+  }
+}

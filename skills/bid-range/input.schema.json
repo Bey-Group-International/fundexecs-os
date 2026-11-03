@@ -1,0 +1,123 @@
+{
+  "type": "object",
+  "required": [
+    "ebitda"
+  ],
+  "properties": {
+    "ebitda": {
+      "type": "number",
+      "minimum": 0
+    },
+    "leverageMultiple": {
+      "type": "number",
+      "minimum": 0
+    },
+    "debtAmount": {
+      "type": "number",
+      "minimum": 0
+    },
+    "holdYears": {
+      "type": "number",
+      "minimum": 0
+    },
+    "exitMultiple": {
+      "type": "number",
+      "minimum": 0
+    },
+    "ebitdaGrowthRate": {
+      "type": "number"
+    },
+    "annualDebtPaydown": {
+      "type": "number",
+      "minimum": 0
+    },
+    "transactionFeesPct": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1
+    },
+    "hurdles": {
+      "type": "object",
+      "required": [
+        "base",
+        "holdYears"
+      ],
+      "properties": {
+        "base": {
+          "type": "object",
+          "properties": {
+            "irr": {
+              "type": "number",
+              "minimum": 0
+            },
+            "moic": {
+              "type": "number",
+              "minimum": 0
+            }
+          }
+        },
+        "downside": {
+          "type": "object",
+          "properties": {
+            "irr": {
+              "type": "number",
+              "minimum": 0
+            },
+            "moic": {
+              "type": "number",
+              "minimum": 0
+            }
+          }
+        },
+        "holdYears": {
+          "type": "number",
+          "minimum": 0
+        }
+      }
+    },
+    "downsideCase": {
+      "type": "object",
+      "properties": {
+        "ebitdaGrowthRate": {
+          "type": "number"
+        },
+        "exitMultiple": {
+          "type": "number",
+          "minimum": 0
+        }
+      }
+    },
+    "compsMultipleRange": {
+      "type": "object",
+      "required": [
+        "low",
+        "high"
+      ],
+      "properties": {
+        "low": {
+          "type": "number"
+        },
+        "high": {
+          "type": "number"
+        }
+      }
+    },
+    "redFlagPriceAdjustment": {
+      "type": "number",
+      "minimum": 0
+    },
+    "openingDiscountPct": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 100
+    },
+    "targetDiscountPct": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 100
+    },
+    "gateOwner": {
+      "type": "string"
+    }
+  }
+}

@@ -1,0 +1,7 @@
+# skills/qoe-bridge/evaluation.yaml — acceptance criteria; exercised by lib/skills/catalog/pe-diligence-valuation.test.ts
+criteria:
+  - accepted without support is downgraded
+  - bridge adds up
+  - management bridge reconciled
+  - adjusted EBITDA never reaches IC memo before sign-off
+example: examples/example-1.json

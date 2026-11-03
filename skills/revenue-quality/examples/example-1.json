@@ -1,0 +1,33 @@
+{
+  "input": {
+    "years": [
+      "2023",
+      "2024"
+    ],
+    "reportedRevenue": {
+      "2023": 100,
+      "2024": 120
+    },
+    "customers": [
+      {
+        "name": "BigCo A",
+        "relatedGroup": "BigCo",
+        "revenueByYear": {
+          "2023": 30,
+          "2024": 25
+        },
+        "revenueClass": "contracted-recurring",
+        "changeOfControl": "yes"
+      },
+      {
+        "name": "Mid",
+        "revenueByYear": {
+          "2023": 70,
+          "2024": 95
+        },
+        "revenueClass": "repeat",
+        "changeOfControl": "no"
+      }
+    ]
+  }
+}

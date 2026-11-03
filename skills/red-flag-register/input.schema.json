@@ -1,0 +1,84 @@
+{
+  "type": "object",
+  "required": [
+    "findings",
+    "workstreamsRun"
+  ],
+  "properties": {
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "title",
+          "workstream",
+          "severity",
+          "impact"
+        ],
+        "properties": {
+          "title": {
+            "type": "string",
+            "minLength": 1
+          },
+          "workstream": {
+            "type": "string",
+            "minLength": 1
+          },
+          "severity": {
+            "type": "string",
+            "enum": [
+              "red",
+              "amber"
+            ]
+          },
+          "impact": {
+            "type": "string",
+            "enum": [
+              "walk-away",
+              "price",
+              "structure",
+              "spa-protection",
+              "100-day"
+            ]
+          },
+          "evidenceGrade": {
+            "type": "string",
+            "enum": [
+              "A",
+              "B",
+              "C",
+              "U"
+            ]
+          },
+          "priceImpact": {
+            "type": "number"
+          },
+          "treatment": {
+            "type": "string"
+          },
+          "owner": {
+            "type": "string"
+          },
+          "sourceRef": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "workstreamsRun": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "expectedWorkstreams": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "gateOwner": {
+      "type": "string"
+    }
+  }
+}
