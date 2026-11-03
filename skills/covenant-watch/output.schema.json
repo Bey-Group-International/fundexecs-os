@@ -1,56 +1,38 @@
 {
-  "type": "object",
-  "required": [
-    "covenants",
-    "excludedAddbacks",
-    "warnThresholdPct",
-    "warnThresholdIsDefault",
-    "cureOptions",
-    "gate",
-    "limitation"
-  ],
   "properties": {
     "covenants": {
-      "type": "array",
       "items": {
-        "type": "object",
-        "required": [
-          "id",
-          "name",
-          "clause",
-          "periods"
-        ]
-      }
-    },
-    "excludedAddbacks": {
-      "type": "array",
-      "items": {
-        "type": "object",
-        "required": [
-          "period",
-          "label",
-          "amount",
-          "reason"
-        ]
-      }
-    },
-    "warnThresholdPct": {
-      "type": "number"
-    },
-    "warnThresholdIsDefault": {
-      "type": "boolean"
+        "required": [ "id", "name", "clause", "periods" ],
+        "type": "object"
+      },
+      "type": "array"
     },
     "cureOptions": {
-      "type": "array",
       "items": {
         "type": "string"
-      }
+      },
+      "type": "array"
+    },
+    "excludedAddbacks": {
+      "items": {
+        "required": [ "period", "label", "amount", "reason" ],
+        "type": "object"
+      },
+      "type": "array"
     },
     "gate": {
       "type": "string"
     },
     "limitation": {
       "type": "string"
+    },
+    "warnThresholdIsDefault": {
+      "type": "boolean"
+    },
+    "warnThresholdPct": {
+      "type": "number"
     }
-  }
+  },
+  "required": [ "covenants", "excludedAddbacks", "warnThresholdPct", "warnThresholdIsDefault", "cureOptions", "gate", "limitation" ],
+  "type": "object"
 }

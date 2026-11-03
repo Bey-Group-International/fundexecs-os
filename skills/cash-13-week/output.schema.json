@@ -1,54 +1,33 @@
 {
-  "type": "object",
-  "required": [
-    "base",
-    "accuracy",
-    "openingTiedToBank",
-    "limitation",
-    "gate"
-  ],
   "properties": {
+    "accuracy": {
+      "items": {
+        "required": [ "week", "forecast", "actual", "variance" ],
+        "type": "object"
+      },
+      "type": "array"
+    },
     "base": {
-      "type": "object",
-      "required": [
-        "rows",
-        "minClosing",
-        "minWeek",
-        "facilityDrawNeeded"
-      ]
+      "required": [ "rows", "minClosing", "minWeek", "facilityDrawNeeded" ],
+      "type": "object"
     },
     "downside": {
-      "type": "object",
-      "required": [
-        "rows",
-        "minClosing",
-        "minWeek",
-        "facilityDrawNeeded"
-      ]
+      "required": [ "rows", "minClosing", "minWeek", "facilityDrawNeeded" ],
+      "type": "object"
     },
-    "liquidityMinimum": {
-      "type": "number"
-    },
-    "accuracy": {
-      "type": "array",
-      "items": {
-        "type": "object",
-        "required": [
-          "week",
-          "forecast",
-          "actual",
-          "variance"
-        ]
-      }
-    },
-    "openingTiedToBank": {
-      "type": "boolean"
+    "gate": {
+      "type": "string"
     },
     "limitation": {
       "type": "string"
     },
-    "gate": {
-      "type": "string"
+    "liquidityMinimum": {
+      "type": "number"
+    },
+    "openingTiedToBank": {
+      "type": "boolean"
     }
-  }
+  },
+  "required": [ "base", "accuracy", "openingTiedToBank", "limitation", "gate" ],
+  "type": "object"
 }

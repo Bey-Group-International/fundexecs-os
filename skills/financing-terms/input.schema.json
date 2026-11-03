@@ -1,100 +1,84 @@
 {
-  "type": "object",
-  "required": [
-    "baseRatePct",
-    "offers"
-  ],
   "properties": {
     "baseRatePct": {
-      "type": "number",
-      "minimum": 0
-    },
-    "offers": {
-      "type": "array",
-      "items": {
-        "type": "object",
-        "required": [
-          "lender",
-          "seniorLeverage",
-          "marginBps",
-          "upfrontFeePct",
-          "tenorYears",
-          "amortPctPerYear",
-          "covenant",
-          "callProtectionMonths",
-          "equityCure"
-        ],
-        "properties": {
-          "lender": {
-            "type": "string",
-            "minLength": 1
-          },
-          "seniorLeverage": {
-            "type": "number",
-            "minimum": 0
-          },
-          "totalLeverage": {
-            "type": "number",
-            "minimum": 0
-          },
-          "marginBps": {
-            "type": "number",
-            "minimum": 0
-          },
-          "upfrontFeePct": {
-            "type": "number",
-            "minimum": 0
-          },
-          "tenorYears": {
-            "type": "number",
-            "minimum": 0
-          },
-          "amortPctPerYear": {
-            "type": "number",
-            "minimum": 0
-          },
-          "covenant": {
-            "type": "string",
-            "enum": [
-              "maintenance",
-              "cov-lite"
-            ]
-          },
-          "covenantHeadroomPct": {
-            "type": "number"
-          },
-          "callProtectionMonths": {
-            "type": "number",
-            "minimum": 0
-          },
-          "equityCure": {
-            "type": "boolean"
-          },
-          "sourceRef": {
-            "type": "string"
-          }
-        }
-      }
+      "minimum": 0,
+      "type": "number"
     },
     "financing": {
-      "type": "object",
       "properties": {
-        "maxSeniorLeverage": {
-          "type": "number"
-        },
-        "maxTotalLeverage": {
-          "type": "number"
-        },
         "covenantWarnHeadroomPct": {
           "type": "number"
         },
         "maxCallProtectionMonths": {
           "type": "number"
+        },
+        "maxSeniorLeverage": {
+          "type": "number"
+        },
+        "maxTotalLeverage": {
+          "type": "number"
         }
-      }
+      },
+      "type": "object"
     },
     "gateOwner": {
       "type": "string"
+    },
+    "offers": {
+      "items": {
+        "properties": {
+          "amortPctPerYear": {
+            "minimum": 0,
+            "type": "number"
+          },
+          "callProtectionMonths": {
+            "minimum": 0,
+            "type": "number"
+          },
+          "covenant": {
+            "enum": [ "maintenance", "cov-lite" ],
+            "type": "string"
+          },
+          "covenantHeadroomPct": {
+            "type": "number"
+          },
+          "equityCure": {
+            "type": "boolean"
+          },
+          "lender": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "marginBps": {
+            "minimum": 0,
+            "type": "number"
+          },
+          "seniorLeverage": {
+            "minimum": 0,
+            "type": "number"
+          },
+          "sourceRef": {
+            "type": "string"
+          },
+          "tenorYears": {
+            "minimum": 0,
+            "type": "number"
+          },
+          "totalLeverage": {
+            "minimum": 0,
+            "type": "number"
+          },
+          "upfrontFeePct": {
+            "minimum": 0,
+            "type": "number"
+          }
+        },
+        "required": [ "lender", "seniorLeverage", "marginBps", "upfrontFeePct", "tenorYears", "amortPctPerYear", "covenant", "callProtectionMonths", "equityCure" ],
+        "type": "object"
+      },
+      "type": "array"
     }
-  }
+  },
+  "required": [ "baseRatePct", "offers" ],
+  "type": "object"
 }

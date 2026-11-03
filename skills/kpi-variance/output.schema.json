@@ -1,46 +1,29 @@
 {
-  "type": "object",
-  "required": [
-    "rows",
-    "materialCount",
-    "policy",
-    "policyIsDefault",
-    "limitation",
-    "gate"
-  ],
   "properties": {
-    "rows": {
-      "type": "array",
-      "items": {
-        "type": "object",
-        "required": [
-          "name",
-          "actual",
-          "budget",
-          "varianceAbs",
-          "direction",
-          "material",
-          "challenges"
-        ]
-      }
+    "gate": {
+      "type": "string"
+    },
+    "limitation": {
+      "type": "string"
     },
     "materialCount": {
       "type": "integer"
     },
     "policy": {
-      "type": "object",
-      "required": [
-        "materialityPct"
-      ]
+      "required": [ "materialityPct" ],
+      "type": "object"
     },
     "policyIsDefault": {
       "type": "boolean"
     },
-    "limitation": {
-      "type": "string"
-    },
-    "gate": {
-      "type": "string"
+    "rows": {
+      "items": {
+        "required": [ "name", "actual", "budget", "varianceAbs", "direction", "material", "challenges" ],
+        "type": "object"
+      },
+      "type": "array"
     }
-  }
+  },
+  "required": [ "rows", "materialCount", "policy", "policyIsDefault", "limitation", "gate" ],
+  "type": "object"
 }

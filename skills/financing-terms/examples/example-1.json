@@ -1,19 +1,17 @@
 {
   "input": {
     "baseRatePct": 4,
-    "offers": [
-      {
-        "lender": "Bank A",
-        "seniorLeverage": 3.5,
-        "marginBps": 450,
-        "upfrontFeePct": 2,
-        "tenorYears": 7,
-        "amortPctPerYear": 1,
-        "covenant": "cov-lite",
-        "callProtectionMonths": 6,
-        "equityCure": true,
-        "sourceRef": "TS A p.4"
-      }
-    ]
+    "offers": [ {
+      "amortPctPerYear": 1,
+      "callProtectionMonths": 6,
+      "covenant": "cov-lite",
+      "equityCure": true,
+      "lender": "Bank A",
+      "marginBps": 450,
+      "seniorLeverage": 3.5,
+      "sourceRef": "TS A p.4",
+      "tenorYears": 7,
+      "upfrontFeePct": 2
+    } ]
   }
 }
