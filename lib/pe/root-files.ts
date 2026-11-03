@@ -1,0 +1,60 @@
+// lib/pe/root-files.ts
+// The per-organization "root files" the PE department skills read. Pure, no I/O.
+//
+// Phase 1 (sourcing) types only the `mandate` file. The other keys are stored as
+// raw jsonb and get typed parsers in the phase that first consumes them, so no
+// speculative schema is committed here.
+
+import { EMPTY_MANDATE, parseMandateTests, type MandateTests } from "./mandate-tests";
+
+export const ROOT_FILE_KEYS = ["firm", "mandate", "returns", "evidence", "ic_memo", "kpi", "financing", "reporting"] as const;
+export type RootFileKey = (typeof ROOT_FILE_KEYS)[number];
+
+export function isRootFileKey(k: string): k is RootFileKey {
+  return (ROOT_FILE_KEYS as readonly string[]).includes(k);
+}
+
+export interface RootFileRow {
+  file_key: string;
+  content: unknown;
+  version?: number | null;
+}
+
+export interface ResolvedRootFiles {
+  /** The org's mandate, or an EMPTY draft when none is stored / parseable. */
+  mandate: MandateTests;
+  /** Keys with a stored, non-empty row. */
+  found: RootFileKey[];
+  missing: RootFileKey[];
+  /** One short line for the run header, e.g. "Root files found: mandate. Not found: firm, returns, … — run on default settings." */
+  statusLine: string;
+}
+
+/** Resolve stored rows into typed root files. Never throws; unparseable content counts as missing. */
+export function resolveRootFiles(rows: RootFileRow[] | null | undefined): ResolvedRootFiles {
+  const byKey = new Map<RootFileKey, RootFileRow>();
+  for (const r of rows ?? []) {
+    if (isRootFileKey(r.file_key)) byKey.set(r.file_key, r);
+  }
+
+  const mandateParsed = byKey.has("mandate") ? parseMandateTests(byKey.get("mandate")!.content) : null;
+  const mandateUsable = !!mandateParsed && mandateParsed.hardLimits.length + mandateParsed.preferences.length + mandateParsed.killFacts.length > 0;
+
+  const found: RootFileKey[] = [];
+  for (const k of ROOT_FILE_KEYS) {
+    if (k === "mandate") {
+      if (mandateUsable) found.push(k);
+      continue;
+    }
+    const c = byKey.get(k)?.content;
+    if (c && typeof c === "object" && Object.keys(c as object).length > 0) found.push(k);
+  }
+  const missing = ROOT_FILE_KEYS.filter((k) => !found.includes(k));
+
+  const statusLine =
+    `Root files found: ${found.length ? found.join(", ") : "none"}. ` +
+    `Not found: ${missing.length ? missing.join(", ") : "none"}` +
+    (missing.length ? " — run on default settings." : ".");
+
+  return { mandate: mandateUsable ? mandateParsed! : EMPTY_MANDATE, found, missing, statusLine };
+}

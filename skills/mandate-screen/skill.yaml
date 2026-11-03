@@ -1,0 +1,59 @@
+# skills/mandate-screen/skill.yaml
+# Authoring spec for Investment Mandate Screen. The machine-readable manifest the runtime loads is
+# the TypeScript SkillDefinition in lib/skills/catalog/mandate-screen.ts; this YAML is the
+# human-facing contract and must stay consistent with it.
+# Origin: PE department pack · Deal Sourcing. Rules re-implemented natively; no pack text is shipped.
+id: mandate-screen
+name: Investment Mandate Screen
+version: 1.0.0
+owner: fundexecs
+hub: source
+
+applicable_executives:
+  - deal_sourcer
+  - analyst
+  - investment_committee
+
+supported_entity_types: [mandate]
+
+required_inputs:
+  - mandate
+
+optional_inputs:
+  - gateOwner
+
+outputs:
+  - rows
+  - issues
+  - openQuestions
+  - readyForSignOff
+  - basis
+  - gate
+
+artifact_types: [analysis]
+data_permissions: [mandate:read]
+tools: []
+
+approval_tier: 1
+risk_classification: low
+execution_timeout_ms: 10000
+retry_policy:
+  max_attempts: 1
+  backoff_ms: 0
+
+provider_capabilities:
+  - structured_extraction
+
+allowed_downstream_skills: [target-screen, first-look, screen-deal, ic-memo]
+
+prohibited_actions:
+  - send_outreach
+  - distribute_report
+  - sign_document
+  - move_capital
+  - capital_call
+
+input_schema: input.schema.json
+output_schema: output.schema.json
+policy: policy.yaml
+evaluation: evaluation.yaml

@@ -42,6 +42,9 @@ import { ddPrep } from "./catalog/dd-prep";
 import { auditStatement } from "./catalog/audit-statement";
 import { sectorResearch } from "./catalog/sector-research";
 import { cim } from "./catalog/cim";
+import { mandateScreen } from "./catalog/mandate-screen";
+import { targetScreen } from "./catalog/target-screen";
+import { firstLook } from "./catalog/first-look";
 
 const SKILLS: Record<string, SkillDefinition> = {
   [screenDeal.manifest.id]: screenDeal as SkillDefinition,
@@ -93,6 +96,10 @@ const SKILLS: Record<string, SkillDefinition> = {
   [sectorResearch.manifest.id]: sectorResearch as SkillDefinition,
   // Communications CIM (draft-only; never invents financials or distributes).
   [cim.manifest.id]: cim as SkillDefinition,
+  // PE department · sourcing (mandate-as-tests; screen supplied lists, never invent a number).
+  [mandateScreen.manifest.id]: mandateScreen as SkillDefinition,
+  [targetScreen.manifest.id]: targetScreen as SkillDefinition,
+  [firstLook.manifest.id]: firstLook as SkillDefinition,
 };
 
 export function getSkill(id: string): SkillDefinition | null {

@@ -1,0 +1,29 @@
+# skills/target-screen/policy.yaml — enforced by lib/skills/runner.ts and lib/executives/registry.ts
+approval_tier: 1
+risk_classification: low
+
+allowed_executives:
+  - deal_sourcer
+  - analyst
+
+data_scopes:
+  - company:read
+  - mandate:read
+
+prohibited_actions:
+  - send_outreach
+  - distribute_report
+  - sign_document
+  - move_capital
+  - capital_call
+
+guardrails:
+  - Never invents a number to make a company pass; empty fields are needs-data.
+  - Every fail cites the criterion (and clause) it failed.
+  - Ranks only the list it is given — never fabricates a company.
+  - A pass means worth a call, not worth a bid; an associate reviews every pass before outreach.
+
+downstream:
+  - first-look
+  - screen-deal
+  - dd-checklist

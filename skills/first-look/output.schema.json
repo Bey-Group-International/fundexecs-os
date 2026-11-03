@@ -1,0 +1,75 @@
+{
+  "type": "object",
+  "required": [
+    "view",
+    "reason",
+    "ebitdaBridge",
+    "mandateResult",
+    "basis",
+    "threeReasonsItCouldFail",
+    "threeFactsThatWouldKillIt",
+    "gate"
+  ],
+  "properties": {
+    "view": {
+      "type": "string",
+      "enum": [
+        "go",
+        "no-go",
+        "ask-more"
+      ]
+    },
+    "reason": {
+      "type": "string"
+    },
+    "numbers": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "metric",
+          "grade"
+        ]
+      }
+    },
+    "ebitdaBridge": {
+      "type": "object"
+    },
+    "mandateResult": {
+      "type": "string",
+      "enum": [
+        "pass",
+        "fail",
+        "needs-data"
+      ]
+    },
+    "basis": {
+      "type": "string",
+      "enum": [
+        "approved-mandate",
+        "default-screened"
+      ]
+    },
+    "threeReasonsItCouldFail": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "threeFactsThatWouldKillIt": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "unsourcedNumbers": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "gate": {
+      "type": "string"
+    }
+  }
+}

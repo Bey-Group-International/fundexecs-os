@@ -1,0 +1,73 @@
+{
+  "type": "object",
+  "required": [
+    "results",
+    "counts",
+    "basis",
+    "limitation",
+    "gate"
+  ],
+  "properties": {
+    "results": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "name",
+          "result"
+        ],
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "result": {
+            "type": "string",
+            "enum": [
+              "pass",
+              "fail",
+              "needs-data"
+            ]
+          },
+          "score": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 100
+          },
+          "criteriaFailed": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "fieldsMissing": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "counts": {
+      "type": "object",
+      "required": [
+        "pass",
+        "fail",
+        "needsData"
+      ]
+    },
+    "basis": {
+      "type": "string",
+      "enum": [
+        "approved-mandate",
+        "default-screened"
+      ]
+    },
+    "limitation": {
+      "type": "string"
+    },
+    "gate": {
+      "type": "string"
+    }
+  }
+}

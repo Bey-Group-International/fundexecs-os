@@ -1,0 +1,55 @@
+{
+  "type": "object",
+  "required": [
+    "rows",
+    "issues",
+    "openQuestions",
+    "readyForSignOff",
+    "basis",
+    "gate"
+  ],
+  "properties": {
+    "rows": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "type",
+          "criterion",
+          "threshold",
+          "source"
+        ]
+      }
+    },
+    "issues": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "severity",
+          "message"
+        ]
+      }
+    },
+    "openQuestions": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "readyForSignOff": {
+      "type": "boolean"
+    },
+    "basis": {
+      "type": "string",
+      "enum": [
+        "approved-mandate",
+        "default-screened"
+      ]
+    },
+    "gate": {
+      "type": "string"
+    }
+  }
+}

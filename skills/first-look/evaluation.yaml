@@ -1,0 +1,7 @@
+# skills/first-look/evaluation.yaml — acceptance criteria; exercised by lib/skills/catalog/pe-sourcing.test.ts
+criteria:
+  - no-go on hard-limit fail
+  - ask-more on untestable hard limit
+  - go requires sourced headline numbers
+  - adjusted EBITDA is a calculation
+example: examples/example-1.json

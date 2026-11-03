@@ -1,0 +1,6 @@
+# skills/mandate-screen/evaluation.yaml — acceptance criteria; exercised by lib/skills/catalog/pe-sourcing.test.ts
+criteria:
+  - criteria without a number are blockers
+  - unsourced hard limits are flagged
+  - contradictions are caught
+example: examples/example-1.json
