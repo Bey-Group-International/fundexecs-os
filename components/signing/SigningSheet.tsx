@@ -7,7 +7,7 @@
 import { useMemo, useState, useTransition } from "react";
 import { PdfPages } from "@/components/signing/PdfPages";
 import { SignaturePad } from "@/components/signing/SignaturePad";
-import { blockSpec, formatBlockDateTime } from "@/lib/signing/blocks";
+import { blockSpec, blockValueProblem, formatBlockDateTime } from "@/lib/signing/blocks";
 
 export interface SheetBlock {
   id: string;
@@ -68,7 +68,11 @@ export function SigningSheet({
     return out;
   }, [blocks, values, signature]);
 
-  const canFinish = agreed && Boolean(signature) && open.length === 0 && !pending;
+  const problems = useMemo(
+    () => blocks.map((b) => blockValueProblem(b.type, values[b.id])).filter((p): p is string => Boolean(p)),
+    [blocks, values],
+  );
+  const canFinish = agreed && Boolean(signature) && open.length === 0 && problems.length === 0 && !pending;
 
   function finish() {
     if (!signature) return;
@@ -85,7 +89,7 @@ export function SigningSheet({
       <div className="mb-4 rounded-xl border border-line bg-surface-1 p-4">
         <p className="text-sm text-fg-secondary">
           Fill in the highlighted blocks on the document, add your signature, then {submitLabel.toLowerCase()}.
-          {open.length ? <span className="text-fg-primary"> Still to do: {open.join(", ")}.</span> : <span className="text-gold-300"> Everything is filled in.</span>}
+          {open.length ? <span className="text-fg-primary"> Still to do: {open.join(", ")}.</span> : problems.length ? <span className="text-status-danger"> {problems[0]}</span> : <span className="text-gold-300"> Everything is filled in.</span>}
         </p>
       </div>
 
@@ -154,7 +158,7 @@ export function SigningSheet({
                   };
                   return (
                     <div key={b.id} className={base} style={boxStyle(b)}>
-                      {spec.input === "multiline" ? <textarea {...common} className={`${common.className} resize-none leading-tight`} /> : <input type="text" {...common} />}
+                      {spec.input === "multiline" ? <textarea {...common} className={`${common.className} resize-none leading-tight`} /> : <input type={spec.inputType ?? "text"} {...common} />}
                     </div>
                   );
                 })}

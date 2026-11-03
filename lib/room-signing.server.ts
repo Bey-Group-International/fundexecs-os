@@ -59,14 +59,15 @@ export function canCarrySignature(doc: Pick<Document, "storage_key" | "content">
 
 /**
  * The template's blocks as rows for one reader's envelope: "signer" becomes the
- * reader, "owner" the countersigner. A name block the owner left empty starts with
- * the reader's name, which they can still change.
+ * reader, "owner" the countersigner. A name or email block the owner left empty
+ * starts with the reader's own, which they can still change.
  */
 export function instantiateBlocks(
   template: TemplateBlock[],
   ids: { signer: string; owner: string },
   readerName: string,
   envelopeId: string,
+  readerEmail: string | null = null,
 ) {
   return template.map((b) => ({
     envelope_id: envelopeId,
@@ -79,7 +80,9 @@ export function instantiateBlocks(
     height_pct: b.height_pct,
     label: b.label,
     required: b.required,
-    prefill: b.prefill ?? (b.field_type === "name" && b.recipient_id !== "owner" ? readerName : null),
+    prefill:
+      b.prefill ??
+      (b.recipient_id === "owner" ? null : b.field_type === "name" ? readerName : b.field_type === "email" ? readerEmail : null),
     locked: b.locked,
   }));
 }
@@ -216,7 +219,7 @@ export async function startReaderSigning(
   const readerRecipientId = created.recipients[0]?.id;
   const { error: fieldsErr } = await client
     .from("envelope_fields")
-    .insert(instantiateBlocks(template, { signer: readerRecipientId, owner: created.ownerRecipientId }, name, created.envelopeId));
+    .insert(instantiateBlocks(template, { signer: readerRecipientId, owner: created.ownerRecipientId }, name, created.envelopeId, email));
   if (fieldsErr) {
     await client.from("envelopes").update({ status: "voided", void_reason: "Could not place signature blocks" }).eq("id", created.envelopeId);
     return { ok: false, error: "We couldn't prepare this document for signing. Please try again." };

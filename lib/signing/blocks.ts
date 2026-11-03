@@ -3,13 +3,15 @@
 // The signature blocks an owner can place on a document, and how each behaves.
 // Pure, so the placement screen, the signing screen and the server agree.
 
-export type BlockType = "name" | "signature" | "datetime" | "company" | "title" | "address";
+export type BlockType = "name" | "signature" | "datetime" | "company" | "title" | "address" | "email" | "phone";
 
 export interface BlockSpec {
   type: BlockType;
   label: string;
   /** How the signer fills it. `auto` blocks fill themselves at signing time. */
   input: "signature" | "text" | "multiline" | "auto";
+  /** The keyboard a text block asks for on a phone. */
+  inputType?: "email" | "tel";
   /** Default size on the page, as a percentage of page width and height. */
   widthPct: number;
   heightPct: number;
@@ -22,7 +24,18 @@ export const BLOCKS: BlockSpec[] = [
   { type: "company", label: "Company", input: "text", widthPct: 28, heightPct: 3.5 },
   { type: "title", label: "Title", input: "text", widthPct: 22, heightPct: 3.5 },
   { type: "address", label: "Address", input: "multiline", widthPct: 34, heightPct: 8 },
+  { type: "email", label: "Email", input: "text", inputType: "email", widthPct: 30, heightPct: 3.5 },
+  { type: "phone", label: "Phone", input: "text", inputType: "tel", widthPct: 22, heightPct: 3.5 },
 ];
+
+/** A reason a typed value is not acceptable for its block, or null. Browsers can be bypassed; the server asks too. */
+export function blockValueProblem(fieldType: string, value: string | null | undefined): string | null {
+  const v = (value ?? "").trim();
+  if (!v) return null;
+  if (fieldType === "email" && !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(v)) return "Enter a valid email address.";
+  if (fieldType === "phone" && (!/^[+()\d][\d\s().+-]*$/.test(v) || v.replace(/\D/g, "").length < 7 || v.replace(/\D/g, "").length > 15)) return "Enter a valid phone number.";
+  return null;
+}
 
 const BY_TYPE = new Map<string, BlockSpec>(BLOCKS.map((b) => [b.type, b]));
 
