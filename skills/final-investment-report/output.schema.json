@@ -1,69 +1,43 @@
 {
-  "type": "object",
-  "required": [
-    "realised",
-    "hurdleVerdict",
-    "bridge",
-    "fundTie",
-    "thesisReview",
-    "lessons",
-    "limitation",
-    "gate"
-  ],
   "properties": {
-    "realised": {
-      "type": "object",
-      "required": [
-        "invested",
-        "returned"
-      ]
-    },
-    "hurdleVerdict": {
-      "type": "string",
-      "enum": [
-        "clears",
-        "misses",
-        "not-tested"
-      ]
-    },
     "bridge": {
-      "type": "object",
-      "required": [
-        "valueCreated",
-        "ebitdaGrowth",
-        "multipleChange",
-        "deleveraging",
-        "sum",
-        "ties"
-      ]
+      "required": [ "valueCreated", "ebitdaGrowth", "multipleChange", "deleveraging", "sum", "ties" ],
+      "type": "object"
     },
     "fundTie": {
       "type": "object"
     },
-    "versusUnderwriting": {
-      "type": "object"
+    "gate": {
+      "type": "string"
     },
-    "thesisReview": {
-      "type": "array",
-      "items": {
-        "type": "object",
-        "required": [
-          "claim",
-          "reviewable"
-        ]
-      }
+    "hurdleVerdict": {
+      "enum": [ "clears", "misses", "not-tested" ],
+      "type": "string"
     },
     "lessons": {
-      "type": "array",
       "items": {
         "type": "string"
-      }
+      },
+      "type": "array"
     },
     "limitation": {
       "type": "string"
     },
-    "gate": {
-      "type": "string"
+    "realised": {
+      "required": [ "invested", "returned" ],
+      "type": "object"
+    },
+    "thesisReview": {
+      "items": {
+        "required": [ "claim", "reviewable" ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "versusUnderwriting": {
+      "type": "object"
     }
-  }
+  },
+  "required": [ "realised", "hurdleVerdict", "bridge", "fundTie", "thesisReview", "lessons", "limitation", "gate" ],
+  "type": "object"
 }

@@ -1,79 +1,65 @@
 {
-  "type": "object",
-  "required": [
-    "company",
-    "exchange",
-    "items"
-  ],
   "properties": {
     "company": {
-      "type": "string",
-      "minLength": 1
+      "minLength": 1,
+      "type": "string"
     },
     "exchange": {
-      "type": "string",
-      "minLength": 1
+      "minLength": 1,
+      "type": "string"
+    },
+    "gateOwner": {
+      "type": "string"
     },
     "items": {
-      "type": "array",
       "items": {
-        "type": "object",
-        "required": [
-          "id",
-          "area",
-          "requirement",
-          "status"
-        ],
         "properties": {
-          "id": {
-            "type": "string",
-            "minLength": 1
-          },
           "area": {
-            "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "type": "string"
           },
-          "requirement": {
-            "type": "string",
-            "minLength": 1
+          "costToClose": {
+            "minimum": 0,
+            "type": "number"
           },
-          "status": {
-            "type": "string",
-            "enum": [
-              "met",
-              "partial",
-              "gap",
-              "unknown"
-            ]
+          "critical": {
+            "type": "boolean"
+          },
+          "dueDate": {
+            "type": "string"
           },
           "evidence": {
             "type": "string"
           },
-          "sourceRule": {
+          "id": {
+            "minLength": 1,
             "type": "string"
           },
           "owner": {
             "type": "string"
           },
-          "dueDate": {
+          "requirement": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "sourceRule": {
+            "type": "string"
+          },
+          "status": {
+            "enum": [ "met", "partial", "gap", "unknown" ],
             "type": "string"
           },
           "weeksToClose": {
-            "type": "number",
-            "minimum": 0
-          },
-          "costToClose": {
-            "type": "number",
-            "minimum": 0
-          },
-          "critical": {
-            "type": "boolean"
+            "minimum": 0,
+            "type": "number"
           }
-        }
-      }
-    },
-    "gateOwner": {
-      "type": "string"
+        },
+        "required": [ "id", "area", "requirement", "status" ],
+        "type": "object"
+      },
+      "type": "array"
     }
-  }
+  },
+  "required": [ "company", "exchange", "items" ],
+  "type": "object"
 }

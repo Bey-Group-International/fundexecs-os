@@ -1,87 +1,72 @@
 {
-  "type": "object",
-  "required": [
-    "company",
-    "documents"
-  ],
   "properties": {
     "company": {
-      "type": "string",
-      "minLength": 1
+      "minLength": 1,
+      "type": "string"
     },
     "documents": {
-      "type": "array",
       "items": {
-        "type": "object",
-        "required": [
-          "name",
-          "workstream"
-        ],
         "properties": {
+          "answers": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
           "name": {
-            "type": "string",
-            "minLength": 1
-          },
-          "workstream": {
-            "type": "string",
-            "minLength": 1
-          },
-          "sensitivity": {
-            "type": "string",
-            "enum": [
-              "normal",
-              "competitor-sensitive",
-              "personal-data",
-              "third-party-confidential"
-            ]
+            "minLength": 1,
+            "type": "string"
           },
           "redacted": {
             "type": "boolean"
           },
+          "sensitivity": {
+            "enum": [ "normal", "competitor-sensitive", "personal-data", "third-party-confidential" ],
+            "type": "string"
+          },
           "staged": {
             "type": "boolean"
           },
-          "answers": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
+          "workstream": {
+            "minLength": 1,
+            "type": "string"
           }
-        }
-      }
+        },
+        "required": [ "name", "workstream" ],
+        "type": "object"
+      },
+      "type": "array"
     },
     "expectedRequests": {
-      "type": "array",
       "items": {
-        "type": "object",
-        "required": [
-          "id",
-          "workstream",
-          "request"
-        ],
         "properties": {
           "id": {
-            "type": "string",
-            "minLength": 1
-          },
-          "workstream": {
+            "minLength": 1,
             "type": "string"
           },
           "request": {
             "type": "string"
+          },
+          "workstream": {
+            "type": "string"
           }
-        }
-      }
+        },
+        "required": [ "id", "workstream", "request" ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "gateOwner": {
+      "type": "string"
     },
     "qaOwner": {
       "type": "string"
     },
     "qaResponseHours": {
-      "type": "number",
-      "minimum": 0
-    },
-    "gateOwner": {
-      "type": "string"
+      "minimum": 0,
+      "type": "number"
     }
-  }
+  },
+  "required": [ "company", "documents" ],
+  "type": "object"
 }

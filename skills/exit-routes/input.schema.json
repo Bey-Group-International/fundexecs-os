@@ -1,95 +1,23 @@
 {
-  "type": "object",
-  "required": [
-    "company",
-    "equityInvested",
-    "ownershipPct",
-    "netDebtAtExit",
-    "yearsHeld",
-    "routes"
-  ],
   "properties": {
     "company": {
-      "type": "string",
-      "minLength": 1
+      "minLength": 1,
+      "type": "string"
     },
     "equityInvested": {
-      "type": "number",
-      "minimum": 0
-    },
-    "ownershipPct": {
-      "type": "number",
       "minimum": 0,
-      "maximum": 100
-    },
-    "netDebtAtExit": {
       "type": "number"
     },
-    "yearsHeld": {
-      "type": "number",
-      "minimum": 0
-    },
     "fundLifeRemainingMonths": {
-      "type": "number",
-      "minimum": 0
+      "minimum": 0,
+      "type": "number"
     },
-    "routes": {
-      "type": "array",
-      "items": {
-        "type": "object",
-        "required": [
-          "name",
-          "evLow",
-          "evHigh",
-          "monthsToClose",
-          "certainty",
-          "costPct"
-        ],
-        "properties": {
-          "name": {
-            "type": "string",
-            "minLength": 1
-          },
-          "evLow": {
-            "type": "number",
-            "minimum": 0
-          },
-          "evHigh": {
-            "type": "number",
-            "minimum": 0
-          },
-          "basis": {
-            "type": "string"
-          },
-          "monthsToClose": {
-            "type": "number",
-            "minimum": 0
-          },
-          "certainty": {
-            "type": "string",
-            "enum": [
-              "high",
-              "medium",
-              "low"
-            ]
-          },
-          "costPct": {
-            "type": "number",
-            "minimum": 0,
-            "maximum": 100
-          }
-        }
-      }
+    "gateOwner": {
+      "type": "string"
     },
     "hurdles": {
-      "type": "object",
-      "required": [
-        "base",
-        "holdYears"
-      ],
       "properties": {
         "base": {
-          "type": "object",
           "properties": {
             "irr": {
               "type": "number"
@@ -97,7 +25,8 @@
             "moic": {
               "type": "number"
             }
-          }
+          },
+          "type": "object"
         },
         "downside": {
           "type": "object"
@@ -105,10 +34,60 @@
         "holdYears": {
           "type": "number"
         }
-      }
+      },
+      "required": [ "base", "holdYears" ],
+      "type": "object"
     },
-    "gateOwner": {
-      "type": "string"
+    "netDebtAtExit": {
+      "type": "number"
+    },
+    "ownershipPct": {
+      "maximum": 100,
+      "minimum": 0,
+      "type": "number"
+    },
+    "routes": {
+      "items": {
+        "properties": {
+          "basis": {
+            "type": "string"
+          },
+          "certainty": {
+            "enum": [ "high", "medium", "low" ],
+            "type": "string"
+          },
+          "costPct": {
+            "maximum": 100,
+            "minimum": 0,
+            "type": "number"
+          },
+          "evHigh": {
+            "minimum": 0,
+            "type": "number"
+          },
+          "evLow": {
+            "minimum": 0,
+            "type": "number"
+          },
+          "monthsToClose": {
+            "minimum": 0,
+            "type": "number"
+          },
+          "name": {
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [ "name", "evLow", "evHigh", "monthsToClose", "certainty", "costPct" ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "yearsHeld": {
+      "minimum": 0,
+      "type": "number"
     }
-  }
+  },
+  "required": [ "company", "equityInvested", "ownershipPct", "netDebtAtExit", "yearsHeld", "routes" ],
+  "type": "object"
 }

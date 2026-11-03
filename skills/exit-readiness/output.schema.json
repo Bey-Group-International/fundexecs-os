@@ -1,69 +1,50 @@
 {
-  "type": "object",
-  "required": [
-    "items",
-    "counts",
-    "ready",
-    "blockers",
-    "equityStory",
-    "limitation",
-    "gate"
-  ],
   "properties": {
-    "items": {
-      "type": "array",
+    "blockers": {
       "items": {
-        "type": "object",
-        "required": [
-          "id",
-          "area",
-          "requirement",
-          "status",
-          "effectiveStatus",
-          "flags"
-        ]
-      }
+        "type": "string"
+      },
+      "type": "array"
     },
     "counts": {
       "type": "object"
     },
+    "equityStory": {
+      "required": [ "kept", "removed", "sizeOk" ],
+      "type": "object"
+    },
+    "gate": {
+      "type": "string"
+    },
+    "items": {
+      "items": {
+        "required": [ "id", "area", "requirement", "status", "effectiveStatus", "flags" ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "limitation": {
+      "type": "string"
+    },
     "ready": {
       "type": "boolean"
     },
-    "blockers": {
-      "type": "array",
+    "totalCostToClose": {
+      "type": "number"
+    },
+    "untimed": {
       "items": {
         "type": "string"
-      }
+      },
+      "type": "array"
     },
     "weeksIfParallel": {
       "type": "number"
     },
     "weeksIfSerial": {
       "type": "number"
-    },
-    "totalCostToClose": {
-      "type": "number"
-    },
-    "untimed": {
-      "type": "array",
-      "items": {
-        "type": "string"
-      }
-    },
-    "equityStory": {
-      "type": "object",
-      "required": [
-        "kept",
-        "removed",
-        "sizeOk"
-      ]
-    },
-    "limitation": {
-      "type": "string"
-    },
-    "gate": {
-      "type": "string"
     }
-  }
+  },
+  "required": [ "items", "counts", "ready", "blockers", "equityStory", "limitation", "gate" ],
+  "type": "object"
 }
