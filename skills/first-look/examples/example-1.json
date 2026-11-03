@@ -1,130 +1,105 @@
 {
   "input": {
-    "mandate": {
-      "status": "approved",
-      "approvedBy": "Partner A",
-      "hardLimits": [
-        {
-          "id": "geo",
-          "label": "Geography",
-          "metric": "geography",
-          "allow": [
-            "UK",
-            "Germany"
-          ],
-          "source": "LPA 9.1"
-        },
-        {
-          "id": "excl",
-          "label": "Excluded sectors",
-          "metric": "sector",
-          "deny": [
-            "tobacco",
-            "gambling"
-          ],
-          "source": "Side letter 2"
-        },
-        {
-          "id": "ctrl",
-          "label": "Control",
-          "metric": "ownershipPct",
-          "band": {
-            "min": 51
-          },
-          "source": "LPA 9.4"
-        },
-        {
-          "id": "conc",
-          "label": "Concentration",
-          "metric": "equityChequePct",
-          "band": {
-            "max": 15
-          },
-          "source": "LPA 7.2"
-        }
-      ],
-      "preferences": [
-        {
-          "id": "ebitda",
-          "label": "EBITDA",
-          "metric": "ebitda",
-          "strong": {
-            "min": 8,
-            "max": 20
-          },
-          "acceptable": {
-            "min": 5,
-            "max": 25
-          },
-          "weight": 50
-        },
-        {
-          "id": "margin",
-          "label": "Margin",
-          "metric": "ebitdaMargin",
-          "strong": {
-            "min": 20
-          },
-          "acceptable": {
-            "min": 12
-          },
-          "weight": 30
-        },
-        {
-          "id": "sector",
-          "label": "Sector",
-          "metric": "sector",
-          "strongValues": [
-            "software"
-          ],
-          "acceptableValues": [
-            "services"
-          ],
-          "weight": 20
-        }
-      ],
-      "killFacts": [
-        {
-          "id": "cust",
-          "label": "Single customer above 40%",
-          "metric": "topCustomerPct",
-          "above": 40
-        },
-        {
-          "id": "roll",
-          "label": "Founder unwilling to roll equity",
-          "flag": true
-        }
-      ]
-    },
     "deal": {
-      "name": "Acme",
-      "geography": "UK",
-      "sector": "Software",
-      "ownershipPct": 100,
-      "equityChequePct": 10,
+      "adjustments": [ {
+        "amount": 1.5,
+        "label": "Owner salary",
+        "sourceRef": "CIM p.21"
+      }, {
+        "amount": 0.5,
+        "label": "One-off legal",
+        "sourceRef": "CIM p.22"
+      } ],
       "ebitdaMargin": 25,
-      "topCustomerPct": 12,
+      "equityChequePct": 10,
+      "geography": "UK",
+      "name": "Acme",
+      "ownershipPct": 100,
       "reportedEbitda": 8,
-      "adjustments": [
-        {
-          "label": "Owner salary",
-          "amount": 1.5,
-          "sourceRef": "CIM p.21"
-        },
-        {
-          "label": "One-off legal",
-          "amount": 0.5,
-          "sourceRef": "CIM p.22"
-        }
-      ],
-      "statedAdjustedEbitda": 10,
       "revenue": 40,
+      "sector": "Software",
       "sourceRefs": {
+        "ebitdaMargin": "CIM p.15",
         "reportedEbitda": "CIM p.20",
-        "revenue": "CIM p.14",
-        "ebitdaMargin": "CIM p.15"
-      }
+        "revenue": "CIM p.14"
+      },
+      "statedAdjustedEbitda": 10,
+      "topCustomerPct": 12
+    },
+    "mandate": {
+      "approvedBy": "Partner A",
+      "hardLimits": [ {
+        "allow": [ "UK", "Germany" ],
+        "id": "geo",
+        "label": "Geography",
+        "metric": "geography",
+        "source": "LPA 9.1"
+      }, {
+        "deny": [ "tobacco", "gambling" ],
+        "id": "excl",
+        "label": "Excluded sectors",
+        "metric": "sector",
+        "source": "Side letter 2"
+      }, {
+        "band": {
+          "min": 51
+        },
+        "id": "ctrl",
+        "label": "Control",
+        "metric": "ownershipPct",
+        "source": "LPA 9.4"
+      }, {
+        "band": {
+          "max": 15
+        },
+        "id": "conc",
+        "label": "Concentration",
+        "metric": "equityChequePct",
+        "source": "LPA 7.2"
+      } ],
+      "killFacts": [ {
+        "above": 40,
+        "id": "cust",
+        "label": "Single customer above 40%",
+        "metric": "topCustomerPct"
+      }, {
+        "flag": true,
+        "id": "roll",
+        "label": "Founder unwilling to roll equity"
+      } ],
+      "preferences": [ {
+        "acceptable": {
+          "max": 25,
+          "min": 5
+        },
+        "id": "ebitda",
+        "label": "EBITDA",
+        "metric": "ebitda",
+        "strong": {
+          "max": 20,
+          "min": 8
+        },
+        "weight": 50
+      }, {
+        "acceptable": {
+          "min": 12
+        },
+        "id": "margin",
+        "label": "Margin",
+        "metric": "ebitdaMargin",
+        "strong": {
+          "min": 20
+        },
+        "weight": 30
+      }, {
+        "acceptableValues": [ "services" ],
+        "id": "sector",
+        "label": "Sector",
+        "metric": "sector",
+        "strongValues": [ "software" ],
+        "weight": 20
+      } ],
+      "status": "approved"
     }
   }
 }
