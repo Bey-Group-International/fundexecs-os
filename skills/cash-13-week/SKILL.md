@@ -8,13 +8,13 @@ skill runtime (`lib/skills/runner.ts`) using the shared evidence grades (`lib/pe
 
 ## Contract
 
-|                   |                                       |
-|-------------------|---------------------------------------|
-| **Approval tier** | 1 — internal, reversible analysis |
-| **Executives**    | portfolio_ops · fund_admin |
-| **Inputs**        | `company`, `openingCash`, `weeks` |
+|                   |                                        |
+|-------------------|----------------------------------------|
+| **Approval tier** | 1 — internal, reversible analysis      |
+| **Executives**    | portfolio_ops · fund_admin             |
+| **Inputs**        | `company`, `openingCash`, `weeks`      |
 | **Outputs**       | `base`, `downside`, `accuracy`, `gate` |
-| **Downstream**    | covenant-watch, portfolio-review |
+| **Downstream**    | covenant-watch, portfolio-review       |
 
 ## Guardrails
 

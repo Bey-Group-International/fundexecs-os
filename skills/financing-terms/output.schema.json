@@ -1,44 +1,28 @@
 {
-  "type": "object",
-  "required": [
-    "rows",
-    "costMethod",
-    "flexibilityMethod",
-    "policyIsDefault",
-    "limitation",
-    "gate"
-  ],
   "properties": {
-    "rows": {
-      "type": "array",
-      "items": {
-        "type": "object",
-        "required": [
-          "lender",
-          "allInCostPct",
-          "costRank",
-          "flexibilityScore",
-          "flexibilityRank",
-          "policyFlags",
-          "downsideFlags",
-          "cited"
-        ]
-      }
-    },
     "costMethod": {
       "type": "string"
     },
     "flexibilityMethod": {
       "type": "string"
     },
-    "policyIsDefault": {
-      "type": "boolean"
+    "gate": {
+      "type": "string"
     },
     "limitation": {
       "type": "string"
     },
-    "gate": {
-      "type": "string"
+    "policyIsDefault": {
+      "type": "boolean"
+    },
+    "rows": {
+      "items": {
+        "required": [ "lender", "allInCostPct", "costRank", "flexibilityScore", "flexibilityRank", "policyFlags", "downsideFlags", "cited" ],
+        "type": "object"
+      },
+      "type": "array"
     }
-  }
+  },
+  "required": [ "rows", "costMethod", "flexibilityMethod", "policyIsDefault", "limitation", "gate" ],
+  "type": "object"
 }
