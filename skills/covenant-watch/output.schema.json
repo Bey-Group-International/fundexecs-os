@@ -1,0 +1,56 @@
+{
+  "type": "object",
+  "required": [
+    "covenants",
+    "excludedAddbacks",
+    "warnThresholdPct",
+    "warnThresholdIsDefault",
+    "cureOptions",
+    "gate",
+    "limitation"
+  ],
+  "properties": {
+    "covenants": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "clause",
+          "periods"
+        ]
+      }
+    },
+    "excludedAddbacks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "period",
+          "label",
+          "amount",
+          "reason"
+        ]
+      }
+    },
+    "warnThresholdPct": {
+      "type": "number"
+    },
+    "warnThresholdIsDefault": {
+      "type": "boolean"
+    },
+    "cureOptions": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "gate": {
+      "type": "string"
+    },
+    "limitation": {
+      "type": "string"
+    }
+  }
+}

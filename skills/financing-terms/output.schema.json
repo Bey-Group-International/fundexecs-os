@@ -1,0 +1,44 @@
+{
+  "type": "object",
+  "required": [
+    "rows",
+    "costMethod",
+    "flexibilityMethod",
+    "policyIsDefault",
+    "limitation",
+    "gate"
+  ],
+  "properties": {
+    "rows": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "lender",
+          "allInCostPct",
+          "costRank",
+          "flexibilityScore",
+          "flexibilityRank",
+          "policyFlags",
+          "downsideFlags",
+          "cited"
+        ]
+      }
+    },
+    "costMethod": {
+      "type": "string"
+    },
+    "flexibilityMethod": {
+      "type": "string"
+    },
+    "policyIsDefault": {
+      "type": "boolean"
+    },
+    "limitation": {
+      "type": "string"
+    },
+    "gate": {
+      "type": "string"
+    }
+  }
+}

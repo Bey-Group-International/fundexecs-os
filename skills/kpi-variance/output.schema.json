@@ -1,0 +1,46 @@
+{
+  "type": "object",
+  "required": [
+    "rows",
+    "materialCount",
+    "policy",
+    "policyIsDefault",
+    "limitation",
+    "gate"
+  ],
+  "properties": {
+    "rows": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "name",
+          "actual",
+          "budget",
+          "varianceAbs",
+          "direction",
+          "material",
+          "challenges"
+        ]
+      }
+    },
+    "materialCount": {
+      "type": "integer"
+    },
+    "policy": {
+      "type": "object",
+      "required": [
+        "materialityPct"
+      ]
+    },
+    "policyIsDefault": {
+      "type": "boolean"
+    },
+    "limitation": {
+      "type": "string"
+    },
+    "gate": {
+      "type": "string"
+    }
+  }
+}

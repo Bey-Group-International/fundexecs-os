@@ -1,0 +1,111 @@
+{
+  "type": "object",
+  "required": [
+    "company",
+    "period",
+    "kpis"
+  ],
+  "properties": {
+    "company": {
+      "type": "string",
+      "minLength": 1
+    },
+    "period": {
+      "type": "string",
+      "minLength": 1
+    },
+    "kpis": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "name",
+          "actual",
+          "budget"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "unit": {
+            "type": "string"
+          },
+          "higherIsBetter": {
+            "type": "boolean"
+          },
+          "actual": {
+            "type": "number"
+          },
+          "budget": {
+            "type": "number"
+          },
+          "priorYear": {
+            "type": "number"
+          },
+          "series": {
+            "type": "array",
+            "items": {
+              "type": "number"
+            }
+          },
+          "drivers": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "name",
+                "amount"
+              ],
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "amount": {
+                  "type": "number"
+                }
+              }
+            }
+          },
+          "commentary": {
+            "type": "string"
+          },
+          "classification": {
+            "type": "string",
+            "enum": [
+              "timing",
+              "one-off",
+              "trend"
+            ]
+          },
+          "evidence": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "kpiPolicy": {
+      "type": "object",
+      "required": [
+        "materialityPct"
+      ],
+      "properties": {
+        "materialityPct": {
+          "type": "number",
+          "minimum": 0
+        },
+        "materialityAbs": {
+          "type": "number",
+          "minimum": 0
+        },
+        "trendPeriods": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "gateOwner": {
+      "type": "string"
+    }
+  }
+}

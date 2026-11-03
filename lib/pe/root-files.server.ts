@@ -7,10 +7,22 @@ import "server-only";
 import { createServiceClient, hasSupabaseServiceEnv } from "@/lib/supabase/server";
 import { resolveRootFiles, type ResolvedRootFiles, type RootFileRow } from "./root-files";
 
-/** Skills whose `mandate` input defaults to the organization's stored mandate. */
-export const MANDATE_BOUND_SKILLS = new Set(["mandate-screen", "target-screen", "first-look"]);
-/** Skills whose `hurdles` input defaults to the organization's stored return hurdles. */
-export const HURDLE_BOUND_SKILLS = new Set(["bid-range"]);
+/**
+ * Skills whose policy input defaults to the organization's stored root file.
+ * Only an org's OWN settings are injected; otherwise the skill applies (and
+ * labels) the standing default, so a default is never passed off as the firm's.
+ */
+type Binding = { input: "mandate" | "hurdles" | "financing" | "kpiPolicy" };
+export const ROOT_BINDINGS: Record<string, Binding[]> = {
+  "mandate-screen": [{ input: "mandate" }],
+  "target-screen": [{ input: "mandate" }],
+  "first-look": [{ input: "mandate" }],
+  "bid-range": [{ input: "hurdles" }],
+  "covenant-watch": [{ input: "financing" }],
+  "cash-13-week": [{ input: "financing" }],
+  "financing-terms": [{ input: "financing" }],
+  "kpi-variance": [{ input: "kpiPolicy" }],
+};
 
 export async function loadRootFiles(orgId: string): Promise<ResolvedRootFiles> {
   if (!hasSupabaseServiceEnv()) return resolveRootFiles([]);
@@ -24,23 +36,23 @@ export async function loadRootFiles(orgId: string): Promise<ResolvedRootFiles> {
 }
 
 /**
- * For a mandate-bound skill whose input carries no `mandate`, fill it from the
- * org's stored mandate. An explicit input always wins; an org with no mandate
- * leaves the input untouched (the schema then rejects it, which is the honest answer).
+ * Fill each bound policy input the caller left out from the org's stored root
+ * files. An explicit input always wins. Never throws.
  */
 export async function withOrgMandate(orgId: string, skillId: string, input: unknown): Promise<unknown> {
-  const mandateBound = MANDATE_BOUND_SKILLS.has(skillId);
-  const hurdleBound = HURDLE_BOUND_SKILLS.has(skillId);
-  if (!mandateBound && !hurdleBound) return input;
+  const bindings = ROOT_BINDINGS[skillId];
+  if (!bindings) return input;
   if (!input || typeof input !== "object" || Array.isArray(input)) return input;
   const obj = input as Record<string, unknown>;
-  const needMandate = mandateBound && obj.mandate === undefined;
-  const needHurdles = hurdleBound && obj.hurdles === undefined;
-  if (!needMandate && !needHurdles) return input;
+  const missing = bindings.filter((b) => obj[b.input] === undefined);
+  if (missing.length === 0) return input;
   const root = await loadRootFiles(orgId);
   const out: Record<string, unknown> = { ...obj };
-  if (needMandate && root.found.includes("mandate")) out.mandate = root.mandate;
-  // Only an org's OWN hurdles are injected; otherwise the skill applies (and labels) the standing default.
-  if (needHurdles && !root.returnsAreDefault) out.hurdles = root.returns;
+  for (const b of missing) {
+    if (b.input === "mandate" && root.found.includes("mandate")) out.mandate = root.mandate;
+    if (b.input === "hurdles" && !root.returnsAreDefault) out.hurdles = root.returns;
+    if (b.input === "financing" && !root.financingIsDefault) out.financing = root.financing;
+    if (b.input === "kpiPolicy" && !root.kpiIsDefault) out.kpiPolicy = root.kpi;
+  }
   return out;
 }

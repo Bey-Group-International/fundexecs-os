@@ -1,0 +1,7 @@
+# skills/kpi-variance/evaluation.yaml — acceptance criteria; exercised by lib/skills/catalog/pe-portfolio-execution.test.ts
+criteria:
+  - materiality uses pct AND absolute floor when set
+  - cost KPIs read direction-aware
+  - driver residual reported
+  - unevidenced classification challenged
+example: examples/example-1.json

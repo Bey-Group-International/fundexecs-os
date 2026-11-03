@@ -1,0 +1,7 @@
+# skills/cash-13-week/evaluation.yaml — acceptance criteria; exercised by lib/skills/catalog/pe-portfolio-execution.test.ts
+criteria:
+  - weekly roll correct
+  - liquidity minimum tested
+  - facility shortfall flagged
+  - accuracy log computed
+example: examples/example-1.json

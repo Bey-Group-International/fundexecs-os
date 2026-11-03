@@ -1,0 +1,26 @@
+# skills/kpi-variance/policy.yaml — enforced by lib/skills/runner.ts and lib/executives/registry.ts
+approval_tier: 1
+risk_classification: low
+
+allowed_executives:
+  - portfolio_ops
+
+data_scopes:
+  - asset:read
+
+prohibited_actions:
+  - sign_document
+  - move_capital
+  - distribute_report
+  - send_outreach
+
+guardrails:
+  - Materiality is the firm's percent AND absolute floor when set; the default is labelled.
+  - Drivers must sum to the variance; the residual is reported.
+  - A classification with no evidence is flagged as management's word only.
+  - A 'timing' or 'one-off' call that the series contradicts is challenged.
+
+downstream:
+  - portfolio-review
+  - value-creation
+  - lp-update

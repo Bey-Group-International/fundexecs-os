@@ -1,0 +1,7 @@
+# skills/covenant-watch/evaluation.yaml — acceptance criteria; exercised by lib/skills/catalog/pe-portfolio-execution.test.ts
+criteria:
+  - unquoted covenant not calculated
+  - unpermitted addback excluded
+  - headroom sign and warning threshold correct
+  - forecast periods flagged
+example: examples/example-1.json

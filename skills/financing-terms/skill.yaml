@@ -1,0 +1,58 @@
+# skills/financing-terms/skill.yaml
+# Authoring spec for Financing Terms Comparison. The machine-readable manifest the runtime loads is
+# the TypeScript SkillDefinition in lib/skills/catalog/financing-terms.ts; this YAML is the
+# human-facing contract and must stay consistent with it.
+# Origin: PE department pack · Execution + Portfolio. Rules re-implemented natively; no pack text is shipped.
+id: financing-terms
+name: Financing Terms Comparison
+version: 1.0.0
+owner: fundexecs
+hub: execute
+
+applicable_executives:
+  - analyst
+  - legal_closing
+
+supported_entity_types: [deal]
+
+required_inputs:
+  - baseRatePct
+  - offers
+
+optional_inputs:
+  - financing
+  - gateOwner
+
+outputs:
+  - rows
+  - costMethod
+  - flexibilityMethod
+  - gate
+
+artifact_types: [analysis]
+data_permissions: [deal:read, document:read]
+tools: []
+
+approval_tier: 1
+risk_classification: moderate
+execution_timeout_ms: 10000
+retry_policy:
+  max_attempts: 1
+  backoff_ms: 0
+
+provider_capabilities:
+  - financial_reasoning
+
+allowed_downstream_skills: [bid-range, ic-memo, closing-checklist]
+
+prohibited_actions:
+  - sign_document
+  - move_capital
+  - submit_term_sheet
+  - execute_subdoc
+  - send_outreach
+
+input_schema: input.schema.json
+output_schema: output.schema.json
+policy: policy.yaml
+evaluation: evaluation.yaml

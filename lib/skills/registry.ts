@@ -49,6 +49,10 @@ import { qoeBridge } from "./catalog/qoe-bridge";
 import { revenueQuality } from "./catalog/revenue-quality";
 import { redFlagRegister } from "./catalog/red-flag-register";
 import { bidRange } from "./catalog/bid-range";
+import { covenantWatch } from "./catalog/covenant-watch";
+import { kpiVariance } from "./catalog/kpi-variance";
+import { cash13Week } from "./catalog/cash-13-week";
+import { financingTerms } from "./catalog/financing-terms";
 
 const SKILLS: Record<string, SkillDefinition> = {
   [screenDeal.manifest.id]: screenDeal as SkillDefinition,
@@ -109,6 +113,11 @@ const SKILLS: Record<string, SkillDefinition> = {
   [revenueQuality.manifest.id]: revenueQuality as SkillDefinition,
   [redFlagRegister.manifest.id]: redFlagRegister as SkillDefinition,
   [bidRange.manifest.id]: bidRange as SkillDefinition,
+  // PE department · execution + portfolio (quote the clause / cite the page; policy defaults are labelled).
+  [covenantWatch.manifest.id]: covenantWatch as SkillDefinition,
+  [kpiVariance.manifest.id]: kpiVariance as SkillDefinition,
+  [cash13Week.manifest.id]: cash13Week as SkillDefinition,
+  [financingTerms.manifest.id]: financingTerms as SkillDefinition,
 };
 
 export function getSkill(id: string): SkillDefinition | null {

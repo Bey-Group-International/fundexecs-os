@@ -1,0 +1,19 @@
+{
+  "input": {
+    "baseRatePct": 4,
+    "offers": [
+      {
+        "lender": "Bank A",
+        "seniorLeverage": 3.5,
+        "marginBps": 450,
+        "upfrontFeePct": 2,
+        "tenorYears": 7,
+        "amortPctPerYear": 1,
+        "covenant": "cov-lite",
+        "callProtectionMonths": 6,
+        "equityCure": true,
+        "sourceRef": "TS A p.4"
+      }
+    ]
+  }
+}

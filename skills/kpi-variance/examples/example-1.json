@@ -1,0 +1,30 @@
+{
+  "input": {
+    "company": "Acme",
+    "period": "Mar",
+    "kpis": [
+      {
+        "name": "Revenue",
+        "actual": 92,
+        "budget": 100,
+        "drivers": [
+          {
+            "name": "Volume",
+            "amount": -5
+          },
+          {
+            "name": "Price",
+            "amount": -3
+          }
+        ],
+        "classification": "timing"
+      },
+      {
+        "name": "COGS",
+        "higherIsBetter": false,
+        "actual": 63,
+        "budget": 60
+      }
+    ]
+  }
+}

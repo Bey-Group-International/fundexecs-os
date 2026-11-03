@@ -1,0 +1,100 @@
+{
+  "type": "object",
+  "required": [
+    "baseRatePct",
+    "offers"
+  ],
+  "properties": {
+    "baseRatePct": {
+      "type": "number",
+      "minimum": 0
+    },
+    "offers": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "lender",
+          "seniorLeverage",
+          "marginBps",
+          "upfrontFeePct",
+          "tenorYears",
+          "amortPctPerYear",
+          "covenant",
+          "callProtectionMonths",
+          "equityCure"
+        ],
+        "properties": {
+          "lender": {
+            "type": "string",
+            "minLength": 1
+          },
+          "seniorLeverage": {
+            "type": "number",
+            "minimum": 0
+          },
+          "totalLeverage": {
+            "type": "number",
+            "minimum": 0
+          },
+          "marginBps": {
+            "type": "number",
+            "minimum": 0
+          },
+          "upfrontFeePct": {
+            "type": "number",
+            "minimum": 0
+          },
+          "tenorYears": {
+            "type": "number",
+            "minimum": 0
+          },
+          "amortPctPerYear": {
+            "type": "number",
+            "minimum": 0
+          },
+          "covenant": {
+            "type": "string",
+            "enum": [
+              "maintenance",
+              "cov-lite"
+            ]
+          },
+          "covenantHeadroomPct": {
+            "type": "number"
+          },
+          "callProtectionMonths": {
+            "type": "number",
+            "minimum": 0
+          },
+          "equityCure": {
+            "type": "boolean"
+          },
+          "sourceRef": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "financing": {
+      "type": "object",
+      "properties": {
+        "maxSeniorLeverage": {
+          "type": "number"
+        },
+        "maxTotalLeverage": {
+          "type": "number"
+        },
+        "covenantWarnHeadroomPct": {
+          "type": "number"
+        },
+        "maxCallProtectionMonths": {
+          "type": "number"
+        }
+      }
+    },
+    "gateOwner": {
+      "type": "string"
+    }
+  }
+}

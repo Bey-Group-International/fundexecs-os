@@ -1,0 +1,29 @@
+# skills/financing-terms/policy.yaml — enforced by lib/skills/runner.ts and lib/executives/registry.ts
+approval_tier: 1
+risk_classification: moderate
+
+allowed_executives:
+  - analyst
+  - legal_closing
+
+data_scopes:
+  - deal:read
+  - document:read
+
+prohibited_actions:
+  - sign_document
+  - move_capital
+  - submit_term_sheet
+  - execute_subdoc
+  - send_outreach
+
+guardrails:
+  - Every term must cite a term-sheet page; uncited terms are marked.
+  - Cost and flexibility are ranked separately and the methods are shown.
+  - The skill ranks; the financing lead selects the lender group.
+  - Default policy limits are labelled 'run on default settings'.
+
+downstream:
+  - bid-range
+  - ic-memo
+  - closing-checklist

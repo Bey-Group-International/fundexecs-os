@@ -1,0 +1,142 @@
+{
+  "type": "object",
+  "required": [
+    "company",
+    "covenants",
+    "periods"
+  ],
+  "properties": {
+    "company": {
+      "type": "string",
+      "minLength": 1
+    },
+    "covenants": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "clause",
+          "metric",
+          "kind",
+          "threshold"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "clause": {
+            "type": "string"
+          },
+          "metric": {
+            "type": "string",
+            "enum": [
+              "netLeverage",
+              "interestCover",
+              "custom"
+            ]
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "max",
+              "min"
+            ]
+          },
+          "threshold": {
+            "type": "number"
+          },
+          "numeratorKey": {
+            "type": "string"
+          },
+          "denominatorKey": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "periods": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "label",
+          "ebitda"
+        ],
+        "properties": {
+          "label": {
+            "type": "string",
+            "minLength": 1
+          },
+          "forecast": {
+            "type": "boolean"
+          },
+          "ebitda": {
+            "type": "number"
+          },
+          "addbacks": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "label",
+                "amount"
+              ],
+              "properties": {
+                "label": {
+                  "type": "string"
+                },
+                "amount": {
+                  "type": "number"
+                },
+                "clause": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "netDebt": {
+            "type": "number"
+          },
+          "interest": {
+            "type": "number"
+          },
+          "extra": {
+            "type": "object"
+          }
+        }
+      }
+    },
+    "cureOptions": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "financing": {
+      "type": "object",
+      "properties": {
+        "covenantWarnHeadroomPct": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100
+        },
+        "escalateBelowPct": {
+          "type": "number"
+        },
+        "escalateTo": {
+          "type": "string"
+        }
+      }
+    },
+    "gateOwner": {
+      "type": "string"
+    }
+  }
+}

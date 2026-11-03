@@ -6,6 +6,8 @@
 // speculative schema is committed here.
 
 import { EMPTY_MANDATE, parseMandateTests, type MandateTests } from "./mandate-tests";
+import { DEFAULT_FINANCING, parseFinancingPolicy, type FinancingPolicy } from "./financing-policy";
+import { DEFAULT_KPI_POLICY, parseKpiPolicy, type KpiPolicy } from "./kpi-policy";
 import { DEFAULT_RETURNS, parseReturnsHurdles, type ReturnsHurdles } from "./returns-hurdles";
 
 export const ROOT_FILE_KEYS = ["firm", "mandate", "returns", "evidence", "ic_memo", "kpi", "financing", "reporting"] as const;
@@ -28,6 +30,12 @@ export interface ResolvedRootFiles {
   returns: ReturnsHurdles;
   /** True when `returns` is the standing default, not the firm's own. */
   returnsAreDefault: boolean;
+  /** The org's financing limits / covenant rules, or the labelled standing defaults. */
+  financing: FinancingPolicy;
+  financingIsDefault: boolean;
+  /** The org's KPI materiality, or the labelled standing default. */
+  kpi: KpiPolicy;
+  kpiIsDefault: boolean;
   /** Keys with a stored, non-empty row. */
   found: RootFileKey[];
   missing: RootFileKey[];
@@ -47,6 +55,9 @@ export function resolveRootFiles(rows: RootFileRow[] | null | undefined): Resolv
 
   const returnsParsed = byKey.has("returns") ? parseReturnsHurdles(byKey.get("returns")!.content) : null;
 
+  const financingParsed = byKey.has("financing") ? parseFinancingPolicy(byKey.get("financing")!.content) : null;
+  const kpiParsed = byKey.has("kpi") ? parseKpiPolicy(byKey.get("kpi")!.content) : null;
+
   const found: RootFileKey[] = [];
   for (const k of ROOT_FILE_KEYS) {
     if (k === "mandate") {
@@ -55,6 +66,14 @@ export function resolveRootFiles(rows: RootFileRow[] | null | undefined): Resolv
     }
     if (k === "returns") {
       if (returnsParsed) found.push(k);
+      continue;
+    }
+    if (k === "financing") {
+      if (financingParsed) found.push(k);
+      continue;
+    }
+    if (k === "kpi") {
+      if (kpiParsed) found.push(k);
       continue;
     }
     const c = byKey.get(k)?.content;
@@ -67,5 +86,5 @@ export function resolveRootFiles(rows: RootFileRow[] | null | undefined): Resolv
     `Not found: ${missing.length ? missing.join(", ") : "none"}` +
     (missing.length ? " — run on default settings." : ".");
 
-  return { mandate: mandateUsable ? mandateParsed! : EMPTY_MANDATE, returns: returnsParsed ?? DEFAULT_RETURNS, returnsAreDefault: !returnsParsed, found, missing, statusLine };
+  return { mandate: mandateUsable ? mandateParsed! : EMPTY_MANDATE, returns: returnsParsed ?? DEFAULT_RETURNS, returnsAreDefault: !returnsParsed, financing: financingParsed ?? DEFAULT_FINANCING, financingIsDefault: !financingParsed, kpi: kpiParsed ?? DEFAULT_KPI_POLICY, kpiIsDefault: !kpiParsed, found, missing, statusLine };
 }
