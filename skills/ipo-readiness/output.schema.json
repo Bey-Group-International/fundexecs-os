@@ -1,71 +1,55 @@
 {
-  "type": "object",
-  "required": [
-    "items",
-    "counts",
-    "ready",
-    "blockers",
-    "exchange",
-    "uncitedRequirements",
-    "limitation",
-    "gate"
-  ],
   "properties": {
-    "items": {
-      "type": "array",
+    "blockers": {
       "items": {
-        "type": "object",
-        "required": [
-          "id",
-          "area",
-          "requirement",
-          "status",
-          "effectiveStatus",
-          "flags"
-        ]
-      }
+        "type": "string"
+      },
+      "type": "array"
     },
     "counts": {
       "type": "object"
     },
+    "exchange": {
+      "type": "string"
+    },
+    "gate": {
+      "type": "string"
+    },
+    "items": {
+      "items": {
+        "required": [ "id", "area", "requirement", "status", "effectiveStatus", "flags" ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "limitation": {
+      "type": "string"
+    },
     "ready": {
       "type": "boolean"
     },
-    "blockers": {
-      "type": "array",
+    "totalCostToClose": {
+      "type": "number"
+    },
+    "uncitedRequirements": {
       "items": {
         "type": "string"
-      }
+      },
+      "type": "array"
+    },
+    "untimed": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
     },
     "weeksIfParallel": {
       "type": "number"
     },
     "weeksIfSerial": {
       "type": "number"
-    },
-    "totalCostToClose": {
-      "type": "number"
-    },
-    "untimed": {
-      "type": "array",
-      "items": {
-        "type": "string"
-      }
-    },
-    "exchange": {
-      "type": "string"
-    },
-    "uncitedRequirements": {
-      "type": "array",
-      "items": {
-        "type": "string"
-      }
-    },
-    "limitation": {
-      "type": "string"
-    },
-    "gate": {
-      "type": "string"
     }
-  }
+  },
+  "required": [ "items", "counts", "ready", "blockers", "exchange", "uncitedRequirements", "limitation", "gate" ],
+  "type": "object"
 }

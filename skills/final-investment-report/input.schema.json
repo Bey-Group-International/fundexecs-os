@@ -1,133 +1,74 @@
 {
-  "type": "object",
-  "required": [
-    "company",
-    "cashFlows",
-    "entry",
-    "exit"
-  ],
   "properties": {
-    "company": {
-      "type": "string",
-      "minLength": 1
-    },
     "cashFlows": {
-      "type": "array",
       "items": {
-        "type": "object",
-        "required": [
-          "date",
-          "amount"
-        ],
         "properties": {
-          "date": {
-            "type": "string",
-            "minLength": 8
-          },
           "amount": {
             "type": "number"
+          },
+          "date": {
+            "minLength": 8,
+            "type": "string"
           }
-        }
-      }
+        },
+        "required": [ "date", "amount" ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "company": {
+      "minLength": 1,
+      "type": "string"
     },
     "entry": {
-      "type": "object",
-      "required": [
-        "ebitda",
-        "multiple",
-        "netDebt"
-      ],
       "properties": {
         "ebitda": {
           "type": "number"
         },
         "multiple": {
-          "type": "number",
-          "minimum": 0
+          "minimum": 0,
+          "type": "number"
         },
         "netDebt": {
           "type": "number"
         }
-      }
+      },
+      "required": [ "ebitda", "multiple", "netDebt" ],
+      "type": "object"
     },
     "exit": {
-      "type": "object",
-      "required": [
-        "ebitda",
-        "multiple",
-        "netDebt"
-      ],
       "properties": {
         "ebitda": {
           "type": "number"
         },
         "multiple": {
-          "type": "number",
-          "minimum": 0
+          "minimum": 0,
+          "type": "number"
         },
         "netDebt": {
           "type": "number"
         }
-      }
+      },
+      "required": [ "ebitda", "multiple", "netDebt" ],
+      "type": "object"
     },
     "fundRecord": {
-      "type": "object",
       "properties": {
-        "moic": {
-          "type": "number"
-        },
         "irr": {
           "type": "number"
-        }
-      }
-    },
-    "underwriting": {
-      "type": "object",
-      "properties": {
+        },
         "moic": {
           "type": "number"
-        },
-        "irr": {
-          "type": "number"
         }
-      }
+      },
+      "type": "object"
     },
-    "thesis": {
-      "type": "array",
-      "items": {
-        "type": "object",
-        "required": [
-          "claim"
-        ],
-        "properties": {
-          "claim": {
-            "type": "string",
-            "minLength": 1
-          },
-          "outcome": {
-            "type": "string"
-          },
-          "evidence": {
-            "type": "string"
-          }
-        }
-      }
-    },
-    "lessons": {
-      "type": "array",
-      "items": {
-        "type": "string"
-      }
+    "gateOwner": {
+      "type": "string"
     },
     "hurdles": {
-      "type": "object",
-      "required": [
-        "base",
-        "holdYears"
-      ],
       "properties": {
         "base": {
-          "type": "object",
           "properties": {
             "irr": {
               "type": "number"
@@ -135,7 +76,8 @@
             "moic": {
               "type": "number"
             }
-          }
+          },
+          "type": "object"
         },
         "downside": {
           "type": "object"
@@ -143,10 +85,47 @@
         "holdYears": {
           "type": "number"
         }
-      }
+      },
+      "required": [ "base", "holdYears" ],
+      "type": "object"
     },
-    "gateOwner": {
-      "type": "string"
+    "lessons": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "thesis": {
+      "items": {
+        "properties": {
+          "claim": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "evidence": {
+            "type": "string"
+          },
+          "outcome": {
+            "type": "string"
+          }
+        },
+        "required": [ "claim" ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "underwriting": {
+      "properties": {
+        "irr": {
+          "type": "number"
+        },
+        "moic": {
+          "type": "number"
+        }
+      },
+      "type": "object"
     }
-  }
+  },
+  "required": [ "company", "cashFlows", "entry", "exit" ],
+  "type": "object"
 }

@@ -8,13 +8,13 @@ skill runtime (`lib/skills/runner.ts`) using the shared evidence grades (`lib/pe
 
 ## Contract
 
-|                   |                                       |
-|-------------------|---------------------------------------|
-| **Approval tier** | 1 — internal, reversible analysis |
-| **Executives**    | portfolio_ops · diligence |
-| **Inputs**        | `company`, `items` |
+|                   |                                                                                                   |
+|-------------------|---------------------------------------------------------------------------------------------------|
+| **Approval tier** | 1 — internal, reversible analysis                                                                 |
+| **Executives**    | portfolio_ops · diligence                                                                         |
+| **Inputs**        | `company`, `items`                                                                                |
 | **Outputs**       | `items`, `counts`, `ready`, `blockers`, `weeksIfParallel`, `weeksIfSerial`, `equityStory`, `gate` |
-| **Downstream**    | data-room-prep, exit-routes, ipo-readiness |
+| **Downstream**    | data-room-prep, exit-routes, ipo-readiness                                                        |
 
 ## Guardrails
 

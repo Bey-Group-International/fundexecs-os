@@ -1,72 +1,49 @@
 {
-  "type": "object",
-  "required": [
-    "index",
-    "coverage",
-    "gaps",
-    "redactionList",
-    "qaLog",
-    "requestListIsDefault",
-    "limitation",
-    "gate"
-  ],
   "properties": {
-    "index": {
-      "type": "array",
-      "items": {
-        "type": "object",
-        "required": [
-          "workstream",
-          "documents"
-        ]
-      }
-    },
     "coverage": {
-      "type": "array",
       "items": {
-        "type": "object",
-        "required": [
-          "requestId",
-          "request",
-          "status"
-        ]
-      }
+        "required": [ "requestId", "request", "status" ],
+        "type": "object"
+      },
+      "type": "array"
     },
     "gaps": {
-      "type": "array",
       "items": {
         "type": "string"
-      }
+      },
+      "type": "array"
     },
-    "redactionList": {
-      "type": "array",
+    "gate": {
+      "type": "string"
+    },
+    "index": {
       "items": {
-        "type": "object",
-        "required": [
-          "document",
-          "sensitivity",
-          "action"
-        ]
-      }
-    },
-    "qaLog": {
-      "type": "array",
-      "items": {
-        "type": "object",
-        "required": [
-          "ref",
-          "question"
-        ]
-      }
-    },
-    "requestListIsDefault": {
-      "type": "boolean"
+        "required": [ "workstream", "documents" ],
+        "type": "object"
+      },
+      "type": "array"
     },
     "limitation": {
       "type": "string"
     },
-    "gate": {
-      "type": "string"
+    "qaLog": {
+      "items": {
+        "required": [ "ref", "question" ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "redactionList": {
+      "items": {
+        "required": [ "document", "sensitivity", "action" ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "requestListIsDefault": {
+      "type": "boolean"
     }
-  }
+  },
+  "required": [ "index", "coverage", "gaps", "redactionList", "qaLog", "requestListIsDefault", "limitation", "gate" ],
+  "type": "object"
 }
