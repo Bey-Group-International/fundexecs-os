@@ -3,6 +3,7 @@ import { planSkillForStep, type SkillPlanningContext } from "./skill-planner";
 import { executeSkillCore } from "./runner";
 import { canRunSkill } from "@/lib/executives/registry";
 import type { SkillContext } from "./types";
+import { EMPTY_MANDATE, parseMandateTests } from "@/lib/pe/mandate-tests";
 
 const CRITERIA = { sectors: ["software"], geographies: ["north america"], minRevenue: 10, maxRevenue: 100 };
 
@@ -112,3 +113,58 @@ describe("planSkillForStep — deferral", () => {
     expect(planSkillForStep("Generate a diligence checklist", "", ctx)).toBeNull();
   });
 });
+
+describe("planSkillForStep — PE sourcing skills", () => {
+  const MANDATE = parseMandateTests({
+    status: "approved",
+    hardLimits: [{ id: "geo", label: "Geography", metric: "geography", allow: ["UK"], source: "LPA 9.1" }],
+    preferences: [{ id: "e", label: "EBITDA", metric: "ebitda", strong: { min: 5 }, weight: 1 }],
+    killFacts: [],
+  })!;
+
+  it("plans mandate-screen only when the org has stored mandate tests", () => {
+    expect(planSkillForStep("Define the mandate screen", "", {})).toBeNull();
+    expect(planSkillForStep("Define the mandate screen", "", { mandateTests: EMPTY_MANDATE })).toBeNull();
+    const plan = planSkillForStep("Define the mandate screen", "", { mandateTests: MANDATE })!;
+    expect(plan.skillId).toBe("mandate-screen");
+    expect(plan.input).toEqual({ mandate: MANDATE });
+  });
+
+  it("plans first-look from a real deal record, forwarding only the facts it carries", () => {
+    const ctx: SkillPlanningContext = { mandateTests: MANDATE, deal: { companyName: "Acme", geography: "UK", ebitda: 8, askingPrice: 99 } };
+    const plan = planSkillForStep("First look at the teaser", "", ctx)!;
+    expect(plan.skillId).toBe("first-look");
+    expect(plan.input).toEqual({ mandate: MANDATE, deal: { name: "Acme", geography: "UK", ebitda: 8 } }); // no invented fields; askingPrice is not a mandate fact
+    expect(planSkillForStep("First look at the teaser", "", { mandateTests: MANDATE, deal: {} })).toBeNull(); // no name -> no invention
+    expect(planSkillForStep("First look at the teaser", "", { deal: { companyName: "Acme" } })).toBeNull(); // no mandate
+  });
+
+  it("plans target-screen from a supplied list and the stored mandate", () => {
+    const ctx: SkillPlanningContext = { mandateTests: MANDATE, candidates: [{ name: "A", geography: "UK", ebitda: 9 }, { name: "  " } as never] };
+    const plan = planSkillForStep("Target screening", "", ctx)!;
+    expect(plan.skillId).toBe("target-screen");
+    expect((plan.input as { targets: unknown[] }).targets).toEqual([{ name: "A", geography: "UK", ebitda: 9 }]);
+    expect(planSkillForStep("Target screening", "", { mandateTests: MANDATE })).toBeNull();
+  });
+
+  it("the assembled inputs run through the governed runtime and the executive may run them", () => {
+    const run = (title: string, ctx: SkillPlanningContext) => {
+      const plan = planSkillForStep(title, "", ctx)!;
+      expect(canRunSkill(plan.executive, plan.skillId)).toBe(true);
+      const sctx: SkillContext = { workspaceId: "o", principalId: "p", executive: plan.executive };
+      return executeSkillCore(plan.skillId, plan.input, sctx);
+    };
+    const a = run("First look at the teaser", { mandateTests: MANDATE, deal: { companyName: "Acme", geography: "UK", ebitda: 8 } });
+    expect(a.ok).toBe(true);
+    expect((a.structured as { view: string }).view).toBe("ask-more"); // numbers carry no source reference
+    expect(run("Define the mandate screen", { mandateTests: MANDATE }).ok).toBe(true);
+    expect(run("Target screening", { mandateTests: MANDATE, candidates: [{ name: "A", geography: "UK", ebitda: 9 }] }).ok).toBe(true);
+  });
+
+  it("defers the PE skills that need rich structured input rather than inventing it", () => {
+    for (const step of ["Set the bid price range", "Run the quality of earnings bridge", "Covenant headroom", "13-week cash forecast", "Exit options paper"]) {
+      expect(planSkillForStep(step, "", { mandateTests: MANDATE, deal: { companyName: "Acme", ebitda: 8 } })).toBeNull();
+    }
+  });
+});
+

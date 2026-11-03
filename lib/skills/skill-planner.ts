@@ -18,6 +18,7 @@ import type { ExecutiveKey } from "@/lib/executives/registry";
 import { detectSkillForStep } from "./engine-bridge";
 import { getSkill } from "./registry";
 import { hasUsableCriteria, type ScreeningCriteria } from "./screening-criteria";
+import type { DealFacts, MandateTests } from "@/lib/pe/mandate-tests";
 
 /** A deal's structured fields, as far as they are actually known. All optional. */
 export interface PlanningDeal {
@@ -46,6 +47,8 @@ export interface PlanningCandidate {
 
 /** The real, structured context the engine assembles from mandate + records. */
 export interface SkillPlanningContext {
+  /** The org's stored PE mandate tests (approved or draft). Absent = none stored. */
+  mandateTests?: MandateTests | null;
   criteria?: ScreeningCriteria | null;
   deal?: PlanningDeal | null;
   candidates?: PlanningCandidate[] | null;
@@ -85,7 +88,26 @@ export function planSkillForStep(
 
   const criteria = ctx.criteria ?? null;
 
+  const mandateTests = hasUsableMandateTests(ctx.mandateTests) ? (ctx.mandateTests as MandateTests) : null;
+
   switch (skillId) {
+    // --- PE department sourcing skills: run only on a STORED mandate and real records. ---
+    case "mandate-screen": {
+      if (!mandateTests) return null;
+      return { skillId, executive, input: { mandate: mandateTests } };
+    }
+    case "target-screen": {
+      // Needs the mandate AND a supplied list. Only the facts the records carry are
+      // forwarded; every other metric stays absent and the skill reports needs-data.
+      const targets = (ctx.candidates ?? []).filter((c) => c && typeof c.name === "string" && c.name.trim());
+      if (!mandateTests || targets.length === 0) return null;
+      return { skillId, executive, input: { mandate: mandateTests, targets: targets.map((c) => ({ name: c.name.trim(), ...peFacts(c) })) } };
+    }
+    case "first-look": {
+      const name = ctx.deal?.companyName?.trim();
+      if (!mandateTests || !name) return null;
+      return { skillId, executive, input: { mandate: mandateTests, deal: { name, ...peFacts(ctx.deal ?? {}) } } };
+    }
     case "screen-deal": {
       // Screening needs a named deal AND criteria to screen it against. Without a
       // company name we will not invent one; without usable criteria there is
@@ -107,9 +129,26 @@ export function planSkillForStep(
       };
     }
     default:
-      // Other detectable skills (returns, ic-memo, dd-checklist) require rich
+      // Other detectable skills (returns, ic-memo, dd-checklist, and the PE diligence /
+      // valuation / portfolio / exit skills) require rich
       // structured input that is not reliably present mid-workflow; running them
       // now would mean fabricating that input, so we defer to the free-text path.
       return null;
   }
+}
+
+/** True when the mandate carries at least one criterion a screen can run on. */
+function hasUsableMandateTests(m: MandateTests | null | undefined): boolean {
+  return !!m && m.hardLimits.length + m.preferences.length + m.killFacts.length > 0;
+}
+
+/** The mandate-test facts a record actually carries (never invented; absent stays absent). */
+function peFacts(src: { sector?: string; geography?: string; revenue?: number; ebitda?: number; transactionType?: string }): DealFacts {
+  const out: DealFacts = {};
+  if (typeof src.sector === "string" && src.sector.trim()) out.sector = src.sector.trim();
+  if (typeof src.geography === "string" && src.geography.trim()) out.geography = src.geography.trim();
+  if (typeof src.revenue === "number" && Number.isFinite(src.revenue)) out.revenue = src.revenue;
+  if (typeof src.ebitda === "number" && Number.isFinite(src.ebitda)) out.ebitda = src.ebitda;
+  if (typeof src.transactionType === "string" && src.transactionType.trim()) out.dealType = src.transactionType.trim();
+  return out;
 }

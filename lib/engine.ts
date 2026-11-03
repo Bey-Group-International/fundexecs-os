@@ -31,6 +31,7 @@ import { parseStoredEdgeContext, edgeContextToPromptLine, type EdgeContextResult
 import { selectAgentWithContext } from "@/lib/brain-routing";
 import { resolveAutonomyForIntent } from "@/lib/autonomy";
 import { getActiveMandate, getActiveScreeningCriteria } from "@/lib/mandates";
+import { loadRootFiles } from "@/lib/pe/root-files.server";
 import { planSkillForStep, type SkillPlan, type SkillPlanningContext, type PlanningDeal } from "@/lib/skills/skill-planner";
 import { executePlannedSkill } from "@/lib/skills/engine-run";
 import { SKILL_AUTOINVOKE_ENABLED } from "@/lib/skills/config";
@@ -834,7 +835,14 @@ async function executeWorkflow(ctx: Ctx, workflow: Task, onProgress?: OnProgress
         };
       }
     }
-    skillPlanningContext = { criteria: screeningCriteria, deal: planningDeal };
+    // The org's PE mandate tests (root file). Absent => the PE sourcing skills defer
+    // to the free-text path rather than screening against an empty mandate.
+    const peRoot = await loadRootFiles(ctx.orgId).catch(() => null);
+    skillPlanningContext = {
+      criteria: screeningCriteria,
+      deal: planningDeal,
+      mandateTests: peRoot && peRoot.found.includes("mandate") ? peRoot.mandate : null,
+    };
   }
 
   for (let i = 0; i < list.length; i++) {

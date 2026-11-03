@@ -2,8 +2,11 @@
 // Server-only I/O for the per-org PE root files. Defensive: a missing table,
 // missing env or failed read degrades to "no root files" (skills then run on
 // labelled default settings) — it never throws into a skill run.
+//
+// No `server-only` marker: like lib/skills/session-run.ts and lib/engine.ts it is
+// only ever imported from server code, and the marker would make every test that
+// imports the engine mock it. The service client it uses is the real guard.
 
-import "server-only";
 import { createServiceClient, hasSupabaseServiceEnv } from "@/lib/supabase/server";
 import { resolveRootFiles, type ResolvedRootFiles, type RootFileRow } from "./root-files";
 
