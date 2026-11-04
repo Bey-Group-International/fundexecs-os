@@ -25,24 +25,24 @@ fill in the gates you want named:
 
 ## Which gate belongs to which skill
 
-| Gate key | Skill | Gate |
-| --- | --- | --- |
-| `mandate_screen` | `mandate-screen` | Mandate screen sign-off |
-| `target_screen_review` | `target-screen` | Review of every pass before outreach |
-| `first_look` | `first-look` | Go / no-go on first look |
-| `revenue_quality` | `revenue-quality` | Treatment of customer concentration |
-| `adjusted_ebitda` | `qoe-bridge` | Diligence-adjusted EBITDA |
-| `red_flag_treatment` | `red-flag-register` | Treatment of walk-away and price items |
-| `bid_price` | `bid-range` | Bid price |
-| `financing_structure` | `financing-terms` | Financing structure and lender selection |
-| `compliance_certificate` | `covenant-watch` | Compliance certificate |
-| `kpi_trend_review` | `kpi-variance` | KPI trend classifications |
-| `cash_forecast` | `cash-13-week` | 13-week cash forecast |
-| `exit_launch` | `exit-readiness` | Exit launch timing |
-| `ipo_decision` | `ipo-readiness` | Decision to pursue a listing |
-| `exit_route` | `exit-routes` | Exit route |
-| `data_room_redaction` | `data-room-prep` | Redaction list before the room opens |
-| `final_report_review` | `final-investment-report` | Final investment report |
+|         Gate key         |           Skill           |                   Gate                   |
+|--------------------------|---------------------------|------------------------------------------|
+| `mandate_screen`         | `mandate-screen`          | Mandate screen sign-off                  |
+| `target_screen_review`   | `target-screen`           | Review of every pass before outreach     |
+| `first_look`             | `first-look`              | Go / no-go on first look                 |
+| `revenue_quality`        | `revenue-quality`         | Treatment of customer concentration      |
+| `adjusted_ebitda`        | `qoe-bridge`              | Diligence-adjusted EBITDA                |
+| `red_flag_treatment`     | `red-flag-register`       | Treatment of walk-away and price items   |
+| `bid_price`              | `bid-range`               | Bid price                                |
+| `financing_structure`    | `financing-terms`         | Financing structure and lender selection |
+| `compliance_certificate` | `covenant-watch`          | Compliance certificate                   |
+| `kpi_trend_review`       | `kpi-variance`            | KPI trend classifications                |
+| `cash_forecast`          | `cash-13-week`            | 13-week cash forecast                    |
+| `exit_launch`            | `exit-readiness`          | Exit launch timing                       |
+| `ipo_decision`           | `ipo-readiness`           | Decision to pursue a listing             |
+| `exit_route`             | `exit-routes`             | Exit route                               |
+| `data_room_redaction`    | `data-room-prep`          | Redaction list before the room opens     |
+| `final_report_review`    | `final-investment-report` | Final investment report                  |
 
 ## How it reaches a skill
 
