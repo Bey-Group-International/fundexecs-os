@@ -165,3 +165,47 @@ describe("toRedFlagHandoff", () => {
     expect(h.needingImpact).toEqual(["No impact"]);
   });
 });
+
+import { keyPersonIssue } from "./dd-issues";
+
+describe("keyPersonIssue", () => {
+  it("rates a key person by retention risk and documented knowledge, and raises nothing for low or medium", () => {
+    expect(
+      keyPersonIssue(
+        {
+          role: "CTO",
+          retentionRisk: "high",
+          knowledgeDocumented: false,
+          documentRef: "ORG.pdf",
+        },
+        "people",
+      ),
+    ).toMatchObject({
+      rating: "red",
+      category: "people",
+      evidenceGrade: "B",
+      title:
+        "Key person dependency: CTO (retention risk high; knowledge not documented)",
+    });
+    expect(
+      keyPersonIssue(
+        { role: "Lead", retentionRisk: "high", knowledgeDocumented: true },
+        "x",
+      ),
+    ).toMatchObject({ rating: "amber", evidenceGrade: "U", category: "x" });
+    expect(
+      keyPersonIssue({ role: "Ops", retentionRisk: "high" }, "x")?.title,
+    ).toMatch(/documentation not confirmed/);
+    expect(keyPersonIssue({ role: "DevOps" }, "x")).toMatchObject({
+      rating: "amber",
+      title: "Retention risk unconfirmed: DevOps",
+    });
+    expect(
+      keyPersonIssue({ role: "QA", retentionRisk: "low" }, "x"),
+    ).toBeNull();
+    expect(
+      keyPersonIssue({ role: "QA", retentionRisk: "medium" }, "x"),
+    ).toBeNull();
+    expect(keyPersonIssue({ role: "  " }, "x")).toBeNull();
+  });
+});

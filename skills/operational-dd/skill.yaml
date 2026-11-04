@@ -1,0 +1,84 @@
+# skills/operational-dd/skill.yaml
+# Authoring spec for Operational DD Memo. The machine-readable manifest the runtime loads is
+# the TypeScript SkillDefinition in lib/skills/catalog/operational-dd.ts; this YAML is the
+# human-facing contract and must stay consistent with it.
+# Origin: PE department pack · Due Diligence. Rules re-implemented natively; no pack text is shipped.
+id: operational-dd
+name: Operational DD Memo
+version: 1.0.0
+owner: fundexecs
+hub: run
+
+applicable_executives:
+  - diligence
+  - analyst
+
+supported_entity_types: [deal]
+
+required_inputs:
+
+optional_inputs:
+  - documentsReceived
+  - expectedDocuments
+  - revenue
+  - costBase
+  - reportedCostBase
+  - tieOutToleranceAbs
+  - benchmarkTolerancePts
+  - capacity
+  - warnAbovePct
+  - keyPeople
+  - suppliers
+  - supplierConcentrationPct
+  - kpis
+  - kpiPolicy
+  - improvements
+  - issues
+  - categoriesReviewed
+  - siteVisitDone
+  - evidencePolicy
+  - gateOwner
+
+outputs:
+  - costMap
+  - capacity
+  - suppliers
+  - kpis
+  - improvements
+  - planSavings
+  - outsidePlan
+  - issues
+  - documentGaps
+  - handoff
+  - basisOfReview
+  - note
+  - gate
+
+artifact_types: [analysis]
+data_permissions: [deal:read, document:read, data_room:read]
+tools: []
+
+approval_tier: 1
+risk_classification: moderate
+execution_timeout_ms: 15000
+retry_policy:
+  max_attempts: 1
+  backoff_ms: 0
+
+provider_capabilities:
+  - structured_extraction
+
+allowed_downstream_skills: [red-flag-register, dd-checklist]
+
+prohibited_actions:
+  - send_outreach
+  - distribute_report
+  - sign_document
+  - move_capital
+  - capital_call
+  - submit_term_sheet
+
+input_schema: input.schema.json
+output_schema: output.schema.json
+policy: policy.yaml
+evaluation: evaluation.yaml

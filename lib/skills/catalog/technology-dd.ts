@@ -20,6 +20,7 @@ import type {
 } from "@/lib/skills/types";
 import {
   documentGaps,
+  keyPersonIssue,
   issueInSchema,
   rankIssues,
   toRedFlagHandoff,
@@ -28,6 +29,9 @@ import {
   type Rating,
   type RedFlagHandoff,
 } from "@/lib/pe/dd-issues";
+import type { KeyPersonIn } from "@/lib/pe/dd-issues";
+
+export type { KeyPersonIn, RetentionRisk } from "@/lib/pe/dd-issues";
 import {
   canSupportPrice,
   DEFAULT_EVIDENCE_POLICY,
@@ -54,7 +58,6 @@ const DEFAULT_PEN_TEST_MAX_AGE_MONTHS = 12;
 export type Severity = "critical" | "high" | "medium" | "low";
 export type FindingStatus = "open" | "remediated" | "accepted" | "unknown";
 export type SupportStatus = "supported" | "end-of-life" | "unknown";
-export type RetentionRisk = "low" | "medium" | "high" | "unknown";
 
 export interface ComponentIn {
   name: string;
@@ -79,13 +82,6 @@ export interface CapacityTestIn {
   capacity: number;
   /** The plan's own growth in this metric over the hold, in percent. */
   planGrowthPct: number;
-  documentRef?: string;
-}
-
-export interface KeyPersonIn {
-  role: string;
-  retentionRisk?: RetentionRisk;
-  knowledgeDocumented?: boolean;
   documentRef?: string;
 }
 
@@ -420,39 +416,8 @@ const run: SkillCore<TechnologyDdInput, TechnologyDdOutput> = (
 
   // ---- key people ----
   for (const p of input.keyPeople ?? []) {
-    const role = clean(p?.role);
-    if (!role) continue;
-    const risk = p.retentionRisk ?? "unknown";
-    const doc = clean(p.documentRef) ?? undefined;
-    if (risk === "high") {
-      const undocumented = p.knowledgeDocumented === false;
-      const knowledge = undocumented
-        ? "knowledge not documented"
-        : p.knowledgeDocumented === true
-          ? "knowledge documented"
-          : "documentation not confirmed";
-      derived.push({
-        title: `Key person dependency: ${role} (retention risk high; ${knowledge})`,
-        rating: undocumented ? "red" : "amber",
-        category: "people",
-        documentRef: doc,
-        evidenceGrade: doc ? "B" : "U",
-        question:
-          "What retention terms are in place, and who else can run this if they leave?",
-        derived: true,
-      });
-    } else if (risk === "unknown") {
-      derived.push({
-        title: `Retention risk unconfirmed: ${role}`,
-        rating: "amber",
-        category: "people",
-        documentRef: doc,
-        evidenceGrade: "U",
-        question:
-          "Is this person staying post-deal? Agree retention terms before signing.",
-        derived: true,
-      });
-    }
+    const issue = keyPersonIssue(p, "people");
+    if (issue) derived.push(issue);
   }
 
   // ---- rank ----
