@@ -20,13 +20,13 @@ redeploy to turn the pilot off; no data needs cleaning up.
 A step runs as a skill only when it **clearly is one** (see `lib/skills/engine-bridge.ts`)
 **and** the real input exists. Otherwise the normal free-text path runs, unchanged.
 
-| Step reads like | Skill | Needs (all real records) |
-| --- | --- | --- |
-| "Define the mandate screen" | `mandate-screen` | the org's saved mandate (`/settings/pe-firm`) |
-| "First look at the teaser" | `first-look` | the saved mandate **and** a deal linked to the workflow |
-| "Target screening of the catalog" | `target-screen` | the saved mandate **and** company rows in the sourcing catalog |
-| "Source targets for the mandate" | `source-deals` | mandate screening criteria **and** company rows in the catalog |
-| "Screen this opportunity against our mandate" | `screen-deal` | mandate screening criteria **and** a linked deal |
+|                Step reads like                |      Skill       |                    Needs (all real records)                    |
+|-----------------------------------------------|------------------|----------------------------------------------------------------|
+| "Define the mandate screen"                   | `mandate-screen` | the org's saved mandate (`/settings/pe-firm`)                  |
+| "First look at the teaser"                    | `first-look`     | the saved mandate **and** a deal linked to the workflow        |
+| "Target screening of the catalog"             | `target-screen`  | the saved mandate **and** company rows in the sourcing catalog |
+| "Source targets for the mandate"              | `source-deals`   | mandate screening criteria **and** company rows in the catalog |
+| "Screen this opportunity against our mandate" | `screen-deal`    | mandate screening criteria **and** a linked deal               |
 
 The other PE skills (QoE, bid range, covenants, exit…) need rich structured input that a
 workflow does not reliably hold, so they still defer to free text. Run them from a session
