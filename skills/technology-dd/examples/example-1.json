@@ -1,74 +1,59 @@
 {
   "input": {
-    "dealName": "Acme",
-    "documentsReceived": [
-      "Architecture documents",
-      "Security policies and pen test reports",
-      "Product roadmap"
-    ],
-    "categoriesReviewed": ["security", "infrastructure"],
-    "hosting": "AWS eu-west-1",
-    "components": [
-      {
-        "name": "Core API",
-        "kind": "service",
-        "version": "Node 14",
-        "supportStatus": "end-of-life",
-        "documentRef": "ARCH.pdf"
-      },
-      {
-        "name": "Billing DB",
-        "version": "Postgres 15",
-        "supportStatus": "supported",
-        "documentRef": "ARCH.pdf"
-      }
-    ],
     "asOf": "2026-11-04",
+    "capacityTests": [ {
+      "capacity": 1000,
+      "currentPeak": 600,
+      "documentRef": "LOAD.pdf",
+      "metric": "Peak orders/min",
+      "planGrowthPct": 80
+    } ],
+    "categoriesReviewed": [ "security", "infrastructure" ],
+    "components": [ {
+      "documentRef": "ARCH.pdf",
+      "kind": "service",
+      "name": "Core API",
+      "supportStatus": "end-of-life",
+      "version": "Node 14"
+    }, {
+      "documentRef": "ARCH.pdf",
+      "name": "Billing DB",
+      "supportStatus": "supported",
+      "version": "Postgres 15"
+    } ],
+    "dealName": "Acme",
+    "documentsReceived": [ "Architecture documents", "Security policies and pen test reports", "Product roadmap" ],
+    "hosting": "AWS eu-west-1",
+    "issues": [ {
+      "category": "technical-debt",
+      "documentRef": "ARCH.pdf",
+      "evidenceGrade": "B",
+      "rangeBasis": "Vendor quote for the service split plus 20% contingency",
+      "rangeHigh": 400,
+      "rangeLow": 200,
+      "rating": "amber",
+      "title": "Monolith blocks independent scaling"
+    } ],
+    "keyPeople": [ {
+      "documentRef": "ORG.pdf",
+      "knowledgeDocumented": false,
+      "retentionRisk": "high",
+      "role": "CTO"
+    } ],
     "penTest": {
       "date": "2025-09-15",
       "documentRef": "PT-2025.pdf"
     },
-    "securityFindings": [
-      {
-        "title": "SQL injection in search endpoint",
-        "severity": "high",
-        "status": "open",
-        "documentRef": "PT-2025.pdf section 4.2",
-        "remediation": {
-          "low": 30,
-          "high": 50,
-          "basis": "2-3 engineer-weeks at 1,500 a day"
-        }
-      }
-    ],
-    "capacityTests": [
-      {
-        "metric": "Peak orders/min",
-        "currentPeak": 600,
-        "capacity": 1000,
-        "planGrowthPct": 80,
-        "documentRef": "LOAD.pdf"
-      }
-    ],
-    "keyPeople": [
-      {
-        "role": "CTO",
-        "retentionRisk": "high",
-        "knowledgeDocumented": false,
-        "documentRef": "ORG.pdf"
-      }
-    ],
-    "issues": [
-      {
-        "title": "Monolith blocks independent scaling",
-        "rating": "amber",
-        "category": "technical-debt",
-        "documentRef": "ARCH.pdf",
-        "evidenceGrade": "B",
-        "rangeLow": 200,
-        "rangeHigh": 400,
-        "rangeBasis": "Vendor quote for the service split plus 20% contingency"
-      }
-    ]
+    "securityFindings": [ {
+      "documentRef": "PT-2025.pdf section 4.2",
+      "remediation": {
+        "basis": "2-3 engineer-weeks at 1,500 a day",
+        "high": 50,
+        "low": 30
+      },
+      "severity": "high",
+      "status": "open",
+      "title": "SQL injection in search endpoint"
+    } ]
   }
 }

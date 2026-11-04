@@ -1,254 +1,78 @@
 {
-  "type": "object",
   "properties": {
-    "dealName": {
+    "asOf": {
       "type": "string"
     },
-    "documentsReceived": {
-      "type": "array",
+    "capacityTests": {
       "items": {
-        "type": "string"
-      }
+        "properties": {
+          "capacity": {
+            "minimum": 0,
+            "type": "number"
+          },
+          "currentPeak": {
+            "minimum": 0,
+            "type": "number"
+          },
+          "documentRef": {
+            "type": "string"
+          },
+          "metric": {
+            "type": "string"
+          },
+          "planGrowthPct": {
+            "type": "number"
+          }
+        },
+        "required": [ "metric", "currentPeak", "capacity", "planGrowthPct" ],
+        "type": "object"
+      },
+      "type": "array"
     },
-    "expectedDocuments": {
-      "type": "array",
+    "categoriesReviewed": {
       "items": {
+        "enum": [ "security", "infrastructure", "technical-debt", "scalability", "people" ],
         "type": "string"
-      }
-    },
-    "hosting": {
-      "type": "string"
+      },
+      "type": "array"
     },
     "components": {
-      "type": "array",
       "items": {
-        "type": "object",
-        "required": ["name"],
         "properties": {
-          "name": {
+          "documentRef": {
             "type": "string"
           },
           "kind": {
             "type": "string"
           },
-          "version": {
+          "name": {
             "type": "string"
           },
           "supportStatus": {
-            "type": "string",
-            "enum": ["supported", "end-of-life", "unknown"]
+            "enum": [ "supported", "end-of-life", "unknown" ],
+            "type": "string"
           },
-          "documentRef": {
+          "version": {
             "type": "string"
           }
-        }
-      }
-    },
-    "securityFindings": {
-      "type": "array",
-      "items": {
-        "type": "object",
-        "required": ["title", "severity"],
-        "properties": {
-          "title": {
-            "type": "string"
-          },
-          "severity": {
-            "type": "string",
-            "enum": ["critical", "high", "medium", "low"]
-          },
-          "status": {
-            "type": "string",
-            "enum": ["open", "remediated", "accepted", "unknown"]
-          },
-          "documentRef": {
-            "type": "string"
-          },
-          "evidenceGrade": {
-            "type": "string",
-            "enum": ["A", "B", "C", "U"]
-          },
-          "remediation": {
-            "type": "object",
-            "required": ["low", "high"],
-            "properties": {
-              "low": {
-                "type": "number",
-                "minimum": 0
-              },
-              "high": {
-                "type": "number",
-                "minimum": 0
-              },
-              "basis": {
-                "type": "string"
-              }
-            }
-          }
-        }
-      }
-    },
-    "penTest": {
-      "type": "object",
-      "properties": {
-        "date": {
-          "type": "string"
         },
-        "documentRef": {
-          "type": "string"
-        }
-      }
+        "required": [ "name" ],
+        "type": "object"
+      },
+      "type": "array"
     },
-    "asOf": {
+    "dealName": {
       "type": "string"
     },
-    "penTestMaxAgeMonths": {
-      "type": "number",
-      "minimum": 0
-    },
-    "capacityTests": {
-      "type": "array",
+    "documentsReceived": {
       "items": {
-        "type": "object",
-        "required": ["metric", "currentPeak", "capacity", "planGrowthPct"],
-        "properties": {
-          "metric": {
-            "type": "string"
-          },
-          "currentPeak": {
-            "type": "number",
-            "minimum": 0
-          },
-          "capacity": {
-            "type": "number",
-            "minimum": 0
-          },
-          "planGrowthPct": {
-            "type": "number"
-          },
-          "documentRef": {
-            "type": "string"
-          }
-        }
-      }
-    },
-    "warnAbovePct": {
-      "type": "number",
-      "minimum": 0
-    },
-    "keyPeople": {
-      "type": "array",
-      "items": {
-        "type": "object",
-        "required": ["role"],
-        "properties": {
-          "role": {
-            "type": "string"
-          },
-          "retentionRisk": {
-            "type": "string",
-            "enum": ["low", "medium", "high", "unknown"]
-          },
-          "knowledgeDocumented": {
-            "type": "boolean"
-          },
-          "documentRef": {
-            "type": "string"
-          }
-        }
-      }
-    },
-    "issues": {
-      "type": "array",
-      "items": {
-        "type": "object",
-        "required": ["title", "rating"],
-        "properties": {
-          "title": {
-            "type": "string"
-          },
-          "rating": {
-            "type": "string",
-            "enum": ["red", "amber", "green"]
-          },
-          "category": {
-            "type": "string",
-            "enum": [
-              "security",
-              "infrastructure",
-              "technical-debt",
-              "scalability",
-              "people",
-              "other"
-            ]
-          },
-          "jurisdiction": {
-            "type": "string"
-          },
-          "period": {
-            "type": "string"
-          },
-          "documentRef": {
-            "type": "string"
-          },
-          "clauseRef": {
-            "type": "string"
-          },
-          "evidenceGrade": {
-            "type": "string",
-            "enum": ["A", "B", "C", "U"]
-          },
-          "impact": {
-            "type": "string",
-            "enum": [
-              "walk-away",
-              "price",
-              "structure",
-              "spa-protection",
-              "100-day"
-            ]
-          },
-          "question": {
-            "type": "string"
-          },
-          "owner": {
-            "type": "string"
-          },
-          "rangeLow": {
-            "type": "number",
-            "minimum": 0
-          },
-          "rangeHigh": {
-            "type": "number",
-            "minimum": 0
-          },
-          "rangeBasis": {
-            "type": "string"
-          }
-        }
-      }
-    },
-    "categoriesReviewed": {
-      "type": "array",
-      "items": {
-        "type": "string",
-        "enum": [
-          "security",
-          "infrastructure",
-          "technical-debt",
-          "scalability",
-          "people"
-        ]
-      }
-    },
-    "repositoryAccess": {
-      "type": "boolean"
+        "type": "string"
+      },
+      "type": "array"
     },
     "evidencePolicy": {
-      "type": "object",
       "properties": {
         "supportsPrice": {
-          "type": "object",
           "properties": {
             "A": {
               "type": "boolean"
@@ -259,12 +83,169 @@
             "C": {
               "type": "boolean"
             }
-          }
+          },
+          "type": "object"
         }
-      }
+      },
+      "type": "object"
+    },
+    "expectedDocuments": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
     },
     "gateOwner": {
       "type": "string"
+    },
+    "hosting": {
+      "type": "string"
+    },
+    "issues": {
+      "items": {
+        "properties": {
+          "category": {
+            "enum": [ "security", "infrastructure", "technical-debt", "scalability", "people", "other" ],
+            "type": "string"
+          },
+          "clauseRef": {
+            "type": "string"
+          },
+          "documentRef": {
+            "type": "string"
+          },
+          "evidenceGrade": {
+            "enum": [ "A", "B", "C", "U" ],
+            "type": "string"
+          },
+          "impact": {
+            "enum": [ "walk-away", "price", "structure", "spa-protection", "100-day" ],
+            "type": "string"
+          },
+          "jurisdiction": {
+            "type": "string"
+          },
+          "owner": {
+            "type": "string"
+          },
+          "period": {
+            "type": "string"
+          },
+          "question": {
+            "type": "string"
+          },
+          "rangeBasis": {
+            "type": "string"
+          },
+          "rangeHigh": {
+            "minimum": 0,
+            "type": "number"
+          },
+          "rangeLow": {
+            "minimum": 0,
+            "type": "number"
+          },
+          "rating": {
+            "enum": [ "red", "amber", "green" ],
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          }
+        },
+        "required": [ "title", "rating" ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "keyPeople": {
+      "items": {
+        "properties": {
+          "documentRef": {
+            "type": "string"
+          },
+          "knowledgeDocumented": {
+            "type": "boolean"
+          },
+          "retentionRisk": {
+            "enum": [ "low", "medium", "high", "unknown" ],
+            "type": "string"
+          },
+          "role": {
+            "type": "string"
+          }
+        },
+        "required": [ "role" ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "penTest": {
+      "properties": {
+        "date": {
+          "type": "string"
+        },
+        "documentRef": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "penTestMaxAgeMonths": {
+      "minimum": 0,
+      "type": "number"
+    },
+    "repositoryAccess": {
+      "type": "boolean"
+    },
+    "securityFindings": {
+      "items": {
+        "properties": {
+          "documentRef": {
+            "type": "string"
+          },
+          "evidenceGrade": {
+            "enum": [ "A", "B", "C", "U" ],
+            "type": "string"
+          },
+          "remediation": {
+            "properties": {
+              "basis": {
+                "type": "string"
+              },
+              "high": {
+                "minimum": 0,
+                "type": "number"
+              },
+              "low": {
+                "minimum": 0,
+                "type": "number"
+              }
+            },
+            "required": [ "low", "high" ],
+            "type": "object"
+          },
+          "severity": {
+            "enum": [ "critical", "high", "medium", "low" ],
+            "type": "string"
+          },
+          "status": {
+            "enum": [ "open", "remediated", "accepted", "unknown" ],
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          }
+        },
+        "required": [ "title", "severity" ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "warnAbovePct": {
+      "minimum": 0,
+      "type": "number"
     }
-  }
+  },
+  "type": "object"
 }
