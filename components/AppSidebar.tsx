@@ -690,7 +690,7 @@ function SidebarPanel({
           </button>
 
           {accountOpen ? (
-            <div className="absolute bottom-full left-0 right-0 mb-2 flex flex-col gap-0.5 rounded-xl border border-line/80 bg-surface-1/95 p-1.5 shadow-[0_-8px_40px_-12px_rgba(0,0,0,0.6)] backdrop-blur-xl animate-fade-up">
+            <div className="absolute bottom-full left-0 right-0 mb-2 flex max-h-[calc(100dvh_-_10rem)] flex-col gap-0.5 overflow-y-auto overscroll-contain rounded-xl border border-line/80 bg-surface-1/95 p-1.5 shadow-[0_-8px_40px_-12px_rgba(0,0,0,0.6)] backdrop-blur-xl animate-fade-up">
               {/* Internal-only: hidden admin console, shown to @beygroupintl.com. */}
               {isPlatformAdmin ? (
                 <Link

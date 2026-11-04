@@ -76,3 +76,10 @@ it("lets a manual toggle override the automatic open", () => {
   expect(screen.getByRole("link", { name: "Firm Identity" })).toBeInTheDocument();
   expect(screen.queryByRole("link", { name: "Diligence" })).not.toBeInTheDocument();
 });
+
+it("sets aria-current only on the top-level link for the current page", () => {
+  mockPath = "/inbox";
+  render(<AppSidebar {...props} />);
+  expect(screen.getByRole("link", { name: "Inbox" })).toHaveAttribute("aria-current", "page");
+  expect(screen.getByRole("link", { name: "Dashboard" })).not.toHaveAttribute("aria-current");
+});
