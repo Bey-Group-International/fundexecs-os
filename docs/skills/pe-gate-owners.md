@@ -34,8 +34,8 @@ fill in the gates you want named:
 | `adjusted_ebitda`         | `qoe-bridge`              | Diligence-adjusted EBITDA                |
 | `legal_findings`          | `legal-dd`                | Legal findings                           |
 | `tax_exposures`           | `tax-dd`                  | Tax exposures before price or SPA        |
-| `improvement_register`   | `operational-dd`          | Improvement register                     |
 | `technology_risk_ratings` | `technology-dd`           | Technology risk ratings                  |
+| `improvement_register`    | `operational-dd`          | Improvement register                     |
 | `red_flag_treatment`      | `red-flag-register`       | Treatment of walk-away and price items   |
 | `bid_price`               | `bid-range`               | Bid price                                |
 | `sensitivity_basis`       | `sensitivity`             | Case the price rests on                  |
