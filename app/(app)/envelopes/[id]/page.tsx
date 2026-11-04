@@ -117,7 +117,7 @@ export default async function EnvelopeDetailPage(
       return (
         <>
           {shell("max-w-5xl")}
-          <Countersign envelopeId={envelope.id} title={envelope.title} defaultName={cs.defaultName} blocks={cs.blocks} done={cs.done} />
+          <Countersign envelopeId={envelope.id} title={envelope.title} defaultName={cs.defaultName} blocks={cs.blocks} done={cs.done} userId={ctx.userId} />
         </>
       );
     }

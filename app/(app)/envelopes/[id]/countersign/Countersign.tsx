@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { SigningSheet, type DoneBlock, type SheetBlock } from "@/components/signing/SigningSheet";
 
 // The owner's turn: the recipient's filled-in, signed document, with the owner's own blocks to fill.
-export function Countersign({ envelopeId, title, defaultName, blocks, done }: { envelopeId: string; title: string; defaultName: string; blocks: SheetBlock[]; done: DoneBlock[] }) {
+export function Countersign({ envelopeId, title, defaultName, blocks, done, userId }: { envelopeId: string; title: string; defaultName: string; blocks: SheetBlock[]; done: DoneBlock[]; userId: string }) {
   const router = useRouter();
   return (
     <div className="mx-auto max-w-5xl px-4 py-6">
@@ -15,6 +15,7 @@ export function Countersign({ envelopeId, title, defaultName, blocks, done }: { 
         blocks={blocks}
         done={done}
         signerName={defaultName}
+        rememberFor={userId}
         submitLabel="Countersign"
         onSubmit={async (signatureData, fieldResponses) => {
           const res = await fetch(`/api/envelopes/${envelopeId}/countersign`, {

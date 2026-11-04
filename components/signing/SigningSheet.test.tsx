@@ -38,8 +38,8 @@ const blocks = [
   block({ id: "d", type: "datetime", yPct: 50 }),
 ];
 
-function mount(onSubmit = jest.fn(async () => null as string | null), b = blocks) {
-  render(<SigningSheet pdfSrc="/p" blocks={b} done={[]} signerName="Jane Smith" submitLabel="Sign and send back" onSubmit={onSubmit} />);
+function mount(onSubmit = jest.fn(async () => null as string | null), b = blocks, rememberFor?: string) {
+  render(<SigningSheet pdfSrc="/p" blocks={b} done={[]} signerName="Jane Smith" submitLabel="Sign and send back" onSubmit={onSubmit} rememberFor={rememberFor} />);
   return onSubmit;
 }
 
@@ -169,5 +169,51 @@ describe("SigningSheet: a × at each spot, one at a time", () => {
     mount();
     expect(fireEvent.contextMenu(screen.getByRole("textbox", { name: "Name" }))).toBe(true);
     expect(screen.getByRole("dialog", { name: "Name" })).toBeTruthy();
+  });
+
+  describe("a signature kept on this device (the owner)", () => {
+    const KEY = "fundexecs:signature:owner-1";
+    const only = [block({ id: "s", type: "signature", yPct: 10 })];
+    beforeEach(() => window.localStorage.clear());
+
+    it("offers a kept signature straight away, ready to use", async () => {
+      window.localStorage.setItem(KEY, "data:image/png;base64,AAAA");
+      mount(undefined, only, "owner-1");
+      const d = screen.getByRole("dialog", { name: "Signature" });
+      await waitFor(() => expect(within(d).getByAltText("Your signature")).toBeTruthy());
+      expect(within(d).getByRole("button", { name: "Forget it on this device" })).toBeTruthy();
+    });
+
+    it("keeps a new signature by default, and not when the box is unticked", () => {
+      mount(undefined, only, "owner-1");
+      expect(screen.getByRole("checkbox", { name: /Remember my signature/ })).toBeTruthy();
+      fireEvent.click(screen.getByRole("button", { name: "make signature" }));
+      fireEvent.click(screen.getByRole("checkbox", { name: /I agree/ })); // the last spot carries the agreement
+      fireEvent.click(screen.getByRole("button", { name: /Done|Use it/ }));
+      expect(window.localStorage.getItem(KEY)).toBe("data:image/png;base64,AAAA");
+    });
+
+    it("does not keep it when the box is unticked", () => {
+      mount(undefined, only, "owner-1");
+      fireEvent.click(screen.getByRole("checkbox", { name: /Remember my signature/ }));
+      fireEvent.click(screen.getByRole("button", { name: "make signature" }));
+      fireEvent.click(screen.getByRole("checkbox", { name: /I agree/ }));
+      fireEvent.click(screen.getByRole("button", { name: /Done|Use it/ }));
+      expect(screen.queryByRole("dialog")).toBeNull(); // it did go through
+      expect(window.localStorage.getItem(KEY)).toBeNull();
+    });
+
+    it("can be forgotten from the panel, which brings the pad back", async () => {
+      window.localStorage.setItem(KEY, "data:image/png;base64,AAAA");
+      mount(undefined, only, "owner-1");
+      fireEvent.click(await screen.findByRole("button", { name: "Forget it on this device" }));
+      expect(window.localStorage.getItem(KEY)).toBeNull();
+      expect(screen.getByRole("button", { name: "make signature" })).toBeTruthy();
+    });
+
+    it("offers nothing to keep for a reader (no owner id)", () => {
+      mount(undefined, only);
+      expect(screen.queryByRole("checkbox", { name: /Remember my signature/ })).toBeNull();
+    });
   });
 });
