@@ -1,0 +1,270 @@
+{
+  "type": "object",
+  "properties": {
+    "dealName": {
+      "type": "string"
+    },
+    "documentsReceived": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "expectedDocuments": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "hosting": {
+      "type": "string"
+    },
+    "components": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name"],
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "version": {
+            "type": "string"
+          },
+          "supportStatus": {
+            "type": "string",
+            "enum": ["supported", "end-of-life", "unknown"]
+          },
+          "documentRef": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "securityFindings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["title", "severity"],
+        "properties": {
+          "title": {
+            "type": "string"
+          },
+          "severity": {
+            "type": "string",
+            "enum": ["critical", "high", "medium", "low"]
+          },
+          "status": {
+            "type": "string",
+            "enum": ["open", "remediated", "accepted", "unknown"]
+          },
+          "documentRef": {
+            "type": "string"
+          },
+          "evidenceGrade": {
+            "type": "string",
+            "enum": ["A", "B", "C", "U"]
+          },
+          "remediation": {
+            "type": "object",
+            "required": ["low", "high"],
+            "properties": {
+              "low": {
+                "type": "number",
+                "minimum": 0
+              },
+              "high": {
+                "type": "number",
+                "minimum": 0
+              },
+              "basis": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      }
+    },
+    "penTest": {
+      "type": "object",
+      "properties": {
+        "date": {
+          "type": "string"
+        },
+        "documentRef": {
+          "type": "string"
+        }
+      }
+    },
+    "asOf": {
+      "type": "string"
+    },
+    "penTestMaxAgeMonths": {
+      "type": "number",
+      "minimum": 0
+    },
+    "capacityTests": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["metric", "currentPeak", "capacity", "planGrowthPct"],
+        "properties": {
+          "metric": {
+            "type": "string"
+          },
+          "currentPeak": {
+            "type": "number",
+            "minimum": 0
+          },
+          "capacity": {
+            "type": "number",
+            "minimum": 0
+          },
+          "planGrowthPct": {
+            "type": "number"
+          },
+          "documentRef": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "warnAbovePct": {
+      "type": "number",
+      "minimum": 0
+    },
+    "keyPeople": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["role"],
+        "properties": {
+          "role": {
+            "type": "string"
+          },
+          "retentionRisk": {
+            "type": "string",
+            "enum": ["low", "medium", "high", "unknown"]
+          },
+          "knowledgeDocumented": {
+            "type": "boolean"
+          },
+          "documentRef": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "issues": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["title", "rating"],
+        "properties": {
+          "title": {
+            "type": "string"
+          },
+          "rating": {
+            "type": "string",
+            "enum": ["red", "amber", "green"]
+          },
+          "category": {
+            "type": "string",
+            "enum": [
+              "security",
+              "infrastructure",
+              "technical-debt",
+              "scalability",
+              "people",
+              "other"
+            ]
+          },
+          "jurisdiction": {
+            "type": "string"
+          },
+          "period": {
+            "type": "string"
+          },
+          "documentRef": {
+            "type": "string"
+          },
+          "clauseRef": {
+            "type": "string"
+          },
+          "evidenceGrade": {
+            "type": "string",
+            "enum": ["A", "B", "C", "U"]
+          },
+          "impact": {
+            "type": "string",
+            "enum": [
+              "walk-away",
+              "price",
+              "structure",
+              "spa-protection",
+              "100-day"
+            ]
+          },
+          "question": {
+            "type": "string"
+          },
+          "owner": {
+            "type": "string"
+          },
+          "rangeLow": {
+            "type": "number",
+            "minimum": 0
+          },
+          "rangeHigh": {
+            "type": "number",
+            "minimum": 0
+          },
+          "rangeBasis": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "categoriesReviewed": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": [
+          "security",
+          "infrastructure",
+          "technical-debt",
+          "scalability",
+          "people"
+        ]
+      }
+    },
+    "repositoryAccess": {
+      "type": "boolean"
+    },
+    "evidencePolicy": {
+      "type": "object",
+      "properties": {
+        "supportsPrice": {
+          "type": "object",
+          "properties": {
+            "A": {
+              "type": "boolean"
+            },
+            "B": {
+              "type": "boolean"
+            },
+            "C": {
+              "type": "boolean"
+            }
+          }
+        }
+      }
+    },
+    "gateOwner": {
+      "type": "string"
+    }
+  }
+}

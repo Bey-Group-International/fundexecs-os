@@ -62,6 +62,7 @@ import { debtStructure } from "./catalog/debt-structure";
 import { sensitivity } from "./catalog/sensitivity";
 import { legalDd } from "./catalog/legal-dd";
 import { taxDd } from "./catalog/tax-dd";
+import { technologyDd } from "./catalog/technology-dd";
 
 const SKILLS: Record<string, SkillDefinition> = {
   [screenDeal.manifest.id]: screenDeal as SkillDefinition,
@@ -141,6 +142,8 @@ const SKILLS: Record<string, SkillDefinition> = {
   [legalDd.manifest.id]: legalDd as SkillDefinition,
   // PE department · due diligence (tax exposures by year; flags, does not quantify).
   [taxDd.manifest.id]: taxDd as SkillDefinition,
+  // PE department · due diligence (document review of stack, security, capacity and people; ranges need a basis).
+  [technologyDd.manifest.id]: technologyDd as SkillDefinition,
 };
 
 export function getSkill(id: string): SkillDefinition | null {

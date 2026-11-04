@@ -31,6 +31,7 @@ export const ROOT_BINDINGS: Record<string, Binding[]> = {
   "debt-structure": [{ input: "financing" }],
   "kpi-variance": [{ input: "kpiPolicy" }],
   "red-flag-register": [{ input: "evidencePolicy" }],
+  "technology-dd": [{ input: "evidencePolicy" }],
   "ic-memo": [{ input: "memoStructure" }],
   "lp-update": [{ input: "reportingStyle" }],
 };

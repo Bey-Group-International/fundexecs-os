@@ -1,0 +1,8 @@
+# skills/technology-dd/evaluation.yaml — acceptance criteria; exercised by lib/skills/catalog/technology-dd.test.ts
+criteria:
+  - uncited risks flagged
+  - cost ranges dropped without a basis
+  - price-supported part of the range stated
+  - states it is a document review
+  - technical reviewer named as the gate
+example: examples/example-1.json

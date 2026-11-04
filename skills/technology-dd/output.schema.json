@@ -1,0 +1,239 @@
+{
+  "type": "object",
+  "required": [
+    "stack",
+    "penTest",
+    "capacity",
+    "issues",
+    "counts",
+    "documentGaps",
+    "categoriesNotReviewed",
+    "uncited",
+    "rangesDropped",
+    "evidencePolicyIsDefault",
+    "basisOfReview",
+    "duplicatesMerged",
+    "derivedCount",
+    "handoff",
+    "limitation",
+    "note",
+    "gate"
+  ],
+  "properties": {
+    "stack": {
+      "type": "object",
+      "required": ["components", "supportUnknown"],
+      "properties": {
+        "components": {
+          "type": "array"
+        },
+        "supportUnknown": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "penTest": {
+      "type": "object",
+      "required": ["status", "maxAgeMonths", "maxAgeIsDefault"],
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": ["none", "current", "stale", "age-unknown"]
+        },
+        "maxAgeMonths": {
+          "type": "number"
+        },
+        "maxAgeIsDefault": {
+          "type": "boolean"
+        }
+      }
+    },
+    "capacity": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["metric", "projected", "utilisationPct", "status"],
+        "properties": {
+          "metric": {
+            "type": "string"
+          },
+          "projected": {
+            "type": "number"
+          },
+          "utilisationPct": {
+            "type": "number"
+          },
+          "status": {
+            "type": "string",
+            "enum": ["breach", "warn", "within"]
+          }
+        }
+      }
+    },
+    "issues": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "rank",
+          "title",
+          "rating",
+          "category",
+          "evidenceGrade",
+          "cited",
+          "derived",
+          "notes"
+        ],
+        "properties": {
+          "rank": {
+            "type": "number"
+          },
+          "title": {
+            "type": "string"
+          },
+          "rating": {
+            "type": "string",
+            "enum": ["red", "amber", "green"]
+          },
+          "category": {
+            "type": "string"
+          },
+          "evidenceGrade": {
+            "type": "string",
+            "enum": ["A", "B", "C", "U"]
+          },
+          "cited": {
+            "type": "boolean"
+          },
+          "derived": {
+            "type": "boolean"
+          },
+          "notes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "counts": {
+      "type": "object",
+      "required": ["red", "amber", "green"],
+      "properties": {
+        "red": {
+          "type": "number"
+        },
+        "amber": {
+          "type": "number"
+        },
+        "green": {
+          "type": "number"
+        }
+      }
+    },
+    "documentGaps": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "categoriesNotReviewed": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": [
+          "security",
+          "infrastructure",
+          "technical-debt",
+          "scalability",
+          "people"
+        ]
+      }
+    },
+    "uncited": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "rangesDropped": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "rangeTotal": {
+      "type": "object",
+      "required": ["low", "high", "issuesIncluded"],
+      "properties": {
+        "low": {
+          "type": "number"
+        },
+        "high": {
+          "type": "number"
+        },
+        "issuesIncluded": {
+          "type": "number"
+        }
+      }
+    },
+    "priceSupportedRange": {
+      "type": "object",
+      "required": ["low", "high", "issuesIncluded", "excludedForEvidence"],
+      "properties": {
+        "low": {
+          "type": "number"
+        },
+        "high": {
+          "type": "number"
+        },
+        "issuesIncluded": {
+          "type": "number"
+        },
+        "excludedForEvidence": {
+          "type": "number"
+        }
+      }
+    },
+    "evidencePolicyIsDefault": {
+      "type": "boolean"
+    },
+    "basisOfReview": {
+      "type": "string"
+    },
+    "duplicatesMerged": {
+      "type": "number"
+    },
+    "derivedCount": {
+      "type": "number"
+    },
+    "handoff": {
+      "type": "object",
+      "required": ["findings", "needingImpact"],
+      "properties": {
+        "findings": {
+          "type": "array"
+        },
+        "needingImpact": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "limitation": {
+      "type": "string"
+    },
+    "note": {
+      "type": "string"
+    },
+    "gate": {
+      "type": "string"
+    }
+  }
+}
