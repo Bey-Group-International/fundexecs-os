@@ -8,13 +8,13 @@ skill runtime (`lib/skills/runner.ts`) using the shared evidence grades (`lib/pe
 
 ## Contract
 
-|                   |                                       |
-|-------------------|---------------------------------------|
-| **Approval tier** | 1 — internal, reversible analysis |
-| **Executives**    | analyst · legal_closing |
-| **Inputs**        | `dealName`, `entryEbitda`, `tranches`, `base` |
+|                   |                                                                                |
+|-------------------|--------------------------------------------------------------------------------|
+| **Approval tier** | 1 — internal, reversible analysis                                              |
+| **Executives**    | analyst · legal_closing                                                        |
+| **Inputs**        | `dealName`, `entryEbitda`, `tranches`, `base`                                  |
 | **Outputs**       | `tranches`, `closing`, `base`, `downside`, `covenants`, `policyChecks`, `gate` |
-| **Downstream**    | financing-terms, bid-range, covenant-watch, ic-memo |
+| **Downstream**    | financing-terms, bid-range, covenant-watch, ic-memo                            |
 
 ## Guardrails
 

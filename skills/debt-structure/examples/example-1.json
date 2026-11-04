@@ -1,72 +1,60 @@
 {
   "input": {
-    "dealName": "Acme",
-    "entryEbitda": 20,
-    "baseRatePct": 4,
-    "totalUses": 160,
-    "tranches": [
-      {
-        "name": "Term loan B",
-        "seniority": "senior",
-        "multiple": 3,
-        "marginBps": 450,
-        "amortPctPerYear": 1,
-        "tenorYears": 7
-      },
-      {
-        "name": "Junior notes",
-        "seniority": "junior",
-        "amount": 20,
-        "fixedRatePct": 12,
-        "amortPctPerYear": 0,
-        "tenorYears": 8
-      }
-    ],
     "base": {
-      "periods": [
-        {
-          "label": "Y1",
-          "ebitdaLtm": 22,
-          "capex": 4,
-          "cashTaxes": 3
-        },
-        {
-          "label": "Y2",
-          "ebitdaLtm": 24,
-          "capex": 4,
-          "cashTaxes": 3
-        }
-      ]
+      "periods": [ {
+        "capex": 4,
+        "cashTaxes": 3,
+        "ebitdaLtm": 22,
+        "label": "Y1"
+      }, {
+        "capex": 4,
+        "cashTaxes": 3,
+        "ebitdaLtm": 24,
+        "label": "Y2"
+      } ]
     },
+    "baseRatePct": 4,
+    "covenants": [ {
+      "definitionSource": "TS p.7",
+      "kind": "maxLeverage",
+      "name": "Net leverage",
+      "threshold": 5
+    }, {
+      "definitionSource": "TS p.8",
+      "kind": "minInterestCover",
+      "name": "Interest cover",
+      "threshold": 2
+    } ],
+    "dealName": "Acme",
     "downside": {
-      "periods": [
-        {
-          "label": "Y1",
-          "ebitdaLtm": 16,
-          "capex": 4,
-          "cashTaxes": 2
-        },
-        {
-          "label": "Y2",
-          "ebitdaLtm": 15,
-          "capex": 4,
-          "cashTaxes": 2
-        }
-      ]
+      "periods": [ {
+        "capex": 4,
+        "cashTaxes": 2,
+        "ebitdaLtm": 16,
+        "label": "Y1"
+      }, {
+        "capex": 4,
+        "cashTaxes": 2,
+        "ebitdaLtm": 15,
+        "label": "Y2"
+      } ]
     },
-    "covenants": [
-      {
-        "name": "Net leverage",
-        "kind": "maxLeverage",
-        "threshold": 5,
-        "definitionSource": "TS p.7"
-      },
-      {
-        "name": "Interest cover",
-        "kind": "minInterestCover",
-        "threshold": 2,
-        "definitionSource": "TS p.8"
-      }
-    ]
+    "entryEbitda": 20,
+    "totalUses": 160,
+    "tranches": [ {
+      "amortPctPerYear": 1,
+      "marginBps": 450,
+      "multiple": 3,
+      "name": "Term loan B",
+      "seniority": "senior",
+      "tenorYears": 7
+    }, {
+      "amortPctPerYear": 0,
+      "amount": 20,
+      "fixedRatePct": 12,
+      "name": "Junior notes",
+      "seniority": "junior",
+      "tenorYears": 8
+    } ]
   }
 }
