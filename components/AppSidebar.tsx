@@ -339,6 +339,8 @@ const SessionRow = memo(function SessionRow({
 
 interface AppSidebarProps {
   name: string;
+  /** The organization the signed-in user is working in. Shown read-only at the top of the rail. */
+  orgName?: string;
   planName: string;
   hubs: HubItem[];
   sessions: SessionItem[];
@@ -371,6 +373,7 @@ interface AppSidebarProps {
 // which session menu is open, etc.) independently.
 function SidebarPanel({
   name,
+  orgName,
   planName,
   hubs,
   sessions,
@@ -446,6 +449,19 @@ function SidebarPanel({
         />
         <Logo href="/dashboard" variant="coin-wordmark" />
       </div>
+
+      {/* Workspace — which organization this is all happening in. Read-only for
+          now: switching between organizations is a separate change. */}
+      {orgName ? (
+        <div className="border-b border-line/60 px-4 py-2.5" data-testid="workspace-name">
+          <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-fg-muted/70">
+            Workspace
+          </p>
+          <p className="truncate text-sm font-medium text-fg-primary" title={orgName}>
+            {orgName}
+          </p>
+        </div>
+      ) : null}
 
       <nav className="flex-1 overflow-y-auto overscroll-contain px-2 py-3 text-sm">
         {/* Top-level destinations, grouped. */}

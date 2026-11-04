@@ -107,3 +107,16 @@ it("keeps module labels aligned when only some modules have a status dot", () =>
   expect(withDot.firstElementChild?.className).toContain("w-1.5");
   expect(without.firstElementChild?.className).toContain("w-1.5");
 });
+
+it("shows the current workspace name at the top of the rail", () => {
+  mockPath = "/dashboard";
+  render(<AppSidebar {...props} orgName="Bey Group International" />);
+  expect(screen.getByTestId("workspace-name")).toHaveTextContent("Workspace");
+  expect(screen.getByTestId("workspace-name")).toHaveTextContent("Bey Group International");
+});
+
+it("shows no workspace block when the organization name is unknown", () => {
+  mockPath = "/dashboard";
+  render(<AppSidebar {...props} />);
+  expect(screen.queryByTestId("workspace-name")).not.toBeInTheDocument();
+});
