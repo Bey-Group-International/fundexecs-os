@@ -101,6 +101,11 @@ export async function POST(
       return NextResponse.json({ ok: false, error: 'Envelope not found' }, { status: 404 })
     }
 
+    // Signing again (a retry after a dropped response, a double click) is not an error.
+    if (recipient.status === 'signed' && envelope.status !== 'voided') {
+      return NextResponse.json({ ok: true, envelopeCompleted: envelope.status === 'completed', alreadySigned: true })
+    }
+
     // Status gates. Signatures are only acceptable while the envelope is
     // actually out for signing — an explicit allow-list (sent /
     // partially_signed) so any state this code doesn't know about fails
@@ -133,9 +138,6 @@ export async function POST(
       )
     }
 
-    if (recipient.status === 'signed') {
-      return NextResponse.json({ ok: false, error: 'Already signed.' }, { status: 409 })
-    }
     // A declined recipient made a recorded decision — flipping it to signed
     // via a replayed link would contradict the audit trail.
     if (recipient.status === 'declined') {
@@ -191,104 +193,43 @@ export async function POST(
     const ipAddress = getIpAddress(request)
     const now = new Date().toISOString()
 
-    // Persist field responses BEFORE flipping the recipient to signed, so a
-    // signed recipient can never exist with its responses still unwritten.
-    // The answers are written together, not one round trip each.
-    const writes = await Promise.all(
-      Object.keys(responses).map(async (fieldId) => ({
-        fieldId,
-        ...(await supabase.from('envelope_fields').update({ response: responses[fieldId] }).eq('id', fieldId).eq('recipient_id', recipient.id)),
-      })),
-    )
-    const failed = writes.find((w) => w.error)
-    if (failed) {
-      console.error(`POST /api/sign/[token]/complete field ${failed.fieldId} error:`, failed.error)
-      return NextResponse.json({ ok: false, error: 'Failed to record field responses' }, { status: 500 })
-    }
-
-    // Update recipient to signed
-    const { error: updateRecipientError } = await supabase
-      .from('envelope_recipients')
-      .update({
-        status: 'signed',
-        signed_at: now,
-        signature_data: signatureData,
-        initials_data: initialsData ?? null,
-        ip_address: ipAddress,
-      })
-      .eq('id', recipient.id)
-
-    if (updateRecipientError) {
-      console.error('POST /api/sign/[token]/complete updateRecipientError:', updateRecipientError)
+    // Everything is written in one database transaction under a lock on the envelope: the
+    // answers, the signature, the event and the roll-up to partially signed / completed.
+    // It either all happens or none of it does, and signing twice changes nothing.
+    const { data: result, error: rpcError } = await supabase.rpc('record_envelope_signature', {
+      p_recipient_id: recipient.id,
+      p_responses: responses,
+      p_signature: signatureData,
+      p_initials: initialsData ?? null,
+      p_ip: ipAddress,
+      p_now: now,
+      // When the signer set the printed date and time, the true signing moment is kept beside it.
+      p_event_metadata: adjustedTimes.length
+        ? { datetime_chosen: adjustedTimes.map((t) => t.chosen), datetime_actual: stampedAt }
+        : null,
+    })
+    if (rpcError || !result) {
+      console.error('POST /api/sign/[token]/complete record_envelope_signature error:', rpcError)
       return NextResponse.json({ ok: false, error: 'Failed to record signature' }, { status: 500 })
     }
-
-    // Log 'signed' event
-    const { error: signedEventError } = await supabase.from('envelope_events').insert({
-      envelope_id: envelope.id,
-      event_type: 'signed',
-      recipient_id: recipient.id,
-      ip_address: ipAddress,
-      // When the signer set the printed date and time, the true signing moment is kept beside it.
-      ...(adjustedTimes.length ? { metadata: { datetime_chosen: adjustedTimes.map((t) => t.chosen), datetime_actual: stampedAt } } : {}),
-    })
-
-    if (signedEventError) {
-      console.error('POST /api/sign/[token]/complete signedEventError:', signedEventError)
-    }
-
-    // Check if ALL recipients are now signed
-    const { data: allRecipients, error: allRecipientsError } = await supabase
-      .from('envelope_recipients')
-      .select('id, status')
-      .eq('envelope_id', envelope.id)
-
-    if (allRecipientsError) {
-      console.error('POST /api/sign/[token]/complete allRecipientsError:', allRecipientsError)
-      // Non-fatal: return success but envelopeCompleted unknown — treat as false
-      return NextResponse.json({ ok: true, envelopeCompleted: false })
-    }
-
-    const allSigned =
-      allRecipients.length > 0 && allRecipients.every((r) => r.status === 'signed')
-
-    let envelopeCompleted = false
-
-    if (allSigned) {
-      const { error: completeError } = await supabase
-        .from('envelopes')
-        .update({ status: 'completed', completed_at: now })
-        .eq('id', envelope.id)
-
-      if (completeError) {
-        console.error('POST /api/sign/[token]/complete completeError:', completeError)
-      } else {
-        envelopeCompleted = true
-
-        const { error: completedEventError } = await supabase.from('envelope_events').insert({
-          envelope_id: envelope.id,
-          event_type: 'completed',
-        })
-
-        if (completedEventError) {
-          console.error(
-            'POST /api/sign/[token]/complete completedEventError:',
-            completedEventError
-          )
-        }
+    const outcome = result as { ok: boolean; code?: string; status?: string; already?: boolean; completed?: boolean }
+    if (!outcome.ok) {
+      if (outcome.code === 'declined') {
+        return NextResponse.json(
+          { ok: false, error: 'This signature request was declined and can no longer be signed.' },
+          { status: 409 },
+        )
       }
-    } else if (envelope.status === 'sent') {
-      // First signature in a multi-signer envelope: reflect the documented
-      // lifecycle (draft → sent → partially_signed → completed) instead of
-      // leaving the envelope on 'sent' until the very last signer.
-      const { error: partialError } = await supabase
-        .from('envelopes')
-        .update({ status: 'partially_signed' })
-        .eq('id', envelope.id)
-      if (partialError) {
-        console.error('POST /api/sign/[token]/complete partialError:', partialError)
+      if (outcome.code === 'status' && outcome.status === 'voided') {
+        return NextResponse.json({ ok: false, error: 'This document has been voided.' }, { status: 410 })
       }
+      return NextResponse.json({ ok: false, error: 'This document is not available for signing.' }, { status: 409 })
     }
+    // Signed a moment earlier (a retry, or a double click): nothing more to do.
+    if (outcome.already) {
+      return NextResponse.json({ ok: true, envelopeCompleted: Boolean(outcome.completed), alreadySigned: true })
+    }
+    const envelopeCompleted = Boolean(outcome.completed)
 
     // Tell the owner it is their turn (or, if this was the last signature, send the signed copy).
     try {
