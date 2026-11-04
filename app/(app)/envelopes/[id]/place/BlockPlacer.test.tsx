@@ -9,7 +9,7 @@ jest.mock("@/components/signing/PdfPages", () => ({
 }));
 
 import React from "react";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { BlockPlacer } from "./BlockPlacer";
 
 const fields = {
@@ -23,7 +23,8 @@ const fields = {
 let puts: { blocks: { recipientId: string; type: string; prefill: string }[] }[] = [];
 beforeEach(() => {
   puts = [];
-  // jsdom has no pointer capture.
+  // jsdom has no pointer events or pointer capture.
+  (window as unknown as { PointerEvent: typeof MouseEvent }).PointerEvent = window.MouseEvent;
   HTMLElement.prototype.setPointerCapture = jest.fn();
   global.fetch = jest.fn(async (_url: string, init?: { method?: string; body?: string }) => {
     if (init?.method === "PUT") {
@@ -36,7 +37,10 @@ beforeEach(() => {
 
 function mount() {
   render(<BlockPlacer title="NDA" fieldsUrl="/f" pdfUrl="/p" sendUrl="/s" doneHref="/done" />);
-  return waitFor(() => expect(screen.getByRole("button", { name: /Jane Smith/ })).toBeTruthy());
+  // Let the document's blocks and parties load.
+  return act(async () => {
+    await Promise.resolve();
+  });
 }
 
 // jsdom has no layout: give the page layer a box so click positions can be turned into percentages.
@@ -45,20 +49,47 @@ function clickPage(x: number, y: number) {
   layer.getBoundingClientRect = () => ({ left: 0, top: 0, width: 600, height: 800, right: 600, bottom: 800, x: 0, y: 0, toJSON: () => ({}) });
   fireEvent.pointerDown(layer, { clientX: x, clientY: y });
 }
+const choose = (name: string) => fireEvent.click(within(screen.getByRole("menu")).getByRole("menuitem", { name }));
 
-describe("BlockPlacer: one-click placement", () => {
-  it("drops a signature block for the recipient with a single click on the page", async () => {
+describe("BlockPlacer: click, choose, done", () => {
+  it("opens a menu where the page was clicked, and picking a type drops the block there and closes it", async () => {
     await mount();
+    expect(screen.queryByRole("menu")).toBeNull();
     clickPage(300, 400);
-    expect(screen.getAllByRole("button", { name: "Signature block" })).toHaveLength(1);
+    const menu = screen.getByRole("menu");
+    expect(menu.style.left).toBe("50%");
+    expect(menu.style.top).toBe("50%");
+    expect(within(menu).getAllByRole("menuitem").map((i) => i.textContent)).toEqual(["Name", "Signature", "Date and time", "Company", "Title", "Address", "Email", "Phone"]);
+    choose("Signature");
+    expect(screen.queryByRole("menu")).toBeNull();
+    const block = screen.getByRole("button", { name: "Signature block" });
+    expect(block.style.left).toBe("37%"); // centred on the click: 50% minus half the 26% width
   });
 
-  it("keeps the chosen block type for the next click, and the switch decides whose block it is", async () => {
+  it("closes without placing on Escape, and on a click outside the page", async () => {
     await mount();
-    fireEvent.click(screen.getByRole("button", { name: "Email" }));
+    clickPage(300, 400);
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(screen.queryByRole("menu")).toBeNull();
+    clickPage(300, 400);
+    fireEvent.pointerDown(document.body);
+    expect(screen.queryByRole("menu")).toBeNull();
+    expect(screen.queryByRole("button", { name: /block$/ })).toBeNull();
+  });
+
+  it("opens near the click: flipped back inside the page near the right and bottom edges", async () => {
+    await mount();
+    clickPage(570, 780);
+    expect(screen.getByRole("menu").style.transform).toBe("translate(-100%, -100%)");
+  });
+
+  it("lets the menu say whose block it is, and pre-fills email with the person's own", async () => {
+    await mount();
     clickPage(100, 100);
-    fireEvent.click(screen.getByRole("button", { name: /Me/ }));
+    choose("Email");
     clickPage(300, 300);
+    fireEvent.click(within(screen.getByRole("menu")).getByRole("button", { name: /Me/ }));
+    choose("Email");
     fireEvent.click(screen.getByRole("button", { name: /Save$/ }));
     await waitFor(() => expect(puts).toHaveLength(1));
     expect(puts[0].blocks.map((b) => [b.recipientId, b.type, b.prefill])).toEqual([
@@ -69,17 +100,20 @@ describe("BlockPlacer: one-click placement", () => {
 
   it("shows who still needs a signature block, and will not send until everyone has one", async () => {
     await mount();
-    expect(screen.getAllByLabelText("needs a signature block")).toHaveLength(2);
     clickPage(300, 400);
+    expect(screen.getAllByLabelText("needs a signature block")).toHaveLength(2);
+    choose("Signature");
+    clickPage(300, 500);
     expect(screen.getAllByLabelText("has a signature block")).toHaveLength(1);
+    fireEvent.keyDown(window, { key: "Escape" });
     fireEvent.click(screen.getByRole("button", { name: /Send for signature/ }));
     await waitFor(() => expect(screen.getByRole("alert").textContent).toMatch(/signature block for yourself/));
   });
 
-  it("offers Email and Phone blocks, and Delete removes the selected block", async () => {
+  it("Delete removes the selected block", async () => {
     await mount();
-    expect(screen.getByRole("button", { name: "Phone" })).toBeTruthy();
     clickPage(300, 400);
+    choose("Signature");
     fireEvent.pointerDown(screen.getByRole("button", { name: "Signature block" }), { clientX: 300, clientY: 400, pointerId: 1 });
     fireEvent.click(screen.getByRole("button", { name: "Delete" }));
     expect(screen.queryByRole("button", { name: "Signature block" })).toBeNull();

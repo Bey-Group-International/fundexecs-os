@@ -586,7 +586,7 @@ export function EnvelopeWizard() {
 
     const data = (await res.json()) as { envelopeId?: string };
     if (!data.envelopeId) throw new Error("No envelope ID returned.");
-    router.push(next === "place" ? `/envelopes/${data.envelopeId}/place` : `/envelopes/${data.envelopeId}`);
+    router.push(`/envelopes/${data.envelopeId}`);
   }
 
   function handleSaveDraft() {

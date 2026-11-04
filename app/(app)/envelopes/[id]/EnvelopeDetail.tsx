@@ -476,24 +476,6 @@ export function EnvelopeDetail({ envelope, recipients, events }: Props) {
               </button>
             )}
 
-            {envelope.status === "draft" && (
-              <a
-                href={`/envelopes/${envelope.id}/place`}
-                className="inline-flex items-center gap-1.5 rounded-lg bg-gold-500 px-3 py-2 text-sm font-semibold text-on-gold transition hover:brightness-110 focus:outline-none focus-visible:ring-2"
-              >
-                Open document and place signature blocks
-              </a>
-            )}
-
-            {envelope.status === "partially_signed" && (
-              <a
-                href={`/envelopes/${envelope.id}/countersign`}
-                className="inline-flex items-center gap-1.5 rounded-lg bg-gold-500 px-3 py-2 text-sm font-semibold text-on-gold transition hover:brightness-110 focus:outline-none focus-visible:ring-2"
-              >
-                Countersign
-              </a>
-            )}
-
             {(envelope.status === "partially_signed" || envelope.status === "completed") && (
               <a
                 href={`/api/envelopes/${envelope.id}/executed`}
