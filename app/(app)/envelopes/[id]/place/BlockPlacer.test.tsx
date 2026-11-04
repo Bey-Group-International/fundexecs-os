@@ -152,4 +152,21 @@ describe("BlockPlacer: click, choose, done", () => {
     expect(screen.queryByRole("button", { name: "Signature block" })).toBeNull();
     expect(screen.getByRole("button", { name: "Name block" })).toBeTruthy();
   });
+
+  it("a right click closes the open menu without placing anything", async () => {
+    await mount();
+    clickPage(300, 400);
+    expect(screen.getByRole("menu")).toBeTruthy();
+    expect(fireEvent.contextMenu(document.body)).toBe(false);
+    expect(screen.queryByRole("menu")).toBeNull();
+    expect(screen.queryByRole("button", { name: /block$/ })).toBeNull();
+    expect(fireEvent.contextMenu(document.body)).toBe(true);
+  });
+
+  it("a right click on the page does not open a menu", async () => {
+    await mount();
+    const layer = document.querySelector("[data-page-layer]") as HTMLElement;
+    fireEvent.pointerDown(layer, { clientX: 300, clientY: 400, button: 2, pointerId: 1 });
+    expect(screen.queryByRole("menu")).toBeNull();
+  });
 });

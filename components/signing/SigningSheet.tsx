@@ -63,16 +63,37 @@ export function SigningSheet({
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
-  // The spots to complete, in reading order. A locked, pre-filled block is shown but not asked for.
+  // The spots to complete, in reading order. A locked, pre-filled block is shown but not asked for,
+  // and neither is one that arrives already filled in correctly (an email or name we know): it
+  // shows its value on the page, and a click still opens it to change.
   const steps = useMemo(
     () =>
       blocks
-        .filter((b) => blockSpec(b.type) && !(b.locked && b.prefill))
+        .filter((b) => {
+          const spec = blockSpec(b.type);
+          if (!spec || (b.locked && b.prefill)) return false;
+          const known = (spec.input === "text" || spec.input === "multiline") && Boolean(b.prefill?.trim()) && !blockValueProblem(b.type, b.prefill);
+          return !known;
+        })
         .sort((a, b) => a.page - b.page || a.yPct - b.yPct || a.xPct - b.xPct),
     [blocks],
   );
   const [activeId, setActiveId] = useState<string | null>(() => steps[0]?.id ?? null);
   const activeIndex = steps.findIndex((b) => b.id === activeId);
+  const lastOpen = activeIndex >= 0 && activeIndex === steps.length - 1;
+
+  // A right click closes the open panel (and the browser's own menu stays out of the way).
+  useEffect(() => {
+    if (!activeId) return;
+    function onContext(e: MouseEvent) {
+      // A text box keeps the browser's own editing menu (paste, copy).
+      if (e.target instanceof Element && e.target.closest("input, textarea")) return;
+      e.preventDefault();
+      setActiveId(null);
+    }
+    document.addEventListener("contextmenu", onContext);
+    return () => document.removeEventListener("contextmenu", onContext);
+  }, [activeId]);
 
   // Bring the open spot into view.
   useEffect(() => {
@@ -107,8 +128,6 @@ export function SigningSheet({
       if (err) setError(err);
     });
   }
-
-  const active = steps[activeIndex] ?? null;
 
   return (
     <div>
@@ -179,7 +198,7 @@ export function SigningSheet({
                         </span>
                       )}
                       </div>
-                      {isActive && active ? (
+                      {isActive ? (
                         <div
                           className="absolute z-30"
                           style={{
@@ -197,11 +216,13 @@ export function SigningSheet({
                             signature={signature}
                             onSignature={setSignature}
                             signerName={signerName}
+                            // A spot outside the walk (already filled in) opens alone: no count, no Back, Done closes it.
                             position={activeIndex + 1}
-                            total={steps.length}
+                            total={activeIndex >= 0 ? steps.length : 0}
                             onBack={activeIndex > 0 ? () => setActiveId(steps[activeIndex - 1].id) : null}
-                            onNext={() => setActiveId(activeIndex < steps.length - 1 ? steps[activeIndex + 1].id : null)}
-                            isLast={activeIndex === steps.length - 1}
+                            onNext={() => setActiveId(activeIndex >= 0 && activeIndex < steps.length - 1 ? steps[activeIndex + 1].id : null)}
+                            isLast={activeIndex < 0 || activeIndex === steps.length - 1}
+                            agree={lastOpen ? { checked: agreed, onChange: setAgreed } : undefined}
                             onClose={() => setActiveId(null)}
                           />
                         </div>
@@ -215,10 +236,12 @@ export function SigningSheet({
       </div>
 
       <div className="sticky bottom-0 mt-4 rounded-xl border border-line bg-surface-1/95 p-4 backdrop-blur">
-        <label className="mb-3 flex items-start gap-2 text-xs text-fg-secondary">
-          <input type="checkbox" checked={agreed} onChange={(e) => setAgreed(e.target.checked)} className="mt-0.5" />
-          <span>I agree to sign this document electronically, and that my electronic signature is legally binding.</span>
-        </label>
+        {lastOpen ? null : (
+          <label className="mb-3 flex items-start gap-2 text-xs text-fg-secondary">
+            <input type="checkbox" checked={agreed} onChange={(e) => setAgreed(e.target.checked)} className="mt-0.5" />
+            <span>I agree to sign this document electronically, and that my electronic signature is legally binding.</span>
+          </label>
+        )}
         {error ? <p role="alert" className="mb-2 text-sm text-status-danger">{error}</p> : null}
         <button type="button" onClick={finish} disabled={!canFinish} className="w-full rounded-lg bg-gold-500 py-2.5 text-sm font-semibold text-on-gold hover:brightness-110 disabled:opacity-40">
           {pending ? "Signing…" : submitLabel}
