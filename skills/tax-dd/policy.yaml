@@ -1,0 +1,30 @@
+# skills/tax-dd/policy.yaml — enforced by lib/skills/runner.ts and lib/executives/registry.ts
+approval_tier: 1
+risk_classification: moderate
+
+allowed_executives:
+  - diligence
+  - legal_closing
+
+data_scopes:
+  - deal:read
+  - document:read
+  - data_room:read
+
+prohibited_actions:
+  - send_outreach
+  - distribute_report
+  - sign_document
+  - move_capital
+  - capital_call
+  - submit_term_sheet
+
+guardrails:
+  - An open year with no computation is named and graded U; no year is assumed clean.
+  - No exposure range appears without a stated basis; the total is a plain sum of supported ranges and overlaps are not netted.
+  - Every exposure cites a document or is graded U; missing documents and exposure types not reviewed are listed as gaps.
+  - The skill flags issues; it does not quantify or opine. The tax adviser confirms each exposure before it moves into the price or SPA.
+
+downstream:
+  - red-flag-register
+  - dd-checklist

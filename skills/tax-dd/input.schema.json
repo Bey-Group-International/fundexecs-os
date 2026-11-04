@@ -1,0 +1,160 @@
+{
+  "properties": {
+    "dealName": {
+      "type": "string"
+    },
+    "documentsReceived": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "expectedDocuments": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "exposureTypesReviewed": {
+      "items": {
+        "enum": [ "transfer-pricing", "permanent-establishment", "vat-sales-tax", "payroll-tax", "unused-losses" ],
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "gateOwner": {
+      "type": "string"
+    },
+    "issues": {
+      "items": {
+        "properties": {
+          "category": {
+            "enum": [ "transfer-pricing", "permanent-establishment", "vat-sales-tax", "payroll-tax", "unused-losses", "other" ],
+            "type": "string"
+          },
+          "clauseRef": {
+            "type": "string"
+          },
+          "documentRef": {
+            "type": "string"
+          },
+          "evidenceGrade": {
+            "enum": [ "A", "B", "C", "U" ],
+            "type": "string"
+          },
+          "impact": {
+            "enum": [ "walk-away", "price", "structure", "spa-protection", "100-day" ],
+            "type": "string"
+          },
+          "jurisdiction": {
+            "type": "string"
+          },
+          "owner": {
+            "type": "string"
+          },
+          "period": {
+            "type": "string"
+          },
+          "question": {
+            "type": "string"
+          },
+          "rangeBasis": {
+            "type": "string"
+          },
+          "rangeHigh": {
+            "minimum": 0,
+            "type": "number"
+          },
+          "rangeLow": {
+            "minimum": 0,
+            "type": "number"
+          },
+          "rating": {
+            "enum": [ "red", "amber", "green" ],
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          }
+        },
+        "required": [ "title", "rating" ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "losses": {
+      "items": {
+        "properties": {
+          "amount": {
+            "minimum": 0,
+            "type": "number"
+          },
+          "documentRef": {
+            "type": "string"
+          },
+          "jurisdiction": {
+            "type": "string"
+          },
+          "restrictionOnChangeOfControl": {
+            "enum": [ "yes", "no", "unknown" ],
+            "type": "string"
+          }
+        },
+        "required": [ "jurisdiction", "amount" ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "openYears": {
+      "items": {
+        "properties": {
+          "jurisdiction": {
+            "type": "string"
+          },
+          "years": {
+            "items": {
+              "type": "number"
+            },
+            "type": "array"
+          }
+        },
+        "required": [ "jurisdiction", "years" ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "reconciliations": {
+      "items": {
+        "properties": {
+          "chargeInAccounts": {
+            "type": "number"
+          },
+          "chargePerComputation": {
+            "type": "number"
+          },
+          "documentRef": {
+            "type": "string"
+          },
+          "explained": {
+            "minimum": 0,
+            "type": "number"
+          },
+          "jurisdiction": {
+            "type": "string"
+          },
+          "year": {
+            "type": "number"
+          }
+        },
+        "required": [ "jurisdiction", "year", "chargeInAccounts", "chargePerComputation" ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "toleranceAbs": {
+      "minimum": 0,
+      "type": "number"
+    }
+  },
+  "type": "object"
+}

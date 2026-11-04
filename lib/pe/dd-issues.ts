@@ -33,6 +33,10 @@ export interface IssueIn {
   title: string;
   rating: Rating;
   category?: string;
+  /** Where the issue arises (a country or tax jurisdiction); part of the de-duplication key. */
+  jurisdiction?: string;
+  /** The period it concerns (a tax year, say); part of the de-duplication key. */
+  period?: string;
   documentRef?: string;
   clauseRef?: string;
   evidenceGrade?: EvidenceGrade;
@@ -53,6 +57,8 @@ export interface IssueOut {
   title: string;
   rating: Rating;
   category: string;
+  jurisdiction: string | null;
+  period: string | null;
   documentRef: string | null;
   clauseRef: string | null;
   evidenceGrade: EvidenceGrade;
@@ -89,6 +95,8 @@ interface Work {
   title: string;
   rating: Rating;
   category: string;
+  jurisdiction: string | null;
+  period: string | null;
   docs: Set<string>;
   clauses: Set<string>;
   grade: EvidenceGrade;
@@ -120,7 +128,9 @@ export function rankIssues(
       );
     }
     const category = clean(raw.category) ?? fallbackCategory;
-    const key = `${norm(category)}|${norm(title)}`;
+    const jurisdiction = clean(raw.jurisdiction);
+    const period = clean(raw.period);
+    const key = `${norm(category)}|${norm(jurisdiction ?? "")}|${norm(period ?? "")}|${norm(title)}`;
     const doc = clean(raw.documentRef);
     const clause = clean(raw.clauseRef);
     const grade = gradeOf(raw.evidenceGrade);
@@ -133,6 +143,8 @@ export function rankIssues(
         title,
         rating,
         category,
+        jurisdiction,
+        period,
         docs: new Set(doc ? [doc] : []),
         clauses: new Set(clause ? [clause] : []),
         grade,
@@ -210,6 +222,8 @@ export function rankIssues(
       title: w.title,
       rating: w.rating,
       category: w.category,
+      jurisdiction: w.jurisdiction,
+      period: w.period,
       documentRef,
       clauseRef,
       evidenceGrade: grade,
@@ -296,6 +310,8 @@ export const issueInSchema: JsonSchema = {
     title: { type: "string" },
     rating: { type: "string", enum: ["red", "amber", "green"] },
     category: { type: "string" },
+    jurisdiction: { type: "string" },
+    period: { type: "string" },
     documentRef: { type: "string" },
     clauseRef: { type: "string" },
     evidenceGrade: { type: "string", enum: ["A", "B", "C", "U"] },

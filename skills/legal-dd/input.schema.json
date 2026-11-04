@@ -108,7 +108,13 @@
             "enum": [ "walk-away", "price", "structure", "spa-protection", "100-day" ],
             "type": "string"
           },
+          "jurisdiction": {
+            "type": "string"
+          },
           "owner": {
+            "type": "string"
+          },
+          "period": {
             "type": "string"
           },
           "question": {

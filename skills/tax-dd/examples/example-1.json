@@ -1,0 +1,48 @@
+{
+  "input": {
+    "dealName": "Acme",
+    "documentsReceived": [ "Tax returns and computations (open years)", "Group structure chart" ],
+    "exposureTypesReviewed": [ "transfer-pricing", "vat-sales-tax" ],
+    "issues": [ {
+      "category": "transfer-pricing",
+      "documentRef": "TP-study.pdf",
+      "evidenceGrade": "A",
+      "impact": "price",
+      "jurisdiction": "UK",
+      "period": "2022",
+      "question": "Is the mark-up defensible, and what is the likely adjustment?",
+      "rangeBasis": "Mark-up gap x service charge x open years",
+      "rangeHigh": 600,
+      "rangeLow": 200,
+      "rating": "red",
+      "title": "Intercompany service charge not at arm's length"
+    } ],
+    "losses": [ {
+      "amount": 5000,
+      "documentRef": "TC-UK23.pdf",
+      "jurisdiction": "UK",
+      "restrictionOnChangeOfControl": "yes"
+    } ],
+    "openYears": [ {
+      "jurisdiction": "UK",
+      "years": [ 2022, 2023 ]
+    }, {
+      "jurisdiction": "DE",
+      "years": [ 2023 ]
+    } ],
+    "reconciliations": [ {
+      "chargeInAccounts": 1000,
+      "chargePerComputation": 1000,
+      "documentRef": "TC-UK22.pdf",
+      "jurisdiction": "UK",
+      "year": 2022
+    }, {
+      "chargeInAccounts": 1200,
+      "chargePerComputation": 1000,
+      "documentRef": "TC-UK23.pdf",
+      "explained": 50,
+      "jurisdiction": "UK",
+      "year": 2023
+    } ]
+  }
+}

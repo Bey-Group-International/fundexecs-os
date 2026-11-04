@@ -1,0 +1,169 @@
+{
+  "properties": {
+    "adviserQuestions": {
+      "items": {
+        "properties": {
+          "issue": {
+            "type": "string"
+          },
+          "question": {
+            "type": "string"
+          }
+        },
+        "required": [ "issue", "question" ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "counts": {
+      "properties": {
+        "amber": {
+          "type": "number"
+        },
+        "green": {
+          "type": "number"
+        },
+        "red": {
+          "type": "number"
+        }
+      },
+      "required": [ "red", "amber", "green" ],
+      "type": "object"
+    },
+    "derivedCount": {
+      "type": "number"
+    },
+    "documentGaps": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "duplicatesMerged": {
+      "type": "number"
+    },
+    "gate": {
+      "type": "string"
+    },
+    "handoff": {
+      "properties": {
+        "findings": {
+          "type": "array"
+        },
+        "needingImpact": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [ "findings", "needingImpact" ],
+      "type": "object"
+    },
+    "issues": {
+      "items": {
+        "properties": {
+          "category": {
+            "type": "string"
+          },
+          "cited": {
+            "type": "boolean"
+          },
+          "derived": {
+            "type": "boolean"
+          },
+          "evidenceGrade": {
+            "enum": [ "A", "B", "C", "U" ],
+            "type": "string"
+          },
+          "notes": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "rank": {
+            "type": "number"
+          },
+          "rating": {
+            "enum": [ "red", "amber", "green" ],
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          }
+        },
+        "required": [ "rank", "title", "rating", "category", "evidenceGrade", "cited", "derived", "notes" ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "limitation": {
+      "type": "string"
+    },
+    "note": {
+      "type": "string"
+    },
+    "rangeTotal": {
+      "properties": {
+        "high": {
+          "type": "number"
+        },
+        "issuesIncluded": {
+          "type": "number"
+        },
+        "low": {
+          "type": "number"
+        },
+        "redAmberWithoutRange": {
+          "type": "number"
+        }
+      },
+      "required": [ "low", "high", "issuesIncluded", "redAmberWithoutRange" ],
+      "type": "object"
+    },
+    "rangesDropped": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "typesNotReviewed": {
+      "items": {
+        "enum": [ "transfer-pricing", "permanent-establishment", "vat-sales-tax", "payroll-tax", "unused-losses" ],
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "uncited": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "years": {
+      "items": {
+        "properties": {
+          "jurisdiction": {
+            "type": "string"
+          },
+          "open": {
+            "type": "boolean"
+          },
+          "status": {
+            "enum": [ "reconciled", "difference", "no-computation" ],
+            "type": "string"
+          },
+          "year": {
+            "type": "number"
+          }
+        },
+        "required": [ "jurisdiction", "year", "open", "status" ],
+        "type": "object"
+      },
+      "type": "array"
+    }
+  },
+  "required": [ "issues", "counts", "years", "documentGaps", "typesNotReviewed", "uncited", "rangesDropped", "adviserQuestions", "duplicatesMerged", "derivedCount", "handoff", "limitation", "note", "gate" ],
+  "type": "object"
+}
