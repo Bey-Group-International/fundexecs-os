@@ -1,0 +1,167 @@
+{
+  "properties": {
+    "assumptions": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "base": {
+      "properties": {
+        "verdict": {
+          "enum": [ "clears", "misses", "not-tested" ],
+          "type": "string"
+        }
+      },
+      "required": [ "verdict" ],
+      "type": "object"
+    },
+    "breakEvens": {
+      "items": {
+        "properties": {
+          "baseValue": {
+            "type": "number"
+          },
+          "direction": {
+            "enum": [ "maximum", "minimum" ],
+            "type": "string"
+          },
+          "driver": {
+            "enum": [ "entryMultiple", "exitMultiple", "ebitdaGrowthRate" ],
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "note": {
+            "type": "string"
+          },
+          "status": {
+            "enum": [ "base-clears", "base-misses", "not-binding", "not-reachable", "not-tested" ],
+            "type": "string"
+          }
+        },
+        "required": [ "driver", "label", "direction", "baseValue", "status", "note" ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "cases": {
+      "items": {
+        "properties": {
+          "kind": {
+            "enum": [ "base", "downside", "upside" ],
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "testedAgainst": {
+            "enum": [ "base hurdle", "downside hurdle", "none" ],
+            "type": "string"
+          },
+          "verdict": {
+            "enum": [ "clears", "misses", "not-tested" ],
+            "type": "string"
+          }
+        },
+        "required": [ "name", "kind", "verdict", "testedAgainst" ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "combinedDownsideSupplied": {
+      "type": "boolean"
+    },
+    "gate": {
+      "type": "string"
+    },
+    "hurdlesAreDefault": {
+      "type": "boolean"
+    },
+    "limitation": {
+      "type": "string"
+    },
+    "note": {
+      "type": "string"
+    },
+    "oneWay": {
+      "items": {
+        "properties": {
+          "baseIsAssumed": {
+            "type": "boolean"
+          },
+          "driver": {
+            "enum": [ "entryMultiple", "exitMultiple", "ebitdaGrowthRate", "leverageMultiple", "holdYears", "transactionFeesPct" ],
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "points": {
+            "items": {
+              "properties": {
+                "value": {
+                  "type": "number"
+                },
+                "verdict": {
+                  "enum": [ "clears", "misses", "not-tested" ],
+                  "type": "string"
+                }
+              },
+              "required": [ "value", "verdict" ],
+              "type": "object"
+            },
+            "type": "array"
+          }
+        },
+        "required": [ "driver", "label", "baseIsAssumed", "points" ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "twoWay": {
+      "items": {
+        "properties": {
+          "cells": {
+            "type": "array"
+          },
+          "colDriver": {
+            "enum": [ "entryMultiple", "exitMultiple", "ebitdaGrowthRate", "leverageMultiple", "holdYears", "transactionFeesPct" ],
+            "type": "string"
+          },
+          "colValues": {
+            "items": {
+              "type": "number"
+            },
+            "type": "array"
+          },
+          "defaultPairing": {
+            "type": "boolean"
+          },
+          "rowDriver": {
+            "enum": [ "entryMultiple", "exitMultiple", "ebitdaGrowthRate", "leverageMultiple", "holdYears", "transactionFeesPct" ],
+            "type": "string"
+          },
+          "rowValues": {
+            "items": {
+              "type": "number"
+            },
+            "type": "array"
+          }
+        },
+        "required": [ "rowDriver", "colDriver", "rowValues", "colValues", "cells", "defaultPairing" ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "warnings": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    }
+  },
+  "required": [ "base", "oneWay", "twoWay", "cases", "combinedDownsideSupplied", "breakEvens", "hurdlesAreDefault", "assumptions", "warnings", "limitation", "note", "gate" ],
+  "type": "object"
+}

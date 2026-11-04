@@ -22,6 +22,7 @@ export const ROOT_BINDINGS: Record<string, Binding[]> = {
   "target-screen": [{ input: "mandate" }],
   "first-look": [{ input: "mandate" }],
   "bid-range": [{ input: "hurdles" }],
+  sensitivity: [{ input: "hurdles" }],
   "exit-routes": [{ input: "hurdles" }],
   "final-investment-report": [{ input: "hurdles" }],
   "covenant-watch": [{ input: "financing" }],

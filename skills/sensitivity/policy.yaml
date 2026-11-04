@@ -1,0 +1,30 @@
+# skills/sensitivity/policy.yaml — enforced by lib/skills/runner.ts and lib/executives/registry.ts
+approval_tier: 1
+risk_classification: moderate
+
+allowed_executives:
+  - analyst
+  - investment_committee
+
+data_scopes:
+  - deal:read
+  - valuation:read
+
+prohibited_actions:
+  - send_outreach
+  - distribute_report
+  - sign_document
+  - move_capital
+  - capital_call
+  - submit_term_sheet
+
+guardrails:
+  - Ranges and cases come only from the input; the skill never picks a range or a case for the deal team.
+  - A set of cases with no combined downside (two or more assumptions moving together) is flagged: single-variable stresses understate how things go wrong together.
+  - Break-evens move one assumption at a time against the firm's base hurdle (standing default labelled) and report room or shortfall in the safe direction.
+  - A downside case is tested only against a downside hurdle the firm has set; otherwise it is reported, not tested. The deal lead chooses the case the price rests on.
+
+downstream:
+  - bid-range
+  - ic-memo
+  - returns

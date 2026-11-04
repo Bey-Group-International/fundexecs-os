@@ -1,0 +1,42 @@
+{
+  "input": {
+    "cases": [ {
+      "kind": "upside",
+      "name": "Upside",
+      "overrides": {
+        "ebitdaGrowthRate": 0.15,
+        "exitMultiple": 12
+      }
+    }, {
+      "kind": "downside",
+      "name": "Combined downside",
+      "overrides": {
+        "ebitdaGrowthRate": 0.02,
+        "exitMultiple": 8
+      }
+    } ],
+    "dealName": "Acme",
+    "drivers": [ {
+      "driver": "exitMultiple",
+      "values": [ 8, 10, 12 ]
+    }, {
+      "driver": "ebitdaGrowthRate",
+      "values": [ 0, 0.1, 0.2 ]
+    }, {
+      "driver": "entryMultiple",
+      "values": [ 9, 10, 11 ]
+    }, {
+      "driver": "leverageMultiple",
+      "values": [ 3, 4, 5 ]
+    } ],
+    "ebitdaGrowthRate": 0.1,
+    "entryEbitda": 10,
+    "entryMultiple": 10,
+    "holdYears": 5,
+    "leverageMultiple": 4,
+    "twoWay": [ {
+      "col": "ebitdaGrowthRate",
+      "row": "exitMultiple"
+    } ]
+  }
+}

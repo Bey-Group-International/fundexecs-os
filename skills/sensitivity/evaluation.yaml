@@ -1,0 +1,7 @@
+# skills/sensitivity/evaluation.yaml — acceptance criteria; exercised by lib/skills/catalog/sensitivity.test.ts
+criteria:
+  - no range or case invented
+  - missing combined downside flagged
+  - default hurdles labelled
+  - break-even states room or shortfall
+example: examples/example-1.json

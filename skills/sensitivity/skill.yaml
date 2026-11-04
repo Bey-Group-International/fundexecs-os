@@ -1,0 +1,73 @@
+# skills/sensitivity/skill.yaml
+# Authoring spec for Sensitivity & Break-evens. The machine-readable manifest the runtime loads is
+# the TypeScript SkillDefinition in lib/skills/catalog/sensitivity.ts; this YAML is the
+# human-facing contract and must stay consistent with it.
+# Origin: PE department pack · Valuation. Rules re-implemented natively; no pack text is shipped.
+id: sensitivity
+name: Sensitivity & Break-evens
+version: 1.0.0
+owner: fundexecs
+hub: run
+
+applicable_executives:
+  - analyst
+  - investment_committee
+
+supported_entity_types: [deal]
+
+required_inputs:
+  - entryEbitda
+  - entryMultiple
+  - holdYears
+
+optional_inputs:
+  - leverageMultiple
+  - debtAmount
+  - exitMultiple
+  - ebitdaGrowthRate
+  - annualDebtPaydown
+  - transactionFeesPct
+  - hurdles
+  - drivers
+  - twoWay
+  - cases
+  - gateOwner
+
+outputs:
+  - base
+  - oneWay
+  - twoWay
+  - cases
+  - breakEvens
+  - warnings
+  - note
+  - gate
+
+artifact_types: [analysis]
+data_permissions: [deal:read, valuation:read]
+tools: []
+
+approval_tier: 1
+risk_classification: moderate
+execution_timeout_ms: 15000
+retry_policy:
+  max_attempts: 1
+  backoff_ms: 0
+
+provider_capabilities:
+  - financial_reasoning
+
+allowed_downstream_skills: [bid-range, ic-memo, returns]
+
+prohibited_actions:
+  - send_outreach
+  - distribute_report
+  - sign_document
+  - move_capital
+  - capital_call
+  - submit_term_sheet
+
+input_schema: input.schema.json
+output_schema: output.schema.json
+policy: policy.yaml
+evaluation: evaluation.yaml

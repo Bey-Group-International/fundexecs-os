@@ -34,6 +34,7 @@ fill in the gates you want named:
 | `adjusted_ebitda`        | `qoe-bridge`              | Diligence-adjusted EBITDA                |
 | `red_flag_treatment`     | `red-flag-register`       | Treatment of walk-away and price items   |
 | `bid_price`              | `bid-range`               | Bid price                                |
+| `sensitivity_basis`      | `sensitivity`             | Case the price rests on                  |
 | `financing_structure`    | `financing-terms`         | Financing structure and lender selection |
 | `compliance_certificate` | `covenant-watch`          | Compliance certificate                   |
 | `kpi_trend_review`       | `kpi-variance`            | KPI trend classifications                |
