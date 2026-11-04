@@ -8,6 +8,7 @@ import { wizardStep } from "@/lib/signing/wizard";
 import { loadCountersign } from "@/lib/envelope-countersign.server";
 import { SigningProgress } from "@/components/signing/SigningProgress";
 import { EnvelopeDetail } from "./EnvelopeDetail";
+import { WaitingActions } from "./WaitingActions";
 import { BlockPlacer } from "./place/BlockPlacer";
 import { Countersign } from "./countersign/Countersign";
 
@@ -82,7 +83,10 @@ export default async function EnvelopeDetailPage(
   // The three steps on one page: the maker places blocks, the reader signs, the maker countersigns.
   const step = wizardStep(envelope.status);
   const hasPdf = Boolean((envelope as EnvelopeRow & { pdf_storage_key?: string | null }).pdf_storage_key);
-  const reader = recipients.find((r) => (r as RecipientRow & { role?: string }).role !== "owner")?.name;
+  const readerRow = recipients.find((r) => (r as RecipientRow & { role?: string }).role !== "owner");
+  const reader = readerRow?.name;
+  // An LP signs inside their portal, behind its emailed-code check, so no bare link is offered for it.
+  const isLp = Boolean((envelope as EnvelopeRow & { lp_session_id?: string | null }).lp_session_id);
   const shell = (width: string, note?: string) =>
     step ? (
       <div className={`mx-auto ${width} px-4 pt-6`}>
@@ -128,6 +132,11 @@ export default async function EnvelopeDetailPage(
   return (
     <>
       {shell("max-w-5xl", note)}
+      {step === 2 && readerRow ? (
+        <div className="mx-auto max-w-5xl px-4">
+          <WaitingActions envelopeId={envelope.id} readerName={readerRow.name} signingToken={isLp ? null : readerRow.signing_token} />
+        </div>
+      ) : null}
       <EnvelopeDetail envelope={envelope} recipients={recipients} events={events} />
     </>
   );

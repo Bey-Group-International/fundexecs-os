@@ -1,17 +1,9 @@
 import { NextResponse } from "next/server";
 import { createServerClient } from "@/lib/supabase/server";
-import { sendEmail, buildSigningInvitationHtml } from "@/lib/email";
+import { inviteSigners } from "@/lib/envelope-invite.server";
 import { recipientsWithoutSignature } from "@/lib/envelope-fields";
 
 export const runtime = "nodejs";
-
-interface Recipient {
-  id: string;
-  name: string;
-  email: string;
-  signing_token: string;
-  role: string;
-}
 
 export async function POST(_req: Request, props: { params: Promise<{ id: string }> }) {
   const params = await props.params;
@@ -77,61 +69,14 @@ export async function POST(_req: Request, props: { params: Promise<{ id: string 
     return NextResponse.json({ error: "Envelope not found" }, { status: 404 });
   }
 
-  // Fetch recipients with signing tokens
-  const { data: recipients, error: recipientsErr } = await supabase
-    .from("envelope_recipients")
-    .select("id, name, email, signing_token, role")
-    .eq("envelope_id", envelopeId);
-
-  if (recipientsErr) {
-    console.error("[/api/envelopes/[id]/send] recipients error", recipientsErr);
-    return NextResponse.json({ error: recipientsErr.message }, { status: 500 });
-  }
-
-  // The owner countersigns in the app after the recipients; only signers are emailed.
-  const rows = ((recipients ?? []) as Recipient[]).filter((r) => r.role !== "owner");
-
-  // Build signing URLs
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, "") ?? "";
-
-  // An LP's agreement is signed inside their portal (behind its emailed-code check), so
-  // they are sent the portal link, never the bare signing link.
-  let portalUrl: string | null = null;
-  if (cur.lp_session_id) {
-    const { createServiceClient } = await import("@/lib/supabase/server");
-    const { data: sess } = await createServiceClient().from("lp_onboarding_sessions").select("token").eq("id", cur.lp_session_id).maybeSingle();
-    const t = (sess as { token: string } | null)?.token;
-    if (t) portalUrl = `${baseUrl}/lp/${t}`;
-  }
-
-  const signingUrls = rows.map((r) => ({
-    recipientId: r.id,
-    name: r.name,
-    email: r.email,
-    url: portalUrl ?? `${baseUrl}/sign/${r.signing_token}`,
-  }));
-
-  // Send invitation emails from the org's own connected mailbox.
-  if (rows.length > 0) {
-    await Promise.allSettled(
-      signingUrls.map(({ email, name, url }) =>
-        sendEmail({
-          orgId,
-          to: { name, email },
-          subject: portalUrl ? "Your subscription agreement is ready to sign" : `You have been invited to sign: ${envelope.title ?? "Document"}`,
-          htmlBody: buildSigningInvitationHtml({
-            recipientName: name,
-            documentTitle: envelope.title ?? "Document",
-            signingLink: url,
-          }),
-        }).then((result) => {
-          if (!result.ok) {
-            console.warn(`[envelopes/send] email to ${email} not sent externally (${result.detail}) — link available in-app`)
-          }
-        }),
-      ),
-    );
-  }
+  const invite = await inviteSigners(supabase, {
+    envelopeId,
+    title: (envelope as { title?: string }).title ?? "Document",
+    orgId,
+    lpSessionId: cur.lp_session_id,
+  });
+  if (!invite.ok) return NextResponse.json({ error: invite.error }, { status: 500 });
+  const signingUrls = invite.signingUrls;
 
   // Log 'sent' audit event
   await supabase.from("envelope_events").insert({

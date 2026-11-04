@@ -67,7 +67,8 @@ async function fetchSigningData(token: string): Promise<SigningData | null> {
     recipientEmail: recipient.email as string,
     documentId: env.id,
     documentTitle: env.title,
-    documentContent: env.document_content,
+    // The page is the PDF; its text is not sent to the browser a second time.
+    documentContent: env.pdf_storage_key ? "" : env.document_content,
     envelopeId: env.id,
     envelopeStatus: env.status,
     signingToken: token,

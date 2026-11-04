@@ -4,7 +4,7 @@
 // typed and rendered in a script face, or uploaded from a photo or scan. Either way the result is a PNG in dark
 // ink on a transparent background, so it prints on a white page. The server
 // re-validates it and stamps it into the PDF; this component only captures.
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { fitInside, inkFromPixels } from "@/lib/signing/ink";
 
 type Tab = "draw" | "type" | "upload";
@@ -13,6 +13,13 @@ const MAX_DATA_URL = 195_000;
 const INK = "#111827";
 const W = 800;
 const H = 240;
+const FALLBACK_FACE = "Georgia, cursive";
+
+/** The app's own script face (loaded with the page), with a plain fallback. */
+function scriptFace(): string {
+  const v = typeof document !== "undefined" ? getComputedStyle(document.documentElement).getPropertyValue("--font-signature").trim() : "";
+  return v ? `${v}, ${FALLBACK_FACE}` : FALLBACK_FACE;
+}
 
 export function SignaturePad({
   signerName,
@@ -32,17 +39,6 @@ export function SignaturePad({
   const hasInk = useRef(false);
   const [uploaded, setUploaded] = useState<string | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
-
-  // The script face for typed signatures.
-  useEffect(() => {
-    const link = document.createElement("link");
-    link.href = "https://fonts.googleapis.com/css2?family=Dancing+Script:wght@600&display=swap";
-    link.rel = "stylesheet";
-    document.head.appendChild(link);
-    return () => {
-      document.head.removeChild(link);
-    };
-  }, []);
 
   const clearCanvas = useCallback(() => {
     const c = canvasRef.current;
@@ -89,25 +85,37 @@ export function SignaturePad({
     if (hasInk.current) onChange(canvasRef.current!.toDataURL("image/png"));
   }
 
-  function renderTyped(text: string) {
+  // Typed text is drawn only once the script face has loaded; drawn sooner it would be
+  // stamped on the document in the fallback face. A later keystroke supersedes an earlier draw.
+  const typedSeq = useRef(0);
+  async function renderTyped(text: string) {
     const t = text.trim();
+    const mine = ++typedSeq.current;
     if (!t) {
       onChange(null);
       return;
     }
+    const face = scriptFace();
+    try {
+      await document.fonts?.load(`600 96px ${face}`, t);
+    } catch {
+      // The fallback face will do.
+    }
+    if (mine !== typedSeq.current) return;
     const c = document.createElement("canvas");
     c.width = W;
     c.height = H;
-    const ctx = c.getContext("2d")!;
+    const ctx = c.getContext("2d");
+    if (!ctx) return;
     ctx.clearRect(0, 0, W, H);
     ctx.fillStyle = INK;
-    ctx.font = "96px 'Dancing Script', Georgia, cursive";
     ctx.textBaseline = "middle";
     // Shrink to fit rather than clip a long name.
     let size = 96;
+    ctx.font = `600 ${size}px ${face}`;
     while (ctx.measureText(t).width > W - 40 && size > 28) {
       size -= 4;
-      ctx.font = `${size}px 'Dancing Script', Georgia, cursive`;
+      ctx.font = `600 ${size}px ${face}`;
     }
     ctx.fillText(t, 20, H / 2);
     onChange(c.toDataURL("image/png"));
@@ -237,7 +245,7 @@ export function SignaturePad({
             className="w-full rounded-lg border border-line bg-surface-2 px-3 py-2 text-sm text-fg-primary placeholder:text-fg-muted focus:border-gold-400 focus:outline-none"
           />
           <div className="flex min-h-[64px] items-center rounded-lg border border-line bg-white px-4 py-3">
-            <span style={{ fontFamily: "'Dancing Script', Georgia, cursive", fontSize: "2rem", color: INK }}>
+            <span style={{ fontFamily: `var(--font-signature), ${FALLBACK_FACE}`, fontWeight: 600, fontSize: "2rem", color: INK }}>
               {typed}
             </span>
           </div>
