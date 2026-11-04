@@ -1,0 +1,186 @@
+{
+  "type": "object",
+  "required": ["entryEbitda", "entryMultiple", "holdYears"],
+  "properties": {
+    "dealName": {
+      "type": "string"
+    },
+    "entryEbitda": {
+      "type": "number",
+      "minimum": 0
+    },
+    "entryMultiple": {
+      "type": "number",
+      "minimum": 0
+    },
+    "holdYears": {
+      "type": "number",
+      "minimum": 0
+    },
+    "leverageMultiple": {
+      "type": "number",
+      "minimum": 0
+    },
+    "debtAmount": {
+      "type": "number",
+      "minimum": 0
+    },
+    "exitMultiple": {
+      "type": "number",
+      "minimum": 0
+    },
+    "ebitdaGrowthRate": {
+      "type": "number"
+    },
+    "annualDebtPaydown": {
+      "type": "number",
+      "minimum": 0
+    },
+    "transactionFeesPct": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1
+    },
+    "hurdles": {
+      "type": "object",
+      "required": ["base", "holdYears"],
+      "properties": {
+        "base": {
+          "type": "object",
+          "properties": {
+            "irr": {
+              "type": "number",
+              "minimum": 0
+            },
+            "moic": {
+              "type": "number",
+              "minimum": 0
+            }
+          }
+        },
+        "downside": {
+          "type": "object",
+          "properties": {
+            "irr": {
+              "type": "number",
+              "minimum": 0
+            },
+            "moic": {
+              "type": "number",
+              "minimum": 0
+            }
+          }
+        },
+        "holdYears": {
+          "type": "number",
+          "minimum": 0
+        }
+      }
+    },
+    "drivers": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["driver", "values"],
+        "properties": {
+          "driver": {
+            "type": "string",
+            "enum": [
+              "entryMultiple",
+              "exitMultiple",
+              "ebitdaGrowthRate",
+              "leverageMultiple",
+              "holdYears",
+              "transactionFeesPct"
+            ]
+          },
+          "values": {
+            "type": "array",
+            "items": {
+              "type": "number"
+            }
+          }
+        }
+      }
+    },
+    "twoWay": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["row", "col"],
+        "properties": {
+          "row": {
+            "type": "string",
+            "enum": [
+              "entryMultiple",
+              "exitMultiple",
+              "ebitdaGrowthRate",
+              "leverageMultiple",
+              "holdYears",
+              "transactionFeesPct"
+            ]
+          },
+          "col": {
+            "type": "string",
+            "enum": [
+              "entryMultiple",
+              "exitMultiple",
+              "ebitdaGrowthRate",
+              "leverageMultiple",
+              "holdYears",
+              "transactionFeesPct"
+            ]
+          }
+        }
+      }
+    },
+    "cases": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name", "overrides"],
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string",
+            "enum": ["base", "downside", "upside"]
+          },
+          "overrides": {
+            "type": "object",
+            "properties": {
+              "entryMultiple": {
+                "type": "number",
+                "minimum": 0
+              },
+              "exitMultiple": {
+                "type": "number",
+                "minimum": 0
+              },
+              "ebitdaGrowthRate": {
+                "type": "number"
+              },
+              "leverageMultiple": {
+                "type": "number",
+                "minimum": 0
+              },
+              "holdYears": {
+                "type": "number",
+                "minimum": 0
+              },
+              "transactionFeesPct": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+              }
+            }
+          }
+        }
+      }
+    },
+    "gateOwner": {
+      "type": "string"
+    }
+  }
+}

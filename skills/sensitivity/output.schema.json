@@ -1,0 +1,221 @@
+{
+  "type": "object",
+  "required": [
+    "base",
+    "oneWay",
+    "twoWay",
+    "cases",
+    "combinedDownsideSupplied",
+    "breakEvens",
+    "hurdlesAreDefault",
+    "assumptions",
+    "warnings",
+    "limitation",
+    "note",
+    "gate"
+  ],
+  "properties": {
+    "base": {
+      "type": "object",
+      "required": ["verdict"],
+      "properties": {
+        "verdict": {
+          "type": "string",
+          "enum": ["clears", "misses", "not-tested"]
+        }
+      }
+    },
+    "oneWay": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["driver", "label", "baseIsAssumed", "points"],
+        "properties": {
+          "driver": {
+            "type": "string",
+            "enum": [
+              "entryMultiple",
+              "exitMultiple",
+              "ebitdaGrowthRate",
+              "leverageMultiple",
+              "holdYears",
+              "transactionFeesPct"
+            ]
+          },
+          "label": {
+            "type": "string"
+          },
+          "baseIsAssumed": {
+            "type": "boolean"
+          },
+          "points": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["value", "verdict"],
+              "properties": {
+                "value": {
+                  "type": "number"
+                },
+                "verdict": {
+                  "type": "string",
+                  "enum": ["clears", "misses", "not-tested"]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "twoWay": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "rowDriver",
+          "colDriver",
+          "rowValues",
+          "colValues",
+          "cells",
+          "defaultPairing"
+        ],
+        "properties": {
+          "rowDriver": {
+            "type": "string",
+            "enum": [
+              "entryMultiple",
+              "exitMultiple",
+              "ebitdaGrowthRate",
+              "leverageMultiple",
+              "holdYears",
+              "transactionFeesPct"
+            ]
+          },
+          "colDriver": {
+            "type": "string",
+            "enum": [
+              "entryMultiple",
+              "exitMultiple",
+              "ebitdaGrowthRate",
+              "leverageMultiple",
+              "holdYears",
+              "transactionFeesPct"
+            ]
+          },
+          "rowValues": {
+            "type": "array",
+            "items": {
+              "type": "number"
+            }
+          },
+          "colValues": {
+            "type": "array",
+            "items": {
+              "type": "number"
+            }
+          },
+          "cells": {
+            "type": "array"
+          },
+          "defaultPairing": {
+            "type": "boolean"
+          }
+        }
+      }
+    },
+    "cases": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name", "kind", "verdict", "testedAgainst"],
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string",
+            "enum": ["base", "downside", "upside"]
+          },
+          "verdict": {
+            "type": "string",
+            "enum": ["clears", "misses", "not-tested"]
+          },
+          "testedAgainst": {
+            "type": "string",
+            "enum": ["base hurdle", "downside hurdle", "none"]
+          }
+        }
+      }
+    },
+    "combinedDownsideSupplied": {
+      "type": "boolean"
+    },
+    "breakEvens": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "driver",
+          "label",
+          "direction",
+          "baseValue",
+          "status",
+          "note"
+        ],
+        "properties": {
+          "driver": {
+            "type": "string",
+            "enum": ["entryMultiple", "exitMultiple", "ebitdaGrowthRate"]
+          },
+          "label": {
+            "type": "string"
+          },
+          "direction": {
+            "type": "string",
+            "enum": ["maximum", "minimum"]
+          },
+          "baseValue": {
+            "type": "number"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "base-clears",
+              "base-misses",
+              "not-binding",
+              "not-reachable",
+              "not-tested"
+            ]
+          },
+          "note": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "hurdlesAreDefault": {
+      "type": "boolean"
+    },
+    "assumptions": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "warnings": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "limitation": {
+      "type": "string"
+    },
+    "note": {
+      "type": "string"
+    },
+    "gate": {
+      "type": "string"
+    }
+  }
+}

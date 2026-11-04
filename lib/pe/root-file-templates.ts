@@ -34,7 +34,7 @@ export const ROOT_FILE_META: RootFileMeta[] = [
   {
     key: "returns",
     title: "Return hurdles",
-    blurb: "Base and downside hurdles and the underwriting hold period. IRR is a decimal (0.2 = 20%). Read by bid-range, exit-routes and final-investment-report.",
+    blurb: "Base and downside hurdles and the underwriting hold period. IRR is a decimal (0.2 = 20%). Read by bid-range, sensitivity, exit-routes and final-investment-report.",
     starter: j({ base: { irr: null, moic: null }, downside: { irr: null, moic: null }, holdYears: null }),
   },
   {
@@ -52,7 +52,7 @@ export const ROOT_FILE_META: RootFileMeta[] = [
   {
     key: "firm",
     title: "Firm and gate owners",
-    blurb: "Who owns each human gate. Every PE skill ends by naming a gate owner; with a name here it names that person or committee instead of a generic role. Read by all 17 PE skills.",
+    blurb: "Who owns each human gate. Every PE skill ends by naming a gate owner; with a name here it names that person or committee instead of a generic role. Read by all 18 PE skills.",
     starter: j({ firmName: "", gateOwners: Object.fromEntries(GATE_KEYS.map((k) => [k, ""])) }),
   },
   {

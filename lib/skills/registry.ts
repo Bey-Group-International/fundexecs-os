@@ -59,6 +59,7 @@ import { exitRoutes } from "./catalog/exit-routes";
 import { dataRoomPrep } from "./catalog/data-room-prep";
 import { finalInvestmentReport } from "./catalog/final-investment-report";
 import { debtStructure } from "./catalog/debt-structure";
+import { sensitivity } from "./catalog/sensitivity";
 
 const SKILLS: Record<string, SkillDefinition> = {
   [screenDeal.manifest.id]: screenDeal as SkillDefinition,
@@ -132,6 +133,8 @@ const SKILLS: Record<string, SkillDefinition> = {
   [finalInvestmentReport.manifest.id]: finalInvestmentReport as SkillDefinition,
   // PE department · valuation (structure from supplied tranches and cases; headroom at the tightest period).
   [debtStructure.manifest.id]: debtStructure as SkillDefinition,
+  // PE department · valuation (flexes only the ranges and cases supplied; break-evens vs the hurdle).
+  [sensitivity.manifest.id]: sensitivity as SkillDefinition,
 };
 
 export function getSkill(id: string): SkillDefinition | null {
