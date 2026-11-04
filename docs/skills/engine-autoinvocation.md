@@ -85,8 +85,9 @@ typecheck + eslint clean.
 - Populate `screening_criteria` from the mandate UI (this slice adds the column +
   read path; authoring UI is a separate front-end change).
 - Broaden the planning context: link a deal to a workflow earlier (so `screen-deal`
-  fires on first-run sourcing/screening workflows, not only continuations), and
-  thread a candidate set through for `source-deals`.
+  fires on first-run sourcing/screening workflows, not only continuations).
+  *(Done: a candidate set is now threaded through from the sourcing catalog, and the flag
+  can be set per organization — see [pe-autoinvoke-pilot.md](./pe-autoinvoke-pilot.md).)*
 - Planner-emitted tags from the LLM planner (today detection is deterministic
   regex); an explicit `skillId` on a planned step would remove the guesswork.
 
