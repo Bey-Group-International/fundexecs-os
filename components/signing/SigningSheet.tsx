@@ -82,6 +82,17 @@ export function SigningSheet({
   const activeIndex = steps.findIndex((b) => b.id === activeId);
   const lastOpen = activeIndex >= 0 && activeIndex === steps.length - 1;
 
+  // A right click closes the open panel (and the browser's own menu stays out of the way).
+  useEffect(() => {
+    if (!activeId) return;
+    function onContext(e: MouseEvent) {
+      e.preventDefault();
+      setActiveId(null);
+    }
+    document.addEventListener("contextmenu", onContext);
+    return () => document.removeEventListener("contextmenu", onContext);
+  }, [activeId]);
+
   // Bring the open spot into view.
   useEffect(() => {
     if (!activeId) return;

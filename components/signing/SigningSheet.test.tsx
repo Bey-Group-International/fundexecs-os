@@ -144,4 +144,16 @@ describe("SigningSheet: a × at each spot, one at a time", () => {
     expect(within(screen.getByRole("dialog", { name: "Date and time" })).getByRole("checkbox")).toBeTruthy();
     expect(screen.getAllByRole("checkbox")).toHaveLength(1);
   });
+
+  it("a right click closes the open panel, and the spot can be reopened", () => {
+    mount();
+    expect(screen.getByRole("dialog", { name: "Name" })).toBeTruthy();
+    const notPrevented = fireEvent.contextMenu(document.body);
+    expect(notPrevented).toBe(false); // the browser's own menu is suppressed
+    expect(screen.queryByRole("dialog")).toBeNull();
+    // With nothing open, a right click is left to the browser.
+    expect(fireEvent.contextMenu(document.body)).toBe(true);
+    fireEvent.click(screen.getByRole("button", { name: /Name: click to complete/ }));
+    expect(screen.getByRole("dialog", { name: "Name" })).toBeTruthy();
+  });
 });

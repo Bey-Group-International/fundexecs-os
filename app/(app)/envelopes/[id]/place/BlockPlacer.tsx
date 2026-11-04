@@ -128,6 +128,17 @@ export function BlockPlacer({ title, fieldsUrl, pdfUrl, sendUrl, doneHref, prefi
     return () => document.removeEventListener("pointerdown", onDown);
   }, [menu]);
 
+  // A right click closes the open menu (and the browser's own menu stays out of the way).
+  useEffect(() => {
+    if (!menu) return;
+    function onContext(e: MouseEvent) {
+      e.preventDefault();
+      setMenu(null);
+    }
+    document.addEventListener("contextmenu", onContext);
+    return () => document.removeEventListener("contextmenu", onContext);
+  }, [menu]);
+
   const partyIndex = useMemo(() => new Map(parties.map((p, i) => [p.id, i === 0 ? 0 : p.role === "owner" ? 1 : 0])), [parties]);
   const sel = blocks.find((b) => b.key === selected) ?? null;
   const party = (id: string) => parties.find((p) => p.id === id);
