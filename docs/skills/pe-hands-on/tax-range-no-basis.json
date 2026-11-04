@@ -1,0 +1,20 @@
+{
+  "openYears": [
+    {
+      "jurisdiction": "UK",
+      "years": [2023]
+    }
+  ],
+  "issues": [
+    {
+      "title": "Possible permanent establishment",
+      "rating": "amber",
+      "category": "permanent-establishment",
+      "jurisdiction": "FR",
+      "period": "2023",
+      "documentRef": "org-chart.pdf",
+      "rangeLow": 100,
+      "rangeHigh": 300
+    }
+  ]
+}

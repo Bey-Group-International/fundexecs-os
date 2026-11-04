@@ -666,7 +666,7 @@ const run: SkillCore<OperationalDdInput, OperationalDdOutput> = (
     missingData.push(`Not reviewed: ${categoriesNotReviewed.join(", ")}`);
   if (ranked.uncited.length)
     missingData.push(
-      `${ranked.uncited.length} risk${ranked.uncited.length === 1 ? "" : "s"} cite no document and are graded U: ${ranked.uncited.join("; ")}`,
+      `${ranked.uncited.length} risk${ranked.uncited.length === 1 ? "" : "s"} ${ranked.uncited.length === 1 ? "cites" : "cite"} no document and ${ranked.uncited.length === 1 ? "is" : "are"} graded U: ${ranked.uncited.join("; ")}`,
     );
   if (!input.siteVisitDone)
     missingData.push(

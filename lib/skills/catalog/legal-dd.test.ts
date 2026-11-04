@@ -252,4 +252,12 @@ describe("legal-dd core", () => {
       "Jane Doe, GC reviews and owns the legal findings.",
     );
   });
+
+  it("reads correctly when exactly one issue is uncited", () => {
+    expect(
+      run({
+        issues: [{ title: "Side letter", rating: "amber" }],
+      }).missingData.join(" "),
+    ).toMatch(/1 issue cites no document and clause: Side letter/);
+  });
 });

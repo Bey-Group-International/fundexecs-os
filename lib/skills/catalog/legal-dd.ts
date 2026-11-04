@@ -265,7 +265,7 @@ const run: SkillCore<LegalDdInput, LegalDdOutput> = (
       missingData.push(`${r.name}: not stated — ${r.notStated.join(", ")}`);
   if (ranked.uncited.length)
     missingData.push(
-      `${ranked.uncited.length} issue${ranked.uncited.length === 1 ? "" : "s"} cite no document and clause: ${ranked.uncited.join("; ")}`,
+      `${ranked.uncited.length} issue${ranked.uncited.length === 1 ? "" : "s"} ${ranked.uncited.length === 1 ? "cites" : "cite"} no document and clause: ${ranked.uncited.join("; ")}`,
     );
 
   for (const r of abstract)
@@ -295,7 +295,7 @@ const run: SkillCore<LegalDdInput, LegalDdOutput> = (
       ? "No legal issues were supplied or derived. That is not a clean bill: " +
         (gaps.length ? "documents are missing, and " : "") +
         "the list reflects only what was reviewed."
-      : `${ranked.issues.length} legal issue${ranked.issues.length === 1 ? "" : "s"}: ${red} red, ${amber} amber, ${green} green${derivedCount ? ` (${derivedCount} derived from the contract abstract)` : ""}. ${gaps.length ? `${gaps.length} expected document${gaps.length === 1 ? "" : "s"} not received. ` : ""}${ranked.uncited.length ? `${ranked.uncited.length} cite no document and clause and are graded U. ` : ""}`.trim();
+      : `${ranked.issues.length} legal issue${ranked.issues.length === 1 ? "" : "s"}: ${red} red, ${amber} amber, ${green} green${derivedCount ? ` (${derivedCount} derived from the contract abstract)` : ""}. ${gaps.length ? `${gaps.length} expected document${gaps.length === 1 ? "" : "s"} not received. ` : ""}${ranked.uncited.length ? `${ranked.uncited.length} ${ranked.uncited.length === 1 ? "cites" : "cite"} no document and clause and ${ranked.uncited.length === 1 ? "is" : "are"} graded U. ` : ""}`.trim();
 
   const structured: LegalDdOutput = {
     issues: ranked.issues,

@@ -322,7 +322,7 @@ const run: SkillCore<TaxDdInput, TaxDdOutput> = (
     );
   if (ranked.uncited.length)
     missingData.push(
-      `${ranked.uncited.length} exposure${ranked.uncited.length === 1 ? "" : "s"} cite no document and are graded U: ${ranked.uncited.join("; ")}`,
+      `${ranked.uncited.length} exposure${ranked.uncited.length === 1 ? "" : "s"} ${ranked.uncited.length === 1 ? "cites" : "cite"} no document and ${ranked.uncited.length === 1 ? "is" : "are"} graded U: ${ranked.uncited.join("; ")}`,
     );
   if (ranked.rangesDropped.length)
     missingData.push(
@@ -394,7 +394,7 @@ const run: SkillCore<TaxDdInput, TaxDdOutput> = (
   const note =
     ranked.issues.length === 0
       ? "No tax issues were supplied or derived. That is not a clean bill: the list reflects only what was reviewed."
-      : `${ranked.issues.length} tax issue${ranked.issues.length === 1 ? "" : "s"}: ${red} red, ${amber} amber, ${green} green${derivedCount ? ` (${derivedCount} derived from the years and losses)` : ""}. ${years.filter((y) => y.status === "no-computation").length ? `${years.filter((y) => y.status === "no-computation").length} year(s) have no computation. ` : ""}${rangeTotal ? `Supported ranges sum to ${rangeTotal.low}–${rangeTotal.high} across ${rangeTotal.issuesIncluded} issue${rangeTotal.issuesIncluded === 1 ? "" : "s"}; ${redAmberWithoutRange} red or amber issue${redAmberWithoutRange === 1 ? " has" : "s have"} no range. ` : "No exposure range is supported by a stated basis. "}${ranked.uncited.length ? `${ranked.uncited.length} cite no document. ` : ""}`.trim();
+      : `${ranked.issues.length} tax issue${ranked.issues.length === 1 ? "" : "s"}: ${red} red, ${amber} amber, ${green} green${derivedCount ? ` (${derivedCount} derived from the years and losses)` : ""}. ${years.filter((y) => y.status === "no-computation").length ? `${years.filter((y) => y.status === "no-computation").length} year(s) have no computation. ` : ""}${rangeTotal ? `Supported ranges sum to ${rangeTotal.low}–${rangeTotal.high} across ${rangeTotal.issuesIncluded} issue${rangeTotal.issuesIncluded === 1 ? "" : "s"}; ${redAmberWithoutRange} red or amber issue${redAmberWithoutRange === 1 ? " has" : "s have"} no range. ` : "No exposure range is supported by a stated basis. "}${ranked.uncited.length ? `${ranked.uncited.length} ${ranked.uncited.length === 1 ? "cites" : "cite"} no document. ` : ""}`.trim();
 
   const structured: TaxDdOutput = {
     issues: ranked.issues,
