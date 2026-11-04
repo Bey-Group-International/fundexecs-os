@@ -1,0 +1,184 @@
+{
+  "type": "object",
+  "properties": {
+    "dealName": {
+      "type": "string"
+    },
+    "documentsReceived": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "expectedDocuments": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "openYears": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["jurisdiction", "years"],
+        "properties": {
+          "jurisdiction": {
+            "type": "string"
+          },
+          "years": {
+            "type": "array",
+            "items": {
+              "type": "number"
+            }
+          }
+        }
+      }
+    },
+    "reconciliations": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "jurisdiction",
+          "year",
+          "chargeInAccounts",
+          "chargePerComputation"
+        ],
+        "properties": {
+          "jurisdiction": {
+            "type": "string"
+          },
+          "year": {
+            "type": "number"
+          },
+          "chargeInAccounts": {
+            "type": "number"
+          },
+          "chargePerComputation": {
+            "type": "number"
+          },
+          "explained": {
+            "type": "number",
+            "minimum": 0
+          },
+          "documentRef": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "toleranceAbs": {
+      "type": "number",
+      "minimum": 0
+    },
+    "losses": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["jurisdiction", "amount"],
+        "properties": {
+          "jurisdiction": {
+            "type": "string"
+          },
+          "amount": {
+            "type": "number",
+            "minimum": 0
+          },
+          "restrictionOnChangeOfControl": {
+            "type": "string",
+            "enum": ["yes", "no", "unknown"]
+          },
+          "documentRef": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "issues": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["title", "rating"],
+        "properties": {
+          "title": {
+            "type": "string"
+          },
+          "rating": {
+            "type": "string",
+            "enum": ["red", "amber", "green"]
+          },
+          "category": {
+            "type": "string",
+            "enum": [
+              "transfer-pricing",
+              "permanent-establishment",
+              "vat-sales-tax",
+              "payroll-tax",
+              "unused-losses",
+              "other"
+            ]
+          },
+          "jurisdiction": {
+            "type": "string"
+          },
+          "period": {
+            "type": "string"
+          },
+          "documentRef": {
+            "type": "string"
+          },
+          "clauseRef": {
+            "type": "string"
+          },
+          "evidenceGrade": {
+            "type": "string",
+            "enum": ["A", "B", "C", "U"]
+          },
+          "impact": {
+            "type": "string",
+            "enum": [
+              "walk-away",
+              "price",
+              "structure",
+              "spa-protection",
+              "100-day"
+            ]
+          },
+          "question": {
+            "type": "string"
+          },
+          "owner": {
+            "type": "string"
+          },
+          "rangeLow": {
+            "type": "number",
+            "minimum": 0
+          },
+          "rangeHigh": {
+            "type": "number",
+            "minimum": 0
+          },
+          "rangeBasis": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "exposureTypesReviewed": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": [
+          "transfer-pricing",
+          "permanent-establishment",
+          "vat-sales-tax",
+          "payroll-tax",
+          "unused-losses"
+        ]
+      }
+    },
+    "gateOwner": {
+      "type": "string"
+    }
+  }
+}

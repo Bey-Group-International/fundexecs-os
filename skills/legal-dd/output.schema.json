@@ -1,79 +1,51 @@
 {
+  "type": "object",
+  "required": [
+    "issues",
+    "counts",
+    "abstract",
+    "documentGaps",
+    "notReviewed",
+    "uncited",
+    "duplicatesMerged",
+    "derivedCount",
+    "handoff",
+    "limitation",
+    "note",
+    "gate"
+  ],
   "properties": {
-    "abstract": {
-      "items": {
-        "properties": {
-          "changeOfControl": {
-            "type": "string"
-          },
-          "exclusivity": {
-            "type": "string"
-          },
-          "name": {
-            "type": "string"
-          },
-          "notStated": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array"
-          }
-        },
-        "required": [ "name", "changeOfControl", "exclusivity", "notStated" ],
-        "type": "object"
-      },
-      "type": "array"
-    },
-    "counts": {
-      "properties": {
-        "amber": {
-          "type": "number"
-        },
-        "green": {
-          "type": "number"
-        },
-        "red": {
-          "type": "number"
-        }
-      },
-      "required": [ "red", "amber", "green" ],
-      "type": "object"
-    },
-    "derivedCount": {
-      "type": "number"
-    },
-    "documentGaps": {
-      "items": {
-        "type": "string"
-      },
-      "type": "array"
-    },
-    "duplicatesMerged": {
-      "type": "number"
-    },
-    "gate": {
-      "type": "string"
-    },
-    "handoff": {
-      "properties": {
-        "findings": {
-          "type": "array"
-        },
-        "needingImpact": {
-          "items": {
-            "type": "string"
-          },
-          "type": "array"
-        }
-      },
-      "required": [ "findings", "needingImpact" ],
-      "type": "object"
-    },
     "issues": {
+      "type": "array",
       "items": {
+        "type": "object",
+        "required": [
+          "rank",
+          "title",
+          "rating",
+          "category",
+          "evidenceGrade",
+          "cited",
+          "derived",
+          "notes"
+        ],
         "properties": {
+          "rank": {
+            "type": "number"
+          },
+          "title": {
+            "type": "string"
+          },
+          "rating": {
+            "type": "string",
+            "enum": ["red", "amber", "green"]
+          },
           "category": {
             "type": "string"
+          },
+          "evidenceGrade": {
+            "type": "string",
+            "enum": ["A", "B", "C", "U"]
           },
           "cited": {
             "type": "boolean"
@@ -81,52 +53,109 @@
           "derived": {
             "type": "boolean"
           },
-          "evidenceGrade": {
-            "enum": [ "A", "B", "C", "U" ],
-            "type": "string"
-          },
           "notes": {
+            "type": "array",
             "items": {
               "type": "string"
-            },
-            "type": "array"
-          },
-          "rank": {
-            "type": "number"
-          },
-          "rating": {
-            "enum": [ "red", "amber", "green" ],
+            }
+          }
+        }
+      }
+    },
+    "counts": {
+      "type": "object",
+      "required": ["red", "amber", "green"],
+      "properties": {
+        "red": {
+          "type": "number"
+        },
+        "amber": {
+          "type": "number"
+        },
+        "green": {
+          "type": "number"
+        }
+      }
+    },
+    "abstract": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name", "changeOfControl", "exclusivity", "notStated"],
+        "properties": {
+          "name": {
             "type": "string"
           },
-          "title": {
+          "changeOfControl": {
+            "type": "string"
+          },
+          "exclusivity": {
+            "type": "string"
+          },
+          "notStated": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "documentGaps": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "notReviewed": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": [
+          "contract",
+          "litigation",
+          "regulatory",
+          "ip",
+          "corporate",
+          "employment"
+        ]
+      }
+    },
+    "uncited": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "duplicatesMerged": {
+      "type": "number"
+    },
+    "derivedCount": {
+      "type": "number"
+    },
+    "handoff": {
+      "type": "object",
+      "required": ["findings", "needingImpact"],
+      "properties": {
+        "findings": {
+          "type": "array"
+        },
+        "needingImpact": {
+          "type": "array",
+          "items": {
             "type": "string"
           }
-        },
-        "required": [ "rank", "title", "rating", "category", "evidenceGrade", "cited", "derived", "notes" ],
-        "type": "object"
-      },
-      "type": "array"
+        }
+      }
     },
     "limitation": {
       "type": "string"
     },
-    "notReviewed": {
-      "items": {
-        "enum": [ "contract", "litigation", "regulatory", "ip", "corporate", "employment" ],
-        "type": "string"
-      },
-      "type": "array"
-    },
     "note": {
       "type": "string"
     },
-    "uncited": {
-      "items": {
-        "type": "string"
-      },
-      "type": "array"
+    "gate": {
+      "type": "string"
     }
-  },
-  "required": [ "issues", "counts", "abstract", "documentGaps", "notReviewed", "uncited", "duplicatesMerged", "derivedCount", "handoff", "limitation", "note", "gate" ],
-  "type": "object"
+  }
 }

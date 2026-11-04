@@ -1,0 +1,8 @@
+# skills/tax-dd/evaluation.yaml — acceptance criteria; exercised by lib/skills/catalog/tax-dd.test.ts
+criteria:
+  - open years without a computation named
+  - ranges dropped when no basis
+  - adviser questions listed
+  - states it flags and does not quantify
+  - tax adviser named as the gate
+example: examples/example-1.json

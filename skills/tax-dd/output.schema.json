@@ -1,0 +1,199 @@
+{
+  "type": "object",
+  "required": [
+    "issues",
+    "counts",
+    "years",
+    "documentGaps",
+    "typesNotReviewed",
+    "uncited",
+    "rangesDropped",
+    "adviserQuestions",
+    "duplicatesMerged",
+    "derivedCount",
+    "handoff",
+    "limitation",
+    "note",
+    "gate"
+  ],
+  "properties": {
+    "issues": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "rank",
+          "title",
+          "rating",
+          "category",
+          "evidenceGrade",
+          "cited",
+          "derived",
+          "notes"
+        ],
+        "properties": {
+          "rank": {
+            "type": "number"
+          },
+          "title": {
+            "type": "string"
+          },
+          "rating": {
+            "type": "string",
+            "enum": ["red", "amber", "green"]
+          },
+          "category": {
+            "type": "string"
+          },
+          "evidenceGrade": {
+            "type": "string",
+            "enum": ["A", "B", "C", "U"]
+          },
+          "cited": {
+            "type": "boolean"
+          },
+          "derived": {
+            "type": "boolean"
+          },
+          "notes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "counts": {
+      "type": "object",
+      "required": ["red", "amber", "green"],
+      "properties": {
+        "red": {
+          "type": "number"
+        },
+        "amber": {
+          "type": "number"
+        },
+        "green": {
+          "type": "number"
+        }
+      }
+    },
+    "years": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["jurisdiction", "year", "open", "status"],
+        "properties": {
+          "jurisdiction": {
+            "type": "string"
+          },
+          "year": {
+            "type": "number"
+          },
+          "open": {
+            "type": "boolean"
+          },
+          "status": {
+            "type": "string",
+            "enum": ["reconciled", "difference", "no-computation"]
+          }
+        }
+      }
+    },
+    "documentGaps": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "typesNotReviewed": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": [
+          "transfer-pricing",
+          "permanent-establishment",
+          "vat-sales-tax",
+          "payroll-tax",
+          "unused-losses"
+        ]
+      }
+    },
+    "uncited": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "rangesDropped": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "rangeTotal": {
+      "type": "object",
+      "required": ["low", "high", "issuesIncluded", "redAmberWithoutRange"],
+      "properties": {
+        "low": {
+          "type": "number"
+        },
+        "high": {
+          "type": "number"
+        },
+        "issuesIncluded": {
+          "type": "number"
+        },
+        "redAmberWithoutRange": {
+          "type": "number"
+        }
+      }
+    },
+    "adviserQuestions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["issue", "question"],
+        "properties": {
+          "issue": {
+            "type": "string"
+          },
+          "question": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "duplicatesMerged": {
+      "type": "number"
+    },
+    "derivedCount": {
+      "type": "number"
+    },
+    "handoff": {
+      "type": "object",
+      "required": ["findings", "needingImpact"],
+      "properties": {
+        "findings": {
+          "type": "array"
+        },
+        "needingImpact": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "limitation": {
+      "type": "string"
+    },
+    "note": {
+      "type": "string"
+    },
+    "gate": {
+      "type": "string"
+    }
+  }
+}
