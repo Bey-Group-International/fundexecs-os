@@ -4,13 +4,14 @@ import { stampBlocks } from "./stamp.server";
 import { buildDocumentPdf } from "./executed-pdf.server";
 import { BLOCKS, blockSpec, clampBlock, newBlockAt, formatBlockDateTime } from "./blocks";
 import { missingRequiredFields } from "../envelope-signing";
+import { blockValueProblem } from "./blocks";
 
 const PNG =
   "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
 
 describe("blocks", () => {
-  it("offers exactly the six blocks, and old types behave like their nearest block", () => {
-    expect(BLOCKS.map((b) => b.type)).toEqual(["name", "signature", "datetime", "company", "title", "address"]);
+  it("offers exactly these blocks, and old types behave like their nearest block", () => {
+    expect(BLOCKS.map((b) => b.type)).toEqual(["name", "signature", "datetime", "company", "title", "address", "email", "phone"]);
     expect(blockSpec("initials")?.type).toBe("signature");
     expect(blockSpec("date")?.type).toBe("datetime");
     expect(blockSpec("nope")).toBeNull();
@@ -67,5 +68,20 @@ describe("stampBlocks", () => {
       { page: 1, xPct: 10, yPct: 20, widthPct: 20, heightPct: 6, type: "signature", value: null, signaturePng: "data:image/png;base64,AAAA" },
     ]);
     expect(Buffer.from(out).includes(Buffer.from("/Subtype /Image"))).toBe(false);
+  });
+});
+
+describe("blockValueProblem", () => {
+  it("accepts good emails and phone numbers, and empty values", () => {
+    expect(blockValueProblem("email", "jane@lp.com")).toBeNull();
+    expect(blockValueProblem("phone", "+1 (415) 555-0100")).toBeNull();
+    expect(blockValueProblem("email", "")).toBeNull();
+    expect(blockValueProblem("name", "anything at all")).toBeNull();
+  });
+  it("refuses a malformed email or phone number", () => {
+    expect(blockValueProblem("email", "jane@")).toMatch(/valid email/);
+    expect(blockValueProblem("email", "no at sign.com")).toMatch(/valid email/);
+    expect(blockValueProblem("phone", "12")).toMatch(/valid phone/);
+    expect(blockValueProblem("phone", "call me")).toMatch(/valid phone/);
   });
 });

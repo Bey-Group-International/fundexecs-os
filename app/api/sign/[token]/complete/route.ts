@@ -3,6 +3,7 @@ import { createClient } from '@supabase/supabase-js'
 import { missingRequiredFields, type EnvelopeFieldRequirement } from '@/lib/envelope-signing'
 import { checkRateLimit, rateLimitHeaders } from '@/lib/rate-limit'
 import { parseSignaturePng } from '@/lib/signing/signature-image'
+import { blockValueProblem } from '@/lib/signing/blocks'
 
 export const runtime = 'nodejs'
 
@@ -174,6 +175,11 @@ export async function POST(
         { ok: false, error: `Required fields are incomplete: ${missing.join(', ')}` },
         { status: 400 }
       )
+    }
+
+    for (const f of fieldList) {
+      const problem = blockValueProblem(f.field_type, responses[f.id])
+      if (problem) return NextResponse.json({ ok: false, error: problem }, { status: 400 })
     }
 
     const ipAddress = getIpAddress(request)

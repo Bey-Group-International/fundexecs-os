@@ -30,6 +30,19 @@ describe("instantiateBlocks", () => {
   });
 });
 
+describe("instantiateBlocks email", () => {
+  it("starts an empty email block with the reader's email, never the countersigner's", () => {
+    const rows = instantiateBlocks(
+      [block({ field_type: "email" }), block({ field_type: "email", recipient_id: "owner" }), block({ field_type: "email", prefill: "legal@lp.com" })],
+      { signer: "r-reader", owner: "r-owner" },
+      "Jane Smith",
+      "e",
+      "jane@lp.com",
+    );
+    expect(rows.map((r) => r.prefill)).toEqual(["jane@lp.com", null, "legal@lp.com"]);
+  });
+});
+
 describe("what can carry a signature", () => {
   it("is an uploaded PDF or a written document, nothing else", () => {
     expect(canCarrySignature({ storage_key: "org/nda.pdf", content: null })).toBe(true);
