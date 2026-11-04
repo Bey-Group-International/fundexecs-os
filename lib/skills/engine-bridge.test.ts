@@ -77,6 +77,8 @@ describe("detectSkillForStep", () => {
       ["Build the contract abstract table", "legal-dd"],
       ["Tax due diligence issues list", "tax-dd"],
       ["List the tax exposures for the adviser", "tax-dd"],
+      ["Technology due diligence on the platform", "technology-dd"],
+      ["Review the security posture and technical debt", "technology-dd"],
     ];
     for (const [step, id] of cases) expect([step, detectSkillForStep(step)]).toEqual([step, id]);
   });

@@ -1,0 +1,78 @@
+# skills/technology-dd/skill.yaml
+# Authoring spec for Technology DD Issues List. The machine-readable manifest the runtime loads is
+# the TypeScript SkillDefinition in lib/skills/catalog/technology-dd.ts; this YAML is the
+# human-facing contract and must stay consistent with it.
+# Origin: PE department pack · Due Diligence. Rules re-implemented natively; no pack text is shipped.
+id: technology-dd
+name: Technology DD Issues List
+version: 1.0.0
+owner: fundexecs
+hub: run
+
+applicable_executives:
+  - diligence
+  - analyst
+
+supported_entity_types: [deal]
+
+required_inputs:
+
+optional_inputs:
+  - documentsReceived
+  - expectedDocuments
+  - hosting
+  - components
+  - securityFindings
+  - penTest
+  - asOf
+  - penTestMaxAgeMonths
+  - capacityTests
+  - warnAbovePct
+  - keyPeople
+  - issues
+  - categoriesReviewed
+  - repositoryAccess
+  - evidencePolicy
+  - gateOwner
+
+outputs:
+  - stack
+  - penTest
+  - capacity
+  - issues
+  - rangeTotal
+  - priceSupportedRange
+  - documentGaps
+  - handoff
+  - basisOfReview
+  - note
+  - gate
+
+artifact_types: [analysis]
+data_permissions: [deal:read, document:read, data_room:read]
+tools: []
+
+approval_tier: 1
+risk_classification: moderate
+execution_timeout_ms: 15000
+retry_policy:
+  max_attempts: 1
+  backoff_ms: 0
+
+provider_capabilities:
+  - structured_extraction
+
+allowed_downstream_skills: [red-flag-register, dd-checklist]
+
+prohibited_actions:
+  - send_outreach
+  - distribute_report
+  - sign_document
+  - move_capital
+  - capital_call
+  - submit_term_sheet
+
+input_schema: input.schema.json
+output_schema: output.schema.json
+policy: policy.yaml
+evaluation: evaluation.yaml

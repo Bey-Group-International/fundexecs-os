@@ -52,13 +52,13 @@ export const ROOT_FILE_META: RootFileMeta[] = [
   {
     key: "firm",
     title: "Firm and gate owners",
-    blurb: "Who owns each human gate. Every PE skill ends by naming a gate owner; with a name here it names that person or committee instead of a generic role. Read by all 20 PE skills.",
+    blurb: "Who owns each human gate. Every PE skill ends by naming a gate owner; with a name here it names that person or committee instead of a generic role. Read by all 21 PE skills.",
     starter: j({ firmName: "", gateOwners: Object.fromEntries(GATE_KEYS.map((k) => [k, ""])) }),
   },
   {
     key: "evidence",
     title: "Evidence grades",
-    blurb: "Which evidence grades may support a price. A is audited / contractual, B is management data with support, C is assertion without support, U is untested. U can never support a price. Read by red-flag-register.",
+    blurb: "Which evidence grades may support a price. A is audited / contractual, B is management data with support, C is assertion without support, U is untested. U can never support a price. Read by red-flag-register and technology-dd.",
     starter: j({ supportsPrice: { A: null, B: null, C: null } }),
   },
   {

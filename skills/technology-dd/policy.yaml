@@ -1,0 +1,30 @@
+# skills/technology-dd/policy.yaml — enforced by lib/skills/runner.ts and lib/executives/registry.ts
+approval_tier: 1
+risk_classification: moderate
+
+allowed_executives:
+  - diligence
+  - analyst
+
+data_scopes:
+  - deal:read
+  - document:read
+  - data_room:read
+
+prohibited_actions:
+  - send_outreach
+  - distribute_report
+  - sign_document
+  - move_capital
+  - capital_call
+  - submit_term_sheet
+
+guardrails:
+  - Every risk cites a document or test; one that does not is kept, graded U (untested) and listed.
+  - A cost range appears only with a stated basis; the part of the total that the firm's evidence policy lets support a price is stated separately (standing default labelled).
+  - The capacity test uses the plan's own growth in each metric; 'tight' is flagged only against a threshold the caller supplies, and a breach is always flagged.
+  - This is a document review: the skill does not read code, even when repository access is granted. A technical reviewer confirms the risk ratings.
+
+downstream:
+  - red-flag-register
+  - dd-checklist

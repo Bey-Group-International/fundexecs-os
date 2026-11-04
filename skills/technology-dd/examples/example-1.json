@@ -1,0 +1,59 @@
+{
+  "input": {
+    "asOf": "2026-11-04",
+    "capacityTests": [ {
+      "capacity": 1000,
+      "currentPeak": 600,
+      "documentRef": "LOAD.pdf",
+      "metric": "Peak orders/min",
+      "planGrowthPct": 80
+    } ],
+    "categoriesReviewed": [ "security", "infrastructure" ],
+    "components": [ {
+      "documentRef": "ARCH.pdf",
+      "kind": "service",
+      "name": "Core API",
+      "supportStatus": "end-of-life",
+      "version": "Node 14"
+    }, {
+      "documentRef": "ARCH.pdf",
+      "name": "Billing DB",
+      "supportStatus": "supported",
+      "version": "Postgres 15"
+    } ],
+    "dealName": "Acme",
+    "documentsReceived": [ "Architecture documents", "Security policies and pen test reports", "Product roadmap" ],
+    "hosting": "AWS eu-west-1",
+    "issues": [ {
+      "category": "technical-debt",
+      "documentRef": "ARCH.pdf",
+      "evidenceGrade": "B",
+      "rangeBasis": "Vendor quote for the service split plus 20% contingency",
+      "rangeHigh": 400,
+      "rangeLow": 200,
+      "rating": "amber",
+      "title": "Monolith blocks independent scaling"
+    } ],
+    "keyPeople": [ {
+      "documentRef": "ORG.pdf",
+      "knowledgeDocumented": false,
+      "retentionRisk": "high",
+      "role": "CTO"
+    } ],
+    "penTest": {
+      "date": "2025-09-15",
+      "documentRef": "PT-2025.pdf"
+    },
+    "securityFindings": [ {
+      "documentRef": "PT-2025.pdf section 4.2",
+      "remediation": {
+        "basis": "2-3 engineer-weeks at 1,500 a day",
+        "high": 50,
+        "low": 30
+      },
+      "severity": "high",
+      "status": "open",
+      "title": "SQL injection in search endpoint"
+    } ]
+  }
+}

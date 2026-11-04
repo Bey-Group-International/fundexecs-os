@@ -1,0 +1,206 @@
+{
+  "properties": {
+    "basisOfReview": {
+      "type": "string"
+    },
+    "capacity": {
+      "items": {
+        "properties": {
+          "metric": {
+            "type": "string"
+          },
+          "projected": {
+            "type": "number"
+          },
+          "status": {
+            "enum": [ "breach", "warn", "within" ],
+            "type": "string"
+          },
+          "utilisationPct": {
+            "type": "number"
+          }
+        },
+        "required": [ "metric", "projected", "utilisationPct", "status" ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "categoriesNotReviewed": {
+      "items": {
+        "enum": [ "security", "infrastructure", "technical-debt", "scalability", "people" ],
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "counts": {
+      "properties": {
+        "amber": {
+          "type": "number"
+        },
+        "green": {
+          "type": "number"
+        },
+        "red": {
+          "type": "number"
+        }
+      },
+      "required": [ "red", "amber", "green" ],
+      "type": "object"
+    },
+    "derivedCount": {
+      "type": "number"
+    },
+    "documentGaps": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "duplicatesMerged": {
+      "type": "number"
+    },
+    "evidencePolicyIsDefault": {
+      "type": "boolean"
+    },
+    "gate": {
+      "type": "string"
+    },
+    "handoff": {
+      "properties": {
+        "findings": {
+          "type": "array"
+        },
+        "needingImpact": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [ "findings", "needingImpact" ],
+      "type": "object"
+    },
+    "issues": {
+      "items": {
+        "properties": {
+          "category": {
+            "type": "string"
+          },
+          "cited": {
+            "type": "boolean"
+          },
+          "derived": {
+            "type": "boolean"
+          },
+          "evidenceGrade": {
+            "enum": [ "A", "B", "C", "U" ],
+            "type": "string"
+          },
+          "notes": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "rank": {
+            "type": "number"
+          },
+          "rating": {
+            "enum": [ "red", "amber", "green" ],
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          }
+        },
+        "required": [ "rank", "title", "rating", "category", "evidenceGrade", "cited", "derived", "notes" ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "limitation": {
+      "type": "string"
+    },
+    "note": {
+      "type": "string"
+    },
+    "penTest": {
+      "properties": {
+        "maxAgeIsDefault": {
+          "type": "boolean"
+        },
+        "maxAgeMonths": {
+          "type": "number"
+        },
+        "status": {
+          "enum": [ "none", "current", "stale", "age-unknown" ],
+          "type": "string"
+        }
+      },
+      "required": [ "status", "maxAgeMonths", "maxAgeIsDefault" ],
+      "type": "object"
+    },
+    "priceSupportedRange": {
+      "properties": {
+        "excludedForEvidence": {
+          "type": "number"
+        },
+        "high": {
+          "type": "number"
+        },
+        "issuesIncluded": {
+          "type": "number"
+        },
+        "low": {
+          "type": "number"
+        }
+      },
+      "required": [ "low", "high", "issuesIncluded", "excludedForEvidence" ],
+      "type": "object"
+    },
+    "rangeTotal": {
+      "properties": {
+        "high": {
+          "type": "number"
+        },
+        "issuesIncluded": {
+          "type": "number"
+        },
+        "low": {
+          "type": "number"
+        }
+      },
+      "required": [ "low", "high", "issuesIncluded" ],
+      "type": "object"
+    },
+    "rangesDropped": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "stack": {
+      "properties": {
+        "components": {
+          "type": "array"
+        },
+        "supportUnknown": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [ "components", "supportUnknown" ],
+      "type": "object"
+    },
+    "uncited": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    }
+  },
+  "required": [ "stack", "penTest", "capacity", "issues", "counts", "documentGaps", "categoriesNotReviewed", "uncited", "rangesDropped", "evidencePolicyIsDefault", "basisOfReview", "duplicatesMerged", "derivedCount", "handoff", "limitation", "note", "gate" ],
+  "type": "object"
+}
