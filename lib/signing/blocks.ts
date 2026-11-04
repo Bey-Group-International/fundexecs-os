@@ -80,11 +80,16 @@ export function clampBlock<T extends { xPct: number; yPct: number; widthPct: num
   };
 }
 
-/** A new block centred on a click at (xPct, yPct) of a page. */
+/**
+ * A new block anchored at a click at (xPct, yPct) of a page: the block starts at the click and is
+ * centred on it vertically, so the × drawn at its left-middle sits exactly where the click was and
+ * what the signer enters starts right there. Near the right or bottom edge the block is kept on the
+ * page, which can move it left or up.
+ */
 export function newBlockAt(type: BlockType, xPct: number, yPct: number): Pick<PlacedBlock, "xPct" | "yPct" | "widthPct" | "heightPct"> {
   const spec = BY_TYPE.get(type)!;
   return clampBlock({
-    xPct: xPct - spec.widthPct / 2,
+    xPct,
     yPct: yPct - spec.heightPct / 2,
     widthPct: spec.widthPct,
     heightPct: spec.heightPct,

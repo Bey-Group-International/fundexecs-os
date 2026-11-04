@@ -57,15 +57,31 @@ describe("BlockPlacer: click, choose, done", () => {
     expect(screen.queryByRole("menu")).toBeNull();
     clickPage(300, 400);
     const menu = screen.getByRole("menu");
-    expect(menu.style.left).toBe("50%");
-    expect(menu.style.top).toBe("50%");
+    // Beside the click (16px off it), not on top of it.
+    expect(menu.style.left).toBe("calc(50% + 16px)");
+    expect(menu.style.top).toBe("calc(50% + 16px)");
     expect(within(menu).getAllByRole("menuitem").map((i) => i.textContent)).toEqual(["Name", "Signature", "Date and time", "Company", "Title", "Address", "Email", "Phone"]);
     choose("Signature");
     expect(screen.queryByRole("menu")).toBeNull();
     const block = screen.getByRole("button", { name: "Signature block" });
-    expect(block.style.left).toBe("36%"); // centred on the click: 50% minus half the 28% width
+    // The block starts at the click, centred on it vertically, so its × is exactly where it was made.
+    expect(block.style.left).toBe("50%");
+    expect(block.style.top).toBe("48%"); // 50% minus half the 4% height
     expect(block.style.width).toBe("28%");
     expect(block.style.height).toBe("4%");
+  });
+
+  it("shows the × at the click straight away, before a type is chosen, and keeps it where the block lands", async () => {
+    await mount();
+    clickPage(150, 200); // 25% across, 25% down
+    const marker = document.querySelector("[data-pending-marker]") as HTMLElement;
+    expect(marker.style.left).toBe("25%");
+    expect(marker.style.top).toBe("25%");
+    choose("Name");
+    expect(document.querySelector("[data-pending-marker]")).toBeNull();
+    const block = screen.getByRole("button", { name: "Name block" });
+    expect(block.style.left).toBe("25%");
+    expect(parseFloat(block.style.top) + parseFloat(block.style.height) / 2).toBeCloseTo(25);
   });
 
   it("closes without placing on Escape, and on a click outside the page", async () => {
@@ -83,6 +99,7 @@ describe("BlockPlacer: click, choose, done", () => {
     await mount();
     clickPage(570, 780);
     expect(screen.getByRole("menu").style.transform).toBe("translate(-100%, -100%)");
+    expect(screen.getByRole("menu").style.left).toContain("- 16px");
   });
 
   it("lets the menu say whose block it is, and pre-fills email with the person's own", async () => {

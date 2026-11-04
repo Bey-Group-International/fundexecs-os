@@ -327,14 +327,25 @@ export function BlockPlacer({ title, fieldsUrl, pdfUrl, sendUrl, doneHref, prefi
                     </div>
                   ))}
                 {menu && menu.page === page ? (
+                  // The × appears at the click at once, where the block will start; the menu sits just beside it.
+                  <span
+                    aria-hidden="true"
+                    data-pending-marker
+                    className="pointer-events-none absolute z-10 flex h-5 w-5 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border-2 bg-white/90 text-xs font-bold leading-none"
+                    style={{ left: `${menu.xPct}%`, top: `${menu.yPct}%`, borderColor: tint(partyId), color: tint(partyId) }}
+                  >
+                    ×
+                  </span>
+                ) : null}
+                {menu && menu.page === page ? (
                   <div
                     ref={menuRef}
                     role="menu"
                     aria-label="Add a block"
                     className="absolute z-20 w-52 rounded-xl border border-line bg-surface-0 p-2 text-sm shadow-xl"
                     style={{
-                      left: `${menu.xPct}%`,
-                      top: `${menu.yPct}%`,
+                      left: `calc(${menu.xPct}% ${menu.xPct > 55 ? "-" : "+"} 16px)`,
+                      top: `calc(${menu.yPct}% ${menu.yPct > 60 ? "-" : "+"} 16px)`,
                       transform: `translate(${menu.xPct > 55 ? "-100%" : "0"}, ${menu.yPct > 60 ? "-100%" : "0"})`,
                     }}
                   >
