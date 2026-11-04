@@ -57,6 +57,18 @@ describe("evidence policy injection", () => {
   });
 });
 
+describe("IC memo structure injection", () => {
+  it("passes the firm's structure to ic-memo, leaves an explicit one alone, and injects nothing when none is saved", async () => {
+    const input = { deal: { companyName: "Acme" } };
+    expect(await withOrgMandate("org", "ic-memo", input)).toBe(input);
+    rows.push({ file_key: "ic_memo", content: { sections: [{ key: "returns" }, { key: "asks", title: "Asks" }] } });
+    const out = (await withOrgMandate("org", "ic-memo", input)) as { memoStructure?: { sections: Array<{ key: string }> } };
+    expect(out.memoStructure?.sections.map((s) => s.key)).toEqual(["returns", "asks"]);
+    const explicit = { ...input, memoStructure: { sections: [{ key: "market" }] } };
+    expect(await withOrgMandate("org", "ic-memo", explicit)).toBe(explicit);
+  });
+});
+
 describe("gate owners from the firm file", () => {
   const firm = { firmName: "Acme", gateOwners: { first_look: "Jane Doe (deal lead)", bid_price: "Investment Committee" } };
 

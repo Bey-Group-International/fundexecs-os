@@ -13,13 +13,14 @@ import { parseReturnsHurdles } from "./returns-hurdles";
 import { parseFinancingPolicy } from "./financing-policy";
 import { parseKpiPolicy } from "./kpi-policy";
 import { parseEvidencePolicyDetailed } from "./evidence";
+import { MAX_MEMO_SECTIONS, MAX_TITLE_CHARS, parseMemoStructure } from "./memo-structure";
 import { GATE_KEYS, MAX_OWNER_CHARS, parseFirmFile } from "./gates";
 import { isRootFileKey, type RootFileKey } from "./root-files";
 
 export const MAX_ROOT_FILE_BYTES = 50_000;
 
 /** Files a skill reads today (typed). The rest are stored for later phases. */
-export const TYPED_ROOT_FILES: RootFileKey[] = ["mandate", "returns", "financing", "kpi", "firm", "evidence"];
+export const TYPED_ROOT_FILES: RootFileKey[] = ["mandate", "returns", "financing", "kpi", "firm", "evidence", "ic_memo"];
 
 export interface RootFileValidation {
   ok: boolean;
@@ -88,6 +89,14 @@ export function validateRootFileText(key: string, text: string): RootFileValidat
     const p = parseKpiPolicy(raw);
     if (!p) return fail("No usable KPI values. Expected materialityPct (percent), optionally materialityAbs and trendPeriods.");
     return { ok: true, normalized: p as unknown as Record<string, unknown>, errors: [], warnings, readBySkills };
+  }
+
+  if (key === "ic_memo") {
+    const { structure, dropped, customKeys } = parseMemoStructure(raw);
+    for (const d of dropped) warnings.push(d);
+    if (!structure) return { ok: false, errors: [`No usable sections. Expected { "sections": [ { "key": "recommendation", "title": "Recommendation", "required": true }, … ] } — up to ${MAX_MEMO_SECTIONS} sections, titles up to ${MAX_TITLE_CHARS} characters.`], warnings, readBySkills };
+    if (customKeys.length) warnings.push(`The IC memo skill cannot generate: ${customKeys.join(", ")}. They will appear as open placeholders to fill in by hand; nothing is invented for them.`);
+    return { ok: true, normalized: structure as unknown as Record<string, unknown>, errors: [], warnings, readBySkills };
   }
 
   if (key === "evidence") {

@@ -9,6 +9,7 @@
 // OPEN ITEM — never a fabricated financial or market claim.
 
 import type { JsonSchema, SkillCore, SkillCoreResult, SkillDefinition, SkillManifest, SkillSource } from "@/lib/skills/types";
+import { isMemoSectionKey, parseMemoStructure, type MemoSectionKey } from "@/lib/pe/memo-structure";
 
 // ---------------------------------------------------------------------------
 // I/O types
@@ -42,6 +43,8 @@ export interface IcMemoInput {
   market?: string;
   mitigants?: string[];
   recommendation?: string;
+  /** The firm's memo structure (order, titles, required). Absent = the skill's own twelve sections. */
+  memoStructure?: { sections?: Array<{ key?: string; title?: string; required?: boolean }> };
 }
 
 export type MemoSectionStatus = "complete" | "open";
@@ -60,6 +63,10 @@ export interface IcMemoOutput {
   missingSections: string[];
   /** 0–1 fraction of sections that are complete. */
   completeness: number;
+  /** Required sections (per the firm's structure) that are still open. */
+  requiredOpen: string[];
+  /** True when the skill's own twelve sections were used, not a firm structure. */
+  structureIsDefault: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -101,8 +108,11 @@ const run: SkillCore<IcMemoInput, IcMemoOutput> = (input): SkillCoreResult<IcMem
   const mits = nonEmpty(mitigants);
 
   // Open items are pushed at each call site with the heading-specific context.
-  const add = (heading: string, body: string, status: MemoSectionStatus): void => {
-    sections.push({ heading, body, status });
+  const generated = new Map<MemoSectionKey, MemoSection>();
+  const add = (key: MemoSectionKey, heading: string, body: string, status: MemoSectionStatus): void => {
+    const section = { heading, body, status };
+    sections.push(section);
+    generated.set(key, section);
   };
 
   // Provided data is recorded as FACTS — never fabricated.
@@ -122,7 +132,7 @@ const run: SkillCore<IcMemoInput, IcMemoOutput> = (input): SkillCoreResult<IcMem
     `Screen verdict: ${verdict ? verdict.toUpperCase() : "not yet screened"}${overall != null ? ` (${overall}/100 mandate fit)` : ""}.` +
     returnsHeadline +
     ` This memo assembles structured deal data for committee review; it is not an investment decision.`;
-  add("Executive Summary", execBody, "complete");
+  add("executive_summary", "Executive Summary", execBody, "complete");
 
   // 2. Recommendation — PRELIMINARY and advisory. Provided, else derived neutrally
   //    from the screen verdict, else an open item. Never a decision.
@@ -142,7 +152,7 @@ const run: SkillCore<IcMemoInput, IcMemoOutput> = (input): SkillCoreResult<IcMem
     recStatus = "open";
     openItems.push("Recommendation pending — provide a screen verdict or an explicit recommendation.");
   }
-  add("Recommendation", `PRELIMINARY recommendation for the IC's decision (advisory — NOT a decision): ${recText}`, recStatus);
+  add("recommendation", "Recommendation", `PRELIMINARY recommendation for the IC's decision (advisory — NOT a decision): ${recText}`, recStatus);
 
   // 3. Transaction Overview — from the deal fields (companyName is required).
   const overviewBody = [
@@ -151,21 +161,21 @@ const run: SkillCore<IcMemoInput, IcMemoOutput> = (input): SkillCoreResult<IcMem
     `Geography: ${deal.geography ?? "not specified"}`,
     `Transaction type: ${deal.transactionType ?? "not specified"}`,
   ].join(" · ");
-  add("Transaction Overview", overviewBody, "complete");
+  add("transaction_overview", "Transaction Overview", overviewBody, "complete");
 
   // 4. Investment Thesis.
   if (clean(thesis) !== "") {
-    add("Investment Thesis", clean(thesis), "complete");
+    add("investment_thesis", "Investment Thesis", clean(thesis), "complete");
   } else {
-    add("Investment Thesis", "Pending — articulate the investment thesis.", "open");
+    add("investment_thesis", "Investment Thesis", "Pending — articulate the investment thesis.", "open");
     openItems.push("Investment thesis pending — articulate the thesis.");
   }
 
   // 5. Market — NEVER fabricate a market claim.
   if (clean(market) !== "") {
-    add("Market", clean(market), "complete");
+    add("market", "Market", clean(market), "complete");
   } else {
-    add("Market", "Pending — run the market / sector research skill. No market claims are asserted without a source.", "open");
+    add("market", "Market", "Pending — run the market / sector research skill. No market claims are asserted without a source.", "open");
     openItems.push("Market analysis pending — run the market / sector research skill.");
   }
 
@@ -174,9 +184,9 @@ const run: SkillCore<IcMemoInput, IcMemoOutput> = (input): SkillCoreResult<IcMem
     const fvParts: string[] = [];
     if (entryEv != null) { fvParts.push(`Entry EV: ${entryEv}`); sources.push({ label: "Entry EV", kind: "fact", value: entryEv }); }
     if (exitEv != null) { fvParts.push(`Exit EV: ${exitEv}`); sources.push({ label: "Exit EV", kind: "fact", value: exitEv }); }
-    add("Financials & Valuation", `Provided figures — ${fvParts.join(", ")}. Confirm valuation and EBITDA quality in diligence.`, "complete");
+    add("financials_valuation", "Financials & Valuation", `Provided figures — ${fvParts.join(", ")}. Confirm valuation and EBITDA quality in diligence.`, "complete");
   } else {
-    add("Financials & Valuation", "Pending — provide entry / exit valuation (run the returns skill).", "open");
+    add("financials_valuation", "Financials & Valuation", "Pending — provide entry / exit valuation (run the returns skill).", "open");
     openItems.push("Financials & valuation pending — provide entry / exit valuation.");
   }
 
@@ -185,55 +195,79 @@ const run: SkillCore<IcMemoInput, IcMemoOutput> = (input): SkillCoreResult<IcMem
     const rParts: string[] = [];
     if (moic != null) rParts.push(`${moic}x MOIC`);
     if (irrPct != null) rParts.push(`${irrPct}% IRR`);
-    add("Returns", `Provided figures — ${rParts.join(", ")}. Figures as supplied; confirm the underlying returns model.`, "complete");
+    add("returns", "Returns", `Provided figures — ${rParts.join(", ")}. Figures as supplied; confirm the underlying returns model.`, "complete");
   } else {
-    add("Returns", "Pending — run the returns skill.", "open");
+    add("returns", "Returns", "Pending — run the returns skill.", "open");
     openItems.push("Returns pending — run the returns skill.");
   }
 
   // 8. Key Risks.
   if (risks.length > 0) {
-    add("Key Risks", numbered(risks), "complete");
+    add("key_risks", "Key Risks", numbered(risks), "complete");
   } else {
-    add("Key Risks", "Pending — run the screen-deal skill or supply key risks.", "open");
+    add("key_risks", "Key Risks", "Pending — run the screen-deal skill or supply key risks.", "open");
     openItems.push("Key risks pending — run the screen-deal skill or supply key risks.");
   }
 
   // 9. Mitigants — if risks are present but no mitigants, this is flagged.
   if (mits.length > 0) {
-    add("Mitigants", numbered(mits), "complete");
+    add("mitigants", "Mitigants", numbered(mits), "complete");
   } else {
-    add("Mitigants", "Mitigants pending.", "open");
+    add("mitigants", "Mitigants", "Mitigants pending.", "open");
     openItems.push("Mitigants pending");
   }
 
   // 10. Open Items — the running summary of everything flagged above.
-  add("Open Items", openItems.length > 0 ? numbered(openItems) : "None — all sections populated.", "complete");
+  add("open_items", "Open Items", openItems.length > 0 ? numbered(openItems) : "None — all sections populated.", "complete");
 
   // 11. Conditions Precedent — a standard, GENERATED list, not deal-specific claims.
-  add("Conditions Precedent", numbered(CONDITIONS_PRECEDENT), "complete");
+  add("conditions_precedent", "Conditions Precedent", numbered(CONDITIONS_PRECEDENT), "complete");
   sources.push({ label: "Conditions precedent", kind: "generated", value: CONDITIONS_PRECEDENT.join("; ") });
 
   // 12. Decision History — placeholder; the IC records decisions, not this skill.
-  add("Decision History", "No decisions recorded yet.", "complete");
+  add("decision_history", "Decision History", "No decisions recorded yet.", "complete");
 
-  const missingSections = sections.filter((s) => s.status === "open").map((s) => s.heading);
-  const completeCount = sections.length - missingSections.length;
-  const completeness = Math.round((completeCount / sections.length) * 100) / 100;
+  // The firm's structure, when it set one: its order, its titles; sections the skill cannot
+  // generate become OPEN placeholders (never invented); sections the firm left out are not emitted.
+  const parsedStructure = parseMemoStructure(input.memoStructure).structure;
+  const structureIsDefault = !parsedStructure;
+  const requiredOpen: string[] = [];
+  let finalSections = sections;
+  if (parsedStructure) {
+    sources.push({ label: "IC memo structure", kind: "fact", value: `${parsedStructure.sections.length} sections`, ref: "firm's IC memo file (root-ic-memo)" });
+    finalSections = parsedStructure.sections.map((spec) => {
+      const known = isMemoSectionKey(spec.key) ? generated.get(spec.key) : undefined;
+      const section: MemoSection = known
+        ? { heading: spec.title, body: known.body, status: known.status }
+        : { heading: spec.title, body: "Pending — this section is not generated by this skill; add it manually. Nothing is asserted here.", status: "open" };
+      if (spec.required && section.status === "open") requiredOpen.push(spec.title);
+      return section;
+    });
+    for (const title of requiredOpen) openItems.push(`Required section "${title}" is open.`);
+    // Rebuild the running summary if the firm kept it, so it lists the required-section items too.
+    const summaryAt = parsedStructure.sections.findIndex((x) => x.key === "open_items");
+    if (summaryAt >= 0) finalSections[summaryAt] = { ...finalSections[summaryAt], body: numbered(openItems) };
+  }
+
+  const missingSections = finalSections.filter((x) => x.status === "open").map((x) => x.heading);
+  const completeCount = finalSections.length - missingSections.length;
+  const completeness = finalSections.length ? Math.round((completeCount / finalSections.length) * 100) / 100 : 0;
 
   const structured: IcMemoOutput = {
-    sections,
+    sections: finalSections,
     recommendation: recText,
     openItems,
     conditionsPrecedent: CONDITIONS_PRECEDENT.slice(),
     missingSections,
     completeness,
+    requiredOpen,
+    structureIsDefault,
   };
 
   const confidence = Math.max(0.2, Math.min(0.9, 0.3 + completeness * 0.6));
 
   const narrative =
-    `IC pre-read for ${deal.companyName} assembled: ${completeCount}/${sections.length} sections complete` +
+    `IC pre-read for ${deal.companyName} assembled: ${completeCount}/${finalSections.length} sections complete` +
     `${missingSections.length ? `, ${missingSections.length} open (${missingSections.join(", ")})` : ""}. ` +
     `Preliminary recommendation: ${recStatus === "open" ? "pending" : recText}. ` +
     `This prepares the memo for the committee; it does not make the investment decision.`;
@@ -280,12 +314,18 @@ const inputSchema: JsonSchema = {
     market: { type: "string" },
     mitigants: { type: "array", items: { type: "string" } },
     recommendation: { type: "string" },
+    memoStructure: {
+      type: "object",
+      properties: {
+        sections: { type: "array", items: { type: "object", properties: { key: { type: "string" }, title: { type: "string" }, required: { type: "boolean" } } } },
+      },
+    },
   },
 };
 
 const outputSchema: JsonSchema = {
   type: "object",
-  required: ["sections", "recommendation", "openItems", "conditionsPrecedent", "missingSections", "completeness"],
+  required: ["sections", "recommendation", "openItems", "conditionsPrecedent", "missingSections", "completeness", "requiredOpen", "structureIsDefault"],
   properties: {
     sections: {
       type: "array",
@@ -304,6 +344,8 @@ const outputSchema: JsonSchema = {
     conditionsPrecedent: { type: "array", items: { type: "string" } },
     missingSections: { type: "array", items: { type: "string" } },
     completeness: { type: "number", minimum: 0, maximum: 1 },
+    requiredOpen: { type: "array", items: { type: "string" } },
+    structureIsDefault: { type: "boolean" },
   },
 };
 
@@ -316,8 +358,8 @@ export const icMemoManifest: SkillManifest = {
   applicableExecutives: ["investment_committee"],
   supportedEntityTypes: ["deal", "company", "ic_memo"],
   requiredInputs: ["deal.companyName"],
-  optionalInputs: ["thesis", "screen", "returns", "market", "mitigants", "recommendation"],
-  outputs: ["sections", "recommendation", "openItems", "conditionsPrecedent", "missingSections", "completeness"],
+  optionalInputs: ["thesis", "screen", "returns", "market", "mitigants", "recommendation", "memoStructure"],
+  outputs: ["sections", "recommendation", "openItems", "conditionsPrecedent", "missingSections", "completeness", "requiredOpen", "structureIsDefault"],
   artifactTypes: ["ic_memo"],
   dataPermissions: ["deal:read", "ic_memo:read"],
   tools: [],

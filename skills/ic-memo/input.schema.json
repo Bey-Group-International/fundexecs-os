@@ -1,80 +1,110 @@
 {
+  "type": "object",
+  "required": [
+    "deal"
+  ],
   "properties": {
     "deal": {
+      "type": "object",
+      "required": [
+        "companyName"
+      ],
       "properties": {
         "companyName": {
-          "minLength": 1,
+          "type": "string",
+          "minLength": 1
+        },
+        "sector": {
           "type": "string"
         },
         "geography": {
           "type": "string"
         },
-        "sector": {
-          "type": "string"
-        },
         "transactionType": {
           "type": "string"
         }
-      },
-      "required": [ "companyName" ],
-      "type": "object"
+      }
+    },
+    "thesis": {
+      "type": "string"
+    },
+    "screen": {
+      "type": "object",
+      "properties": {
+        "verdict": {
+          "type": "string",
+          "enum": [
+            "pass",
+            "watch",
+            "fail"
+          ]
+        },
+        "overall": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100
+        },
+        "keyRisks": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "returns": {
+      "type": "object",
+      "properties": {
+        "moic": {
+          "type": "number",
+          "minimum": 0
+        },
+        "irrPct": {
+          "type": "number"
+        },
+        "entryEv": {
+          "type": "number",
+          "minimum": 0
+        },
+        "exitEv": {
+          "type": "number",
+          "minimum": 0
+        }
+      }
     },
     "market": {
       "type": "string"
     },
     "mitigants": {
+      "type": "array",
       "items": {
         "type": "string"
-      },
-      "type": "array"
+      }
     },
     "recommendation": {
       "type": "string"
     },
-    "returns": {
+    "memoStructure": {
+      "type": "object",
       "properties": {
-        "entryEv": {
-          "minimum": 0,
-          "type": "number"
-        },
-        "exitEv": {
-          "minimum": 0,
-          "type": "number"
-        },
-        "irrPct": {
-          "type": "number"
-        },
-        "moic": {
-          "minimum": 0,
-          "type": "number"
-        }
-      },
-      "type": "object"
-    },
-    "screen": {
-      "properties": {
-        "keyRisks": {
+        "sections": {
+          "type": "array",
           "items": {
-            "type": "string"
-          },
-          "type": "array"
-        },
-        "overall": {
-          "maximum": 100,
-          "minimum": 0,
-          "type": "number"
-        },
-        "verdict": {
-          "enum": [ "pass", "watch", "fail" ],
-          "type": "string"
+            "type": "object",
+            "properties": {
+              "key": {
+                "type": "string"
+              },
+              "title": {
+                "type": "string"
+              },
+              "required": {
+                "type": "boolean"
+              }
+            }
+          }
         }
-      },
-      "type": "object"
-    },
-    "thesis": {
-      "type": "string"
+      }
     }
-  },
-  "required": [ "deal" ],
-  "type": "object"
+  }
 }

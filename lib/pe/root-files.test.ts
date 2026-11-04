@@ -50,3 +50,14 @@ describe("evidence file in resolveRootFiles", () => {
     expect(resolveRootFiles([{ file_key: "evidence", content: { supportsPrice: { A: "yes" } } }]).evidenceIsDefault).toBe(true);
   });
 });
+
+describe("ic_memo file in resolveRootFiles", () => {
+  it("is null until the firm lists a usable section", () => {
+    expect(resolveRootFiles([]).icMemo).toBeNull();
+    expect(resolveRootFiles([{ file_key: "ic_memo", content: { sections: [{ key: "BAD" }] } }]).icMemo).toBeNull();
+    const r = resolveRootFiles([{ file_key: "ic_memo", content: { sections: [{ key: "returns" }, { key: "asks", title: "Asks", required: true }] } }]);
+    expect(r.icMemo?.sections.map((s) => s.key)).toEqual(["returns", "asks"]);
+    expect(r.found).toContain("ic_memo");
+  });
+});
+

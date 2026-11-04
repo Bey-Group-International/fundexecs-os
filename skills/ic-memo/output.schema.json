@@ -1,51 +1,76 @@
 {
+  "type": "object",
+  "required": [
+    "sections",
+    "recommendation",
+    "openItems",
+    "conditionsPrecedent",
+    "missingSections",
+    "completeness",
+    "requiredOpen",
+    "structureIsDefault"
+  ],
   "properties": {
-    "completeness": {
-      "maximum": 1,
-      "minimum": 0,
-      "type": "number"
-    },
-    "conditionsPrecedent": {
+    "sections": {
+      "type": "array",
       "items": {
-        "type": "string"
-      },
-      "type": "array"
-    },
-    "missingSections": {
-      "items": {
-        "type": "string"
-      },
-      "type": "array"
-    },
-    "openItems": {
-      "items": {
-        "type": "string"
-      },
-      "type": "array"
+        "type": "object",
+        "required": [
+          "heading",
+          "body",
+          "status"
+        ],
+        "properties": {
+          "heading": {
+            "type": "string"
+          },
+          "body": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "complete",
+              "open"
+            ]
+          }
+        }
+      }
     },
     "recommendation": {
       "type": "string"
     },
-    "sections": {
+    "openItems": {
+      "type": "array",
       "items": {
-        "properties": {
-          "body": {
-            "type": "string"
-          },
-          "heading": {
-            "type": "string"
-          },
-          "status": {
-            "enum": [ "complete", "open" ],
-            "type": "string"
-          }
-        },
-        "required": [ "heading", "body", "status" ],
-        "type": "object"
-      },
-      "type": "array"
+        "type": "string"
+      }
+    },
+    "conditionsPrecedent": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "missingSections": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "completeness": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1
+    },
+    "requiredOpen": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "structureIsDefault": {
+      "type": "boolean"
     }
-  },
-  "required": [ "sections", "recommendation", "openItems", "conditionsPrecedent", "missingSections", "completeness" ],
-  "type": "object"
+  }
 }

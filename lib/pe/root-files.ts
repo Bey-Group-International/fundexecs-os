@@ -8,6 +8,7 @@
 import { EMPTY_MANDATE, parseMandateTests, type MandateTests } from "./mandate-tests";
 import { DEFAULT_EVIDENCE_POLICY, parseEvidencePolicy, type EvidencePolicy } from "./evidence";
 import { parseFirmFile, type FirmFile } from "./gates";
+import { parseMemoStructure, type MemoStructure } from "./memo-structure";
 import { DEFAULT_FINANCING, parseFinancingPolicy, type FinancingPolicy } from "./financing-policy";
 import { DEFAULT_KPI_POLICY, parseKpiPolicy, type KpiPolicy } from "./kpi-policy";
 import { DEFAULT_RETURNS, parseReturnsHurdles, type ReturnsHurdles } from "./returns-hurdles";
@@ -41,6 +42,8 @@ export interface ResolvedRootFiles {
   /** Which evidence grades may support a price: the org's own, or the labelled standing default. */
   evidence: EvidencePolicy;
   evidenceIsDefault: boolean;
+  /** The org's IC memo structure, or null when none is stored (the ic-memo skill then uses its own twelve sections). */
+  icMemo: MemoStructure | null;
   /** The org's firm file (gate owners, firm name), or null when none is stored. Skills then use their labelled generic roles. */
   firm: FirmFile | null;
   /** Keys with a stored, non-empty row. */
@@ -69,6 +72,8 @@ export function resolveRootFiles(rows: RootFileRow[] | null | undefined): Resolv
 
   const evidenceParsed = byKey.has("evidence") ? parseEvidencePolicy(byKey.get("evidence")!.content) : null;
 
+  const icMemoParsed = byKey.has("ic_memo") ? parseMemoStructure(byKey.get("ic_memo")!.content).structure : null;
+
   const found: RootFileKey[] = [];
   for (const k of ROOT_FILE_KEYS) {
     if (k === "mandate") {
@@ -85,6 +90,10 @@ export function resolveRootFiles(rows: RootFileRow[] | null | undefined): Resolv
     }
     if (k === "evidence") {
       if (evidenceParsed) found.push(k);
+      continue;
+    }
+    if (k === "ic_memo") {
+      if (icMemoParsed) found.push(k);
       continue;
     }
     if (k === "firm") {
@@ -105,5 +114,5 @@ export function resolveRootFiles(rows: RootFileRow[] | null | undefined): Resolv
     `Not found: ${missing.length ? missing.join(", ") : "none"}` +
     (missing.length ? " — run on default settings." : ".");
 
-  return { mandate: mandateUsable ? mandateParsed! : EMPTY_MANDATE, returns: returnsParsed ?? DEFAULT_RETURNS, returnsAreDefault: !returnsParsed, financing: financingParsed ?? DEFAULT_FINANCING, financingIsDefault: !financingParsed, kpi: kpiParsed ?? DEFAULT_KPI_POLICY, kpiIsDefault: !kpiParsed, evidence: evidenceParsed ?? DEFAULT_EVIDENCE_POLICY, evidenceIsDefault: !evidenceParsed, firm: firmParsed, found, missing, statusLine };
+  return { mandate: mandateUsable ? mandateParsed! : EMPTY_MANDATE, returns: returnsParsed ?? DEFAULT_RETURNS, returnsAreDefault: !returnsParsed, financing: financingParsed ?? DEFAULT_FINANCING, financingIsDefault: !financingParsed, kpi: kpiParsed ?? DEFAULT_KPI_POLICY, kpiIsDefault: !kpiParsed, evidence: evidenceParsed ?? DEFAULT_EVIDENCE_POLICY, evidenceIsDefault: !evidenceParsed, icMemo: icMemoParsed, firm: firmParsed, found, missing, statusLine };
 }

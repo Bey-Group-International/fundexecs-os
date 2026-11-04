@@ -8,7 +8,7 @@ describe("validateRootFileText", () => {
     expect(validateRootFileText("mandate", "{nope").errors[0]).toMatch(/Not valid JSON/);
     expect(validateRootFileText("mandate", "[1]").errors[0]).toMatch(/must be a JSON object/);
     expect(validateRootFileText("bogus", "{}").errors[0]).toMatch(/Unknown root file/);
-    expect(validateRootFileText("ic_memo", JSON.stringify({ x: "a".repeat(60_000) })).errors[0]).toMatch(/Too large/);
+    expect(validateRootFileText("reporting", JSON.stringify({ x: "a".repeat(60_000) })).errors[0]).toMatch(/Too large/);
   });
 
   it("stores the parsed mandate, forces draft, and reports what was dropped", () => {
@@ -38,7 +38,7 @@ describe("validateRootFileText", () => {
   });
 
   it("stores untyped files as written and says no skill reads them", () => {
-    const v = validateRootFileText("ic_memo", JSON.stringify({ sections: [{ title: "Recommendation" }] }));
+    const v = validateRootFileText("reporting", JSON.stringify({ boardPack: { sections: ["KPIs"] } }));
     expect(v.ok).toBe(true);
     expect(v.readBySkills).toBe(false);
     expect(v.warnings[0]).toMatch(/No skill reads this file yet/);
@@ -54,18 +54,23 @@ describe("mandate approval", () => {
 });
 
 describe("starter templates carry no invented numbers", () => {
-  it("every typed starter either fails validation or saves as an UNAPPROVABLE draft", () => {
+  it("every typed starter either fails validation, saves as an UNAPPROVABLE draft, or is exactly the skill's own default", () => {
     for (const m of ROOT_FILE_META.filter((x) => x.typed)) {
       const v = validateRootFileText(m.key, m.starter);
       if (m.key === "mandate") {
         expect(v.ok).toBe(true);
         expect(mandateApprovalBlockers(parseMandateTests(v.normalized)).length).toBeGreaterThan(0);
+      } else if (m.key === "ic_memo") {
+        // Structure only, no numbers: it saves, and is identical to what the skill does with no file.
+        expect(v.ok).toBe(true);
+        expect((v.normalized as { sections: Array<{ required: boolean }> }).sections.every((s) => s.required === false)).toBe(true);
       } else {
         expect(v.ok).toBe(false);
       }
     }
   });
 });
+
 
 describe("firm file (gate owners)", () => {
   it("stores only known gates with real names and reports what it ignored", () => {
@@ -98,5 +103,24 @@ describe("evidence file (price-support policy)", () => {
     expect(validateRootFileText("evidence", "{}").errors[0]).toMatch(/No usable evidence policy/);
     expect(validateRootFileText("evidence", JSON.stringify({ supportsPrice: { A: "yes", B: 1 } })).ok).toBe(false);
     expect(validateRootFileText("evidence", ROOT_FILE_META.find((m) => m.key === "evidence")!.starter).ok).toBe(false);
+  });
+});
+
+describe("ic_memo file (memo structure)", () => {
+  it("stores the parsed structure and explains dropped entries and placeholder sections", () => {
+    const v = validateRootFileText("ic_memo", JSON.stringify({ sections: [{ key: "recommendation", required: true }, { key: "asks", title: "Asks" }, { key: "BAD" }] }));
+    expect(v.ok).toBe(true);
+    expect(v.normalized).toEqual({ sections: [{ key: "recommendation", title: "Recommendation", required: true }, { key: "asks", title: "Asks", required: false }] });
+    expect(v.warnings.join(" ")).toMatch(/Section 3: key must be lowercase/);
+    expect(v.warnings.join(" ")).toMatch(/cannot generate: asks.*open placeholders/);
+    expect(v.readBySkills).toBe(true);
+  });
+
+  it("rejects a file with no usable section, but accepts the skill-structure starter", () => {
+    expect(validateRootFileText("ic_memo", JSON.stringify({ sections: [{ key: "BAD" }] })).errors[0]).toMatch(/No usable sections/);
+    const starter = validateRootFileText("ic_memo", ROOT_FILE_META.find((m) => m.key === "ic_memo")!.starter);
+    expect(starter.ok).toBe(true);
+    expect((starter.normalized as { sections: unknown[] }).sections).toHaveLength(12);
+    expect(starter.warnings).toEqual([]); // identical to the default: nothing dropped, nothing custom
   });
 });

@@ -5,6 +5,7 @@
 // "no threshold" blockers that stop it being approved. The firm supplies the numbers.
 
 import { GATE_KEYS } from "./gates";
+import { DEFAULT_MEMO_TITLES, MEMO_SECTION_KEYS } from "./memo-structure";
 import type { RootFileKey } from "./root-files";
 
 export interface RootFileMeta {
@@ -68,6 +69,12 @@ export const ROOT_FILE_META: RootFileMeta[] = [
     typed: true,
     starter: j({ supportsPrice: { A: null, B: null, C: null } }),
   },
-  { key: "ic_memo", title: "IC memo format", blurb: "The firm's IC memo structure.", typed: false, starter: j({ sections: [] }) },
+  {
+    key: "ic_memo",
+    title: "IC memo structure",
+    blurb: "Which sections the IC memo has, in what order, under what title, and which are required. The ic-memo skill generates twelve known sections; any other section you list appears as an open placeholder, never filled in. Sections you leave out are not emitted. The starter is the skill's own structure.",
+    typed: true,
+    starter: j({ sections: MEMO_SECTION_KEYS.map((k) => ({ key: k, title: DEFAULT_MEMO_TITLES[k], required: false })) }),
+  },
   { key: "reporting", title: "Reporting policy", blurb: "Board, LP and valuation reporting formats.", typed: false, starter: j({ formats: {} }) },
 ];

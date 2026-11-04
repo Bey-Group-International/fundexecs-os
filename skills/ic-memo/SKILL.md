@@ -72,6 +72,19 @@ investment decision, and it never manufactures data to fill a section:
 `completeness` is the fraction of the twelve sections that are `complete`;
 `missingSections` lists the headings that remain `open`.
 
+### The firm's own structure
+
+If the firm has saved an IC memo structure (Settings → PE department settings → IC memo
+structure), pass it as `memoStructure` (it is filled in automatically when the caller does not):
+the sections are emitted in the firm's order and under the firm's titles. Rules:
+
+- A section the skill can generate (the twelve keys above) keeps its content and status.
+- A section the skill **cannot** generate (for example `structure`, `asks`, `source_ledger`) is
+  emitted as an **open placeholder** — nothing is invented for it.
+- A section the firm leaves out is not emitted.
+- A section marked `required` that is still open is listed in `requiredOpen` and in the open items.
+- With no firm structure, the output is the twelve sections above (`structureIsDefault: true`).
+
 ## Example
 
 See [`examples/example-1.json`](./examples/example-1.json) — a fully-populated
