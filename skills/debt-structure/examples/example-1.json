@@ -1,0 +1,72 @@
+{
+  "input": {
+    "dealName": "Acme",
+    "entryEbitda": 20,
+    "baseRatePct": 4,
+    "totalUses": 160,
+    "tranches": [
+      {
+        "name": "Term loan B",
+        "seniority": "senior",
+        "multiple": 3,
+        "marginBps": 450,
+        "amortPctPerYear": 1,
+        "tenorYears": 7
+      },
+      {
+        "name": "Junior notes",
+        "seniority": "junior",
+        "amount": 20,
+        "fixedRatePct": 12,
+        "amortPctPerYear": 0,
+        "tenorYears": 8
+      }
+    ],
+    "base": {
+      "periods": [
+        {
+          "label": "Y1",
+          "ebitdaLtm": 22,
+          "capex": 4,
+          "cashTaxes": 3
+        },
+        {
+          "label": "Y2",
+          "ebitdaLtm": 24,
+          "capex": 4,
+          "cashTaxes": 3
+        }
+      ]
+    },
+    "downside": {
+      "periods": [
+        {
+          "label": "Y1",
+          "ebitdaLtm": 16,
+          "capex": 4,
+          "cashTaxes": 2
+        },
+        {
+          "label": "Y2",
+          "ebitdaLtm": 15,
+          "capex": 4,
+          "cashTaxes": 2
+        }
+      ]
+    },
+    "covenants": [
+      {
+        "name": "Net leverage",
+        "kind": "maxLeverage",
+        "threshold": 5,
+        "definitionSource": "TS p.7"
+      },
+      {
+        "name": "Interest cover",
+        "kind": "minInterestCover",
+        "threshold": 2,
+        "definitionSource": "TS p.8"
+      }
+    ]
+  }
+}

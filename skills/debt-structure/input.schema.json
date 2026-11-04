@@ -1,0 +1,208 @@
+{
+  "type": "object",
+  "required": [
+    "dealName",
+    "entryEbitda",
+    "tranches",
+    "base"
+  ],
+  "properties": {
+    "dealName": {
+      "type": "string",
+      "minLength": 1
+    },
+    "entryEbitda": {
+      "type": "number",
+      "minimum": 0
+    },
+    "tranches": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "name",
+          "seniority",
+          "amortPctPerYear"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "seniority": {
+            "type": "string",
+            "enum": [
+              "senior",
+              "junior"
+            ]
+          },
+          "amount": {
+            "type": "number",
+            "minimum": 0
+          },
+          "multiple": {
+            "type": "number",
+            "minimum": 0
+          },
+          "marginBps": {
+            "type": "number",
+            "minimum": 0
+          },
+          "fixedRatePct": {
+            "type": "number",
+            "minimum": 0
+          },
+          "amortPctPerYear": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 100
+          },
+          "tenorYears": {
+            "type": "number",
+            "minimum": 0
+          }
+        }
+      }
+    },
+    "baseRatePct": {
+      "type": "number",
+      "minimum": 0
+    },
+    "totalUses": {
+      "type": "number",
+      "minimum": 0
+    },
+    "base": {
+      "type": "object",
+      "required": [
+        "periods"
+      ],
+      "properties": {
+        "periods": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "label",
+              "ebitdaLtm"
+            ],
+            "properties": {
+              "label": {
+                "type": "string",
+                "minLength": 1
+              },
+              "ebitdaLtm": {
+                "type": "number"
+              },
+              "periodYears": {
+                "type": "number",
+                "minimum": 0
+              },
+              "capex": {
+                "type": "number",
+                "minimum": 0
+              },
+              "cashTaxes": {
+                "type": "number",
+                "minimum": 0
+              }
+            }
+          }
+        }
+      }
+    },
+    "downside": {
+      "type": "object",
+      "required": [
+        "periods"
+      ],
+      "properties": {
+        "periods": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "label",
+              "ebitdaLtm"
+            ],
+            "properties": {
+              "label": {
+                "type": "string",
+                "minLength": 1
+              },
+              "ebitdaLtm": {
+                "type": "number"
+              },
+              "periodYears": {
+                "type": "number",
+                "minimum": 0
+              },
+              "capex": {
+                "type": "number",
+                "minimum": 0
+              },
+              "cashTaxes": {
+                "type": "number",
+                "minimum": 0
+              }
+            }
+          }
+        }
+      }
+    },
+    "covenants": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "name",
+          "kind",
+          "threshold"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "maxLeverage",
+              "minInterestCover",
+              "minFixedChargeCover"
+            ]
+          },
+          "threshold": {
+            "type": "number"
+          },
+          "definitionSource": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "financing": {
+      "type": "object",
+      "properties": {
+        "maxSeniorLeverage": {
+          "type": "number"
+        },
+        "maxTotalLeverage": {
+          "type": "number"
+        },
+        "minInterestCoverDownside": {
+          "type": "number"
+        },
+        "minEquityPct": {
+          "type": "number"
+        },
+        "covenantWarnHeadroomPct": {
+          "type": "number"
+        }
+      }
+    },
+    "gateOwner": {
+      "type": "string"
+    }
+  }
+}

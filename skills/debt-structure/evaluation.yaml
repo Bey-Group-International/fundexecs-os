@@ -1,0 +1,7 @@
+# skills/debt-structure/evaluation.yaml — acceptance criteria; exercised by lib/skills/catalog/debt-structure.test.ts
+criteria:
+  - tranche sizing and pricing resolved
+  - balance rolls with amortisation only
+  - headroom at tightest period in both cases
+  - firm limits tested, default policy labelled
+example: examples/example-1.json

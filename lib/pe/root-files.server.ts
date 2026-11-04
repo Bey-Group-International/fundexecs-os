@@ -27,6 +27,7 @@ export const ROOT_BINDINGS: Record<string, Binding[]> = {
   "covenant-watch": [{ input: "financing" }],
   "cash-13-week": [{ input: "financing" }],
   "financing-terms": [{ input: "financing" }],
+  "debt-structure": [{ input: "financing" }],
   "kpi-variance": [{ input: "kpiPolicy" }],
   "red-flag-register": [{ input: "evidencePolicy" }],
   "ic-memo": [{ input: "memoStructure" }],

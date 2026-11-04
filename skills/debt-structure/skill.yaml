@@ -1,0 +1,68 @@
+# skills/debt-structure/skill.yaml
+# Authoring spec for Debt Structure. The machine-readable manifest the runtime loads is
+# the TypeScript SkillDefinition in lib/skills/catalog/debt-structure.ts; this YAML is the
+# human-facing contract and must stay consistent with it.
+# Origin: PE department pack · Valuation. Rules re-implemented natively; no pack text is shipped.
+id: debt-structure
+name: Debt Structure
+version: 1.0.0
+owner: fundexecs
+hub: run
+
+applicable_executives:
+  - analyst
+  - legal_closing
+
+supported_entity_types: [deal]
+
+required_inputs:
+  - dealName
+  - entryEbitda
+  - tranches
+  - base
+
+optional_inputs:
+  - baseRatePct
+  - totalUses
+  - downside
+  - covenants
+  - financing
+  - gateOwner
+
+outputs:
+  - tranches
+  - closing
+  - base
+  - downside
+  - covenants
+  - policyChecks
+  - gate
+
+artifact_types: [model]
+data_permissions: [deal:read, valuation:read]
+tools: []
+
+approval_tier: 1
+risk_classification: moderate
+execution_timeout_ms: 10000
+retry_policy:
+  max_attempts: 1
+  backoff_ms: 0
+
+provider_capabilities:
+  - financial_reasoning
+
+allowed_downstream_skills: [financing-terms, bid-range, covenant-watch, ic-memo]
+
+prohibited_actions:
+  - send_outreach
+  - distribute_report
+  - share_materials
+  - submit_term_sheet
+  - sign_document
+  - move_capital
+
+input_schema: input.schema.json
+output_schema: output.schema.json
+policy: policy.yaml
+evaluation: evaluation.yaml
