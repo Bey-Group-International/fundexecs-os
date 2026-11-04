@@ -225,6 +225,11 @@ body {
   .fx-blueprint {
     position: relative;
     isolation: isolate;
+    /* The ::before glow bleeds past both edges by design. Clip it here so the
+       page it sits on cannot be dragged sideways on a phone (login and
+       request-access did). `clip`, not `hidden`: no scroll container, so
+       sticky children keep working. */
+    overflow-x: clip;
   }
   .fx-blueprint::before {
     content: "";

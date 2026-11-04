@@ -73,9 +73,14 @@ export function GlobalTopBar({
         <Link
           href="/settings"
           title="Settings"
-          className="flex h-7 w-7 items-center justify-center rounded-full border border-line text-xs text-fg-secondary transition hover:border-gold-500/40 hover:text-fg-primary"
+          aria-label="Settings"
+          className="flex h-8 w-8 items-center justify-center rounded-full border border-line text-fg-secondary transition hover:border-gold-500/40 hover:text-fg-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-400"
         >
-          ⚙
+          <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" aria-hidden>
+            <path d="M4 7h10M18 7h2M4 17h2M10 17h10" />
+            <circle cx="16" cy="7" r="2" />
+            <circle cx="8" cy="17" r="2" />
+          </svg>
         </Link>
       </div>
     </div>
