@@ -72,11 +72,13 @@ export async function POST(req: Request, props: { params: Promise<{ id: string }
     if (problem) return NextResponse.json({ ok: false, error: problem }, { status: 400 });
   }
 
-  for (const f of fields) {
-    if (responses[f.id] === undefined) continue;
-    const { error } = await supabase.from("envelope_fields").update({ response: responses[f.id] }).eq("id", f.id).eq("recipient_id", owner.id);
-    if (error) return NextResponse.json({ ok: false, error: "Failed to record your answers" }, { status: 500 });
-  }
+  // The answers are written together, not one round trip each.
+  const writes = await Promise.all(
+    fields
+      .filter((f) => responses[f.id] !== undefined)
+      .map((f) => supabase.from("envelope_fields").update({ response: responses[f.id] }).eq("id", f.id).eq("recipient_id", owner.id)),
+  );
+  if (writes.some((w) => w.error)) return NextResponse.json({ ok: false, error: "Failed to record your answers" }, { status: 500 });
 
   const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? req.headers.get("x-real-ip") ?? null;
   const signerName = (body.signerName ?? "").trim().replace(/\s+/g, " ").slice(0, 120);
@@ -101,7 +103,14 @@ export async function POST(req: Request, props: { params: Promise<{ id: string }
   try {
     const { after } = await import("next/server");
     const { notifyCompleted } = await import("@/lib/envelope-notify.server");
-    after(() => notifyCompleted(id).catch(() => undefined));
+    // The signed copy is built and kept first, so the link in the email opens at once and
+    // everyone is given the same file.
+    const { keepExecutedCopy } = await import("@/lib/signing/executed-envelope.server");
+    const { createServiceClient: service } = await import("@/lib/supabase/server");
+    after(async () => {
+      if (!doneErr) await keepExecutedCopy(service() as never, id).catch((e) => console.error("[countersign] could not keep the executed copy", e));
+      await notifyCompleted(id).catch(() => undefined);
+    });
     if (envelope.lp_session_id) {
       const sessionId = envelope.lp_session_id;
       const { onLpAgreementCountersigned } = await import("@/lib/lp-agreement.server");
