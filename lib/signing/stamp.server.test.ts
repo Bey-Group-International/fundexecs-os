@@ -2,7 +2,7 @@ jest.mock("server-only", () => ({}), { virtual: true });
 import { PDFDocument } from "pdf-lib";
 import { stampBlocks } from "./stamp.server";
 import { buildDocumentPdf } from "./executed-pdf.server";
-import { BLOCKS, blockSpec, clampBlock, newBlockAt, formatBlockDateTime } from "./blocks";
+import { BLOCKS, BLOCK_HEIGHT_PCT, BLOCK_WIDTH_PCT, blockSpec, clampBlock, newBlockAt, formatBlockDateTime } from "./blocks";
 import { missingRequiredFields } from "../envelope-signing";
 import { blockValueProblem } from "./blocks";
 
@@ -83,5 +83,13 @@ describe("blockValueProblem", () => {
     expect(blockValueProblem("email", "no at sign.com")).toMatch(/valid email/);
     expect(blockValueProblem("phone", "12")).toMatch(/valid phone/);
     expect(blockValueProblem("phone", "call me")).toMatch(/valid phone/);
+  });
+});
+
+describe("uniform block size", () => {
+  it("gives every block type the same size when placed", () => {
+    const sizes = new Set(BLOCKS.map((b) => `${newBlockAt(b.type, 50, 50).widthPct}x${newBlockAt(b.type, 50, 50).heightPct}`));
+    expect(sizes.size).toBe(1);
+    expect(BLOCKS.every((b) => b.widthPct === BLOCK_WIDTH_PCT && b.heightPct === BLOCK_HEIGHT_PCT)).toBe(true);
   });
 });
