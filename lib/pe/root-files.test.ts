@@ -26,3 +26,14 @@ describe("resolveRootFiles", () => {
     expect(resolveRootFiles([{ file_key: "mandate", content: { hardLimits: [] } }]).found).toEqual([]);
   });
 });
+
+describe("firm file in resolveRootFiles", () => {
+  it("is null until the firm names a firm or an owner, then carries the gate owners", () => {
+    expect(resolveRootFiles([]).firm).toBeNull();
+    expect(resolveRootFiles([{ file_key: "firm", content: { gateOwners: { first_look: "  " } } }]).firm).toBeNull();
+    const r = resolveRootFiles([{ file_key: "firm", content: { firmName: "Acme", gateOwners: { first_look: "Jane Doe" } } }]);
+    expect(r.firm).toEqual({ firmName: "Acme", gateOwners: { first_look: "Jane Doe" } });
+    expect(r.found).toContain("firm");
+    expect(r.missing).not.toContain("firm");
+  });
+});

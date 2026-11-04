@@ -12,12 +12,13 @@ import { auditMandate, parseMandateTests, type MandateIssue, type MandateTests }
 import { parseReturnsHurdles } from "./returns-hurdles";
 import { parseFinancingPolicy } from "./financing-policy";
 import { parseKpiPolicy } from "./kpi-policy";
+import { GATE_KEYS, MAX_OWNER_CHARS, parseFirmFile } from "./gates";
 import { isRootFileKey, type RootFileKey } from "./root-files";
 
 export const MAX_ROOT_FILE_BYTES = 50_000;
 
 /** Files a skill reads today (typed). The rest are stored for later phases. */
-export const TYPED_ROOT_FILES: RootFileKey[] = ["mandate", "returns", "financing", "kpi"];
+export const TYPED_ROOT_FILES: RootFileKey[] = ["mandate", "returns", "financing", "kpi", "firm"];
 
 export interface RootFileValidation {
   ok: boolean;
@@ -86,6 +87,14 @@ export function validateRootFileText(key: string, text: string): RootFileValidat
     const p = parseKpiPolicy(raw);
     if (!p) return fail("No usable KPI values. Expected materialityPct (percent), optionally materialityAbs and trendPeriods.");
     return { ok: true, normalized: p as unknown as Record<string, unknown>, errors: [], warnings, readBySkills };
+  }
+
+  if (key === "firm") {
+    const p = parseFirmFile(raw);
+    if (p.unknownKeys.length) warnings.push(`Unknown gate(s) ignored: ${p.unknownKeys.join(", ")}. Known gates: ${GATE_KEYS.join(", ")}.`);
+    if (p.droppedOwners.length) warnings.push(`Owner name over ${MAX_OWNER_CHARS} characters was dropped for: ${p.droppedOwners.join(", ")}.`);
+    if (!p.firm) return { ok: false, errors: ['No usable firm values. Expected { "firmName": "…", "gateOwners": { "first_look": "Jane Doe, deal lead" } } with at least one name filled in.'], warnings, readBySkills };
+    return { ok: true, normalized: p.firm as unknown as Record<string, unknown>, errors: [], warnings, readBySkills };
   }
 
   // Untyped files: plain object, stored as given, with the honest note.

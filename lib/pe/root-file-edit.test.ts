@@ -8,7 +8,7 @@ describe("validateRootFileText", () => {
     expect(validateRootFileText("mandate", "{nope").errors[0]).toMatch(/Not valid JSON/);
     expect(validateRootFileText("mandate", "[1]").errors[0]).toMatch(/must be a JSON object/);
     expect(validateRootFileText("bogus", "{}").errors[0]).toMatch(/Unknown root file/);
-    expect(validateRootFileText("firm", JSON.stringify({ x: "a".repeat(60_000) })).errors[0]).toMatch(/Too large/);
+    expect(validateRootFileText("evidence", JSON.stringify({ x: "a".repeat(60_000) })).errors[0]).toMatch(/Too large/);
   });
 
   it("stores the parsed mandate, forces draft, and reports what was dropped", () => {
@@ -38,7 +38,7 @@ describe("validateRootFileText", () => {
   });
 
   it("stores untyped files as written and says no skill reads them", () => {
-    const v = validateRootFileText("firm", JSON.stringify({ firmName: "X" }));
+    const v = validateRootFileText("evidence", JSON.stringify({ grades: { A: "audited" } }));
     expect(v.ok).toBe(true);
     expect(v.readBySkills).toBe(false);
     expect(v.warnings[0]).toMatch(/No skill reads this file yet/);
@@ -64,5 +64,21 @@ describe("starter templates carry no invented numbers", () => {
         expect(v.ok).toBe(false);
       }
     }
+  });
+});
+
+describe("firm file (gate owners)", () => {
+  it("stores only known gates with real names and reports what it ignored", () => {
+    const v = validateRootFileText("firm", JSON.stringify({ firmName: " Acme Capital ", gateOwners: { first_look: " Jane Doe, deal lead ", bid_price: "", made_up_gate: "X", ipo_decision: "y".repeat(200) } }));
+    expect(v.ok).toBe(true);
+    expect(v.normalized).toEqual({ firmName: "Acme Capital", gateOwners: { first_look: "Jane Doe, deal lead" } });
+    expect(v.warnings.join(" ")).toMatch(/Unknown gate\(s\) ignored: made_up_gate/);
+    expect(v.warnings.join(" ")).toMatch(/over 120 characters was dropped for: ipo_decision/);
+    expect(v.readBySkills).toBe(true);
+  });
+
+  it("rejects a file with no name and no owner (the starter is all blanks, so it is never stored as-is)", () => {
+    expect(validateRootFileText("firm", JSON.stringify({ gateOwners: { first_look: "  " } })).ok).toBe(false);
+    expect(validateRootFileText("firm", "{}").errors[0]).toMatch(/No usable firm values/);
   });
 });

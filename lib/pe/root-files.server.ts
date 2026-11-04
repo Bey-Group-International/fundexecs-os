@@ -8,6 +8,7 @@
 // imports the engine mock it. The service client it uses is the real guard.
 
 import { createServiceClient, hasSupabaseServiceEnv } from "@/lib/supabase/server";
+import { gateOwnerFor, SKILL_GATES } from "./gates";
 import { resolveRootFiles, type ResolvedRootFiles, type RootFileRow } from "./root-files";
 
 /**
@@ -15,7 +16,7 @@ import { resolveRootFiles, type ResolvedRootFiles, type RootFileRow } from "./ro
  * Only an org's OWN settings are injected; otherwise the skill applies (and
  * labels) the standing default, so a default is never passed off as the firm's.
  */
-type Binding = { input: "mandate" | "hurdles" | "financing" | "kpiPolicy" };
+type Binding = { input: "mandate" | "hurdles" | "financing" | "kpiPolicy" | "gateOwner" };
 export const ROOT_BINDINGS: Record<string, Binding[]> = {
   "mandate-screen": [{ input: "mandate" }],
   "target-screen": [{ input: "mandate" }],
@@ -28,6 +29,10 @@ export const ROOT_BINDINGS: Record<string, Binding[]> = {
   "financing-terms": [{ input: "financing" }],
   "kpi-variance": [{ input: "kpiPolicy" }],
 };
+// Every PE skill ends on a human gate; the firm file may name its owner.
+for (const skillId of Object.keys(SKILL_GATES)) {
+  ROOT_BINDINGS[skillId] = [...(ROOT_BINDINGS[skillId] ?? []), { input: "gateOwner" }];
+}
 
 export async function loadRootFiles(orgId: string): Promise<ResolvedRootFiles> {
   if (!hasSupabaseServiceEnv()) return resolveRootFiles([]);
@@ -58,6 +63,12 @@ export async function withOrgMandate(orgId: string, skillId: string, input: unkn
     if (b.input === "hurdles" && !root.returnsAreDefault) out.hurdles = root.returns;
     if (b.input === "financing" && !root.financingIsDefault) out.financing = root.financing;
     if (b.input === "kpiPolicy" && !root.kpiIsDefault) out.kpiPolicy = root.kpi;
+    // Only a name the firm actually wrote; absent leaves the skill's labelled generic role.
+    if (b.input === "gateOwner") {
+      const owner = gateOwnerFor(skillId, root.firm);
+      if (owner) out.gateOwner = owner;
+    }
   }
-  return out;
+  // Nothing the org has saved applied: hand back the caller's own object untouched.
+  return Object.keys(out).length === Object.keys(obj).length ? input : out;
 }
