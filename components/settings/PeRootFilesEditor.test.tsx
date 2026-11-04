@@ -19,7 +19,7 @@ jest.mock("@/app/(app)/settings/pe-actions", () => ({
 
 const files = [
   { key: "mandate", title: "Investment mandate", blurb: "b", typed: true, starter: "{}" },
-  { key: "firm", title: "Firm", blurb: "b", typed: false, starter: "{}" },
+  { key: "evidence", title: "Evidence", blurb: "b", typed: false, starter: "{}" },
 ];
 const stored = [{ key: "mandate", content: JSON.stringify({ ...FIXTURE, status: "draft" }, null, 2), version: 2, updatedAt: null }];
 
@@ -39,7 +39,7 @@ describe("PeRootFilesEditor", () => {
 
   it("disables Save and shows the error for invalid JSON, and unblocks on valid input", async () => {
     render(<PeRootFilesEditor files={files} stored={[]} canManage />);
-    const box = screen.getByLabelText("Firm (JSON)");
+    const box = screen.getByLabelText("Evidence (JSON)");
     fireEvent.change(box, { target: { value: "{nope" } });
     expect(screen.getByText(/Not valid JSON/)).toBeTruthy();
     const saveBtns = screen.getAllByRole("button", { name: "Save" });

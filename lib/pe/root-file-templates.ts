@@ -4,6 +4,7 @@
 // rejected (returns / financing / kpi) or saved as a DRAFT mandate with
 // "no threshold" blockers that stop it being approved. The firm supplies the numbers.
 
+import { GATE_KEYS } from "./gates";
 import type { RootFileKey } from "./root-files";
 
 export interface RootFileMeta {
@@ -53,7 +54,13 @@ export const ROOT_FILE_META: RootFileMeta[] = [
     typed: true,
     starter: j({ materialityPct: null, materialityAbs: null, trendPeriods: null }),
   },
-  { key: "firm", title: "Firm, gate owners, house style", blurb: "Who signs each gate, advisers, house style.", typed: false, starter: j({ firmName: "", gateOwners: {} }) },
+  {
+    key: "firm",
+    title: "Firm and gate owners",
+    blurb: "Who owns each human gate. Every PE skill ends by naming a gate owner; with a name here it names that person or committee instead of a generic role. Read by all 16 PE skills.",
+    typed: true,
+    starter: j({ firmName: "", gateOwners: Object.fromEntries(GATE_KEYS.map((k) => [k, ""])) }),
+  },
   { key: "evidence", title: "Evidence grades", blurb: "The firm's evidence scale and citation format.", typed: false, starter: j({ grades: {} }) },
   { key: "ic_memo", title: "IC memo format", blurb: "The firm's IC memo structure.", typed: false, starter: j({ sections: [] }) },
   { key: "reporting", title: "Reporting policy", blurb: "Board, LP and valuation reporting formats.", typed: false, starter: j({ formats: {} }) },

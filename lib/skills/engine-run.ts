@@ -13,6 +13,7 @@ import { EXECUTIVE_BY_KEY } from "@/lib/executives/registry";
 import { getSkill } from "./registry";
 import { executeSkillCore } from "./runner";
 import { persistSkillRun } from "./store";
+import { withOrgMandate } from "@/lib/pe/root-files.server";
 import type { SkillContext, SkillResult } from "./types";
 import type { SkillPlan } from "./skill-planner";
 
@@ -65,7 +66,10 @@ export async function executePlannedSkill(input: ExecutePlannedSkillInput): Prom
     workflowTaskId: input.workflowTaskId ?? null,
   };
 
-  const result = executeSkillCore(plan.skillId, plan.input, ctx);
+  // Fill any policy input the planner left out (gate owner, hurdles, …) from the org's
+  // own saved root files. An input the planner already set always wins.
+  const skillInput = await withOrgMandate(input.orgId, plan.skillId, plan.input);
+  const result = executeSkillCore(plan.skillId, skillInput, ctx);
 
   // Best-effort evidence row; the engine persists the artifact itself.
   try {
@@ -74,7 +78,7 @@ export async function executePlannedSkill(input: ExecutePlannedSkillInput): Prom
       skillVersion: result.version,
       backingAgent,
       risk: skill?.manifest.riskClassification ?? "low",
-      input: plan.input,
+      input: skillInput,
       result,
       artifactId: null,
     });
