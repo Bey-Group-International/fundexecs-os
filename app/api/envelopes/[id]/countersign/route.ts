@@ -4,7 +4,7 @@ import { canAdminOrg } from "@/lib/rbac";
 import { createServerClient } from "@/lib/supabase/server";
 import { missingRequiredFields, type EnvelopeFieldRequirement } from "@/lib/envelope-signing";
 import { parseSignaturePng } from "@/lib/signing/signature-image";
-import { blockValueProblem } from "@/lib/signing/blocks";
+import { blockValueProblem, resolveDateTimeResponse } from "@/lib/signing/blocks";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -55,9 +55,14 @@ export async function POST(req: Request, props: { params: Promise<{ id: string }
     .eq("recipient_id", owner.id);
   const fields = (fieldRows ?? []) as (EnvelopeFieldRequirement & { prefill?: string | null; locked?: boolean })[];
   const now = new Date().toISOString();
+  const adjustedTimes: string[] = [];
   for (const f of fields) {
-    if (f.field_type === "datetime") responses[f.id] = now;
-    else if (f.locked && f.prefill) responses[f.id] = f.prefill;
+    if (f.field_type === "datetime") {
+      const r = resolveDateTimeResponse(responses[f.id], now);
+      if (r.problem) return NextResponse.json({ ok: false, error: r.problem }, { status: 400 });
+      responses[f.id] = r.value;
+      if (r.adjusted && r.chosen) adjustedTimes.push(r.chosen);
+    } else if (f.locked && f.prefill) responses[f.id] = f.prefill;
   }
   const missing = missingRequiredFields(fields, { signatureData, initialsData: null, fieldResponses: responses });
   if (missing.length) return NextResponse.json({ ok: false, error: `Required fields are incomplete: ${missing.join(", ")}` }, { status: 400 });
@@ -89,7 +94,7 @@ export async function POST(req: Request, props: { params: Promise<{ id: string }
     .eq("id", owner.id);
   if (signErr) return NextResponse.json({ ok: false, error: "Failed to record your signature" }, { status: 500 });
 
-  await supabase.from("envelope_events").insert({ envelope_id: id, event_type: "signed", recipient_id: owner.id, ip_address: ip, metadata: { actor: ctx.userId, party: "owner" } } as never);
+  await supabase.from("envelope_events").insert({ envelope_id: id, event_type: "signed", recipient_id: owner.id, ip_address: ip, metadata: { actor: ctx.userId, party: "owner", ...(adjustedTimes.length ? { datetime_chosen: adjustedTimes, datetime_actual: now } : {}) } } as never);
   const { error: doneErr } = await supabase.from("envelopes").update({ status: "completed", completed_at: now }).eq("id", id);
   if (!doneErr) await supabase.from("envelope_events").insert({ envelope_id: id, event_type: "completed" });
 

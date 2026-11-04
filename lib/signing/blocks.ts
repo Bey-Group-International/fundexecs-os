@@ -91,10 +91,62 @@ export function newBlockAt(type: BlockType, xPct: number, yPct: number): Pick<Pl
   });
 }
 
-/** "Nov 2, 2026, 14:03:09 UTC": what a date-and-time block shows once stamped. */
+const OFFSET_ISO = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?(Z|[+-]\d{2}:\d{2})$/;
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const pad2 = (n: number) => String(n).padStart(2, "0");
+
+/** A moment as the signer's own wall clock with its UTC offset: "2026-11-04T14:03:00-08:00". */
+export function toOffsetIso(d: Date): string {
+  const off = -d.getTimezoneOffset();
+  const sign = off >= 0 ? "+" : "-";
+  const abs = Math.abs(off);
+  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}T${pad2(d.getHours())}:${pad2(d.getMinutes())}:00${sign}${pad2(Math.floor(abs / 60))}:${pad2(abs % 60)}`;
+}
+
+/**
+ * What a date-and-time block shows. A time the signer chose keeps their own clock and
+ * offset ("Nov 4, 2026, 14:03 UTC-08:00"); a server stamp shows in UTC with seconds.
+ */
 export function formatBlockDateTime(iso: string): string {
+  const m = OFFSET_ISO.exec(iso);
+  if (m && m[7] !== "Z") {
+    return `${MONTHS[Number(m[2]) - 1]} ${Number(m[3])}, ${m[1]}, ${m[4]}:${m[5]} UTC${m[7]}`;
+  }
   const d = new Date(iso);
   const date = d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" });
   const time = d.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false, timeZone: "UTC" });
   return `${date}, ${time} UTC`;
+}
+
+/** A signer may set the printed date and time within this window of the real signing moment. */
+export const DATETIME_PAST_MS = 30 * 24 * 60 * 60 * 1000;
+export const DATETIME_FUTURE_MS = 24 * 60 * 60 * 1000;
+/** Beyond this gap from the real time, the signing event records both the chosen and the true time. */
+const DATETIME_ADJUSTED_MS = 2 * 60 * 1000;
+
+export interface DateTimeResolution {
+  /** What is stored and printed on the page. */
+  value: string;
+  /** The signer's choice, or null if they chose nothing. */
+  chosen: string | null;
+  /** The choice differs enough from the real time to be noted in the audit trail. */
+  adjusted: boolean;
+  problem: string | null;
+}
+
+/**
+ * The date and time a signer's block ends up with. The wheels start at now and the signer
+ * may change them; the server decides what is acceptable and always knows the true time
+ * (`nowIso`), which stays in the signing record whatever is printed on the page.
+ */
+export function resolveDateTimeResponse(chosen: unknown, nowIso: string): DateTimeResolution {
+  const raw = typeof chosen === "string" ? chosen.trim() : "";
+  if (!raw) return { value: nowIso, chosen: null, adjusted: false, problem: null };
+  const t = Date.parse(raw);
+  if (!OFFSET_ISO.test(raw) || Number.isNaN(t)) return { value: nowIso, chosen: raw, adjusted: false, problem: "Choose a valid date and time." };
+  const now = Date.parse(nowIso);
+  if (t < now - DATETIME_PAST_MS || t > now + DATETIME_FUTURE_MS) {
+    return { value: nowIso, chosen: raw, adjusted: false, problem: "Choose a date and time within the last 30 days." };
+  }
+  return { value: raw, chosen: raw, adjusted: Math.abs(t - now) > DATETIME_ADJUSTED_MS, problem: null };
 }
