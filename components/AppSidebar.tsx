@@ -44,19 +44,52 @@ interface GroupItem {
   name: string;
 }
 
-// Account menu, in display order. Items with a real destination are links;
-// Walkthrough has no href and instead re-opens the guided tour overlay.
-const ACCOUNT_ITEMS: { label: string; href?: string }[] = [
-  { label: "Settings", href: "/settings" },
-  { label: "Integrations", href: "/settings#integrations" },
-  { label: "Get help", href: "/settings#help" },
-  { label: "Walkthrough" },
-  { label: "Learn more", href: "/settings#about" },
-  { label: "View plans", href: "/wallet" },
-  { label: "Treasury", href: "/wallet/treasury" },
-  { label: "Invite", href: "/invite" },
-  { label: "Gift credits", href: "/gift" },
-  { label: "Earn guide", href: "/earn" },
+// Account menu, grouped so ten flat items read as three short lists. Items with
+// a real destination are links; Walkthrough has no href and instead re-opens the
+// guided tour overlay. Every destination that was here is still here.
+type AccountItem = { label: string; href?: string };
+const ACCOUNT_GROUPS: { title: string; items: AccountItem[] }[] = [
+  {
+    title: "Account",
+    items: [
+      { label: "Settings", href: "/settings" },
+      { label: "Integrations", href: "/settings#integrations" },
+    ],
+  },
+  {
+    title: "Credits & plan",
+    items: [
+      { label: "View plans", href: "/wallet" },
+      { label: "Treasury", href: "/wallet/treasury" },
+      { label: "Invite", href: "/invite" },
+      { label: "Gift credits", href: "/gift" },
+    ],
+  },
+  {
+    title: "Help",
+    items: [
+      { label: "Get help", href: "/settings#help" },
+      { label: "Walkthrough" },
+      { label: "Earn guide", href: "/earn" },
+      { label: "Learn more", href: "/settings#about" },
+    ],
+  },
+];
+
+// Top-level destinations in two labelled groups. Order within a group is
+// unchanged; the groups just give the eye a place to rest.
+const WORK_LINKS = [
+  { href: "/dashboard", label: "Dashboard" },
+  { href: "/office", label: "Office" },
+  { href: "/workspace", label: "Sessions" },
+  { href: "/automations", label: "Automations" },
+  { href: "/inbox", label: "Inbox", badge: "inbox" as const },
+];
+const NETWORK_LINKS = [
+  { href: "/network", label: "Network" },
+  { href: "/marketplace", label: "Marketplace" },
+  { href: "/meetings", label: "Meetings" },
+  { href: "/pulse", label: "Pulse", badge: "pulse" as const },
 ];
 
 function useDismiss<T extends HTMLElement>(onDismiss: () => void) {
@@ -357,7 +390,13 @@ function SidebarPanel({
   pendingAccessRequests = 0,
 }: AppSidebarProps) {
   const pathname = usePathname();
-  const [openHub, setOpenHub] = useState<string | null>(null);
+  // The hub that owns the current page starts open, so a module page shows
+  // where you are instead of a fully collapsed rail. A manual toggle wins.
+  const activeHubKey =
+    hubs.find((h) => h.modules.some((m) => navHrefActive(pathname, m.href)))?.key ?? null;
+  const [hubChoice, setHubChoice] = useState<{ key: string | null; forPath: string } | null>(null);
+  const openHub = hubChoice && hubChoice.forPath === pathname ? hubChoice.key : activeHubKey;
+  const setOpenHub = (key: string | null) => setHubChoice({ key, forPath: pathname });
   const [accountOpen, setAccountOpen] = useState(false);
   const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
   const [newGroupOpen, setNewGroupOpen] = useState(false);
@@ -395,7 +434,7 @@ function SidebarPanel({
 
   const linkClass =
     "flex items-center gap-2 rounded-md px-2 py-1.5 text-fg-secondary transition duration-150 hover:bg-surface-2/80 hover:text-fg-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-400";
-  const activeLinkClass = "fx-nav-active rounded-md px-2 py-1.5 text-fg-primary transition duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-400";
+  const activeLinkClass = "fx-nav-active flex items-center gap-2 rounded-md px-2 py-1.5 text-fg-primary transition duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-400";
 
   return (
     <>
@@ -409,84 +448,45 @@ function SidebarPanel({
       </div>
 
       <nav className="flex-1 overflow-y-auto overscroll-contain px-2 py-3 text-sm">
-        {/* Top-level destinations */}
-        <div className="flex flex-col gap-0.5">
-          {/* Dashboard — the Private Markets Command Center home base. Sits at
-              the very top of the rail as the operator's default landing surface. */}
-          <Link
-            href="/dashboard"
-            className={navHrefActive(pathname, "/dashboard") ? `${activeLinkClass} flex items-center gap-2` : linkClass}
+        {/* Top-level destinations, grouped. */}
+        {[
+          { title: null, links: WORK_LINKS },
+          { title: "Network", links: NETWORK_LINKS },
+        ].map((group) => (
+          <div
+            key={group.title ?? "work"}
+            className={`flex flex-col gap-0.5 ${group.title ? "mt-4" : ""}`}
           >
-            Dashboard
-          </Link>
-          <Link
-            href="/office"
-            className={navHrefActive(pathname, "/office") ? `${activeLinkClass} flex items-center gap-2` : linkClass}
-          >
-            Office
-          </Link>
-          <Link
-            href="/workspace"
-            className={navHrefActive(pathname, "/workspace") ? `${activeLinkClass} flex items-center gap-2` : linkClass}
-          >
-            Sessions
-          </Link>
-          <Link
-            href="/automations"
-            className={navHrefActive(pathname, "/automations") ? `${activeLinkClass} flex items-center gap-2` : linkClass}
-          >
-            Automations
-          </Link>
-          <Link
-            href="/inbox"
-            className={`${navHrefActive(pathname, "/inbox") ? `${activeLinkClass} flex items-center justify-between gap-2` : `${linkClass} justify-between`}`}
-          >
-            <span className="flex items-center gap-2">
-              Inbox
-            </span>
-            {inboxUnread > 0 ? (
-              <span className="rounded-full bg-gradient-to-r from-gold-400 to-gold-300 px-1.5 py-0.5 font-mono text-[11px] font-bold leading-none text-surface-0 shadow-[0_0_8px_rgb(var(--fx-gold-rgb)/0.5)]">
-                {inboxUnread > 99 ? "99+" : inboxUnread}
-              </span>
+            {group.title ? (
+              <p className="mb-1 px-2 font-mono text-[11px] uppercase tracking-[0.16em] text-fg-muted/70">
+                {group.title}
+              </p>
             ) : null}
-          </Link>
-          {/* Network — standalone relationship-capital surface (formerly a
-              Source module), now a top-level destination in its own right. */}
-          <Link
-            href="/network"
-            className={navHrefActive(pathname, "/network") ? `${activeLinkClass} flex items-center gap-2` : linkClass}
-          >
-            Network
-          </Link>
-          {/* Marketplace · Meetings · Pulse — top-level rail destinations,
-              grouped just below Network. */}
-          <Link
-            href="/marketplace"
-            className={navHrefActive(pathname, "/marketplace") ? `${activeLinkClass} flex items-center gap-2` : linkClass}
-          >
-            Marketplace
-          </Link>
-          <Link
-            href="/meetings"
-            className={navHrefActive(pathname, "/meetings") ? `${activeLinkClass} flex items-center gap-2` : linkClass}
-          >
-            Meetings
-          </Link>
-          <Link
-            href="/pulse"
-            className={`${navHrefActive(pathname, "/pulse") ? `${activeLinkClass} flex items-center justify-between gap-2` : `${linkClass} justify-between`}`}
-          >
-            <span className="flex items-center gap-2">Pulse</span>
-            {pulseNew > 0 ? (
-              <span
-                className="rounded-full bg-surface-2 px-1.5 py-0.5 font-mono text-[11px] font-semibold leading-none text-gold-300"
-                aria-label={`${pulseNew} new Pulse findings`}
-              >
-                {pulseNew > 99 ? "99+" : pulseNew}
-              </span>
-            ) : null}
-          </Link>
-        </div>
+            {group.links.map((l) => {
+              const active = navHrefActive(pathname, l.href);
+              const count =
+                "badge" in l ? (l.badge === "inbox" ? inboxUnread : pulseNew) : 0;
+              return (
+                <Link
+                  key={l.href}
+                  href={l.href}
+                  aria-current={active ? "page" : undefined}
+                  className={`${active ? activeLinkClass : linkClass} justify-between`}
+                >
+                  <span className="flex items-center gap-2">{l.label}</span>
+                  {count > 0 ? (
+                    <span
+                      aria-label={`${count} new in ${l.label}`}
+                      className="rounded-full bg-gradient-to-r from-gold-400 to-gold-300 px-1.5 py-0.5 font-mono text-[11px] font-bold leading-none text-surface-0"
+                    >
+                      {count > 99 ? "99+" : count}
+                    </span>
+                  ) : null}
+                </Link>
+              );
+            })}
+          </div>
+        ))}
 
         <p className="mb-1.5 mt-5 px-2 font-mono text-[11px] uppercase tracking-[0.16em] text-fg-muted/70">
           Hubs
@@ -690,7 +690,7 @@ function SidebarPanel({
           </button>
 
           {accountOpen ? (
-            <div className="absolute bottom-full left-0 right-0 mb-2 flex flex-col gap-0.5 rounded-xl border border-line/80 bg-surface-1/95 p-1.5 shadow-[0_-8px_40px_-12px_rgba(0,0,0,0.6)] backdrop-blur-xl animate-fade-up">
+            <div className="absolute bottom-full left-0 right-0 mb-2 flex max-h-[calc(100dvh_-_10rem)] flex-col gap-0.5 overflow-y-auto overscroll-contain rounded-xl border border-line/80 bg-surface-1/95 p-1.5 shadow-[0_-8px_40px_-12px_rgba(0,0,0,0.6)] backdrop-blur-xl animate-fade-up">
               {/* Internal-only: hidden admin console, shown to @beygroupintl.com. */}
               {isPlatformAdmin ? (
                 <Link
@@ -709,32 +709,39 @@ function SidebarPanel({
                   ) : null}
                 </Link>
               ) : null}
-              {ACCOUNT_ITEMS.map((item) => {
-                const cls =
-                  "flex items-center gap-2.5 rounded-md px-2 py-1.5 text-xs text-fg-secondary transition duration-100 hover:bg-surface-2/80 hover:text-fg-primary";
-                return item.href ? (
-                  <Link
-                    key={item.label}
-                    href={item.href}
-                    onClick={() => setAccountOpen(false)}
-                    className={cls}
-                  >
-                    {item.label}
-                  </Link>
-                ) : (
-                  <button
-                    key={item.label}
-                    type="button"
-                    onClick={() => {
-                      setAccountOpen(false);
-                      window.dispatchEvent(new Event("fx:open-tour"));
-                    }}
-                    className={`${cls} text-left`}
-                  >
-                    {item.label}
-                  </button>
-                );
-              })}
+              {ACCOUNT_GROUPS.map((group, gi) => (
+                <div key={group.title} className={gi > 0 ? "mt-1 border-t border-line/60 pt-1" : ""}>
+                  <p className="px-2 pb-0.5 pt-1 font-mono text-[10px] uppercase tracking-[0.16em] text-fg-muted/70">
+                    {group.title}
+                  </p>
+                  {group.items.map((item) => {
+                    const cls =
+                      "flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-xs text-fg-secondary transition duration-100 hover:bg-surface-2/80 hover:text-fg-primary";
+                    return item.href ? (
+                      <Link
+                        key={item.label}
+                        href={item.href}
+                        onClick={() => setAccountOpen(false)}
+                        className={cls}
+                      >
+                        {item.label}
+                      </Link>
+                    ) : (
+                      <button
+                        key={item.label}
+                        type="button"
+                        onClick={() => {
+                          setAccountOpen(false);
+                          window.dispatchEvent(new Event("fx:open-tour"));
+                        }}
+                        className={`${cls} text-left`}
+                      >
+                        {item.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              ))}
             </div>
           ) : null}
         </div>
