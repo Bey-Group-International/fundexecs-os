@@ -4,6 +4,7 @@
 // are percentages of the page (from the top-left), so overlays stay put at any width.
 // pdf.js is loaded in the browser only; the page is drawn to a canvas.
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import { DRAW_MARGIN_PX, pageBox, pageWidth } from "@/lib/signing/pdf-layout";
 
 export interface PageInfo {
   /** 1-based. */
@@ -15,48 +16,85 @@ export interface PageInfo {
 
 type PdfDoc = import("pdfjs-dist").PDFDocumentProxy;
 
-function PageCanvas({ doc, page, maxWidth, children }: { doc: PdfDoc; page: number; maxWidth: number; children?: (p: PageInfo) => ReactNode }) {
+function PageCanvas({
+  doc,
+  page,
+  maxWidth,
+  ratio,
+  children,
+}: {
+  doc: PdfDoc;
+  page: number;
+  maxWidth: number;
+  /** Height over width of the first page: the box every page holds until it is drawn. */
+  ratio: number;
+  children?: (p: PageInfo) => ReactNode;
+}) {
+  const wrapRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [size, setSize] = useState<{ width: number; height: number } | null>(null);
+  // Only pages near the screen are drawn: a long document would otherwise hold a full-size
+  // canvas for every page. The first two draw at once; without IntersectionObserver all do.
+  const [near, setNear] = useState(page <= 2);
 
   useEffect(() => {
+    const el = wrapRef.current;
+    if (!el || typeof IntersectionObserver === "undefined") {
+      setNear(true);
+      return;
+    }
+    const io = new IntersectionObserver(([e]) => setNear(e.isIntersecting), { rootMargin: `${DRAW_MARGIN_PX}px 0px` });
+    io.observe(el);
+    return () => io.disconnect();
+  }, []);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!near) {
+      // Out of range: give the canvas memory back. Its box (the CSS size) stays, so nothing moves.
+      if (canvas) {
+        canvas.width = 0;
+        canvas.height = 0;
+      }
+      return;
+    }
     let cancelled = false;
     let task: { cancel: () => void } | null = null;
     (async () => {
       const p = await doc.getPage(page);
       const base = p.getViewport({ scale: 1 });
-      const scale = Math.min(maxWidth, 900) / base.width;
+      const scale = pageWidth(maxWidth) / base.width;
       const viewport = p.getViewport({ scale });
-      const ratio = window.devicePixelRatio || 1;
-      const canvas = canvasRef.current;
-      if (!canvas || cancelled) return;
-      canvas.width = Math.floor(viewport.width * ratio);
-      canvas.height = Math.floor(viewport.height * ratio);
+      const ratioPx = window.devicePixelRatio || 1;
+      const c = canvasRef.current;
+      if (!c || cancelled) return;
+      c.width = Math.floor(viewport.width * ratioPx);
+      c.height = Math.floor(viewport.height * ratioPx);
       setSize({ width: viewport.width, height: viewport.height });
-      const ctx = canvas.getContext("2d");
+      const ctx = c.getContext("2d");
       if (!ctx) return;
-      const render = p.render({ canvasContext: ctx, viewport, transform: ratio !== 1 ? [ratio, 0, 0, ratio, 0, 0] : undefined });
+      const render = p.render({ canvasContext: ctx, viewport, transform: ratioPx !== 1 ? [ratioPx, 0, 0, ratioPx, 0, 0] : undefined });
       task = render;
       try {
         await render.promise;
       } catch {
-        // A cancelled render (the page re-laid out) is expected.
+        // A cancelled render (the page re-laid out or scrolled away) is expected.
       }
     })();
     return () => {
       cancelled = true;
       task?.cancel();
     };
-  }, [doc, page, maxWidth]);
+  }, [doc, page, maxWidth, near]);
+
+  // The box is known before the page is drawn, so blocks on a far page already have a place
+  // (and "scroll to this spot" can find them).
+  const box = size ?? pageBox(maxWidth, ratio);
 
   return (
-    <div
-      data-page={page}
-      className="relative mx-auto mb-4 bg-white shadow-md"
-      style={{ width: size?.width ?? maxWidth, height: size?.height ?? maxWidth * 1.294 }}
-    >
-      <canvas ref={canvasRef} className="block" style={{ width: size?.width, height: size?.height }} />
-      {size && children ? <div className="absolute inset-0">{children({ page, ...size })}</div> : null}
+    <div data-page={page} ref={wrapRef} className="relative mx-auto mb-4 bg-white shadow-md" style={{ width: box.width, height: box.height }}>
+      <canvas ref={canvasRef} className="block" style={{ width: box.width, height: box.height }} />
+      {children ? <div className="absolute inset-0">{children({ page, ...box })}</div> : null}
     </div>
   );
 }
@@ -76,6 +114,7 @@ export function PdfPages({
   const [doc, setDoc] = useState<PdfDoc | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [width, setWidth] = useState(720);
+  const [ratio, setRatio] = useState(0);
 
   useEffect(() => {
     const el = wrapRef.current;
@@ -103,6 +142,10 @@ export function PdfPages({
           return;
         }
         loaded = d;
+        // The first page's shape sizes every page's box until it is drawn.
+        const first = (await d.getPage(1)).getViewport({ scale: 1 });
+        if (cancelled) return;
+        setRatio(first.height / first.width);
         setDoc(d);
         onLoaded?.(d.numPages);
       } catch (e) {
@@ -125,7 +168,7 @@ export function PdfPages({
         <p className="p-6 text-center text-sm text-fg-muted">Loading the document…</p>
       ) : (
         Array.from({ length: doc.numPages }, (_, i) => (
-          <PageCanvas key={i + 1} doc={doc} page={i + 1} maxWidth={width}>
+          <PageCanvas key={i + 1} doc={doc} page={i + 1} maxWidth={width} ratio={ratio}>
             {children}
           </PageCanvas>
         ))

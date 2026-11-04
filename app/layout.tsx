@@ -5,6 +5,7 @@ import {
   JetBrains_Mono,
   Playfair_Display,
   Inter,
+  Dancing_Script,
 } from "next/font/google";
 import {
   SITE_DESCRIPTION,
@@ -57,6 +58,15 @@ const roomSerif = Playfair_Display({
 const roomSans = Inter({
   subsets: ["latin"],
   variable: "--font-room-sans",
+  display: "swap",
+  preload: false,
+});
+
+// The script face for typed signatures. Not preloaded: only a page that draws one fetches it.
+const signatureScript = Dancing_Script({
+  subsets: ["latin"],
+  weight: ["600"],
+  variable: "--font-signature",
   display: "swap",
   preload: false,
 });
@@ -158,7 +168,7 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${display.variable} ${sans.variable} ${mono.variable} ${roomSerif.variable} ${roomSans.variable}`}
+      className={`${display.variable} ${sans.variable} ${mono.variable} ${roomSerif.variable} ${roomSans.variable} ${signatureScript.variable}`}
       suppressHydrationWarning
     >
       <head>
