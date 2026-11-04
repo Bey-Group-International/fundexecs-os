@@ -20,6 +20,9 @@
     "recommendedAction": {
       "type": "string"
     },
+    "reportingStyleApplied": {
+      "type": "boolean"
+    },
     "sections": {
       "items": {
         "properties": {
@@ -46,6 +49,6 @@
       "type": "array"
     }
   },
-  "required": [ "sections", "statedMetrics", "openItems", "missingFields", "completeness", "recommendedAction" ],
+  "required": [ "sections", "statedMetrics", "openItems", "missingFields", "completeness", "recommendedAction", "reportingStyleApplied" ],
   "type": "object"
 }

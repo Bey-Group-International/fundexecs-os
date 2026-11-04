@@ -1,5 +1,24 @@
 {
   "properties": {
+    "evidencePolicy": {
+      "properties": {
+        "supportsPrice": {
+          "properties": {
+            "A": {
+              "type": "boolean"
+            },
+            "B": {
+              "type": "boolean"
+            },
+            "C": {
+              "type": "boolean"
+            }
+          },
+          "type": "object"
+        }
+      },
+      "type": "object"
+    },
     "expectedWorkstreams": {
       "items": {
         "type": "string"

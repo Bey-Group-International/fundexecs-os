@@ -45,6 +45,42 @@ describe("withOrgMandate", () => {
   });
 });
 
+describe("evidence policy injection", () => {
+  it("passes the org's own policy to red-flag-register, never the standing default", async () => {
+    const input = { findings: [], workstreamsRun: [] };
+    expect(await withOrgMandate("org", "red-flag-register", input)).toBe(input); // nothing saved -> caller's object untouched
+    rows.push({ file_key: "evidence", content: { supportsPrice: { A: true, B: false } } });
+    const out = (await withOrgMandate("org", "red-flag-register", input)) as { evidencePolicy?: { supportsPrice: Record<string, boolean> } };
+    expect(out.evidencePolicy?.supportsPrice).toEqual({ A: true, B: false, C: false });
+    const explicit = { ...input, evidencePolicy: { supportsPrice: { A: false } } };
+    expect(await withOrgMandate("org", "red-flag-register", explicit)).toBe(explicit);
+  });
+});
+
+describe("IC memo structure injection", () => {
+  it("passes the firm's structure to ic-memo, leaves an explicit one alone, and injects nothing when none is saved", async () => {
+    const input = { deal: { companyName: "Acme" } };
+    expect(await withOrgMandate("org", "ic-memo", input)).toBe(input);
+    rows.push({ file_key: "ic_memo", content: { sections: [{ key: "returns" }, { key: "asks", title: "Asks" }] } });
+    const out = (await withOrgMandate("org", "ic-memo", input)) as { memoStructure?: { sections: Array<{ key: string }> } };
+    expect(out.memoStructure?.sections.map((s) => s.key)).toEqual(["returns", "asks"]);
+    const explicit = { ...input, memoStructure: { sections: [{ key: "market" }] } };
+    expect(await withOrgMandate("org", "ic-memo", explicit)).toBe(explicit);
+  });
+});
+
+describe("reporting style injection", () => {
+  it("passes the firm's style to lp-update, leaves an explicit one alone, and injects nothing when none is saved", async () => {
+    const input = { fundName: "Fund I" };
+    expect(await withOrgMandate("org", "lp-update", input)).toBe(input);
+    rows.push({ file_key: "reporting", content: { currency: "USD", decimals: 1 } });
+    const out = (await withOrgMandate("org", "lp-update", input)) as { reportingStyle?: unknown };
+    expect(out.reportingStyle).toEqual({ currency: "USD", decimals: 1 });
+    const explicit = { ...input, reportingStyle: { units: "k" } };
+    expect(await withOrgMandate("org", "lp-update", explicit)).toBe(explicit);
+  });
+});
+
 describe("gate owners from the firm file", () => {
   const firm = { firmName: "Acme", gateOwners: { first_look: "Jane Doe (deal lead)", bid_price: "Investment Committee" } };
 

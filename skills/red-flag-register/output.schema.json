@@ -18,6 +18,9 @@
     "duplicatesMerged": {
       "type": "integer"
     },
+    "evidencePolicyIsDefault": {
+      "type": "boolean"
+    },
     "gate": {
       "type": "string"
     },
@@ -39,6 +42,6 @@
       "type": "array"
     }
   },
-  "required": [ "register", "blindSpots", "supportedPriceAdjustment", "unsupportedPriceClaims", "challenges", "gate" ],
+  "required": [ "register", "blindSpots", "supportedPriceAdjustment", "evidencePolicyIsDefault", "unsupportedPriceClaims", "challenges", "gate" ],
   "type": "object"
 }

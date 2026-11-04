@@ -24,6 +24,7 @@ optional_inputs:
   - market
   - mitigants
   - recommendation
+  - memoStructure     # the firm's sections: order, titles, required (from its IC memo file)
 
 outputs:
   - sections          # ordered [{heading, body, status}]
@@ -32,6 +33,8 @@ outputs:
   - conditionsPrecedent
   - missingSections
   - completeness      # 0-1 fraction of sections complete
+  - requiredOpen      # sections the firm marks required that are still open
+  - structureIsDefault
 
 artifact_types: [ic_memo]
 data_permissions: [deal:read, ic_memo:read]

@@ -16,7 +16,7 @@ import { resolveRootFiles, type ResolvedRootFiles, type RootFileRow } from "./ro
  * Only an org's OWN settings are injected; otherwise the skill applies (and
  * labels) the standing default, so a default is never passed off as the firm's.
  */
-type Binding = { input: "mandate" | "hurdles" | "financing" | "kpiPolicy" | "gateOwner" };
+type Binding = { input: "mandate" | "hurdles" | "financing" | "kpiPolicy" | "gateOwner" | "evidencePolicy" | "memoStructure" | "reportingStyle" };
 export const ROOT_BINDINGS: Record<string, Binding[]> = {
   "mandate-screen": [{ input: "mandate" }],
   "target-screen": [{ input: "mandate" }],
@@ -28,6 +28,9 @@ export const ROOT_BINDINGS: Record<string, Binding[]> = {
   "cash-13-week": [{ input: "financing" }],
   "financing-terms": [{ input: "financing" }],
   "kpi-variance": [{ input: "kpiPolicy" }],
+  "red-flag-register": [{ input: "evidencePolicy" }],
+  "ic-memo": [{ input: "memoStructure" }],
+  "lp-update": [{ input: "reportingStyle" }],
 };
 // Every PE skill ends on a human gate; the firm file may name its owner.
 for (const skillId of Object.keys(SKILL_GATES)) {
@@ -63,6 +66,9 @@ export async function withOrgMandate(orgId: string, skillId: string, input: unkn
     if (b.input === "hurdles" && !root.returnsAreDefault) out.hurdles = root.returns;
     if (b.input === "financing" && !root.financingIsDefault) out.financing = root.financing;
     if (b.input === "kpiPolicy" && !root.kpiIsDefault) out.kpiPolicy = root.kpi;
+    if (b.input === "evidencePolicy" && !root.evidenceIsDefault) out.evidencePolicy = root.evidence;
+    if (b.input === "memoStructure" && root.icMemo) out.memoStructure = root.icMemo;
+    if (b.input === "reportingStyle" && root.reporting) out.reportingStyle = root.reporting;
     // Only a name the firm actually wrote; absent leaves the skill's labelled generic role.
     if (b.input === "gateOwner") {
       const owner = gateOwnerFor(skillId, root.firm);

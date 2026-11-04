@@ -26,6 +26,12 @@
     "recommendation": {
       "type": "string"
     },
+    "requiredOpen": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
     "sections": {
       "items": {
         "properties": {
@@ -44,8 +50,11 @@
         "type": "object"
       },
       "type": "array"
+    },
+    "structureIsDefault": {
+      "type": "boolean"
     }
   },
-  "required": [ "sections", "recommendation", "openItems", "conditionsPrecedent", "missingSections", "completeness" ],
+  "required": [ "sections", "recommendation", "openItems", "conditionsPrecedent", "missingSections", "completeness", "requiredOpen", "structureIsDefault" ],
   "type": "object"
 }

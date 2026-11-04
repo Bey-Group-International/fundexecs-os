@@ -29,6 +29,39 @@
     "portfolioNotes": {
       "type": "string"
     },
+    "reportingStyle": {
+      "properties": {
+        "currency": {
+          "type": "string"
+        },
+        "decimals": {
+          "maximum": 4,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "labels": {
+          "properties": {
+            "dpi": {
+              "type": "string"
+            },
+            "nav": {
+              "type": "string"
+            },
+            "netIrr": {
+              "type": "string"
+            },
+            "tvpi": {
+              "type": "string"
+            }
+          },
+          "type": "object"
+        },
+        "units": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
     "tvpi": {
       "minimum": 0,
       "type": "number"

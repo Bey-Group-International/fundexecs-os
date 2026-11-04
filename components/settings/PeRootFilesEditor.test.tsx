@@ -18,8 +18,8 @@ jest.mock("@/app/(app)/settings/pe-actions", () => ({
 }));
 
 const files = [
-  { key: "mandate", title: "Investment mandate", blurb: "b", typed: true, starter: "{}" },
-  { key: "evidence", title: "Evidence", blurb: "b", typed: false, starter: "{}" },
+  { key: "mandate", title: "Investment mandate", blurb: "b", starter: "{}" },
+  { key: "evidence", title: "Evidence", blurb: "b", starter: "{}" },
 ];
 const stored = [{ key: "mandate", content: JSON.stringify({ ...FIXTURE, status: "draft" }, null, 2), version: 2, updatedAt: null }];
 
@@ -44,8 +44,8 @@ describe("PeRootFilesEditor", () => {
     expect(screen.getByText(/Not valid JSON/)).toBeTruthy();
     const saveBtns = screen.getAllByRole("button", { name: "Save" });
     expect(saveBtns[1]).toHaveProperty("disabled", true);
-    fireEvent.change(box, { target: { value: '{"firmName":"X"}' } });
-    expect(screen.getByText(/No skill reads this file yet/)).toBeTruthy();
+    fireEvent.change(box, { target: { value: '{"supportsPrice":{"A":true,"U":true}}' } });
+    expect(screen.getByText(/can never support a price/)).toBeTruthy();
     expect(saveBtns[1]).toHaveProperty("disabled", false);
   });
 

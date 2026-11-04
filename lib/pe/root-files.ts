@@ -1,12 +1,15 @@
 // lib/pe/root-files.ts
 // The per-organization "root files" the PE department skills read. Pure, no I/O.
 //
-// Phase 1 (sourcing) types only the `mandate` file. The other keys are stored as
-// raw jsonb and get typed parsers in the phase that first consumes them, so no
-// speculative schema is committed here.
+// Every one of the eight root files has a typed, defensive parser; a malformed value is dropped
+// (and reported by the editor), never coerced. A file that is missing or unusable resolves to
+// null or the labelled standing default, so a skill never runs on something the firm did not write.
 
 import { EMPTY_MANDATE, parseMandateTests, type MandateTests } from "./mandate-tests";
+import { DEFAULT_EVIDENCE_POLICY, parseEvidencePolicy, type EvidencePolicy } from "./evidence";
 import { parseFirmFile, type FirmFile } from "./gates";
+import { parseMemoStructure, type MemoStructure } from "./memo-structure";
+import { parseReportingStyle, type ReportingStyle } from "./reporting-style";
 import { DEFAULT_FINANCING, parseFinancingPolicy, type FinancingPolicy } from "./financing-policy";
 import { DEFAULT_KPI_POLICY, parseKpiPolicy, type KpiPolicy } from "./kpi-policy";
 import { DEFAULT_RETURNS, parseReturnsHurdles, type ReturnsHurdles } from "./returns-hurdles";
@@ -37,6 +40,13 @@ export interface ResolvedRootFiles {
   /** The org's KPI materiality, or the labelled standing default. */
   kpi: KpiPolicy;
   kpiIsDefault: boolean;
+  /** Which evidence grades may support a price: the org's own, or the labelled standing default. */
+  evidence: EvidencePolicy;
+  evidenceIsDefault: boolean;
+  /** The org's IC memo structure, or null when none is stored (the ic-memo skill then uses its own twelve sections). */
+  icMemo: MemoStructure | null;
+  /** The org's reporting style for the LP update, or null (the skill then uses its standing format). */
+  reporting: ReportingStyle | null;
   /** The org's firm file (gate owners, firm name), or null when none is stored. Skills then use their labelled generic roles. */
   firm: FirmFile | null;
   /** Keys with a stored, non-empty row. */
@@ -63,6 +73,12 @@ export function resolveRootFiles(rows: RootFileRow[] | null | undefined): Resolv
 
   const firmParsed = byKey.has("firm") ? parseFirmFile(byKey.get("firm")!.content).firm : null;
 
+  const evidenceParsed = byKey.has("evidence") ? parseEvidencePolicy(byKey.get("evidence")!.content) : null;
+
+  const icMemoParsed = byKey.has("ic_memo") ? parseMemoStructure(byKey.get("ic_memo")!.content).structure : null;
+
+  const reportingParsed = byKey.has("reporting") ? parseReportingStyle(byKey.get("reporting")!.content).style : null;
+
   const found: RootFileKey[] = [];
   for (const k of ROOT_FILE_KEYS) {
     if (k === "mandate") {
@@ -75,6 +91,18 @@ export function resolveRootFiles(rows: RootFileRow[] | null | undefined): Resolv
     }
     if (k === "financing") {
       if (financingParsed) found.push(k);
+      continue;
+    }
+    if (k === "evidence") {
+      if (evidenceParsed) found.push(k);
+      continue;
+    }
+    if (k === "ic_memo") {
+      if (icMemoParsed) found.push(k);
+      continue;
+    }
+    if (k === "reporting") {
+      if (reportingParsed) found.push(k);
       continue;
     }
     if (k === "firm") {
@@ -95,5 +123,5 @@ export function resolveRootFiles(rows: RootFileRow[] | null | undefined): Resolv
     `Not found: ${missing.length ? missing.join(", ") : "none"}` +
     (missing.length ? " — run on default settings." : ".");
 
-  return { mandate: mandateUsable ? mandateParsed! : EMPTY_MANDATE, returns: returnsParsed ?? DEFAULT_RETURNS, returnsAreDefault: !returnsParsed, financing: financingParsed ?? DEFAULT_FINANCING, financingIsDefault: !financingParsed, kpi: kpiParsed ?? DEFAULT_KPI_POLICY, kpiIsDefault: !kpiParsed, firm: firmParsed, found, missing, statusLine };
+  return { mandate: mandateUsable ? mandateParsed! : EMPTY_MANDATE, returns: returnsParsed ?? DEFAULT_RETURNS, returnsAreDefault: !returnsParsed, financing: financingParsed ?? DEFAULT_FINANCING, financingIsDefault: !financingParsed, kpi: kpiParsed ?? DEFAULT_KPI_POLICY, kpiIsDefault: !kpiParsed, evidence: evidenceParsed ?? DEFAULT_EVIDENCE_POLICY, evidenceIsDefault: !evidenceParsed, icMemo: icMemoParsed, reporting: reportingParsed, firm: firmParsed, found, missing, statusLine };
 }

@@ -31,7 +31,7 @@ export default async function PeFirmPage() {
         </p>
       </header>
       <PeRootFilesEditor
-        files={ROOT_FILE_META.map((m) => ({ key: m.key, title: m.title, blurb: m.blurb, typed: m.typed, starter: m.starter }))}
+        files={ROOT_FILE_META.map((m) => ({ key: m.key, title: m.title, blurb: m.blurb, starter: m.starter }))}
         stored={rows}
         canManage={ctx.role === "owner" || ctx.role === "admin"}
       />

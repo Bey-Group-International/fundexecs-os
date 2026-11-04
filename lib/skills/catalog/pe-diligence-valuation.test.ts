@@ -165,3 +165,42 @@ describe("bid-range", () => {
     expect(r.structured.versusComps).toBe("above");
   });
 });
+
+describe("red-flag-register: the firm's evidence policy", () => {
+  const f = [
+    { title: "Churn spike", workstream: "commercial", severity: "amber" as const, impact: "price" as const, evidenceGrade: "C" as const, priceImpact: 3 },
+    { title: "Lease gap", workstream: "financial", severity: "amber" as const, impact: "price" as const, evidenceGrade: "B" as const, priceImpact: 2 },
+    { title: "Tax exposure", workstream: "tax", severity: "red" as const, impact: "price" as const, evidenceGrade: "A" as const, priceImpact: 5 },
+  ];
+  const ran = ["commercial", "financial", "tax"];
+
+  it("uses the labelled standing default when the firm sets none", () => {
+    const r = redFlagRegister.run({ findings: f, workstreamsRun: ran }, ctx);
+    expect(r.structured.evidencePolicyIsDefault).toBe(true);
+    expect(r.structured.supportedPriceAdjustment).toBe(7); // A + B
+    expect(r.sources.some((s) => s.kind === "assumption" && s.label === "Evidence policy")).toBe(true);
+  });
+
+  it("a stricter firm policy excludes B, a looser one admits C, and U can never be admitted", () => {
+    const strict = redFlagRegister.run({ findings: f, workstreamsRun: ran, evidencePolicy: { supportsPrice: { A: true, B: false, C: false } } }, ctx);
+    expect(strict.structured.evidencePolicyIsDefault).toBe(false);
+    expect(strict.structured.supportedPriceAdjustment).toBe(5);
+    expect(strict.structured.unsupportedPriceClaims.map((c) => c.title).sort()).toEqual(["Churn spike", "Lease gap"]);
+
+    const loose = redFlagRegister.run({ findings: f, workstreamsRun: ran, evidencePolicy: { supportsPrice: { A: true, B: true, C: true } } }, ctx);
+    expect(loose.structured.supportedPriceAdjustment).toBe(10);
+
+    const withU = redFlagRegister.run(
+      { findings: [{ ...f[0], evidenceGrade: undefined }], workstreamsRun: ran, evidencePolicy: { supportsPrice: { A: true, B: true, C: true } } },
+      ctx,
+    );
+    expect(withU.structured.register[0].evidenceGrade).toBe("U");
+    expect(withU.structured.supportedPriceAdjustment).toBe(0); // ungraded = U, never supports a price
+  });
+
+  it("a partial policy keeps the default for the grades it does not mention", () => {
+    const r = redFlagRegister.run({ findings: f, workstreamsRun: ran, evidencePolicy: { supportsPrice: { B: false } } }, ctx);
+    expect(r.structured.supportedPriceAdjustment).toBe(5); // A still true by default, B now false
+    expect(validate(r.structured, redFlagRegister.manifest.outputSchema).valid).toBe(true);
+  });
+});
