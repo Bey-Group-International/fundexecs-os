@@ -1,83 +1,65 @@
 {
   "input": {
+    "capacity": [ {
+      "capacity": 1000,
+      "currentVolume": 800,
+      "documentRef": "SITE.pdf",
+      "metric": "units/yr",
+      "planVolume": 1200,
+      "unit": "Plant A"
+    } ],
+    "categoriesReviewed": [ "cost-base", "capacity" ],
+    "costBase": [ {
+      "benchmarkPctOfRevenue": 25,
+      "cost": 300,
+      "documentRef": "COST.xlsx",
+      "function": "Manufacturing"
+    }, {
+      "benchmarkPctOfRevenue": 10,
+      "cost": 80,
+      "function": "G&A"
+    } ],
     "dealName": "Acme",
-    "documentsReceived": [
-      "Org chart and headcount data",
-      "Site and capacity data",
-      "Supplier list and spend"
-    ],
-    "categoriesReviewed": ["cost-base", "capacity"],
-    "revenue": 1000,
-    "costBase": [
-      {
-        "function": "Manufacturing",
-        "cost": 300,
-        "benchmarkPctOfRevenue": 25,
-        "documentRef": "COST.xlsx"
-      },
-      {
-        "function": "G&A",
-        "cost": 80,
-        "benchmarkPctOfRevenue": 10
-      }
-    ],
+    "documentsReceived": [ "Org chart and headcount data", "Site and capacity data", "Supplier list and spend" ],
+    "improvements": [ {
+      "evidence": "Plant B pilot report",
+      "evidenceGrade": "B",
+      "inPlan": true,
+      "name": "Lean line rebalancing",
+      "savingBasis": "Pilot at Plant B cut cost per unit by 6%",
+      "savingHigh": 30,
+      "savingLow": 20
+    }, {
+      "inPlan": true,
+      "name": "Procurement consolidation",
+      "savingBasis": "Management estimate",
+      "savingHigh": 60,
+      "savingLow": 40
+    }, {
+      "inPlan": false,
+      "name": "Shared service centre",
+      "savingBasis": "Benchmark study",
+      "savingHigh": 50,
+      "savingLow": 30
+    } ],
+    "kpis": [ {
+      "current": 60,
+      "name": "OEE %",
+      "plan": 75
+    } ],
     "reportedCostBase": 380,
-    "capacity": [
-      {
-        "unit": "Plant A",
-        "metric": "units/yr",
-        "currentVolume": 800,
-        "capacity": 1000,
-        "planVolume": 1200,
-        "documentRef": "SITE.pdf"
-      }
-    ],
-    "suppliers": [
-      {
-        "name": "Steelco",
-        "spend": 600,
-        "critical": true,
-        "alternativeSupplier": "no",
-        "documentRef": "SUP.xlsx"
-      },
-      {
-        "name": "Packwell",
-        "spend": 300,
-        "alternativeSupplier": "yes"
-      }
-    ],
+    "revenue": 1000,
     "supplierConcentrationPct": 50,
-    "kpis": [
-      {
-        "name": "OEE %",
-        "current": 60,
-        "plan": 75
-      }
-    ],
-    "improvements": [
-      {
-        "name": "Lean line rebalancing",
-        "inPlan": true,
-        "savingLow": 20,
-        "savingHigh": 30,
-        "savingBasis": "Pilot at Plant B cut cost per unit by 6%",
-        "evidence": "Plant B pilot report",
-        "evidenceGrade": "B"
-      },
-      {
-        "name": "Procurement consolidation",
-        "inPlan": true,
-        "savingLow": 40,
-        "savingHigh": 60,
-        "savingBasis": "Management estimate"
-      },
-      {
-        "name": "Shared service centre",
-        "inPlan": false,
-        "savingLow": 30,
-        "savingHigh": 50,
-        "savingBasis": "Benchmark study"
-      }
-    ]
+    "suppliers": [ {
+      "alternativeSupplier": "no",
+      "critical": true,
+      "documentRef": "SUP.xlsx",
+      "name": "Steelco",
+      "spend": 600
+    }, {
+      "alternativeSupplier": "yes",
+      "name": "Packwell",
+      "spend": 300
+    } ]
   }
 }
