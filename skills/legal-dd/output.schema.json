@@ -1,0 +1,161 @@
+{
+  "type": "object",
+  "required": [
+    "issues",
+    "counts",
+    "abstract",
+    "documentGaps",
+    "notReviewed",
+    "uncited",
+    "duplicatesMerged",
+    "derivedCount",
+    "handoff",
+    "limitation",
+    "note",
+    "gate"
+  ],
+  "properties": {
+    "issues": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "rank",
+          "title",
+          "rating",
+          "category",
+          "evidenceGrade",
+          "cited",
+          "derived",
+          "notes"
+        ],
+        "properties": {
+          "rank": {
+            "type": "number"
+          },
+          "title": {
+            "type": "string"
+          },
+          "rating": {
+            "type": "string",
+            "enum": ["red", "amber", "green"]
+          },
+          "category": {
+            "type": "string"
+          },
+          "evidenceGrade": {
+            "type": "string",
+            "enum": ["A", "B", "C", "U"]
+          },
+          "cited": {
+            "type": "boolean"
+          },
+          "derived": {
+            "type": "boolean"
+          },
+          "notes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "counts": {
+      "type": "object",
+      "required": ["red", "amber", "green"],
+      "properties": {
+        "red": {
+          "type": "number"
+        },
+        "amber": {
+          "type": "number"
+        },
+        "green": {
+          "type": "number"
+        }
+      }
+    },
+    "abstract": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name", "changeOfControl", "exclusivity", "notStated"],
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "changeOfControl": {
+            "type": "string"
+          },
+          "exclusivity": {
+            "type": "string"
+          },
+          "notStated": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "documentGaps": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "notReviewed": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": [
+          "contract",
+          "litigation",
+          "regulatory",
+          "ip",
+          "corporate",
+          "employment"
+        ]
+      }
+    },
+    "uncited": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "duplicatesMerged": {
+      "type": "number"
+    },
+    "derivedCount": {
+      "type": "number"
+    },
+    "handoff": {
+      "type": "object",
+      "required": ["findings", "needingImpact"],
+      "properties": {
+        "findings": {
+          "type": "array"
+        },
+        "needingImpact": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "limitation": {
+      "type": "string"
+    },
+    "note": {
+      "type": "string"
+    },
+    "gate": {
+      "type": "string"
+    }
+  }
+}

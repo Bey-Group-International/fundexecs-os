@@ -52,7 +52,7 @@ export const ROOT_FILE_META: RootFileMeta[] = [
   {
     key: "firm",
     title: "Firm and gate owners",
-    blurb: "Who owns each human gate. Every PE skill ends by naming a gate owner; with a name here it names that person or committee instead of a generic role. Read by all 18 PE skills.",
+    blurb: "Who owns each human gate. Every PE skill ends by naming a gate owner; with a name here it names that person or committee instead of a generic role. Read by all 19 PE skills.",
     starter: j({ firmName: "", gateOwners: Object.fromEntries(GATE_KEYS.map((k) => [k, ""])) }),
   },
   {

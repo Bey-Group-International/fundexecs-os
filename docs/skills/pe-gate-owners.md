@@ -32,6 +32,7 @@ fill in the gates you want named:
 | `first_look`             | `first-look`              | Go / no-go on first look                 |
 | `revenue_quality`        | `revenue-quality`         | Treatment of customer concentration      |
 | `adjusted_ebitda`        | `qoe-bridge`              | Diligence-adjusted EBITDA                |
+| `legal_findings`         | `legal-dd`                | Legal findings                           |
 | `red_flag_treatment`     | `red-flag-register`       | Treatment of walk-away and price items   |
 | `bid_price`              | `bid-range`               | Bid price                                |
 | `sensitivity_basis`      | `sensitivity`             | Case the price rests on                  |

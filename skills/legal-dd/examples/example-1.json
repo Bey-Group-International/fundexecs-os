@@ -1,0 +1,50 @@
+{
+  "input": {
+    "dealName": "Acme",
+    "documentsReceived": [
+      "Material contracts folder",
+      "Corporate records",
+      "Litigation file"
+    ],
+    "categoriesReviewed": ["contract", "litigation"],
+    "contracts": [
+      {
+        "name": "Master supply agreement",
+        "counterparty": "Globex",
+        "term": "5 years from 2023",
+        "changeOfControl": "termination-right",
+        "exclusivity": "yes",
+        "assignment": "Consent needed",
+        "terminationRights": "90 days notice",
+        "liabilityCap": "12 months fees",
+        "documentRef": "DR-1/MSA.pdf",
+        "clauseRef": "cl. 14.2"
+      },
+      {
+        "name": "Reseller agreement",
+        "counterparty": "Initech",
+        "documentRef": "DR-1/RA.pdf"
+      }
+    ],
+    "ipAssets": [
+      {
+        "name": "Core algorithm",
+        "titleEvidence": "none"
+      }
+    ],
+    "issues": [
+      {
+        "title": "Pending claim by former distributor",
+        "rating": "red",
+        "category": "litigation",
+        "documentRef": "DR-3/claim.pdf",
+        "clauseRef": "para 4",
+        "evidenceGrade": "A",
+        "impact": "price",
+        "rangeLow": 0.5,
+        "rangeHigh": 1.2,
+        "rangeBasis": "Damages sought in the claim letter, para 4"
+      }
+    ]
+  }
+}

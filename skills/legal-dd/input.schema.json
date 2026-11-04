@@ -1,0 +1,162 @@
+{
+  "type": "object",
+  "properties": {
+    "dealName": {
+      "type": "string"
+    },
+    "documentsReceived": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "expectedDocuments": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "contracts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name"],
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "counterparty": {
+            "type": "string"
+          },
+          "term": {
+            "type": "string"
+          },
+          "changeOfControl": {
+            "type": "string",
+            "enum": [
+              "consent-required",
+              "termination-right",
+              "notice-only",
+              "none",
+              "unknown"
+            ]
+          },
+          "exclusivity": {
+            "type": "string",
+            "enum": ["yes", "no", "unknown"]
+          },
+          "assignment": {
+            "type": "string"
+          },
+          "terminationRights": {
+            "type": "string"
+          },
+          "liabilityCap": {
+            "type": "string"
+          },
+          "documentRef": {
+            "type": "string"
+          },
+          "clauseRef": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "ipAssets": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name"],
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "ownerOfRecord": {
+            "type": "string"
+          },
+          "titleEvidence": {
+            "type": "string",
+            "enum": ["assignment", "registration", "none", "unknown"]
+          },
+          "documentRef": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "issues": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["title", "rating"],
+        "properties": {
+          "title": {
+            "type": "string"
+          },
+          "rating": {
+            "type": "string",
+            "enum": ["red", "amber", "green"]
+          },
+          "category": {
+            "type": "string"
+          },
+          "documentRef": {
+            "type": "string"
+          },
+          "clauseRef": {
+            "type": "string"
+          },
+          "evidenceGrade": {
+            "type": "string",
+            "enum": ["A", "B", "C", "U"]
+          },
+          "impact": {
+            "type": "string",
+            "enum": [
+              "walk-away",
+              "price",
+              "structure",
+              "spa-protection",
+              "100-day"
+            ]
+          },
+          "question": {
+            "type": "string"
+          },
+          "owner": {
+            "type": "string"
+          },
+          "rangeLow": {
+            "type": "number",
+            "minimum": 0
+          },
+          "rangeHigh": {
+            "type": "number",
+            "minimum": 0
+          },
+          "rangeBasis": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "categoriesReviewed": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": [
+          "contract",
+          "litigation",
+          "regulatory",
+          "ip",
+          "corporate",
+          "employment"
+        ]
+      }
+    },
+    "gateOwner": {
+      "type": "string"
+    }
+  }
+}
