@@ -15,7 +15,6 @@ interface FileMeta {
   key: string;
   title: string;
   blurb: string;
-  typed: boolean;
   starter: string;
 }
 
@@ -65,7 +64,6 @@ function FileCard({ meta, stored, canManage }: { meta: FileMeta; stored: StoredF
         <h2 className="font-display text-lg font-semibold text-fg-primary">{meta.title}</h2>
         <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-fg-muted">
           {stored ? `saved · v${stored.version}${approved ? " · approved" : meta.key === "mandate" ? " · draft" : ""}` : "not set · standing default"}
-          {!meta.typed ? " · not read by a skill yet" : ""}
         </span>
       </div>
       <p className="mt-1 text-xs leading-snug text-fg-secondary">{meta.blurb}</p>

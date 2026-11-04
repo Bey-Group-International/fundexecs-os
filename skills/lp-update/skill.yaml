@@ -26,6 +26,7 @@ optional_inputs:
   - highlights
   - portfolioNotes
   - capitalActivity
+  - reportingStyle    # the firm's currency / units / decimals / metric labels (presentation only)
 
 outputs:
   - sections          # ordered [{heading, body, status}]
@@ -34,6 +35,7 @@ outputs:
   - missingFields
   - completeness      # 0-1 fraction of sections complete
   - recommendedAction
+  - reportingStyleApplied
 
 artifact_types: [lp_update]
 data_permissions: [fund:read, lp_update:read]

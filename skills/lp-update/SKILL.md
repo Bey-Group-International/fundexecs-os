@@ -69,3 +69,13 @@ performance figure to fill a section:
 See [`examples/example-1.json`](./examples/example-1.json) — a fully-populated
 quarterly update draft with all four performance metrics stated, every section
 complete.
+
+## The firm's reporting style
+
+If the firm has saved a reporting style (Settings → PE department settings → Reporting style), it
+is passed as `reportingStyle` (filled in automatically when the caller does not): the currency and
+units NAV is stated in, the decimal places every metric carries, and the firm's own labels for NAV,
+DPI, TVPI and Net IRR. This is **presentation only**: it never changes a value, rescales a figure
+or converts units. "units" labels what the supplied number is in, and "decimals" only controls how
+many decimals are shown. With no style the figures read exactly as before
+(`reportingStyleApplied: false`).

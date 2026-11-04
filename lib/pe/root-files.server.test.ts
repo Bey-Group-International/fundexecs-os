@@ -69,6 +69,18 @@ describe("IC memo structure injection", () => {
   });
 });
 
+describe("reporting style injection", () => {
+  it("passes the firm's style to lp-update, leaves an explicit one alone, and injects nothing when none is saved", async () => {
+    const input = { fundName: "Fund I" };
+    expect(await withOrgMandate("org", "lp-update", input)).toBe(input);
+    rows.push({ file_key: "reporting", content: { currency: "USD", decimals: 1 } });
+    const out = (await withOrgMandate("org", "lp-update", input)) as { reportingStyle?: unknown };
+    expect(out.reportingStyle).toEqual({ currency: "USD", decimals: 1 });
+    const explicit = { ...input, reportingStyle: { units: "k" } };
+    expect(await withOrgMandate("org", "lp-update", explicit)).toBe(explicit);
+  });
+});
+
 describe("gate owners from the firm file", () => {
   const firm = { firmName: "Acme", gateOwners: { first_look: "Jane Doe (deal lead)", bid_price: "Investment Committee" } };
 

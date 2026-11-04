@@ -4,6 +4,7 @@
 // fabricated figure.
 import { lpUpdate, type LpUpdateInput } from "./lp-update";
 import type { SkillContext } from "@/lib/skills/types";
+import { validate } from "@/lib/skills/validate";
 
 const ctx: SkillContext = { workspaceId: "org1", principalId: "p1", executive: "investor_relations" };
 const run = (input: LpUpdateInput) => lpUpdate.run(input, ctx);
@@ -118,3 +119,37 @@ describe("lp-update core", () => {
     expect(r.narrative).toMatch(/does not distribute/);
   });
 });
+
+describe("lp-update: the firm's reporting style", () => {
+  const base: LpUpdateInput = { fundName: "Fund I", period: "Q3 2026", nav: 120.5, dpi: 0.8, tvpi: 1.45, netIrrPct: 14 };
+  const perf = (r: ReturnType<typeof run>) => r.structured.sections.find((s) => s.heading === "Performance")!.body;
+
+  it("reads exactly as before with no style", () => {
+    const r = run(base);
+    expect(perf(r)).toContain("NAV: 120.5 · DPI: 0.8x · TVPI: 1.45x · Net IRR: 14%.");
+    expect(r.structured.reportingStyleApplied).toBe(false);
+  });
+
+  it("shows the figures in the firm's style without changing any value", () => {
+    const r = run({ ...base, reportingStyle: { currency: "USD", units: "m", decimals: 2, labels: { netIrr: "Net IRR (net of fees)" } } });
+    expect(perf(r)).toContain("NAV: USD 120.50m · DPI: 0.80x · TVPI: 1.45x · Net IRR (net of fees): 14.00%.");
+    expect(r.structured.reportingStyleApplied).toBe(true);
+    expect(r.structured.statedMetrics).toEqual(["NAV", "DPI", "TVPI", "Net IRR"]); // canonical names unchanged for downstream use
+    expect(r.sources.find((s) => s.label === "NAV")?.value).toBe(120.5); // the recorded fact is the supplied number
+    expect(r.sources.some((s) => s.label === "Reporting style")).toBe(true);
+  });
+
+  it("a missing metric stays an open item and is never invented, style or not", () => {
+    const r = run({ fundName: "Fund I", reportingStyle: { currency: "USD", decimals: 1 } });
+    expect(r.structured.sections.find((s) => s.heading === "Performance")!.status).toBe("open");
+    expect(r.structured.statedMetrics).toEqual([]);
+  });
+
+  it("an unusable style is ignored, and the output validates", () => {
+    const r = run({ ...base, reportingStyle: { decimals: 9 } as never });
+    expect(r.structured.reportingStyleApplied).toBe(false);
+    expect(perf(r)).toContain("NAV: 120.5");
+    expect(validate(r.structured, lpUpdate.manifest.outputSchema).valid).toBe(true);
+  });
+});
+

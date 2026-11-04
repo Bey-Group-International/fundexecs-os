@@ -61,3 +61,29 @@ describe("ic_memo file in resolveRootFiles", () => {
   });
 });
 
+describe("reporting file in resolveRootFiles", () => {
+  it("is null until the firm sets something usable", () => {
+    expect(resolveRootFiles([]).reporting).toBeNull();
+    expect(resolveRootFiles([{ file_key: "reporting", content: { decimals: 9 } }]).reporting).toBeNull();
+    const r = resolveRootFiles([{ file_key: "reporting", content: { currency: "GBP", decimals: 0 } }]);
+    expect(r.reporting).toEqual({ currency: "GBP", decimals: 0 });
+    expect(r.found).toContain("reporting");
+  });
+
+  it("with all eight files saved, nothing is missing", () => {
+    const rows = [
+      { file_key: "firm", content: { firmName: "Acme" } },
+      { file_key: "mandate", content: { hardLimits: [{ id: "g", label: "Geo", metric: "geography", allow: ["UK"] }] } },
+      { file_key: "returns", content: { base: { irr: 0.2 } } },
+      { file_key: "evidence", content: { supportsPrice: { A: true } } },
+      { file_key: "ic_memo", content: { sections: [{ key: "returns" }] } },
+      { file_key: "kpi", content: { materialityPct: 3 } },
+      { file_key: "financing", content: { maxSeniorLeverage: 4 } },
+      { file_key: "reporting", content: { units: "m" } },
+    ];
+    const r = resolveRootFiles(rows);
+    expect(r.missing).toEqual([]);
+    expect(r.statusLine).toMatch(/Not found: none\.$/);
+  });
+});
+

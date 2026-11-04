@@ -18,8 +18,8 @@ jest.mock("@/app/(app)/settings/pe-actions", () => ({
 }));
 
 const files = [
-  { key: "mandate", title: "Investment mandate", blurb: "b", typed: true, starter: "{}" },
-  { key: "evidence", title: "Evidence", blurb: "b", typed: false, starter: "{}" },
+  { key: "mandate", title: "Investment mandate", blurb: "b", starter: "{}" },
+  { key: "evidence", title: "Evidence", blurb: "b", starter: "{}" },
 ];
 const stored = [{ key: "mandate", content: JSON.stringify({ ...FIXTURE, status: "draft" }, null, 2), version: 2, updatedAt: null }];
 

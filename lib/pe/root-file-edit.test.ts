@@ -20,7 +20,6 @@ describe("validateRootFileText", () => {
     expect((n.hardLimits as unknown[]).length).toBe(4);
     expect(v.warnings.join(" ")).toMatch(/1 malformed criterion/);
     expect(v.warnings.join(" ")).toMatch(/reset to draft/);
-    expect(v.readBySkills).toBe(true);
   });
 
   it("refuses a mandate with no usable criteria", () => {
@@ -37,12 +36,6 @@ describe("validateRootFileText", () => {
     expect(validateRootFileText("kpi", "{}").ok).toBe(false);
   });
 
-  it("stores untyped files as written and says no skill reads them", () => {
-    const v = validateRootFileText("reporting", JSON.stringify({ boardPack: { sections: ["KPIs"] } }));
-    expect(v.ok).toBe(true);
-    expect(v.readBySkills).toBe(false);
-    expect(v.warnings[0]).toMatch(/No skill reads this file yet/);
-  });
 });
 
 describe("mandate approval", () => {
@@ -54,8 +47,8 @@ describe("mandate approval", () => {
 });
 
 describe("starter templates carry no invented numbers", () => {
-  it("every typed starter either fails validation, saves as an UNAPPROVABLE draft, or is exactly the skill's own default", () => {
-    for (const m of ROOT_FILE_META.filter((x) => x.typed)) {
+  it("every starter either fails validation, saves as an UNAPPROVABLE draft, or is exactly the skill's own default", () => {
+    for (const m of ROOT_FILE_META) {
       const v = validateRootFileText(m.key, m.starter);
       if (m.key === "mandate") {
         expect(v.ok).toBe(true);
@@ -79,7 +72,6 @@ describe("firm file (gate owners)", () => {
     expect(v.normalized).toEqual({ firmName: "Acme Capital", gateOwners: { first_look: "Jane Doe, deal lead" } });
     expect(v.warnings.join(" ")).toMatch(/Unknown gate\(s\) ignored: made_up_gate/);
     expect(v.warnings.join(" ")).toMatch(/over 120 characters was dropped for: ipo_decision/);
-    expect(v.readBySkills).toBe(true);
   });
 
   it("rejects a file with no name and no owner (the starter is all blanks, so it is never stored as-is)", () => {
@@ -95,7 +87,6 @@ describe("evidence file (price-support policy)", () => {
     expect(v.normalized).toEqual({ supportsPrice: { A: true, B: false, C: true } });
     expect(v.warnings.join(" ")).toMatch(/"U" \(untested\) can never support a price/);
     expect(v.warnings.join(" ")).toMatch(/Grade C .* is set to support a price/);
-    expect(v.readBySkills).toBe(true);
     expect(validateRootFileText("evidence", JSON.stringify({ supportsPrice: { A: false } })).warnings.join(" ")).toMatch(/Grade A .* NOT to support a price/);
   });
 
@@ -113,7 +104,6 @@ describe("ic_memo file (memo structure)", () => {
     expect(v.normalized).toEqual({ sections: [{ key: "recommendation", title: "Recommendation", required: true }, { key: "asks", title: "Asks", required: false }] });
     expect(v.warnings.join(" ")).toMatch(/Section 3: key must be lowercase/);
     expect(v.warnings.join(" ")).toMatch(/cannot generate: asks.*open placeholders/);
-    expect(v.readBySkills).toBe(true);
   });
 
   it("rejects a file with no usable section, but accepts the skill-structure starter", () => {
@@ -124,3 +114,30 @@ describe("ic_memo file (memo structure)", () => {
     expect(starter.warnings).toEqual([]); // identical to the default: nothing dropped, nothing custom
   });
 });
+
+describe("reporting file (LP update style)", () => {
+  it("stores the parsed style, reports dropped values, and says it is presentation only", () => {
+    const v = validateRootFileText("reporting", JSON.stringify({ currency: "USD", units: "m", decimals: 1, labels: { netIrr: "Net IRR (net of fees)", bogus: "x" } }));
+    expect(v.ok).toBe(true);
+    expect(v.normalized).toEqual({ currency: "USD", units: "m", decimals: 1, labels: { netIrr: "Net IRR (net of fees)" } });
+    expect(v.warnings.join(" ")).toMatch(/labels\.bogus: unknown metric/);
+    expect(v.warnings.join(" ")).toMatch(/never their values/);
+  });
+
+  it("rejects a style with nothing usable, including the all-blank starter", () => {
+    expect(validateRootFileText("reporting", JSON.stringify({ decimals: 9 })).errors[0]).toMatch(/No usable reporting style/);
+    expect(validateRootFileText("reporting", ROOT_FILE_META.find((m) => m.key === "reporting")!.starter).ok).toBe(false);
+  });
+});
+
+describe("every root file has an editor", () => {
+  it("each key validates something and none is stored unchecked", () => {
+    for (const m of ROOT_FILE_META) {
+      const r = validateRootFileText(m.key, "{}");
+      expect(r.errors.length + (r.ok ? 0 : 1)).toBeGreaterThan(0); // an empty object is never accepted, for any file
+      expect(r.ok).toBe(false);
+    }
+    expect(ROOT_FILE_META).toHaveLength(8);
+  });
+});
+

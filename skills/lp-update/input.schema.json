@@ -1,39 +1,74 @@
 {
+  "type": "object",
+  "required": [
+    "fundName"
+  ],
   "properties": {
-    "capitalActivity": {
-      "type": "string"
-    },
-    "dpi": {
-      "minimum": 0,
-      "type": "number"
-    },
     "fundName": {
-      "minLength": 1,
-      "type": "string"
-    },
-    "highlights": {
-      "items": {
-        "type": "string"
-      },
-      "type": "array"
-    },
-    "nav": {
-      "type": "number"
-    },
-    "netIrrPct": {
-      "type": "number"
+      "type": "string",
+      "minLength": 1
     },
     "period": {
       "type": "string"
     },
+    "nav": {
+      "type": "number"
+    },
+    "dpi": {
+      "type": "number",
+      "minimum": 0
+    },
+    "tvpi": {
+      "type": "number",
+      "minimum": 0
+    },
+    "netIrrPct": {
+      "type": "number"
+    },
+    "highlights": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
     "portfolioNotes": {
       "type": "string"
     },
-    "tvpi": {
-      "minimum": 0,
-      "type": "number"
+    "capitalActivity": {
+      "type": "string"
+    },
+    "reportingStyle": {
+      "type": "object",
+      "properties": {
+        "currency": {
+          "type": "string"
+        },
+        "units": {
+          "type": "string"
+        },
+        "decimals": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 4
+        },
+        "labels": {
+          "type": "object",
+          "properties": {
+            "nav": {
+              "type": "string"
+            },
+            "dpi": {
+              "type": "string"
+            },
+            "tvpi": {
+              "type": "string"
+            },
+            "netIrr": {
+              "type": "string"
+            }
+          }
+        }
+      }
     }
-  },
-  "required": [ "fundName" ],
-  "type": "object"
+  }
 }

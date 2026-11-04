@@ -8,6 +8,7 @@
 // ("Pending — confirm from fund admin"), never an invented number.
 
 import type { JsonSchema, SkillCore, SkillCoreResult, SkillDefinition, SkillManifest, SkillSource } from "@/lib/skills/types";
+import { formatMetricLine, parseReportingStyle, type ReportMetric } from "@/lib/pe/reporting-style";
 
 // ---------------------------------------------------------------------------
 // I/O types
@@ -23,6 +24,8 @@ export interface LpUpdateInput {
   highlights?: string[];
   portfolioNotes?: string;
   capitalActivity?: string;
+  /** The firm's reporting style (currency, units, decimals, metric labels). Absent = the standing format. */
+  reportingStyle?: { currency?: string; units?: string; decimals?: number; labels?: Partial<Record<ReportMetric, string>> };
 }
 
 export type LpUpdateSectionStatus = "complete" | "open";
@@ -42,6 +45,8 @@ export interface LpUpdateOutput {
   /** 0–1 fraction of sections that are complete. */
   completeness: number;
   recommendedAction: string;
+  /** True when the firm's reporting style shaped the figures' presentation. */
+  reportingStyleApplied: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -50,11 +55,11 @@ export interface LpUpdateOutput {
 
 /** The four performance metrics. Each is stated as a FACT only when provided —
  *  a missing metric is flagged, NEVER fabricated. */
-const METRIC_DEFS: Array<{ key: "nav" | "dpi" | "tvpi" | "netIrrPct"; name: string; format: (v: number) => string }> = [
-  { key: "nav", name: "NAV", format: (v) => `NAV: ${v}` },
-  { key: "dpi", name: "DPI", format: (v) => `DPI: ${v}x` },
-  { key: "tvpi", name: "TVPI", format: (v) => `TVPI: ${v}x` },
-  { key: "netIrrPct", name: "Net IRR", format: (v) => `Net IRR: ${v}%` },
+const METRIC_DEFS: Array<{ key: "nav" | "dpi" | "tvpi" | "netIrrPct"; name: string; metric: ReportMetric }> = [
+  { key: "nav", name: "NAV", metric: "nav" },
+  { key: "dpi", name: "DPI", metric: "dpi" },
+  { key: "tvpi", name: "TVPI", metric: "tvpi" },
+  { key: "netIrrPct", name: "Net IRR", metric: "netIrr" },
 ];
 
 /** The standard note attached wherever performance metrics are absent. */
@@ -66,6 +71,9 @@ const nonEmpty = (xs: string[] | undefined): string[] => (xs ?? []).map((x) => c
 const run: SkillCore<LpUpdateInput, LpUpdateOutput> = (input): SkillCoreResult<LpUpdateOutput> => {
   const { fundName, period, highlights, portfolioNotes, capitalActivity } = input;
   const sources: SkillSource[] = [];
+  // Presentation only: the firm's currency / units / decimals / labels. Never changes a figure's value.
+  const style = parseReportingStyle(input.reportingStyle).style;
+  if (style) sources.push({ label: "Reporting style", kind: "fact", ref: "firm's reporting file (root-reporting)" });
   const openItems: string[] = [];
   const sections: LpUpdateSection[] = [];
 
@@ -104,7 +112,7 @@ const run: SkillCore<LpUpdateInput, LpUpdateOutput> = (input): SkillCoreResult<L
   // 2. Performance — list ONLY the provided metrics as stated figures. If NONE were
   //    provided, this is an OPEN item; nothing is ever invented.
   if (providedMetrics.length > 0) {
-    const lines = providedMetrics.map((m) => m.format(input[m.key] as number));
+    const lines = providedMetrics.map((m) => formatMetricLine(m.metric, input[m.key] as number, style));
     add("Performance", `${lines.join(" · ")}. Figures as supplied; confirm against the fund admin statement.`, "complete");
   } else {
     add("Performance", `${PERFORMANCE_PENDING}. No performance metrics were provided; none are fabricated.`, "open");
@@ -165,6 +173,7 @@ const run: SkillCore<LpUpdateInput, LpUpdateOutput> = (input): SkillCoreResult<L
     missingFields,
     completeness,
     recommendedAction,
+    reportingStyleApplied: !!style,
   };
 
   const confidence = Math.max(0.2, Math.min(0.9, 0.3 + completeness * 0.6));
@@ -196,12 +205,21 @@ const inputSchema: JsonSchema = {
     highlights: { type: "array", items: { type: "string" } },
     portfolioNotes: { type: "string" },
     capitalActivity: { type: "string" },
+    reportingStyle: {
+      type: "object",
+      properties: {
+        currency: { type: "string" },
+        units: { type: "string" },
+        decimals: { type: "integer", minimum: 0, maximum: 4 },
+        labels: { type: "object", properties: { nav: { type: "string" }, dpi: { type: "string" }, tvpi: { type: "string" }, netIrr: { type: "string" } } },
+      },
+    },
   },
 };
 
 const outputSchema: JsonSchema = {
   type: "object",
-  required: ["sections", "statedMetrics", "openItems", "missingFields", "completeness", "recommendedAction"],
+  required: ["sections", "statedMetrics", "openItems", "missingFields", "completeness", "recommendedAction", "reportingStyleApplied"],
   properties: {
     sections: {
       type: "array",
@@ -220,6 +238,7 @@ const outputSchema: JsonSchema = {
     missingFields: { type: "array", items: { type: "string" } },
     completeness: { type: "number", minimum: 0, maximum: 1 },
     recommendedAction: { type: "string" },
+    reportingStyleApplied: { type: "boolean" },
   },
 };
 
@@ -232,8 +251,8 @@ export const lpUpdateManifest: SkillManifest = {
   applicableExecutives: ["investor_relations"],
   supportedEntityTypes: ["fund", "lp_update"],
   requiredInputs: ["fundName"],
-  optionalInputs: ["period", "nav", "dpi", "tvpi", "netIrrPct", "highlights", "portfolioNotes", "capitalActivity"],
-  outputs: ["sections", "statedMetrics", "openItems", "missingFields", "completeness", "recommendedAction"],
+  optionalInputs: ["period", "nav", "dpi", "tvpi", "netIrrPct", "highlights", "portfolioNotes", "capitalActivity", "reportingStyle"],
+  outputs: ["sections", "statedMetrics", "openItems", "missingFields", "completeness", "recommendedAction", "reportingStyleApplied"],
   artifactTypes: ["lp_update"],
   dataPermissions: ["fund:read", "lp_update:read"],
   tools: [],
