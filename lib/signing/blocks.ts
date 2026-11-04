@@ -19,7 +19,7 @@ export interface BlockSpec {
 
 /** Every block is the same size on the page, so a placed set looks even and lines up. */
 export const BLOCK_WIDTH_PCT = 28;
-export const BLOCK_HEIGHT_PCT = 6;
+export const BLOCK_HEIGHT_PCT = 4;
 
 export const BLOCKS: BlockSpec[] = [
   { type: "name", label: "Name", input: "text", widthPct: BLOCK_WIDTH_PCT, heightPct: BLOCK_HEIGHT_PCT },
