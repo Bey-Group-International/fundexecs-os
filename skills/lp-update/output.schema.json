@@ -1,69 +1,54 @@
 {
-  "type": "object",
-  "required": [
-    "sections",
-    "statedMetrics",
-    "openItems",
-    "missingFields",
-    "completeness",
-    "recommendedAction",
-    "reportingStyleApplied"
-  ],
   "properties": {
-    "sections": {
-      "type": "array",
-      "items": {
-        "type": "object",
-        "required": [
-          "heading",
-          "body",
-          "status"
-        ],
-        "properties": {
-          "heading": {
-            "type": "string"
-          },
-          "body": {
-            "type": "string"
-          },
-          "status": {
-            "type": "string",
-            "enum": [
-              "complete",
-              "open"
-            ]
-          }
-        }
-      }
-    },
-    "statedMetrics": {
-      "type": "array",
-      "items": {
-        "type": "string"
-      }
-    },
-    "openItems": {
-      "type": "array",
-      "items": {
-        "type": "string"
-      }
+    "completeness": {
+      "maximum": 1,
+      "minimum": 0,
+      "type": "number"
     },
     "missingFields": {
-      "type": "array",
       "items": {
         "type": "string"
-      }
+      },
+      "type": "array"
     },
-    "completeness": {
-      "type": "number",
-      "minimum": 0,
-      "maximum": 1
+    "openItems": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
     },
     "recommendedAction": {
       "type": "string"
     },
     "reportingStyleApplied": {
       "type": "boolean"
+    },
+    "sections": {
+      "items": {
+        "properties": {
+          "body": {
+            "type": "string"
+          },
+          "heading": {
+            "type": "string"
+          },
+          "status": {
+            "enum": [ "complete", "open" ],
+            "type": "string"
+          }
+        },
+        "required": [ "heading", "body", "status" ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "statedMetrics": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
     }
-  }
+  },
+  "required": [ "sections", "statedMetrics", "openItems", "missingFields", "completeness", "recommendedAction", "reportingStyleApplied" ],
+  "type": "object"
 }

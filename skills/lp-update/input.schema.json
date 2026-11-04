@@ -1,74 +1,72 @@
 {
-  "type": "object",
-  "required": [
-    "fundName"
-  ],
   "properties": {
-    "fundName": {
-      "type": "string",
-      "minLength": 1
-    },
-    "period": {
+    "capitalActivity": {
       "type": "string"
+    },
+    "dpi": {
+      "minimum": 0,
+      "type": "number"
+    },
+    "fundName": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "highlights": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
     },
     "nav": {
       "type": "number"
     },
-    "dpi": {
-      "type": "number",
-      "minimum": 0
-    },
-    "tvpi": {
-      "type": "number",
-      "minimum": 0
-    },
     "netIrrPct": {
       "type": "number"
     },
-    "highlights": {
-      "type": "array",
-      "items": {
-        "type": "string"
-      }
+    "period": {
+      "type": "string"
     },
     "portfolioNotes": {
       "type": "string"
     },
-    "capitalActivity": {
-      "type": "string"
-    },
     "reportingStyle": {
-      "type": "object",
       "properties": {
         "currency": {
           "type": "string"
         },
-        "units": {
-          "type": "string"
-        },
         "decimals": {
-          "type": "integer",
+          "maximum": 4,
           "minimum": 0,
-          "maximum": 4
+          "type": "integer"
         },
         "labels": {
-          "type": "object",
           "properties": {
-            "nav": {
-              "type": "string"
-            },
             "dpi": {
               "type": "string"
             },
-            "tvpi": {
+            "nav": {
               "type": "string"
             },
             "netIrr": {
               "type": "string"
+            },
+            "tvpi": {
+              "type": "string"
             }
-          }
+          },
+          "type": "object"
+        },
+        "units": {
+          "type": "string"
         }
-      }
+      },
+      "type": "object"
+    },
+    "tvpi": {
+      "minimum": 0,
+      "type": "number"
     }
-  }
+  },
+  "required": [ "fundName" ],
+  "type": "object"
 }
