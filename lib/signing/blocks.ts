@@ -17,15 +17,19 @@ export interface BlockSpec {
   heightPct: number;
 }
 
+/** Every block is the same size on the page, so a placed set looks even and lines up. */
+export const BLOCK_WIDTH_PCT = 28;
+export const BLOCK_HEIGHT_PCT = 6;
+
 export const BLOCKS: BlockSpec[] = [
-  { type: "name", label: "Name", input: "text", widthPct: 24, heightPct: 3.5 },
-  { type: "signature", label: "Signature", input: "signature", widthPct: 26, heightPct: 7 },
-  { type: "datetime", label: "Date and time", input: "auto", widthPct: 24, heightPct: 3.5 },
-  { type: "company", label: "Company", input: "text", widthPct: 28, heightPct: 3.5 },
-  { type: "title", label: "Title", input: "text", widthPct: 22, heightPct: 3.5 },
-  { type: "address", label: "Address", input: "multiline", widthPct: 34, heightPct: 8 },
-  { type: "email", label: "Email", input: "text", inputType: "email", widthPct: 30, heightPct: 3.5 },
-  { type: "phone", label: "Phone", input: "text", inputType: "tel", widthPct: 22, heightPct: 3.5 },
+  { type: "name", label: "Name", input: "text", widthPct: BLOCK_WIDTH_PCT, heightPct: BLOCK_HEIGHT_PCT },
+  { type: "signature", label: "Signature", input: "signature", widthPct: BLOCK_WIDTH_PCT, heightPct: BLOCK_HEIGHT_PCT },
+  { type: "datetime", label: "Date and time", input: "auto", widthPct: BLOCK_WIDTH_PCT, heightPct: BLOCK_HEIGHT_PCT },
+  { type: "company", label: "Company", input: "text", widthPct: BLOCK_WIDTH_PCT, heightPct: BLOCK_HEIGHT_PCT },
+  { type: "title", label: "Title", input: "text", widthPct: BLOCK_WIDTH_PCT, heightPct: BLOCK_HEIGHT_PCT },
+  { type: "address", label: "Address", input: "multiline", widthPct: BLOCK_WIDTH_PCT, heightPct: BLOCK_HEIGHT_PCT },
+  { type: "email", label: "Email", input: "text", inputType: "email", widthPct: BLOCK_WIDTH_PCT, heightPct: BLOCK_HEIGHT_PCT },
+  { type: "phone", label: "Phone", input: "text", inputType: "tel", widthPct: BLOCK_WIDTH_PCT, heightPct: BLOCK_HEIGHT_PCT },
 ];
 
 /** A reason a typed value is not acceptable for its block, or null. Browsers can be bypassed; the server asks too. */
