@@ -22,6 +22,8 @@ export interface SpotPanelProps {
   onNext: () => void;
   isLast: boolean;
   onClose: () => void;
+  /** On the last spot only: the agreement to sign electronically, so there is one path to the end. */
+  agree?: { checked: boolean; onChange: (v: boolean) => void };
 }
 
 export function SpotPanel(p: SpotPanelProps) {
@@ -31,7 +33,7 @@ export function SpotPanel(p: SpotPanelProps) {
   const problem = kind === "text" || kind === "multiline" ? blockValueProblem(p.spec.type, p.value) : null;
 
   const filled = kind === "signature" ? Boolean(draft) || (Boolean(p.signature) && !changing) : kind === "auto" ? true : Boolean(p.value.trim());
-  const canNext = (!p.required || filled) && !problem;
+  const canNext = (!p.required || filled) && !problem && (!p.agree || p.agree.checked);
   const nextLabel = p.isLast ? "Done" : "Next";
 
   function next() {
@@ -47,9 +49,11 @@ export function SpotPanel(p: SpotPanelProps) {
     <div role="dialog" aria-label={p.spec.label} className="w-72 max-w-[85vw] rounded-xl border border-line bg-surface-0 p-3 text-left shadow-xl">
       <div className="mb-2 flex items-center justify-between gap-2">
         <h3 className="text-sm font-semibold text-fg-primary">{p.spec.label}</h3>
-        <span className="font-mono text-[11px] text-fg-muted">
-          {p.position} of {p.total}
-        </span>
+        {p.total > 0 ? (
+          <span className="font-mono text-[11px] text-fg-muted">
+            {p.position} of {p.total}
+          </span>
+        ) : null}
         <button type="button" onClick={p.onClose} aria-label="Close" className="text-fg-muted hover:text-fg-primary">
           ✕
         </button>
@@ -105,6 +109,13 @@ export function SpotPanel(p: SpotPanelProps) {
         ) : (
           <SignaturePad signerName={p.signerName} onChange={setDraft} label="Sign" />
         )
+      ) : null}
+
+      {p.agree ? (
+        <label className="mt-3 flex items-start gap-2 text-xs text-fg-secondary">
+          <input type="checkbox" checked={p.agree.checked} onChange={(e) => p.agree!.onChange(e.target.checked)} className="mt-0.5" />
+          <span>I agree to sign this document electronically, and that my electronic signature is legally binding.</span>
+        </label>
       ) : null}
 
       {problem ? <p role="alert" className="mt-1 text-xs text-status-danger">{problem}</p> : null}

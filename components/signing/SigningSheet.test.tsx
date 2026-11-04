@@ -91,9 +91,12 @@ describe("SigningSheet: a × at each spot, one at a time", () => {
     fireEvent.click(screen.getByRole("button", { name: "Next" }));
     fireEvent.click(screen.getByRole("button", { name: "make signature" }));
     fireEvent.click(screen.getByRole("button", { name: "Next" }));
-    fireEvent.click(screen.getByRole("button", { name: "Done" })); // the last spot (date and time)
+    // The last spot (date and time) carries the agreement; Done waits for it.
+    expect((screen.getByRole("button", { name: "Done" }) as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.click(within(screen.getByRole("dialog", { name: "Date and time" })).getByRole("checkbox"));
+    fireEvent.click(screen.getByRole("button", { name: "Done" }));
     expect(screen.queryByRole("dialog")).toBeNull();
-    fireEvent.click(screen.getByRole("checkbox"));
+    expect((screen.getByRole("checkbox") as HTMLInputElement).checked).toBe(true);
     fireEvent.click(screen.getByRole("button", { name: "Sign and send back" }));
     await waitFor(() => expect(onSubmit).toHaveBeenCalled());
     const [sig, responses] = onSubmit.mock.calls[0] as unknown as [string, Record<string, string>];
@@ -107,5 +110,38 @@ describe("SigningSheet: a × at each spot, one at a time", () => {
     expect(screen.getByRole("dialog", { name: "Name" })).toBeTruthy();
     expect(screen.getByText("1 of 1")).toBeTruthy();
     expect(screen.getByText("Acme LP")).toBeTruthy();
+  });
+
+  it("skips a spot that arrives already filled in correctly, still shows it, and a click opens it to change", () => {
+    mount(undefined, [
+      block({ id: "e", type: "email", prefill: "jane@acme.com", yPct: 5 }),
+      block({ id: "n", type: "name", yPct: 20 }),
+    ]);
+    // Only the name is asked for; the email is on the page.
+    expect(screen.getByRole("dialog", { name: "Name" })).toBeTruthy();
+    expect(screen.getByText("1 of 1")).toBeTruthy();
+    expect(screen.getByText("jane@acme.com")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: /Email: filled/ }));
+    const d = screen.getByRole("dialog", { name: "Email" });
+    expect(within(d).queryByText(/ of /)).toBeNull();
+    expect(within(d).queryByRole("checkbox")).toBeNull();
+    expect(within(d).getByRole("button", { name: "Done" })).toBeTruthy();
+  });
+
+  it("asks again for a prefilled value that is not valid", () => {
+    mount(undefined, [block({ id: "e", type: "email", prefill: "not-an-email", yPct: 5 }), block({ id: "n", type: "name", yPct: 20 })]);
+    expect(screen.getByRole("dialog", { name: "Email" })).toBeTruthy();
+    expect(screen.getByText("1 of 2")).toBeTruthy();
+  });
+
+  it("keeps the agreement in the bottom bar when the last spot is not open", () => {
+    mount();
+    // First spot open: the agreement is in the bottom bar, not in the panel.
+    expect(within(screen.getByRole("dialog", { name: "Name" })).queryByRole("checkbox")).toBeNull();
+    expect(screen.getAllByRole("checkbox")).toHaveLength(1);
+    // Last spot open: the agreement moves into the panel, and the bar does not repeat it.
+    fireEvent.click(screen.getByRole("button", { name: /Date and time: filled/ }));
+    expect(within(screen.getByRole("dialog", { name: "Date and time" })).getByRole("checkbox")).toBeTruthy();
+    expect(screen.getAllByRole("checkbox")).toHaveLength(1);
   });
 });
