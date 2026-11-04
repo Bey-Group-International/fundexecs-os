@@ -83,3 +83,27 @@ it("sets aria-current only on the top-level link for the current page", () => {
   expect(screen.getByRole("link", { name: "Inbox" })).toHaveAttribute("aria-current", "page");
   expect(screen.getByRole("link", { name: "Dashboard" })).not.toHaveAttribute("aria-current");
 });
+
+it("keeps module labels aligned when only some modules have a status dot", () => {
+  mockPath = "/build/profile";
+  render(
+    <AppSidebar
+      {...props}
+      hubs={[
+        {
+          key: "build",
+          label: "Build",
+          modules: [
+            { href: "/build/profile", label: "Firm Identity", status: "complete" as const },
+            { href: "/build/documents", label: "Documents" },
+          ],
+        },
+      ]}
+    />,
+  );
+  const withDot = screen.getByRole("link", { name: "Firm Identity" });
+  const without = screen.getByRole("link", { name: "Documents" });
+  // Both rows lead with a one-dot-wide element before the label.
+  expect(withDot.firstElementChild?.className).toContain("w-1.5");
+  expect(without.firstElementChild?.className).toContain("w-1.5");
+});

@@ -528,6 +528,10 @@ function SidebarPanel({
                 <div className="flex flex-col animate-fade-up">
                   {hub.modules.map((mod) => {
                     const isModActive = navHrefActive(pathname, mod.href);
+                    // In a hub that shows progress dots (Build), a module with no
+                    // status still reserves the dot's width, so every label in the
+                    // list starts at the same x.
+                    const reserveDot = !mod.status && hub.modules.some((m) => m.status);
                     return (
                       <Link
                         key={mod.href}
@@ -556,6 +560,8 @@ function SidebarPanel({
                                   : "bg-line"
                             }`}
                           />
+                        ) : reserveDot ? (
+                          <span aria-hidden className="h-1.5 w-1.5 shrink-0" />
                         ) : null}
                         <span className="truncate">{mod.label}</span>
                       </Link>
