@@ -26,7 +26,8 @@ describe("blocks", () => {
 
   it("centres a new block on the click", () => {
     const b = newBlockAt("signature", 50, 50);
-    expect(b.xPct + b.widthPct / 2).toBeCloseTo(50);
+    // Starts at the click, centred on it vertically: the × at its left-middle is on the click.
+    expect(b.xPct).toBeCloseTo(50);
     expect(b.yPct + b.heightPct / 2).toBeCloseTo(50);
   });
 
@@ -115,5 +116,21 @@ describe("date and time blocks", () => {
     expect(resolveDateTimeResponse("yesterday", NOW).problem).toMatch(/valid/);
     expect(resolveDateTimeResponse("2026-09-01T09:00:00-08:00", NOW).problem).toMatch(/last 30 days/);
     expect(resolveDateTimeResponse("2026-12-25T09:00:00-08:00", NOW).problem).toMatch(/last 30 days/);
+  });
+});
+
+describe("newBlockAt anchoring", () => {
+  it("puts the block's left-middle exactly on the click", () => {
+    for (const spec of BLOCKS) {
+      const b = newBlockAt(spec.type, 31.5, 42);
+      expect(b.xPct).toBeCloseTo(31.5);
+      expect(b.yPct + b.heightPct / 2).toBeCloseTo(42);
+    }
+  });
+  it("keeps a block that would run off the page, moving it left or up", () => {
+    const right = newBlockAt("signature", 95, 50);
+    expect(right.xPct + right.widthPct).toBeLessThanOrEqual(100.0001);
+    const bottom = newBlockAt("signature", 50, 99.5);
+    expect(bottom.yPct + bottom.heightPct).toBeLessThanOrEqual(100.0001);
   });
 });
