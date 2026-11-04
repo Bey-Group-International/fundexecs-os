@@ -236,7 +236,7 @@ export function BlockPlacer({ title, fieldsUrl, pdfUrl, sendUrl, doneHref, prefi
       {error ? <p role="alert" className="mb-3 rounded-lg border border-status-danger/40 bg-status-danger/10 px-3 py-2 text-sm text-status-danger">{error}</p> : null}
       {notice ? <p role="status" className="mb-3 text-sm text-fg-secondary">{notice}</p> : null}
 
-      <p className="mb-3 text-sm text-fg-secondary">Click the page where a block goes, then choose what it is. Drag a block to move it; click one to change it.</p>
+      <p className="mb-3 text-sm text-fg-secondary">Click the page where a block goes, then choose what it is. Each spot shows as a ×; drag it to move it, click it to change it.</p>
 
       <div className={sel ? "sticky top-0 z-10 mb-4 rounded-xl border border-line bg-surface-1/95 p-3 backdrop-blur" : "hidden"}>
         {sel ? (
@@ -261,7 +261,7 @@ export function BlockPlacer({ title, fieldsUrl, pdfUrl, sendUrl, doneHref, prefi
                 </label>
               </>
             ) : null}
-            {sel.type === "datetime" ? <span className="text-fg-muted">Filled automatically when it is signed.</span> : null}
+            {sel.type === "datetime" ? <span className="text-fg-muted">Starts at the signing moment; the signer can adjust it, and the true time is recorded.</span> : null}
             <button
               type="button"
               onClick={() => {
@@ -307,20 +307,23 @@ export function BlockPlacer({ title, fieldsUrl, pdfUrl, sendUrl, doneHref, prefi
                           setSelected(null);
                         }
                       }}
-                      className={`absolute flex cursor-move items-center overflow-hidden rounded-sm border-2 px-1 text-[10px] font-semibold leading-tight ${selected === b.key ? "ring-2 ring-white/70" : ""}`}
+                      className={`absolute flex cursor-move items-center ${selected === b.key ? "rounded-sm border border-dashed" : ""}`}
                       style={{
                         left: `${b.xPct}%`,
                         top: `${b.yPct}%`,
                         width: `${b.widthPct}%`,
                         height: `${b.heightPct}%`,
                         borderColor: tint(b.recipientId),
-                        background: `${tint(b.recipientId)}26`,
-                        color: "#111827",
                         touchAction: "none",
                       }}
                     >
-                      {blockSpec(b.type)!.label}
-                      {b.prefill ? <span className="ml-1 truncate font-normal opacity-70">· {b.prefill}</span> : null}
+                      <span
+                        aria-hidden="true"
+                        className="flex h-5 w-5 shrink-0 -translate-x-1/2 items-center justify-center rounded-full border-2 bg-white/90 text-xs font-bold leading-none"
+                        style={{ borderColor: tint(b.recipientId), color: tint(b.recipientId) }}
+                      >
+                        ×
+                      </span>
                     </div>
                   ))}
                 {menu && menu.page === page ? (

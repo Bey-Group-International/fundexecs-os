@@ -1,13 +1,14 @@
 "use client";
 
-// The signer's view of the document: the real pages with this person's blocks on them.
-// Text blocks are filled in place, a signature block opens the signature pad, a date and
-// time block fills itself when they sign. Whatever the other party already filled in is
-// shown on the page, read-only. Used by the recipient (by link) and the owner (countersign).
-import { useMemo, useState, useTransition } from "react";
+// The signer's view of the document: the real pages with a plain × at each spot this person
+// has to complete. The first spot is open to start; a small panel beside it has just what that
+// spot needs, and Next moves to the following one, with the rest dimmed. A filled spot shows
+// what was entered in place of its ×. Whatever the other party already filled in is shown on
+// the page, read-only. Used by the recipient (by link) and the owner (countersign).
+import { useEffect, useMemo, useState, useTransition } from "react";
 import { PdfPages } from "@/components/signing/PdfPages";
-import { SignaturePad } from "@/components/signing/SignaturePad";
-import { blockSpec, blockValueProblem, formatBlockDateTime } from "@/lib/signing/blocks";
+import { SpotPanel } from "@/components/signing/SpotPanel";
+import { blockSpec, blockValueProblem, formatBlockDateTime, toOffsetIso } from "@/lib/signing/blocks";
 
 export interface SheetBlock {
   id: string;
@@ -49,13 +50,37 @@ export function SigningSheet({
   /** Resolves to an error message, or null when it worked. */
   onSubmit: (signatureData: string, responses: Record<string, string>) => Promise<string | null>;
 }) {
-  const [values, setValues] = useState<Record<string, string>>(() => Object.fromEntries(blocks.filter((b) => b.prefill).map((b) => [b.id, b.prefill as string])));
+  const [values, setValues] = useState<Record<string, string>>(() => {
+    const now = toOffsetIso(new Date());
+    return Object.fromEntries(
+      blocks
+        .map((b) => [b.id, b.prefill ?? (blockSpec(b.type)?.input === "auto" ? now : "")] as const)
+        .filter(([, v]) => v),
+    );
+  });
   const [signature, setSignature] = useState<string | null>(null);
-  const [padOpen, setPadOpen] = useState(false);
-  const [draft, setDraft] = useState<string | null>(null);
   const [agreed, setAgreed] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+
+  // The spots to complete, in reading order. A locked, pre-filled block is shown but not asked for.
+  const steps = useMemo(
+    () =>
+      blocks
+        .filter((b) => blockSpec(b.type) && !(b.locked && b.prefill))
+        .sort((a, b) => a.page - b.page || a.yPct - b.yPct || a.xPct - b.xPct),
+    [blocks],
+  );
+  const [activeId, setActiveId] = useState<string | null>(() => steps[0]?.id ?? null);
+  const activeIndex = steps.findIndex((b) => b.id === activeId);
+
+  // Bring the open spot into view.
+  useEffect(() => {
+    if (!activeId) return;
+    document.querySelector(`[data-block-id="${activeId}"]`)?.scrollIntoView?.({ block: "center", behavior: "smooth" });
+  }, [activeId]);
+
+  const isFilled = (b: SheetBlock) => (blockSpec(b.type)!.input === "signature" ? Boolean(signature) : Boolean((values[b.id] ?? "").trim()));
 
   const open = useMemo(() => {
     const out: string[] = [];
@@ -78,18 +103,19 @@ export function SigningSheet({
     if (!signature) return;
     setError(null);
     startTransition(async () => {
-      // The date and time is stamped by the server at the moment of signing.
       const err = await onSubmit(signature, Object.fromEntries(Object.entries(values).filter(([, v]) => v.trim())));
       if (err) setError(err);
     });
   }
 
+  const active = steps[activeIndex] ?? null;
+
   return (
     <div>
       <div className="mb-4 rounded-xl border border-line bg-surface-1 p-4">
         <p className="text-sm text-fg-secondary">
-          Fill in the highlighted blocks on the document, add your signature, then {submitLabel.toLowerCase()}.
-          {open.length ? <span className="text-fg-primary"> Still to do: {open.join(", ")}.</span> : problems.length ? <span className="text-status-danger"> {problems[0]}</span> : <span className="text-gold-300"> Everything is filled in.</span>}
+          Click each <span aria-hidden="true">×</span> on the document to complete it, or use Next.
+          {open.length ? <span className="text-fg-primary"> Still to do: {open.join(", ")}.</span> : problems.length ? <span className="text-status-danger"> {problems[0]}</span> : <span className="text-gold-300"> Everything is filled in. Agree below and send it back.</span>}
         </p>
       </div>
 
@@ -118,47 +144,68 @@ export function SigningSheet({
                 .map((b) => {
                   const spec = blockSpec(b.type);
                   if (!spec) return null;
-                  const base = "absolute overflow-hidden rounded-sm border-2 border-gold-500/70 bg-gold-500/10";
-                  if (spec.input === "signature") {
-                    return (
-                      <button
-                        key={b.id}
-                        type="button"
-                        onClick={() => {
-                          setDraft(signature);
-                          setPadOpen(true);
-                        }}
-                        aria-label="Sign here"
-                        className={`${base} flex items-center justify-center text-xs font-semibold text-[#7a5d00] hover:bg-gold-500/20`}
-                        style={boxStyle(b)}
-                      >
-                        {signature ? (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img src={signature} alt="Your signature" className="h-full w-auto max-w-full object-contain" />
-                        ) : (
-                          "Click to sign"
-                        )}
-                      </button>
-                    );
-                  }
-                  if (spec.input === "auto") {
-                    return (
-                      <div key={b.id} className={`${base} flex items-center px-1 text-[10px] text-[#7a5d00]`} style={boxStyle(b)}>
-                        Date and time: filled when you sign
-                      </div>
-                    );
-                  }
-                  const common = {
-                    "aria-label": spec.label,
-                    value: values[b.id] ?? "",
-                    readOnly: b.locked,
-                    onChange: (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => setValues((v) => ({ ...v, [b.id]: e.target.value })),
-                    placeholder: spec.label,
-                    className: `h-full w-full bg-transparent px-1 text-[12px] text-[#0d0d40] placeholder:text-[#7a5d00]/70 focus:outline-none ${b.locked ? "cursor-not-allowed opacity-80" : ""}`,
-                  };
+                  const locked = b.locked && Boolean(b.prefill);
+                  const isActive = b.id === activeId;
+                  const filled = locked || isFilled(b);
+                  const v = values[b.id] ?? "";
                   return (
-                    <div key={b.id} className={base} style={boxStyle(b)}>
-                      {spec.input === "multiline" ? <textarea {...common} className={`${common.className} resize-none leading-tight`} /> : <input type={spec.inputType ?? "text"} {...common} />}
+                    <div
+                      key={b.id}
+                      data-block-id={b.id}
+                      role={locked ? undefined : "button"}
+                      tabIndex={locked ? undefined : 0}
+                      aria-label={locked ? undefined : `${spec.label}: ${filled ? "filled, click to change" : "click to complete"}`}
+                      onClick={locked ? undefined : () => setActiveId(b.id)}
+                      onKeyDown={locked ? undefined : (e) => (e.key === "Enter" || e.key === " ") && setActiveId(b.id)}
+                      className={`absolute flex items-center ${locked ? "" : "cursor-pointer"} ${activeId && !isActive ? "opacity-50" : ""}`}
+                      style={boxStyle(b)}
+                    >
+                      <div className="flex h-full w-full items-center overflow-hidden">
+                      {filled ? (
+                        spec.input === "signature" ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img src={signature ?? ""} alt="Your signature" className="h-full w-auto max-w-full object-contain" />
+                        ) : (
+                          <span className="whitespace-pre-wrap px-1 text-[11px] leading-tight text-[#0d0d40]">
+                            {spec.input === "auto" ? formatBlockDateTime(v) : locked ? b.prefill : v}
+                          </span>
+                        )
+                      ) : (
+                        <span
+                          aria-hidden="true"
+                          className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 text-xs font-bold leading-none ${isActive ? "animate-pulse border-gold-500 bg-gold-500 text-on-gold" : "border-gold-500 bg-white/80 text-[#7a5d00]"}`}
+                        >
+                          ×
+                        </span>
+                      )}
+                      </div>
+                      {isActive && active ? (
+                        <div
+                          className="absolute z-30"
+                          style={{
+                            ...(b.xPct > 45 ? { right: 0 } : { left: 0 }),
+                            ...(b.yPct > 55 ? { bottom: "100%", marginBottom: 6 } : { top: "100%", marginTop: 6 }),
+                          }}
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <SpotPanel
+                            key={b.id}
+                            spec={spec}
+                            required={b.required}
+                            value={v}
+                            onValue={(nv) => setValues((cur) => ({ ...cur, [b.id]: nv }))}
+                            signature={signature}
+                            onSignature={setSignature}
+                            signerName={signerName}
+                            position={activeIndex + 1}
+                            total={steps.length}
+                            onBack={activeIndex > 0 ? () => setActiveId(steps[activeIndex - 1].id) : null}
+                            onNext={() => setActiveId(activeIndex < steps.length - 1 ? steps[activeIndex + 1].id : null)}
+                            isLast={activeIndex === steps.length - 1}
+                            onClose={() => setActiveId(null)}
+                          />
+                        </div>
+                      ) : null}
                     </div>
                   );
                 })}
@@ -177,30 +224,6 @@ export function SigningSheet({
           {pending ? "Signing…" : submitLabel}
         </button>
       </div>
-
-      {padOpen ? (
-        <div role="dialog" aria-modal="true" aria-label="Add your signature" className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 p-4 sm:items-center">
-          <div className="w-full max-w-lg rounded-2xl border border-line bg-surface-0 p-4 shadow-xl">
-            <SignaturePad signerName={signerName} onChange={setDraft} label="Your signature" />
-            <div className="mt-3 flex justify-end gap-2">
-              <button type="button" onClick={() => setPadOpen(false)} className="rounded-lg border border-line px-4 py-2 text-sm text-fg-secondary hover:bg-surface-2">
-                Cancel
-              </button>
-              <button
-                type="button"
-                disabled={!draft}
-                onClick={() => {
-                  setSignature(draft);
-                  setPadOpen(false);
-                }}
-                className="rounded-lg bg-gold-500 px-4 py-2 text-sm font-semibold text-on-gold hover:brightness-110 disabled:opacity-40"
-              >
-                Apply signature
-              </button>
-            </div>
-          </div>
-        </div>
-      ) : null}
     </div>
   );
 }

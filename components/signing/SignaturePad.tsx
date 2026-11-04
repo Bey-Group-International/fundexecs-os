@@ -1,12 +1,15 @@
 "use client";
 
 // A signature the signer actually makes: drawn with mouse, finger or stylus, or
-// typed and rendered in a script face. Either way the result is a PNG in dark
+// typed and rendered in a script face, or uploaded from a photo or scan. Either way the result is a PNG in dark
 // ink on a transparent background, so it prints on a white page. The server
 // re-validates it and stamps it into the PDF; this component only captures.
 import { useCallback, useEffect, useRef, useState } from "react";
+import { fitInside, inkFromPixels } from "@/lib/signing/ink";
 
-type Tab = "draw" | "type";
+type Tab = "draw" | "type" | "upload";
+/** The most a stored signature may weigh, as a data URL (the server accepts 150 KB of image). */
+const MAX_DATA_URL = 195_000;
 const INK = "#111827";
 const W = 800;
 const H = 240;
@@ -27,6 +30,8 @@ export function SignaturePad({
   const drawing = useRef(false);
   const last = useRef<{ x: number; y: number } | null>(null);
   const hasInk = useRef(false);
+  const [uploaded, setUploaded] = useState<string | null>(null);
+  const [uploadError, setUploadError] = useState<string | null>(null);
 
   // The script face for typed signatures.
   useEffect(() => {
@@ -108,26 +113,66 @@ export function SignaturePad({
     onChange(c.toDataURL("image/png"));
   }
 
+  // A photo or scan becomes dark ink on a transparent background, like the pad's own output.
+  function onFile(file: File | undefined) {
+    setUploadError(null);
+    if (!file) return;
+    if (!/^image\/(png|jpe?g)$/.test(file.type)) {
+      setUploadError("Choose a PNG or JPG image.");
+      return;
+    }
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      const box = fitInside(img.naturalWidth, img.naturalHeight, W - 40, H - 40);
+      const c = document.createElement("canvas");
+      c.width = W;
+      c.height = H;
+      const ctx = c.getContext("2d");
+      if (!ctx) return;
+      ctx.drawImage(img, Math.round((W - box.width) / 2), Math.round((H - box.height) / 2), box.width, box.height);
+      const px = ctx.getImageData(0, 0, W, H);
+      inkFromPixels(px.data);
+      ctx.putImageData(px, 0, 0);
+      const out = c.toDataURL("image/png");
+      if (out.length > MAX_DATA_URL) {
+        setUploadError("That image is too detailed. Try a clean photo of your signature on white paper.");
+        setUploaded(null);
+        onChange(null);
+        return;
+      }
+      setUploaded(out);
+      onChange(out);
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      setUploadError("We couldn't read that image.");
+    };
+    img.src = url;
+  }
+
   return (
     <div className="rounded-xl border border-line bg-surface-1 p-4">
       <div className="mb-3 flex items-center justify-between">
         <h3 className="text-sm font-semibold text-fg-primary">{label}</h3>
         <div className="flex w-fit gap-1 rounded-lg bg-surface-2 p-1">
-          {(["draw", "type"] as Tab[]).map((t) => (
+          {(["draw", "type", "upload"] as Tab[]).map((t) => (
             <button
               key={t}
               type="button"
               onClick={() => {
                 setTab(t);
                 if (t === "draw") clearCanvas();
-                else renderTyped(typed || signerName);
+                else if (t === "type") renderTyped(typed || signerName);
+                else onChange(uploaded);
                 if (t === "type" && !typed) setTyped(signerName);
               }}
               className={`rounded-md px-3 py-1 text-xs font-medium transition ${
                 tab === t ? "bg-gold-500 text-on-gold" : "text-fg-secondary hover:text-fg-primary"
               }`}
             >
-              {t === "draw" ? "Draw" : "Type"}
+              {t === "draw" ? "Draw" : t === "type" ? "Type" : "Upload"}
             </button>
           ))}
         </div>
@@ -159,6 +204,25 @@ export function SignaturePad({
           >
             Clear
           </button>
+        </div>
+      ) : tab === "upload" ? (
+        <div className="flex flex-col gap-3">
+          <input
+            type="file"
+            accept="image/png,image/jpeg"
+            aria-label="Upload a picture of your signature"
+            onChange={(e) => onFile(e.target.files?.[0])}
+            className="text-xs text-fg-secondary file:mr-3 file:rounded-md file:border file:border-line file:bg-surface-2 file:px-3 file:py-1.5 file:text-xs file:text-fg-primary"
+          />
+          {uploadError ? <p role="alert" className="text-xs text-status-danger">{uploadError}</p> : null}
+          <div className="flex min-h-[64px] items-center justify-center rounded-lg border border-line bg-white px-4 py-3">
+            {uploaded ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={uploaded} alt="Your uploaded signature" className="max-h-24 w-auto object-contain" />
+            ) : (
+              <span className="text-xs text-gray-400">A photo or scan of your signature on white paper</span>
+            )}
+          </div>
         </div>
       ) : (
         <div className="flex flex-col gap-3">
