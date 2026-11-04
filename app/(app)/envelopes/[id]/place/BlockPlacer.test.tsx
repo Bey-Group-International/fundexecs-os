@@ -65,7 +65,7 @@ describe("BlockPlacer: click, choose, done", () => {
     const block = screen.getByRole("button", { name: "Signature block" });
     expect(block.style.left).toBe("36%"); // centred on the click: 50% minus half the 28% width
     expect(block.style.width).toBe("28%");
-    expect(block.style.height).toBe("6%");
+    expect(block.style.height).toBe("4%");
   });
 
   it("closes without placing on Escape, and on a click outside the page", async () => {
