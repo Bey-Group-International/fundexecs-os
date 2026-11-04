@@ -58,6 +58,7 @@ import { ipoReadiness } from "./catalog/ipo-readiness";
 import { exitRoutes } from "./catalog/exit-routes";
 import { dataRoomPrep } from "./catalog/data-room-prep";
 import { finalInvestmentReport } from "./catalog/final-investment-report";
+import { debtStructure } from "./catalog/debt-structure";
 
 const SKILLS: Record<string, SkillDefinition> = {
   [screenDeal.manifest.id]: screenDeal as SkillDefinition,
@@ -129,6 +130,8 @@ const SKILLS: Record<string, SkillDefinition> = {
   [exitRoutes.manifest.id]: exitRoutes as SkillDefinition,
   [dataRoomPrep.manifest.id]: dataRoomPrep as SkillDefinition,
   [finalInvestmentReport.manifest.id]: finalInvestmentReport as SkillDefinition,
+  // PE department · valuation (structure from supplied tranches and cases; headroom at the tightest period).
+  [debtStructure.manifest.id]: debtStructure as SkillDefinition,
 };
 
 export function getSkill(id: string): SkillDefinition | null {

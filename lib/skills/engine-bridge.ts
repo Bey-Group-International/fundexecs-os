@@ -26,6 +26,7 @@ const RULES: Array<{ skillId: string; pattern: RegExp }> = [
   { skillId: "covenant-watch", pattern: /\bcovenant\s+(watch|headroom|test(s|ing)?|monitoring)\b/i },
   { skillId: "cash-13-week", pattern: /\b(13|thirteen)[-\s]week\s+(cash|forecast)/i },
   { skillId: "kpi-variance", pattern: /\b(kpi\s+variance|budget[-\s]to[-\s]actual|variance\s+to\s+budget)\b/i },
+  { skillId: "debt-structure", pattern: /\bdebt\s+(structure|package|sizing)\b/i },
   { skillId: "financing-terms", pattern: /\b(financing\s+terms|term[-\s]sheet\s+comparison|compare\s+(the\s+)?(lender|term[-\s]sheet)s?)\b/i },
   { skillId: "ipo-readiness", pattern: /\bipo\s+readiness\b/i },
   { skillId: "exit-readiness", pattern: /\b(exit\s+readiness|equity\s+story)\b/i },

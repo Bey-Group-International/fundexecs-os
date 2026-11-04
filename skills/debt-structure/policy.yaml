@@ -1,0 +1,31 @@
+# skills/debt-structure/policy.yaml — enforced by lib/skills/runner.ts and lib/executives/registry.ts
+approval_tier: 1
+risk_classification: moderate
+
+allowed_executives:
+  - analyst
+  - legal_closing
+
+data_scopes:
+  - deal:read
+  - valuation:read
+
+prohibited_actions:
+  - send_outreach
+  - distribute_report
+  - share_materials
+  - submit_term_sheet
+  - sign_document
+  - move_capital
+
+guardrails:
+  - Covenant headroom is reported at the TIGHTEST period in each case, never an average.
+  - A covenant that cites no term-sheet source is flagged: headroom on the model's definition may differ from the lender's.
+  - The balance falls by mandatory amortisation only (no sweep or prepayment) and interest is annualised on the opening balance; both are stated as assumptions.
+  - An unsized or unpriced tranche is flagged and its metrics are left null, never estimated. The financing lead approves the structure before lenders see it.
+
+downstream:
+  - financing-terms
+  - bid-range
+  - covenant-watch
+  - ic-memo

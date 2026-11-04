@@ -1,0 +1,59 @@
+{
+  "properties": {
+    "assumptions": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "base": {
+      "items": {
+        "required": [ "period", "openingDebt", "closingDebt" ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "closing": {
+      "type": "object"
+    },
+    "covenants": {
+      "items": {
+        "required": [ "name", "kind", "threshold", "base" ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "downside": {
+      "items": {
+        "required": [ "period", "openingDebt", "closingDebt" ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "financingPolicyIsDefault": {
+      "type": "boolean"
+    },
+    "gate": {
+      "type": "string"
+    },
+    "limitation": {
+      "type": "string"
+    },
+    "policyChecks": {
+      "items": {
+        "required": [ "check", "result", "detail" ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "tranches": {
+      "items": {
+        "required": [ "name", "seniority", "annualAmort" ],
+        "type": "object"
+      },
+      "type": "array"
+    }
+  },
+  "required": [ "tranches", "closing", "base", "covenants", "policyChecks", "financingPolicyIsDefault", "assumptions", "limitation", "gate" ],
+  "type": "object"
+}

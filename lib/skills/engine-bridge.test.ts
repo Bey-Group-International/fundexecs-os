@@ -69,6 +69,8 @@ describe("detectSkillForStep", () => {
       ["First look at the teaser", "first-look"],
       ["Define the mandate screen", "mandate-screen"],
       ["Target screening of the CRM export", "target-screen"],
+      ["Size the debt package and test covenants", "debt-structure"],
+      ["Debt structure for the downside case", "debt-structure"],
     ];
     for (const [step, id] of cases) expect([step, detectSkillForStep(step)]).toEqual([step, id]);
   });
