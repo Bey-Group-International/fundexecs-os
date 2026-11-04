@@ -46,7 +46,13 @@ export function SpotPanel(p: SpotPanelProps) {
   }
 
   return (
-    <div role="dialog" aria-label={p.spec.label} className="w-72 max-w-[85vw] rounded-xl border border-line bg-surface-0 p-3 text-left shadow-xl">
+    <div
+      role="dialog"
+      aria-label={p.spec.label}
+      // Keys typed in the panel belong to the panel: Enter must not reach the spot behind it and reopen it.
+      onKeyDown={(e) => e.stopPropagation()}
+      className="w-72 max-w-[85vw] rounded-xl border border-line bg-surface-0 p-3 text-left shadow-xl"
+    >
       <div className="mb-2 flex items-center justify-between gap-2">
         <h3 className="text-sm font-semibold text-fg-primary">{p.spec.label}</h3>
         {p.total > 0 ? (

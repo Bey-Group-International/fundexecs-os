@@ -120,6 +120,7 @@ export function BlockPlacer({ title, fieldsUrl, pdfUrl, sendUrl, doneHref, prefi
   useEffect(() => {
     if (!menu) return;
     function onDown(e: PointerEvent) {
+      if (e.button !== 0) return; // a right click is handled by the contextmenu listener
       const t = e.target as HTMLElement | null;
       if (!t || menuRef.current?.contains(t) || t.closest("[data-page-layer]")) return;
       setMenu(null);
@@ -295,7 +296,7 @@ export function BlockPlacer({ title, fieldsUrl, pdfUrl, sendUrl, doneHref, prefi
                 data-page-layer
                 className="absolute inset-0 cursor-crosshair"
                 onPointerDown={(e) => {
-                  if (e.target !== e.currentTarget) return;
+                  if (e.target !== e.currentTarget || e.button !== 0) return;
                   const r = e.currentTarget.getBoundingClientRect();
                   setSelected(null);
                   setMenu({ page, xPct: ((e.clientX - r.left) / r.width) * 100, yPct: ((e.clientY - r.top) / r.height) * 100 });

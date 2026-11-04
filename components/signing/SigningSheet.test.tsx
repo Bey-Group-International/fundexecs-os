@@ -156,4 +156,18 @@ describe("SigningSheet: a × at each spot, one at a time", () => {
     fireEvent.click(screen.getByRole("button", { name: /Name: click to complete/ }));
     expect(screen.getByRole("dialog", { name: "Name" })).toBeTruthy();
   });
+
+  it("Enter in a text box moves to the next spot and stays there", () => {
+    mount();
+    fireEvent.change(screen.getByRole("textbox", { name: "Name" }), { target: { value: "Jane Smith" } });
+    fireEvent.keyDown(screen.getByRole("textbox", { name: "Name" }), { key: "Enter" });
+    expect(screen.getByRole("dialog", { name: "Signature" })).toBeTruthy();
+    expect(screen.queryByRole("dialog", { name: "Name" })).toBeNull();
+  });
+
+  it("a right click in a text box is left to the browser, so its paste menu works", () => {
+    mount();
+    expect(fireEvent.contextMenu(screen.getByRole("textbox", { name: "Name" }))).toBe(true);
+    expect(screen.getByRole("dialog", { name: "Name" })).toBeTruthy();
+  });
 });

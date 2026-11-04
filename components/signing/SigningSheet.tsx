@@ -86,6 +86,8 @@ export function SigningSheet({
   useEffect(() => {
     if (!activeId) return;
     function onContext(e: MouseEvent) {
+      // A text box keeps the browser's own editing menu (paste, copy).
+      if (e.target instanceof Element && e.target.closest("input, textarea")) return;
       e.preventDefault();
       setActiveId(null);
     }
