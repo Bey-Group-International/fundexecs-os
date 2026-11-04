@@ -1,6 +1,6 @@
 {
   "ebitda": 20,
-  "leverageMultiple": 3,
   "ebitdaGrowthRate": 0.05,
-  "holdYears": 5
+  "holdYears": 5,
+  "leverageMultiple": 3
 }

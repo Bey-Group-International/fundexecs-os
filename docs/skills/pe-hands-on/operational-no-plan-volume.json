@@ -1,17 +1,13 @@
 {
-  "capacity": [
-    {
-      "unit": "Plant A",
-      "capacity": 1000,
-      "currentVolume": 800
-    }
-  ],
-  "improvements": [
-    {
-      "name": "Lean line rebalancing",
-      "inPlan": true,
-      "savingLow": 20,
-      "savingHigh": 30
-    }
-  ]
+  "capacity": [ {
+    "capacity": 1000,
+    "currentVolume": 800,
+    "unit": "Plant A"
+  } ],
+  "improvements": [ {
+    "inPlan": true,
+    "name": "Lean line rebalancing",
+    "savingHigh": 30,
+    "savingLow": 20
+  } ]
 }

@@ -1,7 +1,7 @@
 {
+  "ebitdaGrowthRate": 0.1,
   "entryEbitda": 10,
   "entryMultiple": 10,
   "holdYears": 5,
-  "leverageMultiple": 4,
-  "ebitdaGrowthRate": 0.1
+  "leverageMultiple": 4
 }

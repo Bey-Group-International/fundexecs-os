@@ -1,103 +1,88 @@
 {
   "mandate": {
-    "hardLimits": [
-      {
-        "allow": ["UK", "Germany"],
-        "id": "geo",
-        "label": "Geography",
-        "metric": "geography",
-        "source": "LPA 9.1"
+    "hardLimits": [ {
+      "allow": [ "UK", "Germany" ],
+      "id": "geo",
+      "label": "Geography",
+      "metric": "geography",
+      "source": "LPA 9.1"
+    }, {
+      "deny": [ "tobacco", "gambling" ],
+      "id": "excl",
+      "label": "Excluded sectors",
+      "metric": "sector",
+      "source": "Side letter 2"
+    }, {
+      "band": {
+        "min": 51
       },
-      {
-        "deny": ["tobacco", "gambling"],
-        "id": "excl",
-        "label": "Excluded sectors",
-        "metric": "sector",
-        "source": "Side letter 2"
+      "id": "ctrl",
+      "label": "Control",
+      "metric": "ownershipPct",
+      "source": "LPA 9.4"
+    }, {
+      "band": {
+        "max": 15
       },
-      {
-        "band": {
-          "min": 51
-        },
-        "id": "ctrl",
-        "label": "Control",
-        "metric": "ownershipPct",
-        "source": "LPA 9.4"
+      "id": "conc",
+      "label": "Concentration",
+      "metric": "equityChequePct",
+      "source": "LPA 7.2"
+    } ],
+    "killFacts": [ {
+      "above": 40,
+      "id": "cust",
+      "label": "Single customer above 40%",
+      "metric": "topCustomerPct"
+    }, {
+      "flag": true,
+      "id": "roll",
+      "label": "Founder unwilling to roll equity"
+    } ],
+    "preferences": [ {
+      "acceptable": {
+        "max": 25,
+        "min": 5
       },
-      {
-        "band": {
-          "max": 15
-        },
-        "id": "conc",
-        "label": "Concentration",
-        "metric": "equityChequePct",
-        "source": "LPA 7.2"
-      }
-    ],
-    "killFacts": [
-      {
-        "above": 40,
-        "id": "cust",
-        "label": "Single customer above 40%",
-        "metric": "topCustomerPct"
+      "id": "ebitda",
+      "label": "EBITDA",
+      "metric": "ebitda",
+      "strong": {
+        "max": 20,
+        "min": 8
       },
-      {
-        "flag": true,
-        "id": "roll",
-        "label": "Founder unwilling to roll equity"
-      }
-    ],
-    "preferences": [
-      {
-        "acceptable": {
-          "max": 25,
-          "min": 5
-        },
-        "id": "ebitda",
-        "label": "EBITDA",
-        "metric": "ebitda",
-        "strong": {
-          "max": 20,
-          "min": 8
-        },
-        "weight": 50
+      "weight": 50
+    }, {
+      "acceptable": {
+        "min": 12
       },
-      {
-        "acceptable": {
-          "min": 12
-        },
-        "id": "margin",
-        "label": "Margin",
-        "metric": "ebitdaMargin",
-        "strong": {
-          "min": 20
-        },
-        "weight": 30
+      "id": "margin",
+      "label": "Margin",
+      "metric": "ebitdaMargin",
+      "strong": {
+        "min": 20
       },
-      {
-        "acceptableValues": ["services"],
-        "id": "sector",
-        "label": "Sector",
-        "metric": "sector",
-        "strongValues": ["software"],
-        "weight": 20
-      }
-    ]
+      "weight": 30
+    }, {
+      "acceptableValues": [ "services" ],
+      "id": "sector",
+      "label": "Sector",
+      "metric": "sector",
+      "strongValues": [ "software" ],
+      "weight": 20
+    } ]
   },
-  "targets": [
-    {
-      "name": "Sparse Co",
-      "geography": "UK"
-    },
-    {
-      "ebitda": 10,
-      "ebitdaMargin": 25,
-      "equityChequePct": 10,
-      "geography": "UK",
-      "name": "Top",
-      "ownershipPct": 100,
-      "sector": "Software",
-      "topCustomerPct": 12
-    }
-  ]
+  "targets": [ {
+    "geography": "UK",
+    "name": "Sparse Co"
+  }, {
+    "ebitda": 10,
+    "ebitdaMargin": 25,
+    "equityChequePct": 10,
+    "geography": "UK",
+    "name": "Top",
+    "ownershipPct": 100,
+    "sector": "Software",
+    "topCustomerPct": 12
+  } ]
 }
