@@ -34,7 +34,9 @@ import { getActiveMandate, getActiveScreeningCriteria } from "@/lib/mandates";
 import { loadRootFiles } from "@/lib/pe/root-files.server";
 import { planSkillForStep, type SkillPlan, type SkillPlanningContext, type PlanningDeal } from "@/lib/skills/skill-planner";
 import { executePlannedSkill } from "@/lib/skills/engine-run";
-import { SKILL_AUTOINVOKE_ENABLED } from "@/lib/skills/config";
+import { skillAutoInvokeEnabledFor } from "@/lib/skills/config";
+import { loadPlanningCandidates } from "@/lib/skills/planning-candidates";
+import { detectSkillForStep } from "@/lib/skills/engine-bridge";
 import { observeOutput } from "@/lib/observe";
 import { extractApiWriteRequest, executeApiWrite } from "@/lib/api-write-requests";
 import { deliverApprovedReply, extractInboxReply, legacyInboxReply } from "@/lib/inbox/deliver-reply.server";
@@ -790,6 +792,9 @@ async function executeWorkflow(ctx: Ctx, workflow: Task, onProgress?: OnProgress
   // honestly reflect what happened.
   let failedSteps = 0;
 
+  // Auto-invocation is decided per organization (global flag OR the pilot allow-list).
+  const autoInvoke = skillAutoInvokeEnabledFor(ctx.orgId);
+
   const [orgContext, orgProfile, activeMandate, screeningCriteria] = await Promise.all([
     loadOrgContext(ctx, workflow),
     // Resolve the org's compounding profile once for the whole workflow so all
@@ -802,7 +807,7 @@ async function executeWorkflow(ctx: Ctx, workflow: Task, onProgress?: OnProgress
     // The mandate's STRUCTURED screening criteria — the real input the screening/
     // sourcing skills consume when skill auto-invocation is enabled. Only fetched
     // when the flag is on; null otherwise (and the free-text path is unchanged).
-    SKILL_AUTOINVOKE_ENABLED
+    autoInvoke
       ? getActiveScreeningCriteria(ctx.supabase, ctx.orgId).catch(() => null)
       : Promise.resolve(null),
   ]);
@@ -812,7 +817,7 @@ async function executeWorkflow(ctx: Ctx, workflow: Task, onProgress?: OnProgress
   // record, never fabricated; absent for most first-run workflows, in which case
   // the planner simply defers to the free-text path.
   let skillPlanningContext: SkillPlanningContext | null = null;
-  if (SKILL_AUTOINVOKE_ENABLED) {
+  if (autoInvoke) {
     let planningDeal: PlanningDeal | null = null;
     const linkedDealId =
       workflow.result && typeof workflow.result === "object"
@@ -838,9 +843,17 @@ async function executeWorkflow(ctx: Ctx, workflow: Task, onProgress?: OnProgress
     // The org's PE mandate tests (root file). Absent => the PE sourcing skills defer
     // to the free-text path rather than screening against an empty mandate.
     const peRoot = await loadRootFiles(ctx.orgId).catch(() => null);
+    // The org's catalog companies, loaded only when a step actually maps to a skill that
+    // consumes a candidate list — no extra query for workflows that never screen one.
+    const needsCandidates = list.some((st) => {
+      const id = detectSkillForStep(st.title, st.description ?? "");
+      return id === "source-deals" || id === "target-screen";
+    });
+    const candidates = needsCandidates ? await loadPlanningCandidates(ctx.supabase, ctx.orgId) : [];
     skillPlanningContext = {
       criteria: screeningCriteria,
       deal: planningDeal,
+      candidates,
       mandateTests: peRoot && peRoot.found.includes("mandate") ? peRoot.mandate : null,
     };
   }
