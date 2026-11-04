@@ -9,7 +9,7 @@ skill runtime (`lib/skills/runner.ts`) using the shared evidence grades (`lib/pe
 ## Contract
 
 |                   |                                                                               |
-| ----------------- | ----------------------------------------------------------------------------- |
+|-------------------|-------------------------------------------------------------------------------|
 | **Approval tier** | 1 — internal, reversible analysis                                             |
 | **Executives**    | analyst · investment_committee                                                |
 | **Inputs**        | `entryEbitda`, `entryMultiple`, `holdYears`                                   |

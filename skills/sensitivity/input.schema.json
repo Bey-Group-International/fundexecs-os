@@ -1,186 +1,165 @@
 {
-  "type": "object",
-  "required": ["entryEbitda", "entryMultiple", "holdYears"],
   "properties": {
+    "annualDebtPaydown": {
+      "minimum": 0,
+      "type": "number"
+    },
+    "cases": {
+      "items": {
+        "properties": {
+          "kind": {
+            "enum": [ "base", "downside", "upside" ],
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "overrides": {
+            "properties": {
+              "ebitdaGrowthRate": {
+                "type": "number"
+              },
+              "entryMultiple": {
+                "minimum": 0,
+                "type": "number"
+              },
+              "exitMultiple": {
+                "minimum": 0,
+                "type": "number"
+              },
+              "holdYears": {
+                "minimum": 0,
+                "type": "number"
+              },
+              "leverageMultiple": {
+                "minimum": 0,
+                "type": "number"
+              },
+              "transactionFeesPct": {
+                "maximum": 1,
+                "minimum": 0,
+                "type": "number"
+              }
+            },
+            "type": "object"
+          }
+        },
+        "required": [ "name", "overrides" ],
+        "type": "object"
+      },
+      "type": "array"
+    },
     "dealName": {
       "type": "string"
     },
-    "entryEbitda": {
-      "type": "number",
-      "minimum": 0
-    },
-    "entryMultiple": {
-      "type": "number",
-      "minimum": 0
-    },
-    "holdYears": {
-      "type": "number",
-      "minimum": 0
-    },
-    "leverageMultiple": {
-      "type": "number",
-      "minimum": 0
-    },
     "debtAmount": {
-      "type": "number",
-      "minimum": 0
+      "minimum": 0,
+      "type": "number"
     },
-    "exitMultiple": {
-      "type": "number",
-      "minimum": 0
+    "drivers": {
+      "items": {
+        "properties": {
+          "driver": {
+            "enum": [ "entryMultiple", "exitMultiple", "ebitdaGrowthRate", "leverageMultiple", "holdYears", "transactionFeesPct" ],
+            "type": "string"
+          },
+          "values": {
+            "items": {
+              "type": "number"
+            },
+            "type": "array"
+          }
+        },
+        "required": [ "driver", "values" ],
+        "type": "object"
+      },
+      "type": "array"
     },
     "ebitdaGrowthRate": {
       "type": "number"
     },
-    "annualDebtPaydown": {
-      "type": "number",
-      "minimum": 0
-    },
-    "transactionFeesPct": {
-      "type": "number",
+    "entryEbitda": {
       "minimum": 0,
-      "maximum": 1
+      "type": "number"
     },
-    "hurdles": {
-      "type": "object",
-      "required": ["base", "holdYears"],
-      "properties": {
-        "base": {
-          "type": "object",
-          "properties": {
-            "irr": {
-              "type": "number",
-              "minimum": 0
-            },
-            "moic": {
-              "type": "number",
-              "minimum": 0
-            }
-          }
-        },
-        "downside": {
-          "type": "object",
-          "properties": {
-            "irr": {
-              "type": "number",
-              "minimum": 0
-            },
-            "moic": {
-              "type": "number",
-              "minimum": 0
-            }
-          }
-        },
-        "holdYears": {
-          "type": "number",
-          "minimum": 0
-        }
-      }
+    "entryMultiple": {
+      "minimum": 0,
+      "type": "number"
     },
-    "drivers": {
-      "type": "array",
-      "items": {
-        "type": "object",
-        "required": ["driver", "values"],
-        "properties": {
-          "driver": {
-            "type": "string",
-            "enum": [
-              "entryMultiple",
-              "exitMultiple",
-              "ebitdaGrowthRate",
-              "leverageMultiple",
-              "holdYears",
-              "transactionFeesPct"
-            ]
-          },
-          "values": {
-            "type": "array",
-            "items": {
-              "type": "number"
-            }
-          }
-        }
-      }
-    },
-    "twoWay": {
-      "type": "array",
-      "items": {
-        "type": "object",
-        "required": ["row", "col"],
-        "properties": {
-          "row": {
-            "type": "string",
-            "enum": [
-              "entryMultiple",
-              "exitMultiple",
-              "ebitdaGrowthRate",
-              "leverageMultiple",
-              "holdYears",
-              "transactionFeesPct"
-            ]
-          },
-          "col": {
-            "type": "string",
-            "enum": [
-              "entryMultiple",
-              "exitMultiple",
-              "ebitdaGrowthRate",
-              "leverageMultiple",
-              "holdYears",
-              "transactionFeesPct"
-            ]
-          }
-        }
-      }
-    },
-    "cases": {
-      "type": "array",
-      "items": {
-        "type": "object",
-        "required": ["name", "overrides"],
-        "properties": {
-          "name": {
-            "type": "string"
-          },
-          "kind": {
-            "type": "string",
-            "enum": ["base", "downside", "upside"]
-          },
-          "overrides": {
-            "type": "object",
-            "properties": {
-              "entryMultiple": {
-                "type": "number",
-                "minimum": 0
-              },
-              "exitMultiple": {
-                "type": "number",
-                "minimum": 0
-              },
-              "ebitdaGrowthRate": {
-                "type": "number"
-              },
-              "leverageMultiple": {
-                "type": "number",
-                "minimum": 0
-              },
-              "holdYears": {
-                "type": "number",
-                "minimum": 0
-              },
-              "transactionFeesPct": {
-                "type": "number",
-                "minimum": 0,
-                "maximum": 1
-              }
-            }
-          }
-        }
-      }
+    "exitMultiple": {
+      "minimum": 0,
+      "type": "number"
     },
     "gateOwner": {
       "type": "string"
+    },
+    "holdYears": {
+      "minimum": 0,
+      "type": "number"
+    },
+    "hurdles": {
+      "properties": {
+        "base": {
+          "properties": {
+            "irr": {
+              "minimum": 0,
+              "type": "number"
+            },
+            "moic": {
+              "minimum": 0,
+              "type": "number"
+            }
+          },
+          "type": "object"
+        },
+        "downside": {
+          "properties": {
+            "irr": {
+              "minimum": 0,
+              "type": "number"
+            },
+            "moic": {
+              "minimum": 0,
+              "type": "number"
+            }
+          },
+          "type": "object"
+        },
+        "holdYears": {
+          "minimum": 0,
+          "type": "number"
+        }
+      },
+      "required": [ "base", "holdYears" ],
+      "type": "object"
+    },
+    "leverageMultiple": {
+      "minimum": 0,
+      "type": "number"
+    },
+    "transactionFeesPct": {
+      "maximum": 1,
+      "minimum": 0,
+      "type": "number"
+    },
+    "twoWay": {
+      "items": {
+        "properties": {
+          "col": {
+            "enum": [ "entryMultiple", "exitMultiple", "ebitdaGrowthRate", "leverageMultiple", "holdYears", "transactionFeesPct" ],
+            "type": "string"
+          },
+          "row": {
+            "enum": [ "entryMultiple", "exitMultiple", "ebitdaGrowthRate", "leverageMultiple", "holdYears", "transactionFeesPct" ],
+            "type": "string"
+          }
+        },
+        "required": [ "row", "col" ],
+        "type": "object"
+      },
+      "type": "array"
     }
-  }
+  },
+  "required": [ "entryEbitda", "entryMultiple", "holdYears" ],
+  "type": "object"
 }

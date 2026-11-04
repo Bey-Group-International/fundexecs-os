@@ -5,16 +5,16 @@ everyone in the org can read). Each is checked when you save: what is stored is 
 and anything that was ignored is listed back to you. Anything you leave unset runs on a labelled
 standing default, and the skill's output says so.
 
-|         File         |                                         What it holds                                          |                             Read by                             |
-|----------------------|------------------------------------------------------------------------------------------------|-----------------------------------------------------------------|
-| Investment mandate   | hard limits, scored preferences, kill facts, each with a number; approved by an owner or admin | `mandate-screen`, `target-screen`, `first-look`                 |
-| Return hurdles       | base and downside IRR / MOIC, hold period                                                      | `bid-range`, `sensitivity`, `exit-routes`, `final-investment-report`           |
-| Financing limits     | leverage limits, covenant warning %, liquidity minimum, call protection                        | `covenant-watch`, `cash-13-week`, `financing-terms`             |
-| KPI materiality      | % of budget, optional absolute floor, optional trend test                                      | `kpi-variance`                                                  |
-| Firm and gate owners | firm name and who owns each human gate                                                         | all 18 PE skills (see [pe-gate-owners.md](./pe-gate-owners.md)) |
-| Evidence grades      | which grades (A, B, C) may support a price; U never can                                        | `red-flag-register`                                             |
-| IC memo structure    | sections, order, titles, which are required                                                    | `ic-memo`                                                       |
-| Reporting style      | currency, units, decimals and labels for the LP update                                         | `lp-update`                                                     |
+|         File         |                                         What it holds                                          |                               Read by                                |
+|----------------------|------------------------------------------------------------------------------------------------|----------------------------------------------------------------------|
+| Investment mandate   | hard limits, scored preferences, kill facts, each with a number; approved by an owner or admin | `mandate-screen`, `target-screen`, `first-look`                      |
+| Return hurdles       | base and downside IRR / MOIC, hold period                                                      | `bid-range`, `sensitivity`, `exit-routes`, `final-investment-report` |
+| Financing limits     | leverage limits, covenant warning %, liquidity minimum, call protection                        | `covenant-watch`, `cash-13-week`, `financing-terms`                  |
+| KPI materiality      | % of budget, optional absolute floor, optional trend test                                      | `kpi-variance`                                                       |
+| Firm and gate owners | firm name and who owns each human gate                                                         | all 18 PE skills (see [pe-gate-owners.md](./pe-gate-owners.md))      |
+| Evidence grades      | which grades (A, B, C) may support a price; U never can                                        | `red-flag-register`                                                  |
+| IC memo structure    | sections, order, titles, which are required                                                    | `ic-memo`                                                            |
+| Reporting style      | currency, units, decimals and labels for the LP update                                         | `lp-update`                                                          |
 
 ## Evidence grades
 
