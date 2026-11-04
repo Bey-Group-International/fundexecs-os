@@ -1,90 +1,59 @@
 {
-  "type": "object",
-  "required": [
-    "tranches",
-    "closing",
-    "base",
-    "covenants",
-    "policyChecks",
-    "financingPolicyIsDefault",
-    "assumptions",
-    "limitation",
-    "gate"
-  ],
   "properties": {
-    "tranches": {
-      "type": "array",
+    "assumptions": {
       "items": {
-        "type": "object",
-        "required": [
-          "name",
-          "seniority",
-          "annualAmort"
-        ]
-      }
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "base": {
+      "items": {
+        "required": [ "period", "openingDebt", "closingDebt" ],
+        "type": "object"
+      },
+      "type": "array"
     },
     "closing": {
       "type": "object"
     },
-    "base": {
-      "type": "array",
+    "covenants": {
       "items": {
-        "type": "object",
-        "required": [
-          "period",
-          "openingDebt",
-          "closingDebt"
-        ]
-      }
+        "required": [ "name", "kind", "threshold", "base" ],
+        "type": "object"
+      },
+      "type": "array"
     },
     "downside": {
-      "type": "array",
       "items": {
-        "type": "object",
-        "required": [
-          "period",
-          "openingDebt",
-          "closingDebt"
-        ]
-      }
-    },
-    "covenants": {
-      "type": "array",
-      "items": {
-        "type": "object",
-        "required": [
-          "name",
-          "kind",
-          "threshold",
-          "base"
-        ]
-      }
-    },
-    "policyChecks": {
-      "type": "array",
-      "items": {
-        "type": "object",
-        "required": [
-          "check",
-          "result",
-          "detail"
-        ]
-      }
+        "required": [ "period", "openingDebt", "closingDebt" ],
+        "type": "object"
+      },
+      "type": "array"
     },
     "financingPolicyIsDefault": {
       "type": "boolean"
     },
-    "assumptions": {
-      "type": "array",
-      "items": {
-        "type": "string"
-      }
+    "gate": {
+      "type": "string"
     },
     "limitation": {
       "type": "string"
     },
-    "gate": {
-      "type": "string"
+    "policyChecks": {
+      "items": {
+        "required": [ "check", "result", "detail" ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "tranches": {
+      "items": {
+        "required": [ "name", "seniority", "annualAmort" ],
+        "type": "object"
+      },
+      "type": "array"
     }
-  }
+  },
+  "required": [ "tranches", "closing", "base", "covenants", "policyChecks", "financingPolicyIsDefault", "assumptions", "limitation", "gate" ],
+  "type": "object"
 }
