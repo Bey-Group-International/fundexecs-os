@@ -75,6 +75,28 @@
     "market": {
       "type": "string"
     },
+    "memoStructure": {
+      "properties": {
+        "sections": {
+          "items": {
+            "properties": {
+              "key": {
+                "type": "string"
+              },
+              "required": {
+                "type": "boolean"
+              },
+              "title": {
+                "type": "string"
+              }
+            },
+            "type": "object"
+          },
+          "type": "array"
+        }
+      },
+      "type": "object"
+    },
     "mitigants": {
       "type": "array",
       "items": {

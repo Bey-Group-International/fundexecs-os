@@ -1,65 +1,47 @@
 {
-  "type": "object",
-  "required": [
-    "register",
-    "blindSpots",
-    "supportedPriceAdjustment",
-    "evidencePolicyIsDefault",
-    "unsupportedPriceClaims",
-    "challenges",
-    "gate"
-  ],
   "properties": {
-    "register": {
-      "type": "array",
-      "items": {
-        "type": "object",
-        "required": [
-          "rank",
-          "title",
-          "severity",
-          "impact",
-          "evidenceGrade"
-        ]
-      }
-    },
-    "duplicatesMerged": {
-      "type": "integer"
-    },
     "blindSpots": {
-      "type": "array",
       "items": {
         "type": "string"
-      }
-    },
-    "supportedPriceAdjustment": {
-      "type": "number"
-    },
-    "evidencePolicyIsDefault": {
-      "type": "boolean"
-    },
-    "unsupportedPriceClaims": {
-      "type": "array",
-      "items": {
-        "type": "object",
-        "required": [
-          "title",
-          "priceImpact",
-          "evidenceGrade"
-        ]
-      }
-    },
-    "challenges": {
-      "type": "array",
-      "items": {
-        "type": "string"
-      }
+      },
+      "type": "array"
     },
     "challengeNote": {
       "type": "string"
     },
+    "challenges": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "duplicatesMerged": {
+      "type": "integer"
+    },
+    "evidencePolicyIsDefault": {
+      "type": "boolean"
+    },
     "gate": {
       "type": "string"
+    },
+    "register": {
+      "items": {
+        "required": [ "rank", "title", "severity", "impact", "evidenceGrade" ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "supportedPriceAdjustment": {
+      "type": "number"
+    },
+    "unsupportedPriceClaims": {
+      "items": {
+        "required": [ "title", "priceImpact", "evidenceGrade" ],
+        "type": "object"
+      },
+      "type": "array"
     }
-  }
+  },
+  "required": [ "register", "blindSpots", "supportedPriceAdjustment", "evidencePolicyIsDefault", "unsupportedPriceClaims", "challenges", "gate" ],
+  "type": "object"
 }

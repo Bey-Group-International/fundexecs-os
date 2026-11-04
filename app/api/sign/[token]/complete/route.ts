@@ -3,7 +3,7 @@ import { createClient } from '@supabase/supabase-js'
 import { missingRequiredFields, type EnvelopeFieldRequirement } from '@/lib/envelope-signing'
 import { checkRateLimit, rateLimitHeaders } from '@/lib/rate-limit'
 import { parseSignaturePng } from '@/lib/signing/signature-image'
-import { blockValueProblem } from '@/lib/signing/blocks'
+import { blockValueProblem, resolveDateTimeResponse } from '@/lib/signing/blocks'
 
 export const runtime = 'nodejs'
 
@@ -161,9 +161,15 @@ export async function POST(
     // What the server decides, not the browser: a locked block keeps the owner's value,
     // and a date-and-time block is stamped with the moment of signing.
     const stampedAt = new Date().toISOString()
+    // A date and time starts at now and the signer may set it; the true moment is kept in the event below.
+    const adjustedTimes: { chosen: string }[] = []
     for (const f of fieldList) {
-      if (f.field_type === 'datetime') responses[f.id] = stampedAt
-      else if (f.locked && f.prefill) responses[f.id] = f.prefill
+      if (f.field_type === 'datetime') {
+        const r = resolveDateTimeResponse(responses[f.id], stampedAt)
+        if (r.problem) return NextResponse.json({ ok: false, error: r.problem }, { status: 400 })
+        responses[f.id] = r.value
+        if (r.adjusted && r.chosen) adjustedTimes.push({ chosen: r.chosen })
+      } else if (f.locked && f.prefill) responses[f.id] = f.prefill
     }
     const missing = missingRequiredFields(fieldList, {
       signatureData,
@@ -226,6 +232,8 @@ export async function POST(
       event_type: 'signed',
       recipient_id: recipient.id,
       ip_address: ipAddress,
+      // When the signer set the printed date and time, the true signing moment is kept beside it.
+      ...(adjustedTimes.length ? { metadata: { datetime_chosen: adjustedTimes.map((t) => t.chosen), datetime_actual: stampedAt } } : {}),
     })
 
     if (signedEventError) {

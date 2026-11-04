@@ -2,7 +2,7 @@ jest.mock("server-only", () => ({}), { virtual: true });
 import { PDFDocument } from "pdf-lib";
 import { stampBlocks } from "./stamp.server";
 import { buildDocumentPdf } from "./executed-pdf.server";
-import { BLOCKS, BLOCK_HEIGHT_PCT, BLOCK_WIDTH_PCT, blockSpec, clampBlock, newBlockAt, formatBlockDateTime } from "./blocks";
+import { BLOCKS, BLOCK_HEIGHT_PCT, BLOCK_WIDTH_PCT, resolveDateTimeResponse, toOffsetIso, blockSpec, clampBlock, newBlockAt, formatBlockDateTime } from "./blocks";
 import { missingRequiredFields } from "../envelope-signing";
 import { blockValueProblem } from "./blocks";
 
@@ -91,5 +91,29 @@ describe("uniform block size", () => {
     const sizes = new Set(BLOCKS.map((b) => `${newBlockAt(b.type, 50, 50).widthPct}x${newBlockAt(b.type, 50, 50).heightPct}`));
     expect(sizes.size).toBe(1);
     expect(BLOCKS.every((b) => b.widthPct === BLOCK_WIDTH_PCT && b.heightPct === BLOCK_HEIGHT_PCT)).toBe(true);
+  });
+});
+
+describe("date and time blocks", () => {
+  const NOW = "2026-11-04T22:03:09.000Z";
+  it("keeps the signer's own clock when printing a chosen time, and UTC for a server stamp", () => {
+    expect(formatBlockDateTime("2026-11-04T14:03:00-08:00")).toBe("Nov 4, 2026, 14:03 UTC-08:00");
+    expect(formatBlockDateTime("2026-11-04T22:03:09.000Z")).toBe("Nov 4, 2026, 22:03:09 UTC");
+  });
+  it("writes a Date as wall clock plus offset", () => {
+    const d = new Date(2026, 10, 4, 14, 3);
+    expect(toOffsetIso(d)).toMatch(/^2026-11-04T14:03:00[+-]\d{2}:\d{2}$/);
+    expect(Date.parse(toOffsetIso(d))).toBe(d.getTime());
+  });
+  it("uses the real time when nothing was chosen, and accepts a close choice without a note", () => {
+    expect(resolveDateTimeResponse(undefined, NOW)).toMatchObject({ value: NOW, chosen: null, adjusted: false, problem: null });
+    const r = resolveDateTimeResponse("2026-11-04T14:03:00-08:00", NOW);
+    expect(r).toMatchObject({ value: "2026-11-04T14:03:00-08:00", adjusted: false, problem: null });
+  });
+  it("notes an adjusted time, and refuses one that is unreadable or out of range", () => {
+    expect(resolveDateTimeResponse("2026-11-03T09:00:00-08:00", NOW)).toMatchObject({ adjusted: true, problem: null });
+    expect(resolveDateTimeResponse("yesterday", NOW).problem).toMatch(/valid/);
+    expect(resolveDateTimeResponse("2026-09-01T09:00:00-08:00", NOW).problem).toMatch(/last 30 days/);
+    expect(resolveDateTimeResponse("2026-12-25T09:00:00-08:00", NOW).problem).toMatch(/last 30 days/);
   });
 });
