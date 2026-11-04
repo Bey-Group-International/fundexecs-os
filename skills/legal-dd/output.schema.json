@@ -1,0 +1,132 @@
+{
+  "properties": {
+    "abstract": {
+      "items": {
+        "properties": {
+          "changeOfControl": {
+            "type": "string"
+          },
+          "exclusivity": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "notStated": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [ "name", "changeOfControl", "exclusivity", "notStated" ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "counts": {
+      "properties": {
+        "amber": {
+          "type": "number"
+        },
+        "green": {
+          "type": "number"
+        },
+        "red": {
+          "type": "number"
+        }
+      },
+      "required": [ "red", "amber", "green" ],
+      "type": "object"
+    },
+    "derivedCount": {
+      "type": "number"
+    },
+    "documentGaps": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "duplicatesMerged": {
+      "type": "number"
+    },
+    "gate": {
+      "type": "string"
+    },
+    "handoff": {
+      "properties": {
+        "findings": {
+          "type": "array"
+        },
+        "needingImpact": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [ "findings", "needingImpact" ],
+      "type": "object"
+    },
+    "issues": {
+      "items": {
+        "properties": {
+          "category": {
+            "type": "string"
+          },
+          "cited": {
+            "type": "boolean"
+          },
+          "derived": {
+            "type": "boolean"
+          },
+          "evidenceGrade": {
+            "enum": [ "A", "B", "C", "U" ],
+            "type": "string"
+          },
+          "notes": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "rank": {
+            "type": "number"
+          },
+          "rating": {
+            "enum": [ "red", "amber", "green" ],
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          }
+        },
+        "required": [ "rank", "title", "rating", "category", "evidenceGrade", "cited", "derived", "notes" ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "limitation": {
+      "type": "string"
+    },
+    "notReviewed": {
+      "items": {
+        "enum": [ "contract", "litigation", "regulatory", "ip", "corporate", "employment" ],
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "note": {
+      "type": "string"
+    },
+    "uncited": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    }
+  },
+  "required": [ "issues", "counts", "abstract", "documentGaps", "notReviewed", "uncited", "duplicatesMerged", "derivedCount", "handoff", "limitation", "note", "gate" ],
+  "type": "object"
+}

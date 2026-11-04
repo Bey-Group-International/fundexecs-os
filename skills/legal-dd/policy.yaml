@@ -1,0 +1,30 @@
+# skills/legal-dd/policy.yaml — enforced by lib/skills/runner.ts and lib/executives/registry.ts
+approval_tier: 1
+risk_classification: moderate
+
+allowed_executives:
+  - diligence
+  - legal_closing
+
+data_scopes:
+  - deal:read
+  - document:read
+  - data_room:read
+
+prohibited_actions:
+  - send_outreach
+  - distribute_report
+  - sign_document
+  - move_capital
+  - capital_call
+  - submit_term_sheet
+
+guardrails:
+  - Every issue cites a document and a clause; one that does not is kept, graded U (untested) and listed.
+  - A contract field that is not stated stays 'not stated' and is named; nothing in the abstract is guessed.
+  - Missing documents and categories not reviewed are listed as gaps; an empty list is not a clean bill.
+  - This is an issues list for counsel, not legal advice. Deal counsel reviews and owns the legal findings.
+
+downstream:
+  - red-flag-register
+  - dd-checklist

@@ -73,6 +73,8 @@ describe("detectSkillForStep", () => {
       ["Debt structure for the downside case", "debt-structure"],
       ["Run a sensitivity table on entry and exit multiple", "sensitivity"],
       ["Break-even analysis for the bid", "sensitivity"],
+      ["Legal due diligence issues list", "legal-dd"],
+      ["Build the contract abstract table", "legal-dd"],
     ];
     for (const [step, id] of cases) expect([step, detectSkillForStep(step)]).toEqual([step, id]);
   });

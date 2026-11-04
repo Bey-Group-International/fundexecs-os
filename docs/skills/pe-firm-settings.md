@@ -11,7 +11,7 @@ standing default, and the skill's output says so.
 | Return hurdles       | base and downside IRR / MOIC, hold period                                                      | `bid-range`, `sensitivity`, `exit-routes`, `final-investment-report` |
 | Financing limits     | leverage limits, covenant warning %, liquidity minimum, call protection                        | `covenant-watch`, `cash-13-week`, `financing-terms`                  |
 | KPI materiality      | % of budget, optional absolute floor, optional trend test                                      | `kpi-variance`                                                       |
-| Firm and gate owners | firm name and who owns each human gate                                                         | all 18 PE skills (see [pe-gate-owners.md](./pe-gate-owners.md))      |
+| Firm and gate owners | firm name and who owns each human gate                                                         | all 19 PE skills (see [pe-gate-owners.md](./pe-gate-owners.md))      |
 | Evidence grades      | which grades (A, B, C) may support a price; U never can                                        | `red-flag-register`                                                  |
 | IC memo structure    | sections, order, titles, which are required                                                    | `ic-memo`                                                            |
 | Reporting style      | currency, units, decimals and labels for the LP update                                         | `lp-update`                                                          |

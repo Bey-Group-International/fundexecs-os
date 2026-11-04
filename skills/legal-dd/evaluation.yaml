@@ -1,0 +1,8 @@
+# skills/legal-dd/evaluation.yaml — acceptance criteria; exercised by lib/skills/catalog/legal-dd.test.ts
+criteria:
+  - uncited issues flagged
+  - document gaps listed
+  - contract abstract fields not stated are named
+  - states it is not legal advice
+  - counsel named as the gate
+example: examples/example-1.json
