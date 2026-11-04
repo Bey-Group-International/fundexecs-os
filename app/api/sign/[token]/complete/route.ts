@@ -299,7 +299,17 @@ export async function POST(
         after(() => onLpAgreementSigned(supabase as never, lpSessionId).catch(() => undefined))
       }
       const { notifyOwnerToCountersign, notifyCompleted } = await import('@/lib/envelope-notify.server')
-      after(() => (envelopeCompleted ? notifyCompleted(envelope.id) : notifyOwnerToCountersign(envelope.id)).catch(() => undefined))
+      if (envelopeCompleted) {
+        // The signed copy is built and kept first, so the link in the email opens at once and
+        // everyone is given the same file.
+        const { keepExecutedCopy } = await import('@/lib/signing/executed-envelope.server')
+        after(async () => {
+          await keepExecutedCopy(supabase as never, envelope.id).catch((e) => console.error('[sign/complete] could not keep the executed copy', e))
+          await notifyCompleted(envelope.id).catch(() => undefined)
+        })
+      } else {
+        after(() => notifyOwnerToCountersign(envelope.id).catch(() => undefined))
+      }
     } catch {
       // Outside a request (tests): there is nothing to schedule.
     }
