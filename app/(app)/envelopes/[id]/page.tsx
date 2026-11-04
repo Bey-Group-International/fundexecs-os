@@ -3,7 +3,13 @@ import { notFound, redirect } from "next/navigation";
 import { getSessionContext } from "@/lib/auth";
 import { createServerClient } from "@/lib/supabase/server";
 import type { EnvelopeRow, RecipientRow } from "@/lib/signing";
+import { canAdminOrg } from "@/lib/rbac";
+import { wizardStep } from "@/lib/signing/wizard";
+import { loadCountersign } from "@/lib/envelope-countersign.server";
+import { SigningProgress } from "@/components/signing/SigningProgress";
 import { EnvelopeDetail } from "./EnvelopeDetail";
+import { BlockPlacer } from "./place/BlockPlacer";
+import { Countersign } from "./countersign/Countersign";
 
 export const dynamic = "force-dynamic";
 
@@ -73,11 +79,56 @@ export default async function EnvelopeDetailPage(
   const recipients = (recipRes.data ?? []) as RecipientRow[];
   const events = (eventsRes.data ?? []) as EnvelopeEvent[];
 
+  // The three steps on one page: the maker places blocks, the reader signs, the maker countersigns.
+  const step = wizardStep(envelope.status);
+  const hasPdf = Boolean((envelope as EnvelopeRow & { pdf_storage_key?: string | null }).pdf_storage_key);
+  const reader = recipients.find((r) => (r as RecipientRow & { role?: string }).role !== "owner")?.name;
+  const shell = (width: string, note?: string) =>
+    step ? (
+      <div className={`mx-auto ${width} px-4 pt-6`}>
+        <SigningProgress current={step} readerName={reader} note={note} />
+      </div>
+    ) : null;
+
+  // Step 1: place the blocks on the real document, then send.
+  if (step === 1 && hasPdf) {
+    return (
+      <>
+        {shell("max-w-4xl")}
+        <BlockPlacer
+          title={envelope.title}
+          fieldsUrl={`/api/envelopes/${envelope.id}/fields`}
+          pdfUrl={`/api/envelopes/${envelope.id}/pdf`}
+          sendUrl={`/api/envelopes/${envelope.id}/send`}
+          doneHref={`/envelopes/${envelope.id}`}
+        />
+      </>
+    );
+  }
+
+  // Step 3: the reader has signed; it is the maker's turn.
+  if (step === 3 && hasPdf && canAdminOrg(ctx.role)) {
+    const cs = await loadCountersign(supabase, envelope.id);
+    if (cs) {
+      return (
+        <>
+          {shell("max-w-5xl")}
+          <Countersign envelopeId={envelope.id} title={envelope.title} defaultName={cs.defaultName} blocks={cs.blocks} done={cs.done} />
+        </>
+      );
+    }
+  }
+
+  const note =
+    step === 2
+      ? `Waiting for ${reader ?? "the reader"} to sign. They were emailed their link (you can copy it below), and you are emailed the moment they have.`
+      : step === 3
+        ? "The reader has signed. An owner or admin countersigns next."
+        : undefined;
   return (
-    <EnvelopeDetail
-      envelope={envelope}
-      recipients={recipients}
-      events={events}
-    />
+    <>
+      {shell("max-w-5xl", note)}
+      <EnvelopeDetail envelope={envelope} recipients={recipients} events={events} />
+    </>
   );
 }

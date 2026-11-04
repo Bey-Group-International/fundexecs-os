@@ -206,7 +206,7 @@ function DocRow({
               {s.envelopeId && s.envelopeStatus === "partially_signed" ? (
                 <>
                   {" "}
-                  <Link href={`/envelopes/${s.envelopeId}/countersign`} className="font-mono text-[11px] uppercase tracking-wider text-gold-300 hover:underline">
+                  <Link href={`/envelopes/${s.envelopeId}`} className="font-mono text-[11px] uppercase tracking-wider text-gold-300 hover:underline">
                     Countersign →
                   </Link>
                 </>

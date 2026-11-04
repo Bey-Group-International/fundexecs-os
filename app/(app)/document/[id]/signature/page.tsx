@@ -3,6 +3,7 @@ import { notFound, redirect } from "next/navigation";
 import { getSessionContext } from "@/lib/auth";
 import { canAdminOrg } from "@/lib/rbac";
 import { createServerClient } from "@/lib/supabase/server";
+import { SigningProgress } from "@/components/signing/SigningProgress";
 import { BlockPlacer } from "../../../envelopes/[id]/place/BlockPlacer";
 
 export const dynamic = "force-dynamic";
@@ -36,13 +37,18 @@ export default async function RoomSignaturePage(props: {
   if (!row || !doc) notFound();
 
   return (
-    <BlockPlacer
+    <>
+      <div className="mx-auto max-w-4xl px-4 pt-6">
+        <SigningProgress current={1} note="You place the blocks once. Then each reader signs on their own link, and you countersign each one." />
+      </div>
+      <BlockPlacer
       title={(doc as { name: string }).name}
       fieldsUrl={`/api/data-rooms/${room}/documents/${id}/signature`}
       pdfUrl={`/api/data-rooms/${room}/documents/${id}/pdf`}
       doneHref="/build/data_room"
       prefillNames={false}
-      hint="Click where the reader signs, and where you countersign. Every reader who opens this file signs on these blocks. Drag to move."
+      hint="Click where the reader signs, and where you countersign. Every reader who opens this file signs on these blocks."
     />
+    </>
   );
 }

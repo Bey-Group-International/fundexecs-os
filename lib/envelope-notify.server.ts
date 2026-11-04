@@ -50,7 +50,7 @@ export async function notifyOwnerToCountersign(envelopeId: string): Promise<void
     orgId: env.organization_id,
     to: { name: owner.name, email: owner.email },
     subject: `Ready for your countersignature: ${env.title}`,
-    htmlBody: `<p><strong>${escapeHtml(signed.join(", ") || "A recipient")}</strong> signed <strong>${escapeHtml(env.title)}</strong>.</p><p>It is waiting for your countersignature: open the document in FundExecs under Execute &rarr; Signing, then choose Countersign.</p>`,
+    htmlBody: `<p><strong>${escapeHtml(signed.join(", ") || "A recipient")}</strong> signed <strong>${escapeHtml(env.title)}</strong>.</p><p>Step 3 of 3 is yours: <a href="${SITE_URL}/envelopes/${env.id}">review their answers and countersign</a>.</p>`,
     allowFallback: true,
   }).catch(() => undefined);
 }

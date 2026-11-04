@@ -68,7 +68,7 @@ function AgreementRow({ session }: { session: Session }) {
             startTransition(async () => {
               setError("");
               const r = await prepareSubscriptionAgreement(session.id);
-              if (r.ok) router.push(`/envelopes/${r.envelopeId}/place`);
+              if (r.ok) router.push(`/envelopes/${r.envelopeId}`);
               else setError(r.error);
             })
           }
@@ -80,13 +80,13 @@ function AgreementRow({ session }: { session: Session }) {
     }
   } else if (a.status === "draft") {
     line = "Prepared: signature blocks not placed or sent yet";
-    if (manage) action = <a className={link} href={`/envelopes/${a.envelopeId}/place`}>Place signature blocks and send →</a>;
+    if (manage) action = <a className={link} href={`/envelopes/${a.envelopeId}`}>Place signature blocks and send →</a>;
   } else if (a.status === "sent") {
     line = "Sent: awaiting the LP's signature";
     action = <a className={link} href={`/envelopes/${a.envelopeId}`}>View →</a>;
   } else if (a.status === "partially_signed") {
     line = "LP signed: awaiting the fund's countersignature";
-    if (manage) action = <a className={link} href={`/envelopes/${a.envelopeId}/countersign`}>Countersign →</a>;
+    if (manage) action = <a className={link} href={`/envelopes/${a.envelopeId}`}>Countersign →</a>;
   } else if (a.status === "completed") {
     line = "Fully signed";
     action = <a className={link} href={`/api/envelopes/${a.envelopeId}/executed`}>Executed PDF →</a>;
