@@ -5,7 +5,7 @@
 // that did not run (blind spots) and runs a rule-based challenge pass. Pure core.
 
 import type { JsonSchema, SkillCore, SkillCoreResult, SkillDefinition, SkillManifest, SkillSource } from "@/lib/skills/types";
-import { canSupportPrice, gradeOf, mustLabelUntested, EVIDENCE_GRADES, type EvidenceGrade } from "@/lib/pe/evidence";
+import { canSupportPrice, gradeOf, mustLabelUntested, parseEvidencePolicy, DEFAULT_EVIDENCE_POLICY, EVIDENCE_GRADES, type EvidenceGrade } from "@/lib/pe/evidence";
 
 export type Impact = "walk-away" | "price" | "structure" | "spa-protection" | "100-day";
 const IMPACT_ORDER: Impact[] = ["walk-away", "price", "structure", "spa-protection", "100-day"];
@@ -28,6 +28,8 @@ export interface RedFlagInput {
   workstreamsRun: string[];
   /** Defaults to the seven standard workstreams. */
   expectedWorkstreams?: string[];
+  /** Which evidence grades may support a price. Absent = the labelled standing default. */
+  evidencePolicy?: { supportsPrice?: { A?: boolean; B?: boolean; C?: boolean } };
   gateOwner?: string;
 }
 
@@ -52,6 +54,8 @@ export interface RedFlagOutput {
   blindSpots: string[];
   /** Price effect from price items whose evidence can support a price (A/B). */
   supportedPriceAdjustment: number;
+  /** True when the standing default decided which grades support a price, not the firm's own evidence file. */
+  evidencePolicyIsDefault: boolean;
   /** Price claims resting on C / U evidence — NOT usable as a price adjustment. */
   unsupportedPriceClaims: Array<{ title: string; priceImpact: number; evidenceGrade: EvidenceGrade }>;
   challenges: string[];
@@ -65,6 +69,12 @@ const GRADE_RANK: Record<EvidenceGrade, number> = { A: 0, B: 1, C: 2, U: 3 };
 
 const run: SkillCore<RedFlagInput, RedFlagOutput> = (input): SkillCoreResult<RedFlagOutput> => {
   const sources: SkillSource[] = [];
+  const parsedPolicy = parseEvidencePolicy(input.evidencePolicy);
+  const policy = parsedPolicy ?? DEFAULT_EVIDENCE_POLICY;
+  const evidencePolicyIsDefault = !parsedPolicy;
+  if (evidencePolicyIsDefault) {
+    sources.push({ label: "Evidence policy", kind: "assumption", value: "standing default: grades A and B can support a price; C and U cannot", ref: "run on default settings — set root-evidence" });
+  }
 
   // De-duplicate by normalised title, keeping worst case.
   const merged = new Map<string, { f: FindingIn; workstreams: Set<string>; refs: Set<string>; grade: EvidenceGrade }>();
@@ -117,7 +127,7 @@ const run: SkillCore<RedFlagInput, RedFlagOutput> = (input): SkillCoreResult<Red
   const unsupportedPriceClaims: RedFlagOutput["unsupportedPriceClaims"] = [];
   for (const e of register) {
     if (e.impact !== "price" || e.priceImpact === null) continue;
-    if (canSupportPrice(e.evidenceGrade)) {
+    if (canSupportPrice(e.evidenceGrade, policy)) {
       supportedPriceAdjustment += e.priceImpact;
       sources.push({ label: `Price adjustment: ${e.title}`, kind: "fact", value: e.priceImpact, ref: e.sourceRefs.join("; ") || undefined });
     } else {
@@ -129,7 +139,7 @@ const run: SkillCore<RedFlagInput, RedFlagOutput> = (input): SkillCoreResult<Red
   // Rule-based challenge pass — the sceptical reader's strongest points.
   const challenges: string[] = [];
   for (const e of register) {
-    if ((e.impact === "walk-away" || e.impact === "price") && !canSupportPrice(e.evidenceGrade)) {
+    if ((e.impact === "walk-away" || e.impact === "price") && !canSupportPrice(e.evidenceGrade, policy)) {
       challenges.push(`"${e.title}" drives a ${e.impact} decision but rests on grade ${e.evidenceGrade} evidence${e.untested ? " (untested)" : ""}.`);
     }
     if (e.impact === "price" && e.priceImpact === null) challenges.push(`"${e.title}" is a price item with no amount.`);
@@ -149,7 +159,7 @@ const run: SkillCore<RedFlagInput, RedFlagOutput> = (input): SkillCoreResult<Red
 
   const completeness = Math.round(((expected.length - blindSpots.length) / expected.length) * 100) / 100;
   return {
-    structured: { register, duplicatesMerged, blindSpots, supportedPriceAdjustment, unsupportedPriceClaims, challenges: top, challengeNote, gate },
+    structured: { register, duplicatesMerged, blindSpots, supportedPriceAdjustment, evidencePolicyIsDefault, unsupportedPriceClaims, challenges: top, challengeNote, gate },
     narrative,
     sources,
     confidence: Math.max(0.25, Math.min(0.9, 0.3 + completeness * 0.5)),
@@ -182,18 +192,20 @@ const inputSchema: JsonSchema = {
     },
     workstreamsRun: { type: "array", items: { type: "string" } },
     expectedWorkstreams: { type: "array", items: { type: "string" } },
+    evidencePolicy: { type: "object", properties: { supportsPrice: { type: "object", properties: { A: { type: "boolean" }, B: { type: "boolean" }, C: { type: "boolean" } } } } },
     gateOwner: { type: "string" },
   },
 };
 
 const outputSchema: JsonSchema = {
   type: "object",
-  required: ["register", "blindSpots", "supportedPriceAdjustment", "unsupportedPriceClaims", "challenges", "gate"],
+  required: ["register", "blindSpots", "supportedPriceAdjustment", "evidencePolicyIsDefault", "unsupportedPriceClaims", "challenges", "gate"],
   properties: {
     register: { type: "array", items: { type: "object", required: ["rank", "title", "severity", "impact", "evidenceGrade"] } },
     duplicatesMerged: { type: "integer" },
     blindSpots: { type: "array", items: { type: "string" } },
     supportedPriceAdjustment: { type: "number" },
+    evidencePolicyIsDefault: { type: "boolean" },
     unsupportedPriceClaims: { type: "array", items: { type: "object", required: ["title", "priceImpact", "evidenceGrade"] } },
     challenges: { type: "array", items: { type: "string" } },
     challengeNote: { type: "string" },
@@ -210,8 +222,8 @@ export const redFlagRegisterManifest: SkillManifest = {
   applicableExecutives: ["diligence", "investment_committee"],
   supportedEntityTypes: ["deal"],
   requiredInputs: ["findings", "workstreamsRun"],
-  optionalInputs: ["expectedWorkstreams", "gateOwner"],
-  outputs: ["register", "blindSpots", "supportedPriceAdjustment", "unsupportedPriceClaims", "challenges", "gate"],
+  optionalInputs: ["expectedWorkstreams", "evidencePolicy", "gateOwner"],
+  outputs: ["register", "blindSpots", "supportedPriceAdjustment", "evidencePolicyIsDefault", "unsupportedPriceClaims", "challenges", "gate"],
   artifactTypes: ["risk_report"],
   dataPermissions: ["deal:read", "document:read"],
   tools: [],

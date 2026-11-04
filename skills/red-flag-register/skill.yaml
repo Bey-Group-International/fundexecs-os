@@ -21,12 +21,14 @@ required_inputs:
 
 optional_inputs:
   - expectedWorkstreams
+  - evidencePolicy
   - gateOwner
 
 outputs:
   - register
   - blindSpots
   - supportedPriceAdjustment
+  - evidencePolicyIsDefault
   - unsupportedPriceClaims
   - challenges
   - gate

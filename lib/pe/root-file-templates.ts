@@ -61,7 +61,13 @@ export const ROOT_FILE_META: RootFileMeta[] = [
     typed: true,
     starter: j({ firmName: "", gateOwners: Object.fromEntries(GATE_KEYS.map((k) => [k, ""])) }),
   },
-  { key: "evidence", title: "Evidence grades", blurb: "The firm's evidence scale and citation format.", typed: false, starter: j({ grades: {} }) },
+  {
+    key: "evidence",
+    title: "Evidence grades",
+    blurb: "Which evidence grades may support a price. A is audited / contractual, B is management data with support, C is assertion without support, U is untested. U can never support a price. Read by red-flag-register.",
+    typed: true,
+    starter: j({ supportsPrice: { A: null, B: null, C: null } }),
+  },
   { key: "ic_memo", title: "IC memo format", blurb: "The firm's IC memo structure.", typed: false, starter: j({ sections: [] }) },
   { key: "reporting", title: "Reporting policy", blurb: "Board, LP and valuation reporting formats.", typed: false, starter: j({ formats: {} }) },
 ];

@@ -45,6 +45,18 @@ describe("withOrgMandate", () => {
   });
 });
 
+describe("evidence policy injection", () => {
+  it("passes the org's own policy to red-flag-register, never the standing default", async () => {
+    const input = { findings: [], workstreamsRun: [] };
+    expect(await withOrgMandate("org", "red-flag-register", input)).toBe(input); // nothing saved -> caller's object untouched
+    rows.push({ file_key: "evidence", content: { supportsPrice: { A: true, B: false } } });
+    const out = (await withOrgMandate("org", "red-flag-register", input)) as { evidencePolicy?: { supportsPrice: Record<string, boolean> } };
+    expect(out.evidencePolicy?.supportsPrice).toEqual({ A: true, B: false, C: false });
+    const explicit = { ...input, evidencePolicy: { supportsPrice: { A: false } } };
+    expect(await withOrgMandate("org", "red-flag-register", explicit)).toBe(explicit);
+  });
+});
+
 describe("gate owners from the firm file", () => {
   const firm = { firmName: "Acme", gateOwners: { first_look: "Jane Doe (deal lead)", bid_price: "Investment Committee" } };
 

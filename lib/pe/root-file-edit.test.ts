@@ -8,7 +8,7 @@ describe("validateRootFileText", () => {
     expect(validateRootFileText("mandate", "{nope").errors[0]).toMatch(/Not valid JSON/);
     expect(validateRootFileText("mandate", "[1]").errors[0]).toMatch(/must be a JSON object/);
     expect(validateRootFileText("bogus", "{}").errors[0]).toMatch(/Unknown root file/);
-    expect(validateRootFileText("evidence", JSON.stringify({ x: "a".repeat(60_000) })).errors[0]).toMatch(/Too large/);
+    expect(validateRootFileText("ic_memo", JSON.stringify({ x: "a".repeat(60_000) })).errors[0]).toMatch(/Too large/);
   });
 
   it("stores the parsed mandate, forces draft, and reports what was dropped", () => {
@@ -38,7 +38,7 @@ describe("validateRootFileText", () => {
   });
 
   it("stores untyped files as written and says no skill reads them", () => {
-    const v = validateRootFileText("evidence", JSON.stringify({ grades: { A: "audited" } }));
+    const v = validateRootFileText("ic_memo", JSON.stringify({ sections: [{ title: "Recommendation" }] }));
     expect(v.ok).toBe(true);
     expect(v.readBySkills).toBe(false);
     expect(v.warnings[0]).toMatch(/No skill reads this file yet/);
@@ -80,5 +80,23 @@ describe("firm file (gate owners)", () => {
   it("rejects a file with no name and no owner (the starter is all blanks, so it is never stored as-is)", () => {
     expect(validateRootFileText("firm", JSON.stringify({ gateOwners: { first_look: "  " } })).ok).toBe(false);
     expect(validateRootFileText("firm", "{}").errors[0]).toMatch(/No usable firm values/);
+  });
+});
+
+describe("evidence file (price-support policy)", () => {
+  it("stores the full merged policy, locks U, and warns on unusual settings", () => {
+    const v = validateRootFileText("evidence", JSON.stringify({ supportsPrice: { A: true, B: false, C: true, U: true } }));
+    expect(v.ok).toBe(true);
+    expect(v.normalized).toEqual({ supportsPrice: { A: true, B: false, C: true } });
+    expect(v.warnings.join(" ")).toMatch(/"U" \(untested\) can never support a price/);
+    expect(v.warnings.join(" ")).toMatch(/Grade C .* is set to support a price/);
+    expect(v.readBySkills).toBe(true);
+    expect(validateRootFileText("evidence", JSON.stringify({ supportsPrice: { A: false } })).warnings.join(" ")).toMatch(/Grade A .* NOT to support a price/);
+  });
+
+  it("rejects a policy that sets nothing, and the all-null starter", () => {
+    expect(validateRootFileText("evidence", "{}").errors[0]).toMatch(/No usable evidence policy/);
+    expect(validateRootFileText("evidence", JSON.stringify({ supportsPrice: { A: "yes", B: 1 } })).ok).toBe(false);
+    expect(validateRootFileText("evidence", ROOT_FILE_META.find((m) => m.key === "evidence")!.starter).ok).toBe(false);
   });
 });

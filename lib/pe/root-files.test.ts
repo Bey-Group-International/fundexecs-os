@@ -37,3 +37,16 @@ describe("firm file in resolveRootFiles", () => {
     expect(r.missing).not.toContain("firm");
   });
 });
+
+describe("evidence file in resolveRootFiles", () => {
+  it("is the labelled default until the firm sets a grade, then merges with the default", () => {
+    const none = resolveRootFiles([]);
+    expect(none.evidenceIsDefault).toBe(true);
+    expect(none.evidence.supportsPrice).toEqual({ A: true, B: true, C: false });
+    const set = resolveRootFiles([{ file_key: "evidence", content: { supportsPrice: { B: false, U: true } } }]);
+    expect(set.evidenceIsDefault).toBe(false);
+    expect(set.evidence.supportsPrice).toEqual({ A: true, B: false, C: false }); // U is never configurable
+    expect(set.found).toContain("evidence");
+    expect(resolveRootFiles([{ file_key: "evidence", content: { supportsPrice: { A: "yes" } } }]).evidenceIsDefault).toBe(true);
+  });
+});

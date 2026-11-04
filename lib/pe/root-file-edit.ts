@@ -12,13 +12,14 @@ import { auditMandate, parseMandateTests, type MandateIssue, type MandateTests }
 import { parseReturnsHurdles } from "./returns-hurdles";
 import { parseFinancingPolicy } from "./financing-policy";
 import { parseKpiPolicy } from "./kpi-policy";
+import { parseEvidencePolicyDetailed } from "./evidence";
 import { GATE_KEYS, MAX_OWNER_CHARS, parseFirmFile } from "./gates";
 import { isRootFileKey, type RootFileKey } from "./root-files";
 
 export const MAX_ROOT_FILE_BYTES = 50_000;
 
 /** Files a skill reads today (typed). The rest are stored for later phases. */
-export const TYPED_ROOT_FILES: RootFileKey[] = ["mandate", "returns", "financing", "kpi", "firm"];
+export const TYPED_ROOT_FILES: RootFileKey[] = ["mandate", "returns", "financing", "kpi", "firm", "evidence"];
 
 export interface RootFileValidation {
   ok: boolean;
@@ -87,6 +88,15 @@ export function validateRootFileText(key: string, text: string): RootFileValidat
     const p = parseKpiPolicy(raw);
     if (!p) return fail("No usable KPI values. Expected materialityPct (percent), optionally materialityAbs and trendPeriods.");
     return { ok: true, normalized: p as unknown as Record<string, unknown>, errors: [], warnings, readBySkills };
+  }
+
+  if (key === "evidence") {
+    const { policy, uIgnored } = parseEvidencePolicyDetailed(raw);
+    if (uIgnored) warnings.push('Grade "U" (untested) can never support a price and cannot be changed; that value was ignored.');
+    if (!policy) return { ok: false, errors: ['No usable evidence policy. Expected { "supportsPrice": { "A": true, "B": true, "C": false } } with true/false for at least one of A, B, C.'], warnings, readBySkills };
+    if (!policy.supportsPrice.A) warnings.push("Grade A (audited / contractual) is set NOT to support a price — the strictest setting; check this is intended.");
+    if (policy.supportsPrice.C) warnings.push("Grade C (management assertion without support) is set to support a price. The standing rule is that it cannot.");
+    return { ok: true, normalized: policy as unknown as Record<string, unknown>, errors: [], warnings, readBySkills };
   }
 
   if (key === "firm") {

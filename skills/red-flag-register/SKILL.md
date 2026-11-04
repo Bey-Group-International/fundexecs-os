@@ -18,7 +18,7 @@ skill runtime (`lib/skills/runner.ts`) using the shared evidence grades (`lib/pe
 
 ## Guardrails
 
-- A price claim resting on C / U evidence is excluded from the price adjustment and listed separately.
+- A price claim resting on evidence the firm's policy does not allow to support a price (by default C and U; U never) is excluded from the price adjustment and listed separately. The policy comes from the firm's evidence file; the output says when it ran on the standing default.
 - Ungraded findings are U (untested) and labelled so.
 - Workstreams that did not run are named as blind spots.
 - The challenge pass is rule-based; run a second-model adversarial pass for IC.

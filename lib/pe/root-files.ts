@@ -6,6 +6,7 @@
 // speculative schema is committed here.
 
 import { EMPTY_MANDATE, parseMandateTests, type MandateTests } from "./mandate-tests";
+import { DEFAULT_EVIDENCE_POLICY, parseEvidencePolicy, type EvidencePolicy } from "./evidence";
 import { parseFirmFile, type FirmFile } from "./gates";
 import { DEFAULT_FINANCING, parseFinancingPolicy, type FinancingPolicy } from "./financing-policy";
 import { DEFAULT_KPI_POLICY, parseKpiPolicy, type KpiPolicy } from "./kpi-policy";
@@ -37,6 +38,9 @@ export interface ResolvedRootFiles {
   /** The org's KPI materiality, or the labelled standing default. */
   kpi: KpiPolicy;
   kpiIsDefault: boolean;
+  /** Which evidence grades may support a price: the org's own, or the labelled standing default. */
+  evidence: EvidencePolicy;
+  evidenceIsDefault: boolean;
   /** The org's firm file (gate owners, firm name), or null when none is stored. Skills then use their labelled generic roles. */
   firm: FirmFile | null;
   /** Keys with a stored, non-empty row. */
@@ -63,6 +67,8 @@ export function resolveRootFiles(rows: RootFileRow[] | null | undefined): Resolv
 
   const firmParsed = byKey.has("firm") ? parseFirmFile(byKey.get("firm")!.content).firm : null;
 
+  const evidenceParsed = byKey.has("evidence") ? parseEvidencePolicy(byKey.get("evidence")!.content) : null;
+
   const found: RootFileKey[] = [];
   for (const k of ROOT_FILE_KEYS) {
     if (k === "mandate") {
@@ -75,6 +81,10 @@ export function resolveRootFiles(rows: RootFileRow[] | null | undefined): Resolv
     }
     if (k === "financing") {
       if (financingParsed) found.push(k);
+      continue;
+    }
+    if (k === "evidence") {
+      if (evidenceParsed) found.push(k);
       continue;
     }
     if (k === "firm") {
@@ -95,5 +105,5 @@ export function resolveRootFiles(rows: RootFileRow[] | null | undefined): Resolv
     `Not found: ${missing.length ? missing.join(", ") : "none"}` +
     (missing.length ? " — run on default settings." : ".");
 
-  return { mandate: mandateUsable ? mandateParsed! : EMPTY_MANDATE, returns: returnsParsed ?? DEFAULT_RETURNS, returnsAreDefault: !returnsParsed, financing: financingParsed ?? DEFAULT_FINANCING, financingIsDefault: !financingParsed, kpi: kpiParsed ?? DEFAULT_KPI_POLICY, kpiIsDefault: !kpiParsed, firm: firmParsed, found, missing, statusLine };
+  return { mandate: mandateUsable ? mandateParsed! : EMPTY_MANDATE, returns: returnsParsed ?? DEFAULT_RETURNS, returnsAreDefault: !returnsParsed, financing: financingParsed ?? DEFAULT_FINANCING, financingIsDefault: !financingParsed, kpi: kpiParsed ?? DEFAULT_KPI_POLICY, kpiIsDefault: !kpiParsed, evidence: evidenceParsed ?? DEFAULT_EVIDENCE_POLICY, evidenceIsDefault: !evidenceParsed, firm: firmParsed, found, missing, statusLine };
 }
