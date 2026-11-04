@@ -1,0 +1,297 @@
+{
+  "properties": {
+    "benchmarkTolerancePts": {
+      "minimum": 0,
+      "type": "number"
+    },
+    "capacity": {
+      "items": {
+        "properties": {
+          "capacity": {
+            "minimum": 0,
+            "type": "number"
+          },
+          "currentVolume": {
+            "minimum": 0,
+            "type": "number"
+          },
+          "documentRef": {
+            "type": "string"
+          },
+          "metric": {
+            "type": "string"
+          },
+          "planVolume": {
+            "minimum": 0,
+            "type": "number"
+          },
+          "unit": {
+            "type": "string"
+          }
+        },
+        "required": [ "unit", "capacity" ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "categoriesReviewed": {
+      "items": {
+        "enum": [ "cost-base", "capacity", "people", "suppliers", "improvements" ],
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "costBase": {
+      "items": {
+        "properties": {
+          "benchmarkPctOfRevenue": {
+            "minimum": 0,
+            "type": "number"
+          },
+          "cost": {
+            "minimum": 0,
+            "type": "number"
+          },
+          "documentRef": {
+            "type": "string"
+          },
+          "function": {
+            "type": "string"
+          }
+        },
+        "required": [ "function", "cost" ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "dealName": {
+      "type": "string"
+    },
+    "documentsReceived": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "evidencePolicy": {
+      "properties": {
+        "supportsPrice": {
+          "properties": {
+            "A": {
+              "type": "boolean"
+            },
+            "B": {
+              "type": "boolean"
+            },
+            "C": {
+              "type": "boolean"
+            }
+          },
+          "type": "object"
+        }
+      },
+      "type": "object"
+    },
+    "expectedDocuments": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "gateOwner": {
+      "type": "string"
+    },
+    "improvements": {
+      "items": {
+        "properties": {
+          "evidence": {
+            "type": "string"
+          },
+          "evidenceGrade": {
+            "enum": [ "A", "B", "C", "U" ],
+            "type": "string"
+          },
+          "inPlan": {
+            "type": "boolean"
+          },
+          "name": {
+            "type": "string"
+          },
+          "savingBasis": {
+            "type": "string"
+          },
+          "savingHigh": {
+            "minimum": 0,
+            "type": "number"
+          },
+          "savingLow": {
+            "minimum": 0,
+            "type": "number"
+          }
+        },
+        "required": [ "name", "inPlan" ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "issues": {
+      "items": {
+        "properties": {
+          "category": {
+            "enum": [ "cost-base", "capacity", "people", "suppliers", "improvements", "other" ],
+            "type": "string"
+          },
+          "clauseRef": {
+            "type": "string"
+          },
+          "documentRef": {
+            "type": "string"
+          },
+          "evidenceGrade": {
+            "enum": [ "A", "B", "C", "U" ],
+            "type": "string"
+          },
+          "impact": {
+            "enum": [ "walk-away", "price", "structure", "spa-protection", "100-day" ],
+            "type": "string"
+          },
+          "jurisdiction": {
+            "type": "string"
+          },
+          "owner": {
+            "type": "string"
+          },
+          "period": {
+            "type": "string"
+          },
+          "question": {
+            "type": "string"
+          },
+          "rangeBasis": {
+            "type": "string"
+          },
+          "rangeHigh": {
+            "minimum": 0,
+            "type": "number"
+          },
+          "rangeLow": {
+            "minimum": 0,
+            "type": "number"
+          },
+          "rating": {
+            "enum": [ "red", "amber", "green" ],
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          }
+        },
+        "required": [ "title", "rating" ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "keyPeople": {
+      "items": {
+        "properties": {
+          "documentRef": {
+            "type": "string"
+          },
+          "knowledgeDocumented": {
+            "type": "boolean"
+          },
+          "retentionRisk": {
+            "enum": [ "low", "medium", "high", "unknown" ],
+            "type": "string"
+          },
+          "role": {
+            "type": "string"
+          }
+        },
+        "required": [ "role" ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "kpiPolicy": {
+      "properties": {
+        "materialityPct": {
+          "minimum": 0,
+          "type": "number"
+        }
+      },
+      "type": "object"
+    },
+    "kpis": {
+      "items": {
+        "properties": {
+          "current": {
+            "type": "number"
+          },
+          "documentRef": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "plan": {
+            "type": "number"
+          }
+        },
+        "required": [ "name", "current", "plan" ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "reportedCostBase": {
+      "minimum": 0,
+      "type": "number"
+    },
+    "revenue": {
+      "minimum": 0,
+      "type": "number"
+    },
+    "siteVisitDone": {
+      "type": "boolean"
+    },
+    "supplierConcentrationPct": {
+      "minimum": 0,
+      "type": "number"
+    },
+    "suppliers": {
+      "items": {
+        "properties": {
+          "alternativeSupplier": {
+            "enum": [ "yes", "no", "unknown" ],
+            "type": "string"
+          },
+          "critical": {
+            "type": "boolean"
+          },
+          "documentRef": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "spend": {
+            "minimum": 0,
+            "type": "number"
+          }
+        },
+        "required": [ "name", "spend" ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "tieOutToleranceAbs": {
+      "minimum": 0,
+      "type": "number"
+    },
+    "warnAbovePct": {
+      "minimum": 0,
+      "type": "number"
+    }
+  },
+  "type": "object"
+}

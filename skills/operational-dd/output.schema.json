@@ -1,0 +1,322 @@
+{
+  "properties": {
+    "basisOfReview": {
+      "type": "string"
+    },
+    "capacity": {
+      "items": {
+        "properties": {
+          "capacity": {
+            "type": "number"
+          },
+          "status": {
+            "enum": [ "breach", "warn", "within", "plan-volume-missing" ],
+            "type": "string"
+          },
+          "unit": {
+            "type": "string"
+          }
+        },
+        "required": [ "unit", "capacity", "status" ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "categoriesNotReviewed": {
+      "items": {
+        "enum": [ "cost-base", "capacity", "people", "suppliers", "improvements" ],
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "costMap": {
+      "properties": {
+        "benchmarkToleranceIsDefault": {
+          "type": "boolean"
+        },
+        "rows": {
+          "items": {
+            "properties": {
+              "cost": {
+                "type": "number"
+              },
+              "function": {
+                "type": "string"
+              },
+              "pctOfTotal": {
+                "type": "number"
+              },
+              "vsBenchmark": {
+                "enum": [ "above", "below", "in-line", "no-benchmark", "no-revenue" ],
+                "type": "string"
+              }
+            },
+            "required": [ "function", "cost", "pctOfTotal", "vsBenchmark" ],
+            "type": "object"
+          },
+          "type": "array"
+        }
+      },
+      "required": [ "rows", "benchmarkToleranceIsDefault" ],
+      "type": "object"
+    },
+    "counts": {
+      "properties": {
+        "amber": {
+          "type": "number"
+        },
+        "green": {
+          "type": "number"
+        },
+        "red": {
+          "type": "number"
+        }
+      },
+      "required": [ "red", "amber", "green" ],
+      "type": "object"
+    },
+    "derivedCount": {
+      "type": "number"
+    },
+    "documentGaps": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "duplicatesMerged": {
+      "type": "number"
+    },
+    "evidencePolicyIsDefault": {
+      "type": "boolean"
+    },
+    "gate": {
+      "type": "string"
+    },
+    "handoff": {
+      "properties": {
+        "findings": {
+          "type": "array"
+        },
+        "needingImpact": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [ "findings", "needingImpact" ],
+      "type": "object"
+    },
+    "improvements": {
+      "items": {
+        "properties": {
+          "canSupportPrice": {
+            "type": "boolean"
+          },
+          "evidenceGrade": {
+            "enum": [ "A", "B", "C", "U" ],
+            "type": "string"
+          },
+          "inPlan": {
+            "type": "boolean"
+          },
+          "name": {
+            "type": "string"
+          },
+          "status": {
+            "enum": [ "evidenced", "untested" ],
+            "type": "string"
+          }
+        },
+        "required": [ "name", "inPlan", "status", "evidenceGrade", "canSupportPrice" ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "issues": {
+      "items": {
+        "properties": {
+          "category": {
+            "type": "string"
+          },
+          "cited": {
+            "type": "boolean"
+          },
+          "derived": {
+            "type": "boolean"
+          },
+          "evidenceGrade": {
+            "enum": [ "A", "B", "C", "U" ],
+            "type": "string"
+          },
+          "notes": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "rank": {
+            "type": "number"
+          },
+          "rating": {
+            "enum": [ "red", "amber", "green" ],
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          }
+        },
+        "required": [ "rank", "title", "rating", "category", "evidenceGrade", "cited", "derived", "notes" ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "kpis": {
+      "properties": {
+        "materialityPct": {
+          "type": "number"
+        },
+        "policyIsDefault": {
+          "type": "boolean"
+        },
+        "rows": {
+          "items": {
+            "properties": {
+              "current": {
+                "type": "number"
+              },
+              "material": {
+                "type": "boolean"
+              },
+              "name": {
+                "type": "string"
+              },
+              "plan": {
+                "type": "number"
+              }
+            },
+            "required": [ "name", "current", "plan", "material" ],
+            "type": "object"
+          },
+          "type": "array"
+        }
+      },
+      "required": [ "rows", "materialityPct", "policyIsDefault" ],
+      "type": "object"
+    },
+    "limitation": {
+      "type": "string"
+    },
+    "note": {
+      "type": "string"
+    },
+    "outsidePlan": {
+      "items": {
+        "properties": {
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [ "name" ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "planSavings": {
+      "properties": {
+        "evidenced": {
+          "properties": {
+            "count": {
+              "type": "number"
+            },
+            "high": {
+              "type": "number"
+            },
+            "low": {
+              "type": "number"
+            }
+          },
+          "required": [ "low", "high", "count" ],
+          "type": "object"
+        },
+        "priceSupported": {
+          "properties": {
+            "count": {
+              "type": "number"
+            },
+            "high": {
+              "type": "number"
+            },
+            "low": {
+              "type": "number"
+            }
+          },
+          "required": [ "low", "high", "count" ],
+          "type": "object"
+        },
+        "untested": {
+          "properties": {
+            "count": {
+              "type": "number"
+            },
+            "high": {
+              "type": "number"
+            },
+            "low": {
+              "type": "number"
+            }
+          },
+          "required": [ "low", "high", "count" ],
+          "type": "object"
+        }
+      },
+      "type": "object"
+    },
+    "rangesDropped": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "suppliers": {
+      "properties": {
+        "rows": {
+          "items": {
+            "properties": {
+              "alternativeSupplier": {
+                "enum": [ "yes", "no", "unknown" ],
+                "type": "string"
+              },
+              "critical": {
+                "type": "boolean"
+              },
+              "name": {
+                "type": "string"
+              },
+              "sharePct": {
+                "type": "number"
+              },
+              "spend": {
+                "type": "number"
+              }
+            },
+            "required": [ "name", "spend", "sharePct", "critical", "alternativeSupplier" ],
+            "type": "object"
+          },
+          "type": "array"
+        }
+      },
+      "required": [ "rows" ],
+      "type": "object"
+    },
+    "uncited": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    }
+  },
+  "required": [ "costMap", "capacity", "suppliers", "kpis", "improvements", "planSavings", "outsidePlan", "issues", "counts", "documentGaps", "categoriesNotReviewed", "uncited", "rangesDropped", "evidencePolicyIsDefault", "basisOfReview", "duplicatesMerged", "derivedCount", "handoff", "limitation", "note", "gate" ],
+  "type": "object"
+}

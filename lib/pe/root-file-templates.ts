@@ -46,19 +46,19 @@ export const ROOT_FILE_META: RootFileMeta[] = [
   {
     key: "kpi",
     title: "KPI materiality",
-    blurb: "Flag a variance at or above a percent of budget, and above an absolute amount if you set one. Read by kpi-variance.",
+    blurb: "Flag a variance at or above a percent of budget, and above an absolute amount if you set one. Read by kpi-variance and operational-dd.",
     starter: j({ materialityPct: null, materialityAbs: null, trendPeriods: null }),
   },
   {
     key: "firm",
     title: "Firm and gate owners",
-    blurb: "Who owns each human gate. Every PE skill ends by naming a gate owner; with a name here it names that person or committee instead of a generic role. Read by all 21 PE skills.",
+    blurb: "Who owns each human gate. Every PE skill ends by naming a gate owner; with a name here it names that person or committee instead of a generic role. Read by all 22 PE skills.",
     starter: j({ firmName: "", gateOwners: Object.fromEntries(GATE_KEYS.map((k) => [k, ""])) }),
   },
   {
     key: "evidence",
     title: "Evidence grades",
-    blurb: "Which evidence grades may support a price. A is audited / contractual, B is management data with support, C is assertion without support, U is untested. U can never support a price. Read by red-flag-register and technology-dd.",
+    blurb: "Which evidence grades may support a price. A is audited / contractual, B is management data with support, C is assertion without support, U is untested. U can never support a price. Read by red-flag-register, technology-dd and operational-dd.",
     starter: j({ supportsPrice: { A: null, B: null, C: null } }),
   },
   {

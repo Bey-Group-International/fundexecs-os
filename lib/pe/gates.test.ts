@@ -17,8 +17,8 @@ describe("parseFirmFile", () => {
 });
 
 describe("SKILL_GATES", () => {
-  it("covers exactly the 21 PE skills, with one distinct gate each, all registered", () => {
-    expect(Object.keys(SKILL_GATES)).toHaveLength(21);
+  it("covers exactly the 22 PE skills, with one distinct gate each, all registered", () => {
+    expect(Object.keys(SKILL_GATES)).toHaveLength(22);
     for (const id of Object.keys(SKILL_GATES)) expect(getSkill(id)).not.toBeNull();
     const keys = Object.values(SKILL_GATES).map((g) => g.key);
     expect(new Set(keys).size).toBe(keys.length);

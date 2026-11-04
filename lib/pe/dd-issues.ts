@@ -326,3 +326,57 @@ export const issueInSchema: JsonSchema = {
     rangeBasis: { type: "string" },
   },
 };
+
+export type RetentionRisk = "low" | "medium" | "high" | "unknown";
+
+export interface KeyPersonIn {
+  role: string;
+  retentionRisk?: RetentionRisk;
+  knowledgeDocumented?: boolean;
+  documentRef?: string;
+}
+
+/**
+ * The issue a key person raises, by a stated rule: high retention risk with undocumented knowledge is red,
+ * high risk otherwise is amber, an unconfirmed retention risk is amber and graded U, low or medium raises nothing.
+ */
+export function keyPersonIssue(
+  p: KeyPersonIn,
+  category: string,
+): IssueIn | null {
+  const role = clean(p?.role);
+  if (!role) return null;
+  const risk = p.retentionRisk ?? "unknown";
+  const doc = clean(p.documentRef) ?? undefined;
+  if (risk === "high") {
+    const undocumented = p.knowledgeDocumented === false;
+    const knowledge = undocumented
+      ? "knowledge not documented"
+      : p.knowledgeDocumented === true
+        ? "knowledge documented"
+        : "documentation not confirmed";
+    return {
+      title: `Key person dependency: ${role} (retention risk high; ${knowledge})`,
+      rating: undocumented ? "red" : "amber",
+      category,
+      documentRef: doc,
+      evidenceGrade: doc ? "B" : "U",
+      question:
+        "What retention terms are in place, and who else can run this if they leave?",
+      derived: true,
+    };
+  }
+  if (risk === "unknown") {
+    return {
+      title: `Retention risk unconfirmed: ${role}`,
+      rating: "amber",
+      category,
+      documentRef: doc,
+      evidenceGrade: "U",
+      question:
+        "Is this person staying post-deal? Agree retention terms before signing.",
+      derived: true,
+    };
+  }
+  return null;
+}

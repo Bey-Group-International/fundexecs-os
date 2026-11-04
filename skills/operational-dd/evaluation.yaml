@@ -1,0 +1,8 @@
+# skills/operational-dd/evaluation.yaml — acceptance criteria; exercised by lib/skills/catalog/operational-dd.test.ts
+criteria:
+  - plan volume missing flagged not estimated
+  - untested improvements flagged
+  - plan savings split by evidence
+  - states desk-based and pairs with a site visit
+  - operating partner named as the gate
+example: examples/example-1.json

@@ -1,0 +1,30 @@
+# skills/operational-dd/policy.yaml — enforced by lib/skills/runner.ts and lib/executives/registry.ts
+approval_tier: 1
+risk_classification: moderate
+
+allowed_executives:
+  - diligence
+  - analyst
+
+data_scopes:
+  - deal:read
+  - document:read
+  - data_room:read
+
+prohibited_actions:
+  - send_outreach
+  - distribute_report
+  - sign_document
+  - move_capital
+  - capital_call
+  - submit_term_sheet
+
+guardrails:
+  - The capacity test uses the plan's own volume; a plan volume that is not supplied is flagged and the test is not run, never estimated.
+  - Every improvement cites evidence or is marked untested; an untested improvement in the plan is flagged and its saving cannot support a price.
+  - A saving appears only with a stated basis; the plan's savings are split by evidence, and improvements outside the plan are listed and never added to them.
+  - Desk-based operational DD misses what a site visit shows: pair it with a visit before IC. The operating partner signs the improvement register.
+
+downstream:
+  - red-flag-register
+  - dd-checklist

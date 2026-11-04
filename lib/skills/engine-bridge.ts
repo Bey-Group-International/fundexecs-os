@@ -21,6 +21,7 @@ const RULES: Array<{ skillId: string; pattern: RegExp }> = [
   { skillId: "final-investment-report", pattern: /\bfinal\s+investment\s+report\b/i },
   { skillId: "sensitivity", pattern: /\b(sensitivity(\s+(analysis|table|tables))?|break[-\s]?even(s)?(\s+(analysis|multiple|price))?|two[-\s]way\s+table)\b/i },
   { skillId: "bid-range", pattern: /\b(bid\s+(price\s+)?range|walk[-\s]?away\s+price|maximum\s+(bid\s+)?price)\b/i },
+  { skillId: "operational-dd", pattern: /\boperational\s+(dd|due\s+diligence|memo)\b|\bimprovement\s+register\b/i },
   { skillId: "technology-dd", pattern: /\b(technology|tech(nical)?|it)\s+(dd|due\s+diligence|issues?\s+list)\b|\bsecurity\s+posture\b/i },
   { skillId: "tax-dd", pattern: /\btax\s+(dd|due\s+diligence|issues?\s+list|exposures?)\b/i },
   { skillId: "legal-dd", pattern: /\blegal\s+(dd|due\s+diligence|issues?\s+list)\b|\bcontract\s+abstract\b/i },
