@@ -7,12 +7,14 @@
 // required-field enforcement, and the correct response column.
 
 const from = jest.fn();
+const rpc = jest.fn();
 jest.mock('@supabase/supabase-js', () => ({
-  createClient: () => ({ from: (...a: unknown[]) => from(...a) }),
+  createClient: () => ({ from: (...a: unknown[]) => from(...a), rpc: (...a: unknown[]) => rpc(...a) }),
 }));
 
 import { NextRequest } from 'next/server';
 import { POST } from './route';
+import { toOffsetIso } from '@/lib/signing/blocks';
 import { missingRequiredFields } from '@/lib/envelope-signing';
 
 interface ScriptedTables {
@@ -20,6 +22,9 @@ interface ScriptedTables {
   envelope?: { id: string; status: string } | null;
   fields?: { id: string; field_type: string; label: string | null; required: boolean }[];
   allRecipients?: { id: string; status: string }[];
+  /** What the signing function answers; defaults to a plain success. */
+  recorded?: Record<string, unknown> | null;
+  recordedError?: { message: string } | null;
 }
 
 // Stateful stub keyed by table: selects resolve to the scripted rows; updates
@@ -27,6 +32,11 @@ interface ScriptedTables {
 function makeSupabase(script: ScriptedTables) {
   const updates: { table: string; patch: Record<string, unknown> }[] = [];
   const inserts: { table: string; row: Record<string, unknown> }[] = [];
+
+  rpc.mockResolvedValue({
+    data: script.recorded === undefined ? { ok: true, already: false, completed: false } : script.recorded,
+    error: script.recordedError ?? null,
+  });
 
   from.mockImplementation((table: string) => {
     let recipientSelects = 0;
@@ -186,61 +196,104 @@ describe('POST /api/sign/[token]/complete', () => {
     expect(updates).toHaveLength(0); // nothing was written
   });
 
-  it('completes a sent envelope: writes responses to the `response` column, signs the recipient, completes when all signed', async () => {
-    const { updates, inserts } = makeSupabase({
+  it('records the signature in one database call, with every answer', async () => {
+    makeSupabase({
       recipient: { id: 'rec-1', status: 'viewed', envelope_id: 'env-1' },
       envelope: { id: 'env-1', status: 'sent' },
       fields: [{ id: 'f-1', field_type: 'text', label: 'Title', required: true }],
-      allRecipients: [{ id: 'rec-1', status: 'signed' }],
+      recorded: { ok: true, already: false, completed: true },
     });
     const res = await POST(request({ ...GOOD_BODY, fieldResponses: { 'f-1': 'Managing Partner' } }), params);
     expect(res.status).toBe(200);
-    const json = await res.json();
-    expect(json).toEqual({ ok: true, envelopeCompleted: true });
+    expect(await res.json()).toEqual({ ok: true, envelopeCompleted: true });
 
-    const fieldUpdate = updates.find((u) => u.table === 'envelope_fields');
-    expect(fieldUpdate?.patch).toEqual({ response: 'Managing Partner' });
-    const recipientUpdate = updates.find((u) => u.table === 'envelope_recipients');
-    expect(recipientUpdate?.patch).toMatchObject({ status: 'signed', signature_data: GOOD_BODY.signatureData });
-    const envelopeUpdate = updates.find((u) => u.table === 'envelopes');
-    expect(envelopeUpdate?.patch).toMatchObject({ status: 'completed' });
-    expect(inserts.map((i) => i.row.event_type)).toEqual(['signed', 'completed']);
-  });
-
-  it('accepts the next signer while the envelope is already partially_signed', async () => {
-    const { updates } = makeSupabase({
-      recipient: { id: 'rec-2', status: 'viewed', envelope_id: 'env-1' },
-      envelope: { id: 'env-1', status: 'partially_signed' },
-      fields: [],
-      allRecipients: [
-        { id: 'rec-1', status: 'signed' },
-        { id: 'rec-2', status: 'signed' },
-      ],
+    expect(rpc).toHaveBeenCalledTimes(1);
+    const [name, args] = rpc.mock.calls[0];
+    expect(name).toBe('record_envelope_signature');
+    expect(args).toMatchObject({
+      p_recipient_id: 'rec-1',
+      p_responses: { 'f-1': 'Managing Partner' },
+      p_signature: GOOD_BODY.signatureData,
+      p_initials: GOOD_BODY.initialsData,
+      p_event_metadata: null,
     });
-    const res = await POST(request(GOOD_BODY), params);
-    expect(res.status).toBe(200);
-    const json = await res.json();
-    expect(json).toEqual({ ok: true, envelopeCompleted: true });
-    const envelopeUpdate = updates.find((u) => u.table === 'envelopes');
-    expect(envelopeUpdate?.patch).toMatchObject({ status: 'completed' });
+    // No other writes: the single call is the whole record.
+    expect(from.mock.calls.every(([t]) => t === 'envelope_recipients' || t === 'envelopes' || t === 'envelope_fields')).toBe(true);
   });
 
-  it('moves a multi-signer envelope to partially_signed after the first signature', async () => {
-    const { updates } = makeSupabase({
+  it('reports a multi-signer envelope as not yet complete', async () => {
+    makeSupabase({
       recipient: { id: 'rec-1', status: 'viewed', envelope_id: 'env-1' },
       envelope: { id: 'env-1', status: 'sent' },
       fields: [],
-      allRecipients: [
-        { id: 'rec-1', status: 'signed' },
-        { id: 'rec-2', status: 'pending' },
-      ],
+      recorded: { ok: true, already: false, completed: false },
     });
     const res = await POST(request(GOOD_BODY), params);
     expect(res.status).toBe(200);
-    const json = await res.json();
-    expect(json).toEqual({ ok: true, envelopeCompleted: false });
-    const envelopeUpdate = updates.find((u) => u.table === 'envelopes');
-    expect(envelopeUpdate?.patch).toEqual({ status: 'partially_signed' });
+    expect(await res.json()).toEqual({ ok: true, envelopeCompleted: false });
+  });
+
+  it('is harmless to sign twice: a retry gets success and writes nothing', async () => {
+    makeSupabase({
+      recipient: { id: 'rec-1', status: 'signed', envelope_id: 'env-1' },
+      envelope: { id: 'env-1', status: 'completed' },
+    });
+    const res = await POST(request(GOOD_BODY), params);
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ ok: true, envelopeCompleted: true, alreadySigned: true });
+    expect(rpc).not.toHaveBeenCalled();
+  });
+
+  it('treats a signature that lost the race to its own twin as done', async () => {
+    makeSupabase({
+      recipient: { id: 'rec-1', status: 'viewed', envelope_id: 'env-1' },
+      envelope: { id: 'env-1', status: 'sent' },
+      recorded: { ok: true, already: true, completed: false },
+    });
+    const res = await POST(request(GOOD_BODY), params);
+    expect(res.status).toBe(200);
+    expect((await res.json()).alreadySigned).toBe(true);
+  });
+
+  it('maps the function refusing (declined / voided / other) onto the right status', async () => {
+    const cases: [Record<string, unknown>, number][] = [
+      [{ ok: false, code: 'declined' }, 409],
+      [{ ok: false, code: 'status', status: 'voided' }, 410],
+      [{ ok: false, code: 'status', status: 'completed' }, 409],
+    ];
+    for (const [recorded, status] of cases) {
+      makeSupabase({
+        recipient: { id: 'rec-1', status: 'viewed', envelope_id: 'env-1' },
+        envelope: { id: 'env-1', status: 'sent' },
+        recorded,
+      });
+      expect((await POST(request(GOOD_BODY), params)).status).toBe(status);
+    }
+  });
+
+  it('fails with 500 when the database call fails, rather than claiming success', async () => {
+    makeSupabase({
+      recipient: { id: 'rec-1', status: 'viewed', envelope_id: 'env-1' },
+      envelope: { id: 'env-1', status: 'sent' },
+      recorded: null,
+      recordedError: { message: 'connection reset' },
+    });
+    const res = await POST(request(GOOD_BODY), params);
+    expect(res.status).toBe(500);
+  });
+
+  it('keeps the true signing moment when the signer set a different date and time', async () => {
+    makeSupabase({
+      recipient: { id: 'rec-1', status: 'viewed', envelope_id: 'env-1' },
+      envelope: { id: 'env-1', status: 'sent' },
+      fields: [{ id: 'f-1', field_type: 'datetime', label: 'Date', required: true }],
+    });
+    const chosen = toOffsetIso(new Date(Date.now() - 3 * 3600_000));
+    const res = await POST(request({ ...GOOD_BODY, fieldResponses: { 'f-1': chosen } }), params);
+    expect(res.status).toBe(200);
+    const meta = rpc.mock.calls[0][1].p_event_metadata;
+    expect(meta.datetime_chosen).toHaveLength(1);
+    expect(typeof meta.datetime_actual).toBe('string');
   });
 });
 

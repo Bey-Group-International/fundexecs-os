@@ -130,16 +130,17 @@
           "question": {
             "type": "string"
           },
+          "jurisdiction": {
+            "type": "string"
+          },
           "owner": {
             "type": "string"
           },
-          "rangeLow": {
-            "type": "number",
-            "minimum": 0
+          "period": {
+            "type": "string"
           },
-          "rangeHigh": {
-            "type": "number",
-            "minimum": 0
+          "question": {
+            "type": "string"
           },
           "rangeBasis": {
             "type": "string"
