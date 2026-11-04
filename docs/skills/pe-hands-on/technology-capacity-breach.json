@@ -1,0 +1,8 @@
+{
+  "capacityTests": [ {
+    "capacity": 1000,
+    "currentPeak": 600,
+    "metric": "orders/min",
+    "planGrowthPct": 80
+  } ]
+}

@@ -29,8 +29,9 @@ A step runs as a skill only when it **clearly is one** (see `lib/skills/engine-b
 | "Screen this opportunity against our mandate" | `screen-deal`    | mandate screening criteria **and** a linked deal               |
 
 The other PE skills (QoE, bid range, covenants, exit…) need rich structured input that a
-workflow does not reliably hold, so they still defer to free text. Run them from a session
-with explicit input.
+workflow does not reliably hold, so they still defer to free text. There is not yet a screen
+for running them on typed input; to try them by hand, use the command-line tool in
+[pe-hands-on-testing.md](./pe-hands-on-testing.md).
 
 ### Where the candidates come from
 
@@ -46,6 +47,9 @@ guessing. A catalog with no sector, geography or size data will mostly return `n
 that is the correct answer, not a bug.
 
 ## Checking it worked
+
+For a step-by-step script, including what you should see at each point, use
+[pe-hands-on-testing.md](./pe-hands-on-testing.md).
 
 1. Save a mandate at `/settings/pe-firm` (approve it, or results are labelled `default-screened`).
 2. Run a workflow with a step such as "Target screening of the catalog".

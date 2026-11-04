@@ -438,4 +438,22 @@ describe("technology-dd core", () => {
       run({ ...input, gateOwner: "Jane Doe, CTO advisor" }).structured.gate,
     ).toBe("Jane Doe, CTO advisor confirms the risk ratings.");
   });
+
+  it("reads correctly when exactly one risk is uncited", () => {
+    const r = run({
+      asOf: "2026-11-04",
+      penTest: { date: "2026-10-01", documentRef: "PT.pdf" },
+      issues: [
+        {
+          title: "Hand-built deploys",
+          rating: "amber",
+          category: "technical-debt",
+        },
+      ],
+    });
+    expect(r.missingData.join(" ")).toMatch(
+      /1 risk cites no document or test and is graded U: Hand-built deploys/,
+    );
+    expect(r.structured.note).toMatch(/1 cites no document or test\./);
+  });
 });

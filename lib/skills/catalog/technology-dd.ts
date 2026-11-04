@@ -459,7 +459,7 @@ const run: SkillCore<TechnologyDdInput, TechnologyDdOutput> = (
     missingData.push(`Not reviewed: ${categoriesNotReviewed.join(", ")}`);
   if (ranked.uncited.length)
     missingData.push(
-      `${ranked.uncited.length} risk${ranked.uncited.length === 1 ? "" : "s"} cite no document or test and are graded U: ${ranked.uncited.join("; ")}`,
+      `${ranked.uncited.length} risk${ranked.uncited.length === 1 ? "" : "s"} ${ranked.uncited.length === 1 ? "cites" : "cite"} no document or test and ${ranked.uncited.length === 1 ? "is" : "are"} graded U: ${ranked.uncited.join("; ")}`,
     );
   if (ranked.rangesDropped.length)
     missingData.push(
@@ -531,7 +531,7 @@ const run: SkillCore<TechnologyDdInput, TechnologyDdOutput> = (
   const note =
     ranked.issues.length === 0
       ? "No technology risks were supplied or derived. That is not a clean bill: the list reflects only what was reviewed."
-      : `${ranked.issues.length} technology risk${ranked.issues.length === 1 ? "" : "s"}: ${red} red, ${amber} amber, ${green} green${derivedCount ? ` (${derivedCount} derived by rule)` : ""}. ${penTest.status === "stale" ? `Pen test ${penTest.ageMonths} months old. ` : penTest.status === "none" ? "No pen test report seen. " : ""}${capacity.some((c) => c.status === "breach") ? "Capacity is breached under the plan. " : ""}${rangeTotal ? `Cost ranges with a basis sum to ${rangeTotal.low}–${rangeTotal.high}; ${priceSupportedRange?.issuesIncluded ?? 0} of ${rangeTotal.issuesIncluded} can support a price${evidencePolicyIsDefault ? " (default evidence policy)" : ""}. ` : "No cost range is supported by a stated basis. "}${ranked.uncited.length ? `${ranked.uncited.length} cite no document or test. ` : ""}`.trim();
+      : `${ranked.issues.length} technology risk${ranked.issues.length === 1 ? "" : "s"}: ${red} red, ${amber} amber, ${green} green${derivedCount ? ` (${derivedCount} derived by rule)` : ""}. ${penTest.status === "stale" ? `Pen test ${penTest.ageMonths} months old. ` : penTest.status === "none" ? "No pen test report seen. " : ""}${capacity.some((c) => c.status === "breach") ? "Capacity is breached under the plan. " : ""}${rangeTotal ? `Cost ranges with a basis sum to ${rangeTotal.low}–${rangeTotal.high}; ${priceSupportedRange?.issuesIncluded ?? 0} of ${rangeTotal.issuesIncluded} can support a price${evidencePolicyIsDefault ? " (default evidence policy)" : ""}. ` : "No cost range is supported by a stated basis. "}${ranked.uncited.length ? `${ranked.uncited.length} ${ranked.uncited.length === 1 ? "cites" : "cite"} no document or test. ` : ""}`.trim();
 
   const structured: TechnologyDdOutput = {
     stack: { hosting: clean(input.hosting), components, supportUnknown },

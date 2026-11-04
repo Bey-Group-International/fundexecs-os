@@ -323,4 +323,16 @@ describe("tax-dd core", () => {
       "Jane Doe, tax partner confirms each exposure before it moves into the price or SPA.",
     );
   });
+
+  it("reads correctly when exactly one exposure is uncited", () => {
+    const r = run({
+      issues: [
+        { title: "Payroll audit", rating: "amber", category: "payroll-tax" },
+      ],
+    });
+    expect(r.missingData.join(" ")).toMatch(
+      /1 exposure cites no document and is graded U: Payroll audit/,
+    );
+    expect(r.structured.note).toMatch(/1 cites no document\./);
+  });
 });

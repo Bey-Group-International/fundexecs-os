@@ -479,4 +479,12 @@ describe("operational-dd core", () => {
         .gate,
     ).toBe("Jane Doe, operating partner signs the improvement register.");
   });
+
+  it("reads correctly when exactly one risk is uncited", () => {
+    expect(
+      run({
+        issues: [{ title: "Aging line 3", rating: "amber" }],
+      }).missingData.join(" "),
+    ).toMatch(/1 risk cites no document and is graded U: Aging line 3/);
+  });
 });
