@@ -137,4 +137,19 @@ describe("BlockPlacer: click, choose, done", () => {
     fireEvent.click(screen.getByRole("button", { name: "Delete" }));
     expect(screen.queryByRole("button", { name: "Signature block" })).toBeNull();
   });
+
+  it("every block has its own − at the top left that deletes just that block, without selecting or moving it", async () => {
+    await mount();
+    clickPage(300, 400);
+    choose("Signature");
+    clickPage(300, 200);
+    choose("Name");
+    const minus = screen.getByRole("button", { name: "Delete Signature block" });
+    expect(screen.getByRole("button", { name: "Delete Name block" })).toBeTruthy();
+    expect(minus.textContent).toBe("−");
+    fireEvent.pointerDown(minus, { clientX: 300, clientY: 400, pointerId: 1 });
+    fireEvent.click(minus);
+    expect(screen.queryByRole("button", { name: "Signature block" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Name block" })).toBeTruthy();
+  });
 });

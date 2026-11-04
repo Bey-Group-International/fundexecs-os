@@ -317,6 +317,22 @@ export function BlockPlacer({ title, fieldsUrl, pdfUrl, sendUrl, doneHref, prefi
                         touchAction: "none",
                       }}
                     >
+                      <button
+                        type="button"
+                        aria-label={`Delete ${blockSpec(b.type)!.label} block`}
+                        title="Delete this block"
+                        // Not a drag, and not a click on the page behind it.
+                        onPointerDown={(e) => e.stopPropagation()}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setBlocks((cur) => cur.filter((x) => x.key !== b.key));
+                          setSelected((cur) => (cur === b.key ? null : cur));
+                        }}
+                        className="absolute -left-2.5 -top-2.5 z-10 flex h-4 w-4 cursor-pointer items-center justify-center rounded-full border bg-white text-[11px] font-bold leading-none text-status-danger shadow-sm hover:bg-status-danger hover:text-white"
+                        style={{ borderColor: "currentColor" }}
+                      >
+                        −
+                      </button>
                       <span
                         aria-hidden="true"
                         className="flex h-5 w-5 shrink-0 -translate-x-1/2 items-center justify-center rounded-full border-2 bg-white/90 text-xs font-bold leading-none"
