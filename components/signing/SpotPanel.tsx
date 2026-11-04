@@ -14,7 +14,10 @@ export interface SpotPanelProps {
   value: string;
   onValue: (v: string) => void;
   signature: string | null;
-  onSignature: (png: string) => void;
+  /** `remember` is the box under the pad: keep this signature on this device (owner only). */
+  onSignature: (png: string, remember?: boolean) => void;
+  /** Set only where a signature may be kept on this device. */
+  keep?: { stored: boolean; onForget: () => void };
   signerName: string;
   position: number;
   total: number;
@@ -29,6 +32,7 @@ export interface SpotPanelProps {
 export function SpotPanel(p: SpotPanelProps) {
   const [changing, setChanging] = useState(false);
   const [draft, setDraft] = useState<string | null>(null);
+  const [remember, setRemember] = useState(true);
   const kind = p.spec.input;
   const problem = kind === "text" || kind === "multiline" ? blockValueProblem(p.spec.type, p.value) : null;
 
@@ -38,7 +42,7 @@ export function SpotPanel(p: SpotPanelProps) {
 
   function next() {
     if (kind === "signature" && (changing || !p.signature) && draft) {
-      p.onSignature(draft);
+      p.onSignature(draft, p.keep ? remember : undefined);
       setChanging(false);
       setDraft(null);
     }
@@ -111,9 +115,22 @@ export function SpotPanel(p: SpotPanelProps) {
             <button type="button" onClick={() => setChanging(true)} className="mt-1 block text-xs text-fg-secondary underline underline-offset-2 hover:text-fg-primary">
               Change signature
             </button>
+            {p.keep?.stored ? (
+              <button type="button" onClick={p.keep.onForget} className="ml-3 mt-1 text-xs text-fg-secondary underline underline-offset-2 hover:text-fg-primary">
+                Forget it on this device
+              </button>
+            ) : null}
           </div>
         ) : (
-          <SignaturePad signerName={p.signerName} onChange={setDraft} label="Sign" />
+          <div>
+            <SignaturePad signerName={p.signerName} onChange={setDraft} label="Sign" />
+            {p.keep ? (
+              <label className="mt-2 flex items-center gap-2 text-xs text-fg-secondary">
+                <input type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)} />
+                Remember my signature on this device
+              </label>
+            ) : null}
+          </div>
         )
       ) : null}
 

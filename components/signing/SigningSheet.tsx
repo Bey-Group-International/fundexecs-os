@@ -8,6 +8,7 @@
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { PdfPages } from "@/components/signing/PdfPages";
 import { SpotPanel } from "@/components/signing/SpotPanel";
+import { forgetSignature, loadRememberedSignature, rememberSignature } from "@/lib/signing/remembered-signature";
 import { blockSpec, blockValueProblem, formatBlockDateTime, toOffsetIso } from "@/lib/signing/blocks";
 
 export interface SheetBlock {
@@ -41,6 +42,7 @@ export function SigningSheet({
   signerName,
   submitLabel,
   onSubmit,
+  rememberFor,
 }: {
   pdfSrc: string;
   blocks: SheetBlock[];
@@ -49,6 +51,8 @@ export function SigningSheet({
   submitLabel: string;
   /** Resolves to an error message, or null when it worked. */
   onSubmit: (signatureData: string, responses: Record<string, string>) => Promise<string | null>;
+  /** The account holder's id, where a signature may be kept on this device (the owner countersigning). */
+  rememberFor?: string;
 }) {
   const [values, setValues] = useState<Record<string, string>>(() => {
     const now = toOffsetIso(new Date());
@@ -60,6 +64,7 @@ export function SigningSheet({
   });
   const [signature, setSignature] = useState<string | null>(null);
   const [agreed, setAgreed] = useState(false);
+  const [stored, setStored] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
@@ -81,6 +86,16 @@ export function SigningSheet({
   const [activeId, setActiveId] = useState<string | null>(() => steps[0]?.id ?? null);
   const activeIndex = steps.findIndex((b) => b.id === activeId);
   const lastOpen = activeIndex >= 0 && activeIndex === steps.length - 1;
+
+  // A signature kept on this device is offered straight away (read after mount, so the page matches the server's).
+  useEffect(() => {
+    if (!rememberFor) return;
+    const kept = loadRememberedSignature(rememberFor);
+    if (kept) {
+      setSignature((cur) => cur ?? kept);
+      setStored(true);
+    }
+  }, [rememberFor]);
 
   // A right click closes the open panel (and the browser's own menu stays out of the way).
   useEffect(() => {
@@ -214,7 +229,16 @@ export function SigningSheet({
                             value={v}
                             onValue={(nv) => setValues((cur) => ({ ...cur, [b.id]: nv }))}
                             signature={signature}
-                            onSignature={setSignature}
+                            onSignature={(png, remember) => {
+                              setSignature(png);
+                              if (!rememberFor || remember === undefined) return;
+                              if (remember) setStored(rememberSignature(rememberFor, png));
+                              else {
+                                forgetSignature(rememberFor);
+                                setStored(false);
+                              }
+                            }}
+                            keep={rememberFor ? { stored, onForget: () => { forgetSignature(rememberFor); setStored(false); setSignature(null); } } : undefined}
                             signerName={signerName}
                             // A spot outside the walk (already filled in) opens alone: no count, no Back, Done closes it.
                             position={activeIndex + 1}
