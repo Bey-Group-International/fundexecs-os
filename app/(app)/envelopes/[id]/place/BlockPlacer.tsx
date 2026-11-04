@@ -328,7 +328,7 @@ export function BlockPlacer({ title, fieldsUrl, pdfUrl, sendUrl, doneHref, prefi
                           setBlocks((cur) => cur.filter((x) => x.key !== b.key));
                           setSelected((cur) => (cur === b.key ? null : cur));
                         }}
-                        className="absolute -left-2.5 -top-2.5 z-10 flex h-4 w-4 cursor-pointer items-center justify-center rounded-full border bg-white text-[11px] font-bold leading-none text-status-danger shadow-sm hover:bg-status-danger hover:text-white"
+                        className="absolute -right-2.5 -top-2.5 z-10 flex h-4 w-4 cursor-pointer items-center justify-center rounded-full border bg-white text-[11px] font-bold leading-none text-status-danger shadow-sm hover:bg-status-danger hover:text-white"
                         style={{ borderColor: "currentColor" }}
                       >
                         −

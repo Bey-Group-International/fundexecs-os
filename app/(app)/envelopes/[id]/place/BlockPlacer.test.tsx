@@ -138,7 +138,7 @@ describe("BlockPlacer: click, choose, done", () => {
     expect(screen.queryByRole("button", { name: "Signature block" })).toBeNull();
   });
 
-  it("every block has its own − at the top left that deletes just that block, without selecting or moving it", async () => {
+  it("every block has its own − at the top right that deletes just that block, without selecting or moving it", async () => {
     await mount();
     clickPage(300, 400);
     choose("Signature");
