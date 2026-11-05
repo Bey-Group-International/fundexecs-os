@@ -749,12 +749,15 @@ export function EarnCopilotDock({ name }: { name: string }) {
 
   return (
     <>
-      {/* Launcher */}
+      {/* Launcher. Phones only: from `md` up the top bar carries an "Ask Earn"
+          button on every route this dock opens on (same dockHiddenOn rule), and
+          a second, floating copy just sat on top of page content. ⌘K still
+          opens the dock everywhere. */}
       {!open && !launcherSuppressed ? (
         <button
           onClick={() => setOpen(true)}
           title="Ask Earn (⌘K)"
-          className="fixed bottom-5 right-5 z-40 flex items-center gap-2 rounded-full border border-neural-400/45 bg-surface-1 px-4 py-2.5 text-sm font-medium text-neural-300 shadow-[0_18px_48px_-24px_rgb(var(--fx-accent-rgb)/0.378)] backdrop-blur transition hover:border-neural-300/70 hover:bg-neural-400/10 print:hidden"
+          className="fixed bottom-5 right-5 z-40 flex md:hidden items-center gap-2 rounded-full border border-neural-400/45 bg-surface-1 px-4 py-2.5 text-sm font-medium text-neural-300 shadow-[0_18px_48px_-24px_rgb(var(--fx-accent-rgb)/0.378)] backdrop-blur transition hover:border-neural-300/70 hover:bg-neural-400/10 print:hidden"
         >
           <EarnOrb size={22} pulse />
           Ask Earn
