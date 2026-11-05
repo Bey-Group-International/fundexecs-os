@@ -1,6 +1,5 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
-import { Logo } from "@/components/Logo";
 import { getSessionContext } from "@/lib/auth";
 import { createServerClient } from "@/lib/supabase/server";
 import type { Deal, Approval } from "@/lib/supabase/database.types";
@@ -10,6 +9,7 @@ import { ActivityFeed } from "@/components/dashboard/ActivityFeed";
 import { HottestCapital, PendingGates } from "./CapitalSignals";
 import { StaleDealAlerts } from "@/components/dashboard/StaleDealAlerts";
 import { FirstMissionCoach } from "@/components/dashboard/FirstMissionCoach";
+import { NeedsYouStrip } from "@/components/dashboard/NeedsYouStrip";
 import { buildCapitalMap } from "@/lib/capital-map";
 import { getBuildReadiness } from "@/lib/build-readiness";
 import {
@@ -20,6 +20,9 @@ import {
 } from "@/lib/dashboard/institutional";
 
 export const dynamic = "force-dynamic";
+
+// The page only loads the newest few pending approvals; the strip shows "N+" at the cap.
+const PENDING_GATES_LIMIT = 5;
 
 const DEAL_STAGES = ["sourced", "screening", "diligence", "ic_review", "closing"] as const;
 const STAGE_COLORS: Record<string, string> = {
@@ -234,7 +237,7 @@ export default async function DashboardPage() {
     getInstitutionalDashboard(supabase, ctx.orgId),
     buildCapitalMap(supabase),
     getBuildReadiness(ctx.orgId),
-    supabase.from("approvals").select("*").eq("decision", "pending").order("created_at", { ascending: false }).limit(5),
+    supabase.from("approvals").select("*").eq("decision", "pending").order("created_at", { ascending: false }).limit(PENDING_GATES_LIMIT),
     supabase.from("deals").select("*").is("archived_at", null).order("created_at", { ascending: false }).limit(30),
   ]);
 
@@ -270,34 +273,12 @@ export default async function DashboardPage() {
           className="pointer-events-none absolute inset-0 bg-[radial-gradient(55%_80%_at_92%_10%,rgba(56,189,248,0.10),transparent_70%)]"
         />
 
-        {/* Official program identity strip. */}
-        <div className="relative flex items-center justify-between gap-3 border-b border-line/60 px-5 py-2.5 sm:px-6">
-          <div className="flex min-w-0 items-center gap-2.5">
-            <Logo as="span" variant="coin" />
-            <span className="truncate font-mono text-[11px] uppercase tracking-[0.16em] text-gold-300">FundExecs OS</span>
-            <span aria-hidden className="text-fg-muted/50">/</span>
-            <span className="truncate font-mono text-[11px] uppercase tracking-[0.16em] text-fg-secondary">Dashboard</span>
-          </div>
-          <span className="flex shrink-0 items-center gap-1.5 rounded-full border border-status-success/30 bg-status-success/10 px-2.5 py-1 font-mono text-[11px] uppercase tracking-wider text-status-success">
-            <span className="relative flex h-1.5 w-1.5">
-              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-status-success opacity-60" />
-              <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-status-success" />
-            </span>
-            <span className="hidden sm:inline">Systems operational</span>
-            <span className="sm:hidden">Live</span>
-          </span>
-        </div>
-
         {/* Program masthead. */}
         <div className="relative flex flex-col gap-5 p-5 sm:p-6 lg:flex-row lg:items-end lg:justify-between">
           <div className="relative">
             <h1 className="font-display text-3xl font-bold tracking-tight text-fg-primary sm:text-4xl">
               Private Markets Command Center
             </h1>
-            <p className="mt-2 max-w-2xl text-sm leading-6 text-fg-secondary">
-              The institutional dashboard for the program — every live system of record and
-              all activity across capital, deals, portfolio, and operations in one governed view.
-            </p>
           </div>
           <div className="relative flex shrink-0 flex-wrap items-center gap-2">
             <Link
@@ -310,6 +291,15 @@ export default async function DashboardPage() {
           </div>
         </div>
       </header>
+
+      <NeedsYouStrip
+        approvals={pendingGates.length}
+        approvalsCapped={pendingGates.length >= PENDING_GATES_LIMIT}
+        staleDeals={{ count: staleDeals.length, oldestDays: staleDeals[0]?.daysStale ?? 0 }}
+        readinessNext={
+          readiness.nextAction ? { label: readiness.nextAction.label, href: readiness.nextAction.href } : null
+        }
+      />
 
       {/* Headline instrument row — the program's vital metrics. */}
       <section className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
