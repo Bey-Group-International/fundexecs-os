@@ -57,7 +57,7 @@ export function AppShell({
         <CommandPaletteTrigger />
       </div>
       <RecentsStrip />
-      <DashboardHUD data={data} />
+      <DashboardHUD data={data} showApprovals={pathname !== "/dashboard"} />
       <PWAInstallPrompt />
       {children}
     </div>
