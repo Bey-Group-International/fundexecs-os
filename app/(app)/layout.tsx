@@ -122,7 +122,7 @@ export default async function AppLayout({
       getApprovalsCount(ctx.orgId),
       supabase
         .from("organizations")
-        .select("setup_hidden")
+        .select("setup_hidden, name")
         .eq("id", ctx.orgId)
         .maybeSingle(),
       // Market Pulse findings nobody has triaged yet — the rail badge.
@@ -213,6 +213,7 @@ export default async function AppLayout({
       <div className="contents print:hidden">
       <AppSidebar
         name={name}
+        orgName={orgRow?.name?.trim() || undefined}
         planName={planName}
         hubs={hubs}
         sessions={sessions}
