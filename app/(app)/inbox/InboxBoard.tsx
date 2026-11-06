@@ -451,8 +451,11 @@ export function InboxBoard({ cards, teammates }: { cards: InboxCardData[]; teamm
 
       {/* Split view: rows on the left, the open thread on the right. On a phone
           the open thread takes the whole screen and Back returns to the list. */}
-      <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)]">
-        <div className={openCard ? "hidden lg:block" : ""}>
+      {/* `grid-cols-1` gives a phone one shrinkable column. Without it the column
+          sized itself to the longest unwrapped subject, and a long one pushed the
+          whole list (and every row's timestamp) past the edge of the screen. */}
+      <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)]">
+        <div className={openCard ? "hidden min-w-0 lg:block" : "min-w-0"}>
           {active.length === 0 ? (
             <p className="px-1 py-6 text-sm text-fg-muted">
               {tab === "focused" && filter === "all" && tabCounts.other > 0 ? (
@@ -613,13 +616,17 @@ const ThreadRow = memo(function ThreadRow({
         open ? "bg-gold-500/10" : selected ? "bg-gold-500/5" : unread ? "bg-surface-1" : "hover:bg-surface-2/60"
       }`}
     >
-      <input
-        type="checkbox"
-        checked={selected}
-        onChange={() => onToggleSelect(card.id)}
-        aria-label={`Select thread: ${card.subject}`}
-        className="h-3.5 w-3.5 shrink-0 cursor-pointer accent-gold-500"
-      />
+      {/* The box is 16px but the label around it is a ~32px tap target; the
+          negative margin cancels the padding so the row keeps its height. */}
+      <label className="-m-2 flex shrink-0 cursor-pointer items-center p-2">
+        <input
+          type="checkbox"
+          checked={selected}
+          onChange={() => onToggleSelect(card.id)}
+          aria-label={`Select thread: ${card.subject}`}
+          className="h-4 w-4 cursor-pointer accent-gold-500"
+        />
+      </label>
       <button
         type="button"
         onClick={toggleStar}
@@ -627,7 +634,7 @@ const ThreadRow = memo(function ThreadRow({
         aria-pressed={starred}
         aria-label={starred ? "Unstar thread" : "Star thread"}
         title={starred ? "Starred — click to unstar" : "Star this thread"}
-        className={`shrink-0 text-sm leading-none transition disabled:opacity-50 ${
+        className={`-m-2 shrink-0 p-2 text-base leading-none transition disabled:opacity-50 ${
           starred ? "text-gold-300" : "text-fg-muted hover:text-gold-300"
         }`}
       >
@@ -790,7 +797,7 @@ function ThreadPane({
       </div>
 
       <h2 className="text-lg font-semibold leading-snug text-fg-primary">{card.subject}</h2>
-      <p className="mt-0.5 font-mono text-[11px] uppercase tracking-wider text-fg-muted">
+      <p className="mt-0.5 text-xs text-fg-muted">
         <span aria-hidden>{card.channelIcon}</span> {card.counterparty} · {card.channelLabel}
         {card.intent ? ` · ${card.intent}` : ""}
       </p>
@@ -841,7 +848,7 @@ function ThreadPane({
         ) : null}
         {/* Assignee picker — route the thread to a teammate. */}
         <label className="ml-auto inline-flex items-center gap-1 text-fg-muted">
-          <span className="font-mono text-[11px] uppercase tracking-wider">Owner</span>
+          <span className="text-xs">Owner</span>
           <select
             value={card.assignee?.id ?? ""}
             disabled={assigning}
