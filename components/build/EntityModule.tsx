@@ -95,7 +95,7 @@ export async function EntityModule() {
         <FormationWizard parents={entities.map((e) => ({ id: e.id, name: e.name }))} />
       </div>
 
-      <form action={createEntity} className="mb-6 grid gap-3 rounded-xl border border-line bg-surface-1 p-4 sm:grid-cols-2">
+      <form action={createEntity} className="mb-6 grid grid-cols-1 gap-3 rounded-xl border border-line bg-surface-1 p-4 sm:grid-cols-2">
         <input name="name" placeholder="Entity name" className={`${inputClass} sm:col-span-2`} />
         <select name="entity_type" defaultValue="spv" className={inputClass}>
           {ENTITY_TYPES.map((t) => (
@@ -179,7 +179,7 @@ export async function EntityModule() {
                     </div>
                     <form action={deleteEntity}>
                       <input type="hidden" name="id" value={e.id} />
-                      <button className="rounded-md border border-line px-2 py-1 text-xs text-fg-muted transition hover:border-red-500/40 hover:text-red-400">
+                      <button className="fx-mini-btn fx-mini-btn-danger">
                         ✕
                       </button>
                     </form>

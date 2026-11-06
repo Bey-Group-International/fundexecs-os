@@ -334,12 +334,21 @@ export function EntityOwnership({
       ) : null}
 
       {/* Cap table */}
-      <div className="overflow-hidden rounded-xl border border-line">
-        <table className="w-full text-sm">
+      {/* Scrolls sideways on a phone instead of clipping the figures; the holder
+          column stays pinned so each row keeps its name in view. */}
+      <div className="overflow-x-auto rounded-xl border border-line">
+        <table className="w-full min-w-[36rem] text-sm">
           <thead>
             <tr className="border-b border-line bg-surface-2 text-left">
-              {["Holder", "Class", "Units", "Own %", "Invested", ""].map((h) => (
-                <th key={h} className="px-3 py-2 font-mono text-[11px] uppercase tracking-wider text-fg-muted">{h}</th>
+              {["Holder", "Class", "Units", "Own %", "Invested", ""].map((h, i) => (
+                <th
+                  key={h || "actions"}
+                  className={`px-3 py-2 text-xs font-medium text-fg-muted ${
+                    i === 0 ? "bg-surface-2 max-sm:sticky max-sm:left-0 max-sm:z-10" : ""
+                  }`}
+                >
+                  {h}
+                </th>
               ))}
             </tr>
           </thead>
@@ -359,7 +368,7 @@ export function EntityOwnership({
                     className="border-b border-line/60 bg-surface-1"
                     onKeyDown={editing ? onEditKeyDown : undefined}
                   >
-                    <td className="px-3 py-2">
+                    <td className="bg-surface-1 px-3 py-2 max-sm:sticky max-sm:left-0 max-sm:z-10">
                       <span className="inline-flex items-center gap-1.5">
                         <span className="h-2 w-2 rounded-full" style={{ backgroundColor: BAR_COLORS[i % BAR_COLORS.length] }} />
                         <span className="text-fg-primary">{r.name}</span>
@@ -416,7 +425,7 @@ export function EntityOwnership({
                               type="button"
                               onClick={saveEdit}
                               disabled={savingId}
-                              className="rounded border border-emerald-500/40 px-1.5 py-0.5 text-xs text-emerald-300 transition hover:bg-emerald-500/10 disabled:opacity-60"
+                              className="fx-mini-btn fx-mini-btn-primary"
                               aria-label="Save holding"
                             >
                               {savingId ? "…" : "Save"}
@@ -425,7 +434,7 @@ export function EntityOwnership({
                               type="button"
                               onClick={cancelEdit}
                               disabled={savingId}
-                              className="rounded border border-line px-1.5 py-0.5 text-xs text-fg-muted transition hover:text-fg-primary disabled:opacity-60"
+                              className="fx-mini-btn"
                               aria-label="Cancel edit"
                             >
                               ✕
@@ -444,7 +453,7 @@ export function EntityOwnership({
                             <button
                               type="button"
                               onClick={() => startEdit(r.holdingId)}
-                              className="rounded border border-line px-1.5 py-0.5 text-xs text-fg-muted transition hover:border-gold-500/40 hover:text-gold-300"
+                              className="fx-mini-btn"
                               aria-label={`Edit ${r.name}`}
                             >
                               Edit
@@ -456,7 +465,7 @@ export function EntityOwnership({
                               }}
                             >
                               <input type="hidden" name="id" value={r.holdingId} />
-                              <button className="rounded border border-line px-1.5 py-0.5 text-xs text-fg-muted transition hover:border-red-500/40 hover:text-red-400" aria-label={`Delete ${r.name}`}>✕</button>
+                              <button className="fx-mini-btn fx-mini-btn-danger" aria-label={`Delete ${r.name}`}>✕</button>
                             </form>
                           </div>
                         </td>

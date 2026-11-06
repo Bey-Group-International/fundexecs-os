@@ -35,7 +35,7 @@ export function DocumentsTabs({
       onClick={() => setTab(t)}
       title={hint}
       aria-current={tab === t}
-      className={`rounded-lg px-3.5 py-1.5 font-mono text-[11px] uppercase tracking-wider transition ${
+      className={`min-h-9 rounded-lg px-4 text-sm font-medium transition ${
         tab === t
           ? "bg-gold-400 text-on-gold"
           : "border border-line text-fg-secondary hover:text-fg-primary"

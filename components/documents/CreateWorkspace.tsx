@@ -105,7 +105,7 @@ export function CreateWorkspace({ materials, groups, missingCount, usedTemplateS
                         type="submit"
                         disabled={pending}
                         title={`Start ${m.name} from a template`}
-                        className="rounded-lg border border-gold-500/40 bg-gold-500/10 px-3 py-1.5 font-mono text-[11px] uppercase tracking-wider text-gold-300 transition hover:bg-gold-500/20 disabled:opacity-50"
+                        className="rounded-lg border border-gold-500/40 bg-gold-500/10 px-3 min-h-9 text-xs font-medium text-gold-300 transition hover:bg-gold-500/20 disabled:opacity-50"
                       >
                         Template
                       </button>
@@ -127,7 +127,7 @@ export function CreateWorkspace({ materials, groups, missingCount, usedTemplateS
                       type="submit"
                       disabled={pending}
                       title={`Start ${m.name} from a blank page`}
-                      className="rounded-lg border border-line px-3 py-1.5 font-mono text-[11px] uppercase tracking-wider text-fg-secondary transition hover:border-gold-500/40 hover:text-gold-300 disabled:opacity-50"
+                      className="rounded-lg border border-line px-3 min-h-9 text-xs font-medium text-fg-secondary transition hover:border-gold-500/40 hover:text-gold-300 disabled:opacity-50"
                     >
                       Blank
                     </button>
@@ -188,7 +188,7 @@ export function CreateWorkspace({ materials, groups, missingCount, usedTemplateS
                         <button
                           type="submit"
                           disabled={pending}
-                          className="rounded-lg border border-gold-500/40 bg-gold-500/10 px-3 py-1.5 font-mono text-[11px] uppercase tracking-wider text-gold-300 transition hover:bg-gold-500/20 disabled:opacity-50"
+                          className="rounded-lg border border-gold-500/40 bg-gold-500/10 px-3 min-h-9 text-xs font-medium text-gold-300 transition hover:bg-gold-500/20 disabled:opacity-50"
                         >
                           {pending ? "…" : "Use template"}
                         </button>
@@ -197,7 +197,7 @@ export function CreateWorkspace({ materials, groups, missingCount, usedTemplateS
                         type="button"
                         onClick={() => setPreview(preview === t.id ? null : t.id)}
                         aria-expanded={preview === t.id}
-                        className="rounded-lg border border-line px-3 py-1.5 font-mono text-[11px] uppercase tracking-wider text-fg-muted transition hover:text-fg-primary"
+                        className="rounded-lg border border-line px-3 min-h-9 text-xs font-medium text-fg-muted transition hover:text-fg-primary"
                       >
                         {preview === t.id ? "Hide" : "Preview"}
                       </button>
@@ -273,7 +273,7 @@ export function CreateWorkspace({ materials, groups, missingCount, usedTemplateS
               <button
                 type="button"
                 onClick={() => setBlankOpen(true)}
-                className="self-start rounded-lg border border-gold-500/40 bg-gold-500/10 px-3 py-1.5 font-mono text-[11px] uppercase tracking-wider text-gold-300 transition hover:bg-gold-500/20"
+                className="self-start rounded-lg border border-gold-500/40 bg-gold-500/10 px-3 min-h-9 text-xs font-medium text-gold-300 transition hover:bg-gold-500/20"
               >
                 + Blank document
               </button>

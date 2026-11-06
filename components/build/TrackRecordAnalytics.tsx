@@ -223,7 +223,7 @@ export function SortableTrackRecordList({
   return (
     <div>
       <div className="mb-2 flex flex-wrap items-center gap-2 text-xs">
-        <span className="font-mono text-[11px] uppercase tracking-wider text-fg-muted">Sort by</span>
+        <span className="text-xs text-fg-muted">Sort by</span>
         {SORT_OPTIONS.map((o) => {
           const active = o.key === key;
           return (
@@ -237,10 +237,8 @@ export function SortableTrackRecordList({
                   setDesc(true);
                 }
               }}
-              className={`rounded-md border px-2 py-0.5 transition ${
-                active
-                  ? "border-gold-400 bg-surface-2 text-fg-primary"
-                  : "border-line text-fg-muted hover:text-fg-secondary"
+              className={`fx-mini-btn ${
+                active ? "border-gold-400 bg-surface-2 text-fg-primary" : ""
               }`}
               aria-pressed={active}
             >
@@ -251,12 +249,19 @@ export function SortableTrackRecordList({
         })}
       </div>
 
-      <div className="overflow-hidden rounded-xl border border-line">
-        <table className="w-full text-sm">
+      {/* Scrolls sideways on a phone rather than clipping its figures; the deal
+          name column stays pinned (see TrackRecordCells). */}
+      <div className="overflow-x-auto rounded-xl border border-line">
+        <table className="w-full min-w-[36rem] text-sm">
           <thead>
             <tr className="border-b border-line bg-surface-2 text-left">
-              {["Deal", "Class", "Vintage", "Invested", "IRR", "MOIC", ""].map((h) => (
-                <th key={h} className="px-3 py-2 font-mono text-[11px] uppercase tracking-wider text-fg-muted">
+              {["Deal", "Class", "Vintage", "Invested", "IRR", "MOIC", ""].map((h, i) => (
+                <th
+                  key={h || "actions"}
+                  className={`px-3 py-2 text-xs font-medium text-fg-muted ${
+                    i === 0 ? "bg-surface-2 max-sm:sticky max-sm:left-0 max-sm:z-10" : ""
+                  }`}
+                >
                   {h}
                 </th>
               ))}

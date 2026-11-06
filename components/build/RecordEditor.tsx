@@ -29,7 +29,7 @@ export function RecordEditor({
         <button
           type="button"
           onClick={() => setEditing(true)}
-          className="rounded-md border border-line px-2 py-1 text-xs text-fg-muted transition hover:border-gold-500/40 hover:text-gold-300"
+          className="fx-mini-btn"
         >
           Edit
         </button>
@@ -45,20 +45,20 @@ export function RecordEditor({
       }}
       className={
         layout === "grid"
-          ? "grid gap-3 sm:grid-cols-2"
+          ? "grid grid-cols-1 gap-3 sm:grid-cols-2"
           : "flex flex-col gap-3"
       }
     >
       <input type="hidden" name="id" value={id} />
       {children}
       <div className="flex gap-2 sm:col-span-2">
-        <button className="rounded-md bg-gold-400 px-3 py-1.5 text-xs font-medium text-on-gold transition hover:bg-gold-300">
+        <button className="fx-mini-btn fx-mini-btn-primary">
           Save
         </button>
         <button
           type="button"
           onClick={() => setEditing(false)}
-          className="rounded-md border border-line px-3 py-1.5 text-xs text-fg-secondary transition hover:text-fg-primary"
+          className="fx-mini-btn"
         >
           Cancel
         </button>
@@ -100,7 +100,7 @@ export function TableRecordEditor({
             <button
               type="button"
               onClick={() => setEditing(true)}
-              className="rounded-md border border-line px-1.5 py-0.5 text-xs text-fg-muted transition hover:border-gold-500/40 hover:text-gold-300"
+              className="fx-mini-btn"
             >
               Edit
             </button>
@@ -119,18 +119,18 @@ export function TableRecordEditor({
             await action(formData);
             setEditing(false);
           }}
-          className="grid gap-3 sm:grid-cols-2"
+          className="grid grid-cols-1 gap-3 sm:grid-cols-2"
         >
           <input type="hidden" name="id" value={id} />
           {children}
           <div className="flex gap-2 sm:col-span-2">
-            <button className="rounded-md bg-gold-400 px-3 py-1.5 text-xs font-medium text-on-gold transition hover:bg-gold-300">
+            <button className="fx-mini-btn fx-mini-btn-primary">
               Save
             </button>
             <button
               type="button"
               onClick={() => setEditing(false)}
-              className="rounded-md border border-line px-3 py-1.5 text-xs text-fg-secondary transition hover:text-fg-primary"
+              className="fx-mini-btn"
             >
               Cancel
             </button>

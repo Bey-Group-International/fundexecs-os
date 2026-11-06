@@ -128,6 +128,17 @@ body {
   .fx-action-link {
     @apply fx-focus inline-flex min-h-9 items-center gap-1 rounded-md px-1.5 text-sm font-medium text-gold-300 underline-offset-4 transition hover:underline;
   }
+  /* Small in-row buttons (Edit, Remove, Save, Cancel): readable sentence-case with
+     a 36px tap target, so a row of them can be hit with a thumb. */
+  .fx-mini-btn {
+    @apply fx-focus inline-flex min-h-9 items-center justify-center rounded-md border border-line px-3 text-xs font-medium text-fg-muted transition hover:border-gold-500/40 hover:text-gold-300 disabled:opacity-50;
+  }
+  .fx-mini-btn-danger {
+    @apply hover:border-red-500/40 hover:text-red-400;
+  }
+  .fx-mini-btn-primary {
+    @apply border-gold-400 bg-gold-400 text-on-gold hover:border-gold-300 hover:bg-gold-300 hover:text-on-gold;
+  }
   /* Glass panel — for the hero/anchor surfaces that should feel set back behind
      a pane of frosted glass. */
   .fx-glass {

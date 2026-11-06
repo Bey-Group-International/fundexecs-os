@@ -104,13 +104,13 @@ export function DocumentReviewWorkspace({
             href={`/api/documents/${doc.id}/file`}
             target="_blank"
             rel="noopener noreferrer"
-            className="rounded-lg border border-line px-2.5 py-1 font-mono text-[11px] uppercase tracking-wider text-fg-muted transition hover:border-gold-500/40 hover:text-gold-300"
+            className="rounded-lg border border-line px-2.5 inline-flex min-h-9 items-center text-xs font-medium text-fg-muted transition hover:border-gold-500/40 hover:text-gold-300"
           >
             Open in new tab
           </a>
           <a
             href={`/api/documents/${doc.id}/file?download=1`}
-            className="rounded-lg border border-line px-2.5 py-1 font-mono text-[11px] uppercase tracking-wider text-fg-muted transition hover:border-gold-500/40 hover:text-gold-300"
+            className="rounded-lg border border-line px-2.5 inline-flex min-h-9 items-center text-xs font-medium text-fg-muted transition hover:border-gold-500/40 hover:text-gold-300"
           >
             Download
           </a>

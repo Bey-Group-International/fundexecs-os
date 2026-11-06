@@ -167,7 +167,7 @@ export function RoomPreview({ roomId, shares, active, focusDocumentId = null, fo
                 type="button"
                 aria-pressed={width === w}
                 onClick={() => setWidth(w)}
-                className={`px-2.5 py-1.5 font-mono text-[11px] uppercase tracking-wider transition ${
+                className={`px-2.5 min-h-9 text-xs font-medium transition ${
                   width === w ? "bg-surface-0 text-fg-primary" : "text-fg-muted hover:text-fg-primary"
                 }`}
               >
@@ -179,7 +179,7 @@ export function RoomPreview({ roomId, shares, active, focusDocumentId = null, fo
             type="button"
             aria-pressed={fullscreen}
             onClick={() => setFullscreen((v) => !v)}
-            className="rounded-md border border-line px-2.5 py-1.5 font-mono text-[11px] uppercase tracking-wider text-fg-muted transition hover:text-fg-primary"
+            className="rounded-md border border-line px-2.5 min-h-9 text-xs font-medium text-fg-muted transition hover:text-fg-primary"
           >
             {fullscreen ? "Exit full screen" : "Full screen"}
           </button>

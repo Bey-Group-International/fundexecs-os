@@ -7,16 +7,7 @@ import { createTrackRecord, deleteTrackRecord } from "./actions";
 import { updateTrackRecord } from "./edit-actions";
 import { TableRecordEditor, EditInput } from "./RecordEditor";
 import { TrackRecordAnalytics, SortableTrackRecordList } from "./TrackRecordAnalytics";
-
-function compactUsd(n: number | null): string | null {
-  if (!n || n <= 0) return null;
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-    notation: "compact",
-    maximumFractionDigits: 1,
-  }).format(n);
-}
+import { TrackRecordCells } from "./TrackRecordRow";
 
 export async function TrackRecordModule() {
   const ctx = await getSessionContext();
@@ -40,21 +31,12 @@ export async function TrackRecordModule() {
         actions={
           <form action={deleteTrackRecord}>
             <input type="hidden" name="id" value={r.id} />
-            <button className="rounded-md border border-line px-1.5 py-0.5 text-xs text-fg-muted transition hover:border-red-500/40 hover:text-red-400">
+            <button className="fx-mini-btn fx-mini-btn-danger" aria-label={`Delete ${r.deal_name}`}>
               ✕
             </button>
           </form>
         }
-        display={
-          <>
-            <td className="px-3 py-2 text-fg-primary">{r.deal_name}</td>
-            <td className="px-3 py-2">{r.asset_class ?? "—"}</td>
-            <td className="px-3 py-2">{r.vintage_year ?? "—"}</td>
-            <td className="px-3 py-2">{compactUsd(r.invested_amount) ?? "—"}</td>
-            <td className="px-3 py-2">{r.gross_irr != null ? `${r.gross_irr}%` : "—"}</td>
-            <td className="px-3 py-2">{r.gross_moic != null ? `${r.gross_moic}x` : "—"}</td>
-          </>
-        }
+        display={<TrackRecordCells r={r} />}
       >
         <EditInput name="deal_name" defaultValue={r.deal_name} placeholder="Deal name" className="sm:col-span-2" />
         <EditInput name="asset_class" defaultValue={r.asset_class ?? ""} placeholder="Asset class" />
@@ -79,7 +61,7 @@ export async function TrackRecordModule() {
         module="track_record"
       />
 
-      <form action={createTrackRecord} className="mb-6 grid gap-3 rounded-xl border border-line bg-surface-1 p-4 sm:grid-cols-2">
+      <form action={createTrackRecord} className="mb-6 grid grid-cols-1 gap-3 rounded-xl border border-line bg-surface-1 p-4 sm:grid-cols-2">
         <input name="deal_name" placeholder="Deal name" className={`${inputClass} sm:col-span-2`} />
         <input name="asset_class" placeholder="Asset class" className={inputClass} />
         <input name="vintage_year" type="number" placeholder="Vintage year" className={inputClass} />
@@ -91,7 +73,7 @@ export async function TrackRecordModule() {
           <input type="checkbox" name="is_realized" className="h-3.5 w-3.5 accent-gold-500" />
           Realized
         </label>
-        <button className="justify-self-start rounded-md bg-gold-400 px-4 py-2 text-sm font-medium text-on-gold transition hover:bg-gold-300 sm:col-span-2">
+        <button className="fx-btn-primary justify-self-start sm:col-span-2">
           Add record
         </button>
       </form>
