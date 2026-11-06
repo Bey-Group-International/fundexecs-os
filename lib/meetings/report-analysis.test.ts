@@ -194,3 +194,16 @@ describe("the meeting chat in the prompt", () => {
     expect(reportPrompt({ title: "M", participants: [], transcript: "Ana: hi" })).not.toContain("MEETING CHAT");
   });
 });
+
+describe("the meeting brief in the prompt", () => {
+  it("tells the model what the meeting was set up to do, ahead of the transcript", () => {
+    const prompt = reportPrompt({ title: "M", participants: [], transcript: "Ana: hi", brief: "Objective: Agree the side letter" });
+    expect(prompt).toContain("MEETING BRIEF");
+    expect(prompt).toContain("Objective: Agree the side letter");
+    expect(prompt.indexOf("MEETING BRIEF")).toBeLessThan(prompt.indexOf("FULL TRANSCRIPT"));
+  });
+
+  it("leaves the section out when there is no brief", () => {
+    expect(reportPrompt({ title: "M", participants: [], transcript: "Ana: hi", brief: "  " })).not.toContain("MEETING BRIEF");
+  });
+});

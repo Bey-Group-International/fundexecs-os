@@ -17,8 +17,17 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false },
 };
 
-export default async function ManageBookingPage({ params }: { params: Promise<{ token: string }> }) {
+export default async function ManageBookingPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ token: string }>;
+  searchParams?: Promise<Record<string, string | string[] | undefined>>;
+}) {
   const { token } = await params;
+  const query = (await searchParams) ?? {};
+  // `?reschedule=1`: the "pick a new time" links open the picker directly.
+  const initialMode = query.reschedule ? ("reschedule" as const) : undefined;
 
   // The booking, read here rather than by the browser after it hydrates. This
   // page holds the token, so the request the client used to make was one the
@@ -42,7 +51,12 @@ export default async function ManageBookingPage({ params }: { params: Promise<{ 
     <div className="fx-blueprint min-h-screen bg-surface-0 px-4 py-12">
       <div className="mx-auto flex w-full max-w-2xl flex-col gap-8">
         <Logo />
-        <ManageBooking token={token} initialView={initialView} serverNowIso={new Date().toISOString()} />
+        <ManageBooking
+          token={token}
+          initialView={initialView}
+          serverNowIso={new Date().toISOString()}
+          initialMode={initialMode}
+        />
       </div>
     </div>
   );

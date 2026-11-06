@@ -4,6 +4,7 @@ import { createServerClient } from "@/lib/supabase/server";
 import { requireOrgContext } from "@/lib/auth";
 import { normalizeSlug } from "@/lib/meetings/scheduling";
 import { serializeEventType } from "@/lib/meetings/scheduling-service";
+import { normalizeIntakeQuestions } from "@/lib/meetings/intake";
 import type { SchedulingEventType } from "@/lib/supabase/database.types";
 
 export const runtime = "nodejs";
@@ -18,6 +19,7 @@ interface PatchBody {
   requiresApproval?: boolean;
   isActive?: boolean;
   sortOrder?: number;
+  intakeQuestions?: unknown;
 }
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -50,6 +52,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     if (body.requiresApproval !== undefined) update.requires_approval = body.requiresApproval === true;
     if (body.isActive !== undefined) update.is_active = body.isActive === true;
     if (body.sortOrder !== undefined) update.sort_order = Math.max(0, Math.trunc(body.sortOrder));
+    if (body.intakeQuestions !== undefined) update.intake_questions = normalizeIntakeQuestions(body.intakeQuestions);
 
     const supabase = await createServerClient();
     const { data, error } = await supabase
@@ -63,6 +66,14 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       // The only unique index here is (page_id, slug).
       if (error.code === "23505") {
         return NextResponse.json({ error: "You already have a meeting type with that link ending." }, { status: 409 });
+      }
+      // The questions' column arrives with a migration that can land after
+      // this code: say so plainly rather than as a database error.
+      if ("intake_questions" in update && (error.code === "42703" || error.code === "PGRST204")) {
+        return NextResponse.json(
+          { error: "Booking questions aren't available yet — try again in a few minutes." },
+          { status: 503 },
+        );
       }
       throw new Error(error.message);
     }

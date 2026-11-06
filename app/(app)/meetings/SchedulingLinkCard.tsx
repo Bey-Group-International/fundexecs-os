@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { BOOKING_REASON_MAX, detectTimezone, formatSlotFull } from "@/lib/meetings/scheduling";
 import type { HostBooking, HostEventType, HostSchedulingPage, SchedulingSnapshot } from "./scheduling-types";
+import { bookingsByDay, nextBookingLabel } from "@/lib/meetings/booking-days";
 import nextDynamic from "next/dynamic";
 
 // Loaded when the settings panel opens, not with the landing page: most visits
@@ -286,6 +287,11 @@ export function SchedulingLinkCard({
   const pending = snapshot.bookings.filter((b) => b.status === "pending");
   const confirmed = snapshot.bookings.filter((b) => b.status === "confirmed");
   const activeTypes = snapshot.eventTypes.filter((t) => t.isActive);
+  const nowDate = new Date();
+  const nextConfirmed = nextBookingLabel(confirmed, viewerTimezone, nowDate);
+  // Soonest first before the first five are taken, so "five" is the next five.
+  const soonest = [...confirmed].sort((a, b) => new Date(a.startsAt).getTime() - new Date(b.startsAt).getTime());
+  const shownConfirmed = bookingsByDay(showAllConfirmed ? soonest : soonest.slice(0, 5), viewerTimezone, nowDate);
 
   const Shell = inline ? "div" : "section";
   const btn = inline ? "min-h-11 px-3 text-sm sm:min-h-10" : "px-3 py-1.5 text-xs";
@@ -380,6 +386,7 @@ export function SchedulingLinkCard({
             className="fx-focus mt-2 rounded text-xs text-fg-muted underline-offset-2 transition-colors hover:text-fg-primary hover:underline"
           >
             {confirmed.length} booked through your link
+            {nextConfirmed ? <span className="text-fg-secondary"> · next {nextConfirmed}</span> : null}
           </button>
         ) : null}
 
@@ -397,10 +404,9 @@ export function SchedulingLinkCard({
                   <span className="text-xs text-fg-muted">
                     {formatSlotFull(booking.startsAt, viewerTimezone)}
                   </span>
+                  <InviteeEmail email={booking.inviteeEmail} />
                   <GuestLine guests={booking.inviteeGuests} />
-                  {booking.inviteeNotes ? (
-                    <span className="mt-1 text-xs text-fg-secondary">&ldquo;{booking.inviteeNotes}&rdquo;</span>
-                  ) : null}
+                  <BookingNotes notes={booking.inviteeNotes} />
                 </div>
                 {confirming?.id === booking.id ? (
                   <ConfirmRow
@@ -450,7 +456,11 @@ export function SchedulingLinkCard({
 
         {openList === "confirmed" ? (
           <ul className="mt-2 flex flex-col gap-2">
-            {(showAllConfirmed ? confirmed : confirmed.slice(0, 5)).map((booking) => (
+            {shownConfirmed.map((day) => [
+              <li key={`day-${day.label}`} className="mt-1 text-[11px] font-semibold uppercase tracking-wide text-fg-muted first:mt-0">
+                {day.label}
+              </li>,
+              ...day.bookings.map((booking) => (
               <li
                 key={booking.id}
                 className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-line bg-surface-0 px-3 py-2.5"
@@ -462,7 +472,9 @@ export function SchedulingLinkCard({
                   <span className="text-xs text-fg-muted">
                     {formatSlotFull(booking.startsAt, viewerTimezone)}
                   </span>
+                  <InviteeEmail email={booking.inviteeEmail} />
                   <GuestLine guests={booking.inviteeGuests} />
+                  <BookingNotes notes={booking.inviteeNotes} />
                 </div>
                 {confirming?.id === booking.id ? (
                   <ConfirmRow
@@ -498,7 +510,8 @@ export function SchedulingLinkCard({
                   )
                 )}
               </li>
-            ))}
+              )),
+            ])}
             {confirmed.length > 5 ? (
               <li>
                 <button
@@ -583,6 +596,38 @@ function LinkIcon() {
 
 
 /** Who else the invitee is bringing, when anyone. */
+/** Who booked, as a link that starts an email to them. */
+function InviteeEmail({ email }: { email?: string }) {
+  if (!email) return null;
+  return (
+    <a href={`mailto:${email}`} className="mt-0.5 w-fit truncate text-xs text-fg-muted underline-offset-2 hover:text-fg-primary hover:underline">
+      {email}
+    </a>
+  );
+}
+
+/**
+ * What they wrote when booking: the answers to the meeting type's questions,
+ * a line each, then their note. Kept to its lines rather than run together,
+ * and clamped until the host asks for the rest.
+ */
+function BookingNotes({ notes }: { notes: string | null }) {
+  const [open, setOpen] = useState(false);
+  const text = (notes ?? "").trim();
+  if (!text) return null;
+  const long = text.split("\n").length > 3 || text.length > 180;
+  return (
+    <span className="mt-1 flex flex-col items-start gap-0.5">
+      <span className={`whitespace-pre-line text-xs text-fg-secondary ${long && !open ? "line-clamp-3" : ""}`}>{text}</span>
+      {long ? (
+        <button type="button" onClick={() => setOpen((v) => !v)} className="text-[11px] text-fg-muted hover:text-fg-primary">
+          {open ? "Show less" : "Show all"}
+        </button>
+      ) : null}
+    </span>
+  );
+}
+
 function GuestLine({ guests }: { guests?: string[] }) {
   if (!guests || guests.length === 0) return null;
   return (

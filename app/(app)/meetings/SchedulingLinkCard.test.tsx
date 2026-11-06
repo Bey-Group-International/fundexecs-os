@@ -172,3 +172,27 @@ describe("in the lobby's toolbar", () => {
     await waitFor(() => expect(container.textContent).toBe(""));
   });
 });
+
+describe("reading the bookings", () => {
+  it("lists them under their day, soonest first, and says when the next one is", async () => {
+    serve([
+      booking({ id: "late", inviteeName: "Later", startsAt: "2099-10-07T09:00:00.000Z" }),
+      booking({ id: "soon", inviteeName: "Sooner", startsAt: "2099-10-05T14:00:00.000Z" }),
+    ]);
+    render(<SchedulingLinkCard />);
+    const toggle = await screen.findByRole("button", { name: /2 booked through your link/i });
+    expect(toggle.textContent).toMatch(/next .*October 5 2:00 PM/);
+    fireEvent.click(toggle);
+    const text = document.body.textContent ?? "";
+    expect(text.indexOf("Sooner")).toBeLessThan(text.indexOf("Later"));
+    expect(screen.getByText(/^Wednesday, October 7$/)).toBeTruthy();
+  });
+
+  it("shows the booker's answers a line each, and a link to email them", async () => {
+    serve([booking({ inviteeNotes: "Which fund? Fund II\nCompany: Acme" })]);
+    render(<SchedulingLinkCard />);
+    fireEvent.click(await screen.findByRole("button", { name: /1 booked through your link/i }));
+    expect(screen.getByText(/Which fund\? Fund II\s+Company: Acme/)).toBeTruthy();
+    expect(screen.getByRole("link", { name: "ada@example.com" }).getAttribute("href")).toBe("mailto:ada@example.com");
+  });
+});

@@ -78,3 +78,55 @@ it("still draws when the zone is one this runtime has never heard of", () => {
   render(<SlotPicker slots={[slot(MON)]} timezone="Mars/Olympus_Mons" selected={null} onSelect={() => {}} />);
   expect(screen.getAllByRole("tab")[0].textContent).toContain("Mon");
 });
+
+describe("finding a time faster", () => {
+  it("offers the way back to the first open time once another day is open", () => {
+    const picked: string[] = [];
+    render(
+      <SlotPicker
+        slots={[slot(TUE), slot(MON)]}
+        timezone="UTC"
+        selected={null}
+        onSelect={(s) => picked.push(s)}
+      />,
+    );
+    // On the first day the first time is already the first button.
+    expect(screen.queryByRole("button", { name: /first open time/i })).toBeNull();
+    fireEvent.click(screen.getAllByRole("tab")[1]);
+    fireEvent.click(screen.getByRole("button", { name: /first open time/i }));
+    expect(picked).toEqual([MON]);
+    expect(screen.getAllByRole("tab")[0].getAttribute("aria-selected")).toBe("true");
+  });
+
+  it("splits a long day into morning, afternoon and evening by the viewer's clock", () => {
+    const hours = [9, 10, 11, 13, 14, 18];
+    render(
+      <SlotPicker
+        slots={hours.map((h) => slot(`2026-10-05T${String(h).padStart(2, "0")}:00:00.000Z`))}
+        timezone="UTC"
+        selected={null}
+        onSelect={() => {}}
+      />,
+    );
+    expect(screen.getByText("Morning")).toBeTruthy();
+    expect(screen.getByText("Afternoon")).toBeTruthy();
+    expect(screen.getByText("Evening")).toBeTruthy();
+  });
+
+  it("leaves a short day as one list", () => {
+    render(<SlotPicker slots={[slot(MON), slot("2026-10-05T19:00:00.000Z")]} timezone="UTC" selected={null} onSelect={() => {}} />);
+    expect(screen.queryByText("Morning")).toBeNull();
+    expect(screen.queryByText("Evening")).toBeNull();
+  });
+
+  it("moves along the days with the arrow keys", () => {
+    render(<SlotPicker slots={[slot(MON), slot(TUE)]} timezone="UTC" selected={null} onSelect={() => {}} />);
+    const [mon, tue] = screen.getAllByRole("tab");
+    expect(mon.getAttribute("aria-selected")).toBe("true");
+    expect(tue.getAttribute("tabindex")).toBe("-1");
+    fireEvent.keyDown(mon, { key: "ArrowRight" });
+    expect(screen.getAllByRole("tab")[1].getAttribute("aria-selected")).toBe("true");
+    fireEvent.keyDown(screen.getAllByRole("tab")[1], { key: "Home" });
+    expect(screen.getAllByRole("tab")[0].getAttribute("aria-selected")).toBe("true");
+  });
+});

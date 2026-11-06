@@ -397,3 +397,51 @@ describe("POST /api/scheduling/[slug]/[eventSlug]/book", () => {
     expect(serviceClient).not.toHaveBeenCalled();
   });
 });
+
+describe("intake questions", () => {
+  const QUESTIONS = [
+    { id: "fund", label: "Which fund?", kind: "short", required: true },
+    { id: "role", label: "Role", kind: "choice", options: ["LP", "GP"] },
+  ];
+
+  it("refuses a booking that skips a required question, keyed to the question", async () => {
+    const { client, writes } = makeClient(tables({ scheduling_event_types: [eventType({ intake_questions: QUESTIONS })] }));
+    serviceClient.mockReturnValue(client);
+
+    const res = await POST(request({ startIso: nextSlotIso(), name: "Grace", email: "grace@x.com", answers: {} }), { params });
+
+    expect(res.status).toBe(422);
+    expect((await res.json()).fieldErrors).toEqual({ "intake.fund": "Please answer this." });
+    expect(writes.scheduling_bookings).toBeUndefined();
+  });
+
+  it("puts the answers in front of the notes, and so into the meeting's description", async () => {
+    const { client, writes } = makeClient(tables({ scheduling_event_types: [eventType({ intake_questions: QUESTIONS })] }));
+    serviceClient.mockReturnValue(client);
+
+    const res = await POST(
+      request({
+        startIso: nextSlotIso(),
+        name: "Grace",
+        email: "grace@x.com",
+        notes: "Looking forward",
+        answers: { fund: "Fund II", role: "lp" },
+      }),
+      { params },
+    );
+
+    expect(res.status).toBe(200);
+    expect(writes.scheduling_bookings[0].invitee_notes).toBe("Which fund? Fund II\nRole: LP\n\nLooking forward");
+    expect(String(writes.live_meetings[0].description)).toContain("Which fund? Fund II");
+  });
+
+  it("books as before for a meeting type with no questions, or a row from before they existed", async () => {
+    const { client, writes } = makeClient(tables());
+    serviceClient.mockReturnValue(client);
+
+    const res = await POST(request({ startIso: nextSlotIso(), name: "Grace", email: "grace@x.com", notes: "hi" }), { params });
+
+    expect(res.status).toBe(200);
+    expect(writes.scheduling_bookings[0].invitee_notes).toBe("hi");
+  });
+});

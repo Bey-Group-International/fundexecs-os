@@ -15,6 +15,7 @@ import {
   type BookingPrefill,
   type SlotWindow,
 } from "@/lib/meetings/scheduling";
+import { INTAKE_LONG_MAX, INTAKE_SHORT_MAX, type IntakeQuestion } from "@/lib/meetings/intake";
 
 interface PublicEventType {
   id: string;
@@ -23,6 +24,8 @@ interface PublicEventType {
   description: string | null;
   durationMinutes: number;
   requiresApproval: boolean;
+  /** What this meeting type asks the person booking it. */
+  intakeQuestions?: IntakeQuestion[];
 }
 
 interface BookedState {
@@ -67,6 +70,8 @@ export function BookingFlow({
   const [name, setName] = useState(prefill?.name ?? "");
   const [email, setEmail] = useState(prefill?.email ?? "");
   const [notes, setNotes] = useState("");
+  const [answers, setAnswers] = useState<Record<string, string>>({});
+  const questions = eventType.intakeQuestions ?? [];
   const [guests, setGuests] = useState("");
   const [showGuests, setShowGuests] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -159,7 +164,7 @@ export function BookingFlow({
       const res = await fetch(`/api/scheduling/${slug}/${eventType.slug}/book`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ startIso: selected, name, email, notes, timezone, guests }),
+        body: JSON.stringify({ startIso: selected, name, email, notes, timezone, guests, answers }),
       });
       const data = (await res.json()) as {
         error?: string;
@@ -241,12 +246,20 @@ export function BookingFlow({
             </a>
           ) : null}
           {booked.manageUrl ? (
-            <a
-              href={booked.manageUrl}
-              className="rounded-lg border border-[var(--line)] px-4 py-2 text-sm font-medium text-[var(--fg-secondary)] transition-colors hover:text-[var(--fg-primary)]"
-            >
-              Reschedule or cancel
-            </a>
+            <>
+              <a
+                href={withReschedule(booked.manageUrl)}
+                className="rounded-lg border border-[var(--line)] px-4 py-2 text-sm font-medium text-[var(--fg-secondary)] transition-colors hover:text-[var(--fg-primary)]"
+              >
+                Reschedule
+              </a>
+              <a
+                href={booked.manageUrl}
+                className="rounded-lg px-2 py-2 text-sm font-medium text-[var(--fg-muted)] transition-colors hover:text-[var(--fg-primary)]"
+              >
+                Cancel or view
+              </a>
+            </>
           ) : null}
         </div>
       </div>
@@ -321,7 +334,20 @@ export function BookingFlow({
             </button>
           )}
 
-          <Field label="What would you like to cover? (optional)" error={fieldErrors.notes}>
+          {questions.map((q) => (
+            <IntakeField
+              key={q.id}
+              question={q}
+              value={answers[q.id] ?? ""}
+              onChange={(v) => setAnswers((prev) => ({ ...prev, [q.id]: v }))}
+              error={fieldErrors[`intake.${q.id}`]}
+            />
+          ))}
+
+          <Field
+            label={questions.length ? "Anything else? (optional)" : "What would you like to cover? (optional)"}
+            error={fieldErrors.notes}
+          >
             <textarea
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
@@ -378,6 +404,11 @@ export function BookingFlow({
   );
 }
 
+/** A manage link that opens on the time picker. */
+function withReschedule(manageUrl: string): string {
+  return `${manageUrl}${manageUrl.includes("?") ? "&" : "?"}reschedule=1`;
+}
+
 /** The open start closest to `target`, to offer when `target` was just taken. */
 function nearestSlot(slots: SlotWindow[], target: string | null): string | null {
   if (!target || slots.length === 0) return null;
@@ -389,6 +420,75 @@ function nearestSlot(slots: SlotWindow[], target: string | null): string | null 
     }
   }
   return best?.start ?? null;
+}
+
+const INPUT_CLASS =
+  "w-full rounded-lg border border-[var(--line)] bg-[var(--surface-0)] px-3 py-2.5 text-sm text-[var(--fg-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--gold-400)]";
+
+/** One of the host's questions, drawn for its kind. */
+function IntakeField({
+  question,
+  value,
+  onChange,
+  error,
+}: {
+  question: IntakeQuestion;
+  value: string;
+  onChange: (value: string) => void;
+  error?: string;
+}) {
+  const label = question.required ? question.label : `${question.label} (optional)`;
+  if (question.kind === "choice") {
+    return (
+      <fieldset className="flex flex-col gap-1.5">
+        <legend className="mb-1.5 text-xs text-[var(--fg-secondary)]">{label}</legend>
+        <div className="flex flex-wrap gap-2">
+          {question.options.map((opt) => {
+            const on = value === opt;
+            return (
+              <button
+                key={opt}
+                type="button"
+                aria-pressed={on}
+                onClick={() => onChange(on && !question.required ? "" : opt)}
+                className={`min-h-[40px] rounded-full border px-3 py-1.5 text-sm transition-colors ${
+                  on
+                    ? "border-[var(--gold-400)] bg-[var(--gold-400)] text-white"
+                    : "border-[var(--line)] bg-[var(--surface-0)] text-[var(--fg-primary)] hover:border-[var(--gold-400)]"
+                }`}
+              >
+                {opt}
+              </button>
+            );
+          })}
+        </div>
+        {error ? <span className="text-xs text-[var(--status-danger)]">{error}</span> : null}
+      </fieldset>
+    );
+  }
+  return (
+    <Field label={label} error={error}>
+      {question.kind === "long" ? (
+        <textarea
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          maxLength={INTAKE_LONG_MAX}
+          required={question.required}
+          rows={3}
+          className={`${INPUT_CLASS} resize-y`}
+        />
+      ) : (
+        <input
+          type="text"
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          maxLength={INTAKE_SHORT_MAX}
+          required={question.required}
+          className={INPUT_CLASS}
+        />
+      )}
+    </Field>
+  );
 }
 
 function Field({ label, error, children }: { label: string; error?: string; children: React.ReactNode }) {

@@ -8,6 +8,7 @@ import { openSlots, resolvePublicPage } from "@/lib/meetings/scheduling-service"
 import { parseBookingPrefill, type SlotWindow } from "@/lib/meetings/scheduling";
 import { SITE_NAME } from "@/lib/site";
 import { BookingFlow } from "./BookingFlow";
+import { normalizeIntakeQuestions } from "@/lib/meetings/intake";
 
 export const dynamic = "force-dynamic";
 
@@ -94,6 +95,7 @@ export default async function EventTypeBookingPage({
             description: eventType.description,
             durationMinutes: eventType.duration_minutes,
             requiresApproval: eventType.requires_approval,
+            intakeQuestions: normalizeIntakeQuestions(eventType.intake_questions),
           }}
           initialSlots={initialSlots}
           prefill={prefill}

@@ -8,6 +8,7 @@ import {
 } from "@/lib/meetings/scheduling";
 import { TimezoneSelect } from "@/components/scheduling/TimezoneSelect";
 import type { HostEventType, HostSchedulingPage } from "./scheduling-types";
+import { IntakeQuestionsEditor } from "./IntakeQuestionsEditor";
 
 const NOTICE_CHOICES = [
   { label: "No minimum", value: 0 },
@@ -260,6 +261,8 @@ function EventTypesEditor({
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  /** The meeting type whose booking questions are open for editing. */
+  const [questionsFor, setQuestionsFor] = useState<string | null>(null);
 
   async function create() {
     if (!title.trim()) return;
@@ -284,7 +287,7 @@ function EventTypesEditor({
     }
   }
 
-  async function patch(id: string, body: Partial<HostEventType>) {
+  async function patch(id: string, body: Partial<HostEventType>): Promise<boolean> {
     setBusyId(id);
     setError(null);
     setNotice(null);
@@ -297,8 +300,10 @@ function EventTypesEditor({
       const data = (await res.json()) as { error?: string; eventType?: HostEventType };
       if (!res.ok || !data.eventType) throw new Error(data.error ?? "Could not update that.");
       onChange(eventTypes.map((t) => (t.id === id ? data.eventType! : t)));
+      return true;
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not update that.");
+      return false;
     } finally {
       setBusyId(null);
     }
@@ -341,10 +346,21 @@ function EventTypesEditor({
               <span className="text-xs text-[var(--fg-muted)]">
                 /{type.slug} · {type.durationMinutes} min
                 {type.requiresApproval ? " · you approve each request" : ""}
+                {type.intakeQuestions?.length
+                  ? ` · ${type.intakeQuestions.length} question${type.intakeQuestions.length === 1 ? "" : "s"}`
+                  : ""}
                 {type.isActive ? "" : " · hidden"}
               </span>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                aria-expanded={questionsFor === type.id}
+                onClick={() => setQuestionsFor((cur) => (cur === type.id ? null : type.id))}
+                className="rounded-lg border border-[var(--line)] px-2.5 py-1.5 text-xs text-[var(--fg-secondary)] transition-colors hover:text-[var(--fg-primary)]"
+              >
+                Questions
+              </button>
               <button
                 type="button"
                 disabled={busyId === type.id}
@@ -370,6 +386,14 @@ function EventTypesEditor({
                 Remove
               </button>
             </div>
+            {questionsFor === type.id ? (
+              <IntakeQuestionsEditor
+                questions={type.intakeQuestions ?? []}
+                busy={busyId === type.id}
+                onSave={(intakeQuestions) => patch(type.id, { intakeQuestions })}
+                onClose={() => setQuestionsFor(null)}
+              />
+            ) : null}
           </li>
         ))}
       </ul>

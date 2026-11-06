@@ -1,6 +1,7 @@
 // Shapes the Meetings scheduling UI exchanges with /api/meetings/scheduling.
 // Mirrors the serializers in lib/meetings/scheduling-service.
 import type { SchedulingAvailabilityRule } from "@/lib/meetings/scheduling";
+import type { IntakeQuestion } from "@/lib/meetings/intake";
 
 export interface HostSchedulingPage {
   id: string;
@@ -29,6 +30,8 @@ export interface HostEventType {
   requiresApproval: boolean;
   isActive: boolean;
   sortOrder: number;
+  /** Optional: a snapshot from an older server has none. */
+  intakeQuestions?: IntakeQuestion[];
 }
 
 export interface HostBooking {

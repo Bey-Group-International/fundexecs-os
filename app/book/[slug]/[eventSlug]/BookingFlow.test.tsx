@@ -233,3 +233,65 @@ describe("a time taken while the page was open", () => {
     expect(screen.getByRole("button", { pressed: true }).textContent).toMatch(/:30/);
   });
 });
+
+describe("the meeting type's questions", () => {
+  const WITH_QUESTIONS = {
+    ...EVENT,
+    intakeQuestions: [
+      { id: "fund", label: "Which fund?", kind: "short" as const, options: [], required: true },
+      { id: "role", label: "Role", kind: "choice" as const, options: ["LP", "GP"], required: false },
+    ],
+  };
+
+  it("asks them and sends the answers with the booking", async () => {
+    fetchMock.mockImplementation(async (url: string) =>
+      url.endsWith("/book")
+        ? { ok: true, json: async () => ({ status: "confirmed", manageUrl: "u", emailed: true }) }
+        : { ok: true, json: async () => ({ slots: [SLOT] }) },
+    );
+    render(<BookingFlow slug="ana" hostName="Ana" eventType={WITH_QUESTIONS} initialSlots={[SLOT]} />);
+    fireEvent.click(await screen.findByRole("button", { name: /\d{1,2}:\d{2}/ }));
+    fireEvent.change(screen.getByLabelText(/your name/i), { target: { value: "Ada" } });
+    fireEvent.change(screen.getByLabelText(/your email/i), { target: { value: "ada@example.com" } });
+    fireEvent.change(screen.getByLabelText("Which fund?"), { target: { value: "Fund II" } });
+    fireEvent.click(screen.getByRole("button", { name: "GP" }));
+    // With questions asked, the free box is for anything they left out.
+    expect(screen.getByLabelText(/anything else\? \(optional\)/i)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: /confirm booking/i }));
+    await screen.findByText(/you're booked/i);
+
+    const [, init] = fetchMock.mock.calls.find(([url]) => String(url).endsWith("/book"))!;
+    expect(JSON.parse(init.body).answers).toEqual({ fund: "Fund II", role: "GP" });
+  });
+
+  it("shows the server's complaint against the question it is about", async () => {
+    fetchMock.mockImplementation(async (url: string) =>
+      url.endsWith("/book")
+        ? { ok: false, status: 422, json: async () => ({ error: "Check the highlighted fields.", fieldErrors: { "intake.fund": "Please answer this." } }) }
+        : { ok: true, json: async () => ({ slots: [SLOT] }) },
+    );
+    render(<BookingFlow slug="ana" hostName="Ana" eventType={WITH_QUESTIONS} initialSlots={[SLOT]} />);
+    fireEvent.click(await screen.findByRole("button", { name: /\d{1,2}:\d{2}/ }));
+    fireEvent.change(screen.getByLabelText(/your name/i), { target: { value: "Ada" } });
+    fireEvent.change(screen.getByLabelText(/your email/i), { target: { value: "ada@example.com" } });
+    // The browser's own required check is bypassed by submitting the form directly.
+    fireEvent.submit(screen.getByRole("button", { name: /confirm booking/i }).closest("form")!);
+    expect(await screen.findByText("Please answer this.")).toBeTruthy();
+  });
+});
+
+it("links straight to the time picker to reschedule, and separately to cancel", async () => {
+  fetchMock.mockImplementation(async (url: string) =>
+    url.endsWith("/book")
+      ? { ok: true, json: async () => ({ status: "confirmed", manageUrl: "https://app.test/booking/tok", emailed: true }) }
+      : { ok: true, json: async () => ({ slots: [SLOT] }) },
+  );
+  render(<BookingFlow slug="ana" hostName="Ana" eventType={EVENT} initialSlots={[SLOT]} />);
+  fireEvent.click(await screen.findByRole("button", { name: /\d{1,2}:\d{2}/ }));
+  fireEvent.change(screen.getByLabelText(/your name/i), { target: { value: "Ada" } });
+  fireEvent.change(screen.getByLabelText(/your email/i), { target: { value: "ada@example.com" } });
+  fireEvent.click(screen.getByRole("button", { name: /confirm booking/i }));
+  await screen.findByText(/you're booked/i);
+  expect(screen.getByRole("link", { name: "Reschedule" }).getAttribute("href")).toBe("https://app.test/booking/tok?reschedule=1");
+  expect(screen.getByRole("link", { name: /cancel or view/i }).getAttribute("href")).toBe("https://app.test/booking/tok");
+});

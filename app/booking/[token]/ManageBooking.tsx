@@ -26,6 +26,7 @@ export function ManageBooking({
   token,
   initialView,
   serverNowIso,
+  initialMode,
 }: {
   token: string;
   /**
@@ -49,12 +50,19 @@ export function ManageBooking({
    * takes over on mount.
    */
   serverNowIso?: string;
+  /**
+   * "reschedule" when the link asked for it (`?reschedule=1`): the picker opens
+   * straight away, so "Pick a new time" in an email is one tap, not two.
+   */
+  initialMode?: "reschedule";
 }) {
   const [view, setView] = useState<ManageBookingView | null>(initialView ?? null);
   const [loading, setLoading] = useState(initialView === undefined);
   const [notFound, setNotFound] = useState(initialView === null);
   const [timezone, setTimezone] = useState("UTC");
-  const [mode, setMode] = useState<"view" | "reschedule" | "cancel">("view");
+  const [mode, setMode] = useState<"view" | "reschedule" | "cancel">(initialMode ?? "view");
+  /** What just happened, said once after it worked rather than left to a silent reload. */
+  const [done, setDone] = useState<{ kind: "moved"; startIso: string } | { kind: "cancelled" } | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
   const [reason, setReason] = useState("");
   const [busy, setBusy] = useState(false);
@@ -141,6 +149,7 @@ export function ManageBooking({
   async function act(action: "cancel" | "reschedule") {
     setBusy(true);
     setError(null);
+    setDone(null);
     try {
       const res = await fetch(`/api/scheduling/booking/${token}`, {
         method: "POST",
@@ -154,6 +163,7 @@ export function ManageBooking({
       const data = (await res.json()) as { error?: string };
       if (!res.ok) throw new Error(data.error ?? "That didn't work.");
       setMode("view");
+      setDone(action === "reschedule" && selected ? { kind: "moved", startIso: selected } : { kind: "cancelled" });
       setSelected(null);
       await load();
     } catch (err) {
@@ -219,6 +229,27 @@ export function ManageBooking({
         </p>
       ) : null}
 
+      {done ? (
+        <div
+          role="status"
+          className="flex flex-wrap items-center gap-3 rounded-lg border border-[var(--gold-400)]/30 bg-[var(--gold-400)]/5 px-4 py-3 text-sm text-[var(--fg-primary)]"
+        >
+          <span>
+            {done.kind === "moved"
+              ? `Moved to ${formatSlotFull(done.startIso, timezone)}. ${page.displayName} has been told, and we've emailed you the new time.`
+              : `Cancelled. ${page.displayName} has been told.`}
+          </span>
+          {done.kind === "moved" && booking.status === "confirmed" ? (
+            <a
+              href={`/api/scheduling/booking/${token}/calendar.ics`}
+              className="rounded-lg border border-[var(--line)] px-3 py-1.5 text-xs font-medium text-[var(--fg-secondary)] hover:text-[var(--fg-primary)]"
+            >
+              Update your calendar
+            </a>
+          ) : null}
+        </div>
+      ) : null}
+
       {error ? (
         <p className="rounded-lg border border-[var(--status-danger)]/20 bg-[var(--status-danger)]/10 px-3 py-2 text-xs text-[var(--status-danger)]">
           {error}
@@ -253,6 +284,14 @@ export function ManageBooking({
               onSelect={selectSlot}
               emptyMessage={`${page.displayName} has no other open times right now.`}
             />
+            {selected ? (
+              <p className="rounded-lg border border-[var(--line)] bg-[var(--surface-1)] px-3 py-2 text-xs text-[var(--fg-secondary)]">
+                <span className="text-[var(--fg-muted)] line-through">{formatSlotFull(booking.startsAt, timezone)}</span>
+                <span aria-hidden="true"> → </span>
+                <span className="sr-only"> moves to </span>
+                <span className="font-medium text-[var(--fg-primary)]">{formatSlotFull(selected, timezone)}</span>
+              </p>
+            ) : null}
             <div className="flex gap-3">
               <button
                 type="button"
