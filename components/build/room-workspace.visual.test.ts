@@ -11,6 +11,8 @@ import type { Browser } from "playwright-core";
 
 import { VIEWPORTS, chromiumPath, inspect, pageHtml, report } from "@/test-utils/visual";
 import { RoomWorkspace } from "@/components/build/RoomWorkspace";
+import { SignaturesList } from "@/components/build/SignaturesList";
+import type { SignatureTask } from "@/lib/data-room-signatures";
 
 jest.mock("next/navigation", () => ({ useRouter: () => ({ push() {}, refresh() {} }) }));
 jest.mock("@/components/build/room-actions", () => ({
@@ -76,13 +78,79 @@ const workspace = () =>
         activeLinkCount: 3,
         nextGap: "Add audited financials so allocators can complete diligence without asking.",
         sharing: React.createElement("p", null, "sharing"),
+        signatureCount: 2,
+        signatures: React.createElement(SignaturesList, {
+          tasks: [] as SignatureTask[],
+          currentRoomId: "r1",
+          canSign: true,
+          legacyAction: () => null,
+          envelopeAction: () => null,
+        }),
         activity: React.createElement("p", null, "activity"),
         previewShares: [],
       }),
     ),
   );
 
+const LONG_TITLE = "Subscription Agreement and Investor Questionnaire — Fund IV Limited Partnership, Annex of Side Letters (execution copy)";
+const sigTask = (id: string, kind: "legacy" | "envelope", roomId: string, title: string): SignatureTask => ({
+  key: `${kind}:${id}`,
+  kind,
+  id,
+  title,
+  roomId,
+  roomName: roomId === "r1" ? "Fund IV Data Room" : "Fund III Data Room for Institutional Allocators and Their Consultants",
+  signerName: "Alexandra Montgomery-Featherstonehaugh",
+  signerEmail: "alexandra@example.com",
+  signedAt: "2026-10-01T00:00:00Z",
+});
+const signaturesList = () =>
+  renderToStaticMarkup(
+    React.createElement(
+      "div",
+      { className: "mx-auto max-w-6xl p-4" },
+      React.createElement(SignaturesList, {
+        tasks: [
+          sigTask("a", "legacy", "r1", LONG_TITLE),
+          sigTask("b", "envelope", "r1", "Unbroken" + "x".repeat(70)),
+          sigTask("c", "envelope", "r2", "NDA"),
+        ],
+        currentRoomId: "r1",
+        canSign: true,
+        legacyAction: () => React.createElement("button", { className: "fx-mini-btn" }, "Counter-sign"),
+        envelopeAction: () => React.createElement("a", { href: "#", className: "fx-btn-primary inline-flex min-h-9 items-center" }, "Open and counter-sign"),
+      }),
+    ),
+  );
+
 describeVisual("The data room workspace", () => {
+  for (const vp of VIEWPORTS) {
+    it(`lays out the signatures list cleanly at ${vp.width}px`, async () => {
+      const issues = await inspect(browser, signaturesList(), { width: vp.width });
+      expect(report("Signatures list", vp.width, issues)).toBe(report("Signatures list", vp.width, []));
+    });
+  }
+
+  it("keeps each signing action on screen and thumb-sized on a phone", async () => {
+    const page = await browser.newPage({ viewport: { width: 400, height: 900 } });
+    try {
+      await page.setContent(await pageHtml(signaturesList()), { waitUntil: "load" });
+      const r = await page.evaluate(() =>
+        Array.from(document.querySelectorAll("li button, li a")).map((e) => {
+          const b = e.getBoundingClientRect();
+          return { right: Math.round(b.right), h: Math.round(b.height), text: e.textContent?.trim() };
+        }),
+      );
+      expect(r).toHaveLength(3);
+      for (const a of r) {
+        expect(`${a.text} ${a.right <= 400}`).toBe(`${a.text} true`);
+        expect(`${a.text} ${a.h >= 36}`).toBe(`${a.text} true`);
+      }
+    } finally {
+      await page.close();
+    }
+  });
+
   for (const vp of VIEWPORTS) {
     it(`lays out cleanly at ${vp.width}px`, async () => {
       const issues = await inspect(browser, workspace(), { width: vp.width });
@@ -109,7 +177,7 @@ describeVisual("The data room workspace", () => {
     try {
       await page.setContent(await pageHtml(workspace()), { waitUntil: "load" });
       const tabs = await page.evaluate(() =>
-        ["Contents", "Sharing", "Activity", "Preview as LP"].map((label) => {
+        ["Contents", "Sharing", "Signatures", "Activity", "Preview as LP"].map((label) => {
           const b = Array.from(document.querySelectorAll("button")).find((e) => e.textContent?.trim().startsWith(label))!;
           const r = b.getBoundingClientRect();
           return { label, h: Math.round(r.height), upper: getComputedStyle(b).textTransform === "uppercase" };

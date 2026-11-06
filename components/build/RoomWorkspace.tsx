@@ -15,7 +15,7 @@ import type { BuildContentRow } from "@/lib/data-rooms";
 import { RoomPreview, type PreviewShare } from "./RoomPreview";
 import { loadRoomPreview } from "./room-preview-actions";
 
-type Tab = "contents" | "sharing" | "activity" | "preview";
+type Tab = "contents" | "sharing" | "signatures" | "activity" | "preview";
 
 export interface RoomWarnings {
   /** Published but still marked draft or in review. */
@@ -39,6 +39,10 @@ interface Props {
   activeLinkCount: number;
   nextGap: string | null;
   sharing: ReactNode;
+  /** Files across all rooms waiting on the fund's signature. */
+  signatures: ReactNode;
+  /** Null when the list could not be loaded: no count is better than a wrong one. */
+  signatureCount: number | null;
   activity: ReactNode;
   /** Live links the preview can be scoped to. */
   previewShares: PreviewShare[];
@@ -83,6 +87,8 @@ export function RoomWorkspace({
   activeLinkCount,
   nextGap,
   sharing,
+  signatures,
+  signatureCount,
   activity,
   previewShares,
 }: Props) {
@@ -289,6 +295,7 @@ export function RoomWorkspace({
         <div className="mb-4 flex flex-wrap items-center gap-2">
           {tabBtn("contents", "Contents", totalDocs)}
           {tabBtn("sharing", "Sharing", activeLinkCount)}
+          {tabBtn("signatures", "Signatures", signatureCount ?? undefined)}
           {tabBtn("activity", "Activity")}
           {tabBtn("preview", "Preview as LP")}
         </div>
@@ -346,6 +353,9 @@ export function RoomWorkspace({
 
         {/* Sharing */}
         <div hidden={tab !== "sharing"}>{sharing}</div>
+
+        {/* Signatures */}
+        <div hidden={tab !== "signatures"}>{signatures}</div>
 
         {/* Activity */}
         <div hidden={tab !== "activity"}>{activity}</div>

@@ -28,6 +28,9 @@ import { ShareControls } from "./ShareControls";
 import { ViewerAnalytics } from "./ViewerAnalytics";
 import { NdaSignatures } from "./NdaSignatures";
 import { RoomSignatures } from "./RoomSignatures";
+import { SignaturesAwaiting } from "./SignaturesAwaiting";
+import { loadSignaturesAwaitingFund } from "@/lib/data-room-signatures.server";
+import { signatureLoadError, type SignatureTask } from "@/lib/data-room-signatures";
 import { AuditExport } from "./AuditExport";
 import { RoomSwitcher } from "./RoomSwitcher";
 import { RoomWorkspace } from "./RoomWorkspace";
@@ -76,7 +79,7 @@ export async function MaterialsModule({ roomId }: { roomId?: string } = {}) {
     );
   }
 
-  const [published, libraryRes, sharesRes, buildSummary, reviewsRes, signaturesRes] = await Promise.all([
+  const [published, libraryRes, sharesRes, buildSummary, reviewsRes, signaturesRes, awaitingSignatures] = await Promise.all([
     loadRoomDocuments(orgId, room.id),
     // Paged: the library can outgrow one request's max_rows, and a truncated list
     // would hide documents from "Publish from library" with no sign anything is
@@ -111,6 +114,14 @@ export async function MaterialsModule({ roomId }: { roomId?: string } = {}) {
       .eq("organization_id", orgId)
       .eq("room_id", room.id)
       .order("signed_at", { ascending: false }),
+    // Across every room, not just this one: the Signatures tab is the one place
+    // a file waiting on the fund can be found without opening each room.
+    // A failed read here must not take the whole page down (Contents, Sharing), nor
+    // read as "nothing to sign": it is carried to the tab and shown as an error.
+    loadSignaturesAwaitingFund(orgId).then(
+      (tasks) => ({ tasks, error: null as string | null }),
+      (e: unknown) => ({ tasks: [] as SignatureTask[], error: signatureLoadError(e) }),
+    ),
   ]);
 
   // An errored read must not render as "no documents" / "no links": the operator
@@ -355,6 +366,8 @@ export async function MaterialsModule({ roomId }: { roomId?: string } = {}) {
             activeCount={activeShareCount}
           />
         }
+        signatureCount={awaitingSignatures.error ? null : awaitingSignatures.tasks.length}
+        signatures={<SignaturesAwaiting tasks={awaitingSignatures.tasks} error={awaitingSignatures.error} currentRoomId={room.id} />}
         activity={
           <div className="space-y-6">
             <AuditExport roomId={room.id} roomName={room.name} />
