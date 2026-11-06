@@ -548,3 +548,68 @@ describe("the header", () => {
     expect(screen.queryByText(/Last 30 days/)).toBeNull();
   });
 });
+
+describe("organising the library", () => {
+  const calls = [
+    call({ id: "a", title: "Dunbar LP update", tags: ["LP"], people: ["Ana"], dealId: "d1", dealName: "Dunbar" }),
+    call({ id: "b", title: "Acme intro", tags: ["Intro"], people: ["Bo"], dealId: null }),
+  ];
+
+  it("shows tags, people and deal on a row, and filters by them", async () => {
+    mockFetch(async () => ({ body: {} }));
+    render(<CallArchive initial={calls} />);
+    expect(document.querySelector('[data-tag="LP"]')).toBeTruthy();
+    expect(screen.getByText("· with Ana")).toBeTruthy();
+    expect(screen.getByText("· Dunbar")).toBeTruthy();
+    fireEvent.change(screen.getByLabelText("Filter by tag"), { target: { value: "intro" } });
+    expect(screen.queryByText("Dunbar LP update")).toBeNull();
+    expect(screen.getByText("Acme intro")).toBeTruthy();
+    fireEvent.change(screen.getByLabelText("Filter by tag"), { target: { value: "" } });
+    fireEvent.change(screen.getByLabelText("Filter by deal"), { target: { value: "d1" } });
+    expect(screen.queryByText("Acme intro")).toBeNull();
+  });
+
+  it("saves tags, people and a deal from the row's menu", async () => {
+    const sent: unknown[] = [];
+    global.fetch = jest.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url === "/api/meetings/calls/deals") return { ok: true, json: async () => ({ deals: [{ id: "d9", name: "Zephyr" }] }) } as Response;
+      sent.push(JSON.parse(String(init?.body)));
+      return { ok: true, json: async () => ({ id: "b", tags: ["Intro", "Hot"], people: ["Bo"], dealId: "d9", dealName: "Zephyr" }) } as Response;
+    }) as unknown as typeof fetch;
+    render(<CallArchive initial={calls} />);
+    fireEvent.click(screen.getByRole("button", { name: "More actions for Acme intro" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: /tags, people/i }));
+    const form = screen.getByRole("form", { name: "Organise Acme intro" });
+    fireEvent.change(form.querySelector("input")!, { target: { value: "Intro, Hot" } });
+    await settle();
+    fireEvent.change(form.querySelector("select")!, { target: { value: "d9" } });
+    await act(async () => {
+      fireEvent.submit(form);
+    });
+    expect(sent[0]).toEqual({ tags: ["Intro", "Hot"], people: ["Bo"], dealId: "d9" });
+    expect(screen.getByText("· Zephyr")).toBeTruthy();
+    expect(document.querySelector('[data-tag="Hot"]')).toBeTruthy();
+  });
+
+  it("tags several calls at once", async () => {
+    const sent: unknown[] = [];
+    global.fetch = jest.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body));
+      sent.push(body);
+      return { ok: true, json: async () => ({ tags: body.tags }) } as Response;
+    }) as unknown as typeof fetch;
+    render(<CallArchive initial={calls} />);
+    fireEvent.click(screen.getByRole("button", { name: "Select" }));
+    fireEvent.click(screen.getByLabelText("Select Dunbar LP update"));
+    fireEvent.click(screen.getByLabelText("Select Acme intro"));
+    expect(screen.getByText("2 selected")).toBeTruthy();
+    fireEvent.change(screen.getByLabelText("Tag to add to the selected calls"), { target: { value: "Q4" } });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Tag" }));
+    });
+    await settle();
+    expect(sent).toEqual([{ tags: ["LP", "Q4"] }, { tags: ["Intro", "Q4"] }]);
+    expect(screen.getByText(/Tagged 2 calls/)).toBeTruthy();
+  });
+});

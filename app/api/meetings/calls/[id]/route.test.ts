@@ -64,3 +64,24 @@ it("requires a signed-in member", async () => {
   authMock.mockReturnValue({ ok: false, error: "Unauthorized", status: 401 });
   expect((await PATCH(req({ title: "Name" }), { params })).status).toBe(401);
 });
+
+describe("organising", () => {
+  it("stores cleaned tags and who was on the call, and nothing else", async () => {
+    const res = await PATCH(req({ tags: "#LP, lp, diligence", people: "Ana Ruiz; Bo" }), { params });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ id: "c1", tags: ["LP", "diligence"], people: ["Ana Ruiz", "Bo"] });
+    expect(calls).toContainEqual({
+      method: "update",
+      args: [{ tags: ["LP", "diligence"], attendees: [{ name: "Ana Ruiz", type: "external" }, { name: "Bo", type: "external" }] }],
+    });
+  });
+
+  it("unlinks a deal with null, and refuses something that is not a deal id", async () => {
+    expect(await (await PATCH(req({ dealId: null }), { params })).json()).toEqual({ id: "c1", dealId: null, dealName: null });
+    expect((await PATCH(req({ dealId: "drop table" }), { params })).status).toBe(400);
+  });
+
+  it("refuses a request that changes nothing", async () => {
+    expect((await PATCH(req({}), { params })).status).toBe(400);
+  });
+});

@@ -73,6 +73,7 @@ function setup(opts: { routeTitle?: string | undefined } = {}) {
     startedAt: Date.now(),
     start: jest.fn(async () => {}),
     stop: jest.fn(),
+    uploads: { pending: 0, saved: 0 },
   };
 
   (navigator as unknown as { mediaDevices: unknown }).mediaDevices = {

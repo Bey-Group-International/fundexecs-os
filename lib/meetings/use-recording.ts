@@ -16,7 +16,7 @@
 
 "use client";
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   CHUNK_MS,
@@ -30,6 +30,7 @@ import {
   uploadRetryDelay,
 } from "@/lib/meetings/upload-retry";
 import type { ComposerHandlers, PartTiming } from "@/lib/meetings/recording-composer";
+import { idbOutbox, outboxKey, savedPartsNotice, type OutboxStore } from "@/lib/meetings/recording-outbox";
 import type { Database } from "@/lib/supabase/database.types";
 
 type Client = SupabaseClient<Database>;
@@ -60,6 +61,12 @@ export interface RecordingSource {
 
 export interface UseRecordingInput {
   supabase: Client;
+  /**
+   * Where a part that cannot be uploaded is kept until it can. Defaults to
+   * this browser's IndexedDB; null keeps nothing (the old behaviour: the part
+   * is counted as lost). See recording-outbox.ts.
+   */
+  outbox?: OutboxStore | null;
   /**
    * Keep `elapsed` counting. On by default; a caller that shows the time with
    * its own clock from `startedAt` turns it off, so a running recording does
@@ -111,6 +118,12 @@ export interface UseRecordingResult {
   startedAt: number | null;
   start: () => Promise<void>;
   stop: () => void;
+  /**
+   * Parts still on their way up, and parts kept on this device because they
+   * could not get there. Shown so a host knows to keep the tab open, and
+   * that nothing was lost when the connection was.
+   */
+  uploads: { pending: number; saved: number };
 }
 
 /**
@@ -155,6 +168,10 @@ interface RecordingRun {
    * reported itself complete is worse than one that says so.
    */
   dropped: number;
+  /** Parts that ran out of retries and were kept on this device instead. */
+  saved: number;
+  /** Parts produced and not yet stored or saved. */
+  pending: number;
   /**
    * Whether this recording has already been closed out.
    *
@@ -183,6 +200,26 @@ export function useRecording(input: UseRecordingInput): UseRecordingResult {
   const [elapsed, setElapsed] = useState(0);
   const [startedAt, setStartedAt] = useState<number | null>(null);
   const tickElapsed = input.tickElapsed ?? true;
+  const [uploads, setUploads] = useState<{ pending: number; saved: number }>({ pending: 0, saved: 0 });
+  // Resolved once: `undefined` means "this browser's IndexedDB".
+  const outbox = useMemo<OutboxStore | null>(
+    () => (input.outbox === undefined ? idbOutbox() : input.outbox),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [],
+  );
+
+  // Closing the tab while parts are still on their way up is how a recording
+  // loses its end. The browser's own "leave site?" prompt is the only thing
+  // that can stop that; it is asked for only while something is pending.
+  useEffect(() => {
+    if (uploads.pending <= 0) return;
+    const onBeforeUnload = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    window.addEventListener("beforeunload", onBeforeUnload);
+    return () => window.removeEventListener("beforeunload", onBeforeUnload);
+  }, [uploads.pending]);
 
   const sourceRef = useRef<RecordingSource | null>(null);
   const tickRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -239,6 +276,43 @@ export function useRecording(input: UseRecordingInput): UseRecordingResult {
     if (!mId) return;
     const path = chunkPath(mId, run.id, index, mimeType);
 
+    const settle = () => {
+      run.pending = Math.max(0, run.pending - 1);
+      if (runRef.current === run || run.pending === 0) setUploads({ pending: run.pending, saved: run.saved });
+    };
+    /** Keep the part on this device; counted as lost only if even that fails. */
+    const keep = async (why: string, err?: unknown) => {
+      const saved = outbox
+        ? await outbox
+            .put({
+              key: outboxKey(run.id, index),
+              meetingId: mId,
+              recordingId: run.id,
+              idx: index,
+              path,
+              mimeType,
+              blob,
+              offsetMs: timing.offsetMs,
+              durationMs: timing.durationMs,
+              savedAt: Date.now(),
+            })
+            .catch(() => false)
+        : false;
+      if (saved) run.saved += 1;
+      else {
+        run.dropped += 1;
+        console.warn(`[recording] part ${why}`, index, err);
+      }
+      settle();
+    };
+
+    // The browser already knows there is no network: three retries in eight
+    // seconds would only burn the time. Straight to the device.
+    if (typeof navigator !== "undefined" && navigator.onLine === false) {
+      await keep("saved while offline");
+      return;
+    }
+
     for (let attempt = 0; ; attempt++) {
       try {
         const { error: uploadError } = await supabase.storage
@@ -270,12 +344,12 @@ export function useRecording(input: UseRecordingInput): UseRecordingResult {
         run.bytes += blob.size;
         run.count += 1;
         run.endMs = Math.max(run.endMs, timing.offsetMs + timing.durationMs);
+        settle();
         return;
       } catch (err) {
         const delay = classifyUploadError(err) === "retry" ? uploadRetryDelay(attempt) : null;
         if (delay === null) {
-          run.dropped += 1;
-          console.warn("[recording] part permanently lost", index, err);
+          await keep("permanently lost", err);
           return;
         }
         await new Promise((resolve) => setTimeout(resolve, delay));
@@ -284,13 +358,12 @@ export function useRecording(input: UseRecordingInput): UseRecordingResult {
         // Abandoned is as lost as retried-out: it has to be counted, or the
         // notice tells the host less time is missing than really is.
         if (runRef.current !== run) {
-          run.dropped += 1;
-          console.warn("[recording] part abandoned mid-retry", index);
+          await keep("abandoned mid-retry");
           return;
         }
       }
     }
-  }, [supabase, meetingId]);
+  }, [supabase, meetingId, outbox]);
 
   const finalize = useCallback(async (run: RecordingRun, status: "complete" | "failed") => {
     // First close wins, which is the one that knows why it ended.
@@ -381,6 +454,8 @@ export function useRecording(input: UseRecordingInput): UseRecordingResult {
         count: 0,
         endMs: 0,
         dropped: 0,
+        saved: 0,
+        pending: 0,
         closed: false,
         queue: Promise.resolve(),
       };
@@ -390,6 +465,8 @@ export function useRecording(input: UseRecordingInput): UseRecordingResult {
       const source = createSource({
         onChunk: (blob, index, timing) => {
           const mime = source.mimeType ?? fallbackMime;
+          run.pending += 1;
+          setUploads({ pending: run.pending, saved: run.saved });
           // Chained rather than awaited: this runs inside a MediaRecorder event
           // and must return immediately or it stalls the encoder.
           run.queue = run.queue.then(() => uploadChunk(run, blob, index, mime, timing));
@@ -420,7 +497,8 @@ export function useRecording(input: UseRecordingInput): UseRecordingResult {
           // `run.dropped` rather than a shared ref, so a host who starts the
           // next recording during that wait does not erase what this one lost.
           void finalize(run, "complete").then(() => {
-            setNotice(droppedPartsNotice(run.dropped, CHUNK_MS));
+            const notes = [droppedPartsNotice(run.dropped, CHUNK_MS), savedPartsNotice(run.saved, CHUNK_MS)].filter(Boolean);
+            setNotice(notes.length ? notes.join(" ") : null);
           });
         },
       });
@@ -466,5 +544,5 @@ export function useRecording(input: UseRecordingInput): UseRecordingResult {
 
   const dismissNotice = useCallback(() => setNotice(null), []);
 
-  return { state, error, notice, dismissNotice, elapsed, startedAt, start, stop };
+  return { state, error, notice, dismissNotice, elapsed, startedAt, start, stop, uploads };
 }

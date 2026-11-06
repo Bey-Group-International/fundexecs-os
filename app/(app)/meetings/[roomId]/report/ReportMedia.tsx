@@ -31,6 +31,7 @@ export function ReportMedia({
   cueRows,
   transcript,
   markers,
+  isHost = false,
 }: {
   meetingId: string;
   recordings: readonly ReportRecording[];
@@ -40,6 +41,8 @@ export function ReportMedia({
   transcript: string | null;
   /** The report's highlights, placed on the recording; ticks on the scrubber. */
   markers?: ReadonlyArray<{ ms: number; label: string }>;
+  /** The host may share clips of the recording. */
+  isHost?: boolean;
 }) {
   const playerRef = useRef<RecordingPlayerHandle | null>(null);
   /**
@@ -119,6 +122,7 @@ export function ReportMedia({
         playerRef={attachPlayer}
         onTime={handleTime}
         markers={markers}
+        canShare={isHost}
       />
 
       {/* Full transcript, read back into turns rather than shown as the raw

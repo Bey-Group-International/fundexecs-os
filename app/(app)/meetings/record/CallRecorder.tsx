@@ -555,6 +555,21 @@ export function CallRecorder({
               {notice ?? recorder.notice}
             </p>
           )}
+          {/* Where the parts have got to. A pile-up means the connection is
+              struggling; saved ones are safe on this device either way. */}
+          {recorder.uploads.pending > 2 || recorder.uploads.saved > 0 ? (
+            <p data-upload-status="" className="mt-3 text-xs text-[var(--fg-muted)]">
+              {recorder.uploads.pending > 2
+                ? `Uploading… ${recorder.uploads.pending} parts waiting. Keep this tab open.`
+                : ""}
+              {recorder.uploads.pending > 2 && recorder.uploads.saved > 0 ? " " : ""}
+              {recorder.uploads.saved > 0
+                ? `${recorder.uploads.saved} part${recorder.uploads.saved === 1 ? "" : "s"} saved on this device — ${
+                    recorder.uploads.saved === 1 ? "it" : "they"
+                  } will upload when the connection is back.`
+                : ""}
+            </p>
+          ) : null}
 
           {phase === "failed" ? (
             <Link

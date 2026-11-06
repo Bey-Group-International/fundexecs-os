@@ -359,3 +359,56 @@ describe("when the recording ended", () => {
     expect(closed?.patch.ended_at).toBe("2026-10-14T12:00:00.000Z");
   });
 });
+
+describe("a part that cannot be uploaded", () => {
+  it("is kept on this device instead of lost, and the host is told it will upload later", async () => {
+    const { memoryOutbox } = jest.requireActual("@/lib/meetings/recording-outbox") as typeof import("@/lib/meetings/recording-outbox");
+    const outbox = memoryOutbox();
+    const sb = fakeClient();
+    sb.refuseUploads();
+    const { result } = renderHook(() =>
+      useRecording({
+        supabase: sb.client as unknown as Parameters<typeof useRecording>[0]["supabase"],
+        meetingId: "m1",
+        hostName: "Host",
+        createSource: (handlers) => fakeSource(handlers as Handlers),
+        announce: () => {},
+        outbox,
+      }),
+    );
+    await act(async () => { await result.current.start(); });
+    act(() => { composer!.handlers.onChunk(new Blob(["abc"]), 0, { offsetMs: 0, durationMs: 5000 }); });
+    await flush();
+    expect(result.current.uploads.saved).toBe(1);
+    const kept = await outbox.all();
+    expect(kept.map((p) => [p.recordingId, p.idx, p.offsetMs])).toEqual([["r1", 0, 0]]);
+
+    act(() => { composer!.handlers.onStopped("stopped"); });
+    await flush();
+    expect(result.current.notice).toMatch(/saved on this device/);
+    expect(result.current.notice).not.toMatch(/is missing/);
+  });
+
+  it("goes straight to the device while the browser is offline", async () => {
+    const { memoryOutbox } = jest.requireActual("@/lib/meetings/recording-outbox") as typeof import("@/lib/meetings/recording-outbox");
+    const outbox = memoryOutbox();
+    const sb = fakeClient();
+    const online = jest.spyOn(navigator, "onLine", "get").mockReturnValue(false);
+    const { result } = renderHook(() =>
+      useRecording({
+        supabase: sb.client as unknown as Parameters<typeof useRecording>[0]["supabase"],
+        meetingId: "m1",
+        hostName: "Host",
+        createSource: (handlers) => fakeSource(handlers as Handlers),
+        announce: () => {},
+        outbox,
+      }),
+    );
+    await act(async () => { await result.current.start(); });
+    act(() => { composer!.handlers.onChunk(new Blob(["abc"]), 0, { offsetMs: 0, durationMs: 5000 }); });
+    await flush();
+    online.mockRestore();
+    expect((await outbox.all()).length).toBe(1);
+    expect(result.current.uploads).toEqual({ pending: 0, saved: 1 });
+  });
+});

@@ -483,6 +483,7 @@ export default async function MeetingReportPage({
                 cueRows={data.cueRows}
                 transcript={content.transcript}
                 markers={markers}
+                isHost={data.isHost}
               />
             </>
           ),
