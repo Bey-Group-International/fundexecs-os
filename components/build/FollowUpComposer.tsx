@@ -31,7 +31,7 @@ export function FollowUpComposer({ roomId, viewerKey, emphasis }: { roomId: stri
               else setError(res.error);
             })
           }
-          className={`rounded-lg border px-3 py-1.5 font-mono text-[11px] uppercase tracking-wider transition disabled:opacity-50 ${
+          className={`rounded-lg border px-3 min-h-9 text-xs font-medium transition disabled:opacity-50 ${
             emphasis
               ? "border-gold-500/40 bg-gold-500/10 text-gold-300 hover:bg-gold-500/20"
               : "border-line text-fg-muted hover:text-fg-secondary"

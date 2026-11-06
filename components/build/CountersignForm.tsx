@@ -19,7 +19,7 @@ export function CountersignForm({ signatureId, fileName }: { signatureId: string
         type="button"
         onClick={() => setOpen(true)}
         aria-label={`Counter-sign ${fileName}`}
-        className="rounded-md border border-gold-500/40 bg-gold-500/10 px-2.5 py-1 font-mono text-[11px] uppercase tracking-wider text-gold-300 transition hover:bg-gold-500/20"
+        className="rounded-md border border-gold-500/40 bg-gold-500/10 px-2.5 min-h-9 text-xs font-medium text-gold-300 transition hover:bg-gold-500/20"
       >
         Counter-sign
       </button>
@@ -53,7 +53,7 @@ export function CountersignForm({ signatureId, fileName }: { signatureId: string
               if (!r.ok) setError(r.error);
             })
           }
-          className="rounded-md border border-gold-500/40 bg-gold-500/10 px-2.5 py-1 font-mono text-[11px] uppercase tracking-wider text-gold-300 transition hover:bg-gold-500/20 disabled:opacity-40"
+          className="rounded-md border border-gold-500/40 bg-gold-500/10 px-2.5 min-h-9 text-xs font-medium text-gold-300 transition hover:bg-gold-500/20 disabled:opacity-40"
         >
           {pending ? "Signing…" : "Counter-sign"}
         </button>

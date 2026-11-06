@@ -271,7 +271,7 @@ function XlsxView({ preview }: { preview: Extract<OfficePreview, { kind: "xlsx" 
               type="button"
               onClick={() => setActive(i)}
               aria-pressed={i === active}
-              className={`shrink-0 rounded-t-lg px-3 py-1.5 font-mono text-[11px] uppercase tracking-wider ${
+              className={`shrink-0 rounded-t-lg px-3 min-h-9 text-xs font-medium ${
                 i === active ? "bg-surface-1 text-fg-primary" : "text-fg-muted hover:text-fg-secondary"
               }`}
             >

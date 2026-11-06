@@ -198,7 +198,7 @@ export function DocumentBuilder({ doc }: { doc: BuilderDoc }) {
     <button
       type="button"
       onClick={() => setPaneMode(mode)}
-      className={`px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider transition ${
+      className={`px-2 min-h-9 text-xs font-medium transition ${
         paneMode === mode ? "text-gold-300" : "text-fg-muted hover:text-fg-secondary"
       }`}
     >
@@ -454,7 +454,7 @@ export function DocumentBuilder({ doc }: { doc: BuilderDoc }) {
                 <button
                   type="button"
                   onClick={() => setSidePanel((p) => (p === "history" ? "none" : "history"))}
-                  className={`rounded-md border px-2.5 py-1 font-mono text-[11px] uppercase tracking-wider transition ${
+                  className={`rounded-md border px-2.5 min-h-9 text-xs font-medium transition ${
                     sidePanel === "history"
                       ? "border-gold-500/40 bg-gold-500/10 text-gold-300"
                       : "border-line text-fg-muted hover:text-fg-secondary"
@@ -477,7 +477,7 @@ export function DocumentBuilder({ doc }: { doc: BuilderDoc }) {
                   type="button"
                   onClick={printDoc}
                   disabled={!content.trim()}
-                  className="rounded-md border border-line px-3 py-1.5 font-mono text-[11px] uppercase tracking-wider text-fg-secondary transition hover:text-fg-primary disabled:opacity-40"
+                  className="rounded-md border border-line px-3 min-h-9 text-xs font-medium text-fg-secondary transition hover:text-fg-primary disabled:opacity-40"
                 >
                   ⤓ PDF
                 </button>

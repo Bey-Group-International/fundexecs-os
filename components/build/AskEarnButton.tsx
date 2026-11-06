@@ -20,7 +20,7 @@ export function AskEarnButton({ roomId, hasReads }: { roomId: string; hasReads: 
             if (!res.ok) setMessage(res.error ?? "Earn couldn't run. Try again.");
           })
         }
-        className="rounded-lg border border-gold-500/40 bg-gold-500/10 px-3 py-1.5 font-mono text-[11px] uppercase tracking-wider text-gold-300 transition hover:bg-gold-500/20 disabled:opacity-50"
+        className="rounded-lg border border-gold-500/40 bg-gold-500/10 px-3 min-h-9 text-xs font-medium text-gold-300 transition hover:bg-gold-500/20 disabled:opacity-50"
       >
         {pending ? "Earn is reading…" : hasReads ? "Refresh Earn's read" : "Ask Earn to read interest"}
       </button>

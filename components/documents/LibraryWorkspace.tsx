@@ -170,7 +170,7 @@ export function LibraryWorkspace({
           target="_blank"
           rel="noopener noreferrer"
           title={d.uploaded ? "Open the file" : "Open the linked document"}
-          className="shrink-0 rounded-lg border border-line px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider text-fg-muted transition hover:border-gold-500/40 hover:text-gold-300"
+          className="shrink-0 rounded-lg border border-line px-2 inline-flex min-h-9 items-center text-xs font-medium text-fg-muted transition hover:border-gold-500/40 hover:text-gold-300"
         >
           Open
         </a>
@@ -179,7 +179,7 @@ export function LibraryWorkspace({
         <Link
           href={`/document/${d.id}/review`}
           title="See the file as-is with Earn's review beside it"
-          className="shrink-0 rounded-lg border border-gold-500/40 px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider text-gold-300 transition hover:bg-gold-500/10"
+          className="shrink-0 rounded-lg border border-gold-500/40 px-2 inline-flex min-h-9 items-center text-xs font-medium text-gold-300 transition hover:bg-gold-500/10"
         >
           Review
         </Link>
@@ -204,7 +204,7 @@ export function LibraryWorkspace({
           <button
             type="submit"
             title="Detach the file — the document, its name and anything written stay"
-            className="shrink-0 rounded-lg border border-line px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider text-fg-muted transition hover:border-red-500/40 hover:text-red-400"
+            className="shrink-0 rounded-lg border border-line px-2 min-h-9 text-xs font-medium text-fg-muted transition hover:border-red-500/40 hover:text-red-400"
           >
             Detach
           </button>
@@ -248,7 +248,7 @@ export function LibraryWorkspace({
                 onClick={() => setOnlyEmpty((v) => !v)}
                 aria-pressed={onlyEmpty}
                 title="Documents with no file, no link, and nothing written — nothing for a reader to open"
-                className={`mt-2 w-full rounded-lg border px-2.5 py-1.5 text-left font-mono text-[11px] uppercase tracking-wider transition ${
+                className={`mt-2 w-full rounded-lg border px-2.5 min-h-9 text-left text-xs font-medium transition ${
                   onlyEmpty
                     ? "border-amber-500/50 bg-amber-500/10 text-amber-400"
                     : "border-line text-fg-muted hover:border-amber-500/30 hover:text-amber-400"
@@ -372,7 +372,7 @@ export function LibraryWorkspace({
               onClick={() => setLinking((v) => !v)}
               aria-expanded={linking}
               title="File a document that lives elsewhere — Drive, Dropbox, a signed PDF"
-              className="rounded-lg border border-line px-3 py-1.5 font-mono text-[11px] uppercase tracking-wider text-fg-secondary transition hover:border-gold-500/40 hover:text-gold-300"
+              className="rounded-lg border border-line px-3 min-h-9 text-xs font-medium text-fg-secondary transition hover:border-gold-500/40 hover:text-gold-300"
             >
               + Link
             </button>
@@ -388,7 +388,7 @@ export function LibraryWorkspace({
                 type="submit"
                 disabled={pending}
                 title={`Write a new document in ${targetLabel}`}
-                className="rounded-lg border border-gold-500/40 bg-gold-500/10 px-3 py-1.5 font-mono text-[11px] uppercase tracking-wider text-gold-300 transition hover:bg-gold-500/20 disabled:opacity-50"
+                className="rounded-lg border border-gold-500/40 bg-gold-500/10 px-3 min-h-9 text-xs font-medium text-gold-300 transition hover:bg-gold-500/20 disabled:opacity-50"
               >
                 {pending ? "…" : "+ New"}
               </button>

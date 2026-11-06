@@ -258,7 +258,7 @@ function InterviewModal({
                 <button
                   type="button"
                   onClick={onClose}
-                  className="rounded-lg border border-gold-500/50 bg-gold-500/10 px-4 py-2 text-sm font-medium text-gold-300 transition hover:bg-gold-500/20"
+                  className="min-h-10 rounded-lg border border-gold-500/50 bg-gold-500/10 px-4 text-sm font-medium text-gold-300 transition hover:bg-gold-500/20"
                 >
                   Done
                 </button>
@@ -266,7 +266,7 @@ function InterviewModal({
                   <button
                     type="button"
                     onClick={back}
-                    className="text-xs text-fg-muted transition hover:text-fg-primary"
+                    className="fx-action-link text-xs text-fg-muted"
                   >
                     ← Back
                   </button>
@@ -291,14 +291,14 @@ function InterviewModal({
                   type="button"
                   onClick={back}
                   disabled={step === 0}
-                  className="rounded-md border border-line px-3 py-1.5 text-xs text-fg-secondary transition hover:text-fg-primary disabled:opacity-40"
+                  className="fx-mini-btn"
                 >
                   ← Back
                 </button>
                 <button
                   type="button"
                   onClick={next}
-                  className="text-xs text-fg-muted transition hover:text-gold-300"
+                  className="fx-action-link text-xs text-fg-muted"
                 >
                   Skip
                 </button>
@@ -357,7 +357,7 @@ export function FirmIdentityRail({
     // Pinned below the sticky app top bar (--app-header-h), which the window
     // scrolls under.
     <aside className="lg:sticky lg:top-[calc(var(--app-header-h)+1.5rem)] lg:self-start">
-      <div className="rounded-2xl border border-line bg-surface-1 p-5">
+      <div className="rounded-2xl border border-line bg-surface-1 p-4 sm:p-5">
         {/* Completion ring */}
         <div className="flex items-center gap-4">
           <div className="relative shrink-0">
@@ -373,14 +373,14 @@ export function FirmIdentityRail({
             <p className="mt-0.5 truncate font-display text-base font-semibold text-fg-primary">
               {firmName || "Your firm"}
             </p>
-            <p className="mt-0.5 font-mono text-[11px] uppercase tracking-wider text-fg-muted">
+            <p className="mt-0.5 text-xs text-fg-muted">
               {stageLabel(progress.overall)}
             </p>
           </div>
         </div>
 
         {/* Section navigator (contents pane) */}
-        <nav className="mt-5 flex flex-col gap-0.5">
+        <nav className="mt-4 grid grid-cols-1 gap-1 min-[420px]:grid-cols-2 lg:mt-5 lg:flex lg:flex-col lg:gap-0.5">
           {SECTION_ORDER.map((key, i) => {
             const s = byKey.get(key);
             if (!s) return null;
@@ -391,7 +391,7 @@ export function FirmIdentityRail({
                 type="button"
                 onClick={() => jumpToSection(key)}
                 aria-current={isActive ? "true" : undefined}
-                className={`group flex items-center gap-3 rounded-lg border-l-2 px-3 py-2 text-left text-sm transition ${
+                className={`group flex min-h-10 items-center gap-3 rounded-lg border-l-2 px-3 text-left text-sm transition ${
                   isActive
                     ? "border-gold-400 bg-gold-500/[0.06] text-fg-primary"
                     : "border-transparent text-fg-secondary hover:bg-surface-2 hover:text-fg-primary"
@@ -429,12 +429,12 @@ export function FirmIdentityRail({
             <button
               type="button"
               onClick={() => setInterviewOpen(true)}
-              className="w-full rounded-lg border border-gold-500/50 bg-gold-500/10 px-4 py-2.5 text-sm font-medium text-gold-300 transition hover:bg-gold-500/20"
+              className="min-h-11 w-full rounded-lg border border-gold-500/50 bg-gold-500/10 px-4 text-sm font-medium text-gold-300 transition hover:bg-gold-500/20"
             >
               ✶ Complete with guided interview
             </button>
             {questions[0] ? (
-              <p className="px-1 text-[11px] leading-snug text-fg-muted">
+              <p className="px-1 text-xs leading-snug text-fg-muted">
                 Next: <span className="text-fg-secondary">{questions[0].question}</span>
               </p>
             ) : null}

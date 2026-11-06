@@ -604,7 +604,7 @@ export function DeckBuilder({
           <button
             type="button"
             onClick={() => printDeck(deck, docName)}
-            className="rounded-md border border-line px-3 py-1.5 font-mono text-[11px] uppercase tracking-wider text-fg-secondary transition hover:text-fg-primary"
+            className="rounded-md border border-line px-3 min-h-9 text-xs font-medium text-fg-secondary transition hover:text-fg-primary"
           >
             ⤓ PDF
           </button>
@@ -688,7 +688,7 @@ export function DeckBuilder({
               <button
                 type="button"
                 onClick={duplicateSlide}
-                className="rounded border border-line px-2.5 py-1 font-mono text-[11px] uppercase tracking-wider text-fg-muted transition hover:text-fg-secondary"
+                className="rounded border border-line px-2.5 min-h-9 text-xs font-medium text-fg-muted transition hover:text-fg-secondary"
               >
                 Duplicate
               </button>
@@ -696,7 +696,7 @@ export function DeckBuilder({
                 type="button"
                 onClick={deleteSlide}
                 disabled={deck.slides.length <= 1}
-                className="rounded border border-status-danger/30 px-2.5 py-1 font-mono text-[11px] uppercase tracking-wider text-status-danger transition hover:bg-status-danger/10 disabled:opacity-30"
+                className="rounded border border-status-danger/30 px-2.5 min-h-9 text-xs font-medium text-status-danger transition hover:bg-status-danger/10 disabled:opacity-30"
               >
                 Delete
               </button>

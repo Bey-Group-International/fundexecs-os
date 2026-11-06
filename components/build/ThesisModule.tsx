@@ -124,7 +124,7 @@ export async function ThesisModule() {
                   </div>
                   <form action={deleteThesis}>
                     <input type="hidden" name="id" value={t.id} />
-                    <button className="rounded-md border border-line px-2 py-1 text-xs text-fg-muted transition hover:border-red-500/40 hover:text-red-400">
+                    <button className="fx-mini-btn fx-mini-btn-danger">
                       ✕
                     </button>
                   </form>

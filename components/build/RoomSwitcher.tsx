@@ -52,7 +52,7 @@ export function RoomSwitcher({ rooms, current }: { rooms: RoomOption[]; current:
             clear();
             setMode(mode === "new" ? "none" : "new");
           }}
-          className="rounded-lg border border-dashed border-line px-3 py-1.5 font-mono text-[11px] uppercase tracking-wider text-fg-muted transition hover:border-gold-500/40 hover:text-gold-300"
+          className="rounded-lg border border-dashed border-line px-3 min-h-9 text-xs font-medium text-fg-muted transition hover:border-gold-500/40 hover:text-gold-300"
         >
           + New room
         </button>
@@ -62,7 +62,7 @@ export function RoomSwitcher({ rooms, current }: { rooms: RoomOption[]; current:
             clear();
             setMode(mode === "edit" ? "none" : "edit");
           }}
-          className="rounded-lg px-2 py-1.5 font-mono text-[11px] uppercase tracking-wider text-fg-muted transition hover:text-fg-primary"
+          className="rounded-lg px-2 min-h-9 text-xs font-medium text-fg-muted transition hover:text-fg-primary"
         >
           Settings
         </button>
@@ -176,7 +176,7 @@ export function RoomSwitcher({ rooms, current }: { rooms: RoomOption[]; current:
               <input type="hidden" name="room_id" value={current.id} />
               <button
                 type="submit"
-                className="rounded-md border border-status-danger/40 px-2 py-1 font-mono text-[11px] uppercase tracking-wider text-status-danger transition hover:bg-status-danger/10"
+                className="rounded-md border border-status-danger/40 px-2 min-h-9 text-xs font-medium text-status-danger transition hover:bg-status-danger/10"
               >
                 Archive room
               </button>

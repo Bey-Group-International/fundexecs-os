@@ -106,7 +106,7 @@ function ShareRow({ share }: { share: ShareView }) {
                   setTimeout(() => setCopied(false), 1500);
                 });
               }}
-              className="rounded-lg border border-gold-500/40 bg-gold-500/10 px-3 py-1.5 font-mono text-[11px] uppercase tracking-wider text-gold-300 transition hover:bg-gold-500/20"
+              className="rounded-lg border border-gold-500/40 bg-gold-500/10 px-3 min-h-9 text-xs font-medium text-gold-300 transition hover:bg-gold-500/20"
             >
               {copied ? "Copied ✓" : "Copy link"}
             </button>
@@ -183,7 +183,7 @@ function ReactivateButton({ share }: { share: ShareView }) {
         type="button"
         disabled={pending}
         onClick={reactivate}
-        className="rounded-lg border border-gold-500/40 bg-gold-500/10 px-3 py-1.5 font-mono text-[11px] uppercase tracking-wider text-gold-300 transition hover:bg-gold-500/20 disabled:opacity-50"
+        className="rounded-lg border border-gold-500/40 bg-gold-500/10 px-3 min-h-9 text-xs font-medium text-gold-300 transition hover:bg-gold-500/20 disabled:opacity-50"
       >
         {pending ? "Reactivating…" : `Reactivate ${REACTIVATE_DAYS} days`}
       </button>
@@ -283,7 +283,7 @@ function AccessEditor({ share }: { share: ShareView }) {
           type="button"
           disabled={pending || invalid.length > 0}
           onClick={save}
-          className="rounded-lg border border-gold-500/40 bg-gold-500/10 px-3 py-1.5 font-mono text-[11px] uppercase tracking-wider text-gold-300 transition hover:bg-gold-500/20 disabled:opacity-50"
+          className="rounded-lg border border-gold-500/40 bg-gold-500/10 px-3 min-h-9 text-xs font-medium text-gold-300 transition hover:bg-gold-500/20 disabled:opacity-50"
         >
           {pending ? "Saving…" : "Save access"}
         </button>

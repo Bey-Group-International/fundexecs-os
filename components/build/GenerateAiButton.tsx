@@ -34,7 +34,7 @@ export function GenerateAiButton({
             ? `Let Earn draft ${label} from your Build foundation`
             : "Let Earn draft this document from your Build foundation"
         }
-        className="rounded-lg border border-sky-500/40 bg-sky-500/10 px-3 py-1.5 font-mono text-[11px] uppercase tracking-wider text-sky-300 transition hover:bg-sky-500/20 disabled:opacity-50"
+        className="rounded-lg border border-sky-500/40 bg-sky-500/10 px-3 min-h-9 text-xs font-medium text-sky-300 transition hover:bg-sky-500/20 disabled:opacity-50"
       >
         {pending ? "Generating…" : "✦ AI Draft"}
       </button>

@@ -206,7 +206,7 @@ export function ZipImport({
             type="button"
             onClick={onClose}
             aria-label="Close"
-            className="shrink-0 rounded-lg border border-line px-2.5 py-1 font-mono text-[11px] uppercase tracking-wider text-fg-muted transition hover:text-fg-primary"
+            className="shrink-0 rounded-lg border border-line px-2.5 min-h-9 text-xs font-medium text-fg-muted transition hover:text-fg-primary"
           >
             ✕
           </button>
@@ -371,7 +371,7 @@ export function ZipImport({
               type="button"
               onClick={onClose}
               disabled={phase === "importing"}
-              className="rounded-lg border border-line px-3 py-1.5 font-mono text-[11px] uppercase tracking-wider text-fg-secondary transition hover:text-fg-primary disabled:opacity-50"
+              className="rounded-lg border border-line px-3 min-h-9 text-xs font-medium text-fg-secondary transition hover:text-fg-primary disabled:opacity-50"
             >
               {phase === "done" ? "Close" : "Cancel"}
             </button>
@@ -380,7 +380,7 @@ export function ZipImport({
                 type="button"
                 onClick={runImport}
                 disabled={included.length === 0}
-                className="rounded-lg border border-gold-500/40 bg-gold-500/10 px-3 py-1.5 font-mono text-[11px] uppercase tracking-wider text-gold-300 transition hover:bg-gold-500/20 disabled:opacity-50"
+                className="rounded-lg border border-gold-500/40 bg-gold-500/10 px-3 min-h-9 text-xs font-medium text-gold-300 transition hover:bg-gold-500/20 disabled:opacity-50"
               >
                 Import {included.length} document{included.length === 1 ? "" : "s"}
               </button>

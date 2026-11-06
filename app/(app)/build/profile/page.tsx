@@ -61,7 +61,7 @@ function SectionHeader({
           </div>
         </div>
         <span
-          className={`shrink-0 rounded-full border px-2.5 py-1 font-mono text-[11px] uppercase tracking-wider ${
+          className={`shrink-0 rounded-full border px-2.5 py-1 text-xs font-medium ${
             done
               ? "border-emerald-400/40 bg-emerald-400/5 text-emerald-300"
               : "border-line text-fg-muted"
@@ -159,18 +159,12 @@ export default async function FirmIdentityPage() {
 
   return (
     <div className="fx-ambient w-full">
-      <Link
-        href="/settings#account"
-        className="mb-6 inline-flex items-center gap-1.5 font-mono text-[11px] uppercase tracking-widest text-fg-muted transition hover:text-gold-300"
-      >
+      <Link href="/settings#account" className="fx-action-link -ml-1.5 mb-4">
         ← Settings
       </Link>
 
-      <header className="mb-8 border-b border-line pb-6">
-        <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-300">
-          Build Hub
-        </span>
-        <h1 className="mt-2 font-display text-3xl font-semibold tracking-tight text-fg-primary">
+      <header className="mb-6 border-b border-line pb-5 sm:mb-8 sm:pb-6">
+        <h1 className="font-display text-2xl font-semibold tracking-tight text-fg-primary sm:text-3xl">
           Firm identity
         </h1>
         <p className="mt-2 max-w-prose text-sm text-fg-secondary">
