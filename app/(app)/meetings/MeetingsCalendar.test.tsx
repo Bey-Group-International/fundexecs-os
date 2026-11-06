@@ -699,3 +699,84 @@ describe("swiping", () => {
     expect(surface()).not.toBeNull();
   });
 });
+
+describe("finding time and acting on meetings", () => {
+  const toWeek = () => fireEvent.click(screen.getAllByRole("button", { name: "Week" })[0]);
+
+  it("sums the week up above the grid", async () => {
+    await show([
+      meeting({ id: "a", title: "Board", scheduled_at: new Date(2026, 8, 16, 10, 0).toISOString(), duration_minutes: 60 }),
+      meeting({ id: "b", title: "LPs", scheduled_at: new Date(2026, 8, 16, 11, 0).toISOString(), duration_minutes: 30 }),
+    ]);
+    toWeek();
+    const strip = screen.getByRole("region", { name: "Week at a glance" });
+    expect(strip.textContent).toMatch(/1h 30m in meetings/);
+    expect(strip.textContent).toMatch(/1 back-to-back run/);
+  });
+
+  it("draws free time on demand, skipping what is taken and what has passed, and schedules into it", async () => {
+    await show([meeting({ id: "a", title: "Board", scheduled_at: new Date(2026, 8, 16, 10, 0).toISOString() })]);
+    toWeek();
+    expect(document.querySelectorAll("[data-free]").length).toBe(0);
+    fireEvent.click(screen.getByRole("button", { name: "Free time" }));
+    const bands = [...document.querySelectorAll<HTMLElement>("[data-free]")];
+    // Today (Wed 16th, 9:00 now) has 9–10 and 11–18 free; the 13th–15th are past.
+    expect(bands.some((b) => /Free 9:00 AM, 1h/.test(b.getAttribute("aria-label") ?? ""))).toBe(true);
+    expect(bands.some((b) => /Free 11:00 AM, 7h/.test(b.getAttribute("aria-label") ?? ""))).toBe(true);
+    // Wed–Sat: four days drawn, each with at least one band.
+    expect(bands.length).toBeGreaterThanOrEqual(4);
+    fireEvent.click(bands[0]);
+    expect(screen.getByRole("dialog")).toBeTruthy();
+  });
+
+  it("badges a meeting that still needs prep", async () => {
+    await show([
+      meeting({ id: "a", title: "Board", scheduled_at: new Date(2026, 8, 17, 10, 0).toISOString(), preparation_status: "prep_needed" }),
+    ]);
+    const badges = document.querySelectorAll('[data-badge="Prep"]');
+    expect(badges.length).toBeGreaterThan(0);
+  });
+
+  it("opens a quick-actions menu on right-click", async () => {
+    await show([meeting({ id: "a", title: "Board", scheduled_at: new Date(2026, 8, 17, 10, 0).toISOString() })]);
+    toWeek();
+    fireEvent.contextMenu(screen.getByRole("button", { name: /^Board, / }));
+    const menu = screen.getByRole("menu", { name: "Actions for Board" });
+    expect(menu.textContent).toMatch(/Duplicate next week/);
+    expect(menu.textContent).toMatch(/Move to next week/);
+    expect(menu.textContent).toMatch(/Copy invite link/);
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(screen.queryByRole("menu")).toBeNull();
+  });
+
+  it("opens search with / and jumps to a meeting found", async () => {
+    const found = meeting({ id: "z", title: "Acme diligence", scheduled_at: new Date(2026, 10, 3, 15, 0).toISOString() });
+    await show([found]);
+    fireEvent.keyDown(window, { key: "/" });
+    const box = screen.getByRole("textbox", { name: "Search meetings" });
+    await act(async () => { await Promise.resolve(); });
+    fireEvent.change(box, { target: { value: "acme" } });
+    fireEvent.keyDown(box, { key: "Enter" });
+    await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+    expect(screen.queryByRole("textbox", { name: "Search meetings" })).toBeNull();
+    expect(screen.getByRole("dialog", { name: "Acme diligence" })).toBeTruthy();
+  });
+});
+
+describe("on a phone", () => {
+  it("offers a three-day grid that moves three days at a time", async () => {
+    await show([]);
+    fireEvent.click(screen.getByRole("button", { name: "3 days" }));
+    expect(screen.getByRole("region", { name: "Week at a glance" }).querySelectorAll("button").length).toBe(3);
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
+    // Wed 16 → Sat 19: the first column is now the 19th.
+    // Wed 16–Fri 18, then Sat 19–Mon 21.
+    expect(screen.getByText("September 19–21, 2026")).toBeTruthy();
+  });
+
+  it("keeps a New meeting button within reach", async () => {
+    await show([]);
+    fireEvent.click(screen.getByRole("button", { name: "New meeting" }));
+    expect(screen.getByRole("dialog", { name: "Schedule a meeting" })).toBeTruthy();
+  });
+});

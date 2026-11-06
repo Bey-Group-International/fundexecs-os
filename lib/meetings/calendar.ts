@@ -6,7 +6,8 @@
 
 import { MEETING_TYPES } from "./schedule";
 
-export type CalendarView = "month" | "week" | "day" | "agenda";
+/** "3day" is the phone's time grid: three columns that are still readable at 360px. */
+export type CalendarView = "month" | "week" | "3day" | "day" | "agenda";
 
 /** The shape of a meeting the calendar needs to plot and open. A superset of
  *  the live_meetings columns the grid, detail popover, and edit prefill use. */

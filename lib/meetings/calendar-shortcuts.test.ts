@@ -109,3 +109,12 @@ describe("SHORTCUT_HELP", () => {
     }
   });
 });
+
+describe("search and free time", () => {
+  it("opens search on / and toggles free time on f, but not while typing", () => {
+    expect(actionForKey({ key: "/" })).toEqual({ kind: "search" });
+    expect(actionForKey({ key: "f" })).toEqual({ kind: "free" });
+    expect(actionForKey({ key: "/" }, { tagName: "input" })).toBeNull();
+    expect(actionForKey({ key: "f", metaKey: true })).toBeNull();
+  });
+});
