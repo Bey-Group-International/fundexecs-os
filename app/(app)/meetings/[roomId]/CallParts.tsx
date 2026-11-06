@@ -17,6 +17,9 @@ import { mirrorSelfView } from "@/lib/meetings/stage";
 import { REACTIONS, reactionLabel, type ActiveReaction } from "@/lib/meetings/reactions";
 import { ChatText } from "./ChatText";
 import { speakerColorIndex } from "@/lib/meetings/speaker-attribution";
+import { DEFAULT_NOTETAKER, type NotetakerSettings } from "@/lib/meetings/notetaker";
+import { LiveTranscriptPanel } from "./LiveTranscriptPanel";
+import { NotesPanel } from "./NotesPanel";
 import { CHAT_MAX_LENGTH, chatClock, groupChat, pinnedMessage, type ChatMessage, type ChatTurn } from "@/lib/meetings/chat";
 import { MeetingShareLink, copyText } from "@/app/(app)/meetings/MeetingShareLink";
 import { meetingInviteUrl } from "@/lib/meetings/share";
@@ -1334,9 +1337,20 @@ const PersonRow = memo(function PersonRow({
 });
 
 /** The side panel's tabs. Each has its own button on the control bar. */
-export type PanelTab = "chat" | "transcript" | "people" | "docs";
+export type PanelTab = "chat" | "notes" | "transcript" | "people" | "docs";
 
-const PANEL_TITLE: Record<PanelTab, string> = { chat: "Chat", transcript: "Transcript", people: "People", docs: "Documents" };
+const PANEL_TITLE: Record<PanelTab, string> = { chat: "Chat", notes: "Notes", transcript: "Transcript", people: "People", docs: "Documents" };
+
+/** What the Notes and Transcript tabs need from the room's notetaker. */
+export interface SidebarNotetaker {
+  settings: NotetakerSettings;
+  signedIn: boolean;
+  onSettingsChange?: (patch: Partial<NotetakerSettings>) => Promise<boolean>;
+  lineCount: number;
+  bookmarkVersion: number;
+  onBookmark?: (label?: string) => Promise<boolean>;
+  authQuery: string;
+}
 
 /** A line of the live transcript, as the Transcript tab draws it. */
 export interface LiveTranscriptLine {
@@ -1362,7 +1376,10 @@ export function CopilotSidebar({
   speaking = NOBODY, onCollapse,
   tab: tabProp, onTabChange,
   pinnedChatId = null, onPinChat, privateReady = NOBODY, transcriptLines = NO_LINES,
+  notetaker = null,
 }: {
+  /** The notetaker's state and actions, for the Notes tab. Absent in the panel's own tests. */
+  notetaker?: SidebarNotetaker | null;
   /** The chat message pinned to the top of the chat, by id. */
   pinnedChatId?: string | null;
   /** Host only: pin a message, or clear the pin with null. Absent for everyone else. */
@@ -1439,9 +1456,6 @@ export function CopilotSidebar({
   /** Who the composer sends to: the room (null) or one participant's id. */
   const [chatTo, setChatTo] = useState<string | null>(null);
   const chatBottomRef = useRef<HTMLDivElement>(null);
-  const transcriptBoxRef = useRef<HTMLDivElement>(null);
-  /** Follow the newest line, unless somebody has scrolled up to read. */
-  const followTranscript = useRef(true);
   const [emailInput, setEmailInput] = useState("");
   const [emailSending, setEmailSending] = useState(false);
   const [emailNote, setEmailNote] = useState<"sent" | "failed" | null>(null);
@@ -1475,8 +1489,8 @@ export function CopilotSidebar({
   const tabs = useMemo(
     () =>
       canShareDocs
-        ? (["chat", "transcript", "people", "docs"] as const)
-        : (["chat", "transcript", "people"] as const),
+        ? (["chat", "notes", "transcript", "people", "docs"] as const)
+        : (["chat", "notes", "transcript", "people"] as const),
     [canShareDocs],
   );
 
@@ -1488,14 +1502,6 @@ export function CopilotSidebar({
     if (chatTo && !recipient) setChatTo(null);
   }, [chatTo, recipient]);
   const pinned = useMemo(() => pinnedMessage(chatMessages, pinnedChatId), [chatMessages, pinnedChatId]);
-
-  // Scrolled to the newest transcript line as it arrives — unless the reader
-  // has scrolled up, which is them reading, not wanting to be dragged down.
-  useEffect(() => {
-    if (tab !== "transcript" || !followTranscript.current) return;
-    const box = transcriptBoxRef.current;
-    if (box) box.scrollTop = box.scrollHeight;
-  }, [transcriptLines, tab]);
 
   const sendChat = () => {
     const text = chatInput.trim();
@@ -1586,11 +1592,11 @@ export function CopilotSidebar({
       <div className="flex border-b border-[var(--line)] shrink-0 overflow-x-auto overflow-y-hidden">
         {tabs.map((t) => (
           <button key={t} onClick={() => setTab(t)}
-            className={`relative shrink-0 flex-1 py-2 text-xs font-medium transition-colors capitalize ${
+            className={`relative shrink-0 flex-1 min-h-10 px-2 py-2 text-xs font-medium transition-colors capitalize ${
               tab === t ? "text-[var(--fg-primary)] border-b-2 border-[var(--gold-400)]"
                         : "text-[var(--fg-muted)] hover:text-[var(--fg-secondary)]"
             }`}>
-            {t === "people" ? `People ${participants.length}` : t === "docs" ? "Docs" : t === "transcript" ? "Transcript" : "Chat"}
+            {t === "people" ? `People ${participants.length}` : t === "docs" ? "Docs" : t === "transcript" ? "Transcript" : t === "notes" ? "Notes" : "Chat"}
             {/* The only place an unread count can appear while the panel is
                 open: the toolbar badge is suppressed for exactly that case. */}
             {t === "chat" && tab !== "chat" && chatUnread > 0 && (
@@ -1659,39 +1665,28 @@ export function CopilotSidebar({
         )}
 
         {tab === "transcript" && (
-          <div
-            ref={transcriptBoxRef}
-            onScroll={(e) => {
-              const box = e.currentTarget;
-              followTranscript.current = box.scrollHeight - box.scrollTop - box.clientHeight < 40;
-            }}
-            className="-m-3 flex flex-1 flex-col gap-2.5 overflow-y-auto p-3"
-          >
-            {/* What the meeting's notes are being built from, as it is heard.
-                Nothing here is a model's output; it is the words, attributed. */}
-            <p className="text-[11px] text-[var(--fg-muted)]">
-              {srStatus === "active"
-                ? "Live — what's said with mics on. The meeting report is written from this."
-                : srStatus === "unsupported"
-                  ? "This browser can't transcribe. Lines from others still appear here."
-                  : "Not transcribing your mic right now. Lines from others still appear here."}
-            </p>
-            {transcriptLines.length === 0 ? (
-              <EmptyCopilot label="Nothing transcribed yet. Lines appear here as people speak." />
-            ) : (
-              transcriptLines.map((line) => (
-                <div key={line.id} className={`flex min-w-0 flex-col gap-0.5 ${line.final ? "" : "opacity-60"}`}>
-                  <span className="flex items-baseline gap-2">
-                    <span className="break-words text-xs font-medium" style={{ color: colorFor(line.speakerId) }}>
-                      {line.isLocal ? "You" : line.speaker}
-                    </span>
-                    <span className="font-mono text-[10px] tabular-nums text-[var(--fg-muted)]">{chatClock(line.ts)}</span>
-                  </span>
-                  <p className={`break-words text-sm text-[var(--fg-primary)] ${line.final ? "" : "italic"}`}>{line.text}</p>
-                </div>
-              ))
-            )}
-          </div>
+          <LiveTranscriptPanel
+            lines={transcriptLines}
+            srStatus={srStatus}
+            paused={notetaker?.settings.paused ?? false}
+            meetingTitle={meetingTitle}
+            colorFor={colorFor}
+            onBookmark={notetaker?.onBookmark}
+          />
+        )}
+
+        {tab === "notes" && (
+          <NotesPanel
+            meetingId={meetingId}
+            isHost={isHost}
+            signedIn={notetaker?.signedIn ?? false}
+            settings={notetaker?.settings ?? DEFAULT_NOTETAKER}
+            onSettingsChange={notetaker?.onSettingsChange}
+            lineCount={notetaker?.lineCount ?? 0}
+            bookmarkVersion={notetaker?.bookmarkVersion ?? 0}
+            onBookmark={notetaker?.onBookmark}
+            authQuery={notetaker?.authQuery ?? ""}
+          />
         )}
 
         {tab === "docs" && (

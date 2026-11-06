@@ -21,6 +21,7 @@ import { reportTabs } from "@/lib/meetings/report-tabs";
 import { LocalTime } from "./LocalTime";
 import { loadReportPage } from "@/lib/meetings/report-page.server";
 import { loadReportSide } from "@/lib/meetings/report-side.server";
+import { loadMeetingBookmarks } from "@/lib/meetings/notetaker.server";
 import { linkActionItems, presenceFromSpeech, type ReportParticipant } from "@/lib/meetings/report-participants";
 import {
   meetingHappenedAt,
@@ -119,6 +120,9 @@ export default async function MeetingReportPage({
   // Who was there, where the follow-up stands, and the tasks the action items
   // became. A third read, after the document's own two, because it is about
   // acting on the report rather than reading it; it never fails the page.
+  // Moments people flagged during the call: the host sees everyone's, anyone
+  // else their own (the table's policies decide). Read alongside the side panel.
+  const bookmarksRead = loadMeetingBookmarks(supabase as never, meeting.id);
   const side = await loadReportSide(supabase, {
     meetingId: meeting.id,
     hostId: meeting.host_id,
@@ -131,6 +135,7 @@ export default async function MeetingReportPage({
     // are already loaded above.
     spoke: presenceFromSpeech(data.cueRows),
   });
+  const bookmarks = await bookmarksRead;
   const actionItems = linkActionItems(content.actionItems, side.tasks);
   const recipients = side.participants.filter((p) => p.receivesFollowUp);
   const unreachable = side.participants
@@ -388,6 +393,29 @@ export default async function MeetingReportPage({
                       <EmptyNote>No key points were recorded.</EmptyNote>
                     )}
                   </Section>
+                  {bookmarks.length > 0 && (
+                    <Section title="Bookmarked moments" count={bookmarks.length}>
+                      <ul className="flex flex-col gap-2" data-bookmarks>
+                        {bookmarks.map((b) => {
+                          const at = momentsOn && playable?.started_at ? Date.parse(b.at) - Date.parse(playable.started_at) : null;
+                          return (
+                            <li key={b.id} className="flex items-start gap-2 text-sm text-[var(--fg-primary)]">
+                              <span className="mt-0.5 shrink-0" aria-hidden="true">🔖</span>
+                              <span className="min-w-0 flex-1">
+                                {b.label ?? "Flagged as important"}
+                                <span className="text-xs text-[var(--fg-muted)]">
+                                  {" · "}
+                                  <LocalTime iso={b.at} options={{ timeStyle: "short" }} />
+                                  {b.by ? ` · ${b.by}` : ""}
+                                </span>
+                              </span>
+                              {at !== null && at >= 0 && <MomentChip ms={at} what="this bookmark" />}
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    </Section>
+                  )}
                 </div>
               )}
 
