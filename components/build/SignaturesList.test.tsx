@@ -63,3 +63,18 @@ it("shows the list but no actions to someone who cannot sign, and says why", () 
   expect(screen.getByText(/Only an owner or admin with a confirmed email can counter-sign/)).toBeInTheDocument();
   expect(within(screen.getByTestId("signatures-awaiting")).queryAllByRole("link")).toHaveLength(0);
 });
+
+it("shows an error, never an empty list, when the signatures could not be loaded", () => {
+  render(
+    <SignaturesList
+      tasks={[]}
+      error="boom"
+      currentRoomId="r1"
+      canSign
+      legacyAction={() => null}
+      envelopeAction={() => null}
+    />,
+  );
+  expect(screen.getByRole("alert")).toHaveTextContent(/Couldn't load the documents waiting for your signature/);
+  expect(screen.queryByText("Nothing is waiting for your signature.")).not.toBeInTheDocument();
+});

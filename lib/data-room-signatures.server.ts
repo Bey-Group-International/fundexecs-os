@@ -1,5 +1,6 @@
 import "server-only";
 import { createServerClient } from "@/lib/supabase/server";
+import { selectAllPages, type BatchResult } from "@/lib/supabase/batch";
 import type { SignatureTask } from "@/lib/data-room-signatures";
 
 /**
@@ -10,22 +11,33 @@ import type { SignatureTask } from "@/lib/data-room-signatures";
 export async function loadSignaturesAwaitingFund(orgId: string): Promise<SignatureTask[]> {
   const supabase = await createServerClient();
 
+  // Both lists are read in full, a page at a time (PostgREST cuts every response at
+  // its max_rows without saying so), and the fund's-turn test runs on every row. A
+  // plain limit would cut the list before that test, so rows that are not the fund's
+  // turn could crowd out rows that are. Ordering ends in id so pages never skip or
+  // repeat a row.
   const [legacyRes, envRes, roomsRes, sharesRes] = await Promise.all([
-    supabase
-      .from("data_room_document_signatures")
-      .select("id, room_id, file_name, signer_name, signer_email, signed_at")
-      .eq("organization_id", orgId)
-      .is("countersigned_at", null)
-      .order("signed_at", { ascending: true })
-      .limit(500),
-    supabase
-      .from("envelopes")
-      .select("id, title, updated_at, data_room_share_id, data_room_document_id, reader_email, envelope_recipients(name, email, role, status, signed_at)")
-      .eq("organization_id", orgId)
-      .eq("status", "partially_signed")
-      .not("data_room_document_id", "is", null)
-      .order("updated_at", { ascending: true })
-      .limit(500),
+    selectAllPages<Record<string, unknown>>((from, to) =>
+      supabase
+        .from("data_room_document_signatures")
+        .select("id, room_id, file_name, signer_name, signer_email, signed_at")
+        .eq("organization_id", orgId)
+        .is("countersigned_at", null)
+        .order("signed_at", { ascending: true })
+        .order("id", { ascending: true })
+        .range(from, to) as unknown as PromiseLike<BatchResult<Record<string, unknown>>>,
+    ),
+    selectAllPages<Record<string, unknown>>((from, to) =>
+      supabase
+        .from("envelopes")
+        .select("id, title, updated_at, data_room_share_id, data_room_document_id, reader_email, envelope_recipients(name, email, role, status, signed_at)")
+        .eq("organization_id", orgId)
+        .eq("status", "partially_signed")
+        .not("data_room_document_id", "is", null)
+        .order("updated_at", { ascending: true })
+        .order("id", { ascending: true })
+        .range(from, to) as unknown as PromiseLike<BatchResult<Record<string, unknown>>>,
+    ),
     supabase.from("data_rooms").select("id, name").eq("organization_id", orgId),
     supabase.from("data_room_shares").select("id, room_id").eq("organization_id", orgId),
   ]);
@@ -72,9 +84,11 @@ export async function loadSignaturesAwaitingFund(orgId: string): Promise<Signatu
     reader_email: string | null;
     envelope_recipients: { name: string; email: string; role: string; status: string; signed_at: string | null }[];
   }[]) {
-    // The owner's turn only: someone must be left to sign, and it must be the fund.
+    // The fund's turn only: the owner has yet to sign, and every other recipient has
+    // (the counter-sign endpoint refuses until they all have).
     const owner = e.envelope_recipients.find((r) => r.role === "owner");
     if (!owner || owner.status === "signed") continue;
+    if (e.envelope_recipients.some((r) => r.role !== "owner" && r.status !== "signed")) continue;
     const reader = e.envelope_recipients.find((r) => r.role === "signer" && r.status === "signed");
     const roomId = e.data_room_share_id ? roomOfShare.get(e.data_room_share_id) : undefined;
     if (!roomId) continue; // not tied to a room we can name

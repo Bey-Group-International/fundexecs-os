@@ -30,6 +30,7 @@ import { NdaSignatures } from "./NdaSignatures";
 import { RoomSignatures } from "./RoomSignatures";
 import { SignaturesAwaiting } from "./SignaturesAwaiting";
 import { loadSignaturesAwaitingFund } from "@/lib/data-room-signatures.server";
+import type { SignatureTask } from "@/lib/data-room-signatures";
 import { AuditExport } from "./AuditExport";
 import { RoomSwitcher } from "./RoomSwitcher";
 import { RoomWorkspace } from "./RoomWorkspace";
@@ -115,7 +116,12 @@ export async function MaterialsModule({ roomId }: { roomId?: string } = {}) {
       .order("signed_at", { ascending: false }),
     // Across every room, not just this one: the Signatures tab is the one place
     // a file waiting on the fund can be found without opening each room.
-    loadSignaturesAwaitingFund(orgId),
+    // A failed read here must not take the whole page down (Contents, Sharing), nor
+    // read as "nothing to sign": it is carried to the tab and shown as an error.
+    loadSignaturesAwaitingFund(orgId).then(
+      (tasks) => ({ tasks, error: null as string | null }),
+      (e: unknown) => ({ tasks: [] as SignatureTask[], error: e instanceof Error ? e.message : "Couldn't load the signatures." }),
+    ),
   ]);
 
   // An errored read must not render as "no documents" / "no links": the operator
@@ -360,8 +366,8 @@ export async function MaterialsModule({ roomId }: { roomId?: string } = {}) {
             activeCount={activeShareCount}
           />
         }
-        signatureCount={awaitingSignatures.length}
-        signatures={<SignaturesAwaiting tasks={awaitingSignatures} currentRoomId={room.id} />}
+        signatureCount={awaitingSignatures.error ? null : awaitingSignatures.tasks.length}
+        signatures={<SignaturesAwaiting tasks={awaitingSignatures.tasks} error={awaitingSignatures.error} currentRoomId={room.id} />}
         activity={
           <div className="space-y-6">
             <AuditExport roomId={room.id} roomName={room.name} />

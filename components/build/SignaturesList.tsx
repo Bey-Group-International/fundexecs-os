@@ -13,6 +13,7 @@ import {
  */
 export function SignaturesList({
   tasks,
+  error,
   currentRoomId,
   canSign,
   legacyAction,
@@ -20,6 +21,8 @@ export function SignaturesList({
   now,
 }: {
   tasks: SignatureTask[];
+  /** Set when the list could not be loaded: shown instead of the list, never as "nothing". */
+  error?: string | null;
   currentRoomId: string;
   canSign: boolean;
   legacyAction: (t: SignatureTask) => ReactNode;
@@ -29,6 +32,17 @@ export function SignaturesList({
   const groups = groupSignatureTasks(tasks);
   // The room being viewed first; the rest keep their order.
   groups.sort((a, b) => Number(b.roomId === currentRoomId) - Number(a.roomId === currentRoomId));
+
+  if (error) {
+    return (
+      <section aria-label="Documents awaiting your signature" data-testid="signatures-awaiting">
+        <h3 className="font-display text-lg font-semibold tracking-tight text-fg-primary">Needs your signature</h3>
+        <p role="alert" className="mt-2 rounded-xl border border-status-danger/40 bg-status-danger/5 px-4 py-3 text-sm text-status-danger">
+          Couldn&apos;t load the documents waiting for your signature, so this list may be incomplete. Reload the page to try again.
+        </p>
+      </section>
+    );
+  }
 
   return (
     <section aria-label="Documents awaiting your signature" data-testid="signatures-awaiting">

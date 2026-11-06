@@ -10,7 +10,16 @@ import { SignaturesList } from "@/components/build/SignaturesList";
  * on the fund's signature. The caller loads the tasks (it also needs the count for
  * the tab); this adds who may sign.
  */
-export async function SignaturesAwaiting({ tasks, currentRoomId }: { tasks: SignatureTask[]; currentRoomId: string }) {
+export async function SignaturesAwaiting({
+  tasks,
+  error,
+  currentRoomId,
+}: {
+  tasks: SignatureTask[];
+  /** Set when the list could not be loaded. */
+  error?: string | null;
+  currentRoomId: string;
+}) {
   const ctx = await getSessionContext();
   if (!ctx?.orgId) return null;
   const canSign = canAdminOrg(ctx.role) && ctx.emailConfirmed && Boolean(ctx.email);
@@ -18,6 +27,7 @@ export async function SignaturesAwaiting({ tasks, currentRoomId }: { tasks: Sign
   return (
     <SignaturesList
       tasks={tasks}
+      error={error}
       currentRoomId={currentRoomId}
       canSign={canSign}
       legacyAction={(t) => <CountersignForm signatureId={t.id} fileName={t.title} />}
