@@ -271,3 +271,34 @@ describe("coming back to a stale tab", () => {
     expect(screen.queryByText(/could not load/i)).toBeNull();
   });
 });
+
+describe("rescheduling in fewer steps", () => {
+  it("opens on the time picker when the link asks for it", async () => {
+    render(<ManageBooking token="tok" initialView={view()} initialMode="reschedule" />);
+    expect(screen.getByText(/pick a new time/i)).toBeTruthy();
+    expect(screen.getByRole("button", { name: /confirm new time/i })).toBeTruthy();
+  });
+
+  it("shows the old time against the new one before it is confirmed, then says it moved", async () => {
+    render(<ManageBooking token="tok" initialView={view()} initialMode="reschedule" />);
+    await act(async () => {
+      await Promise.resolve();
+    });
+    fireEvent.click(screen.getByRole("button", { name: /^\d{1,2}:\d{2}\s?(AM|PM)$/ }));
+    expect(screen.getByText(/moves to/i).parentElement?.textContent).toMatch(/October 5.*→.*October 7/);
+
+    fetchMock.mockImplementation(async (_url: string, init?: { method?: string }) =>
+      init?.method === "POST"
+        ? { ok: true, status: 200, json: async () => ({}) }
+        : { ok: true, status: 200, json: async () => view({ startsAt: "2099-10-07T14:00:00.000Z" }) },
+    );
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /confirm new time/i }));
+    });
+
+    expect(screen.getByRole("status").textContent).toMatch(/Moved to .*October 7/);
+    expect(screen.getByRole("link", { name: /update your calendar/i }).getAttribute("href")).toBe(
+      "/api/scheduling/booking/tok/calendar.ics",
+    );
+  });
+});

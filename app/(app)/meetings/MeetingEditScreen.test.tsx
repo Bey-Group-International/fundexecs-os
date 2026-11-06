@@ -156,3 +156,41 @@ describe("editing a meeting of a repeating series", () => {
     expect(screen.queryByRole("radio", { name: "This and following meetings" })).toBeNull();
   });
 });
+
+describe("typing a time", () => {
+  it("shows what it read, and fills in the date, start and length on Enter", () => {
+    open();
+    const quick = screen.getByLabelText("Quick time");
+    fireEvent.change(quick, { target: { value: "nov 12 3pm 45m" } });
+    expect(screen.getByText(/Thu, Nov 12 · 3:00 PM · 45 min/)).toBeInTheDocument();
+    fireEvent.keyDown(quick, { key: "Enter" });
+
+    expect((screen.getByLabelText("Date") as HTMLInputElement).value).toMatch(/-11-12$/);
+    expect((screen.getByLabelText("Start time") as HTMLInputElement).value).toBe("15:00");
+    expect((screen.getByLabelText("End time") as HTMLInputElement).value).toBe("15:45");
+    expect((quick as HTMLInputElement).value).toBe("");
+  });
+
+  it("says when it could not read something, and changes nothing", () => {
+    open();
+    const before = (screen.getByLabelText("Start time") as HTMLInputElement).value;
+    fireEvent.change(screen.getByLabelText("Quick time"), { target: { value: "lunch with priya" } });
+    expect(screen.getByText(/couldn.t read that/i)).toBeInTheDocument();
+    fireEvent.keyDown(screen.getByLabelText("Quick time"), { key: "Enter" });
+    expect((screen.getByLabelText("Start time") as HTMLInputElement).value).toBe(before);
+  });
+});
+
+describe("other time zones", () => {
+  it("says what the time is for the host when the meeting is set in another zone", () => {
+    render(
+      <MeetingEditScreen
+        mode="edit"
+        initial={{ scheduledAt: new Date(2026, 9, 5, 10, 0).toISOString(), timezone: "Pacific/Kiritimati" }}
+        onClose={() => {}}
+        onSaved={() => {}}
+      />,
+    );
+    expect(screen.getByText(/for you \(/)).toBeInTheDocument();
+  });
+});

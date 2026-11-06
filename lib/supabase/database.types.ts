@@ -3049,6 +3049,11 @@ export type SchedulingEventType = {
   requires_approval: boolean;
   is_active: boolean;
   sort_order: number;
+  /**
+   * Questions the booking page asks; read through lib/meetings/intake.ts.
+   * Optional because a row read before the column's migration has none.
+   */
+  intake_questions?: Json;
   created_at: string;
   updated_at: string;
 };

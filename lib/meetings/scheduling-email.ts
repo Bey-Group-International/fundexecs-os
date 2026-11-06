@@ -10,6 +10,12 @@ import { sendEmail, escapeHtml, type SendEmailCredentials } from "@/lib/email";
 import { buildBookingCalendarUrl, formatSlotFull } from "@/lib/meetings/scheduling";
 import { buildInviteIcs, inviteSequence, inviteUid } from "@/lib/calendar/invite";
 
+
+/** The invitee's manage link, opening straight onto the time picker. */
+function rescheduleUrl(manageUrl: string): string {
+  return `${manageUrl}${manageUrl.includes("?") ? "&" : "?"}reschedule=1`;
+}
+
 export interface BookingEmailContext {
   /**
    * The org whose connected mailbox sends these. The public booking flow has no
@@ -319,7 +325,9 @@ function buildBookingMessages(
           ],
           cta: ctx.joinUrl ? { label: "Join meeting", url: ctx.joinUrl } : null,
           secondary: inviteeCalendarUrl,
-          footnote: ctx.manageUrl ? `Need to change it? ${ctx.manageUrl}` : null,
+          footnote: ctx.manageUrl
+            ? `Need a different time? Pick one here: ${rescheduleUrl(ctx.manageUrl)} — or cancel: ${ctx.manageUrl}`
+            : null,
         }),
       });
       if (hostTo) {
@@ -436,7 +444,7 @@ function buildBookingMessages(
           cta: ctx.joinUrl ? { label: "Join meeting", url: ctx.joinUrl } : null,
           secondary: inviteeCalendarUrl,
           footnote: ctx.manageUrl
-            ? `If the new time doesn't work, cancel or pick another: ${ctx.manageUrl}`
+            ? `If the new time doesn't work, pick another: ${rescheduleUrl(ctx.manageUrl)} — or cancel: ${ctx.manageUrl}`
             : null,
         }),
       });
@@ -483,7 +491,7 @@ function buildBookingMessages(
           ],
           cta: null,
           footnote: ctx.manageUrl
-            ? `If the new time doesn't work, cancel or pick another: ${ctx.manageUrl}`
+            ? `If the new time doesn't work, pick another: ${rescheduleUrl(ctx.manageUrl)} — or cancel: ${ctx.manageUrl}`
             : null,
         }),
       });

@@ -272,6 +272,11 @@ export interface ReportAnalysisInput {
    * Empty or absent when nobody typed.
    */
   chat?: string | null;
+  /**
+   * What the meeting was set up to do — objective, agenda, and a booked
+   * meeting's intake answers — formatted by meeting-brief.ts.
+   */
+  brief?: string | null;
   /** The version being corrected, so the model can see what the correction is about. */
   previous?: { summary?: string | null; followUp?: string | null } | null;
 }
@@ -303,6 +308,15 @@ export function reportPrompt(input: ReportAnalysisInput): string {
   if (host) lines.push(`Host (sends the follow-up; never its recipient): ${host}`);
   if (recipients.length) lines.push(`Follow-up recipients: ${recipients.join("; ")}`);
   if (durationMin) lines.push(`Duration: ~${durationMin} minutes`);
+
+  const brief = (input.brief ?? "").trim();
+  if (brief) {
+    lines.push(
+      "",
+      "MEETING BRIEF (written before the meeting — what it was set up to do; the transcript says what actually happened):",
+      brief,
+    );
+  }
 
   if (correction) {
     lines.push(

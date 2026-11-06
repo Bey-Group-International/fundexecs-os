@@ -8,6 +8,8 @@ import { toAttendee, type SelectedAttendee } from "@/lib/meetings/people";
 import { failedNotice, whyNotice } from "@/lib/meetings/recipients";
 import { calendarSyncNote } from "@/lib/meetings/calendar-sync";
 import { MeetingShareLink } from "./MeetingShareLink";
+import { describeQuickWhen, parseQuickWhen } from "@/lib/meetings/quick-when";
+import { guestTimes, zoneCity, zoneClock } from "@/lib/meetings/attendee-zones";
 import {
   MEETING_TYPES,
   CALENDAR_VISIBILITIES,
@@ -311,6 +313,67 @@ export function MeetingEditScreen({
   const [savedResult, setSavedResult] = useState<MeetingSaveResult | null>(null);
 
   const activeDuration = durationMinutesFromTimes(startTime, endTime);
+
+  // "tue 3pm 30m": a when typed the way people say it. Shown back before it is
+  // applied, so a misread never lands silently in the date and time below.
+  const [quickText, setQuickText] = useState("");
+  const quickParsed = useMemo(
+    () => (quickText.trim() ? parseQuickWhen(quickText, new Date(), timezone) : null),
+    [quickText, timezone],
+  );
+
+  function applyQuickWhen() {
+    if (!quickParsed) return;
+    const start = quickParsed.time ?? startTime;
+    if (quickParsed.date) setDate(quickParsed.date);
+    if (quickParsed.time) setStartTime(quickParsed.time);
+    const minutes = quickParsed.minutes ?? (startTime && endTime ? durationMinutesFromTimes(startTime, endTime) : null);
+    if (minutes && minutes > 0 && start) {
+      setEndTime(addMinutesToTime(start, minutes));
+      setCustomEnd(!DURATION_PRESETS.some((p) => p.minutes === minutes));
+    } else if (quickParsed.minutes) {
+      setPickedDuration(quickParsed.minutes);
+    }
+    setQuickText("");
+  }
+
+  // The instant on screen, for saying what it is elsewhere. Null until a whole
+  // date and start exist.
+  const startIso = useMemo(() => {
+    if (!date || !/^\d{2}:\d{2}$/.test(startTime)) return null;
+    try {
+      return localToIso(date, startTime, timezone);
+    } catch {
+      return null;
+    }
+  }, [date, startTime, timezone]);
+
+  // Where each guest probably is: see attendee-zones.ts. Asked once per change
+  // to the guest list, not per keystroke elsewhere in the form.
+  const [zones, setZones] = useState<Record<string, string>>({});
+  const zoneKey = attendees.map((a) => a.email).sort().join(",");
+  useEffect(() => {
+    if (!zoneKey) return;
+    const controller = new AbortController();
+    const timer = setTimeout(() => {
+      fetch(`/api/meetings/people/zones?emails=${encodeURIComponent(zoneKey)}`, { signal: controller.signal })
+        .then((res) => (res.ok ? res.json() : null))
+        .then((json: { zones?: Record<string, string> } | null) => {
+          if (json?.zones && typeof json.zones === "object") setZones(json.zones);
+        })
+        .catch(() => {
+          // Unknown zones simply show no line.
+        });
+    }, 250);
+    return () => {
+      clearTimeout(timer);
+      controller.abort();
+    };
+  }, [zoneKey]);
+  const guestClock = useMemo(
+    () => (startIso ? guestTimes(startIso, timezone, attendees, zones) : []),
+    [startIso, timezone, attendees, zones],
+  );
 
   // Checked as the time is picked, not only on Schedule: time a connected
   // calendar has taken cannot be saved over, so saying so after the button
@@ -755,6 +818,40 @@ export function MeetingEditScreen({
 
           {/* When — icon-led inline date/time row. */}
           <Row icon={<IconClock />} className="mt-5">
+            <div className="mb-2">
+              <input
+                value={quickText}
+                onChange={(e) => setQuickText(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    applyQuickWhen();
+                  }
+                }}
+                placeholder='Type a time — "tue 3pm 30m", "tomorrow 9:30 for 1h"'
+                aria-label="Quick time"
+                aria-describedby="quick-when-hint"
+                className="w-full rounded-lg border border-dashed border-[var(--line)] bg-transparent px-3 py-2 text-sm text-[var(--fg-primary)] placeholder:text-[var(--fg-muted)] focus:border-[var(--gold-400)] focus:outline-none sm:py-1.5"
+              />
+              {quickText.trim() ? (
+                <p id="quick-when-hint" className="mt-1 flex flex-wrap items-center gap-2 text-[11px]">
+                  {quickParsed ? (
+                    <>
+                      <span className="text-[var(--fg-secondary)]">{describeQuickWhen(quickParsed)}</span>
+                      <button
+                        type="button"
+                        onClick={applyQuickWhen}
+                        className="rounded-full bg-gold-400/15 px-2 py-0.5 font-medium text-[var(--gold-400)] hover:bg-gold-400/25"
+                      >
+                        Use this ↵
+                      </button>
+                    </>
+                  ) : (
+                    <span className="text-[var(--fg-muted)]">Couldn&rsquo;t read that — try &ldquo;fri 2pm 45m&rdquo;.</span>
+                  )}
+                </p>
+              ) : null}
+            </div>
             <div className="flex flex-wrap items-center gap-x-2 gap-y-2">
               <BareInput type="date" value={date} onChange={setDate} ariaLabel="Date" error={Boolean(fieldErrors.date)} />
               <BareInput type="time" value={startTime} onChange={setStartTime} ariaLabel="Start time" error={Boolean(fieldErrors.startTime)} />
@@ -779,6 +876,11 @@ export function MeetingEditScreen({
                 Time zone
               </button>
             </p>
+            {startIso && timezone !== browserTz ? (
+              <p className="mt-1 text-[11px] text-[var(--fg-secondary)]">
+                That&rsquo;s {zoneClock(startIso, browserTz)} for you ({zoneCity(browserTz)}).
+              </p>
+            ) : null}
             {mode === "create" ? (
               <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-[var(--fg-secondary)]">
                 <label className="flex items-center gap-1.5">
@@ -909,6 +1011,24 @@ export function MeetingEditScreen({
                   decides internal vs external, so nobody has to answer a
                   question the app can answer itself. */}
               <AttendeePicker value={attendees} onChange={setAttendees} label="Add guests" />
+
+              {guestClock.length > 0 ? (
+                <ul aria-label="Guests' local times" className="flex flex-col gap-1">
+                  {guestClock.map((g) => (
+                    <li key={g.email} className="flex flex-wrap items-baseline gap-x-1.5 text-[11px] text-[var(--fg-secondary)]">
+                      <span className="max-w-[9rem] truncate font-medium text-[var(--fg-primary)]">{g.name}</span>
+                      <span>
+                        {g.clock} in {g.city}
+                      </span>
+                      {g.flag ? (
+                        <span className="rounded-full bg-status-warning/15 px-1.5 text-[10px] font-medium text-[var(--status-warning)]">
+                          {g.flag === "early" ? "early for them" : "late for them"}
+                        </span>
+                      ) : null}
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
 
               {unreachable.length > 0 ? (
                 <div className="rounded-lg border border-status-warning/45 bg-status-warning/10 px-3 py-2">
@@ -1176,7 +1296,7 @@ function BareInput({
       aria-label={ariaLabel}
       placeholder={placeholder}
       onChange={(e) => onChange(e.target.value)}
-      className={`rounded-lg border bg-[var(--surface-0)] px-3 py-1.5 text-sm text-[var(--fg-primary)] placeholder:text-[var(--fg-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--gold-400)] ${
+      className={`min-h-10 rounded-lg border bg-[var(--surface-0)] px-3 py-1.5 text-sm text-[var(--fg-primary)] placeholder:text-[var(--fg-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--gold-400)] sm:min-h-0 ${
         full ? "w-full" : ""
       } ${error ? "border-[var(--status-danger)]" : "border-transparent hover:border-[var(--line)] focus:border-[var(--gold-400)]"}`}
     />
@@ -1255,7 +1375,7 @@ function Chip({ active, onClick, children }: { active: boolean; onClick: () => v
       type="button"
       aria-pressed={active}
       onClick={onClick}
-      className={`rounded-full border px-3 py-1 text-xs font-medium transition-colors ${
+      className={`min-h-9 rounded-full border px-3 py-1 text-xs font-medium transition-colors sm:min-h-0 ${
         active
           ? "border-[var(--gold-400)] bg-gold-400/15 text-[var(--gold-400)]"
           : "border-[var(--line)] text-[var(--fg-secondary)] hover:text-[var(--fg-primary)]"

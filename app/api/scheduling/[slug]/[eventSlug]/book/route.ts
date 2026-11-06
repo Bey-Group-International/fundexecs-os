@@ -24,6 +24,7 @@ import {
 } from "@/lib/meetings/scheduling-service";
 import type { SchedulingEventType, SchedulingPage } from "@/lib/supabase/database.types";
 import { sendBookingConfirmation } from "@/lib/meetings/booking-confirmation.server";
+import { normalizeIntakeQuestions, notesWithIntake, validateIntakeAnswers } from "@/lib/meetings/intake";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -40,6 +41,8 @@ interface BookBody {
   timezone?: string;
   /** Extra guests: a list of emails, or one comma-separated string. */
   guests?: unknown;
+  /** Answers to the meeting type's intake questions, keyed by question id. */
+  answers?: unknown;
 }
 
 export async function POST(
@@ -83,6 +86,14 @@ export async function POST(
     if (!eventType) return NextResponse.json({ error: "Not found" }, { status: 404 });
     bookingTarget = { client: service, page: resolved.page, eventType };
 
+    // Checked against the questions as they stand now, not as the page showed
+    // them: a host who made one required since the page loaded gets an answer.
+    const intake = validateIntakeAnswers(normalizeIntakeQuestions(eventType.intake_questions), body.answers);
+    if (Object.keys(intake.errors).length > 0) {
+      const intakeErrors = Object.fromEntries(Object.entries(intake.errors).map(([id, msg]) => [`intake.${id}`, msg]));
+      return NextResponse.json({ error: "Check the highlighted fields.", fieldErrors: intakeErrors }, { status: 422 });
+    }
+
     const { booking, roomCode } = await createBooking(service, {
       page: resolved.page,
       eventType,
@@ -90,7 +101,9 @@ export async function POST(
       inviteeName: body.name!.trim(),
       inviteeEmail: body.email!.trim(),
       inviteeGuests: "guests" in guestList ? guestList.guests : [],
-      inviteeNotes: body.notes ?? null,
+      // The answers lead the notes, so they reach the meeting, the host's email
+      // and the report brief wherever the notes already go.
+      inviteeNotes: notesWithIntake(intake.answers, body.notes),
       // Anything but a real zone falls back to the host's, rather than being
       // stored and read back into every later email about this booking.
       inviteeTimezone: isValidTimezone(body.timezone) ? body.timezone : null,

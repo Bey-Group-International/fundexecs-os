@@ -43,6 +43,7 @@ import {
   parseAvailability,
   suggestSlug,
 } from "@/lib/meetings/scheduling";
+import { normalizeIntakeQuestions, type IntakeQuestion } from "@/lib/meetings/intake";
 
 export type SchedulingClient =
   | Awaited<ReturnType<typeof createServerClient>>
@@ -50,8 +51,12 @@ export type SchedulingClient =
 
 const PAGE_COLUMNS =
   "id, user_id, organization_id, slug, display_name, headline, bio, timezone, availability, buffer_minutes, min_notice_minutes, booking_window_days, max_bookings_per_day, is_active, created_at, updated_at";
-const EVENT_TYPE_COLUMNS =
-  "id, page_id, user_id, organization_id, slug, title, description, duration_minutes, slot_interval_minutes, meeting_type, requires_approval, is_active, sort_order, created_at, updated_at";
+// Every column, rather than a list. A meeting type is a handful of small
+// fields, and naming them would make a newly added one (intake_questions) an
+// error on every booking page for as long as code runs ahead of its migration;
+// "*" simply returns it once it exists. Nothing here leaves the server without
+// going through serializeEventType.
+const EVENT_TYPE_COLUMNS = "*";
 const BOOKING_COLUMNS =
   "id, page_id, event_type_id, host_user_id, organization_id, meeting_id, invitee_name, invitee_email, invitee_notes, invitee_guests, invitee_timezone, starts_at, ends_at, status, cancelled_by, cancellation_reason, manage_token, rescheduled_at, decided_at, calendar_sequence, created_at, updated_at";
 
@@ -1131,6 +1136,7 @@ export interface SerializedEventType {
   requiresApproval: boolean;
   isActive: boolean;
   sortOrder: number;
+  intakeQuestions: IntakeQuestion[];
 }
 
 export function serializeEventType(eventType: SchedulingEventType): SerializedEventType {
@@ -1145,6 +1151,7 @@ export function serializeEventType(eventType: SchedulingEventType): SerializedEv
     requiresApproval: eventType.requires_approval,
     isActive: eventType.is_active,
     sortOrder: eventType.sort_order,
+    intakeQuestions: normalizeIntakeQuestions(eventType.intake_questions),
   };
 }
 
