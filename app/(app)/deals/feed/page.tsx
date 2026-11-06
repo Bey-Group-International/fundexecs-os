@@ -6,7 +6,7 @@ import { getDealFeed } from "@/lib/deal-share.server";
 import { DealsSeen } from "@/components/inbox/DealsSeen";
 import { DealSignalFeed } from "@/components/intelligence/DealSignalFeed";
 import { SectorHeatmap } from "@/components/intelligence/SectorHeatmap";
-import { buildHeatmap } from "@/lib/deal-intelligence";
+import { buildHeatmap, pipelineDealsToSignals } from "@/lib/deal-intelligence";
 import type { DealSignal } from "@/lib/deal-intelligence";
 
 export const dynamic = "force-dynamic";
@@ -32,26 +32,9 @@ export default async function DealFeedPage() {
       .limit(100),
   ]);
 
-  // Map external/demo deals into DealSignal shape for the intelligence feed.
-  // AI-drafted pipeline items (source === "Copilot") are intentionally excluded:
-  // they represent internal work product, not ecosystem signals, and showing
-  // them here creates a confusing mix of "my deals" and "market intelligence."
-  const INTERNAL_SOURCES = new Set(["Copilot", "copilot"]);
-  const signals: DealSignal[] = (dealsRes.data ?? [])
-    .filter((d) => !INTERNAL_SOURCES.has(d.source ?? ""))
-    .map((d) => ({
-      id: d.id,
-      signalType: "funding_round" as const,
-      title: d.name ?? "Unnamed Deal",
-      sector: d.asset_class ?? undefined,
-      geography: d.geography ?? undefined,
-      dealStage: d.stage ?? undefined,
-      dealSizeMin: null,
-      dealSizeMax: d.target_amount ?? null,
-      relevanceScore: 75,
-      thesisMatchScore: 65,
-      publishedAt: d.created_at,
-    }));
+  // The org's own pipeline deals, shaped for the feed. They carry no scores: see
+  // pipelineDealsToSignals.
+  const signals: DealSignal[] = pipelineDealsToSignals(dealsRes.data ?? []);
 
   const heatmapCells = buildHeatmap(signals);
   const sectors = [...new Set(heatmapCells.map((c) => c.sector))];
@@ -118,7 +101,7 @@ export default async function DealFeedPage() {
               Deal Signal Feed
             </h2>
             <p className="mt-1 text-sm text-fg-secondary">
-              Live deal signals across sectors — funding rounds, acquisitions, and market moves mapped to your thesis.
+              The deals in your pipeline, newest first, by sector and stage.
             </p>
           </header>
           <DealSignalFeed signals={signals} />
