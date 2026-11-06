@@ -169,4 +169,58 @@ describe("BlockPlacer: click, choose, done", () => {
     fireEvent.pointerDown(layer, { clientX: 300, clientY: 400, button: 2, pointerId: 1 });
     expect(screen.queryByRole("menu")).toBeNull();
   });
+
+  describe("required and optional", () => {
+    const toggle = (label: string, now: "required" | "optional") =>
+      screen.getByRole("button", { name: new RegExp(`^${label} is ${now}`) });
+
+    it("starts the signature, name and date and time as required and the extras as optional", async () => {
+      await mount();
+      const kinds: [string, string][] = [["Signature", "required"], ["Name", "required"], ["Date and time", "required"], ["Company", "optional"], ["Title", "optional"], ["Address", "optional"], ["Email", "optional"], ["Phone", "optional"]];
+      for (const [i, [label]] of kinds.entries()) {
+        clickPage(40, 60 + i * 80);
+        choose(label);
+      }
+      for (const [label, state] of kinds) expect(toggle(label, state as "required" | "optional")).toBeTruthy();
+    });
+
+    it("every block has a one-click toggle, red when required and blue when optional", async () => {
+      await mount();
+      clickPage(300, 400);
+      choose("Company"); // starts optional
+      const block = screen.getByRole("button", { name: "Company block" });
+      expect(block.getAttribute("data-required")).toBe("false");
+      expect(block.style.border).toContain("rgb(37, 99, 235)"); // blue
+      fireEvent.click(toggle("Company", "optional"));
+      expect(block.getAttribute("data-required")).toBe("true");
+      expect(block.style.border).toContain("rgb(220, 38, 38)"); // red
+      fireEvent.click(toggle("Company", "required"));
+      expect(block.getAttribute("data-required")).toBe("false");
+    });
+
+    it("toggling does not select, move or delete the block, and is saved", async () => {
+      await mount();
+      clickPage(300, 400);
+      choose("Name");
+      fireEvent.click(toggle("Name", "required"));
+      expect(screen.getByRole("button", { name: "Name block" })).toBeTruthy();
+      fireEvent.click(screen.getByRole("button", { name: /Save$/ }));
+      await waitFor(() => expect(puts).toHaveLength(1));
+      expect((puts[0].blocks[0] as unknown as { required: boolean }).required).toBe(false);
+    });
+
+    it("will not send while someone's only signature blocks are optional", async () => {
+      await mount();
+      // Jane (signer) gets a signature, made optional; the owner gets a required one.
+      clickPage(300, 300);
+      choose("Signature");
+      fireEvent.click(toggle("Signature", "required"));
+      clickPage(300, 500);
+      fireEvent.click(within(screen.getByRole("menu")).getByRole("button", { name: /Me/ }));
+      choose("Signature");
+      fireEvent.keyDown(window, { key: "Escape" });
+      fireEvent.click(screen.getByRole("button", { name: /Send for signature/ }));
+      await waitFor(() => expect(screen.getByRole("alert").textContent).toMatch(/at least one of Jane Smith's signature blocks required/));
+    });
+  });
 });

@@ -28,10 +28,10 @@ export async function POST(_req: Request, props: { params: Promise<{ id: string 
   const orgId = ctx.orgId;
 
   // Update envelope status to 'sent'
-  // Nothing goes out until every signer, and the owner, has a signature block to sign on.
+  // Nothing goes out until every signer, and the owner, has a required signature block to sign on.
   const [{ data: pre }, { data: placed }, { data: current }] = await Promise.all([
     supabase.from("envelope_recipients").select("id, name, role").eq("envelope_id", envelopeId),
-    supabase.from("envelope_fields").select("recipient_id, field_type").eq("envelope_id", envelopeId),
+    supabase.from("envelope_fields").select("recipient_id, field_type, required").eq("envelope_id", envelopeId),
     supabase.from("envelopes").select("status, pdf_storage_key, lp_session_id").eq("id", envelopeId).eq("organization_id", orgId).maybeSingle(),
   ]);
   const cur = current as { status: string; pdf_storage_key: string | null; lp_session_id: string | null } | null;
@@ -40,10 +40,10 @@ export async function POST(_req: Request, props: { params: Promise<{ id: string 
   if (cur.pdf_storage_key) {
     const missing = recipientsWithoutSignature(
       ((pre ?? []) as { id: string; name: string; role: string }[]).map((r) => ({ id: r.id, name: r.role === "owner" ? "You (countersignature)" : r.name })),
-      (placed ?? []) as { recipient_id: string; field_type: string }[],
+      (placed ?? []) as { recipient_id: string; field_type: string; required: boolean | null }[],
     );
     if (missing.length) {
-      return NextResponse.json({ error: `Place a signature block for: ${missing.join(", ")}` }, { status: 400 });
+      return NextResponse.json({ error: `Place a required signature block for: ${missing.join(", ")}` }, { status: 400 });
     }
   }
 

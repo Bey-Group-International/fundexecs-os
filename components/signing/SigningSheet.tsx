@@ -9,7 +9,7 @@ import { useEffect, useMemo, useState, useTransition } from "react";
 import { PdfPages } from "@/components/signing/PdfPages";
 import { SpotPanel } from "@/components/signing/SpotPanel";
 import { forgetSignature, loadRememberedSignature, rememberSignature } from "@/lib/signing/remembered-signature";
-import { blockSpec, blockValueProblem, formatBlockDateTime, toOffsetIso } from "@/lib/signing/blocks";
+import { blockColor, blockSpec, blockValueProblem, formatBlockDateTime, toOffsetIso } from "@/lib/signing/blocks";
 
 export interface SheetBlock {
   id: string;
@@ -58,7 +58,7 @@ export function SigningSheet({
     const now = toOffsetIso(new Date());
     return Object.fromEntries(
       blocks
-        .map((b) => [b.id, b.prefill ?? (blockSpec(b.type)?.input === "auto" ? now : "")] as const)
+        .map((b) => [b.id, b.prefill ?? (blockSpec(b.type)?.input === "auto" && b.required ? now : "")] as const)
         .filter(([, v]) => v),
     );
   });
@@ -116,7 +116,10 @@ export function SigningSheet({
     document.querySelector(`[data-block-id="${activeId}"]`)?.scrollIntoView?.({ block: "center", behavior: "smooth" });
   }, [activeId]);
 
-  const isFilled = (b: SheetBlock) => (blockSpec(b.type)!.input === "signature" ? Boolean(signature) : Boolean((values[b.id] ?? "").trim()));
+  // A required signature spot is filled once there is a signature; an optional one only when the
+  // signer chose to sign there.
+  const isFilled = (b: SheetBlock) =>
+    blockSpec(b.type)!.input === "signature" ? Boolean(signature) && (b.required || values[b.id] === "signed") : Boolean((values[b.id] ?? "").trim());
 
   const open = useMemo(() => {
     const out: string[] = [];
@@ -192,7 +195,8 @@ export function SigningSheet({
                       onClick={locked ? undefined : () => setActiveId(b.id)}
                       onKeyDown={locked ? undefined : (e) => (e.key === "Enter" || e.key === " ") && setActiveId(b.id)}
                       className={`absolute flex items-center ${locked ? "" : "cursor-pointer"} ${activeId && !isActive ? "opacity-50" : ""}`}
-                      style={boxStyle(b)}
+                      // Red when it has to be completed, blue when it may be skipped.
+                      style={{ ...boxStyle(b), ...(filled ? {} : { outline: `1px dashed ${blockColor(b.required)}`, outlineOffset: 0 }) }}
                     >
                       <div className="flex h-full w-full items-center overflow-hidden">
                       {filled ? (
@@ -207,7 +211,9 @@ export function SigningSheet({
                       ) : (
                         <span
                           aria-hidden="true"
-                          className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 text-xs font-bold leading-none ${isActive ? "animate-pulse border-gold-500 bg-gold-500 text-on-gold" : "border-gold-500 bg-white/80 text-[#7a5d00]"}`}
+                          data-required={b.required ? "true" : "false"}
+                          className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 text-xs font-bold leading-none ${isActive ? "animate-pulse text-white" : "bg-white/90"}`}
+                          style={{ borderColor: blockColor(b.required), color: isActive ? undefined : blockColor(b.required), background: isActive ? blockColor(b.required) : undefined }}
                         >
                           ×
                         </span>
@@ -244,7 +250,18 @@ export function SigningSheet({
                             position={activeIndex + 1}
                             total={activeIndex >= 0 ? steps.length : 0}
                             onBack={activeIndex > 0 ? () => setActiveId(steps[activeIndex - 1].id) : null}
-                            onNext={() => setActiveId(activeIndex >= 0 && activeIndex < steps.length - 1 ? steps[activeIndex + 1].id : null)}
+                            onNext={(used) => {
+                              // An optional signature spot is signed only when the signer chose to.
+                              if (spec.input === "signature" && !b.required) {
+                                setValues((cur) => {
+                                  const next = { ...cur };
+                                  if (used) next[b.id] = "signed";
+                                  else delete next[b.id];
+                                  return next;
+                                });
+                              }
+                              setActiveId(activeIndex >= 0 && activeIndex < steps.length - 1 ? steps[activeIndex + 1].id : null);
+                            }}
                             isLast={activeIndex < 0 || activeIndex === steps.length - 1}
                             agree={lastOpen ? { checked: agreed, onChange: setAgreed } : undefined}
                             onClose={() => setActiveId(null)}

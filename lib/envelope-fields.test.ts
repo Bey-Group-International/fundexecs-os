@@ -33,4 +33,14 @@ describe("recipientsWithoutSignature", () => {
     expect(recipientsWithoutSignature(people, [])).toEqual(["Jane", "You"]);
     expect(recipientsWithoutSignature(people, [{ recipient_id: "a", field_type: "signature" }, { recipient_id: "b", field_type: "signature" }])).toEqual([]);
   });
+
+  it("only a required signature block counts, so a document cannot be finished without signing", () => {
+    const people = [{ id: "a", name: "Jane" }, { id: "b", name: "You" }];
+    const opt = (id: string) => ({ recipient_id: id, field_type: "signature", required: false });
+    const req = (id: string) => ({ recipient_id: id, field_type: "signature", required: true });
+    expect(recipientsWithoutSignature(people, [opt("a"), req("b")])).toEqual(["Jane"]);
+    expect(recipientsWithoutSignature(people, [opt("a"), req("a"), req("b")])).toEqual([]);
+    // An older block with no flag is required.
+    expect(recipientsWithoutSignature(people, [{ recipient_id: "a", field_type: "signature" }, req("b")])).toEqual([]);
+  });
 });

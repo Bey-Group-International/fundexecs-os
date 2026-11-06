@@ -8,7 +8,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { PdfPages } from "@/components/signing/PdfPages";
-import { BLOCKS, blockSpec, clampBlock, newBlockAt, type BlockType } from "@/lib/signing/blocks";
+import { BLOCKS, blockColor, blockSpec, clampBlock, defaultRequired, newBlockAt, type BlockType } from "@/lib/signing/blocks";
 
 interface Party {
   id: string;
@@ -152,7 +152,7 @@ export function BlockPlacer({ title, fieldsUrl, pdfUrl, sendUrl, doneHref, prefi
     const target = party(partyId);
     // A name or email block starts with the person's own, which they can still change.
     const prefill = prefillNames ? (type === "name" ? target?.name : type === "email" ? target?.email : "") ?? "" : "";
-    const b: Block = { key: nextKey(), recipientId: partyId, type, page, ...pos, required: true, prefill, locked: false };
+    const b: Block = { key: nextKey(), recipientId: partyId, type, page, ...pos, required: defaultRequired(type), prefill, locked: false };
     setBlocks((cur) => [...cur, b]);
     setSelected(null);
     setMenu(null);
@@ -179,8 +179,13 @@ export function BlockPlacer({ title, fieldsUrl, pdfUrl, sendUrl, doneHref, prefi
 
   function missingSignature(): string | null {
     for (const p of parties) {
-      if (!blocks.some((b) => b.recipientId === p.id && b.type === "signature")) {
+      const own = blocks.filter((b) => b.recipientId === p.id && b.type === "signature");
+      if (!own.length) {
         return p.role === "owner" ? "Add a signature block for yourself: you countersign after the recipient." : `Add a signature block for ${p.name}.`;
+      }
+      // At least one must be required, or the document could be finished without a signature.
+      if (!own.some((b) => b.required)) {
+        return p.role === "owner" ? "Make at least one of your signature blocks required." : `Make at least one of ${p.name}'s signature blocks required.`;
       }
     }
     return null;
@@ -319,16 +324,33 @@ export function BlockPlacer({ title, fieldsUrl, pdfUrl, sendUrl, doneHref, prefi
                           setSelected(null);
                         }
                       }}
-                      className={`absolute flex cursor-move items-center ${selected === b.key ? "rounded-sm border border-dashed" : ""}`}
+                      className="absolute flex cursor-move items-center rounded-sm"
+                      // Red when the signer has to complete it, blue when they may skip it.
+                      data-required={b.required ? "true" : "false"}
                       style={{
                         left: `${b.xPct}%`,
                         top: `${b.yPct}%`,
                         width: `${b.widthPct}%`,
                         height: `${b.heightPct}%`,
-                        borderColor: tint(b.recipientId),
+                        border: `${selected === b.key ? 2 : 1}px dashed ${blockColor(b.required)}`,
                         touchAction: "none",
                       }}
                     >
+                      <button
+                        type="button"
+                        aria-label={`${blockSpec(b.type)!.label} is ${b.required ? "required" : "optional"}: click to make it ${b.required ? "optional" : "required"}`}
+                        aria-pressed={b.required}
+                        title={b.required ? "Required: the signer must complete it. Click to make it optional." : "Optional: the signer may skip it. Click to make it required."}
+                        onPointerDown={(e) => e.stopPropagation()}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          patch(b.key, { required: !b.required });
+                        }}
+                        className="absolute -top-2.5 right-2 z-10 flex h-4 cursor-pointer items-center rounded-full px-1.5 text-[9px] font-semibold leading-none text-white shadow-sm"
+                        style={{ background: blockColor(b.required) }}
+                      >
+                        {b.required ? "Required" : "Optional"}
+                      </button>
                       <button
                         type="button"
                         aria-label={`Delete ${blockSpec(b.type)!.label} block`}
@@ -348,7 +370,7 @@ export function BlockPlacer({ title, fieldsUrl, pdfUrl, sendUrl, doneHref, prefi
                       <span
                         aria-hidden="true"
                         className="flex h-5 w-5 shrink-0 -translate-x-1/2 items-center justify-center rounded-full border-2 bg-white/90 text-xs font-bold leading-none"
-                        style={{ borderColor: tint(b.recipientId), color: tint(b.recipientId) }}
+                        style={{ borderColor: blockColor(b.required), color: tint(b.recipientId) }}
                       >
                         ×
                       </span>

@@ -167,6 +167,11 @@ export async function POST(
     const adjustedTimes: { chosen: string }[] = []
     for (const f of fieldList) {
       if (f.field_type === 'datetime') {
+        // An optional date and time the signer left alone stays blank.
+        if (!f.required && !(responses[f.id] ?? '').trim()) {
+          delete responses[f.id]
+          continue
+        }
         const r = resolveDateTimeResponse(responses[f.id], stampedAt)
         if (r.problem) return NextResponse.json({ ok: false, error: r.problem }, { status: 400 })
         responses[f.id] = r.value

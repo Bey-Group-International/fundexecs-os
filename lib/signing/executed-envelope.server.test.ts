@@ -21,14 +21,15 @@ import { getEnvelopeCopy, keepExecutedCopy } from "./executed-envelope.server";
 const bytes = (n: number) => new Uint8Array([0x25, 0x50, 0x44, 0x46, 0x2d, n]);
 let status = "completed";
 let signedRecipients = true;
+let fieldRows: unknown[] = [];
 
 function db(): never {
   const rows: Record<string, unknown> = {
     envelopes: { id: "e1", title: "NDA", document_content: "text", status, pdf_storage_key: "envelopes/e1.pdf", document_sha256: "a".repeat(64) },
     envelope_recipients: [
-      { id: "r1", name: "Jane", email: "j@lp.com", role: "signer", status: signedRecipients ? "signed" : "pending", signed_at: signedRecipients ? "2026-11-04T10:00:00Z" : null, signature_data: null, ip_address: "1.2.3.4" },
+      { id: "r1", name: "Jane", email: "j@lp.com", role: "signer", status: signedRecipients ? "signed" : "pending", signed_at: signedRecipients ? "2026-11-04T10:00:00Z" : null, signature_data: "data:image/png;base64,AAAA", ip_address: "1.2.3.4" },
     ],
-    envelope_fields: [],
+    envelope_fields: fieldRows,
   };
   return {
     from: (t: string) => {
@@ -48,6 +49,7 @@ beforeEach(() => {
   jest.clearAllMocks();
   status = "completed";
   signedRecipients = true;
+  fieldRows = [];
   sealOn = true;
   load.mockResolvedValue(bytes(1));
   stamp.mockResolvedValue(bytes(2));
@@ -112,6 +114,17 @@ describe("getEnvelopeCopy", () => {
     signedRecipients = false;
     status = "sent";
     expect(await getEnvelopeCopy(db(), "e1")).toBeNull();
+  });
+});
+
+describe("optional signature spots", () => {
+  const spot = (over: object) => ({ recipient_id: "r1", field_type: "signature", page: 1, x_pct: 10, y_pct: 10, width_pct: 28, height_pct: 4, response: null, required: true, ...over });
+
+  it("stamps the signature at a required spot and at an optional spot the signer signed, but not at one left blank", async () => {
+    fieldRows = [spot({ x_pct: 1 }), spot({ x_pct: 2, required: false, response: "signed" }), spot({ x_pct: 3, required: false, response: null })];
+    await getEnvelopeCopy(db(), "e1");
+    const stamped = stamp.mock.calls[0][1] as { xPct: number; signaturePng: string | null }[];
+    expect(stamped.map((f) => [f.xPct, Boolean(f.signaturePng)])).toEqual([[1, true], [2, true], [3, false]]);
   });
 });
 
