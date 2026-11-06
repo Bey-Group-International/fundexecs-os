@@ -30,6 +30,10 @@ export interface CueRow {
    * report's attendance reads it. See `presenceFromSpeech`.
    */
   speaker_user_id?: string | null;
+  /** The line's id, when the reader selected it: what a correction is keyed on. */
+  id?: string | null;
+  /** The words as heard, set when the transcript overlay corrected this line. */
+  original?: string;
 }
 
 /** One speaker's turn, placed on the recording's clock. */
@@ -40,6 +44,13 @@ export interface TranscriptCue {
   uncertain: boolean;
   overlapped: boolean;
   paragraphs: string[];
+  /**
+   * Each paragraph's line id, in step with `paragraphs` — present only when
+   * the rows carried ids, which is what lets the host correct one line.
+   */
+  lineIds?: Array<string | null>;
+  /** Each paragraph's words as heard, where it has been corrected; null where not. */
+  originals?: Array<string | null>;
 }
 
 /** Below this, the room said it was not sure who spoke. Matches the room's own bar. */
@@ -81,18 +92,28 @@ export function transcriptCues(
     const last = out[out.length - 1];
     // Merged only while the speaker AND what the room said about them hold: a
     // turn that becomes uncertain halfway through is two different claims.
+    const tracked = row.id !== undefined;
     if (last && last.speaker === speaker && last.uncertain === uncertain && last.overlapped === overlapped) {
       last.paragraphs.push(text);
+      if (tracked) {
+        (last.lineIds ??= []).push(row.id ?? null);
+        (last.originals ??= []).push(row.original ?? null);
+      }
       continue;
     }
 
-    out.push({
+    const cue: TranscriptCue = {
       speaker,
       atMs: Number.isFinite(base) ? Math.max(0, row.at - base) : 0,
       uncertain,
       overlapped,
       paragraphs: [text],
-    });
+    };
+    if (tracked) {
+      cue.lineIds = [row.id ?? null];
+      cue.originals = [row.original ?? null];
+    }
+    out.push(cue);
   }
 
   return out;

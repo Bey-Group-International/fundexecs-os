@@ -32,6 +32,8 @@ import {
   type ReportRow,
 } from "@/lib/meetings/report-page";
 import type { CueRow } from "@/lib/meetings/transcript-cues";
+import { EMPTY_OVERLAY, type TranscriptOverlay } from "@/lib/meetings/transcript-tools";
+import { loadOverlay } from "@/lib/meetings/transcript-tools.server";
 
 type Client = SupabaseClient<Database>;
 
@@ -59,6 +61,8 @@ export interface ReportPageData {
   chat: ChatMessage[];
   /** The timed rows, which are what let a transcript line drive the recording. */
   cueRows: CueRow[];
+  /** Speaker names and line corrections, to apply where the transcript is shown. */
+  overlay: TranscriptOverlay;
   /**
    * The reader's own address, and the meeting's organisation.
    *
@@ -85,6 +89,7 @@ const EMPTY: ReportPageData = {
   recordings: [],
   chat: [],
   cueRows: [],
+  overlay: EMPTY_OVERLAY,
   viewerEmail: null,
   organizationId: null,
   invited: null,
@@ -217,7 +222,7 @@ export async function loadReportPage(
   // Wave two: the five reads that need the meeting's id. All independent of one
   // another, so one Promise.all rather than a waterfall — on the client these
   // arrived in three separate rounds, two of them fired by panels mounting.
-  const [reportResult, attendanceResult, recordingsResult, chatResult, cueRows] =
+  const [reportResult, attendanceResult, recordingsResult, chatResult, cueRows, overlay] =
     await Promise.all([
       supabase
         .from("live_meeting_reports")
@@ -256,7 +261,8 @@ export async function loadReportPage(
           .from("live_meeting_transcripts")
           // `speaker_user_id` is not rendered: the report's attendance reads it
           // to tell a guest's line from a member's. See `presenceFromSpeech`.
-          .select("speaker, text, ts, confidence, overlapped, speaker_user_id")
+          // `id` is what a host's correction of one line is keyed on.
+          .select("id, speaker, text, ts, confidence, overlapped, speaker_user_id")
           .eq("meeting_id", meeting.id)
           .order("ts", { ascending: true })
           .order("id", { ascending: true })
@@ -266,6 +272,8 @@ export async function loadReportPage(
         // The timestamps, not the transcript: the panel still renders from
         // full_transcript, it just cannot drive or follow the recording.
         .catch(() => [] as CueRow[]),
+      // Speaker names and line corrections, applied when the transcript is shown.
+      loadOverlay(supabase as unknown as { from: (t: string) => any }, meeting.id),
     ]);
 
   const report = (reportResult?.data as ReportRow | null) ?? null;
@@ -302,6 +310,7 @@ export async function loadReportPage(
     recordings: state === "forbidden" ? [] : recordings,
     chat: state === "forbidden" ? [] : storedChatMessages(chatRows),
     cueRows: state === "forbidden" ? [] : cueRows,
+    overlay: state === "forbidden" ? EMPTY_OVERLAY : overlay,
     viewerEmail,
     // Cleared for a reader who may not read the report at all, for the same
     // reason the rest is: the history load is keyed off these two, so handing

@@ -1,6 +1,8 @@
 "use client";
 
-import { memo, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { LineActions, TranscriptToolbar } from "./TranscriptTools";
+import type { OverlayRow } from "@/lib/meetings/transcript-tools";
 import {
   parseTranscript,
   speakerInitials,
@@ -88,6 +90,7 @@ const TranscriptTurn = memo(function TranscriptTurn({
   hits,
   timed,
   onSeek,
+  lineTools,
 }: {
   turn: ReturnType<typeof parseTranscript>[number] | TranscriptCue;
   index: number;
@@ -107,7 +110,10 @@ const TranscriptTurn = memo(function TranscriptTurn({
   hits: TurnMatches | undefined;
   timed: boolean;
   onSeek?: (ms: number) => void;
+  /** Quote and correct actions on each line; null to show the transcript bare. */
+  lineTools: LineTools | null;
 }) {
+  const cue = turn as Partial<TranscriptCue>;
   return (
     <li
       ref={active ? activeRef : undefined}
@@ -181,7 +187,7 @@ const TranscriptTurn = memo(function TranscriptTurn({
 
       <div className="min-w-0 flex-1 space-y-1.5">
         {turn.paragraphs.map((paragraph, j) => (
-          <p key={j} className="text-sm leading-relaxed text-[var(--fg-primary)]">
+          <p key={j} className="group text-sm leading-relaxed text-[var(--fg-primary)]">
             {/* Painted in place rather than the turn being pulled
                 out of the transcript. Parts, never markup: these
                 are other people's words. */}
@@ -202,6 +208,17 @@ const TranscriptTurn = memo(function TranscriptTurn({
                 <span key={k}>{part.value}</span>
               ),
             )}
+            {lineTools && (
+              <LineActions
+                text={paragraph}
+                speaker={turn.speaker}
+                atMs={timed && typeof cue.atMs === "number" ? cue.atMs : null}
+                lineId={cue.lineIds?.[j] ?? null}
+                original={cue.originals?.[j] ?? null}
+                canEdit={lineTools.canEdit}
+                onEdit={lineTools.onEdit}
+              />
+            )}
           </p>
         ))}
       </div>
@@ -209,11 +226,26 @@ const TranscriptTurn = memo(function TranscriptTurn({
   );
 });
 
+interface LineTools {
+  canEdit: boolean;
+  onEdit: (lineId: string, text: string | null) => Promise<string | null>;
+}
+
+export interface TranscriptToolsProps {
+  meetingId: string;
+  isHost: boolean;
+  /** The timed rows, as shown, for talk time. */
+  rows: readonly OverlayRow[];
+  /** Speaker label as heard → name shown, as loaded. */
+  speakerNames: Readonly<Record<string, string>>;
+}
+
 export function TranscriptPanel({
   transcript,
   cues,
   onSeek,
   currentMs,
+  tools,
 }: {
   transcript: string;
   /**
@@ -235,8 +267,24 @@ export function TranscriptPanel({
    * meant scrolling this by hand to keep up.
    */
   currentMs?: number;
+  /** Download, talk time, speaker names, quotes and corrections. Absent, the transcript is read-only. */
+  tools?: TranscriptToolsProps;
 }) {
   const [open, setOpen] = useState(false);
+  // Names and corrections made on this page since it loaded, laid over what
+  // the server already applied.
+  const loadedNames = tools?.speakerNames;
+  const heardOf = useMemo(() => {
+    const inverse = new Map<string, string>();
+    for (const [heard, shown] of Object.entries(loadedNames ?? {})) inverse.set(shown, heard);
+    return (shown: string) => inverse.get(shown) ?? shown;
+  }, [loadedNames]);
+  const [names, setNames] = useState<Map<string, string>>(() => new Map(Object.entries(loadedNames ?? {})));
+  const [edits, setEdits] = useState<Map<string, { text: string; original: string | null }>>(() => new Map());
+  const shownName = useCallback((speaker: string) => {
+    const heard = heardOf(speaker);
+    return names.get(heard) ?? heard;
+  }, [heardOf, names]);
   const [query, setQuery] = useState("");
   /** Which hit the reader is on. -1 is "typed, but stepped to nothing yet". */
   const [at, setAt] = useState(-1);
@@ -244,9 +292,88 @@ export function TranscriptPanel({
   const [follow, setFollow] = useState(true);
 
   const timed = Boolean(onSeek && cues && cuesAreTimed(cues));
-  const turns = useMemo(
+  const baseTurns = useMemo(
     () => (cues && cues.length > 0 ? cues : parseTranscript(transcript)),
     [cues, transcript],
+  );
+  const turns = useMemo(() => {
+    if (!tools) return baseTurns;
+    return baseTurns.map((t) => {
+      const cue = t as Partial<TranscriptCue>;
+      const speaker = t.speaker ? shownName(t.speaker) : t.speaker;
+      if (!cue.lineIds || !edits.size) return speaker === t.speaker ? t : { ...t, speaker };
+      const paragraphs = t.paragraphs.slice();
+      const originals = (cue.originals ?? []).slice();
+      cue.lineIds.forEach((id, j) => {
+        const e = id ? edits.get(id) : undefined;
+        if (!e) return;
+        paragraphs[j] = e.text;
+        originals[j] = e.original;
+      });
+      return { ...t, speaker, paragraphs, originals };
+    });
+  }, [baseTurns, tools, shownName, edits]);
+  const heardSpeakers = useMemo(() => {
+    const out: string[] = [];
+    for (const t of baseTurns) {
+      const h = t.speaker ? heardOf(t.speaker) : "";
+      if (h && !out.includes(h)) out.push(h);
+    }
+    return out;
+  }, [baseTurns, heardOf]);
+  const talkRows = useMemo(
+    () => (tools ? tools.rows.map((r) => ({ ...r, speaker: r.speaker ? shownName(r.speaker) : r.speaker })) : []),
+    [tools, shownName],
+  );
+
+  const rename = useCallback(
+    async (heard: string, display: string | null): Promise<string | null> => {
+      if (!tools) return null;
+      try {
+        const res = await fetch(`/api/meetings/${tools.meetingId}/transcript/speakers`, {
+          method: "PUT",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ original: heard, display }),
+        });
+        const body = (await res.json().catch(() => ({}))) as { display?: string | null; error?: string };
+        if (!res.ok) return body.error ?? "Couldn't save the name.";
+        setNames((prev) => {
+          const next = new Map(prev);
+          if (body.display) next.set(heard, body.display);
+          else next.delete(heard);
+          return next;
+        });
+        return null;
+      } catch {
+        return "Couldn't save the name. Check your connection.";
+      }
+    },
+    [tools],
+  );
+
+  const editLine = useCallback(
+    async (lineId: string, text: string | null): Promise<string | null> => {
+      if (!tools) return null;
+      try {
+        const res = await fetch(`/api/meetings/${tools.meetingId}/transcript/lines/${lineId}`, {
+          method: "PUT",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ text }),
+        });
+        const body = (await res.json().catch(() => ({}))) as { text?: string; original?: string | null; error?: string };
+        if (!res.ok || typeof body.text !== "string") return body.error ?? "Couldn't save the correction.";
+        setEdits((prev) => new Map(prev).set(lineId, { text: body.text!, original: body.original ?? null }));
+        return null;
+      } catch {
+        return "Couldn't save the correction. Check your connection.";
+      }
+    },
+    [tools],
+  );
+
+  const lineTools = useMemo<LineTools | null>(
+    () => (tools ? { canEdit: tools.isHost, onEdit: editLine } : null),
+    [tools, editLine],
   );
   const speakers = useMemo(() => transcriptSpeakers(turns), [turns]);
   const words = useMemo(() => transcriptWordCount(turns), [turns]);
@@ -376,6 +503,17 @@ export function TranscriptPanel({
             )}
           </div>
 
+          {tools && (
+            <TranscriptToolbar
+              meetingId={tools.meetingId}
+              isHost={tools.isHost}
+              rows={talkRows}
+              speakers={heardSpeakers}
+              names={names}
+              onRename={rename}
+            />
+          )}
+
           {/* The transcript stays whole. It used to be filtered down to the
               turns containing the query, which threw away the conversation
               around every hit — and the line before a hit is usually the
@@ -400,6 +538,7 @@ export function TranscriptPanel({
                   hits={byTurn.get(i)}
                   timed={timed}
                   onSeek={onSeek}
+                  lineTools={lineTools}
                 />
               ))}
           </ol>

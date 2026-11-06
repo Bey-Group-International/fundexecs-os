@@ -15,6 +15,7 @@ import { MomentChip } from "./MomentChip";
 import { CopyEmails } from "./CopyEmails";
 import { momentFor } from "@/lib/meetings/report-moments";
 import { cuesAreTimed, transcriptCues } from "@/lib/meetings/transcript-cues";
+import { applyOverlay, renameInText } from "@/lib/meetings/transcript-tools";
 import { ReportWaiting } from "./ReportWaiting";
 import { ReportTabs } from "./ReportTabs";
 import { reportTabs } from "@/lib/meetings/report-tabs";
@@ -155,7 +156,11 @@ export default async function MeetingReportPage({
   // clock the media panel uses — and only where the match is convincing; see
   // report-moments.ts. Computed here, once, rather than in each list.
   const playable = playableRecording(data.recordings);
-  const momentCues = playable?.started_at ? transcriptCues(data.cueRows, playable.started_at) : [];
+  // The transcript as it is shown: real names on speaker labels and the host's
+  // corrections applied. The stored rows are never rewritten.
+  const shownRows = applyOverlay(data.cueRows, data.overlay);
+  const shownTranscript = content.transcript ? renameInText(content.transcript, data.overlay.names) : content.transcript;
+  const momentCues = playable?.started_at ? transcriptCues(shownRows, playable.started_at) : [];
   const momentsOn = momentCues.length > 0 && cuesAreTimed(momentCues);
   const momentOf = (text: string) => (momentsOn ? momentFor(text, momentCues) : null);
   // A highlight is placed by its quote — the words that were said — and only
@@ -513,10 +518,11 @@ export default async function MeetingReportPage({
               <ReportMedia
                 meetingId={meeting.id}
                 recordings={data.recordings}
-                cueRows={data.cueRows}
-                transcript={content.transcript}
+                cueRows={shownRows}
+                transcript={shownTranscript}
                 markers={markers}
                 isHost={data.isHost}
+                speakerNames={Object.fromEntries(data.overlay.names)}
               />
             </>
           ),

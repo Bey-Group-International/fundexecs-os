@@ -178,13 +178,15 @@ describe("loadReportPage", () => {
       "live_meeting_participants",
       "live_meeting_recordings",
       "live_meeting_reports",
+      "live_meeting_speaker_names",
+      "live_meeting_transcript_edits",
       "live_meeting_transcripts",
     ]);
 
     // Exactly one read had settled — the meeting, from wave one — when every one
     // of the five started. `auth` does not go through `later`, so it never counts
     // as settled. Awaited one at a time these would read 1, 2, 3, 4, 5.
-    expect(settledAtStart.slice(1)).toEqual([1, 1, 1, 1, 1]);
+    expect(settledAtStart.slice(1)).toEqual([1, 1, 1, 1, 1, 1, 1]);
   });
 
   it("does not ask for the meeting's contents before it knows the meeting exists", async () => {
