@@ -87,7 +87,7 @@ export function SectorHeatmap({ cells, sectors, stages }: Props) {
           {/* Rows */}
           {sectors.map((sector) => (
             <div key={sector} className="mb-2 flex items-center gap-0">
-              <div className="w-[140px] shrink-0 pr-3 text-right">
+              <div className="sticky left-0 z-10 w-[140px] shrink-0 bg-surface-0 pr-3 text-right">
                 <span className="font-mono text-[11px] text-fg-secondary">{sector}</span>
               </div>
               <div className={`grid flex-1 gap-1`} style={{ gridTemplateColumns: `repeat(${stages.length}, 1fr)` }}>

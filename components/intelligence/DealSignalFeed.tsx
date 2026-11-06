@@ -107,7 +107,7 @@ export function DealSignalFeed({ signals }: Props) {
         <button
           type="button"
           onClick={() => setFilter("all")}
-          className={`rounded-full border px-3 py-1 font-mono text-[11px] uppercase tracking-wider transition ${filter === "all" ? "border-gold-500/40 bg-gold-500/10 text-gold-300" : "border-line bg-surface-1 text-fg-muted hover:border-gold-500/20"}`}
+          className={`rounded-full border inline-flex min-h-9 items-center px-3 text-xs font-medium transition ${filter === "all" ? "border-gold-500/40 bg-gold-500/10 text-gold-300" : "border-line bg-surface-1 text-fg-muted hover:border-gold-500/20"}`}
         >
           All
         </button>
@@ -116,7 +116,7 @@ export function DealSignalFeed({ signals }: Props) {
             key={type}
             type="button"
             onClick={() => setFilter(type)}
-            className={`rounded-full border px-3 py-1 font-mono text-[11px] uppercase tracking-wider transition ${filter === type ? `${SIGNAL_TYPE_COLORS[type]} bg-current/5` : "border-line bg-surface-1 text-fg-muted hover:border-gold-500/20"}`}
+            className={`rounded-full border inline-flex min-h-9 items-center px-3 text-xs font-medium transition ${filter === type ? `${SIGNAL_TYPE_COLORS[type]} bg-current/5` : "border-line bg-surface-1 text-fg-muted hover:border-gold-500/20"}`}
           >
             {SIGNAL_TYPE_ICONS[type]} {SIGNAL_TYPE_LABELS[type]}
           </button>
@@ -124,7 +124,7 @@ export function DealSignalFeed({ signals }: Props) {
         <button
           type="button"
           onClick={() => setShowSavedOnly((p) => !p)}
-          className={`ml-auto rounded-full border px-3 py-1 font-mono text-[11px] uppercase tracking-wider transition ${showSavedOnly ? "border-gold-500/40 bg-gold-500/10 text-gold-300" : "border-line text-fg-muted hover:border-gold-500/20"}`}
+          className={`ml-auto rounded-full border inline-flex min-h-9 items-center px-3 text-xs font-medium transition ${showSavedOnly ? "border-gold-500/40 bg-gold-500/10 text-gold-300" : "border-line text-fg-muted hover:border-gold-500/20"}`}
         >
           Saved
         </button>
@@ -134,7 +134,7 @@ export function DealSignalFeed({ signals }: Props) {
       <div className="flex flex-col gap-3">
         {filtered.length === 0 ? (
           <div className="rounded-xl border border-dashed border-line bg-surface-1/50 p-8 text-center">
-            <p className="font-mono text-[11px] uppercase tracking-wider text-fg-muted">No signals match your filters</p>
+            <p className="text-sm text-fg-muted">No signals match your filters</p>
           </div>
         ) : (
           filtered.map((signal) => <SignalCard key={signal.id} signal={signal} />)
