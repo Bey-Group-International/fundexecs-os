@@ -47,19 +47,24 @@ export async function GET(req: NextRequest, { params }: { params: Params }) {
   if (!caller.ok) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const read = writeClient((await createServerClient()) as SupabaseLike);
-  const { data, error } = await read
-    .from("live_meeting_chat")
-    .select("id, author_id, author_name, body, ts")
-    .eq("meeting_id", id)
-    .order("ts", { ascending: true })
-    .limit(MAX_HISTORY);
+  // The pin comes with the history, so somebody joining late sees it too.
+  const [{ data, error }, pinRead] = await Promise.all([
+    read
+      .from("live_meeting_chat")
+      .select("id, author_id, author_name, body, ts")
+      .eq("meeting_id", id)
+      .order("ts", { ascending: true })
+      .limit(MAX_HISTORY),
+    readPin(read, id),
+  ]);
+  const pinnedId = pinRead;
 
   if (error) {
     // Losing the history costs a latecomer the conversation so far, not their
     // ability to take part in the rest of it — so this is reported and the
     // room carries on.
     console.error("[/api/meetings/[id]/chat] history unavailable", error.message);
-    return NextResponse.json({ messages: [] });
+    return NextResponse.json({ messages: [], pinnedId: null });
   }
 
   // Read through the ONE rule for stored rows — the same one the report page
@@ -71,7 +76,24 @@ export async function GET(req: NextRequest, { params }: { params: Params }) {
   // zero, which after the panel's merge sorted that message above the whole
   // conversation, dated 1970. See storedChatMessages.
   const rows = (data ?? []) as StoredChatRow[];
-  return NextResponse.json({ messages: storedChatMessages(rows) });
+  return NextResponse.json({ messages: storedChatMessages(rows), pinnedId });
+}
+
+/**
+ * The pinned message's id, or null. Soft: a pin that cannot be read costs the
+ * chat its pin, never the latecomer their history.
+ */
+async function readPin(read: SupabaseLike, meetingId: string): Promise<string | null> {
+  try {
+    const { data } = await read
+      .from("live_meetings")
+      .select("pinned_chat_message_id")
+      .eq("id", meetingId)
+      .maybeSingle();
+    return ((data as { pinned_chat_message_id?: string | null } | null)?.pinned_chat_message_id ?? null) || null;
+  } catch {
+    return null;
+  }
 }
 
 /**

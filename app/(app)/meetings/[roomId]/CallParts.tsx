@@ -17,7 +17,7 @@ import { mirrorSelfView } from "@/lib/meetings/stage";
 import { REACTIONS, reactionLabel, type ActiveReaction } from "@/lib/meetings/reactions";
 import { ChatText } from "./ChatText";
 import { speakerColorIndex } from "@/lib/meetings/speaker-attribution";
-import { CHAT_MAX_LENGTH, chatClock, groupChat, type ChatMessage, type ChatTurn } from "@/lib/meetings/chat";
+import { CHAT_MAX_LENGTH, chatClock, groupChat, pinnedMessage, type ChatMessage, type ChatTurn } from "@/lib/meetings/chat";
 import { MeetingShareLink, copyText } from "@/app/(app)/meetings/MeetingShareLink";
 import { meetingInviteUrl } from "@/lib/meetings/share";
 import { recordingNotice, type RecordingState } from "@/lib/meetings/recording-policy";
@@ -32,6 +32,7 @@ import { MeetingDocsPanel } from "./MeetingDocsPanel";
 // Palette for per-speaker colours in the transcript.
 /** No provider and no set: nobody is talking. */
 const NOBODY: ReadonlySet<string> = new Set<string>();
+const NO_LINES: readonly LiveTranscriptLine[] = [];
 
 const SPEAKER_COLORS = [
   "var(--gold-400)",
@@ -1211,27 +1212,52 @@ function ReactionRow({ onReaction }: { onReaction: (emoji: string) => void }) {
  * makes the memo worse than useless.
  */
 const ChatTurnRow = memo(function ChatTurnRow({
-  turn, onRetry,
+  turn, onRetry, onPin, pinnedId = null,
 }: {
   turn: ChatTurn;
   onRetry: (id: string) => void;
+  /** Host only: pin a message (or clear the pin with null). */
+  onPin?: (id: string | null) => void;
+  pinnedId?: string | null;
 }) {
+  const priv = turn.privateWith;
   return (
     // `min-w-0` and `break-words` together are what stop a pasted URL — the
     // most common thing anybody pastes into a meeting chat — from forcing this
     // column wider than the panel, which only scrolls vertically.
     <div className="flex flex-col gap-0.5 min-w-0">
-      <span className="flex items-baseline gap-2">
+      <span className="flex flex-wrap items-baseline gap-x-2">
         <span className="text-xs font-medium text-[var(--gold-400)] break-words">{turn.displayName}</span>
         <span className="font-mono text-[10px] tabular-nums text-[var(--fg-muted)]">
           {chatClock(turn.ts)}
         </span>
+        {/* Said on every private turn: who else can read this, which is nobody. */}
+        {priv && (
+          <span className="text-[10px] font-medium text-[#c4b5fd]">
+            {priv.direction === "out" ? `Private to ${priv.name}` : "Private to you"}
+          </span>
+        )}
       </span>
       {turn.messages.map((msg) => (
-        <div key={msg.id} className="flex flex-col gap-0.5 min-w-0">
-          <div className="rounded-lg bg-[var(--surface-0)] border border-[var(--line)] px-3 py-2 text-sm text-[var(--fg-primary)] break-words whitespace-pre-wrap">
+        <div key={msg.id} className="group flex flex-col gap-0.5 min-w-0">
+          <div
+            className={`rounded-lg border px-3 py-2 text-sm text-[var(--fg-primary)] break-words whitespace-pre-wrap ${
+              priv ? "border-dashed border-[#c4b5fd]/50 bg-[#c4b5fd]/5" : "border-[var(--line)] bg-[var(--surface-0)]"
+            } ${msg.id === pinnedId ? "ring-1 ring-gold-400/40" : ""}`}
+          >
             <ChatText text={msg.text} />
           </div>
+          {/* Pinning is for what the room can see: never a private line, never
+              one that has not reached the room yet. */}
+          {onPin && !priv && msg.delivery !== "sending" && msg.delivery !== "failed" && (
+            <button
+              type="button"
+              onClick={() => onPin(msg.id === pinnedId ? null : msg.id)}
+              className="self-start text-[10px] text-[var(--fg-muted)] opacity-0 transition-opacity hover:text-[var(--gold-400)] focus:opacity-100 group-hover:opacity-100"
+            >
+              {msg.id === pinnedId ? "Unpin" : "📌 Pin"}
+            </button>
+          )}
           {msg.delivery === "sending" && (
             <span className="text-[10px] text-[var(--fg-muted)]">Sending…</span>
           )}
@@ -1308,9 +1334,21 @@ const PersonRow = memo(function PersonRow({
 });
 
 /** The side panel's tabs. Each has its own button on the control bar. */
-export type PanelTab = "chat" | "people" | "docs";
+export type PanelTab = "chat" | "transcript" | "people" | "docs";
 
-const PANEL_TITLE: Record<PanelTab, string> = { chat: "Chat", people: "People", docs: "Documents" };
+const PANEL_TITLE: Record<PanelTab, string> = { chat: "Chat", transcript: "Transcript", people: "People", docs: "Documents" };
+
+/** A line of the live transcript, as the Transcript tab draws it. */
+export interface LiveTranscriptLine {
+  id: string;
+  speakerId: string;
+  speaker: string;
+  text: string;
+  ts: number;
+  /** Still being heard: the recogniser may change it. */
+  final: boolean;
+  isLocal: boolean;
+}
 
 // Exported for the tests, exactly as HostExitControl is: reaching this panel
 // through MeetingRoom means entering a room, which opens a camera, an ICE
@@ -1323,7 +1361,16 @@ export function CopilotSidebar({
   removedPeople, onAllowBack,
   speaking = NOBODY, onCollapse,
   tab: tabProp, onTabChange,
+  pinnedChatId = null, onPinChat, privateReady = NOBODY, transcriptLines = NO_LINES,
 }: {
+  /** The chat message pinned to the top of the chat, by id. */
+  pinnedChatId?: string | null;
+  /** Host only: pin a message, or clear the pin with null. Absent for everyone else. */
+  onPinChat?: (messageId: string | null) => void;
+  /** People a private message can reach right now. */
+  privateReady?: ReadonlySet<string>;
+  /** The live transcript, for the Transcript tab. */
+  transcriptLines?: readonly LiveTranscriptLine[];
   /**
    * Which tab is showing, when the room decides. The control bar has its own
    * Chat, People and Docs buttons, so the room has to be able to open this
@@ -1353,7 +1400,8 @@ export function CopilotSidebar({
   roomCode: string; meetingTitle: string; chatMessages: ChatMessage[];
   /** Messages that have arrived since the panel last showed the chat tab. */
   chatUnread: number;
-  onSendChat: (text: string) => void;
+  /** Send to the room, or — with `to`, a participant id — privately to that one person. */
+  onSendChat: (text: string, to?: string) => void;
   /** Send a message again after the socket refused it. */
   onRetryChat: (id: string) => void;
   isHost: boolean;
@@ -1388,7 +1436,12 @@ export function CopilotSidebar({
   const tab = tabProp ?? ownTab;
   const setTab = (t: PanelTab) => { setOwnTab(t); onTabChange?.(t); };
   const [chatInput, setChatInput] = useState("");
+  /** Who the composer sends to: the room (null) or one participant's id. */
+  const [chatTo, setChatTo] = useState<string | null>(null);
   const chatBottomRef = useRef<HTMLDivElement>(null);
+  const transcriptBoxRef = useRef<HTMLDivElement>(null);
+  /** Follow the newest line, unless somebody has scrolled up to read. */
+  const followTranscript = useRef(true);
   const [emailInput, setEmailInput] = useState("");
   const [emailSending, setEmailSending] = useState(false);
   const [emailNote, setEmailNote] = useState<"sent" | "failed" | null>(null);
@@ -1409,21 +1462,46 @@ export function CopilotSidebar({
   // inline arrows, so they are new functions on every render and comparing them
   // would fail every time — which is the whole memo. Wrapped here rather than at
   // the call site so the rows hold whatever the caller does with its own props.
-  const rowHandlers = useStableHandlers({ onRetryChat, onKick });
+  const rowHandlers = useStableHandlers({
+    onRetryChat,
+    onKick,
+    onPinChat: (id: string | null) => onPinChat?.(id),
+  });
 
   // Sorted when the hands or the people change, not on the fast path.
   const orderedPeople = useMemo(() => handsFirst(participants, raisedHands), [participants, raisedHands]);
 
   // The tab strip. A guest gets two tabs, a member three -- see canShareDocs.
   const tabs = useMemo(
-    () => (canShareDocs ? (["chat", "people", "docs"] as const) : (["chat", "people"] as const)),
+    () =>
+      canShareDocs
+        ? (["chat", "transcript", "people", "docs"] as const)
+        : (["chat", "transcript", "people"] as const),
     [canShareDocs],
   );
+
+  // The people a private message could go to: everyone else in the call.
+  const others = useMemo(() => participants.filter((p) => !p.isLocal), [participants]);
+  // A recipient who has left is no recipient: back to the room.
+  const recipient = chatTo ? others.find((p) => p.id === chatTo) ?? null : null;
+  useEffect(() => {
+    if (chatTo && !recipient) setChatTo(null);
+  }, [chatTo, recipient]);
+  const pinned = useMemo(() => pinnedMessage(chatMessages, pinnedChatId), [chatMessages, pinnedChatId]);
+
+  // Scrolled to the newest transcript line as it arrives — unless the reader
+  // has scrolled up, which is them reading, not wanting to be dragged down.
+  useEffect(() => {
+    if (tab !== "transcript" || !followTranscript.current) return;
+    const box = transcriptBoxRef.current;
+    if (box) box.scrollTop = box.scrollHeight;
+  }, [transcriptLines, tab]);
 
   const sendChat = () => {
     const text = chatInput.trim();
     if (!text) return;
-    onSendChat(text);
+    if (recipient) onSendChat(text, recipient.id);
+    else onSendChat(text);
     setChatInput("");
   };
 
@@ -1512,7 +1590,7 @@ export function CopilotSidebar({
               tab === t ? "text-[var(--fg-primary)] border-b-2 border-[var(--gold-400)]"
                         : "text-[var(--fg-muted)] hover:text-[var(--fg-secondary)]"
             }`}>
-            {t === "people" ? `People ${participants.length}` : t === "docs" ? "Docs" : "Chat"}
+            {t === "people" ? `People ${participants.length}` : t === "docs" ? "Docs" : t === "transcript" ? "Transcript" : "Chat"}
             {/* The only place an unread count can appear while the panel is
                 open: the toolbar badge is suppressed for exactly that case. */}
             {t === "chat" && tab !== "chat" && chatUnread > 0 && (
@@ -1539,16 +1617,81 @@ export function CopilotSidebar({
       <div className="flex-1 overflow-y-auto p-3 flex flex-col gap-2">
         {tab === "chat" && (
           <>
+            {/* The pin: the one message the host wants in front of everybody,
+                latecomers included. Sticky, so the conversation scrolls under it. */}
+            {pinned && (
+              <div className="sticky top-0 z-10 -mx-3 -mt-3 mb-1 border-b border-gold-400/30 bg-[var(--surface-1)] px-3 py-2">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-[10px] font-semibold uppercase tracking-wide text-[var(--gold-400)]">
+                    📌 Pinned · {pinned.displayName}
+                  </span>
+                  {onPinChat && (
+                    <button
+                      type="button"
+                      onClick={() => onPinChat(null)}
+                      className="text-[11px] text-[var(--fg-muted)] hover:text-[var(--fg-primary)] hover:underline"
+                    >
+                      Unpin
+                    </button>
+                  )}
+                </div>
+                <p className="mt-0.5 line-clamp-3 break-words text-sm text-[var(--fg-primary)]">
+                  <ChatText text={pinned.text} />
+                </p>
+              </div>
+            )}
             {chatMessages.length === 0 ? <EmptyCopilot label="Send a message to everyone in the call." /> : (
               // Grouped: three lines in a row is one person talking, and
               // repeating their name above each is how a short exchange
               // becomes a wall.
               chatTurns.map((turn) => (
-                <ChatTurnRow key={turn.id} turn={turn} onRetry={rowHandlers.onRetryChat} />
+                <ChatTurnRow
+                  key={turn.id}
+                  turn={turn}
+                  onRetry={rowHandlers.onRetryChat}
+                  onPin={onPinChat ? rowHandlers.onPinChat : undefined}
+                  pinnedId={pinnedChatId}
+                />
               ))
             )}
             <div ref={chatBottomRef} />
           </>
+        )}
+
+        {tab === "transcript" && (
+          <div
+            ref={transcriptBoxRef}
+            onScroll={(e) => {
+              const box = e.currentTarget;
+              followTranscript.current = box.scrollHeight - box.scrollTop - box.clientHeight < 40;
+            }}
+            className="-m-3 flex flex-1 flex-col gap-2.5 overflow-y-auto p-3"
+          >
+            {/* What the meeting's notes are being built from, as it is heard.
+                Nothing here is a model's output; it is the words, attributed. */}
+            <p className="text-[11px] text-[var(--fg-muted)]">
+              {srStatus === "active"
+                ? "Live — what's said with mics on. The meeting report is written from this."
+                : srStatus === "unsupported"
+                  ? "This browser can't transcribe. Lines from others still appear here."
+                  : "Not transcribing your mic right now. Lines from others still appear here."}
+            </p>
+            {transcriptLines.length === 0 ? (
+              <EmptyCopilot label="Nothing transcribed yet. Lines appear here as people speak." />
+            ) : (
+              transcriptLines.map((line) => (
+                <div key={line.id} className={`flex min-w-0 flex-col gap-0.5 ${line.final ? "" : "opacity-60"}`}>
+                  <span className="flex items-baseline gap-2">
+                    <span className="break-words text-xs font-medium" style={{ color: colorFor(line.speakerId) }}>
+                      {line.isLocal ? "You" : line.speaker}
+                    </span>
+                    <span className="font-mono text-[10px] tabular-nums text-[var(--fg-muted)]">{chatClock(line.ts)}</span>
+                  </span>
+                  <p className={`break-words text-sm text-[var(--fg-primary)] ${line.final ? "" : "italic"}`}>{line.text}</p>
+                </div>
+              ))
+            )}
+          </div>
         )}
 
         {tab === "docs" && (
@@ -1664,16 +1807,42 @@ export function CopilotSidebar({
 
       {/* Chat input */}
       {tab === "chat" && (
-        <div className="border-t border-[var(--line)] p-3 flex gap-2 shrink-0">
+        <div className="border-t border-[var(--line)] p-3 flex flex-col gap-2 shrink-0">
+          {/* Who this goes to. Private messages travel straight to that one
+              person over the call's encrypted connection: never to the room,
+              never stored, never in the report. */}
+          {others.length > 0 && (
+            <label className="flex items-center gap-2 text-[11px] text-[var(--fg-muted)]">
+              To
+              <select
+                value={chatTo ?? ""}
+                onChange={(e) => setChatTo(e.target.value || null)}
+                aria-label="Send to"
+                className={`min-w-0 flex-1 rounded-md border bg-[var(--surface-0)] px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-[var(--gold-400)] ${
+                  recipient ? "border-[#c4b5fd]/60 text-[#c4b5fd]" : "border-[var(--line)] text-[var(--fg-primary)]"
+                }`}
+              >
+                <option value="">Everyone</option>
+                {others.map((p) => (
+                  <option key={p.id} value={p.id} disabled={!privateReady.has(p.id)}>
+                    {p.displayName}
+                    {privateReady.has(p.id) ? " (private)" : " — can't receive private messages"}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+          <div className="flex gap-2">
           <input value={chatInput} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setChatInput(e.target.value)}
             onKeyDown={(e: React.KeyboardEvent<HTMLInputElement>) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendChat(); } }}
             maxLength={CHAT_MAX_LENGTH}
-            placeholder="Message everyone…"
+            placeholder={recipient ? `Private message to ${recipient.displayName}…` : "Message everyone…"}
             className="flex-1 rounded-lg border border-[var(--line)] bg-[var(--surface-0)] px-3 py-2 text-sm text-[var(--fg-primary)] placeholder:text-[var(--fg-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--gold-400)]" />
           <button onClick={sendChat} disabled={!chatInput.trim()}
             className="rounded-lg bg-[var(--gold-400)] hover:bg-[var(--gold-500)] disabled:opacity-40 text-white text-xs font-semibold px-3 py-2 transition-colors">
             Send
           </button>
+          </div>
         </div>
       )}
     </div>

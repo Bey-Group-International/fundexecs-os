@@ -1,3 +1,4 @@
+import { cleanGuestEmail } from "@/lib/meetings/guest-email";
 import { NextRequest, NextResponse, after } from "next/server";
 import { createServerClient, createServiceClient, hasSupabaseServiceEnv } from "@/lib/supabase/server";
 import { checkRateLimit, clientIp, rateLimitHeaders } from "@/lib/rate-limit";
@@ -204,6 +205,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ roo
     guestKey?: string;
     displayName?: string;
     signalId?: string;
+    email?: string;
   };
   const guestKey = typeof body.guestKey === "string" ? body.guestKey.trim() : "";
   // The id this person's client is about to appear under in the room. Recorded
@@ -214,6 +216,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ roo
   // costs it the call, because the kick still lands.
   const signalId = typeof body.signalId === "string" ? body.signalId.trim().slice(0, 64) : "";
   const displayName = (typeof body.displayName === "string" && body.displayName.trim()) || "Guest";
+  // Optional, from the join screen: where a guest without an account asked to
+  // be sent the follow-up. Anything that is not plausibly an address is no
+  // address — a typo must never stop somebody joining. See guest-email.ts.
+  const email = cleanGuestEmail(body.email);
   if (!guestKey) return NextResponse.json({ error: "guestKey required" }, { status: 400 });
 
   const { supabase, meeting } = await resolveMeeting(code);
@@ -271,7 +277,15 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ roo
   }
 
   const admitOnSight = quickAccess || caller.isOrgMember;
-  if (existing) return answerKnock(supabase, existing, admitOnSight, displayName, caller.userId, signalId);
+  if (existing) {
+    // Kept apart from the admission decision: the address says where to write
+    // afterwards and has no bearing on whether anybody comes in, so a decided
+    // knock still takes a corrected one.
+    if (email) {
+      await (supabase as any).from("live_meeting_admissions").update({ email }).eq("id", existing.id);
+    }
+    return answerKnock(supabase, existing, admitOnSight, displayName, caller.userId, signalId);
+  }
 
   const { data: inserted, error } = await (supabase as any)
     .from("live_meeting_admissions")
@@ -285,6 +299,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ roo
       user_id: caller.userId,
       ...(signalId ? { signal_id: signalId } : {}),
       display_name: displayName,
+      ...(email ? { email } : {}),
       status: admitOnSight ? "admitted" : "waiting",
       ...(admitOnSight ? { decided_at: new Date().toISOString() } : {}),
     })

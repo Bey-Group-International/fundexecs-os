@@ -66,7 +66,7 @@ export interface ReportExportInput {
    * who never came and somebody who walked in uninvited both belong in the
    * record of what happened.
    */
-  present?: ReadonlyArray<{ name: string }> | null;
+  present?: ReadonlyArray<{ name: string; email?: string | null }> | null;
   /**
    * A recorded call's consent acknowledgement, as stored.
    *
@@ -133,6 +133,15 @@ export interface ReportExportOptions {
    * and only ever honoured by the download route: see `correspondence`.
    */
   includeCorrespondence?: boolean;
+  /**
+   * List every attendee and invitee with their email address.
+   *
+   * Off unless asked for, and only ever asked for by the download route — a
+   * member exporting their own copy. The emailed copy goes to everybody who
+   * was in the room, and the token link to whoever it is forwarded to; neither
+   * should hand one attendee everyone else's address book.
+   */
+  includeContacts?: boolean;
 }
 
 /**
@@ -320,6 +329,63 @@ export function participantNames(
   return names;
 }
 
+/** Somebody on the meeting, and the address that reaches them. */
+export interface ParticipantContact {
+  name: string;
+  email: string | null;
+}
+
+/**
+ * Everybody on the meeting with their email: the invite list and the people in
+ * the room, as one list.
+ *
+ * Merged by address where there is one, and by name where there is not, so an
+ * invitee who joined is one entry rather than two — and the entry keeps the
+ * address from whichever source had it. Somebody with no address on file stays
+ * in the list with `email: null`: the record should say who could not be
+ * reached, not quietly leave them out.
+ */
+export function participantContacts(
+  input: Pick<ReportExportInput, "attendees" | "present">,
+): ParticipantContact[] {
+  const out: ParticipantContact[] = [];
+  const byEmail = new Map<string, ParticipantContact>();
+  const byName = new Map<string, ParticipantContact>();
+
+  const add = (rawName: unknown, rawEmail: unknown) => {
+    const email = typeof rawEmail === "string" && rawEmail.includes("@") ? rawEmail.trim().toLowerCase() : null;
+    const name = (typeof rawName === "string" ? rawName.trim() : "") || email || "";
+    if (!name) return;
+    const nameKey = name.toLowerCase();
+    const existing = (email ? byEmail.get(email) : undefined) ?? byName.get(nameKey);
+    if (existing) {
+      if (!existing.email && email) {
+        existing.email = email;
+        byEmail.set(email, existing);
+      }
+      return;
+    }
+    const contact: ParticipantContact = { name, email };
+    out.push(contact);
+    byName.set(nameKey, contact);
+    if (email) byEmail.set(email, contact);
+  };
+
+  if (Array.isArray(input.attendees)) {
+    for (const entry of input.attendees) {
+      if (typeof entry === "string") add(entry, entry.includes("@") ? entry : null);
+      else if (entry && typeof entry === "object") {
+        const e = entry as { name?: unknown; email?: unknown };
+        add(e.name, e.email);
+      }
+    }
+  }
+  for (const person of input.present ?? []) {
+    if (person && typeof person === "object") add(person.name, person.email);
+  }
+  return out;
+}
+
 /** A time of day, for the record block. Omitted when the meeting never started. */
 function headerTime(iso: string | null): string | null {
   if (!iso) return null;
@@ -409,6 +475,18 @@ export function buildReportMarkdown(
   ].filter(Boolean) as string[];
 
   if (record.length) lines.push(...section("Meeting Record", record.join("\n")));
+
+  // Who to write to afterwards, with the address — the list somebody filing
+  // this report most often comes back to it for.
+  const contacts = options.includeContacts ? participantContacts(input) : [];
+  if (contacts.length) {
+    lines.push(
+      ...section(
+        "Attendees & Invitees",
+        bullets(contacts.map((c) => (c.email ? `${c.name} — ${c.email}` : `${c.name} — no email on file`))),
+      ),
+    );
+  }
 
   // Immediately after the record and before the recording, because it is a fact
   // about the recording's standing rather than about its contents. Only present

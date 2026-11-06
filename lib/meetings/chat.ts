@@ -71,6 +71,15 @@ export interface ChatMessage {
   ts: number;
   /** Own messages only. Absent on anything received. */
   delivery?: ChatDelivery;
+  /**
+   * Set on a private message: who the other person is, and which way it went.
+   *
+   * Private messages travel browser to browser over the call's own encrypted
+   * connection to that one person, never over the room's shared channel and
+   * never to the server — so they are not stored, not in the report, and not
+   * read by the AI. Absent on everything sent to the room.
+   */
+  privateWith?: { id: string; name: string; direction: "in" | "out" };
 }
 
 /**
@@ -268,6 +277,8 @@ export interface ChatTurn {
   /** When the turn started. */
   ts: number;
   messages: ChatMessage[];
+  /** The turn's private counterpart, when it is a private exchange. */
+  privateWith?: ChatMessage["privateWith"];
 }
 
 /**
@@ -283,11 +294,23 @@ export function groupChat(messages: readonly ChatMessage[], windowMs = GROUP_WIN
   for (const msg of messages ?? []) {
     const last = turns[turns.length - 1];
     const previous = last?.messages[last.messages.length - 1];
-    if (last && last.from === msg.from && previous && msg.ts - previous.ts <= windowMs) {
+    // A private line never joins a public turn, or a private turn with
+    // somebody else: the label above a turn says who could read it.
+    const samePrivacy =
+      (previous?.privateWith?.id ?? null) === (msg.privateWith?.id ?? null) &&
+      (previous?.privateWith?.direction ?? null) === (msg.privateWith?.direction ?? null);
+    if (last && last.from === msg.from && previous && samePrivacy && msg.ts - previous.ts <= windowMs) {
       last.messages.push(msg);
       continue;
     }
-    turns.push({ id: msg.id, from: msg.from, displayName: msg.displayName, ts: msg.ts, messages: [msg] });
+    turns.push({
+      id: msg.id,
+      from: msg.from,
+      displayName: msg.displayName,
+      ts: msg.ts,
+      messages: [msg],
+      ...(msg.privateWith ? { privateWith: msg.privateWith } : {}),
+    });
   }
   return turns;
 }
@@ -387,4 +410,59 @@ export function storedChatMessages(rows: readonly StoredChatRow[]): ChatMessage[
       ts: new Date(row.ts).getTime(),
     }))
     .filter((msg) => !Number.isNaN(msg.ts));
+}
+
+
+// ── Private messages ─────────────────────────────────────────────────────────
+
+/** The data channel label and id both ends open, so neither has to offer it. */
+export const PRIVATE_CHANNEL_LABEL = "private-chat";
+export const PRIVATE_CHANNEL_ID = 7;
+
+/** A private message as it travels over the data channel. */
+export interface PrivateWire {
+  kind: "private-chat";
+  id: string;
+  text: string;
+  ts: number;
+  displayName: string;
+}
+
+/** The wire form of a private message. */
+export function encodePrivate(msg: { id: string; text: string; ts: number; displayName: string }): string {
+  const wire: PrivateWire = { kind: "private-chat", id: msg.id, text: msg.text, ts: msg.ts, displayName: msg.displayName };
+  return JSON.stringify(wire);
+}
+
+/**
+ * A received private message, checked: anything malformed, empty or oversized
+ * is null. Bounded on arrival like every chat line — the sender's build does
+ * not get to decide how much this browser draws.
+ */
+export function decodePrivate(raw: unknown): PrivateWire | null {
+  if (typeof raw !== "string" || raw.length > 10_000) return null;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return null;
+  }
+  if (!parsed || typeof parsed !== "object") return null;
+  const o = parsed as Record<string, unknown>;
+  if (o.kind !== "private-chat" || typeof o.id !== "string" || !o.id || o.id.length > 64) return null;
+  const text = normalizeChatText(o.text);
+  if (!text) return null;
+  return {
+    kind: "private-chat",
+    id: o.id,
+    text,
+    ts: typeof o.ts === "number" && Number.isFinite(o.ts) ? o.ts : Date.now(),
+    displayName: normalizeChatName(o.displayName) || "Someone",
+  };
+}
+
+/** The pinned message, if it is one the panel holds. */
+export function pinnedMessage(messages: readonly ChatMessage[], pinnedId: string | null): ChatMessage | null {
+  if (!pinnedId) return null;
+  return messages.find((m) => m.id === pinnedId && !m.privateWith) ?? null;
 }

@@ -170,3 +170,19 @@ describe("a device check with no meeting", () => {
     expect(screen.getByRole("link", { name: "Done" })).toHaveAttribute("href", "/meetings");
   });
 });
+
+describe("the guest's email", () => {
+  it("is asked of a guest, optionally, and reported as typed", async () => {
+    const onGuestEmailChange = jest.fn();
+    await show({ isGuest: true, guestEmail: "", onGuestEmailChange });
+    const field = screen.getByLabelText(/Email/);
+    expect(field).toHaveAttribute("type", "email");
+    fireEvent.change(field, { target: { value: "ada@fund.test" } });
+    expect(onGuestEmailChange).toHaveBeenCalledWith("ada@fund.test");
+  });
+
+  it("is not asked of somebody signed in", async () => {
+    await show({ isGuest: false, guestEmail: "", onGuestEmailChange: jest.fn() });
+    expect(screen.queryByLabelText(/Email/)).toBeNull();
+  });
+});

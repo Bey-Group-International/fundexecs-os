@@ -20,6 +20,7 @@ type Result = { data: unknown; error: { message: string } | null };
 function fakeClient(tables: {
   participants?: Result;
   principals?: Result;
+  admissions?: Result;
   onIn?: (ids: string[]) => void;
 }) {
   const seen: string[] = [];
@@ -28,7 +29,9 @@ function fakeClient(tables: {
     const result: Result =
       table === "live_meeting_participants"
         ? tables.participants ?? { data: [], error: null }
-        : tables.principals ?? { data: [], error: null };
+        : table === "live_meeting_admissions"
+          ? tables.admissions ?? { data: [], error: null }
+          : tables.principals ?? { data: [], error: null };
 
     const builder: Record<string, unknown> = {
       then: (resolve: (r: Result) => unknown) => Promise.resolve(result).then(resolve),
@@ -226,5 +229,24 @@ describe("loadPresentPeople", () => {
       expect(await loadPresentPeople(client, "m1")).toEqual([]);
       warn.mockRestore();
     });
+  });
+});
+
+
+describe("a guest's email from the join screen", () => {
+  it("fills a guest's address from the email they gave at the door", async () => {
+    const { client } = fakeClient({
+      participants: rows({ user_id: null, guest_key: "g1", display_name: "Dana" }),
+      admissions: { data: [{ guest_key: "g1", email: "Dana@Fund.test" }], error: null },
+    });
+    expect(await loadPresentPeople(client, "m1")).toEqual([{ name: "Dana", email: "dana@fund.test" }]);
+  });
+
+  it("keeps the guest, without an address, when the lookup fails", async () => {
+    const { client } = fakeClient({
+      participants: rows({ user_id: null, guest_key: "g1", display_name: "Dana" }),
+      admissions: { data: null, error: { message: "nope" } },
+    });
+    expect(await loadPresentPeople(client, "m1")).toEqual([{ name: "Dana", email: null }]);
   });
 });

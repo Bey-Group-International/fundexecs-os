@@ -12,6 +12,7 @@ import { ExportMenu } from "./ExportMenu";
 import { ChatPanel } from "./ChatPanel";
 import { ReportMedia } from "./ReportMedia";
 import { MomentChip } from "./MomentChip";
+import { CopyEmails } from "./CopyEmails";
 import { momentFor } from "@/lib/meetings/report-moments";
 import { cuesAreTimed, transcriptCues } from "@/lib/meetings/transcript-cues";
 import { ReportWaiting } from "./ReportWaiting";
@@ -555,17 +556,26 @@ const ROLE_LABEL: Record<ReportParticipant["role"], string> = {
   attendee: "Attendee",
 };
 
-/** Who the meeting was between, and in what role — the page never used to say. */
+/**
+ * Who the meeting was between, in what role, and the address that reaches each
+ * of them — attendees and invitees, including the invitee who never joined.
+ * The addresses are shown, not hidden in a tooltip, and can be copied as one
+ * list: writing to everybody afterwards is the commonest thing done from here.
+ */
 function ParticipantsCard({ participants }: { participants: ReportParticipant[] }) {
   if (participants.length === 0) return null;
+  const emails = [...new Set(participants.map((p) => p.email).filter((e): e is string => Boolean(e)))];
   return (
     <div className="flex flex-col gap-3 rounded-xl border border-[var(--line)] bg-[var(--surface-1)] p-4">
-      <p className="text-xs font-medium uppercase tracking-wide text-[var(--fg-secondary)]">
-        Participants <span className="text-[var(--fg-muted)]">· {participants.length}</span>
-      </p>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-xs font-medium uppercase tracking-wide text-[var(--fg-secondary)]">
+          Participants <span className="text-[var(--fg-muted)]">· {participants.length}</span>
+        </p>
+        <CopyEmails emails={emails} />
+      </div>
       <ul className="flex flex-col gap-2.5">
         {participants.map((p) => (
-          <li key={`${p.role}:${p.email ?? p.name}`} className="flex items-center gap-2.5">
+          <li key={`${p.role}:${p.email ?? p.name}`} className="flex items-start gap-2.5">
             <span
               aria-hidden="true"
               className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold ${
@@ -577,13 +587,20 @@ function ParticipantsCard({ participants }: { participants: ReportParticipant[] 
               {initials(p.name)}
             </span>
             <div className="min-w-0 flex-1">
-              <p className="truncate text-sm text-[var(--fg-primary)]" title={p.email ?? undefined}>
-                {p.name}
-              </p>
+              <p className="truncate text-sm text-[var(--fg-primary)]">{p.name}</p>
+              {p.email ? (
+                <a
+                  href={`mailto:${p.email}`}
+                  className="block truncate text-xs text-[var(--fg-secondary)] hover:text-[var(--gold-400)] hover:underline"
+                >
+                  {p.email}
+                </a>
+              ) : (
+                <p className="text-xs italic text-[var(--fg-muted)]">No email on file</p>
+              )}
               <p className="text-[11px] text-[var(--fg-muted)]">
                 {ROLE_LABEL[p.role]}
                 {p.attended === false ? " · didn’t join" : ""}
-                {p.role !== "host" && !p.email ? " · no email" : ""}
               </p>
             </div>
           </li>

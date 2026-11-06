@@ -431,3 +431,51 @@ describe("storedChatMessages", () => {
     expect(storedChatMessages([])).toEqual([]);
   });
 });
+
+// ── Private messages and the pin ────────────────────────────────────────────
+
+import { decodePrivate, encodePrivate, groupChat as groupForPrivacy, pinnedMessage } from "./chat";
+
+describe("private messages on the wire", () => {
+  it("round-trips a message", () => {
+    const wire = encodePrivate({ id: "p1", text: "just you", ts: 5, displayName: "Sam" });
+    expect(decodePrivate(wire)).toEqual({ kind: "private-chat", id: "p1", text: "just you", ts: 5, displayName: "Sam" });
+  });
+
+  it.each([
+    ["not json"],
+    [JSON.stringify({ kind: "other", id: "x", text: "hi" })],
+    [JSON.stringify({ kind: "private-chat", id: "", text: "hi" })],
+    [JSON.stringify({ kind: "private-chat", id: "x", text: "   " })],
+    [42],
+  ])("refuses %p", (raw) => {
+    expect(decodePrivate(raw)).toBeNull();
+  });
+});
+
+describe("grouping private lines", () => {
+  const at = (n: number) => 1_000 + n;
+  it("never joins a private line to a public turn from the same person", () => {
+    const turns = groupForPrivacy([
+      { id: "a", from: "u1", displayName: "Sam", text: "to all", ts: at(0) },
+      { id: "b", from: "u1", displayName: "Sam", text: "just you", ts: at(1), privateWith: { id: "u2", name: "Ana", direction: "out" } },
+      { id: "c", from: "u1", displayName: "Sam", text: "and again", ts: at(2), privateWith: { id: "u2", name: "Ana", direction: "out" } },
+    ]);
+    expect(turns.map((t) => [t.id, t.messages.length, t.privateWith?.name ?? null])).toEqual([
+      ["a", 1, null],
+      ["b", 2, "Ana"],
+    ]);
+  });
+});
+
+describe("pinnedMessage", () => {
+  const msgs = [
+    { id: "m1", from: "u1", displayName: "Sam", text: "agenda", ts: 1 },
+    { id: "m2", from: "u1", displayName: "Sam", text: "secret", ts: 2, privateWith: { id: "u2", name: "Ana", direction: "out" as const } },
+  ];
+  it("finds the pinned message, and never a private one", () => {
+    expect(pinnedMessage(msgs, "m1")?.text).toBe("agenda");
+    expect(pinnedMessage(msgs, "m2")).toBeNull();
+    expect(pinnedMessage(msgs, null)).toBeNull();
+  });
+});

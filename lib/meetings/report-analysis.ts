@@ -216,6 +216,7 @@ The follow_up_draft is written BY the host and sent FROM the host's mailbox TO t
 Begin the follow_up_draft with exactly the line "Hi ${FIRST_NAME_TOKEN}," — that placeholder is replaced with each recipient's first name when the email is sent. Do not put anybody's name in the greeting.
 action_items is the authoritative list of commitments and is never empty — every meeting leaves somebody something to do. The follow_up_draft's numbered action items are exactly the action_items, same items, same owners, same order: do not put a commitment in the email that is missing from action_items.
 When the host gives corrections, they are authoritative: they override anything you would otherwise infer from the transcript, and they apply to the whole report, not only the follow-up. A correction written as "Q: … / A: …" pairs is the host answering this report's earlier open questions: treat each answer as fact and ask that question no more.
+The meeting chat is part of the meeting: links, figures, questions and commitments typed there count exactly as if they had been said — include them in the summary, decisions, action items, open questions and risks. Highlights still quote only the spoken transcript.
 Highlights quote the transcript word for word, because the quote is what finds the moment on the recording. Unresolved questions are ones the participants raised and left open; open_questions are yours to the host about gaps in the transcript — never put the same thing in both.
 When the transcript is incomplete — poor audio, inaudible or garbled passages, a recording that starts late or cuts out, speakers you cannot tell apart — do not describe the problem anywhere in the report and never write that something "could not be confirmed". Report only what the transcript supports, and for each thing you could not confirm (a decision, an owner, a figure, a date) ask the host one specific question in open_questions. The follow_up_draft never mentions the recording, the transcript or audio quality, and never says that nothing was decided: it covers what is clear, and the host completes it after answering the questions.
 When the transcript is too incomplete to know what was agreed, do not invent commitments for the other attendees — no "reschedule in a quieter room", no "come prepared with materials". action_items then holds the host's own step only: confirm with the attendees what was decided and what each person owes. Every open question is a thing the host must settle, not a task for somebody else.`;
@@ -266,6 +267,11 @@ export interface ReportAnalysisInput {
    * the transcript, because the host was in the room and the model was not.
    */
   correction?: string | null;
+  /**
+   * What was typed in the meeting's chat, formatted by chat-for-report.ts.
+   * Empty or absent when nobody typed.
+   */
+  chat?: string | null;
   /** The version being corrected, so the model can see what the correction is about. */
   previous?: { summary?: string | null; followUp?: string | null } | null;
 }
@@ -314,10 +320,18 @@ export function reportPrompt(input: ReportAnalysisInput): string {
     }
   }
 
+  const chat = (input.chat ?? "").trim();
   lines.push(
     "",
     "FULL TRANSCRIPT:",
     clampTranscript(input.transcript),
+    ...(chat
+      ? [
+          "",
+          "MEETING CHAT (typed during the meeting, alongside what was said — treat it as part of the meeting):",
+          chat,
+        ]
+      : []),
     "",
     "Generate a comprehensive post-meeting report.",
   );
