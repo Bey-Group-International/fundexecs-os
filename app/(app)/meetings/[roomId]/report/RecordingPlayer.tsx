@@ -580,6 +580,9 @@ export function RecordingPlayer({
         <video
           ref={videoRef}
           controls
+          // A shared clip offers its own download button when its creator
+          // allows one; the browser's menu should not add one regardless.
+          controlsList={source ? "nodownload" : undefined}
           playsInline
           preload="metadata"
           className="w-full rounded-lg bg-black aspect-video"

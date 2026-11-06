@@ -1,8 +1,10 @@
 "use client";
 
-// A shared clip: the recording, limited to its window, with the words said in
-// it alongside — the line being spoken marked as it plays, and any line a
-// press away.
+// A shared clip: the clip's own file (cut on the server), with the words said
+// in it alongside — the line being spoken marked as it plays, and any line a
+// press away. Times shown are the recording's, so "34:10" means what it meant
+// in the meeting; the player runs on the clip's clock, which starts at
+// `baseMs` into the recording.
 
 import { useRef, useState } from "react";
 import { RecordingPlayer, type RecordingPlayerHandle } from "@/app/(app)/meetings/[roomId]/report/RecordingPlayer";
@@ -27,7 +29,9 @@ export function ClipView({
   recordingId,
   startMs,
   endMs,
+  baseMs,
   expiresAt,
+  allowDownload,
   cues,
 }: {
   token: string;
@@ -37,11 +41,17 @@ export function ClipView({
   recordingId: string;
   startMs: number;
   endMs: number | null;
+  /** Where the clip's file begins in the recording (its first keyframe). */
+  baseMs: number;
   expiresAt: string;
+  allowDownload: boolean;
+  /** On the clip's clock. */
   cues: TranscriptCue[];
 }) {
   const player = useRef<RecordingPlayerHandle>(null);
-  const [nowMs, setNowMs] = useState(startMs);
+  const clipStart = Math.max(0, startMs - baseMs);
+  const clipEnd = endMs === null ? null : Math.max(clipStart + 1, endMs - baseMs);
+  const [nowMs, setNowMs] = useState(clipStart);
   const active = activeCueIndex(cues, nowMs);
 
   return (
@@ -61,9 +71,19 @@ export function ClipView({
         meetingId={meetingId}
         recordingId={recordingId}
         source={{ partsUrl: `/api/clip/${token}/parts`, streamUrl: `/api/clip/${token}/stream` }}
-        clip={{ startMs, endMs }}
+        clip={{ startMs: clipStart, endMs: clipEnd }}
         onTime={setNowMs}
       />
+
+      {allowDownload ? (
+        <a
+          href={`/api/clip/${token}/stream?download=1`}
+          download
+          className="self-start rounded-md border border-[var(--line)] px-3 py-1.5 text-sm text-[var(--fg-primary)] hover:bg-[var(--surface-2)]"
+        >
+          Download clip
+        </a>
+      ) : null}
 
       {cues.length > 0 ? (
         <section aria-label="Transcript" className="flex flex-col gap-1 rounded-xl border border-[var(--line)] bg-[var(--surface-1)] p-3">
@@ -74,12 +94,12 @@ export function ClipView({
                 <button
                   type="button"
                   aria-current={i === active ? "true" : undefined}
-                  onClick={() => player.current?.seekTo(Math.max(startMs, cue.atMs), { play: true })}
+                  onClick={() => player.current?.seekTo(Math.max(clipStart, cue.atMs), { play: true })}
                   className={`flex w-full gap-3 rounded-lg px-2 py-1.5 text-left text-sm transition-colors ${
                     i === active ? "bg-[var(--gold-400)]/15" : "hover:bg-[var(--surface-2)]"
                   }`}
                 >
-                  <span className="w-12 shrink-0 font-mono text-[11px] tabular-nums text-[var(--fg-muted)]">{formatClock(cue.atMs)}</span>
+                  <span className="w-12 shrink-0 font-mono text-[11px] tabular-nums text-[var(--fg-muted)]">{formatClock(cue.atMs + baseMs)}</span>
                   <span className="min-w-0">
                     <span className="font-medium text-[var(--fg-secondary)]">{cue.speaker}: </span>
                     <span className="text-[var(--fg-primary)]">{cue.paragraphs.join(" ")}</span>

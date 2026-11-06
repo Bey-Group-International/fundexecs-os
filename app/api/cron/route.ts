@@ -25,6 +25,7 @@ import { runBookingRequestReminders, type RequestReminderStats } from "@/lib/mee
 import { runLpReminders, type LpReminderStats } from "@/lib/lp-reminders.server";
 import { purgeAbandonedLps } from "@/lib/lp-retention.server";
 import { runRecordingSweep, type RecordingSweepStats } from "@/lib/meetings/recording-sweep.server";
+import { runClipSweep, type ClipSweepStats } from "@/lib/meetings/recording-clip.server";
 import { runStaleMeetingSweep, type StaleMeetingSweepStats } from "@/lib/meetings/stale-meeting-sweep.server";
 import { runFailedReportRetry, type FailedReportRetryStats } from "@/lib/meetings/failed-report-retry.server";
 import { runFollowUpSweep, type FollowUpSweepStats } from "@/lib/meetings/follow-up-sweep.server";
@@ -435,6 +436,16 @@ export async function GET(request: Request) {
     console.error("recording_sweep failed", e);
   }
 
+  // Shared clips: cut any that are still waiting (links made before clips were
+  // trimmed, or a cut that died), and delete the media of links that have
+  // expired or been turned off.
+  let clips: ClipSweepStats = { cut: 0, failed: 0, purged: 0 };
+  try {
+    clips = await runClipSweep(supabase, now);
+  } catch (e) {
+    console.error("clip_sweep failed", e);
+  }
+
   // Meetings nobody ended. A meeting is marked ended by one thing — End
   // pressed in the room — so a host who shut the laptop left the row `active`
   // forever, in "Upcoming", with its whole transcript in a table nothing
@@ -591,5 +602,5 @@ export async function GET(request: Request) {
     // best-effort: never let health tracking break the cron response
   }
 
-  return NextResponse.json({ swept: due.length, results, radar, pulse, escalated, inboxApprovals, webhooks, proactive, reminders, bookingConfirmations, bookingRequestReminders, lpReminders, lpAbandonedPurged, lpAbandonedPurgeFailed, bookingRequestsExpired, recordings, staleMeetings, failedReports, followUps, calendarRepair, subscriptions, settledInvoices, nativeCollections, networkAutomations });
+  return NextResponse.json({ swept: due.length, results, radar, pulse, escalated, inboxApprovals, webhooks, proactive, reminders, bookingConfirmations, bookingRequestReminders, lpReminders, lpAbandonedPurged, lpAbandonedPurgeFailed, bookingRequestsExpired, recordings, clips, staleMeetings, failedReports, followUps, calendarRepair, subscriptions, settledInvoices, nativeCollections, networkAutomations });
 }

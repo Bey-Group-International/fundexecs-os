@@ -7,20 +7,15 @@ import {
   expiryLabel,
   formatClock,
   parseClock,
-  partsForWindow,
-  rangeAllowed,
   shareState,
+  agoLabel,
+  clipCues,
+  clipFilename,
+  clipStatusLabel,
+  deviceLabel,
+  viewSummary,
+  type ShareView,
 } from "./recording-share";
-import type { TimelinePart } from "./recording-timeline";
-
-// Ten 5-second parts of 100 bytes each.
-const PARTS: TimelinePart[] = Array.from({ length: 10 }, (_, i) => ({
-  idx: i,
-  start: i * 100,
-  end: (i + 1) * 100,
-  offsetMs: i * 5000,
-  durationMs: 5000,
-}));
 
 describe("shareState", () => {
   const now = Date.parse("2026-11-06T12:00:00Z");
@@ -75,33 +70,87 @@ describe("cleanLabel and cleanDays", () => {
   });
 });
 
-describe("partsForWindow", () => {
-  it("serves the header part and the window with a part of slack each side", () => {
-    // 20s–30s covers parts 4 and 5; slack adds 3 and 6; part 0 always.
-    expect(partsForWindow(PARTS, { startMs: 20_000, endMs: 30_000 }).map((p) => p.idx)).toEqual([0, 3, 4, 5, 6]);
+describe("clipCues", () => {
+  const started = "2026-11-06T10:00:00.000Z";
+  const at = (s: number) => new Date(Date.parse(started) + s * 1000).toISOString();
+  const rows = [
+    { speaker: "Ann", text: "Before the clip.", ts: at(55) },
+    { speaker: "Ann", text: "Inside, first.", ts: at(61) },
+    { speaker: "Ann", text: "Inside, second.", ts: at(70) },
+    { speaker: "Bob", text: "Inside too.", ts: at(80) },
+    { speaker: "Bob", text: "After the clip.", ts: at(95) },
+  ];
+  it("keeps only lines said inside the window, even within one turn", () => {
+    const cues = clipCues(rows, started, { startMs: 60_000, endMs: 90_000 }, 60_000);
+    expect(cues.map((c) => c.paragraphs)).toEqual([["Inside, first.", "Inside, second."], ["Inside too."]]);
+    const text = cues.flatMap((c) => c.paragraphs).join(" ");
+    expect(text).not.toContain("Before");
+    expect(text).not.toContain("After");
   });
-  it("does not run past either end", () => {
-    expect(partsForWindow(PARTS, { startMs: 0, endMs: 5000 }).map((p) => p.idx)).toEqual([0, 1]);
-    expect(partsForWindow(PARTS, { startMs: 45_000, endMs: 50_000 }).map((p) => p.idx)).toEqual([0, 8, 9]);
+  it("puts lines on the clip's clock", () => {
+    // The clip's file starts at 58s (a keyframe before the asked-for 60s).
+    const cues = clipCues(rows, started, { startMs: 60_000, endMs: 90_000 }, 58_000);
+    expect(cues.map((c) => c.atMs)).toEqual([3000, 22_000]);
   });
-  it("serves only the header when nothing overlaps", () => {
-    expect(partsForWindow(PARTS, { startMs: 90_000, endMs: 95_000 }).map((p) => p.idx)).toEqual([0]);
+  it("is empty without a usable recording start", () => {
+    expect(clipCues(rows, "not a date", { startMs: 0, endMs: null }, 0)).toEqual([]);
   });
 });
 
-describe("rangeAllowed", () => {
-  const allowed = partsForWindow(PARTS, { startMs: 20_000, endMs: 30_000 }); // 0, 3-6
-  it("allows a range inside one run", () => {
-    expect(rangeAllowed(allowed, 300, 699)).toBe(true);
-    expect(rangeAllowed(allowed, 0, 99)).toBe(true);
+describe("deviceLabel", () => {
+  it("names browser and system coarsely", () => {
+    expect(deviceLabel("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36")).toBe(
+      "Chrome on macOS",
+    );
+    expect(deviceLabel("Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1")).toBe(
+      "Safari on iPhone",
+    );
+    expect(deviceLabel("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36 Edg/130.0")).toBe(
+      "Edge on Windows",
+    );
+    expect(deviceLabel("Mozilla/5.0 (X11; Linux x86_64; rv:131.0) Gecko/20100101 Firefox/131.0")).toBe("Firefox on Linux");
   });
-  it("refuses a range that crosses into a part outside the clip", () => {
-    expect(rangeAllowed(allowed, 0, 399)).toBe(false);
-    expect(rangeAllowed(allowed, 600, 799)).toBe(false);
-    expect(rangeAllowed(allowed, 900, 999)).toBe(false);
+  it("calls out link unfurlers, and copes with nothing", () => {
+    expect(deviceLabel("Slackbot-LinkExpanding 1.0 (+https://api.slack.com/robots)")).toBe("Link preview");
+    expect(deviceLabel("")).toBe("Unknown device");
+    expect(deviceLabel(null)).toBe("Unknown device");
   });
-  it("refuses an inverted range", () => {
-    expect(rangeAllowed(allowed, 500, 400)).toBe(false);
+});
+
+describe("viewSummary", () => {
+  const v = (kind: ShareView["kind"], viewer: string, device = "Chrome on macOS"): ShareView => ({
+    kind,
+    viewer,
+    device,
+    createdAt: "2026-11-06T10:00:00Z",
+  });
+  it("counts opens, distinct viewers and downloads, leaving out link previews", () => {
+    const s = viewSummary([v("open", "a"), v("open", "a"), v("open", "b"), v("download", "a"), v("open", "c", "Link preview")]);
+    expect(s).toMatchObject({ opens: 4, viewers: 2, downloads: 1 });
+    expect(s.text).toBe("4 opens · 2 viewers · 1 download");
+  });
+  it("reads well for nothing", () => {
+    expect(viewSummary([]).text).toBe("0 opens · 0 viewers");
+  });
+});
+
+describe("small labels", () => {
+  it("describes the clip's preparation", () => {
+    expect(clipStatusLabel("ready")).toBe("Ready");
+    expect(clipStatusLabel("failed")).toBe("Couldn't be made");
+    expect(clipStatusLabel("processing")).toBe("Preparing…");
+    expect(clipStatusLabel(undefined)).toBe("Preparing…");
+  });
+  it("says how long ago", () => {
+    const now = Date.parse("2026-11-06T12:00:00Z");
+    expect(agoLabel("2026-11-06T11:59:40Z", now)).toBe("just now");
+    expect(agoLabel("2026-11-06T11:15:00Z", now)).toBe("45 min ago");
+    expect(agoLabel("2026-11-06T09:00:00Z", now)).toBe("3 hours ago");
+    expect(agoLabel("2026-11-04T12:00:00Z", now)).toBe("2 days ago");
+  });
+  it("names a downloaded clip by its date, never its title", () => {
+    expect(clipFilename("2026-11-06T10:00:00Z", "video/webm;codecs=vp9")).toBe("meeting-clip-2026-11-06.webm");
+    expect(clipFilename("bad", "audio/webm")).toBe("call-clip-recording.webm");
   });
 });
 
