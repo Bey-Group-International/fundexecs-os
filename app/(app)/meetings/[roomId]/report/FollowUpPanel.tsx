@@ -26,10 +26,23 @@ import {
   type ReportParticipant,
 } from "@/lib/meetings/report-participants";
 import { CopyButton } from "./CopyButton";
+import { UNDO_SECONDS, externalRecipients, itemsFor, withPersonalItems } from "@/lib/meetings/follow-up-loop";
+import {
+  DEFAULT_SEND_OPTIONS,
+  DeliveryList,
+  FollowUpTools,
+  ReviewBeforeSend,
+  SendOptionsRow,
+  UndoCountdown,
+  sendAtIso,
+  type SendOptions,
+} from "./FollowUpLoop";
 
 type SendState =
   | { kind: "idle" }
   | { kind: "sending" }
+  // Scheduled for later by the hourly sweep: nothing has gone yet.
+  | { kind: "scheduled"; scheduled: number; at: string }
   | { kind: "sent"; sent: number; total: number; unreachable: string[]; failed: string[] }
   // Gated by the organisation's mandate: waiting in approvals, nothing sent yet.
   | { kind: "queued"; queued: number; sent: number; total: number }
@@ -109,7 +122,16 @@ export const FollowUpPanel = memo(function FollowUpPanel({
   unreachable = [],
   hostName = null,
   status = { kind: "not_sent" },
+  actionItems = [],
+  trackDelivery = false,
+  undoSeconds = UNDO_SECONDS,
 }: {
+  /** The report's action items, so each reader's copy can carry their own next steps. */
+  actionItems?: string[];
+  /** Read and show per-recipient delivery (the report page turns this on). */
+  trackDelivery?: boolean;
+  /** How long a confirmed send can be taken back before it leaves. */
+  undoSeconds?: number;
   meetingId: string;
   draft: string;
   /** Only the host sends: it goes out over their name, to everyone in the room. */
@@ -127,10 +149,23 @@ export const FollowUpPanel = memo(function FollowUpPanel({
   const [previewAs, setPreviewAs] = useState(0);
   const [state, setState] = useState<SendState>({ kind: "idle" });
   const field = useRef<HTMLTextAreaElement>(null);
+  const [options, setOptions] = useState<SendOptions>(DEFAULT_SEND_OPTIONS);
+  const [reviewing, setReviewing] = useState(false);
+  const [counting, setCounting] = useState(false);
+  const [deliveryVersion, setDeliveryVersion] = useState(0);
+  const [bookingUrl, setBookingUrl] = useState<string | null>(null);
+  const [hostEmail, setHostEmail] = useState<string | null>(null);
+
+  const addressed = useMemo(
+    () => recipients.filter((r): r is ReportParticipant & { email: string } => Boolean(r.email)).map((r) => ({ name: r.name, email: r.email })),
+    [recipients],
+  );
+  const ownSteps = (r: { name: string; email: string | null }) =>
+    options.personalItems && r.email ? itemsFor({ name: r.name, email: r.email }, actionItems, addressed) : [];
 
   const reader = recipients[previewAs] ?? null;
   const preview = reader
-    ? personalizeFollowUp(body, reader.name, { hostName })
+    ? withPersonalItems(personalizeFollowUp(body, reader.name, { hostName }), ownSteps(reader))
     : displayFollowUp(body);
 
   function format(apply: (t: string, s: number, e: number) => Edit) {
@@ -176,15 +211,23 @@ export const FollowUpPanel = memo(function FollowUpPanel({
     }
   }
 
-  async function send() {
+  async function send(only?: string[]) {
     setState({ kind: "sending" });
     try {
       const res = await fetch(`/api/meetings/${meetingId}/follow-up`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ body }),
+        body: JSON.stringify({
+          body,
+          ...(only ? { only } : {}),
+          ...(only ? {} : { sendAt: sendAtIso(options.later) }),
+          nudgeAfterDays: options.nudgeAfterDays,
+          personalItems: options.personalItems,
+        }),
       });
       const json = (await res.json().catch(() => ({}))) as {
+        scheduled?: number;
+        at?: string;
         gated?: boolean;
         queued?: number;
         sent?: number;
@@ -195,6 +238,11 @@ export const FollowUpPanel = memo(function FollowUpPanel({
       };
       if (!res.ok) {
         setState({ kind: "failed", message: json.error ?? "The follow-up could not be sent." });
+        return;
+      }
+      setDeliveryVersion((v) => v + 1);
+      if (json.scheduled) {
+        setState({ kind: "scheduled", scheduled: json.scheduled, at: json.at ?? "" });
         return;
       }
       if (json.gated) {
@@ -213,7 +261,23 @@ export const FollowUpPanel = memo(function FollowUpPanel({
     }
   }
 
-  const sending = state.kind === "sending";
+  /** Confirmed in the review: start the window to take it back, then send. */
+  function confirmSend() {
+    setReviewing(false);
+    if (undoSeconds > 0) setCounting(true);
+    else void send();
+  }
+
+  const reviewRecipients = recipients
+    .filter((r) => r.email)
+    .map((r) => ({
+      name: r.name,
+      email: r.email,
+      external: externalRecipients([r], hostEmail).length > 0,
+      ownSteps: ownSteps(r).length,
+    }));
+
+  const sending = state.kind === "sending" || counting;
   const drafting = state.kind === "drafting";
   const busy = sending || drafting;
   // What just happened here outranks what the page was rendered with.
@@ -293,6 +357,10 @@ export const FollowUpPanel = memo(function FollowUpPanel({
         </div>
       )}
 
+      {canSend && (
+        <FollowUpTools meetingId={meetingId} body={body} onBody={setBody} bookingUrl={bookingUrl} disabled={busy} />
+      )}
+
       {editing && canSend ? (
         <div className="flex flex-col gap-2">
           <div className="flex flex-wrap items-center gap-1" role="toolbar" aria-label="Formatting">
@@ -311,6 +379,7 @@ export const FollowUpPanel = memo(function FollowUpPanel({
           </div>
           <textarea
             ref={field}
+            aria-label="Follow-up email"
             value={body}
             onChange={(e) => setBody(e.target.value)}
             rows={Math.min(24, Math.max(10, body.split("\n").length + 1))}
@@ -347,6 +416,12 @@ export const FollowUpPanel = memo(function FollowUpPanel({
         </div>
       )}
 
+      {canSend && <SendOptionsRow value={options} onChange={setOptions} disabled={busy} />}
+
+      {canSend && reviewing && (
+        <ReviewBeforeSend recipients={reviewRecipients} options={options} onConfirm={confirmSend} onCancel={() => setReviewing(false)} />
+      )}
+
       {canSend && (
         <div className="flex flex-wrap items-center gap-3 border-t border-[var(--line)] pt-3">
           {/* Drafting first, and it is the primary of the two. Sending from here
@@ -362,18 +437,36 @@ export const FollowUpPanel = memo(function FollowUpPanel({
             {drafting ? "Drafting…" : state.kind === "drafted" ? "Draft again" : "Draft in inbox"}
           </button>
           <button
-            onClick={send}
-            disabled={busy || !body.trim()}
+            onClick={() => setReviewing(true)}
+            disabled={busy || reviewing || !body.trim()}
             className="rounded-lg border border-[var(--line)] px-3 py-1.5 text-xs font-semibold text-[var(--fg-primary)] transition-opacity disabled:opacity-50"
           >
             {sending
               ? "Sending…"
               : state.kind === "sent"
                 ? "Send again"
-                : recipients.length
-                  ? `Send now to ${recipients.length}`
-                  : "Send now"}
+                : options.later
+                  ? "Schedule…"
+                  : recipients.length
+                    ? `Send now to ${recipients.length}`
+                    : "Send now"}
           </button>
+          {counting && (
+            <UndoCountdown
+              seconds={undoSeconds}
+              onUndo={() => setCounting(false)}
+              onDone={() => {
+                setCounting(false);
+                void send();
+              }}
+            />
+          )}
+          {state.kind === "scheduled" && (
+            <p className="text-xs text-[var(--fg-muted)]">
+              Scheduled for {state.scheduled} {state.scheduled === 1 ? "person" : "people"}
+              {state.at ? ` on ${new Date(state.at).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })}` : ""}. Nothing has been sent yet.
+            </p>
+          )}
           {state.kind === "sent" && (
             <p className="text-xs text-[var(--fg-muted)]">
               {deliveryMessage({
@@ -419,6 +512,16 @@ export const FollowUpPanel = memo(function FollowUpPanel({
             </p>
           )}
         </div>
+      )}
+
+      {canSend && trackDelivery && (
+        <DeliveryList
+          meetingId={meetingId}
+          version={deliveryVersion}
+          onRetry={(emails) => void send(emails)}
+          onBookingUrl={setBookingUrl}
+          onHostEmail={setHostEmail}
+        />
       )}
     </section>
   );

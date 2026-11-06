@@ -127,6 +127,32 @@ export async function getActiveMandate(
     .limit(1)
     .maybeSingle();
 
+  return mandateFromRow(data);
+}
+
+/**
+ * The active mandate of one organization, for a caller with no session to
+ * scope by — the service role in a cron sweep, where getActiveMandate's
+ * reliance on RLS would read whichever organization's mandate came first.
+ */
+export async function getActiveMandateForOrg(
+  supabase: Client,
+  orgId: string,
+): Promise<Mandate | undefined> {
+  const { data } = await supabase
+    .from("mandates")
+    .select("auto_approve, autonomy_ceiling, scope, guardrails, blast_radius_rules")
+    .eq("organization_id", orgId)
+    .eq("is_active", true)
+    .order("updated_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  return mandateFromRow(data);
+}
+
+function mandateFromRow(
+  data: Pick<MandateRow, "auto_approve" | "autonomy_ceiling" | "guardrails" | "blast_radius_rules"> | null,
+): Mandate | undefined {
   if (!data) return undefined;
 
   const autonomyCeiling = Math.min(2, Math.max(1, data.autonomy_ceiling)) as GateTier;

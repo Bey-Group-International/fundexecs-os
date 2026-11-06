@@ -13,7 +13,9 @@ import { createServerClient } from "@/lib/supabase/server";
 import { sendEmail } from "@/lib/email";
 import { mailboxFor } from "@/lib/meetings/mailbox.server";
 import { mailboxProblemMessage } from "@/lib/meetings/mailbox";
-import { normalizeNoteText } from "@/lib/meetings/live-notes";
+import { normalizeNoteList, normalizeNoteText } from "@/lib/meetings/live-notes";
+import { cleanNudgeDays, cleanSendAt, itemsFor, withPersonalItems } from "@/lib/meetings/follow-up-loop";
+import { recordSends } from "@/lib/meetings/follow-up-sends.server";
 import {
   deliveryOutcome,
   everyoneReached,
@@ -45,6 +47,14 @@ interface FollowUpRequest {
    * difference between a draft and a letter. Omitted, the stored one is sent.
    */
   body?: string;
+  /** Later, as an ISO time: scheduled rather than sent. Omitted, now. */
+  sendAt?: string | null;
+  /** Nudge anyone who has not replied after this many days (2, 3, 5 or 7). */
+  nudgeAfterDays?: number | null;
+  /** Only these addresses — a retry to the people a send failed for. */
+  only?: string[];
+  /** Give each reader their own next steps (default true). */
+  personalItems?: boolean;
 }
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -85,24 +95,35 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   // report, the same ordering the report page and the log use, so a
   // regenerated follow-up is the one that gets sent.
   const edited = followUpBody(typeof payload.body === "string" ? payload.body : "");
-  const [draft, present, host] = await Promise.all([
-    edited
-      ? edited
-      : supabase
-          .from("live_meeting_reports")
-          .select("analysis")
-          .eq("meeting_id", id)
-          .order("created_at", { ascending: false })
-          .limit(1)
-          .maybeSingle()
-          .then(({ data: report }) => {
-            const analysis = (report?.analysis ?? null) as Record<string, unknown> | null;
-            return followUpBody(normalizeNoteText(analysis?.follow_up_draft));
-          }),
+  const sendAt = cleanSendAt(payload.sendAt, Date.now());
+  if (sendAt === undefined) {
+    return NextResponse.json(
+      { error: "Pick a time between a few minutes and 30 days from now." },
+      { status: 422 },
+    );
+  }
+  const nudgeAfterDays = cleanNudgeDays(payload.nudgeAfterDays);
+  const only = Array.isArray(payload.only)
+    ? new Set(payload.only.filter((e): e is string => typeof e === "string").map((e) => e.trim().toLowerCase()))
+    : null;
+  const reportRead = supabase
+    .from("live_meeting_reports")
+    .select("analysis")
+    .eq("meeting_id", id)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle()
+    .then(({ data: report }) => (report?.analysis ?? null) as Record<string, unknown> | null);
+  const [analysis, present, host] = await Promise.all([
+    reportRead,
     loadPresentPeople(supabase, id),
     // Only to recognise a greeting that names the host; see personalizeFollowUp.
     loadHost(supabase, auth.ctx.userId),
   ]);
+
+  const draft = edited || followUpBody(normalizeNoteText(analysis?.follow_up_draft));
+  // Each reader's own next steps, from the report's action items.
+  const actionItems = payload.personalItems === false ? [] : normalizeNoteList(analysis?.action_items, 30);
 
   if (!draft) {
     return NextResponse.json(
@@ -121,7 +142,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     present,
     senderEmail: auth.ctx.email,
   });
-  const recipients = audience.recipients;
+  const recipients = only ? audience.recipients.filter((r) => only.has(r.email.toLowerCase())) : audience.recipients;
+  if (recipients.length === 0 && only) {
+    return NextResponse.json({ error: "None of those people are on this meeting." }, { status: 409 });
+  }
   if (recipients.length === 0) {
     // Said plainly rather than answering "sent 0", which reads as a failure of
     // the mailbox rather than as a meeting whose attendees have no addresses —
@@ -141,6 +165,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   const subject = followUpSubject(meeting.title);
   const hostName = host?.full_name ?? null;
+  /** What one reader gets: their name in the greeting and their own next steps. */
+  const bodyFor = (r: { name: string; email: string }) =>
+    withPersonalItems(personalizeFollowUp(draft, r.name, { hostName }), itemsFor(r, actionItems, audience.recipients));
 
   // Before the gate as well as the send: a follow-up held for approval with no
   // mailbox to send it from would be approved into nothing.
@@ -157,14 +184,52 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   // per attendee, each on that attendee's thread for this meeting — instead of
   // an immediate send; nothing reaches anybody until it is approved.
   const mandate = await getActiveMandate(supabase, auth.ctx.orgId);
-  if (gateDecision("send_reply", mandate, undefined, { platformAdmin: isPlatformAdmin(auth.ctx) }).requiresApproval) {
+  const gated = gateDecision("send_reply", mandate, undefined, { platformAdmin: isPlatformAdmin(auth.ctx) }).requiresApproval;
+
+  // Later: one scheduled row per recipient, sent by the hourly sweep from the
+  // host's mailbox. Not for a firm whose sends wait on approval — a scheduled
+  // send would either skip the gate or sit in it past its time.
+  if (sendAt) {
+    if (gated) {
+      return NextResponse.json(
+        { error: "Your firm approves outbound email first, so a follow-up can't be scheduled. Draft it in the inbox instead." },
+        { status: 409 },
+      );
+    }
+    if (!hasSupabaseServiceEnv()) {
+      return NextResponse.json({ error: "Scheduling isn't available here." }, { status: 503 });
+    }
+    const scheduled = await recordSends(createServiceClient(), {
+      meetingId: id,
+      orgId: auth.ctx.orgId,
+      createdBy: auth.ctx.userId,
+      subject,
+      sends: recipients.map((r) => ({
+        email: r.email,
+        name: r.name,
+        body: bodyFor(r),
+        status: "scheduled" as const,
+        scheduledFor: sendAt.toISOString(),
+        nudgeAfterDays,
+      })),
+    });
+    if (!scheduled) {
+      return NextResponse.json(
+        { error: "Scheduling isn't available yet — send now, or try again in a few minutes." },
+        { status: 503 },
+      );
+    }
+    return NextResponse.json({ scheduled, at: sendAt.toISOString(), total: recipients.length, unreachable: audience.unreachable });
+  }
+
+  if (gated) {
     let queued = 0;
     // Known contacts the firm has written to before skip the hold and go now
     // (lib/inbox/known-contact.server.ts), so a gated follow-up can be both.
     let sentNow = 0;
     const failed: string[] = [];
     for (const r of recipients) {
-      const personal = personalizeFollowUp(draft, r.name, { hostName });
+      const personal = bodyFor(r);
       const thread = await ensureMeetingThread(supabase, {
         orgId: auth.ctx.orgId,
         actorId: auth.ctx.userId,
@@ -224,7 +289,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   // Per recipient, and settled: one bad address must not stop the rest of the
   // room hearing from the meeting they were in. And personalised per recipient:
   // each copy greets its own reader, never the host who is sending it.
-  const bodies = recipients.map((r) => personalizeFollowUp(draft, r.name, { hostName }));
+  const bodies = recipients.map((r) => bodyFor(r));
   const results = await Promise.allSettled(
     recipients.map((r, i) =>
       sendEmail({
@@ -251,6 +316,31 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       subject,
       mailbox: { source: mailbox.source, email: mailbox.email },
       sends: recipients.map((recipient, i) => ({ recipient, body: bodies[i], result: results[i] })),
+    });
+  }
+
+  // One row per recipient, for the panel's delivery list and the nudge sweep.
+  if (hasSupabaseServiceEnv()) {
+    const sentAt = new Date().toISOString();
+    await recordSends(createServiceClient(), {
+      meetingId: id,
+      orgId: auth.ctx.orgId,
+      createdBy: auth.ctx.userId,
+      subject,
+      sends: recipients.map((r, i) => {
+        const result = results[i];
+        const value = result.status === "fulfilled" ? (result.value as { ok?: boolean; detail?: string }) : null;
+        const ok = value?.ok === true;
+        return {
+          email: r.email,
+          name: r.name,
+          body: bodies[i],
+          status: ok ? ("sent" as const) : ("failed" as const),
+          sentAt: ok ? sentAt : null,
+          error: ok ? null : (value?.detail ?? (result.status === "rejected" ? String(result.reason) : "Not delivered")).slice(0, 300),
+          nudgeAfterDays: ok ? nudgeAfterDays : null,
+        };
+      }),
     });
   }
 

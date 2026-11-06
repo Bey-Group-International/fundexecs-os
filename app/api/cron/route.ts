@@ -27,6 +27,7 @@ import { purgeAbandonedLps } from "@/lib/lp-retention.server";
 import { runRecordingSweep, type RecordingSweepStats } from "@/lib/meetings/recording-sweep.server";
 import { runStaleMeetingSweep, type StaleMeetingSweepStats } from "@/lib/meetings/stale-meeting-sweep.server";
 import { runFailedReportRetry, type FailedReportRetryStats } from "@/lib/meetings/failed-report-retry.server";
+import { runFollowUpSweep, type FollowUpSweepStats } from "@/lib/meetings/follow-up-sweep.server";
 import { runEventIdRepair } from "@/lib/calendar/event-id-repair.server";
 import { NO_REPAIRS, summarize, worthReporting, type RepairStats } from "@/lib/calendar/event-id-repair";
 import {
@@ -459,6 +460,16 @@ export async function GET(request: Request) {
     console.error("failed_report_retry failed", e);
   }
 
+  // Meeting follow-ups: scheduled sends whose time has come, nudges to people
+  // who have not replied, and reminders on overdue action items. See
+  // lib/meetings/follow-up-sweep.server.ts.
+  let followUps: FollowUpSweepStats = { scheduledSent: 0, scheduledFailed: 0, nudged: 0, nudgeTasks: 0, chased: 0 };
+  try {
+    followUps = await runFollowUpSweep(supabase, { now });
+  } catch (e) {
+    console.error("follow_up_sweep failed", e);
+  }
+
   // Reattach calendar events to the meetings that lost them. For as long as the
   // sync write named a provider the check constraint rejected, every push did
   // half its job: the event landed on the host's calendar and the UPDATE that
@@ -580,5 +591,5 @@ export async function GET(request: Request) {
     // best-effort: never let health tracking break the cron response
   }
 
-  return NextResponse.json({ swept: due.length, results, radar, pulse, escalated, inboxApprovals, webhooks, proactive, reminders, bookingConfirmations, bookingRequestReminders, lpReminders, lpAbandonedPurged, lpAbandonedPurgeFailed, bookingRequestsExpired, recordings, staleMeetings, failedReports, calendarRepair, subscriptions, settledInvoices, nativeCollections, networkAutomations });
+  return NextResponse.json({ swept: due.length, results, radar, pulse, escalated, inboxApprovals, webhooks, proactive, reminders, bookingConfirmations, bookingRequestReminders, lpReminders, lpAbandonedPurged, lpAbandonedPurgeFailed, bookingRequestsExpired, recordings, staleMeetings, failedReports, followUps, calendarRepair, subscriptions, settledInvoices, nativeCollections, networkAutomations });
 }

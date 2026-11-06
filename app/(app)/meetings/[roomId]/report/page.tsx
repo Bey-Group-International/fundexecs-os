@@ -340,13 +340,16 @@ export default async function MeetingReportPage({
               {/* Action items — straight after the summary, because they are what the
                   meeting left people to do. Ticked off here, as the tasks they became. */}
               {actionItems.length > 0 ? (
-                <ActionItemsList
-                  meetingId={meeting.id}
-                  items={actionItems}
-                  moments={actionItems.map((item) => momentOf(item.task))}
-                  viewerId={data.viewerId}
-                  isHost={data.isHost}
-                />
+                // Anchored: an overdue-item reminder links straight here.
+                <div id="action-items" className="scroll-mt-6">
+                  <ActionItemsList
+                    meetingId={meeting.id}
+                    items={actionItems}
+                    moments={actionItems.map((item) => momentOf(item.task))}
+                    viewerId={data.viewerId}
+                    isHost={data.isHost}
+                  />
+                </div>
               ) : hasBody ? (
                 <Section title="Action items">
                   <EmptyNote>No action items were captured in this meeting.</EmptyNote>
@@ -496,6 +499,8 @@ export default async function MeetingReportPage({
                   unreachable={unreachable}
                   hostName={side.hostName}
                   status={side.followUp}
+                  actionItems={content.actionItems}
+                  trackDelivery
                 />
               )}
             </>
