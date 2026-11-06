@@ -12,7 +12,10 @@ export type SignalType =
   | "market_entry"
   | "exit"
   | "lp_activity"
-  | "regulatory";
+  | "regulatory"
+  // Synthetic: a deal from the org's own pipeline shown in the feed. It is never
+  // stored in deal_signals, so the table's signal_type check does not list it.
+  | "pipeline_deal";
 
 export type ActivityLevel = "low" | "moderate" | "high" | "very_high";
 
@@ -55,6 +58,7 @@ export const SIGNAL_TYPE_LABELS: Record<SignalType, string> = {
   exit: "Exit",
   lp_activity: "LP Activity",
   regulatory: "Regulatory",
+  pipeline_deal: "Your pipeline",
 };
 
 export const SIGNAL_TYPE_ICONS: Record<SignalType, string> = {
@@ -68,6 +72,7 @@ export const SIGNAL_TYPE_ICONS: Record<SignalType, string> = {
   exit: "◎",
   lp_activity: "◆",
   regulatory: "⊞",
+  pipeline_deal: "◇",
 };
 
 export const SIGNAL_TYPE_COLORS: Record<SignalType, string> = {
@@ -81,6 +86,7 @@ export const SIGNAL_TYPE_COLORS: Record<SignalType, string> = {
   exit: "text-emerald-300 border-emerald-500/20",
   lp_activity: "text-gold-300 border-gold-500/20",
   regulatory: "text-slate-300 border-slate-500/20",
+  pipeline_deal: "text-fg-secondary border-line",
 };
 
 export const ACTIVITY_COLORS: Record<ActivityLevel, { bg: string; text: string; border: string }> = {
@@ -109,6 +115,49 @@ export function timeAgo(isoDate: string | undefined): string {
   if (d < 7) return `${d}d ago`;
   if (d < 30) return `${Math.floor(d / 7)}w ago`;
   return `${Math.floor(d / 30)}mo ago`;
+}
+
+// A row of the org's own `deals` table, as much of it as the feed needs.
+export interface PipelineDealRow {
+  id: string;
+  name: string | null;
+  geography: string | null;
+  asset_class: string | null;
+  stage: string | null;
+  target_amount: number | null;
+  created_at: string;
+  source: string | null;
+}
+
+// Work the AI drafted into the pipeline (source "Copilot") is internal work
+// product, not an ecosystem signal, so it stays out of the feed.
+const INTERNAL_SOURCES = new Set(["Copilot", "copilot"]);
+
+/**
+ * The org's own pipeline deals, shaped as feed items.
+ *
+ * Nothing here is scored: `relevanceScore` and `thesisMatchScore` are 0, which
+ * is how the feed reads "not scored" (a real signal with no score is mapped the
+ * same way), so no fit badge is drawn. These used to be hard-coded to 75 and 65,
+ * which put an invented "65% thesis fit" on every deal. A deal is labelled for
+ * what it is, "Your pipeline", not as a funding round.
+ */
+export function pipelineDealsToSignals(rows: PipelineDealRow[]): DealSignal[] {
+  return rows
+    .filter((d) => !INTERNAL_SOURCES.has(d.source ?? ""))
+    .map((d) => ({
+      id: d.id,
+      signalType: "pipeline_deal" as const,
+      title: d.name ?? "Unnamed Deal",
+      sector: d.asset_class ?? undefined,
+      geography: d.geography ?? undefined,
+      dealStage: d.stage ?? undefined,
+      dealSizeMin: null,
+      dealSizeMax: d.target_amount ?? null,
+      relevanceScore: 0,
+      thesisMatchScore: 0,
+      publishedAt: d.created_at,
+    }));
 }
 
 // Build a simple heatmap from deal signals

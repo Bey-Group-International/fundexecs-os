@@ -7,6 +7,8 @@ import {
   formatSignalSize,
   timeAgo,
   buildHeatmap,
+  pipelineDealsToSignals,
+  type PipelineDealRow,
   type SignalType,
   type ActivityLevel,
   type DealSignal,
@@ -17,7 +19,7 @@ describe("SIGNAL_TYPE_LABELS", () => {
   it("has a label for all signal types", () => {
     const types: SignalType[] = [
       "funding_round", "acquisition", "ipo", "bankruptcy", "exec_change",
-      "partnership", "market_entry", "exit", "lp_activity", "regulatory",
+      "partnership", "market_entry", "exit", "lp_activity", "regulatory", "pipeline_deal",
     ];
     for (const t of types) {
       expect(SIGNAL_TYPE_LABELS[t]).toBeTruthy();
@@ -156,5 +158,57 @@ describe("buildHeatmap", () => {
     ];
     const [cell] = buildHeatmap(signals);
     expect(cell.totalValue).toBe(30_000_000);
+  });
+});
+
+// --- pipelineDealsToSignals --------------------------------------------------
+describe("pipelineDealsToSignals", () => {
+  const row = (over: Partial<PipelineDealRow> = {}): PipelineDealRow => ({
+    id: "d1",
+    name: "Maple Street",
+    geography: "Texas",
+    asset_class: "Multifamily",
+    stage: "diligence",
+    target_amount: 48_000_000,
+    created_at: "2026-10-12T09:00:00Z",
+    source: null,
+    ...over,
+  });
+
+  it("invents no scores: a pipeline deal is unscored, so no fit badge is drawn", () => {
+    const [s] = pipelineDealsToSignals([row()]);
+    expect(s.thesisMatchScore).toBe(0);
+    expect(s.relevanceScore).toBe(0);
+  });
+
+  it("labels a pipeline deal as what it is, not as a funding round", () => {
+    const [s] = pipelineDealsToSignals([row()]);
+    expect(s.signalType).toBe("pipeline_deal");
+    expect(SIGNAL_TYPE_LABELS[s.signalType]).toBe("Your pipeline");
+  });
+
+  it("carries the deal's real facts through", () => {
+    const [s] = pipelineDealsToSignals([row()]);
+    expect(s).toMatchObject({
+      id: "d1",
+      title: "Maple Street",
+      sector: "Multifamily",
+      geography: "Texas",
+      dealStage: "diligence",
+      dealSizeMax: 48_000_000,
+      publishedAt: "2026-10-12T09:00:00Z",
+    });
+  });
+
+  it("leaves out work the AI drafted into the pipeline", () => {
+    const out = pipelineDealsToSignals([row({ id: "a", source: "Copilot" }), row({ id: "b", source: "copilot" }), row({ id: "c" })]);
+    expect(out.map((s) => s.id)).toEqual(["c"]);
+  });
+
+  it("names an unnamed deal and tolerates missing facts", () => {
+    const [s] = pipelineDealsToSignals([row({ name: null, asset_class: null, geography: null, stage: null, target_amount: null })]);
+    expect(s.title).toBe("Unnamed Deal");
+    expect(s.sector).toBeUndefined();
+    expect(s.dealSizeMax).toBeNull();
   });
 });
