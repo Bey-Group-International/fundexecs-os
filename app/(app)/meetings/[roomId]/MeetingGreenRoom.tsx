@@ -39,6 +39,8 @@ import {
   classifyMediaError,
 } from "@/lib/meetings/media-acquisition";
 import { MeetingShareLink } from "../MeetingShareLink";
+import { ConnectionRow, InRoomLine, usePreJoinRoom } from "./PreJoinRoom";
+import { hostWaitNote } from "@/lib/meetings/room-presence";
 import {
   BACKGROUND_PREF_KEY,
   NO_BACKGROUND,
@@ -1253,6 +1255,10 @@ export function MeetingGreenRoom({
     problems.some((p) => p.kind === "mic_silent" || p.kind === "mic_busy" || p.kind === "camera_busy");
   const devicesOpen = devicesOpenChoice ?? devicesNeedAttention;
   const summary = deviceSummary(devices, { cameraId: camId, micId, cameraEnabled });
+  // Who is in the room already, and how good this connection is: one timed poll.
+  const room = usePreJoinRoom(roomCode);
+  const waitNote =
+    admission === "waiting" || admission === "timed-out" ? hostWaitNote(room.snapshot) : null;
 
   return (
     // Two columns from `md`: the preview large on the left, everything to decide
@@ -1477,6 +1483,9 @@ export function MeetingGreenRoom({
             {/* Devices, folded to one line. Most people never change them, and
                 three dropdowns above the Join button made the screen look like a
                 settings page. A problem the pickers can fix opens them. */}
+            {checking ? null : <InRoomLine snapshot={room.snapshot} now={Date.now()} />}
+            <ConnectionRow verdict={room.verdict} checking={room.checking} onRecheck={() => void room.recheck()} />
+
             <div className="rounded-lg border border-[var(--line)]">
               <button
                 type="button"
@@ -1581,7 +1590,7 @@ export function MeetingGreenRoom({
               <WaitStatus
                 admission={admission}
                 title={waitCopy.title}
-                detail={waitCopy.detail}
+                detail={waitNote ? `${waitCopy.detail} ${waitNote}` : waitCopy.detail}
                 cancelLabel={waitCopy.cancelLabel}
                 onCancel={onCancelAdmission}
               />

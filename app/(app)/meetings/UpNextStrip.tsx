@@ -11,6 +11,7 @@ import Link from "next/link";
 import { meetingTimeState } from "@/lib/meetings/schedule";
 import type { UpNext } from "@/lib/meetings/lobby";
 import type { UpcomingMeeting } from "./UpcomingMeetingsList";
+import { wantsStickyJoin } from "@/lib/meetings/lobby-today";
 
 export function UpNextStrip({ next, now }: { next: UpNext<UpcomingMeeting> | null; now: number }) {
   if (!next) return null;
@@ -57,6 +58,24 @@ export function UpNextStrip({ next, now }: { next: UpNext<UpcomingMeeting> | nul
       >
         {live ? "Join now" : "Join"}
       </Link>
+      {/* On a phone the strip scrolls away with the list; a meeting that is
+          live or about to start keeps its Join within thumb reach. */}
+      {wantsStickyJoin(live, meeting.scheduled_at, now) ? (
+        <div
+          data-sticky-join=""
+          className="fixed inset-x-0 bottom-0 z-30 border-t border-line bg-surface-1/95 px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 backdrop-blur sm:hidden"
+        >
+          <Link
+            href={`/meetings/${meeting.room_code}`}
+            aria-label={`${live ? "Join now" : "Join"}: ${meeting.title}`}
+            className={`fx-btn flex min-h-12 w-full items-center justify-center gap-2 truncate rounded-xl px-4 text-sm font-semibold text-white ${
+              live ? "bg-[var(--status-success)]" : "bg-gold-400"
+            }`}
+          >
+            <span className="truncate">{live ? "Join now" : "Join"} · {meeting.title}</span>
+          </Link>
+        </div>
+      ) : null}
     </section>
   );
 }
