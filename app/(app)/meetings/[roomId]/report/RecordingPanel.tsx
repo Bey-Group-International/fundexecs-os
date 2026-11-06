@@ -1,6 +1,7 @@
 "use client";
 
-import { memo } from "react";
+import { memo, useCallback, useState } from "react";
+import { ShareClipDialog } from "./ShareClipDialog";
 import { formatSize } from "@/lib/meetings/recording-policy";
 import { playableRecording, type ReportRecording } from "@/lib/meetings/report-page";
 import { ExpiresIn, LocalTime } from "./LocalTime";
@@ -67,6 +68,7 @@ export const RecordingPanel = memo(function RecordingPanel({
   playerRef,
   onTime,
   markers,
+  canShare = false,
 }: {
   meetingId: string;
   /**
@@ -87,7 +89,12 @@ export const RecordingPanel = memo(function RecordingPanel({
   onTime?: (ms: number) => void;
   /** The report's highlights, for the timed recording's scrubber. */
   markers?: ReadonlyArray<{ ms: number; label: string }>;
+  /** The host may cut a clip of the playable recording and share a link to it. */
+  canShare?: boolean;
 }) {
+  const [sharing, setSharing] = useState<{ recordingId: string; atMs: number; durationMs: number | null } | null>(null);
+  const closeShare = useCallback(() => setSharing(null), []);
+
   if (!recordings.length) return null;
 
   // The same row the page offsets the cues against, by the same rule — so the
@@ -146,6 +153,16 @@ export const RecordingPanel = memo(function RecordingPanel({
                 onTime={rec.id === playableId ? onTime : undefined}
                 shareable={rec.id === playableId}
                 markers={rec.id === playableId ? markers : undefined}
+                onShareClip={
+                  canShare && rec.id === playableId
+                    ? (atMs: number) =>
+                        setSharing({
+                          recordingId: rec.id,
+                          atMs,
+                          durationMs: rec.duration_seconds ? rec.duration_seconds * 1000 : null,
+                        })
+                    : undefined
+                }
               />
               <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-[var(--fg-muted)]">
                 {rec.status === "recording" && (
@@ -181,6 +198,15 @@ export const RecordingPanel = memo(function RecordingPanel({
           );
         })}
       </div>
+      {sharing && (
+        <ShareClipDialog
+          meetingId={meetingId}
+          recordingId={sharing.recordingId}
+          atMs={sharing.atMs}
+          durationMs={sharing.durationMs}
+          onClose={closeShare}
+        />
+      )}
     </section>
   );
 });

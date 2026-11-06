@@ -6,6 +6,7 @@ import nextDynamic from "next/dynamic";
 import { usePathname, useSearchParams } from "next/navigation";
 import { useBodyScrollLock, useFocusTrap } from "@/hooks/useFocusTrap";
 import { MeetingLobby } from "./MeetingLobby";
+import { RecordingRecovery } from "./RecordingRecovery";
 import type { UpcomingMeeting } from "./UpcomingMeetingsList";
 import { MeetingsWorkspace } from "./MeetingsWorkspace";
 import type { PendingFollowUp } from "@/lib/meetings/workspace";
@@ -185,6 +186,9 @@ export function MeetingsLanding({
         onScheduleLater={scheduleLater}
         booking={<SchedulingLinkCard inline />}
       />
+
+      {/* Parts of an earlier recording this device kept while offline, uploaded now. */}
+      <RecordingRecovery />
 
       {/* What needs you, today, what is coming, and what happened — with one
           search across them. See MeetingsWorkspace. */}

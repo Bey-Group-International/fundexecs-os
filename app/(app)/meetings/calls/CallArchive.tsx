@@ -1,5 +1,6 @@
 "use client";
 
+import { RecordingRecovery } from "../RecordingRecovery";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import {
@@ -20,6 +21,8 @@ import { searchSummary } from "@/lib/meetings/session-archive";
 import { callClock } from "@/lib/meetings/one-way";
 import { MIN_QUERY } from "@/lib/meetings/transcript-search";
 import { copyText } from "../MeetingShareLink";
+import { facetsOf, passesFacets, withTag, NO_FACETS, type FacetFilter } from "@/lib/meetings/call-organise";
+import { BulkBar, OrganiseForm, type OrganisePatch } from "./CallOrganise";
 
 /**
  * Recorded calls, searched by what was said in them.
@@ -63,6 +66,13 @@ export function CallArchive({
   // The one call playing. One at a time: two recordings talking over each
   // other is nobody's intent, and starting a second is how people stop the first.
   const [playing, setPlaying] = useState<string | null>(null);
+  // Tag, person and deal, applied to what is loaded.
+  const [facets, setFacets] = useState<FacetFilter>(NO_FACETS);
+  // Ticking calls to act on several at once.
+  const [selecting, setSelecting] = useState(false);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [bulkBusy, setBulkBusy] = useState(false);
+  const [bulkNote, setBulkNote] = useState<string | null>(null);
 
   // Calls deleted on this page. A search already in flight when the delete
   // lands was answered before it, and must not put the call back.
@@ -207,6 +217,84 @@ export function CallArchive({
     }
   }, []);
 
+  /** Save a call's tags, people and deal. Resolves to whether it worked. */
+  const organise = useCallback(async (id: string, patch: Partial<OrganisePatch>): Promise<boolean> => {
+    try {
+      const res = await fetch(`/api/meetings/calls/${encodeURIComponent(id)}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(patch),
+      });
+      if (!res.ok) return false;
+      const body = (await res.json().catch(() => ({}))) as {
+        tags?: string[];
+        people?: string[];
+        dealId?: string | null;
+        dealName?: string | null;
+      };
+      setCalls((prev) =>
+        prev.map((c) =>
+          c.id !== id
+            ? c
+            : {
+                ...c,
+                ...(body.tags ? { tags: body.tags } : {}),
+                ...(body.people ? { people: body.people } : {}),
+                ...("dealId" in body ? { dealId: body.dealId ?? null, dealName: body.dealName ?? null } : {}),
+              },
+        ),
+      );
+      return true;
+    } catch {
+      return false;
+    }
+  }, []);
+
+  const toggleSelect = useCallback((id: string) => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
+
+  async function bulkTag(tag: string) {
+    setBulkBusy(true);
+    setBulkNote(null);
+    let failed = 0;
+    for (const id of selected) {
+      const call = calls.find((c) => c.id === id);
+      if (!(await organise(id, { tags: withTag(call?.tags, tag) }))) failed += 1;
+    }
+    setBulkBusy(false);
+    setBulkNote(failed ? `${failed} call${failed === 1 ? "" : "s"} could not be tagged.` : `Tagged ${selected.size} call${selected.size === 1 ? "" : "s"} “${tag}”.`);
+  }
+
+  async function bulkDelete() {
+    setBulkBusy(true);
+    setBulkNote(null);
+    const ids = [...selected];
+    let failed = 0;
+    for (const id of ids) {
+      try {
+        const res = await fetch("/api/meetings/delete", {
+          method: "DELETE",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ meetingId: id }),
+        });
+        if (!res.ok) throw new Error(String(res.status));
+        deleted.current.add(id);
+        setCalls((prev) => prev.filter((c) => c.id !== id));
+      } catch {
+        failed += 1;
+      }
+    }
+    setBulkBusy(false);
+    setSelected(new Set());
+    setBulkNote(failed ? `${failed} call${failed === 1 ? "" : "s"} could not be deleted.` : `Deleted ${ids.length} call${ids.length === 1 ? "" : "s"}.`);
+  }
+
   const confirm = useCallback((id: string) => setConfirming(id), []);
   const cancelConfirm = useCallback(() => setConfirming(null), []);
   const togglePlay = useCallback((id: string) => setPlaying((p) => (p === id ? null : id)), []);
@@ -228,7 +316,11 @@ export function CallArchive({
   const todayKey = new Date().toDateString();
   const today = useMemo(() => new Date(todayKey), [todayKey]);
 
-  const visible = useMemo(() => calls.filter((c) => passesChips(c, chips)), [calls, chips]);
+  const facetOptions = useMemo(() => facetsOf(calls), [calls]);
+  const visible = useMemo(
+    () => calls.filter((c) => passesChips(c, chips) && passesFacets(c, facets)),
+    [calls, chips, facets],
+  );
   const groups = useMemo(() => groupCalls(visible, today), [visible, today]);
 
   const trimmed = query.trim();
@@ -244,10 +336,14 @@ export function CallArchive({
     ? searchSummary({ query: trimmed, hits: calls.length, scanned, bounded, noun: "call" })
     : "";
   const recent = statsLine(stats);
-  const narrowed = range !== "all" || chips.withSummary || chips.withRecording;
+  const narrowed =
+    range !== "all" || chips.withSummary || chips.withRecording || Boolean(facets.tag || facets.person || facets.dealId);
 
   return (
     <div className="mx-auto max-w-3xl px-4 py-6 sm:py-10">
+      <div className="mb-3 empty:hidden">
+        <RecordingRecovery />
+      </div>
       <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-3">
         <div className="min-w-0">
           <h1 className="text-lg font-semibold text-[var(--fg-primary)]">Recorded calls</h1>
@@ -311,7 +407,53 @@ export function CallArchive({
           >
             Has recording
           </Chip>
+          <FacetSelect
+            label="Tag"
+            value={facets.tag}
+            options={facetOptions.tags}
+            onChange={(tag) => setFacets((f) => ({ ...f, tag }))}
+          />
+          <FacetSelect
+            label="Person"
+            value={facets.person}
+            options={facetOptions.people}
+            onChange={(person) => setFacets((f) => ({ ...f, person }))}
+          />
+          <FacetSelect
+            label="Deal"
+            value={facets.dealId}
+            options={facetOptions.deals}
+            onChange={(dealId) => setFacets((f) => ({ ...f, dealId }))}
+          />
+          <button
+            type="button"
+            aria-pressed={selecting}
+            onClick={() => {
+              setSelecting((v) => !v);
+              setSelected(new Set());
+            }}
+            className="ml-auto min-h-9 rounded-lg px-2.5 text-xs font-medium text-[var(--fg-muted)] hover:text-[var(--fg-primary)]"
+          >
+            {selecting ? "Cancel selection" : "Select"}
+          </button>
         </div>
+        {selecting && selected.size > 0 ? (
+          <BulkBar
+            count={selected.size}
+            busy={bulkBusy}
+            onTag={(t) => void bulkTag(t)}
+            onDelete={() => void bulkDelete()}
+            onClear={() => {
+              setSelected(new Set());
+              setSelecting(false);
+            }}
+          />
+        ) : null}
+        {bulkNote ? (
+          <p role="status" className="mt-2 text-xs text-[var(--fg-muted)]">
+            {bulkNote}
+          </p>
+        ) : null}
         {(summary || loading) && (
           <p role="status" aria-live="polite" className="mt-2 text-xs text-[var(--fg-muted)]">
             {loading ? (isSearch ? "Searching…" : "Loading…") : summary}
@@ -364,6 +506,10 @@ export function CallArchive({
                     onDelete={remove}
                     onPlay={togglePlay}
                     onRename={rename}
+                    onOrganise={organise}
+                    selectable={selecting}
+                    selected={selected.has(call.id)}
+                    onToggleSelect={toggleSelect}
                   />
                 ))}
               </ol>
@@ -396,6 +542,41 @@ function callsUrl(q: string, since: string | null, before?: string): string {
   if (since) url += `&since=${encodeURIComponent(since)}`;
   if (before) url += `&before=${encodeURIComponent(before)}`;
   return url;
+}
+
+/** A filter over the tags, people or deals among the calls loaded; nothing when there are none. */
+function FacetSelect({
+  label,
+  value,
+  options,
+  onChange,
+}: {
+  label: string;
+  value: string | null;
+  options: Array<{ value: string; label: string; count: number }>;
+  onChange: (value: string | null) => void;
+}) {
+  if (!options.length && !value) return null;
+  return (
+    <label className="inline-flex items-center">
+      <span className="sr-only">{label}</span>
+      <select
+        aria-label={`Filter by ${label.toLowerCase()}`}
+        value={value ?? ""}
+        onChange={(e) => onChange(e.target.value || null)}
+        className={`min-h-9 rounded-full border px-3 text-xs font-medium ${
+          value ? "border-[var(--gold-400)] bg-gold-400/15 text-[var(--fg-primary)]" : "border-[var(--line)] bg-transparent text-[var(--fg-muted)]"
+        }`}
+      >
+        <option value="">Any {label.toLowerCase()}</option>
+        {options.map((o) => (
+          <option key={o.value} value={o.value}>
+            {o.label} ({o.count})
+          </option>
+        ))}
+      </select>
+    </label>
+  );
 }
 
 function Chip({ pressed, onClick, children }: { pressed: boolean; onClick: () => void; children: React.ReactNode }) {
@@ -438,6 +619,7 @@ function Chip({ pressed, onClick, children }: { pressed: boolean; onClick: () =>
  */
 const CallRow = memo(function CallRow({
   call, today, confirming, deleting, playing, onConfirm, onCancel, onDelete, onPlay, onRename,
+  onOrganise, selectable = false, selected = false, onToggleSelect,
 }: {
   call: CallHit;
   /** The day "Today" is measured against — see the parent. */
@@ -450,8 +632,13 @@ const CallRow = memo(function CallRow({
   onDelete: (id: string) => void;
   onPlay: (id: string) => void;
   onRename: (id: string, title: string) => Promise<boolean>;
+  onOrganise?: (id: string, patch: Partial<OrganisePatch>) => Promise<boolean>;
+  selectable?: boolean;
+  selected?: boolean;
+  onToggleSelect?: (id: string) => void;
 }) {
   const [renaming, setRenaming] = useState(false);
+  const [organising, setOrganising] = useState(false);
   const [draft, setDraft] = useState(call.title);
   const [saving, setSaving] = useState(false);
   const [renameError, setRenameError] = useState(false);
@@ -495,6 +682,17 @@ const CallRow = memo(function CallRow({
   return (
     <li className="hover:bg-[var(--surface-2)]/60">
       <div className="flex items-start">
+        {selectable ? (
+          <label className="flex min-h-11 shrink-0 items-center pl-3 pt-1 sm:min-h-9">
+            <input
+              type="checkbox"
+              checked={selected}
+              onChange={() => onToggleSelect?.(call.id)}
+              aria-label={`Select ${call.title}`}
+              className="h-4 w-4 accent-[var(--gold-400)]"
+            />
+          </label>
+        ) : null}
         {renaming ? (
           <form onSubmit={save} className="flex min-w-0 flex-1 flex-wrap items-center gap-2 px-4 py-3">
             <input
@@ -554,7 +752,18 @@ const CallRow = memo(function CallRow({
               {call.matches > 0 && (
                 <span>· {call.matches} mention{call.matches === 1 ? "" : "s"}</span>
               )}
+              {call.people && call.people.length > 0 && <span>· with {call.people.join(", ")}</span>}
+              {call.dealName && <span>· {call.dealName}</span>}
             </div>
+            {call.tags && call.tags.length > 0 ? (
+              <div className="mt-1 flex flex-wrap gap-1">
+                {call.tags.map((t) => (
+                  <span key={t} data-tag={t} className="rounded-full bg-[var(--surface-3)] px-2 py-0.5 text-[10px] font-medium text-[var(--fg-secondary)]">
+                    {t}
+                  </span>
+                ))}
+              </div>
+            ) : null}
 
             {call.snippet ? (
               <p className="mt-1.5 text-xs text-[var(--fg-secondary)]">
@@ -606,11 +815,27 @@ const CallRow = memo(function CallRow({
             downloadUrl={streamUrl ? `${streamUrl}?download=1` : null}
             disabled={deleting}
             onRename={startRename}
+            onOrganise={onOrganise ? () => setOrganising(true) : undefined}
             onCopy={() => void copyLink()}
             onDelete={() => onConfirm(call.id)}
           />
         </div>
       </div>
+
+      {organising && onOrganise ? (
+        <OrganiseForm
+          title={call.title}
+          tags={call.tags ?? []}
+          people={call.people ?? []}
+          dealId={call.dealId ?? null}
+          onSave={async (patch) => {
+            const ok = await onOrganise(call.id, patch);
+            if (ok) setOrganising(false);
+            return ok;
+          }}
+          onCancel={() => setOrganising(false)}
+        />
+      ) : null}
 
       {/* Below the row rather than squeezed beside it: on a phone the question
           and its two answers did not fit next to a title. */}
@@ -667,12 +892,13 @@ const CallRow = memo(function CallRow({
  * title a few characters wide.
  */
 function RowMenu({
-  title, downloadUrl, disabled, onRename, onCopy, onDelete,
+  title, downloadUrl, disabled, onRename, onOrganise, onCopy, onDelete,
 }: {
   title: string;
   downloadUrl: string | null;
   disabled: boolean;
   onRename: () => void;
+  onOrganise?: () => void;
   onCopy: () => void;
   onDelete: () => void;
 }) {
@@ -720,6 +946,11 @@ function RowMenu({
           <button type="button" role="menuitem" onClick={pick(onRename)} className={item}>
             <PencilIcon /> Rename
           </button>
+          {onOrganise ? (
+            <button type="button" role="menuitem" onClick={pick(onOrganise)} className={item}>
+              <TagIcon /> Tags, people &amp; deal
+            </button>
+          ) : null}
           <button type="button" role="menuitem" onClick={pick(onCopy)} className={item}>
             <LinkIcon /> Copy link to report
           </button>
@@ -775,6 +1006,9 @@ function TrashIcon() {
 }
 function MicIcon() {
   return <Svg><rect x="9" y="2" width="6" height="12" rx="3" /><path d="M5 10a7 7 0 0 0 14 0" /><line x1="12" y1="17" x2="12" y2="22" /></Svg>;
+}
+function TagIcon() {
+  return <Svg><path d="M20.6 13.4 13.4 20.6a2 2 0 0 1-2.8 0L3 13V3h10l7.6 7.6a2 2 0 0 1 0 2.8z" /><circle cx="7.5" cy="7.5" r="1.5" /></Svg>;
 }
 function CheckIcon() {
   return <Svg size={12}><polyline points="20 6 9 17 4 12" /></Svg>;

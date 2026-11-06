@@ -39,6 +39,13 @@ export interface ArchivedCall {
    * when nothing playable was kept.
    */
   recordingId?: string | null;
+  /** The owner's own labels for it. See call-organise.ts. */
+  tags?: string[];
+  /** Who was on the call, by name. */
+  people?: string[];
+  /** The deal it was about, when one was linked. */
+  dealId?: string | null;
+  dealName?: string | null;
 }
 
 /** A call that matched a search, with the words around the hit. */

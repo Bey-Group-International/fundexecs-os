@@ -20,6 +20,7 @@ import {
   type RecordingRow,
 } from "@/lib/meetings/call-archive";
 import { MIN_QUERY } from "@/lib/meetings/transcript-search";
+import { cleanCallTags, peopleFromAttendees } from "@/lib/meetings/call-organise";
 import { hitScanBound, narrowArchive } from "@/lib/meetings/session-archive.server";
 import { LIST_PAGE, SEARCH_SCAN } from "@/lib/meetings/session-archive";
 
@@ -55,6 +56,9 @@ type Row = {
   title: string | null;
   created_at: string;
   recording_consent: unknown;
+  tags?: string[] | null;
+  attendees?: unknown;
+  deal_id?: string | null;
   live_meeting_recordings?: RecordingRow[] | null;
   live_meeting_reports?: Array<{ summary: string | null; full_transcript?: string | null }> | null;
 };
@@ -94,7 +98,7 @@ export async function loadCallPage(
     supabase
       .from("live_meetings")
       .select(
-        "id, room_code, title, created_at, recording_consent, " +
+        "id, room_code, title, created_at, recording_consent, tags, attendees, deal_id, " +
         "live_meeting_recordings(id, duration_seconds, deleted_at), " +
         // Transcripts only when searching. Each is up to 120,000 characters, and
         // the plain list shows the summary.
@@ -119,6 +123,7 @@ export async function loadCallPage(
   if (error) throw new Error(error.message);
 
   const rows = (data ?? []) as unknown as Row[];
+  const dealNames = await loadDealNames(supabase, owner.orgId, rows.map((r) => r.deal_id));
   const calls: CallHit[] = [];
   for (const row of rows) {
     const longest = longestRecording(row.live_meeting_recordings);
@@ -131,6 +136,10 @@ export async function loadCallPage(
       recordingId: longest?.id ?? null,
       summary: (row.live_meeting_reports?.[0]?.summary ?? "").trim(),
       consented: readAcknowledgement(row.recording_consent) !== null,
+      tags: cleanCallTags(row.tags ?? []),
+      people: peopleFromAttendees(row.attendees),
+      dealId: row.deal_id ?? null,
+      dealName: row.deal_id ? dealNames.get(row.deal_id) ?? null : null,
     };
     if (!searching) {
       calls.push({ ...base, matches: 0, snippet: null });
@@ -150,6 +159,23 @@ export async function loadCallPage(
     // A search never pages: it reads its bound and says so.
     hasMore: !searching && rows.length >= LIST_PAGE,
   };
+}
+
+/**
+ * The names of the deals the calls link to, in the caller's organisation.
+ * Empty on any failure: a call shows without its deal's name rather than not
+ * at all.
+ */
+async function loadDealNames(supabase: Client, orgId: string, ids: ReadonlyArray<string | null | undefined>): Promise<Map<string, string>> {
+  const wanted = [...new Set(ids.filter((id): id is string => Boolean(id)))];
+  if (!wanted.length) return new Map();
+  try {
+    const { data, error } = await supabase.from("deals").select("id, name").eq("organization_id", orgId).in("id", wanted);
+    if (error) return new Map();
+    return new Map(((data ?? []) as Array<{ id: string; name: string | null }>).map((d) => [d.id, d.name?.trim() || "Deal"]));
+  } catch {
+    return new Map();
+  }
 }
 
 /** The window the header summarises. */

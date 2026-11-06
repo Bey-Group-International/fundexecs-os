@@ -669,3 +669,45 @@ describe("highlight markers", () => {
     expect(document.querySelector('[aria-label^="Highlight at"]')).toBeNull();
   });
 });
+
+describe("sharing a clip", () => {
+  beforeEach(() => {
+    global.fetch = (() => new Promise(() => {})) as unknown as typeof fetch;
+  });
+
+  it("offers Share clip from where the viewer is", () => {
+    const onShareClip = jest.fn();
+    const { container } = render(<RecordingPlayer meetingId="m1" recordingId="r1" onShareClip={onShareClip} />);
+    const video = container.querySelector("video")!;
+    Object.defineProperty(video, "currentTime", { get: () => 42.5, configurable: true });
+    fireEvent.click(screen.getByRole("button", { name: /share clip/i }));
+    expect(onShareClip).toHaveBeenCalledWith(42_500);
+  });
+
+  it("does not offer it inside a clip, or without a handler", () => {
+    const { unmount } = render(
+      <RecordingPlayer meetingId="m1" recordingId="r1" onShareClip={() => {}} clip={{ startMs: 10_000, endMs: 20_000 }} />,
+    );
+    expect(screen.queryByRole("button", { name: /share clip/i })).toBeNull();
+    unmount();
+    render(<RecordingPlayer meetingId="m1" recordingId="r1" />);
+    expect(screen.queryByRole("button", { name: /share clip/i })).toBeNull();
+  });
+
+  it("reads a clip through its own routes", () => {
+    const urls: string[] = [];
+    global.fetch = ((url: string) => {
+      urls.push(String(url));
+      return new Promise(() => {});
+    }) as unknown as typeof fetch;
+    render(
+      <RecordingPlayer
+        meetingId=""
+        recordingId=""
+        source={{ partsUrl: "/api/clip/t/parts", streamUrl: "/api/clip/t/stream" }}
+        clip={{ startMs: 10_000, endMs: 20_000 }}
+      />,
+    );
+    expect(urls).toEqual(["/api/clip/t/parts"]);
+  });
+});

@@ -94,9 +94,25 @@ export function RecordingPlayer({
   shareable = false,
   markers = [],
   ref,
+  source,
+  clip,
+  onShareClip,
 }: {
   meetingId: string;
   recordingId: string;
+  /**
+   * Where the timeline and the bytes come from, when not the meeting's own
+   * routes — a shared clip reads through its token instead.
+   */
+  source?: { partsUrl: string; streamUrl: string };
+  /**
+   * Play only this window: it opens at the start, stops at the end, and the
+   * scrubber cannot leave it. The server holds the same line — a clip's
+   * routes serve only the parts inside it.
+   */
+  clip?: { startMs: number; endMs: number | null };
+  /** Offer "Share clip", starting from where the viewer is. */
+  onShareClip?: (atMs: number) => void;
   /**
    * Offer "Copy link to this moment". Only on the recording the transcript is
    * timed against: a link opens THAT player, so offering one from another
@@ -138,7 +154,10 @@ export function RecordingPlayer({
   /** The latest `seekTo`, for the MediaSource open handler, which predates it. */
   const seekRef = useRef<RecordingPlayerHandle["seekTo"] | null>(null);
 
-  const streamUrl = `/api/meetings/${meetingId}/recording/${recordingId}/stream`;
+  const streamUrl = source?.streamUrl ?? `/api/meetings/${meetingId}/recording/${recordingId}/stream`;
+  const partsUrl = source?.partsUrl ?? `/api/meetings/${meetingId}/recording/${recordingId}/parts`;
+  const clipStart = clip ? Math.max(0, clip.startMs) : 0;
+  const clipEnd = clip?.endMs ?? null;
 
   // Everything the append loop needs, off the render path: appending happens
   // inside MediaSource events, which must not wait on React.
@@ -165,7 +184,7 @@ export function RecordingPlayer({
     let cancelled = false;
     void (async () => {
       try {
-        const res = await fetch(`/api/meetings/${meetingId}/recording/${recordingId}/parts`);
+        const res = await fetch(partsUrl);
         if (!res.ok) throw new Error(String(res.status));
         const body = (await res.json()) as PartsResponse;
         if (cancelled) return;
@@ -182,7 +201,7 @@ export function RecordingPlayer({
     return () => {
       cancelled = true;
     };
-  }, [meetingId, recordingId]);
+  }, [partsUrl]);
 
   /**
    * Throw the media source away and build a new one, resuming where the viewer
@@ -211,12 +230,24 @@ export function RecordingPlayer({
     setGeneration((g) => g + 1);
   }, []);
 
+  /** `append`, for the gap split inside it, which cannot name itself. */
+  const appendSelf = useRef<(parts: TimelinePart[]) => void>(() => {});
+
   /** Append a run of parts, in order, one update at a time. */
   const append = useCallback(
     (wanted: TimelinePart[]) => {
       const s = state.current;
       const fresh = wanted.filter((p) => !s.appended.has(p.idx));
       if (fresh.length === 0 || !s.buffer || !s.source) return;
+      // One request per run of consecutive parts. A shared clip's timeline
+      // has a gap after its first part, and a single range across that gap
+      // asks for bytes the clip is not allowed to serve.
+      const gap = fresh.findIndex((p, i) => i > 0 && p.idx !== fresh[i - 1].idx + 1);
+      if (gap > 0) {
+        appendSelf.current(fresh.slice(0, gap));
+        appendSelf.current(fresh.slice(gap));
+        return;
+      }
       // Marked before the fetch, not after: two refills racing would otherwise
       // both decide the same part is missing and append it twice.
       for (const p of fresh) s.appended.add(p.idx);
@@ -306,6 +337,8 @@ export function RecordingPlayer({
     },
     [streamUrl, recover],
   );
+
+  appendSelf.current = append;
 
   // ── Wire MediaSource ──────────────────────────────────────────────────────
   useEffect(() => {
@@ -446,7 +479,8 @@ export function RecordingPlayer({
       const video = videoRef.current;
       const s = state.current;
       const play = opts?.play === true;
-      const target = Math.max(0, Math.min(ms, meta?.durationMs ?? ms));
+      const upper = clipEnd ?? meta?.durationMs ?? ms;
+      const target = Math.max(clipStart, Math.min(ms, upper));
       // Not ready: no element yet, no timeline yet, or (native) no metadata —
       // a currentTime set before metadata is quietly dropped by browsers.
       if (!video || (!native && !s.buffer) || (native && video.readyState < 1)) {
@@ -477,9 +511,15 @@ export function RecordingPlayer({
         start();
       });
     },
-    [append, meta?.durationMs, native],
+    [append, meta?.durationMs, native, clipStart, clipEnd],
   );
   seekRef.current = seekTo;
+
+  // A clip opens at its own start, not the recording's.
+  useEffect(() => {
+    if (clip && !pending.current) pending.current = { ms: clipStart, play: false };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clipStart]);
 
   useImperativeHandle(ref, () => ({ seekTo }), [seekTo]);
 
@@ -554,7 +594,9 @@ export function RecordingPlayer({
           onTimeUpdate={() => onTime?.((videoRef.current?.currentTime ?? 0) * 1000)}
         />
         <p className="text-[11px] text-[var(--fg-muted)]">
-          {seekFailed
+          {clip
+            ? "This browser can't play shared clips. Try a current version of Chrome, Edge, Firefox or Safari."
+            : seekFailed
             ? "Seeking failed for this recording, so it will play from the start."
             : "This browser cannot seek inside a meeting recording. It will play from the start."}
         </p>
@@ -576,6 +618,10 @@ export function RecordingPlayer({
         onPause={() => setPlaying(false)}
         onTimeUpdate={() => {
           const ms = (videoRef.current?.currentTime ?? 0) * 1000;
+          // A clip ends where it was cut, whatever the recording goes on to say.
+          if (clipEnd !== null && ms >= clipEnd && videoRef.current && !videoRef.current.paused) {
+            videoRef.current.pause();
+          }
           // The scrub guard is about the SLIDER, which must not fight the
           // thumb somebody is dragging. The transcript has no such conflict
           // and should keep following, so it is told either way.
@@ -592,8 +638,8 @@ export function RecordingPlayer({
         <div className="relative order-first w-full basis-full sm:order-none sm:basis-auto sm:flex-1">
         <input
           type="range"
-          min={0}
-          max={Math.max(1, durationMs)}
+          min={clipStart}
+          max={Math.max(clipStart + 1, clipEnd ?? durationMs)}
           value={Math.min(positionMs, durationMs || positionMs)}
           aria-label="Seek"
           onChange={(e) => {
@@ -639,7 +685,7 @@ export function RecordingPlayer({
         </div>
 
         <span className="shrink-0 font-mono text-[11px] tabular-nums text-[var(--fg-muted)] sm:order-last">
-          {formatClock(positionMs)} / {formatClock(durationMs)}
+          {formatClock(positionMs)} / {formatClock(clipEnd ?? durationMs)}
         </span>
       </div>
 
@@ -680,12 +726,22 @@ export function RecordingPlayer({
         >
           {rate}×
         </button>
-        {shareable && (
+        {onShareClip && !clip ? (
+          <button
+            type="button"
+            onClick={() => onShareClip((videoRef.current?.currentTime ?? 0) * 1000)}
+            title="Share a stretch of this recording with someone outside"
+            className={`${CONTROL} ml-auto`}
+          >
+            Share clip
+          </button>
+        ) : null}
+        {shareable && !clip && (
           <button
             type="button"
             onClick={() => void copyMoment()}
             title="Copy a link that opens this report playing from here"
-            className={`${CONTROL} ml-auto`}
+            className={`${CONTROL} ${onShareClip ? "" : "ml-auto"}`}
           >
             {copied === "ok" ? "Link copied" : copied === "failed" ? "Copy failed" : `Link to ${formatClock(positionMs)}`}
           </button>
