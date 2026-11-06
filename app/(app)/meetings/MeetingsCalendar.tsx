@@ -104,6 +104,17 @@ import type { MeetingEditInitial } from "./MeetingEditScreen";
 import { seriesPositionLabel } from "@/lib/meetings/recurrence";
 import { useNow, useLivePresence, nextChannelName, type RoomPresence } from "./hooks";
 import { useFocusTrap } from "@/hooks/useFocusTrap";
+import {
+  CalendarSearch,
+  ChipBadge,
+  MeetingActionRow,
+  MeetingMenu,
+  WeekInsightsStrip,
+  insightsForDays,
+  type MenuAction,
+} from "./CalendarExtras";
+import { formatMinutes, freeSlots } from "@/lib/meetings/calendar-week";
+import { meetingInviteUrl } from "@/lib/meetings/share";
 
 /** How often the view re-reads the clock. */
 const CLOCK_TICK_MS = 15_000;
@@ -132,8 +143,15 @@ const STATUS_ORDER: MeetingDisplayStatus[] = [
 const VIEW_LABELS: Record<CalendarView, string> = {
   month: "Month",
   week: "Week",
+  "3day": "3 days",
   day: "Day",
   agenda: "Schedule",
+};
+
+/** Views shown only on a phone, or only on a wider screen, in the toggle. */
+const VIEW_SCREEN: Partial<Record<CalendarView, string>> = {
+  week: "hidden sm:inline-flex",
+  "3day": "sm:hidden",
 };
 
 function localIso(year: number, monthZeroBased: number, day: number, hour: number, minute: number): string {
@@ -234,6 +252,12 @@ export function MeetingsCalendar({
   const [filter, setFilter] = useState<CalendarFilter>(emptyFilter);
   const [filterOpen, setFilterOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
+  // Open time drawn on the time grid, to schedule into.
+  const [showFree, setShowFree] = useState(false);
+  // A meeting's quick-actions menu, from a right-click or a long press.
+  const [menu, setMenu] = useState<{ meeting: CalendarMeeting; x: number; y: number } | null>(null);
+  const [copied, setCopied] = useState<string | null>(null);
   const [moveError, setMoveError] = useState<string | null>(null);
   const [detail, setDetail] = useState<CalendarMeeting | null>(null);
   const [editing, setEditing] = useState<CalendarMeeting | null>(null);
@@ -450,6 +474,7 @@ export function MeetingsCalendar({
   function go(delta: number) {
     if (view === "month") setAnchor((a) => addMonths(a, delta));
     else if (view === "week") setAnchor((a) => addDays(a, 7 * delta));
+    else if (view === "3day") setAnchor((a) => addDays(a, 3 * delta));
     else if (view === "day") setAnchor((a) => addDays(a, delta));
     else setAnchor((a) => addDays(a, 14 * delta));
   }
@@ -459,7 +484,7 @@ export function MeetingsCalendar({
   // Suppressed while anything modal is up: a member reading an event detail
   // means "m" to close-and-go-to-month far less often than they mean to type.
   const modalOpen =
-    Boolean(detail) || Boolean(editing) || scheduleOpen || Boolean(slotMenu) || Boolean(blockDraft);
+    Boolean(detail) || Boolean(editing) || scheduleOpen || Boolean(slotMenu) || Boolean(blockDraft) || searchOpen || Boolean(menu);
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -478,6 +503,8 @@ export function MeetingsCalendar({
       else if (action.kind === "next") go(1);
       else if (action.kind === "prev") go(-1);
       else if (action.kind === "help") setShortcutsOpen(true);
+      else if (action.kind === "search") setSearchOpen(true);
+      else if (action.kind === "free") setShowFree((v) => !v);
     }
 
     window.addEventListener("keydown", onKey);
@@ -491,6 +518,7 @@ export function MeetingsCalendar({
   const title = useMemo(() => {
     if (view === "month") return formatMonthTitle(anchor);
     if (view === "week") return formatWeekTitle(weekDays(anchor));
+    if (view === "3day") return formatWeekTitle([anchor, addDays(anchor, 1), addDays(anchor, 2)]);
     if (view === "day") return formatDayTitle(anchor);
     return "Schedule";
   }, [view, anchor]);
@@ -782,6 +810,91 @@ export function MeetingsCalendar({
   // work is not redone on every fifteen-second tick.
   const weekDayList = useMemo(() => weekDays(anchor), [anchor]);
   const oneDayList = useMemo(() => [anchor], [anchor]);
+  const threeDayList = useMemo(() => [anchor, addDays(anchor, 1), addDays(anchor, 2)], [anchor]);
+  const gridDays = view === "week" ? weekDayList : view === "3day" ? threeDayList : view === "day" ? oneDayList : null;
+  const insights = useMemo(
+    () => (gridDays ? insightsForDays(gridDays, visible, blocks, busyExternal, statusOf) : []),
+    [gridDays, visible, blocks, busyExternal, statusOf],
+  );
+
+  // Each meeting's status, held as one map that is only replaced when some
+  // status actually changes: the month cells are memoised, and a new map every
+  // minute would redraw all 42 of them for nothing.
+  const statusMapRef = useRef<{ sig: string; map: Map<string, MeetingDisplayStatus> }>({ sig: "", map: new Map() });
+  const statusById = useMemo(() => {
+    const map = new Map(visible.map((m) => [m.id, statusOf(m)] as const));
+    const sig = [...map].map(([id, st]) => `${id}:${st}`).join("|");
+    if (sig !== statusMapRef.current.sig) statusMapRef.current = { sig, map };
+    return statusMapRef.current.map;
+  }, [visible, statusOf]);
+
+  // Stable, because the memoised month cells take it.
+  const openMenu = useCallback((m: CalendarMeeting, x: number, y: number) => setMenu({ meeting: m, x, y }), []);
+
+  /** What a meeting's menu offers: open it, duplicate it, move it a week on, copy its link, edit it. */
+  function actionsFor(m: CalendarMeeting): MenuAction[] {
+    const request = isBookingRequest(m);
+    const movable = canDragMeeting(m, now);
+    const at = m.scheduled_at ? new Date(m.scheduled_at) : null;
+    return [
+      { label: "Open", onSelect: () => setDetail(m) },
+      {
+        label: "Duplicate next week",
+        disabled: request || !at,
+        onSelect: () => {
+          if (!at) return;
+          const { meetingId: _id, isDraft: _d, seriesId: _s, seriesRule: _r, meetingUrl: _u, ...rest } = toEditInitial(m);
+          void _id; void _d; void _s; void _r; void _u;
+          openScheduleAt(new Date(at.getTime() + 7 * DAY_MS).toISOString(), rest);
+        },
+      },
+      {
+        label: "Move to next week",
+        disabled: !movable || !at,
+        hint: movable ? undefined : "Only a meeting that has not started can be moved",
+        onSelect: () => {
+          if (!at) return;
+          void moveMeeting(m, new Date(at.getTime() + 7 * DAY_MS).toISOString(), m.duration_minutes ?? 60);
+        },
+      },
+      {
+        label: "Copy invite link",
+        disabled: request || !m.room_code,
+        onSelect: () => {
+          const url = meetingInviteUrl(window.location.origin, m.room_code);
+          void navigator.clipboard?.writeText(url).then(
+            () => setCopied("Invite link copied"),
+            () => setCopied("Couldn't copy the link"),
+          );
+        },
+      },
+      { label: "Edit", disabled: request, onSelect: () => setEditing(m) },
+    ];
+  }
+
+  useEffect(() => {
+    if (!copied) return;
+    const t = setTimeout(() => setCopied(null), 2500);
+    return () => clearTimeout(t);
+  }, [copied]);
+
+  /** Jump to a meeting found by search: its day, and the meeting open on it. */
+  async function openFromSearch(id: string, scheduledAt: string | null) {
+    setSearchOpen(false);
+    if (scheduledAt) setAnchor(startOfDay(new Date(scheduledAt)));
+    if (view === "month" || view === "agenda") chooseView(window.matchMedia?.("(max-width: 639px)").matches ? "3day" : "week");
+    const loaded = meetings.find((m) => m.id === id);
+    if (loaded) {
+      setDetail(loaded);
+      return;
+    }
+    try {
+      const { data } = await createClient().from("live_meetings").select(CAL_SELECT).eq("id", id).maybeSingle();
+      if (data) setDetail(data as unknown as CalendarMeeting);
+    } catch {
+      // The day is on screen either way.
+    }
+  }
 
   const shared = {
     now,
@@ -801,6 +914,8 @@ export function MeetingsCalendar({
       setView("day");
     },
     onMoveMeeting: moveMeeting,
+    onMeetingMenu: openMenu,
+    statusById,
   };
 
   return (
@@ -817,6 +932,9 @@ export function MeetingsCalendar({
         filterOpen={filterOpen}
         setFilterOpen={setFilterOpen}
         onShortcuts={() => setShortcutsOpen(true)}
+        onSearch={() => setSearchOpen(true)}
+        showFree={showFree}
+        onToggleFree={gridDays ? () => setShowFree((v) => !v) : undefined}
         railOpen={railOpen}
         onToggleRail={toggleRail}
       />
@@ -886,8 +1004,17 @@ export function MeetingsCalendar({
               onEditMeeting={(m) => (isBookingRequest(m) ? setDetail(m) : setEditing(m))}
             />
           ) : null}
-          {view === "week" ? <TimeGridView days={weekDayList} meetings={visible} {...shared} /> : null}
-          {view === "day" ? <TimeGridView days={oneDayList} meetings={visible} {...shared} /> : null}
+          {gridDays ? (
+            <WeekInsightsStrip
+              days={gridDays}
+              insights={insights}
+              onPickDay={(d) => {
+                setAnchor(startOfDay(d));
+                chooseView("day");
+              }}
+            />
+          ) : null}
+          {gridDays ? <TimeGridView days={gridDays} meetings={visible} {...shared} freeTime={showFree} /> : null}
           {view === "agenda" ? <AgendaView anchor={anchor} meetings={visible} {...shared} /> : null}
         </div>
 
@@ -944,8 +1071,46 @@ export function MeetingsCalendar({
             setDetail(null);
             setEditing(m);
           }}
+          actions={actionsFor(detail).filter((a) => a.label !== "Open" && a.label !== "Edit").map((a) => ({
+            ...a,
+            onSelect: () => {
+              setDetail(null);
+              a.onSelect();
+            },
+          }))}
         />
       ) : null}
+
+      {menu ? (
+        <MeetingMenu
+          title={menu.meeting.title}
+          x={menu.x}
+          y={menu.y}
+          actions={actionsFor(menu.meeting)}
+          onClose={() => setMenu(null)}
+        />
+      ) : null}
+
+      {searchOpen ? (
+        <CalendarSearch orgId={orgId} now={nowMinuteMs} onPick={(id, at) => void openFromSearch(id, at)} onClose={() => setSearchOpen(false)} />
+      ) : null}
+
+      {copied ? (
+        <div role="status" className="fixed bottom-20 left-1/2 z-50 -translate-x-1/2 rounded-full bg-[var(--fg-primary)] px-4 py-2 text-xs font-medium text-[var(--surface-0)] shadow-lg sm:bottom-6">
+          {copied}
+        </div>
+      ) : null}
+
+      {/* New meeting within a thumb's reach on a phone, where the toolbar is a
+          scroll away. */}
+      <button
+        type="button"
+        onClick={() => openScheduleAt(nextSchedulableStart(new Date()).toISOString())}
+        aria-label="New meeting"
+        className="fixed bottom-[calc(1rem+env(safe-area-inset-bottom))] right-4 z-30 flex h-14 w-14 items-center justify-center rounded-full bg-[var(--gold-400)] text-2xl font-light text-white shadow-lg transition-colors hover:bg-[var(--gold-500)] sm:hidden"
+      >
+        +
+      </button>
 
       {editing ? (
         <MeetingEditScreen
@@ -1366,6 +1531,9 @@ function Toolbar({
   filterOpen,
   setFilterOpen,
   onShortcuts,
+  onSearch,
+  showFree,
+  onToggleFree,
   railOpen,
   onToggleRail,
 }: {
@@ -1380,6 +1548,10 @@ function Toolbar({
   filterOpen: boolean;
   setFilterOpen: (v: boolean) => void;
   onShortcuts: () => void;
+  onSearch: () => void;
+  showFree: boolean;
+  /** Absent in views without a time grid, where there is nothing to draw it on. */
+  onToggleFree?: () => void;
   railOpen: boolean;
   onToggleRail: () => void;
 }) {
@@ -1419,7 +1591,9 @@ function Toolbar({
                 key={v}
                 onClick={() => onView(v)}
                 aria-pressed={view === v}
-                className={`min-h-9 rounded-md px-2.5 text-xs font-medium transition-colors sm:min-h-0 sm:py-1 ${
+                className={`min-h-9 items-center rounded-md px-2.5 text-xs font-medium transition-colors sm:min-h-0 sm:py-1 ${
+                  VIEW_SCREEN[v] ?? "inline-flex"
+                } ${
                   view === v ? "bg-[var(--gold-400)] text-white" : "text-[var(--fg-secondary)] hover:text-[var(--fg-primary)]"
                 }`}
               >
@@ -1427,6 +1601,33 @@ function Toolbar({
               </button>
             ))}
           </div>
+
+          <button
+            type="button"
+            onClick={onSearch}
+            title="Search meetings (/)"
+            aria-label="Search meetings"
+            className="flex min-h-9 min-w-9 items-center justify-center gap-1.5 rounded-lg border border-[var(--line)] px-2.5 text-xs font-medium text-[var(--fg-secondary)] transition-colors hover:text-[var(--fg-primary)] sm:min-h-0 sm:py-1.5"
+          >
+            <SearchIcon />
+            <span className="hidden md:inline">Search</span>
+          </button>
+
+          {onToggleFree ? (
+            <button
+              type="button"
+              onClick={onToggleFree}
+              aria-pressed={showFree}
+              title="Show free time (F)"
+              className={`min-h-9 rounded-lg border px-3 text-xs font-medium sm:min-h-0 sm:py-1.5 ${
+                showFree
+                  ? "border-status-success/50 bg-status-success/10 text-[var(--status-success)]"
+                  : "border-[var(--line)] text-[var(--fg-secondary)] hover:text-[var(--fg-primary)]"
+              }`}
+            >
+              Free time
+            </button>
+          ) : null}
 
           <button
             type="button"
@@ -1550,6 +1751,10 @@ interface SharedViewProps {
   onExpandDay: (d: Date) => void;
   /** Commit a drag. Absent in views that cannot express one (month, agenda). */
   onMoveMeeting?: (m: CalendarMeeting, startIso: string, durationMinutes: number) => void;
+  /** Open a meeting's quick-actions menu at the pointer. */
+  onMeetingMenu?: (m: CalendarMeeting, x: number, y: number) => void;
+  /** Each meeting's status, for the badges on its chip; replaced only when one changes. */
+  statusById?: Map<string, MeetingDisplayStatus>;
 }
 
 /**
@@ -1583,6 +1788,8 @@ const MonthDayCell = memo(function MonthDayCell({
   layersById,
   presence,
   onOpenDay,
+  statusById,
+  onMeetingMenu,
 }: {
   day: Date;
   spokenLabel: string;
@@ -1595,6 +1802,8 @@ const MonthDayCell = memo(function MonthDayCell({
   layersById: Map<string, CalendarLayer>;
   presence: Record<string, RoomPresence>;
   onOpenDay: (day: Date, itemKey?: string) => void;
+  statusById?: Map<string, MeetingDisplayStatus>;
+  onMeetingMenu?: (m: CalendarMeeting, x: number, y: number) => void;
 }) {
   // Blocks take the first row so a busy day reads as busy at a glance,
   // then meetings fill what's left of the three-chip budget.
@@ -1647,7 +1856,14 @@ const MonthDayCell = memo(function MonthDayCell({
             <BlockChip key={b.id} b={b} onClick={(e) => { e.stopPropagation(); onOpenDay(day, `block:${b.id}`); }} />
           ))}
           {shown.map((m) => (
-            <MonthChip key={m.id} m={m} live={(presence[m.id]?.count ?? 0) > 0} onClick={(e) => { e.stopPropagation(); onOpenDay(day, `meeting:${m.id}`); }} />
+            <MonthChip
+              key={m.id}
+              m={m}
+              live={(presence[m.id]?.count ?? 0) > 0}
+              status={statusById?.get(m.id)}
+              onClick={(e) => { e.stopPropagation(); onOpenDay(day, `meeting:${m.id}`); }}
+              onMenu={onMeetingMenu ? (x, y) => onMeetingMenu(m, x, y) : undefined}
+            />
           ))}
           {extra > 0 ? (
             <span
@@ -1686,6 +1902,8 @@ function MonthView({
   onNewMeeting,
   onBlockTime,
   onEditMeeting,
+  statusById,
+  onMeetingMenu,
 }: SharedViewProps & {
   anchor: Date;
   /** The day whose list is open, or null. */
@@ -1774,6 +1992,8 @@ function MonthView({
                     layersById={layersById}
                     presence={presence}
                     onOpenDay={onOpenDay}
+                    statusById={statusById}
+                    onMeetingMenu={onMeetingMenu}
                   />
                 );
               })}
@@ -2189,13 +2409,31 @@ function RepeatMark({ m }: { m: CalendarMeeting }) {
   );
 }
 
-function MonthChip({ m, live, onClick }: { m: CalendarMeeting; live: boolean; onClick: (e: React.MouseEvent) => void }) {
+function MonthChip({
+  m,
+  live,
+  status,
+  onClick,
+  onMenu,
+}: {
+  m: CalendarMeeting;
+  live: boolean;
+  status?: MeetingDisplayStatus;
+  onClick: (e: React.MouseEvent) => void;
+  onMenu?: (x: number, y: number) => void;
+}) {
   const meta = typeMeta(m.meeting_type);
   return (
     <span
       role="button"
       tabIndex={0}
       onClick={onClick}
+      onContextMenu={(e) => {
+        if (!onMenu) return;
+        e.preventDefault();
+        e.stopPropagation();
+        onMenu(e.clientX, e.clientY);
+      }}
       onKeyDown={(e) => { if (e.key === "Enter") onClick(e as unknown as React.MouseEvent); }}
       className={`flex items-center gap-1 truncate rounded border px-1 py-0.5 text-[11px] font-medium ${meta.chip}`}
       title={m.title}
@@ -2204,12 +2442,13 @@ function MonthChip({ m, live, onClick }: { m: CalendarMeeting; live: boolean; on
       <span className="shrink-0 tabular-nums opacity-80">{m.scheduled_at ? shortTime(m.scheduled_at) : ""}</span>
       <span className="truncate">{m.title}</span>
       <RepeatMark m={m} />
+      {status ? <ChipBadge status={status} /> : null}
     </span>
   );
 }
 
 // ── Week / Day time grid ────────────────────────────────────────────────────
-function TimeGridView({ days, meetings, blocks, externalEvents, busyEvents, layersById, now, today, presence, conflicts, onSelectEvent, onSelectBlock, onSelectSlot, onMoveMeeting }: SharedViewProps & { days: Date[] }) {
+function TimeGridView({ days, meetings, blocks, externalEvents, busyEvents, layersById, now, today, presence, conflicts, onSelectEvent, onSelectBlock, onSelectSlot, onMoveMeeting, onMeetingMenu, statusById, freeTime = false }: SharedViewProps & { days: Date[]; freeTime?: boolean }) {
   const busyIds = useMemo(() => new Set(busyEvents.map((e) => e.id)), [busyEvents]);
   const scrollRef = useRef<HTMLDivElement>(null);
   const columnsRef = useRef<HTMLDivElement>(null);
@@ -2530,6 +2769,41 @@ function TimeGridView({ days, meetings, blocks, externalEvents, busyEvents, laye
                 );
               })}
 
+              {/* Open time, when asked for: working hours nothing has taken —
+                  no meeting, block or busy time on a connected calendar — and
+                  none already gone. A press schedules into it. */}
+              {freeTime && d.getTime() >= today.getTime()
+                ? freeSlots(
+                    [
+                      ...evs.map((m) => eventSpanMinutes(m)),
+                      ...dayBlocks.map((b) => [b.startMin, b.endMin] as const),
+                      ...busySpans,
+                    ],
+                    { notBefore: isToday ? nowMin : 0 },
+                  ).map(([start, end]) => (
+                    <button
+                      key={`free-${start}`}
+                      type="button"
+                      data-free=""
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onSelectSlot(
+                          localIso(d.getFullYear(), d.getMonth(), d.getDate(), Math.floor(start / 60), start % 60),
+                          e.clientX,
+                          e.clientY,
+                        );
+                      }}
+                      aria-label={`Free ${shortTime(localIso(d.getFullYear(), d.getMonth(), d.getDate(), Math.floor(start / 60), start % 60))}, ${formatMinutes(end - start)} — schedule here`}
+                      className="absolute left-1 right-1 overflow-hidden rounded-md border border-dashed border-status-success/50 bg-status-success/5 px-1.5 py-0.5 text-left transition-colors hover:bg-status-success/15"
+                      style={{ top: (start / 60) * HOUR_PX + 1, height: ((end - start) / 60) * HOUR_PX - 2 }}
+                    >
+                      <span className="truncate text-[10px] font-medium text-[var(--status-success)]">
+                        Free · {formatMinutes(end - start)}
+                      </span>
+                    </button>
+                  ))
+                : null}
+
               {/* Now. Bold in today's column, faint across the others so the
                   hour lines up across the week. Red, not the brand colour: the
                   gold was the same as the selected day and every accent, and
@@ -2584,6 +2858,12 @@ function TimeGridView({ days, meetings, blocks, externalEvents, busyEvents, laye
                       if (swallowClick.current) { swallowClick.current = false; return; }
                       onSelectEvent(m);
                     }}
+                    onContextMenu={(e) => {
+                      if (!onMeetingMenu) return;
+                      e.preventDefault();
+                      e.stopPropagation();
+                      onMeetingMenu(m, e.clientX, e.clientY);
+                    }}
                     aria-label={`${m.title}${m.scheduled_at ? `, ${shortTime(m.scheduled_at)}` : ""}${live ? ", live now" : ""}${clash ? `. ${clash}` : ""}`}
                     className={`absolute overflow-hidden rounded-md border-l-2 px-1.5 py-1 text-left shadow-sm ${
                       draggable ? "cursor-grab active:cursor-grabbing" : ""
@@ -2610,6 +2890,7 @@ function TimeGridView({ days, meetings, blocks, externalEvents, busyEvents, laye
                       {live ? <span className="h-1.5 w-1.5 shrink-0 animate-pulse rounded-full bg-[var(--status-success)]" /> : null}
                       <span className="truncate text-[11px] font-medium text-[var(--fg-primary)]">{m.title}</span>
                       <RepeatMark m={m} />
+                      {statusById?.get(m.id) ? <ChipBadge status={statusById.get(m.id)!} /> : null}
                       {clash ? <ConflictMark label={clash} /> : null}
                     </div>
                     <div className="truncate text-[11px] text-[var(--fg-muted)]">
@@ -2666,7 +2947,7 @@ function TimeGridView({ days, meetings, blocks, externalEvents, busyEvents, laye
 }
 
 // ── Agenda / Schedule view ──────────────────────────────────────────────────
-function AgendaView({ anchor, meetings, now, today, presence, statusOf, conflicts, onSelectEvent }: SharedViewProps & { anchor: Date }) {
+function AgendaView({ anchor, meetings, now, today, presence, statusOf, conflicts, onSelectEvent, onMeetingMenu }: SharedViewProps & { anchor: Date }) {
   // Show the 21 days starting at the later of the anchor or today, grouped by day.
   const startMs = (startOfDay(anchor).getTime() < today.getTime() ? today : startOfDay(anchor)).getTime();
   // Regrouped when the meetings or the starting day change, not every clock tick.
@@ -2709,6 +2990,11 @@ function AgendaView({ anchor, meetings, now, today, presence, statusOf, conflict
                 <div key={m.id} className="flex items-center gap-2">
                 <button
                   onClick={() => onSelectEvent(m)}
+                  onContextMenu={(e) => {
+                    if (!onMeetingMenu) return;
+                    e.preventDefault();
+                    onMeetingMenu(m, e.clientX, e.clientY);
+                  }}
                   className={`flex min-h-12 min-w-0 flex-1 items-center gap-3 rounded-lg border bg-[var(--surface-0)] px-3 py-2 text-left hover:border-fg-muted/40 ${
                     clash ? "border-status-danger/50" : live ? "border-status-success/50" : "border-[var(--line)]"
                   }`}
@@ -2720,6 +3006,7 @@ function AgendaView({ anchor, meetings, now, today, presence, statusOf, conflict
                       {live ? <span className="h-1.5 w-1.5 shrink-0 animate-pulse rounded-full bg-[var(--status-success)]" /> : null}
                       <span className="truncate text-sm font-medium text-[var(--fg-primary)]">{m.title}</span>
                       <RepeatMark m={m} />
+                      <ChipBadge status={statusOf(m)} />
                     </div>
                     <div className="truncate text-xs text-[var(--fg-muted)]">
                       {meta.label}
@@ -3049,6 +3336,7 @@ function EventDetail({
   conflict = null,
   onClose,
   onEdit,
+  actions = [],
 }: {
   meeting: CalendarMeeting;
   presence?: RoomPresence;
@@ -3058,6 +3346,8 @@ function EventDetail({
   conflict?: string | null;
   onClose: () => void;
   onEdit: () => void;
+  /** Quick actions — duplicate, move a week on, copy the link. */
+  actions?: MenuAction[];
 }) {
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -3094,6 +3384,7 @@ function EventDetail({
           </p>
         ) : null}
         <MeetingDetailBody meeting={meeting} presence={presence} now={now} onEdit={onEdit} onAfterEarn={onClose} />
+        {actions.length ? <MeetingActionRow actions={actions} /> : null}
       </div>
     </div>
   );
@@ -3235,6 +3526,15 @@ function IconBtn({ children, label, onClick, small }: { children: React.ReactNod
     >
       {children}
     </button>
+  );
+}
+
+function SearchIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" aria-hidden="true">
+      <circle cx="11" cy="11" r="7" />
+      <line x1="21" y1="21" x2="16.5" y2="16.5" />
+    </svg>
   );
 }
 

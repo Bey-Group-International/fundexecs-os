@@ -13,7 +13,9 @@ export type CalendarAction =
   | { kind: "today" }
   | { kind: "prev" }
   | { kind: "next" }
-  | { kind: "help" };
+  | { kind: "help" }
+  | { kind: "search" }
+  | { kind: "free" };
 
 /** The shape of a keyboard event this needs, so tests need no DOM. */
 export interface KeyLike {
@@ -70,6 +72,7 @@ export function actionForKey(event: KeyLike, target?: TargetLike | null): Calend
 
   // `?` needs Shift on most layouts, so it is checked before the shift guard.
   if (key === "?") return { kind: "help" };
+  if (key === "/") return { kind: "search" };
   if (event.shiftKey) return null;
 
   const lower = key.toLowerCase();
@@ -78,6 +81,7 @@ export function actionForKey(event: KeyLike, target?: TargetLike | null): Calend
   if (view) return { kind: "view", view };
 
   if (lower === "t") return { kind: "today" };
+  if (lower === "f") return { kind: "free" };
   if (lower === "j" || lower === "n" || key === "ArrowRight" || key === "ArrowDown") return { kind: "next" };
   if (lower === "k" || lower === "p" || key === "ArrowLeft" || key === "ArrowUp") return { kind: "prev" };
 
@@ -96,6 +100,8 @@ export const SHORTCUT_HELP: ShortcutHelp[] = [
   { keys: "M · 3", description: "Month view" },
   { keys: "A · 4", description: "Agenda view" },
   { keys: "T", description: "Jump to today" },
+  { keys: "/", description: "Search meetings" },
+  { keys: "F", description: "Show free time" },
   { keys: "J · N · →", description: "Next period" },
   { keys: "K · P · ←", description: "Previous period" },
   { keys: "Drag", description: "Move a meeting; drag its edges to resize" },
