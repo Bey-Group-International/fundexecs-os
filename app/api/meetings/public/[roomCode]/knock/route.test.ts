@@ -750,3 +750,33 @@ describe("the email a guest gives at the door", () => {
     expect(updateCapture.patch).toEqual({ email: "ada@fund.test" });
   });
 });
+
+describe("a database that does not have the email column yet", () => {
+  it("lets the guest in without the email rather than failing the knock", async () => {
+    const meeting = { id: "m1", organization_id: "org1", status: "waiting" };
+    const inserts: Array<Record<string, unknown>> = [];
+    from.mockImplementation((table: string) => {
+      if (table === "live_meetings") return meetingBuilder(meeting);
+      if (table === "organization_members") return memberBuilder(null);
+      if (table === "live_meeting_removals") return removalsBuilder([]);
+      let inserting: Record<string, unknown> | null = null;
+      const b: Record<string, unknown> = {
+        select: () => b, eq: () => b, is: () => b, order: () => b,
+        insert: (row: Record<string, unknown>) => { inserting = row; inserts.push(row); return b; },
+        maybeSingle: async () => {
+          if (!inserting) return { data: null, error: null };
+          return "email" in inserting
+            ? { data: null, error: { code: "42703", message: 'column "email" does not exist' } }
+            : { data: { id: "a1", status: "waiting" }, error: null };
+        },
+        then: (resolve: (v: unknown) => void) => resolve({ error: null }),
+      };
+      return b;
+    });
+
+    const res = await POST(postReq({ guestKey: "g1", displayName: "Ada", email: "ada@fund.test" }), params());
+    expect(await res.json()).toEqual({ admissionId: "a1", status: "waiting" });
+    expect(inserts).toHaveLength(2);
+    expect(inserts[1]).not.toHaveProperty("email");
+  });
+});

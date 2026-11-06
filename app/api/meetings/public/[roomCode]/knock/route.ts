@@ -187,6 +187,9 @@ async function answerKnock(
   return NextResponse.json({ admissionId: existing.id, status: existing.status });
 }
 
+/** Postgres undefined_column: a column this code knows and the database does not, yet. */
+const UNDEFINED_COLUMN = "42703";
+
 /** Postgres unique_violation — here, always UNIQUE (meeting_id, guest_key). */
 const UNIQUE_VIOLATION = "23505";
 
@@ -287,24 +290,32 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ roo
     return answerKnock(supabase, existing, admitOnSight, displayName, caller.userId, signalId);
   }
 
-  const { data: inserted, error } = await (supabase as any)
-    .from("live_meeting_admissions")
-    .insert({
-      meeting_id: meeting.id,
-      organization_id: meeting.organization_id,
-      guest_key: guestKey,
-      // The column that has been NULL on every row ever written. Without it the
-      // one table that knows a signed-in person knocked cannot say who, and a
-      // removal keyed on the account has nothing to match.
-      user_id: caller.userId,
-      ...(signalId ? { signal_id: signalId } : {}),
-      display_name: displayName,
-      ...(email ? { email } : {}),
-      status: admitOnSight ? "admitted" : "waiting",
-      ...(admitOnSight ? { decided_at: new Date().toISOString() } : {}),
-    })
-    .select("id, status")
-    .maybeSingle();
+  const row = {
+    meeting_id: meeting.id,
+    organization_id: meeting.organization_id,
+    guest_key: guestKey,
+    // The column that has been NULL on every row ever written. Without it the
+    // one table that knows a signed-in person knocked cannot say who, and a
+    // removal keyed on the account has nothing to match.
+    user_id: caller.userId,
+    ...(signalId ? { signal_id: signalId } : {}),
+    display_name: displayName,
+    status: admitOnSight ? "admitted" : "waiting",
+    ...(admitOnSight ? { decided_at: new Date().toISOString() } : {}),
+  };
+  const insertKnock = (withEmail: boolean) =>
+    (supabase as any)
+      .from("live_meeting_admissions")
+      .insert(withEmail && email ? { ...row, email } : row)
+      .select("id, status")
+      .maybeSingle();
+  let { data: inserted, error } = await insertKnock(true);
+  // The email is a bonus and must never be why somebody cannot get in. Where
+  // the column is not there yet — this code deployed ahead of its migration —
+  // the knock goes in without it.
+  if (!inserted && email && (error as { code?: string } | null)?.code === UNDEFINED_COLUMN) {
+    ({ data: inserted, error } = await insertKnock(false));
+  }
   if (inserted) {
     return NextResponse.json({ admissionId: inserted.id as string, status: inserted.status as string });
   }
