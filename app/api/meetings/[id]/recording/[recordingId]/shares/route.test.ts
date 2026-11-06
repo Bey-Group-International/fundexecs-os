@@ -1,8 +1,17 @@
 /**
  * Making a clip link: host only, a window inside the recording, the token
- * returned once and stored only as a hash.
+ * returned once and stored only as a hash, and the clip cut on the server
+ * after the response.
  */
 const authMock = jest.fn();
+const afterCalls: Array<() => unknown> = [];
+const buildClip = jest.fn(async () => ({ ok: true }));
+let serviceEnv = true;
+jest.mock("next/server", () => ({
+  ...jest.requireActual("next/server"),
+  after: (fn: () => unknown) => afterCalls.push(fn),
+}));
+jest.mock("@/lib/meetings/recording-clip.server", () => ({ buildClip: (...a: unknown[]) => buildClip(...(a as [])) }));
 const inserts: unknown[] = [];
 let tables: Record<string, { data: unknown; error: unknown }> = {};
 
@@ -12,6 +21,8 @@ jest.mock("@/lib/meetings/recording-parts", () => ({
     Array.from({ length: 12 }, (_, i) => ({ idx: i, size: 100, offset_ms: i * 5000, duration_ms: 5000 })),
 }));
 jest.mock("@/lib/supabase/server", () => ({
+  hasSupabaseServiceEnv: () => serviceEnv,
+  createServiceClient: () => ({ service: true }),
   createServerClient: async () => ({
     from: (table: string) => {
       const q: Record<string, unknown> = {};
@@ -54,10 +65,13 @@ const SHARE_ROW = {
 
 beforeEach(() => {
   inserts.length = 0;
+  afterCalls.length = 0;
+  buildClip.mockClear();
+  serviceEnv = true;
   authMock.mockReturnValue({ ok: true, ctx: { userId: "u1", orgId: "o1" } });
   tables = {
     live_meetings: { data: { id: "m1", organization_id: "o1" }, error: null },
-    live_meeting_recordings: { data: { id: "r1", deleted_at: null }, error: null },
+    live_meeting_recordings: { data: { id: "r1", deleted_at: null, mime_type: "video/webm;codecs=vp9,opus" }, error: null },
     "recording_shares:insert": { data: SHARE_ROW, error: null },
     recording_shares: { data: [SHARE_ROW], error: null },
   };
@@ -74,6 +88,35 @@ it("makes a link for the host, storing only the token's hash", async () => {
   expect(row.token_hash).toBe(hashShareToken(token));
   expect(JSON.stringify(row)).not.toContain(token);
   expect(row).toMatchObject({ meeting_id: "m1", recording_id: "r1", created_by: "u1", label: "Pricing", start_ms: 10_000, end_ms: 40_000 });
+  // Streaming only unless asked.
+  expect(row.allow_download).toBe(false);
+});
+
+it("cuts the clip after answering", async () => {
+  await POST(post({ startMs: 10_000, endMs: 40_000 }), { params });
+  expect(buildClip).not.toHaveBeenCalled();
+  expect(afterCalls).toHaveLength(1);
+  await afterCalls[0]();
+  expect(buildClip).toHaveBeenCalledWith({ service: true }, "s1");
+});
+
+it("stores the download switch when asked", async () => {
+  await POST(post({ startMs: 10_000, endMs: 40_000, allowDownload: true }), { params });
+  expect((inserts[0] as Record<string, unknown>).allow_download).toBe(true);
+});
+
+it("refuses a recording it cannot cut, before making a link", async () => {
+  tables.live_meeting_recordings = { data: { id: "r1", deleted_at: null, mime_type: "video/mp4" }, error: null };
+  const res = await POST(post({ startMs: 0, endMs: 10_000 }), { params });
+  expect(res.status).toBe(422);
+  expect(((await res.json()) as { error: string }).error).toMatch(/WebM/);
+  expect(inserts).toEqual([]);
+});
+
+it("makes no link it could never cut", async () => {
+  serviceEnv = false;
+  expect((await POST(post({ startMs: 0, endMs: 10_000 }), { params })).status).toBe(503);
+  expect(inserts).toEqual([]);
 });
 
 it("refuses anyone but the host", async () => {

@@ -1,19 +1,28 @@
 // lib/meetings/recording-share.ts
 // A shared clip of a recording: the window it covers, whether it still works,
-// and which of the recording's parts it may serve.
+// and how its viewers are described to the person who shared it.
 //
-// Pure, apart from the token helpers' use of Web Crypto, so the client can
-// format and the routes can enforce from one definition.
+// The clip itself is cut on the server into a file of its own
+// (lib/meetings/webm-clip.ts, recording-clip.server.ts); nothing here decides
+// what bytes a link may reach any more.
+//
+// Pure, so the client can format and the routes can enforce from one
+// definition.
 
-import type { TimelinePart } from "@/lib/meetings/recording-timeline";
+import { transcriptCues, type CueRow, type TranscriptCue } from "@/lib/meetings/transcript-cues";
 
 /** How long a clip link may live, in days, and the choices offered. */
 export const SHARE_DAYS = [1, 7, 30, 90] as const;
 export const DEFAULT_SHARE_DAYS = 7;
 export const SHARE_LABEL_MAX = 120;
-/** The shortest clip worth a link, and the longest a clip may be (the rest is a download). */
+/**
+ * The shortest clip worth a link, and the longest a clip may be. Twenty
+ * minutes, because a clip is cut into a file of its own when the link is made
+ * and that has to finish inside one server run; longer than that is a
+ * download.
+ */
 export const MIN_CLIP_MS = 5_000;
-export const MAX_CLIP_MS = 60 * 60_000;
+export const MAX_CLIP_MS = 20 * 60_000;
 
 export interface ShareWindow {
   startMs: number;
@@ -62,40 +71,6 @@ export function cleanDays(raw: unknown): number {
   return (SHARE_DAYS as readonly number[]).includes(n) ? n : DEFAULT_SHARE_DAYS;
 }
 
-/**
- * The parts a clip may serve: the first (it carries the stream's header, and
- * nothing plays without it) and every part that overlaps the window, with one
- * part of slack either side so playback can start and finish cleanly.
- */
-export function partsForWindow(parts: readonly TimelinePart[], w: ShareWindow): TimelinePart[] {
-  if (!parts.length) return [];
-  const end = w.endMs ?? Number.POSITIVE_INFINITY;
-  const overlapping = parts
-    .map((p, i) => ({ p, i }))
-    .filter(({ p }) => p.offsetMs < end && p.offsetMs + p.durationMs > w.startMs)
-    .map(({ i }) => i);
-  if (!overlapping.length) return [parts[0]];
-  const from = Math.max(0, overlapping[0] - 1);
-  const to = Math.min(parts.length - 1, overlapping[overlapping.length - 1] + 1);
-  const chosen = new Set<number>([0]);
-  for (let i = from; i <= to; i++) chosen.add(i);
-  return [...chosen].sort((a, b) => a - b).map((i) => parts[i]);
-}
-
-/** Whether a byte range lies entirely inside the parts a clip may serve. */
-export function rangeAllowed(allowed: readonly TimelinePart[], start: number, endInclusive: number): boolean {
-  if (start > endInclusive) return false;
-  let cursor = start;
-  // Allowed parts are in byte order; walk them covering [start, end].
-  for (const p of allowed) {
-    if (p.end <= cursor) continue;
-    if (p.start > cursor) return false;
-    cursor = p.end;
-    if (cursor > endInclusive) return true;
-  }
-  return false;
-}
-
 /** "0:42–2:10", the window in clock form. */
 export function windowLabel(w: ShareWindow, clock: (ms: number) => string): string {
   return w.endMs === null ? `from ${clock(w.startMs)}` : `${clock(w.startMs)}–${clock(w.endMs)}`;
@@ -132,4 +107,115 @@ export function formatClock(ms: number): string {
   const s = total % 60;
   const ss = String(s).padStart(2, "0");
   return h ? `${h}:${String(m).padStart(2, "0")}:${ss}` : `${m}:${ss}`;
+}
+
+export type ClipStatus = "pending" | "processing" | "ready" | "failed";
+
+/** "Preparing…", "Ready", "Couldn't be made". */
+export function clipStatusLabel(status: ClipStatus | string | null | undefined): string {
+  if (status === "ready") return "Ready";
+  if (status === "failed") return "Couldn't be made";
+  return "Preparing…";
+}
+
+/**
+ * A coarse description of a viewer's device, from their user agent: "Chrome
+ * on macOS", "Safari on iPhone". This is all the access log keeps of it.
+ */
+export function deviceLabel(ua: string | null | undefined): string {
+  const u = (ua ?? "").slice(0, 512);
+  if (!u) return "Unknown device";
+  if (/bot|crawler|spider|preview|slurp|facebookexternalhit|slackbot|whatsapp|telegram|discord|linkedin/i.test(u)) {
+    return "Link preview";
+  }
+  const os = /iPhone/.test(u)
+    ? "iPhone"
+    : /iPad/.test(u)
+      ? "iPad"
+      : /Android/.test(u)
+        ? "Android"
+        : /Windows/.test(u)
+          ? "Windows"
+          : /Mac OS X|Macintosh/.test(u)
+            ? "macOS"
+            : /CrOS/.test(u)
+              ? "ChromeOS"
+              : /Linux/.test(u)
+                ? "Linux"
+                : null;
+  const browser = /Edg\//.test(u)
+    ? "Edge"
+    : /OPR\/|Opera/.test(u)
+      ? "Opera"
+      : /Firefox\/|FxiOS/.test(u)
+        ? "Firefox"
+        : /Chrome\/|CriOS/.test(u)
+          ? "Chrome"
+          : /Safari\//.test(u)
+            ? "Safari"
+            : null;
+  if (browser && os) return `${browser} on ${os}`;
+  return browser ?? os ?? "Unknown device";
+}
+
+export interface ShareView {
+  kind: "open" | "download";
+  viewer: string;
+  device: string | null;
+  createdAt: string;
+}
+
+/** "5 opens · 3 viewers · 1 download". */
+export function viewSummary(views: readonly ShareView[]): { opens: number; viewers: number; downloads: number; text: string } {
+  const opens = views.filter((v) => v.kind === "open").length;
+  const downloads = views.filter((v) => v.kind === "download").length;
+  const viewers = new Set(views.filter((v) => v.device !== "Link preview").map((v) => v.viewer)).size;
+  const bits = [`${opens} ${opens === 1 ? "open" : "opens"}`, `${viewers} ${viewers === 1 ? "viewer" : "viewers"}`];
+  if (downloads) bits.push(`${downloads} ${downloads === 1 ? "download" : "downloads"}`);
+  return { opens, viewers, downloads, text: bits.join(" · ") };
+}
+
+/** "2 hours ago", "3 days ago", "just now". */
+export function agoLabel(iso: string, now: number): string {
+  const ms = Math.max(0, now - Date.parse(iso));
+  const min = Math.floor(ms / 60_000);
+  if (min < 1) return "just now";
+  if (min < 60) return `${min} min ago`;
+  const h = Math.floor(min / 60);
+  if (h < 24) return `${h} hour${h === 1 ? "" : "s"} ago`;
+  const d = Math.floor(h / 24);
+  return `${d} day${d === 1 ? "" : "s"} ago`;
+}
+
+/** A file name for a downloaded clip: the meeting's date, never its title. */
+export function clipFilename(startedAt: string, mimeType: string): string {
+  const at = new Date(startedAt);
+  const day = isNaN(at.getTime()) ? "recording" : at.toISOString().slice(0, 10);
+  return `${mimeType.startsWith("audio/") ? "call" : "meeting"}-clip-${day}.webm`;
+}
+
+/**
+ * The words said inside a clip, on the clip's own clock.
+ *
+ * Rows are kept to the window BEFORE they are grouped into turns: grouping
+ * first and filtering the turns kept a turn that began inside the window with
+ * every later line the same speaker said, and one that began just before it
+ * with all of its lines — words from outside the clip, on a public page.
+ * `baseMs` is where the clip's file begins in the recording; cue times are
+ * moved by it so they match the clip's player.
+ */
+export function clipCues(
+  rows: readonly CueRow[],
+  recordingStartedAt: string,
+  window: { startMs: number; endMs: number | null },
+  baseMs: number,
+): TranscriptCue[] {
+  const origin = Date.parse(recordingStartedAt);
+  if (!Number.isFinite(origin)) return [];
+  const end = window.endMs ?? Number.POSITIVE_INFINITY;
+  const inside = rows.filter((r) => {
+    const at = Date.parse(r.ts) - origin;
+    return Number.isFinite(at) && at >= window.startMs && at < end;
+  });
+  return transcriptCues(inside, recordingStartedAt).map((c) => ({ ...c, atMs: Math.max(0, c.atMs - baseMs) }));
 }
