@@ -17,6 +17,7 @@ import { createTeamTask } from "@/lib/team-tasks";
 import { matchDirectoryPerson, type DirectoryPerson } from "@/lib/meetings/directory";
 import { actionItemKey, clampTitle, parseActionItem } from "@/lib/meetings/action-items";
 import { logId } from "@/lib/log-safe";
+import { dueFromText } from "@/lib/meetings/follow-up-loop";
 
 type Client = SupabaseClient<Database>;
 
@@ -33,6 +34,11 @@ export interface ActionItemTaskInput {
   items: string[];
   /** The organization's members. Omitted or empty, everything stays with the host. */
   directory?: readonly DirectoryPerson[];
+  /**
+   * The day the meeting was held, which "by Friday" is counted from. Omitted,
+   * today — the report is written as the meeting ends.
+   */
+  meetingDay?: Date;
 }
 
 export interface ActionItemTaskResult {
@@ -96,6 +102,9 @@ export async function createActionItemTasks(
         hub: "execute",
         module: "live_meetings",
         priority: "normal",
+        // "by Friday" in the item is a due date on the task, so an overdue
+        // commitment can be chased (see follow-up-sweep.server.ts).
+        dueAt: dueFromText(item.line, input.meetingDay ?? new Date()),
         // Meetings about a deal produce tasks about that deal.
         dealId: input.dealId ?? null,
         meetingId: input.meetingId,

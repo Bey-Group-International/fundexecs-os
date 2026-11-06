@@ -471,6 +471,11 @@ export function MeetingsWorkspace({
       <div className={`grid grid-cols-1 gap-4 ${previewing ? "lg:grid-cols-[minmax(0,1fr)_380px]" : ""} lg:items-start`}>
         <div className="flex min-w-0 flex-col gap-4">
           <div id="panel-needs" role="tabpanel" aria-labelledby="tab-needs" hidden={tab !== "needs"} className="flex flex-col gap-1.5">
+            {tab === "needs" ? (
+              <a href="/meetings/follow-ups" className="self-end text-xs font-medium text-[var(--gold-400)] hover:underline">
+                All follow-ups →
+              </a>
+            ) : null}
             {tab === "needs"
               ? shownRequests.map((r) => (
                   <BookingRequestRow

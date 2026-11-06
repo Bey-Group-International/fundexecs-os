@@ -29,7 +29,13 @@ function captureFetch(response: Record<string, unknown> = { sent: 1, total: 1 },
 }
 
 function panel(canSend = true) {
-  return render(<FollowUpPanel meetingId="m1" draft={DRAFT} canSend={canSend} />);
+  return render(<FollowUpPanel meetingId="m1" draft={DRAFT} canSend={canSend} undoSeconds={0} />);
+}
+
+/** Send now opens the review; confirming it sends (no undo window in these tests). */
+async function sendNow() {
+  await userEvent.click(screen.getByRole("button", { name: /send now/i }));
+  await userEvent.click(screen.getByRole("button", { name: /confirm and send/i }));
 }
 
 afterEach(() => {
@@ -70,7 +76,7 @@ describe("drafting", () => {
     panel();
 
     await userEvent.click(screen.getByRole("button", { name: /^edit$/i }));
-    const field = screen.getByRole("textbox");
+    const field = screen.getByRole("textbox", { name: "Follow-up email" });
     await userEvent.clear(field);
     await userEvent.type(field, "Rewritten.");
     await userEvent.click(screen.getByRole("button", { name: /draft in inbox/i }));
@@ -124,7 +130,7 @@ describe("sending", () => {
     const calls = captureFetch({ sent: 1, total: 1, unreachable: [], failed: [] });
     panel();
 
-    await userEvent.click(screen.getByRole("button", { name: /send now/i }));
+    await sendNow();
 
     await waitFor(() => expect(calls).toHaveLength(1));
     expect(calls[0].url).toBe("/api/meetings/m1/follow-up");
@@ -134,7 +140,7 @@ describe("sending", () => {
     captureFetch({ sent: 2, total: 2, unreachable: [], failed: [] });
     panel();
 
-    await userEvent.click(screen.getByRole("button", { name: /send now/i }));
+    await sendNow();
 
     await waitFor(() => expect(screen.queryByText(/Nothing has been sent/)).toBeNull());
     expect(screen.getByRole("button", { name: /send again/i })).toBeInTheDocument();
@@ -216,7 +222,7 @@ describe("before anything is sent", () => {
   it("formats from the toolbar", async () => {
     full();
     await userEvent.click(screen.getByRole("button", { name: /^edit$/i }));
-    const field = screen.getByRole("textbox") as HTMLTextAreaElement;
+    const field = screen.getByRole("textbox", { name: "Follow-up email" }) as HTMLTextAreaElement;
     await userEvent.clear(field);
     await userEvent.type(field, "deck");
     field.setSelectionRange(0, 4);
@@ -229,7 +235,7 @@ describe("when the organisation gates outbound replies", () => {
   it("says the follow-up is waiting in approvals, never that it was sent", async () => {
     captureFetch({ gated: true, queued: 2, total: 3 });
     panel();
-    await userEvent.click(screen.getByRole("button", { name: /send now/i }));
+    await sendNow();
     expect(await screen.findByText(/Waiting in approvals for 2 of 3 attendees/)).toBeInTheDocument();
     expect(screen.getByText(/nothing has been sent yet/i)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /review approvals/i })).toHaveAttribute("href", "/inbox");
@@ -238,7 +244,7 @@ describe("when the organisation gates outbound replies", () => {
   it("shows the follow-up as awaiting approval in its status chip", async () => {
     captureFetch({ gated: true, queued: 1, total: 1 });
     panel();
-    await userEvent.click(screen.getByRole("button", { name: /send now/i }));
+    await sendNow();
     expect(await screen.findByText("Awaiting approval")).toBeInTheDocument();
   });
 });

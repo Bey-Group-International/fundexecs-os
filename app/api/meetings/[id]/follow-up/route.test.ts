@@ -35,6 +35,8 @@ jest.mock("@/lib/email", () => ({
   escapeHtml: (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"),
 }));
 jest.mock("@/lib/meetings/mailbox.server", () => ({ mailboxFor: (...a: unknown[]) => mailboxFor(...a) }));
+const recordSends = jest.fn();
+jest.mock("@/lib/meetings/follow-up-sends.server", () => ({ recordSends: (...a: unknown[]) => recordSends(...a) }));
 
 import { POST } from "./route";
 
@@ -96,6 +98,7 @@ beforeEach(() => {
   serviceEnv = false;
   gated = false;
   recordFollowUpThreads.mockResolvedValue({ recorded: 0, tracked: 0 });
+  recordSends.mockImplementation(async (_db: unknown, input: { sends: unknown[] }) => input.sends.length);
 });
 
 describe("permission", () => {
@@ -396,5 +399,76 @@ describe("when the organisation gates outbound replies", () => {
     expect(await res.json()).toMatchObject({ gated: true, queued: 1 });
     expect(spy).toHaveBeenCalled();
     spy.mockRestore();
+  });
+});
+
+
+describe("the follow-up loop", () => {
+  const inAnHour = () => new Date(Date.now() + 3_600_000).toISOString();
+
+  it("schedules instead of sending when asked for later, with the nudge", async () => {
+    serviceEnv = true;
+    wire();
+    const at = inAnHour();
+    const res = await POST(req({ sendAt: at, nudgeAfterDays: 3 }), { params });
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json.scheduled).toBe(1);
+    expect(sendEmail).not.toHaveBeenCalled();
+    const sends = recordSends.mock.calls[0][1].sends;
+    expect(sends[0]).toMatchObject({ email: "sarah@fund.test", status: "scheduled", scheduledFor: at, nudgeAfterDays: 3 });
+  });
+
+  it("refuses a time in the past or too far off", async () => {
+    wire();
+    expect((await POST(req({ sendAt: new Date(Date.now() - 3_600_000).toISOString() }), { params })).status).toBe(422);
+    expect((await POST(req({ sendAt: new Date(Date.now() + 60 * 86_400_000).toISOString() }), { params })).status).toBe(422);
+  });
+
+  it("will not schedule where sends wait on approval", async () => {
+    serviceEnv = true;
+    gated = true;
+    wire();
+    const res = await POST(req({ sendAt: inAnHour() }), { params });
+    expect(res.status).toBe(409);
+    expect(recordSends).not.toHaveBeenCalled();
+  });
+
+  it("records each recipient's delivery after an immediate send", async () => {
+    serviceEnv = true;
+    wire();
+    await POST(req({ nudgeAfterDays: 5 }), { params });
+    const sends = recordSends.mock.calls[0][1].sends;
+    expect(sends).toEqual([expect.objectContaining({ email: "sarah@fund.test", status: "sent", nudgeAfterDays: 5 })]);
+  });
+
+  it("records a failure with its reason and no nudge", async () => {
+    serviceEnv = true;
+    sendEmail.mockResolvedValue({ ok: false, detail: "mailbox refused" });
+    wire();
+    await POST(req({ nudgeAfterDays: 5 }), { params });
+    expect(recordSends.mock.calls[0][1].sends[0]).toMatchObject({ status: "failed", error: "mailbox refused", nudgeAfterDays: null });
+  });
+
+  it("retries only the people named", async () => {
+    wire({ meeting: { ...MEETING, attendees: [...MEETING.attendees, { name: "Tom Lee", email: "tom@lp.test" }] } });
+    await POST(req({ only: ["TOM@lp.test"] }), { params });
+    expect(sendEmail).toHaveBeenCalledTimes(1);
+    expect(sendEmail.mock.calls[0][0].to.email).toBe("tom@lp.test");
+  });
+
+  it("gives each reader their own next steps", async () => {
+    wire({ report: { analysis: { follow_up_draft: "Hi {{first_name}},\n\nGood meeting.\n\nBest,\nHost", action_items: ["Sarah: send the model by Friday", "Tom: book the visit"] } } });
+    await POST(req(), { params });
+    const html = sendEmail.mock.calls[0][0].htmlBody as string;
+    expect(html).toContain("Your next steps from this meeting");
+    expect(html).toContain("send the model by Friday");
+    expect(html).not.toContain("book the visit");
+  });
+
+  it("leaves the next steps out when asked to", async () => {
+    wire({ report: { analysis: { follow_up_draft: "Hi,\n\nGood.", action_items: ["Sarah: send it"] } } });
+    await POST(req({ personalItems: false }), { params });
+    expect(sendEmail.mock.calls[0][0].htmlBody).not.toContain("Your next steps");
   });
 });
