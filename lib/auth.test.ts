@@ -12,16 +12,19 @@ jest.mock("@/lib/supabase/server", () => ({
 const mockHasEnv = hasSupabaseServerEnv as jest.Mock;
 const mockCreateClient = createServerClient as jest.Mock;
 
+// The membership list is awaited directly (no limit / maybeSingle), so the
+// query is a thenable that resolves to every membership, oldest first.
 function membershipQuery(result: {
   data: { organization_id: string; role: string } | null;
 }) {
-  return {
+  const rows = { data: result.data ? [result.data] : [] };
+  const q: Record<string, unknown> = {
     select: jest.fn().mockReturnThis(),
     eq: jest.fn().mockReturnThis(),
     order: jest.fn().mockReturnThis(),
-    limit: jest.fn().mockReturnThis(),
-    maybeSingle: jest.fn().mockResolvedValue(result),
+    then: (resolve: (v: typeof rows) => unknown) => Promise.resolve(rows).then(resolve),
   };
+  return q;
 }
 
 describe("getSessionContext", () => {
@@ -108,7 +111,8 @@ describe("getSessionContext", () => {
 
   it("returns null instead of throwing when the membership query rejects", async () => {
     const query = membershipQuery({ data: null });
-    query.maybeSingle.mockRejectedValue(new TypeError("fetch failed"));
+    query.then = (_: unknown, reject: (e: unknown) => unknown) =>
+      Promise.reject(new TypeError("fetch failed")).catch(reject);
     mockCreateClient.mockResolvedValue({
       auth: {
         getUser: jest.fn().mockResolvedValue({

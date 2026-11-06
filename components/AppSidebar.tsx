@@ -341,6 +341,12 @@ interface AppSidebarProps {
   name: string;
   /** The organization the signed-in user is working in. Shown read-only at the top of the rail. */
   orgName?: string;
+  /** Every organization the person belongs to. The switcher shows only when there is more than one. */
+  orgs?: { id: string; name: string }[];
+  /** The organization currently in use (matches one of `orgs`). */
+  activeOrgId?: string;
+  /** Saves the chosen organization and goes to its dashboard. */
+  onSwitchOrg?: (formData: FormData) => void | Promise<void>;
   planName: string;
   hubs: HubItem[];
   sessions: SessionItem[];
@@ -374,6 +380,9 @@ interface AppSidebarProps {
 function SidebarPanel({
   name,
   orgName,
+  orgs,
+  activeOrgId,
+  onSwitchOrg,
   planName,
   hubs,
   sessions,
@@ -450,16 +459,45 @@ function SidebarPanel({
         <Logo href="/dashboard" variant="coin-wordmark" />
       </div>
 
-      {/* Workspace — which organization this is all happening in. Read-only for
-          now: switching between organizations is a separate change. */}
+      {/* Workspace — which organization this is all happening in. With one
+          organization it is a plain label; with several it opens a list to
+          switch between them. */}
       {orgName ? (
         <div className="border-b border-line/60 px-4 py-2.5" data-testid="workspace-name">
           <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-fg-muted/70">
             Workspace
           </p>
-          <p className="truncate text-sm font-medium text-fg-primary" title={orgName}>
-            {orgName}
-          </p>
+          {orgs && orgs.length > 1 && onSwitchOrg ? (
+            <details className="group relative" data-testid="workspace-switcher">
+              <summary className="fx-focus -mx-1 flex min-h-9 cursor-pointer list-none items-center justify-between gap-2 rounded-md px-1 text-sm font-medium text-fg-primary hover:bg-surface-1 [&::-webkit-details-marker]:hidden">
+                <span className="truncate" title={orgName}>{orgName}</span>
+                <span aria-hidden className="shrink-0 text-xs text-fg-muted transition group-open:rotate-180">▾</span>
+              </summary>
+              <form action={onSwitchOrg} className="mt-1 max-h-60 overflow-y-auto rounded-md border border-line bg-surface-0 p-1 shadow-lg">
+                {orgs.map((o) => {
+                  const active = o.id === activeOrgId;
+                  return (
+                    <button
+                      key={o.id}
+                      type="submit"
+                      name="orgId"
+                      value={o.id}
+                      disabled={active}
+                      aria-current={active ? "true" : undefined}
+                      className="fx-focus flex min-h-9 w-full items-center justify-between gap-2 rounded px-2 text-left text-sm text-fg-secondary hover:bg-surface-1 hover:text-fg-primary disabled:cursor-default disabled:text-fg-primary disabled:hover:bg-transparent"
+                    >
+                      <span className="truncate">{o.name}</span>
+                      {active ? <span aria-hidden className="text-gold-300">✓</span> : null}
+                    </button>
+                  );
+                })}
+              </form>
+            </details>
+          ) : (
+            <p className="truncate text-sm font-medium text-fg-primary" title={orgName}>
+              {orgName}
+            </p>
+          )}
         </div>
       ) : null}
 

@@ -4,6 +4,7 @@ import { enforceMfa } from "@/lib/mfa.server";
 import { ADMIN_PLAN_NAME, isPlatformAdmin as isPlatformAdminUser } from "@/lib/platform-admin";
 import { countPendingAccessRequests } from "@/lib/admin/access-requests";
 import { signOut } from "@/app/login/actions";
+import { switchOrganization } from "@/app/(app)/switch-org/actions";
 import { HUB_BY_KEY } from "@/lib/hubs";
 import { PLAN_BY_KEY, type PlanKey } from "@/lib/billing";
 import type { Hub } from "@/lib/supabase/database.types";
@@ -57,6 +58,20 @@ export default async function AppLayout({
   const pendingAccessRequests = isPlatformAdmin
     ? await countPendingAccessRequests()
     : 0;
+
+  // Every organization this person belongs to, for the workspace switcher.
+  const { data: orgMemberships } = await supabase
+    .from("organization_members")
+    .select("organization_id")
+    .eq("principal_id", ctx.userId)
+    .order("created_at", { ascending: true });
+  const memberOrgIds = (orgMemberships ?? []).map((m) => m.organization_id);
+  const { data: memberOrgs } =
+    memberOrgIds.length > 1
+      ? await supabase.from("organizations").select("id, name").in("id", memberOrgIds)
+      : { data: [] as { id: string; name: string | null }[] };
+  const orgNameById = new Map((memberOrgs ?? []).map((o) => [o.id, o.name?.trim()]));
+  const orgs = memberOrgIds.map((id) => ({ id, name: orgNameById.get(id) || "Untitled workspace" }));
 
   const [
     { data: principal },
@@ -214,6 +229,9 @@ export default async function AppLayout({
       <AppSidebar
         name={name}
         orgName={orgRow?.name?.trim() || undefined}
+        orgs={orgs}
+        activeOrgId={ctx.orgId}
+        onSwitchOrg={switchOrganization}
         planName={planName}
         hubs={hubs}
         sessions={sessions}
