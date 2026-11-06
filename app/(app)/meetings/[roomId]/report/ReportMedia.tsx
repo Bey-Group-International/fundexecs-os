@@ -32,6 +32,7 @@ export function ReportMedia({
   transcript,
   markers,
   isHost = false,
+  speakerNames,
 }: {
   meetingId: string;
   recordings: readonly ReportRecording[];
@@ -41,8 +42,10 @@ export function ReportMedia({
   transcript: string | null;
   /** The report's highlights, placed on the recording; ticks on the scrubber. */
   markers?: ReadonlyArray<{ ms: number; label: string }>;
-  /** The host may share clips of the recording. */
+  /** The host may share clips of the recording, rename speakers and correct lines. */
   isHost?: boolean;
+  /** Speaker label as heard → name shown, as the page applied it. */
+  speakerNames?: Readonly<Record<string, string>>;
 }) {
   const playerRef = useRef<RecordingPlayerHandle | null>(null);
   /**
@@ -110,6 +113,10 @@ export function ReportMedia({
    */
   const recordingStartedAt = playableRecording(recordings)?.started_at ?? null;
   const cues = useMemo(() => transcriptCues(cueRows, recordingStartedAt), [cueRows, recordingStartedAt]);
+  const transcriptTools = useMemo(
+    () => ({ meetingId, isHost, rows: cueRows, speakerNames: speakerNames ?? {} }),
+    [meetingId, isHost, cueRows, speakerNames],
+  );
 
   return (
     <>
@@ -135,6 +142,7 @@ export function ReportMedia({
           // timestamps would be clickable and inert, which is worse than plain.
           onSeek={recordingStartedAt ? seekRecording : undefined}
           currentMs={recordingStartedAt ? playheadMs : undefined}
+          tools={transcriptTools}
         />
       )}
     </>

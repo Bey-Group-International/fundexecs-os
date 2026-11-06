@@ -13,6 +13,8 @@ import { createServiceClient, hasSupabaseServiceEnv } from "@/lib/supabase/serve
 import type { CueRow } from "@/lib/meetings/transcript-cues";
 import { readAllTranscriptRows } from "@/lib/meetings/transcript-read";
 import { clipCues } from "@/lib/meetings/recording-share";
+import { applyOverlay } from "@/lib/meetings/transcript-tools";
+import { loadOverlay } from "@/lib/meetings/transcript-tools.server";
 import { guardClipRequest, noteMiss, overHourlyCap, recordOpen, recordView, resolveShare } from "@/lib/meetings/recording-share.server";
 import { ClipView } from "./ClipView";
 
@@ -80,12 +82,16 @@ export default async function ClipPage({ params }: { params: Promise<{ token: st
     const rows = await readAllTranscriptRows<CueRow>((from, to) =>
       service
         .from("live_meeting_transcripts")
-        .select("speaker, text, ts, confidence, overlapped")
+        .select("id, speaker, text, ts, confidence, overlapped")
         .eq("meeting_id", share.meeting_id)
         .order("ts", { ascending: true })
         .range(from, to) as never,
     );
-    cues = clipCues(rows, resolved.recording.started_at, { startMs: share.start_ms, endMs: share.end_ms }, baseMs);
+    // With the host's speaker names and corrections, as everywhere else it is read.
+    const shown = applyOverlay(rows, await loadOverlay(service as unknown as { from: (t: string) => any }, share.meeting_id));
+    cues = clipCues(shown, resolved.recording.started_at, { startMs: share.start_ms, endMs: share.end_ms }, baseMs).map(
+      ({ lineIds: _ids, originals: _originals, ...c }) => c,
+    );
   } catch {
     // The clip plays without its transcript.
   }
