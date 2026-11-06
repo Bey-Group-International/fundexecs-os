@@ -145,3 +145,23 @@ it("does not let envelopes that are not the fund's turn crowd out ones that are"
   const tasks = await loadSignaturesAwaitingFund("org1");
   expect(tasks.map((t) => t.id)).toEqual(["MINE"]);
 });
+
+it("finds a link's room however many links the organization has", async () => {
+  // 1,300 links (more than one server page), the one the envelope came through last.
+  const manyShares = Array.from({ length: 1300 }, (_, i) => ({ id: `s${i}`, room_id: "r2" }));
+  manyShares.push({ id: "target", room_id: "r1" });
+  mock(
+    {
+      data_room_document_signatures: ok([]),
+      envelopes: ok([
+        { id: "E", title: "Subscription", updated_at: "2026-10-05T00:00:00Z", data_room_share_id: "target", reader_email: null, envelope_recipients: [recipient("signer", "signed", "R", "2026-10-04T00:00:00Z"), recipient("owner", "pending")] },
+      ]),
+      data_rooms: rooms,
+      data_room_shares: ok(manyShares),
+    },
+    500,
+  );
+  const tasks = await loadSignaturesAwaitingFund("org1");
+  expect(tasks.map((t) => t.id)).toEqual(["E"]);
+  expect(tasks[0]).toMatchObject({ roomId: "r1", roomName: "Fund IV Room" });
+});

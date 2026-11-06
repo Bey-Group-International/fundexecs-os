@@ -38,8 +38,24 @@ export async function loadSignaturesAwaitingFund(orgId: string): Promise<Signatu
         .order("id", { ascending: true })
         .range(from, to) as unknown as PromiseLike<BatchResult<Record<string, unknown>>>,
     ),
-    supabase.from("data_rooms").select("id, name").eq("organization_id", orgId),
-    supabase.from("data_room_shares").select("id, room_id").eq("organization_id", orgId),
+    // The lookups are paged too: a link missing from a truncated read would hide an
+    // envelope that is waiting on the fund.
+    selectAllPages<Record<string, unknown>>((from, to) =>
+      supabase
+        .from("data_rooms")
+        .select("id, name")
+        .eq("organization_id", orgId)
+        .order("id", { ascending: true })
+        .range(from, to) as unknown as PromiseLike<BatchResult<Record<string, unknown>>>,
+    ),
+    selectAllPages<Record<string, unknown>>((from, to) =>
+      supabase
+        .from("data_room_shares")
+        .select("id, room_id")
+        .eq("organization_id", orgId)
+        .order("id", { ascending: true })
+        .range(from, to) as unknown as PromiseLike<BatchResult<Record<string, unknown>>>,
+    ),
   ]);
   for (const [what, res] of [
     ["signatures", legacyRes],
