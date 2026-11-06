@@ -58,6 +58,11 @@ export async function POST(req: Request, props: { params: Promise<{ id: string }
   const adjustedTimes: string[] = [];
   for (const f of fields) {
     if (f.field_type === "datetime") {
+      // An optional date and time left alone stays blank.
+      if (!f.required && !(responses[f.id] ?? "").trim()) {
+        delete responses[f.id];
+        continue;
+      }
       const r = resolveDateTimeResponse(responses[f.id], now);
       if (r.problem) return NextResponse.json({ ok: false, error: r.problem }, { status: 400 });
       responses[f.id] = r.value;

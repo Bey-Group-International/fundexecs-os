@@ -68,13 +68,18 @@ export function cleanBlocks(raw: unknown, recipientIds: string[], pageCount: num
 }
 
 /**
- * Who cannot sign yet: every signer and the owner each need a signature block, or
- * the document could be "signed" without anyone's signature on it.
+ * Who cannot sign yet: every signer and the owner each need a signature block they must
+ * complete (a required one), or the document could be "signed" without anyone's signature on it.
+ * A block with no `required` flag is treated as required, as older documents are.
  */
 export function recipientsWithoutSignature(
   recipients: { id: string; name: string }[],
-  blocks: { recipient_id: string; field_type: string }[],
+  blocks: { recipient_id: string; field_type: string; required?: boolean | null }[],
 ): string[] {
-  const signing = new Set(blocks.filter((b) => b.field_type === "signature" || b.field_type === "initials").map((b) => b.recipient_id));
+  const signing = new Set(
+    blocks
+      .filter((b) => (b.field_type === "signature" || b.field_type === "initials") && b.required !== false)
+      .map((b) => b.recipient_id),
+  );
   return recipients.filter((r) => !signing.has(r.id)).map((r) => r.name);
 }

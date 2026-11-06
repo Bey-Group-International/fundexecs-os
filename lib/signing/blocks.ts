@@ -41,6 +41,20 @@ export function blockValueProblem(fieldType: string, value: string | null | unde
   return null;
 }
 
+/**
+ * What a new block starts as. The signature, the name and the date and time are what a signing
+ * needs; the rest (company, title, address, email, phone) are often not, so they start optional
+ * and the sender turns on the ones that matter. Either way, one click flips it.
+ */
+export function defaultRequired(type: string): boolean {
+  return type === "signature" || type === "name" || type === "datetime";
+}
+
+/** The two colours a block wears: red when the signer must complete it, blue when they may skip it. */
+export const REQUIRED_COLOR = "#dc2626";
+export const OPTIONAL_COLOR = "#2563eb";
+export const blockColor = (required: boolean) => (required ? REQUIRED_COLOR : OPTIONAL_COLOR);
+
 const BY_TYPE = new Map<string, BlockSpec>(BLOCKS.map((b) => [b.type, b]));
 
 /** Older envelopes use the earlier types; they behave like their nearest block. */

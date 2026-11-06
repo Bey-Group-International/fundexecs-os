@@ -6,7 +6,7 @@
 import { useState } from "react";
 import { SignaturePad } from "@/components/signing/SignaturePad";
 import { DateTimeWheels } from "@/components/signing/DateTimeWheels";
-import { blockValueProblem, toOffsetIso, type BlockSpec } from "@/lib/signing/blocks";
+import { blockColor, blockValueProblem, toOffsetIso, type BlockSpec } from "@/lib/signing/blocks";
 
 export interface SpotPanelProps {
   spec: BlockSpec;
@@ -22,7 +22,8 @@ export interface SpotPanelProps {
   position: number;
   total: number;
   onBack: (() => void) | null;
-  onNext: () => void;
+  /** `used` is whether this spot was filled in (an optional spot may be skipped). */
+  onNext: (used: boolean) => void;
   isLast: boolean;
   onClose: () => void;
   /** On the last spot only: the agreement to sign electronically, so there is one path to the end. */
@@ -36,9 +37,11 @@ export function SpotPanel(p: SpotPanelProps) {
   const kind = p.spec.input;
   const problem = kind === "text" || kind === "multiline" ? blockValueProblem(p.spec.type, p.value) : null;
 
-  const filled = kind === "signature" ? Boolean(draft) || (Boolean(p.signature) && !changing) : kind === "auto" ? true : Boolean(p.value.trim());
+  const filled = kind === "signature" ? Boolean(draft) || (Boolean(p.signature) && !changing) : kind === "auto" ? p.required || Boolean(p.value) : Boolean(p.value.trim());
   const canNext = (!p.required || filled) && !problem && (!p.agree || p.agree.checked);
-  const nextLabel = p.isLast ? "Done" : "Next";
+  // An optional spot that has nothing in it is skipped, not completed.
+  const skipping = !p.required && !filled;
+  const nextLabel = skipping ? "Skip" : p.isLast ? "Done" : "Next";
 
   function next() {
     if (kind === "signature" && (changing || !p.signature) && draft) {
@@ -46,7 +49,7 @@ export function SpotPanel(p: SpotPanelProps) {
       setChanging(false);
       setDraft(null);
     }
-    p.onNext();
+    p.onNext(filled || Boolean(draft));
   }
 
   return (
@@ -58,7 +61,12 @@ export function SpotPanel(p: SpotPanelProps) {
       className="w-72 max-w-[85vw] rounded-xl border border-line bg-surface-0 p-3 text-left shadow-xl"
     >
       <div className="mb-2 flex items-center justify-between gap-2">
-        <h3 className="text-sm font-semibold text-fg-primary">{p.spec.label}</h3>
+        <h3 className="text-sm font-semibold text-fg-primary">
+          {p.spec.label}
+          <span className="ml-2 rounded-full px-1.5 py-0.5 align-middle text-[10px] font-semibold text-white" style={{ background: blockColor(p.required) }}>
+            {p.required ? "Required" : "Optional"}
+          </span>
+        </h3>
         {p.total > 0 ? (
           <span className="font-mono text-[11px] text-fg-muted">
             {p.position} of {p.total}
@@ -112,14 +120,21 @@ export function SpotPanel(p: SpotPanelProps) {
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src={p.signature} alt="Your signature" className="max-h-16 w-auto object-contain" />
             </div>
-            <button type="button" onClick={() => setChanging(true)} className="mt-1 block text-xs text-fg-secondary underline underline-offset-2 hover:text-fg-primary">
+            <div className="mt-1 flex flex-wrap gap-x-3">
+            {!p.required ? (
+              <button type="button" onClick={() => p.onNext(false)} className=" text-xs text-fg-secondary underline underline-offset-2 hover:text-fg-primary">
+                Leave this one blank
+              </button>
+            ) : null}
+            <button type="button" onClick={() => setChanging(true)} className="text-xs text-fg-secondary underline underline-offset-2 hover:text-fg-primary">
               Change signature
             </button>
             {p.keep?.stored ? (
-              <button type="button" onClick={p.keep.onForget} className="ml-3 mt-1 text-xs text-fg-secondary underline underline-offset-2 hover:text-fg-primary">
+              <button type="button" onClick={p.keep.onForget} className="text-xs text-fg-secondary underline underline-offset-2 hover:text-fg-primary">
                 Forget it on this device
               </button>
             ) : null}
+            </div>
           </div>
         ) : (
           <div>

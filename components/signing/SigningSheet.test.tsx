@@ -216,4 +216,53 @@ describe("SigningSheet: a × at each spot, one at a time", () => {
       expect(screen.queryByRole("checkbox", { name: /Remember my signature/ })).toBeNull();
     });
   });
+
+  describe("optional spots", () => {
+    it("wears blue when optional and red when required, and says so in the panel", () => {
+      mount(undefined, [block({ id: "n", type: "name", yPct: 10 }), block({ id: "c", type: "company", required: false, yPct: 30 })]);
+      const marks = Array.from(document.querySelectorAll("[data-required]")) as HTMLElement[];
+      expect(marks.map((m) => [m.getAttribute("data-required"), m.style.borderColor])).toEqual([["true", "rgb(220, 38, 38)"], ["false", "rgb(37, 99, 235)"]]);
+      expect(within(screen.getByRole("dialog", { name: "Name" })).getByText("Required")).toBeTruthy();
+      fireEvent.change(screen.getByRole("textbox", { name: "Name" }), { target: { value: "Jane" } });
+      fireEvent.click(screen.getByRole("button", { name: "Next" }));
+      expect(within(screen.getByRole("dialog", { name: "Company" })).getByText("Optional")).toBeTruthy();
+    });
+
+    it("an empty optional spot is skipped, not completed, and does not hold up sending", async () => {
+      const onSubmit = mount(undefined, [block({ id: "s", type: "signature", yPct: 10 }), block({ id: "c", type: "company", required: false, yPct: 30 })]);
+      fireEvent.click(screen.getByRole("button", { name: "make signature" }));
+      fireEvent.click(screen.getByRole("button", { name: "Next" }));
+      expect(screen.getByRole("button", { name: "Skip" })).toBeTruthy(); // nothing typed: Skip, not Done
+      fireEvent.click(screen.getByRole("checkbox", { name: /I agree/ }));
+      fireEvent.click(screen.getByRole("button", { name: "Skip" }));
+      fireEvent.click(screen.getByRole("button", { name: "Sign and send back" }));
+      await waitFor(() => expect(onSubmit).toHaveBeenCalled());
+      const [, responses] = onSubmit.mock.calls[0] as unknown as [string, Record<string, string>];
+      expect(responses.c).toBeUndefined();
+    });
+
+    it("an optional date and time is left blank unless the signer sets it", async () => {
+      const onSubmit = mount(undefined, [block({ id: "s", type: "signature", yPct: 10 }), block({ id: "d", type: "datetime", required: false, yPct: 30 })]);
+      fireEvent.click(screen.getByRole("button", { name: "make signature" }));
+      fireEvent.click(screen.getByRole("button", { name: "Next" }));
+      expect(screen.getByRole("button", { name: "Skip" })).toBeTruthy();
+      fireEvent.click(screen.getByRole("checkbox", { name: /I agree/ }));
+      fireEvent.click(screen.getByRole("button", { name: "Skip" }));
+      fireEvent.click(screen.getByRole("button", { name: "Sign and send back" }));
+      await waitFor(() => expect(onSubmit).toHaveBeenCalled());
+      expect((onSubmit.mock.calls[0] as unknown as [string, Record<string, string>])[1].d).toBeUndefined();
+    });
+
+    it("an optional signature spot is signed only if the signer chooses to", async () => {
+      const onSubmit = mount(undefined, [block({ id: "s1", type: "signature", yPct: 10 }), block({ id: "s2", type: "signature", required: false, yPct: 30 })]);
+      fireEvent.click(screen.getByRole("button", { name: "make signature" }));
+      fireEvent.click(screen.getByRole("button", { name: "Next" }));
+      // The second spot offers the signature just made, and lets it be left blank.
+      fireEvent.click(screen.getByRole("checkbox", { name: /I agree/ }));
+      fireEvent.click(screen.getByRole("button", { name: "Leave this one blank" }));
+      fireEvent.click(screen.getByRole("button", { name: "Sign and send back" }));
+      await waitFor(() => expect(onSubmit).toHaveBeenCalled());
+      expect((onSubmit.mock.calls[0] as unknown as [string, Record<string, string>])[1].s2).toBeUndefined();
+    });
+  });
 });

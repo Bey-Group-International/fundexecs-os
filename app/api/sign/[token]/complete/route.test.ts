@@ -295,6 +295,23 @@ describe('POST /api/sign/[token]/complete', () => {
     expect(meta.datetime_chosen).toHaveLength(1);
     expect(typeof meta.datetime_actual).toBe('string');
   });
+
+  it('leaves an optional date and time blank when the signer did not set it, and stamps a required one', async () => {
+    makeSupabase({
+      recipient: { id: 'rec-1', status: 'viewed', envelope_id: 'env-1' },
+      envelope: { id: 'env-1', status: 'sent' },
+      fields: [
+        { id: 'f-opt', field_type: 'datetime', label: 'Date', required: false },
+        { id: 'f-req', field_type: 'datetime', label: 'Date', required: true },
+      ],
+    });
+    // Its own token: the rate limiter counts per token, and this file signs a lot.
+    const res = await POST(request(GOOD_BODY), { params: Promise.resolve({ token: 'tok-optional-date' }) });
+    expect(res.status).toBe(200);
+    const sent = rpc.mock.calls[0][1].p_responses as Record<string, string>;
+    expect(sent['f-opt']).toBeUndefined();
+    expect(sent['f-req']).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+  });
 });
 
 describe('missingRequiredFields', () => {
