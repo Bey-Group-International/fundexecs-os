@@ -85,7 +85,8 @@ function DocRow({
 
   return (
     <div className="rounded-lg border border-line/60 bg-surface-0">
-    <div className="flex items-center gap-2 px-3 py-2">
+    <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5 px-3 py-2">
+      <div className="flex min-w-0 flex-1 basis-60 items-center gap-2">
       <span className="shrink-0 font-mono text-[11px] text-fg-muted">{doc.isLink ? "↗" : "≡"}</span>
       <Link
         href={`/document/${doc.id}`}
@@ -105,7 +106,9 @@ function DocRow({
           Empty
         </Flag>
       ) : null}
+      </div>
 
+      <div className="flex flex-wrap items-center gap-1.5">
       <button
         type="button"
         disabled={pending}
@@ -126,7 +129,7 @@ function DocRow({
             ? "Readers must sign this file before it opens. Click to stop requiring it."
             : "Require readers to sign this file before it opens (e.g. an NDA). You then place the signature blocks on it."
         }
-        className={`shrink-0 rounded-md border px-2 py-1 font-mono text-[11px] uppercase tracking-wider transition disabled:opacity-40 ${
+        className={`shrink-0 min-h-9 rounded-md border px-2.5 text-xs font-medium transition disabled:opacity-40 ${
           doc.requireSignature
             ? "border-gold-500/40 bg-gold-500/10 text-gold-300"
             : "border-line text-fg-muted hover:text-fg-primary"
@@ -138,7 +141,7 @@ function DocRow({
         <Link
           href={placeHref}
           title={doc.hasSignatureBlocks ? "Move or change the signature blocks" : "Readers cannot sign until you place the signature blocks"}
-          className={`shrink-0 rounded-md border px-2 py-1 font-mono text-[11px] uppercase tracking-wider transition ${
+          className={`shrink-0 min-h-9 rounded-md border px-2.5 text-xs font-medium transition ${
             doc.hasSignatureBlocks ? "border-line text-fg-muted hover:text-fg-primary" : "border-amber-500/40 bg-amber-500/10 text-amber-400"
           }`}
         >
@@ -157,7 +160,7 @@ function DocRow({
             disabled={pending}
             onClick={() => act(moveRoomDocument, "Couldn't move the document. Try again.", { dir: "up" })}
             title="Move up"
-            className="rounded px-1.5 py-1 font-mono text-[11px] text-fg-muted transition hover:text-fg-primary disabled:opacity-40"
+            className="flex min-h-9 min-w-9 items-center justify-center rounded text-sm text-fg-muted transition hover:text-fg-primary disabled:opacity-40"
           >
             ↑
           </button>
@@ -166,7 +169,7 @@ function DocRow({
             disabled={pending}
             onClick={() => act(moveRoomDocument, "Couldn't move the document. Try again.", { dir: "down" })}
             title="Move down"
-            className="rounded px-1.5 py-1 font-mono text-[11px] text-fg-muted transition hover:text-fg-primary disabled:opacity-40"
+            className="flex min-h-9 min-w-9 items-center justify-center rounded text-sm text-fg-muted transition hover:text-fg-primary disabled:opacity-40"
           >
             ↓
           </button>
@@ -178,7 +181,7 @@ function DocRow({
           type="button"
           onClick={() => onPreview(doc.id)}
           title="See this document as an LP does"
-          className="shrink-0 rounded-md border border-line px-2 py-1 font-mono text-[11px] uppercase tracking-wider text-fg-muted transition hover:border-gold-500/40 hover:text-gold-300"
+          className="shrink-0 min-h-9 rounded-md border border-line px-2.5 text-xs font-medium text-fg-muted transition hover:border-gold-500/40 hover:text-gold-300"
         >
           Preview
         </button>
@@ -188,15 +191,16 @@ function DocRow({
         disabled={pending}
         onClick={() => act(unpublishDocument, "Couldn't remove it from this room. It may still be visible. Try again.")}
         title="Remove from this room — the document stays in your library"
-        className="shrink-0 rounded-md border border-line px-2 py-1 font-mono text-[11px] uppercase tracking-wider text-fg-muted transition hover:border-status-danger/40 hover:text-status-danger disabled:opacity-40"
+        className="shrink-0 min-h-9 rounded-md border border-line px-2.5 text-xs font-medium text-fg-muted transition hover:border-status-danger/40 hover:text-status-danger disabled:opacity-40"
       >
         Remove
       </button>
+      </div>
     </div>
     <ActionError message={error} className="border-t border-line/50 px-3 py-1.5" />
     {doc.requireSignature || doc.signers.length > 0 ? (
       <details className="border-t border-line/50 px-3 py-1.5">
-        <summary className="cursor-pointer font-mono text-[11px] uppercase tracking-wider text-fg-muted">
+        <summary className="flex min-h-9 cursor-pointer items-center text-xs font-medium text-fg-muted">
           {doc.signers.length === 0 ? "No signatures yet" : `${doc.signers.length} signed`}
         </summary>
         <ul className="mt-1.5 space-y-0.5 pb-1 text-xs text-fg-secondary">
@@ -206,7 +210,7 @@ function DocRow({
               {s.envelopeId && s.envelopeStatus === "partially_signed" ? (
                 <>
                   {" "}
-                  <Link href={`/envelopes/${s.envelopeId}`} className="font-mono text-[11px] uppercase tracking-wider text-gold-300 hover:underline">
+                  <Link href={`/envelopes/${s.envelopeId}`} className="text-xs font-medium text-gold-300 hover:underline">
                     Countersign →
                   </Link>
                 </>
@@ -214,7 +218,7 @@ function DocRow({
               {s.envelopeId && s.envelopeStatus === "completed" ? (
                 <>
                   {" "}
-                  <a href={`/api/envelopes/${s.envelopeId}/executed`} className="font-mono text-[11px] uppercase tracking-wider text-gold-300 hover:underline">
+                  <a href={`/api/envelopes/${s.envelopeId}/executed`} className="text-xs font-medium text-gold-300 hover:underline">
                     Executed PDF →
                   </a>
                 </>
@@ -271,7 +275,7 @@ function AddFromLibrary({ roomId, available }: { roomId: string; available: Avai
         type="button"
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
-        className="rounded-lg border border-gold-500/40 bg-gold-500/10 px-3 py-1.5 font-mono text-[11px] uppercase tracking-wider text-gold-300 transition hover:bg-gold-500/20"
+        className="min-h-9 rounded-lg border border-gold-500/40 bg-gold-500/10 px-3 text-sm font-medium text-gold-300 transition hover:bg-gold-500/20"
       >
         + Publish from library ({available.length})
       </button>
@@ -296,7 +300,7 @@ function AddFromLibrary({ roomId, available }: { roomId: string; available: Avai
                     className="flex items-center gap-2 rounded-lg px-2 py-1.5 hover:bg-surface-1"
                   >
                     <span className="min-w-0 flex-1 truncate text-sm text-fg-secondary">{d.name}</span>
-                    <span className="shrink-0 font-mono text-[11px] uppercase tracking-wider text-fg-muted">
+                    <span className="hidden shrink-0 text-xs text-fg-muted sm:inline">
                       {d.sectionLabel}
                     </span>
                     {d.status !== "ready" ? (
@@ -308,7 +312,7 @@ function AddFromLibrary({ roomId, available }: { roomId: string; available: Avai
                       type="button"
                       disabled={pending || done}
                       onClick={() => add(d.id)}
-                      className="shrink-0 rounded-md border border-gold-500/40 px-2 py-1 font-mono text-[11px] uppercase tracking-wider text-gold-300 transition hover:bg-gold-500/10 disabled:opacity-40"
+                      className="shrink-0 min-h-9 rounded-md border border-gold-500/40 px-2.5 text-xs font-medium text-gold-300 transition hover:bg-gold-500/10 disabled:opacity-40"
                     >
                       {done ? "Published" : "Publish"}
                     </button>

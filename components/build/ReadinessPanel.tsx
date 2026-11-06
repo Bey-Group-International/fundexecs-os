@@ -29,7 +29,7 @@ function ModuleChip({ m }: { m: ModuleReadiness }) {
     <Link
       href={m.href}
       title={`${m.label}: ${m.score}% complete`}
-      className={`flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs transition hover:bg-surface-2 ${tone}`}
+      className={`flex min-h-9 items-center gap-1.5 rounded-full border px-3 text-xs transition hover:bg-surface-2 ${tone}`}
     >
       <span className="font-mono text-[11px]">{mark}</span>
       <span>{m.label}</span>
@@ -75,12 +75,12 @@ function topNextActions(
 
 export function ReadinessPanel({
   readiness,
-  floating = false,
+  embedded = false,
 }: {
   readiness: BuildReadiness;
-  /** When true, styles the panel for use inside the floating dismissable
-      alert: no bottom margin, a drop shadow, and header room for a ✕. */
-  floating?: boolean;
+  /** When true, drops the panel's own frame so it can sit inside another card
+      (the readiness summary), which already provides the border and padding. */
+  embedded?: boolean;
 }) {
   const { overall, stage, stages, modules, nextAction } = readiness;
   const nextStage = stages.find((s) => !s.unlocked);
@@ -88,11 +88,7 @@ export function ReadinessPanel({
   const topActions = topNextActions(modules, nextAction);
 
   return (
-    <div
-      className={`rounded-2xl border border-line bg-surface-1 p-5 ${
-        floating ? "shadow-2xl shadow-black/40" : "mb-6"
-      }`}
-    >
+    <div className={embedded ? "" : "mb-6 rounded-2xl border border-line bg-surface-1 p-5"}>
       <div className="flex items-start gap-4">
         <div className="relative shrink-0">
           <Ring value={overall} />
@@ -102,7 +98,7 @@ export function ReadinessPanel({
         </div>
 
         <div className="min-w-0 flex-1">
-          <div className={`flex flex-wrap items-center gap-2 ${floating ? "pr-6" : ""}`}>
+          <div className="flex flex-wrap items-center gap-2">
             <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-300">
               Investor Readiness
             </span>
@@ -111,24 +107,24 @@ export function ReadinessPanel({
             </span>
             <Link
               href="/build/data_room"
-              className="ml-auto font-mono text-[11px] uppercase tracking-wider text-fg-muted transition hover:text-gold-300"
+              className="fx-action-link ml-auto"
             >
               View materials →
             </Link>
           </div>
           <p className="mt-1 text-sm text-fg-secondary">{stage.blurb}</p>
           {nextStage ? (
-            <p className="mt-1 font-mono text-[11px] uppercase tracking-wider text-gold-300">
+            <p className="mt-1 text-xs font-medium text-gold-300">
               {gap} {gap === 1 ? "point" : "points"} to {nextStage.label}
             </p>
           ) : null}
 
           {/* Unlock track */}
-          <div className="mt-3 flex items-center gap-1.5">
+          <div className="mt-3 flex flex-wrap items-center gap-1.5">
             {stages.map((s, i) => (
               <div key={s.key} className="flex items-center gap-1.5">
                 <span
-                  className={`flex items-center gap-1 rounded-full px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider ${
+                  className={`flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium ${
                     s.current
                       ? "bg-gold-400 text-on-gold"
                       : s.unlocked
@@ -171,7 +167,7 @@ export function ReadinessPanel({
                 {idx + 1}
               </span>
               <span className="min-w-0 flex-1">
-                <span className="block font-mono text-[11px] uppercase tracking-wider text-gold-300">
+                <span className="block text-xs text-gold-300">
                   {action.impact} · {action.moduleLabel}
                 </span>
                 <span className="block truncate text-sm text-fg-primary">{action.label}</span>
