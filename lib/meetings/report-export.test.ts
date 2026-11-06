@@ -617,3 +617,24 @@ describe("what the page shows that the file used to drop", () => {
     expect(md).not.toContain("did not complete");
   });
 });
+
+describe("attendees and invitees with their email", () => {
+  const input = {
+    ...base,
+    attendees: [{ name: "Alina Reyes", email: "Alina@Example.com" }, { name: "Rae Patel" }],
+    present: [{ name: "Alina Reyes", email: null }, { name: "Dana", email: "dana@fund.test" }],
+  };
+
+  it("lists everybody with their address in the member's own download", () => {
+    const md = buildReportMarkdown(input, { includeContacts: true });
+    expect(md).toContain(
+      "## Attendees & Invitees\n\n- Alina Reyes — alina@example.com\n- Rae Patel — no email on file\n- Dana — dana@fund.test",
+    );
+  });
+
+  it("keeps the addresses out of the copies that are emailed or shared", () => {
+    const md = buildReportMarkdown(input);
+    expect(md).not.toContain("alina@example.com");
+    expect(md).not.toContain("## Attendees & Invitees");
+  });
+});

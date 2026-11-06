@@ -86,6 +86,8 @@ export async function loadPresentPeople(
     const people: PresentPerson[] = [];
     /** Where to write each member's address once the directory is read. */
     const byUser = new Map<string, PresentPerson>();
+    /** And each guest's, once their knock is read. */
+    const byGuestKey = new Map<string, PresentPerson>();
 
     for (const row of rows.slice(0, PRESENT_LIMIT)) {
       const name = (row.display_name ?? "").trim();
@@ -102,6 +104,34 @@ export async function loadPresentPeople(
       const person: PresentPerson = { name: name || "Guest", email: null };
       people.push(person);
       if (row.user_id) byUser.set(row.user_id, person);
+      else if (row.guest_key) byGuestKey.set(row.guest_key, person);
+    }
+
+    // A guest has no directory row, but may have given an address at the door,
+    // stored on their knock. Read under the caller's own client: the knock is
+    // readable by the meeting's organisation, the people a report is for.
+    //
+    // Contained: a guest's address is a bonus, and failing to read it must
+    // never cost the meeting its attendance list.
+    if (byGuestKey.size > 0) {
+      try {
+        const { data: knocks, error: knockError } = await supabase
+          .from("live_meeting_admissions")
+          .select("guest_key, email")
+          .eq("meeting_id", meetingId)
+          .in("guest_key", [...byGuestKey.keys()]);
+        if (knockError) {
+          console.warn("[recipients] guest email lookup failed", knockError.message);
+        } else {
+          for (const k of (knocks ?? []) as Array<{ guest_key: string; email: string | null }>) {
+            const person = byGuestKey.get(k.guest_key);
+            const email = (k.email ?? "").trim().toLowerCase();
+            if (person && email) person.email = email;
+          }
+        }
+      } catch (err) {
+        console.warn("[recipients] guest email lookup threw", err);
+      }
     }
 
     if (byUser.size === 0) return people;

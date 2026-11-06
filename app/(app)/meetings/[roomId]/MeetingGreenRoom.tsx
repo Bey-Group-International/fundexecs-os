@@ -94,6 +94,12 @@ export interface MeetingGreenRoomProps {
   joining: boolean;
   displayName: string;
   onDisplayNameChange: (name: string) => void;
+  /**
+   * The optional email a guest gives so the follow-up and the report can reach
+   * them. Asked only of `isGuest` joiners, who have no account to read it from.
+   */
+  guestEmail?: string;
+  onGuestEmailChange?: (email: string) => void;
   meetingTitle?: string | null;
   scheduledAt?: string | null;
   onJoin: (choice: GreenRoomChoice) => void;
@@ -424,6 +430,8 @@ export function MeetingGreenRoom({
   joining,
   displayName,
   onDisplayNameChange,
+  guestEmail = "",
+  onGuestEmailChange,
   meetingTitle,
   scheduledAt,
   onJoin,
@@ -1399,6 +1407,27 @@ export function MeetingGreenRoom({
                 className="rounded-lg border border-[var(--line)] bg-[var(--surface-0)] px-3 py-2.5 text-base text-[var(--fg-primary)] placeholder:text-[var(--fg-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--gold-400)] sm:text-sm"
               />
             </label>
+            )}
+
+            {/* A guest has no account to read an address from, so the report
+                listed them with "no email" and the follow-up never reached
+                them. Optional: joining never waits on it. */}
+            {isGuest && !checking && onGuestEmailChange && (
+              <label className="flex flex-col gap-1.5">
+                <span className="text-xs text-[var(--fg-muted)]">
+                  Email <span className="text-[var(--fg-muted)]/80">(optional, for the meeting notes)</span>
+                </span>
+                <input
+                  type="email"
+                  inputMode="email"
+                  value={guestEmail}
+                  onChange={(e) => onGuestEmailChange(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter" && !e.nativeEvent.isComposing) join(); }}
+                  placeholder="you@company.com"
+                  autoComplete="email"
+                  className="rounded-lg border border-[var(--line)] bg-[var(--surface-0)] px-3 py-2.5 text-base text-[var(--fg-primary)] placeholder:text-[var(--fg-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--gold-400)] sm:text-sm"
+                />
+              </label>
             )}
 
             {otherProblems.length > 0 && (

@@ -731,3 +731,24 @@ describe("the report's insights", () => {
     expect(screen.queryByText("Suggested agenda")).toBeNull();
   });
 });
+
+describe("everybody's email on the report", () => {
+  afterEach(() => {
+    side.participants = [];
+  });
+
+  it("shows each attendee's and invitee's email, and offers to copy them all", async () => {
+    db.report = { summary: "Done.", key_points: [], action_items: [], analysis: {}, full_transcript: "x" };
+    side.participants = [
+      { name: "Alex Rivera", email: "host@fundexecs.com", role: "host", attended: true, receivesFollowUp: false },
+      { name: "Ana Diaz", email: "ana@acme.com", role: "invitee", attended: false, receivesFollowUp: true },
+      { name: "Guest (phone)", email: null, role: "attendee", attended: true, receivesFollowUp: false },
+    ];
+    await renderPage();
+
+    expect(screen.getByRole("link", { name: "ana@acme.com" })).toHaveAttribute("href", "mailto:ana@acme.com");
+    expect(screen.getByRole("link", { name: "host@fundexecs.com" })).toBeInTheDocument();
+    expect(screen.getByText("No email on file")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Copy all emails (2)" })).toBeInTheDocument();
+  });
+});

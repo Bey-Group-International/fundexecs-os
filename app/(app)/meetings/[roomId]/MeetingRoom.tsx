@@ -71,6 +71,10 @@ import {
   type ChatDelivery,
   type ChatMessage,
   type ChatTurn,
+  PRIVATE_CHANNEL_ID,
+  PRIVATE_CHANNEL_LABEL,
+  decodePrivate,
+  encodePrivate,
 } from "@/lib/meetings/chat";
 import { CopilotErrorBoundary } from "./CopilotErrorBoundary";
 import type { PanelTab } from "./CallParts";
@@ -380,6 +384,10 @@ type SignalMsg =
   // millisecond, and it is the primary key of the row the message is stored
   // as. Optional, so a client on an older build still chats.
   | { type: "chat"; from: string; displayName: string; text: string; ts: number; id?: string }
+  // The host pinned (or unpinned) a chat message. Only a nudge: whoever hears it
+  // reads the pin back from the server, which only the host can write, so a
+  // forged broadcast pins nothing.
+  | { type: "chat_pin"; from: string }
   | { type: "raise_hand"; from: string; raised: boolean }
   | { type: "reaction"; from: string; emoji: string; ts: number }
   | { type: "mute_all"; from: string }
@@ -970,6 +978,20 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
 
   // Chat
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  // The message the host pinned to the top of the chat, by id.
+  const [pinnedChatId, setPinnedChatId] = useState<string | null>(null);
+  // Private messages: one data channel per peer, opened on the call's own
+  // encrypted connection to that person. See attachPrivateChannel.
+  const privateChannelsRef = useRef(new Map<string, RTCDataChannel>());
+  /** Peers a private message can reach right now: their channel is open. */
+  const [privateReady, setPrivateReady] = useState<ReadonlySet<string>>(() => new Set());
+  /** Sent private messages waiting for the recipient's receipt. */
+  const privateAckTimersRef = useRef(new Map<string, ReturnType<typeof setTimeout>>());
+  /** Set below, once the chat handlers exist; read when a peer connection opens. */
+  const attachPrivateChannelRef = useRef<(peerId: string, channel: RTCDataChannel) => void>(() => {});
+  // The live transcript, as the Transcript tab draws it. A copy of the room's
+  // transcript ref, refreshed while that tab is showing — see the effect below.
+  const [transcriptView, setTranscriptView] = useState<TranscriptLine[]>([]);
   // Read by retryChat, which must not re-create itself every time somebody
   // speaks — a new identity on each message would re-run the panel's effects.
   const chatMessagesRef = useRef<ChatMessage[]>([]);
@@ -1241,6 +1263,12 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
   const [displayName, setDisplayName] = useState("");
   const [joining, setJoining] = useState(false);
   const [isGuest, setIsGuest] = useState(false);
+  // The optional address a guest without an account gives at the door, sent
+  // with their knock so the report and the follow-up can reach them. A ref as
+  // well, because the knock is made inside the admission session's closure.
+  const [guestEmail, setGuestEmail] = useState("");
+  const guestEmailRef = useRef("");
+  useEffect(() => { guestEmailRef.current = guestEmail; }, [guestEmail]);
   const [showGuestUpsell, setShowGuestUpsell] = useState(false);
   // Read from the signaling handlers, which must not be re-created (and the
   // channel re-subscribed) just because this flipped.
@@ -2117,6 +2145,18 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
       console.info("[meeting] codec preference not applied", err);
     }
 
+    // The private-message channel. Pre-agreed (`negotiated`, fixed id) and
+    // created by both ends before the offer, so it rides the first negotiation
+    // and nobody has to offer it — and after the media transceivers, so the
+    // media m-lines keep their order. A peer on an older build never answers
+    // on it; the receipt each message waits for is what says so honestly.
+    try {
+      const channel = pc.createDataChannel(PRIVATE_CHANNEL_LABEL, { negotiated: true, id: PRIVATE_CHANNEL_ID });
+      attachPrivateChannelRef.current(peerId, channel);
+    } catch (err) {
+      console.info("[meeting] private chat unavailable for this peer", err);
+    }
+
     pc.ontrack = (ev) => {
       // Prefer the stream the far end named, so both sides agree on identity,
       // but never depend on it: a renegotiated or msid-less answer arrives with
@@ -2700,6 +2740,10 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
         setChatMessages((prev) => insertMessage(prev, chatMsg));
         if (!chatOpenRef.current) setChatUnread((n) => n + 1);
       }
+    }
+
+    if (msg.type === "chat_pin" && msg.from !== myId) {
+      void loadChatHistoryRef.current();
     }
 
     if (msg.type === "raise_hand") {
@@ -3438,7 +3482,12 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
           // The id this client will appear under in the room, so the host's
           // "remove that tile" can be resolved by the server rather than
           // claimed by a peer. See the removals route.
-          body: JSON.stringify({ guestKey, displayName: name, signalId: myIdRef.current }),
+          body: JSON.stringify({
+            guestKey,
+            displayName: name,
+            signalId: myIdRef.current,
+            ...(guestEmailRef.current.trim() ? { email: guestEmailRef.current.trim() } : {}),
+          }),
         });
         const body = res.ok ? ((await res.json()) as { status?: string }) : null;
         const status = admissionStatusFromResponse(res.status, body);
@@ -6270,10 +6319,12 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     try {
       const res = await fetch(chatUrl(), { cache: "no-store" });
       if (!res.ok) return;
-      const { messages } = (await res.json()) as { messages?: ChatMessage[] };
+      const { messages, pinnedId } = (await res.json()) as { messages?: ChatMessage[]; pinnedId?: string | null };
       if (Array.isArray(messages) && messages.length) {
         setChatMessages((prev) => mergeChat(prev, messages));
       }
+      // The server's answer is the pin, whoever says otherwise over the socket.
+      if (pinnedId !== undefined) setPinnedChatId(pinnedId ?? null);
     } catch (err) {
       console.warn("[meeting] chat history unavailable", err);
     }
@@ -6330,6 +6381,12 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
   const retryChat = useCallback(async (id: string) => {
     const msg = chatMessagesRef.current.find((m) => m.id === id);
     if (!msg || msg.delivery !== "failed") return;
+    // A private message goes back the way it went: to that one person, never
+    // to the room and never to the server.
+    if (msg.privateWith) {
+      sendPrivateRef.current(msg);
+      return;
+    }
     setChatMessages((prev) => markDelivery(prev, id, "sending"));
     void persistChatRef.current(msg);
     const delivery = await sendSignalAck({
@@ -6337,6 +6394,152 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     });
     setChatMessages((prev) => markDelivery(prev, id, delivery));
   }, [sendSignalAck]);
+
+  /**
+   * Put a private message on its way to one person, and wait for their receipt.
+   *
+   * Over the call's own data channel to that peer — encrypted end to end by
+   * the connection, never on the room's broadcast channel, never stored. The
+   * recipient answers with a receipt; until it lands the message is "sending",
+   * and without one in a few seconds it is "failed" and can be retried. That
+   * receipt is the honest test: a peer on an older build opens no channel to
+   * read it, and the message must not claim to have arrived.
+   */
+  const sendPrivate = useCallback((msg: ChatMessage) => {
+    const to = msg.privateWith?.id;
+    if (!to) return;
+    const channel = privateChannelsRef.current.get(to);
+    setChatMessages((prev) => insertMessage(markDelivery(prev, msg.id, "sending"), { ...msg, delivery: "sending" }));
+    const fail = () => {
+      privateAckTimersRef.current.delete(msg.id);
+      setChatMessages((prev) => markDelivery(prev, msg.id, "failed"));
+    };
+    if (!channel || channel.readyState !== "open") {
+      fail();
+      return;
+    }
+    try {
+      channel.send(encodePrivate(msg));
+    } catch {
+      fail();
+      return;
+    }
+    const prior = privateAckTimersRef.current.get(msg.id);
+    if (prior) clearTimeout(prior);
+    privateAckTimersRef.current.set(msg.id, setTimeout(fail, 6000));
+  }, []);
+  const sendPrivateRef = useRef(sendPrivate);
+  useEffect(() => { sendPrivateRef.current = sendPrivate; }, [sendPrivate]);
+
+  /** Say something to one person only. */
+  const sendPrivateChat = useCallback((peerId: string, raw: string) => {
+    const text = normalizeChatText(raw);
+    if (!text) return;
+    const name = displayNameFor({ from: peerId }, peersDataRef.current);
+    sendPrivate({
+      id: crypto.randomUUID(),
+      from: myIdRef.current,
+      displayName: localNameRef.current,
+      text,
+      ts: Date.now(),
+      delivery: "sending",
+      privateWith: { id: peerId, name, direction: "out" },
+    });
+  }, [sendPrivate]);
+
+  /**
+   * Wire one peer's private channel: open and closed decide whether they can be
+   * written to; a message gets a receipt; a receipt settles one of ours.
+   */
+  const attachPrivateChannel = useCallback((peerId: string, channel: RTCDataChannel) => {
+    privateChannelsRef.current.set(peerId, channel);
+    const setReady = (ready: boolean) =>
+      setPrivateReady((prev) => {
+        if (prev.has(peerId) === ready) return prev;
+        const next = new Set(prev);
+        if (ready) next.add(peerId); else next.delete(peerId);
+        return next;
+      });
+    channel.onopen = () => setReady(true);
+    channel.onclose = () => {
+      setReady(false);
+      if (privateChannelsRef.current.get(peerId) === channel) privateChannelsRef.current.delete(peerId);
+    };
+    channel.onmessage = (ev: MessageEvent) => {
+      // A receipt for one of ours.
+      if (typeof ev.data === "string" && ev.data.startsWith('{"kind":"private-ack"')) {
+        try {
+          const { id } = JSON.parse(ev.data) as { id?: unknown };
+          if (typeof id !== "string") return;
+          const timer = privateAckTimersRef.current.get(id);
+          if (timer) clearTimeout(timer);
+          privateAckTimersRef.current.delete(id);
+          setChatMessages((prev) => markDelivery(prev, id, "sent"));
+        } catch { /* not a receipt */ }
+        return;
+      }
+      const wire = decodePrivate(ev.data);
+      if (!wire) return;
+      // The roster's name for the sender, not the one in the payload.
+      const name = displayNameFor({ from: peerId, displayName: wire.displayName }, peersDataRef.current);
+      setChatMessages((prev) =>
+        insertMessage(prev, {
+          id: wire.id,
+          from: peerId,
+          displayName: name,
+          text: wire.text,
+          ts: resolveTimestamp(wire.ts, Date.now()),
+          privateWith: { id: peerId, name, direction: "in" },
+        }),
+      );
+      if (!chatOpenRef.current) setChatUnread((n) => n + 1);
+      try { channel.send(JSON.stringify({ kind: "private-ack", id: wire.id })); } catch { /* they will retry */ }
+    };
+    if (channel.readyState === "open") setReady(true);
+  }, []);
+  attachPrivateChannelRef.current = attachPrivateChannel;
+
+  /**
+   * Pin a message to the top of the chat, or clear the pin. Host only — the
+   * route decides that, not this button. The room is nudged to read the pin
+   * back from the server rather than told what it is.
+   */
+  const pinChat = useCallback(async (messageId: string | null) => {
+    const id = meetingIdRef.current;
+    if (!id) return;
+    try {
+      const res = await fetch(`/api/meetings/${id}/chat/pin`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ messageId }),
+      });
+      if (!res.ok) return;
+      setPinnedChatId(messageId);
+      sendSignal({ type: "chat_pin", from: myIdRef.current });
+    } catch (err) {
+      console.warn("[meeting] could not pin the message", err);
+    }
+  }, [sendSignal]);
+
+  // The Transcript tab's copy of the live transcript. The transcript itself is a
+  // ref — it changes several times a second while people talk, and re-rendering
+  // the room for each change is what the ref exists to avoid — so the tab reads
+  // it on a one-second clock, and only while it is the tab being looked at.
+  useEffect(() => {
+    if (!copilotOpen || panelTab !== "transcript") return;
+    const read = () => {
+      const lines = transcriptRef.current;
+      setTranscriptView((prev) => {
+        const last = lines[lines.length - 1];
+        const prevLast = prev[prev.length - 1];
+        if (prev.length === lines.length && prevLast?.id === last?.id && prevLast?.text === last?.text) return prev;
+        return lines.slice(-400);
+      });
+    };
+    read();
+    const timer = setInterval(read, 1000);
+    return () => clearInterval(timer);
+  }, [copilotOpen, panelTab]);
 
   /**
    * Whether the chat panel is the thing being looked at.
@@ -7094,6 +7297,8 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
         onCancelAdmission={cancelAdmission}
         displayName={displayName}
         onDisplayNameChange={setDisplayName}
+        guestEmail={guestEmail}
+        onGuestEmailChange={setGuestEmail}
         meetingTitle={meetingTitle}
         onJoin={(choice) => void joinMeeting(choice)}
         onPreviewStream={(s, release) => {
@@ -7536,7 +7741,10 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
             <CopilotSidebar
               srStatus={srStatus} srNoisy={srNoisy} participants={participantList} roomCode={roomCode} meetingTitle={meetingTitle}
               chatMessages={chatMessages} chatUnread={chatUnread}
-              onSendChat={(t) => void sendChat(t)} onRetryChat={(id) => void retryChat(id)} isHost={isHost}
+              onSendChat={(t, to) => (to ? sendPrivateChat(to, t) : void sendChat(t))} onRetryChat={(id) => void retryChat(id)} isHost={isHost}
+              pinnedChatId={pinnedChatId} onPinChat={isHost ? (id) => void pinChat(id) : undefined}
+              privateReady={privateReady}
+              transcriptLines={transcriptView}
               raisedHands={raisedHands} onKick={(id) => void kickPeer(id)} onAdmit={admitPeer} onDeny={denyPeer} onAdmitAll={admitAll}
               waitingPeers={livePeers}
               removedPeople={removedPeople} onAllowBack={(s) => void allowBack(s)}

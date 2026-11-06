@@ -96,6 +96,9 @@ export async function GET(
   const markdown = buildReportMarkdown({ ...loaded, correspondence }, {
     includeTranscript,
     includeCorrespondence,
+    // The member's own download: every attendee and invitee with their email.
+    // Never the emailed or shared copies; see includeContacts.
+    includeContacts: true,
     titleHeading: !rendererDrawsTitle(format),
   });
   const title = loaded.title ?? undefined;

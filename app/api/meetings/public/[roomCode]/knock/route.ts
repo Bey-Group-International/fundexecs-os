@@ -1,3 +1,4 @@
+import { cleanGuestEmail } from "@/lib/meetings/guest-email";
 import { NextRequest, NextResponse, after } from "next/server";
 import { createServerClient, createServiceClient, hasSupabaseServiceEnv } from "@/lib/supabase/server";
 import { checkRateLimit, clientIp, rateLimitHeaders } from "@/lib/rate-limit";
@@ -186,6 +187,9 @@ async function answerKnock(
   return NextResponse.json({ admissionId: existing.id, status: existing.status });
 }
 
+/** Postgres undefined_column: a column this code knows and the database does not, yet. */
+const UNDEFINED_COLUMN = "42703";
+
 /** Postgres unique_violation — here, always UNIQUE (meeting_id, guest_key). */
 const UNIQUE_VIOLATION = "23505";
 
@@ -204,6 +208,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ roo
     guestKey?: string;
     displayName?: string;
     signalId?: string;
+    email?: string;
   };
   const guestKey = typeof body.guestKey === "string" ? body.guestKey.trim() : "";
   // The id this person's client is about to appear under in the room. Recorded
@@ -214,6 +219,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ roo
   // costs it the call, because the kick still lands.
   const signalId = typeof body.signalId === "string" ? body.signalId.trim().slice(0, 64) : "";
   const displayName = (typeof body.displayName === "string" && body.displayName.trim()) || "Guest";
+  // Optional, from the join screen: where a guest without an account asked to
+  // be sent the follow-up. Anything that is not plausibly an address is no
+  // address — a typo must never stop somebody joining. See guest-email.ts.
+  const email = cleanGuestEmail(body.email);
   if (!guestKey) return NextResponse.json({ error: "guestKey required" }, { status: 400 });
 
   const { supabase, meeting } = await resolveMeeting(code);
@@ -271,25 +280,42 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ roo
   }
 
   const admitOnSight = quickAccess || caller.isOrgMember;
-  if (existing) return answerKnock(supabase, existing, admitOnSight, displayName, caller.userId, signalId);
+  if (existing) {
+    // Kept apart from the admission decision: the address says where to write
+    // afterwards and has no bearing on whether anybody comes in, so a decided
+    // knock still takes a corrected one.
+    if (email) {
+      await (supabase as any).from("live_meeting_admissions").update({ email }).eq("id", existing.id);
+    }
+    return answerKnock(supabase, existing, admitOnSight, displayName, caller.userId, signalId);
+  }
 
-  const { data: inserted, error } = await (supabase as any)
-    .from("live_meeting_admissions")
-    .insert({
-      meeting_id: meeting.id,
-      organization_id: meeting.organization_id,
-      guest_key: guestKey,
-      // The column that has been NULL on every row ever written. Without it the
-      // one table that knows a signed-in person knocked cannot say who, and a
-      // removal keyed on the account has nothing to match.
-      user_id: caller.userId,
-      ...(signalId ? { signal_id: signalId } : {}),
-      display_name: displayName,
-      status: admitOnSight ? "admitted" : "waiting",
-      ...(admitOnSight ? { decided_at: new Date().toISOString() } : {}),
-    })
-    .select("id, status")
-    .maybeSingle();
+  const row = {
+    meeting_id: meeting.id,
+    organization_id: meeting.organization_id,
+    guest_key: guestKey,
+    // The column that has been NULL on every row ever written. Without it the
+    // one table that knows a signed-in person knocked cannot say who, and a
+    // removal keyed on the account has nothing to match.
+    user_id: caller.userId,
+    ...(signalId ? { signal_id: signalId } : {}),
+    display_name: displayName,
+    status: admitOnSight ? "admitted" : "waiting",
+    ...(admitOnSight ? { decided_at: new Date().toISOString() } : {}),
+  };
+  const insertKnock = (withEmail: boolean) =>
+    (supabase as any)
+      .from("live_meeting_admissions")
+      .insert(withEmail && email ? { ...row, email } : row)
+      .select("id, status")
+      .maybeSingle();
+  let { data: inserted, error } = await insertKnock(true);
+  // The email is a bonus and must never be why somebody cannot get in. Where
+  // the column is not there yet — this code deployed ahead of its migration —
+  // the knock goes in without it.
+  if (!inserted && email && (error as { code?: string } | null)?.code === UNDEFINED_COLUMN) {
+    ({ data: inserted, error } = await insertKnock(false));
+  }
   if (inserted) {
     return NextResponse.json({ admissionId: inserted.id as string, status: inserted.status as string });
   }

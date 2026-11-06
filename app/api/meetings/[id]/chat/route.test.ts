@@ -204,3 +204,32 @@ describe("the conversation so far", () => {
     spy.mockRestore();
   });
 });
+
+describe("the pinned message", () => {
+  function wireWithPin(pinned: string | null) {
+    from.mockImplementation((table: string) => {
+      const b: Record<string, unknown> = {
+        select: () => b,
+        eq: () => b,
+        order: () => b,
+        limit: async () => ({ data: [], error: null }),
+        maybeSingle: async () => ({ data: table === "live_meetings" ? { pinned_chat_message_id: pinned } : null }),
+      };
+      return b;
+    });
+  }
+
+  it("comes back with the history, so a latecomer sees it", async () => {
+    authorizeMeetingCaller.mockResolvedValue({ ok: true, userId: "u1" });
+    wireWithPin("c9");
+    expect((await (await GET(get(), params)).json()).pinnedId).toBe("c9");
+  });
+
+  it("is null when nothing is pinned, or when it cannot be read", async () => {
+    authorizeMeetingCaller.mockResolvedValue({ ok: true, userId: "u1" });
+    wireWithPin(null);
+    expect((await (await GET(get(), params)).json()).pinnedId).toBeNull();
+    wire({ rows: [] });
+    expect((await (await GET(get(), params)).json()).pinnedId).toBeNull();
+  });
+});

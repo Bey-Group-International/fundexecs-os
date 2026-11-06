@@ -182,3 +182,15 @@ describe("the report's insight fields", () => {
     expect(report.next_meeting_agenda).toEqual(["Side letter"]);
   });
 });
+
+describe("the meeting chat in the prompt", () => {
+  it("hands the model what was typed, beside what was said", () => {
+    const prompt = reportPrompt({ title: "M", participants: [], transcript: "Ana: hi", chat: "[14:05 UTC] Bo: deck link" });
+    expect(prompt).toContain("MEETING CHAT");
+    expect(prompt).toContain("[14:05 UTC] Bo: deck link");
+  });
+
+  it("says nothing about a chat nobody used", () => {
+    expect(reportPrompt({ title: "M", participants: [], transcript: "Ana: hi" })).not.toContain("MEETING CHAT");
+  });
+});

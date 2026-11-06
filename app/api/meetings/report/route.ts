@@ -8,6 +8,7 @@ import { parseActionItem } from "@/lib/meetings/action-items";
 import { loadOrgDirectory } from "@/lib/meetings/directory.server";
 import { normalizeNoteList, normalizeNoteText } from "@/lib/meetings/live-notes";
 import { EMPTY_REPORT, generateMeetingReport } from "@/lib/meetings/report-analysis";
+import { loadChatForReport } from "@/lib/meetings/chat-for-report.server";
 import { mergeTranscripts, restoreTranscript, type StoredLine } from "@/lib/meetings/transcript-restore";
 import { meanRowConfidence, qualityPreamble, transcriptForModel, transcriptQuality } from "@/lib/meetings/transcript-quality";
 import { readAllTranscriptRows } from "@/lib/meetings/transcript-read";
@@ -237,6 +238,8 @@ export async function POST(req: Request) {
     // same people: this route used to pass the room's peer list and that one
     // the invite list, and they disagreed about who had been there.
     const presentLookup = loadPresentPeople(supabase, body.meetingId).catch(() => []);
+    // What was typed, read alongside who was there; see chat-for-report.ts.
+    const chatLookup = loadChatForReport(supabase, body.meetingId);
 
     // When the room opened. `started_at` was never written by the room (its
     // write was a query builder that was never awaited, so never sent), so the
@@ -349,7 +352,7 @@ export async function POST(req: Request) {
     //
     // A missing API key is NOT a failure and still takes the success path:
     // generateMeetingReport returns the empty report rather than throwing.
-    const [roles, firstJoinedAt, present] = await Promise.all([rolesLookup, firstJoinRead, presentLookup]);
+    const [roles, firstJoinedAt, present, chat] = await Promise.all([rolesLookup, firstJoinRead, presentLookup, chatLookup]);
     // The end is now; the start is whatever the evidence says. Decided once,
     // here, so the meeting row, the CRM timeline and the institutional record
     // all carry the same span.
@@ -378,6 +381,7 @@ export async function POST(req: Request) {
         title: body.title ?? "Untitled",
         participants,
         transcript: modelTranscript,
+        chat,
         durationSeconds: body.duration ?? null,
         host: roles.host,
         recipients: roles.recipients,
