@@ -63,7 +63,7 @@ it("offers a download in each format, with timestamps optional", async () => {
   expect(link).toHaveAttribute("href", "/api/meetings/m1/transcript/export?format=txt");
   await user.click(screen.getByLabelText("Include timestamps"));
   expect(link).toHaveAttribute("href", "/api/meetings/m1/transcript/export?format=txt&timestamps=0");
-  await user.selectOptions(screen.getByLabelText("Download format"), "srt");
+  await user.selectOptions(screen.getByLabelText("Download format"), "Captions (.srt)");
   expect(screen.getByRole("link", { name: "Download transcript" })).toHaveAttribute("href", "/api/meetings/m1/transcript/export?format=srt");
   expect(screen.queryByLabelText("Include timestamps")).toBeNull();
 });

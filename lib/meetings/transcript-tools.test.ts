@@ -154,9 +154,9 @@ describe("export", () => {
     expect(srt.startsWith("1\n00:00:00,000 --> 00:00:05,000\nSpeaker 1: Thanks for joining. Shall we start?\n\n2\n00:00:05,000 --> 00:00:09,000\n")).toBe(true);
   });
 
-  it("writes WebVTT, never letting a line end its own cue", () => {
-    const vtt = toVtt([{ speaker: "", text: "a --> b", atMs: 1_500 }]);
-    expect(vtt).toBe("WEBVTT\n\n00:00:01.500 --> 00:00:03.000\na -> b\n");
+  it("writes WebVTT with the words escaped, so no line can end its cue or open a tag", () => {
+    const vtt = toVtt([{ speaker: "", text: "a --> b <i>&", atMs: 1_500 }]);
+    expect(vtt).toBe("WEBVTT\n\n00:00:01.500 --> 00:00:03.100\na --&gt; b &lt;i&gt;&amp;\n");
   });
 
   it("names the file by date and checks the format", () => {

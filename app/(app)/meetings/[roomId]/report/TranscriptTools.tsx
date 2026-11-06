@@ -65,22 +65,29 @@ export function TranscriptToolbar({
 }
 
 function ExportPanel({ meetingId }: { meetingId: string }) {
-  const [format, setFormat] = useState<ExportFormat>("txt");
+  // The chosen format is held as its position in the fixed list, so the link
+  // is only ever built from the list's own values, never from what the page
+  // handed back.
+  const [choice, setChoice] = useState(0);
   const [timestamps, setTimestamps] = useState(true);
+  const format: ExportFormat = EXPORT_FORMATS[choice] ?? "txt";
   const captions = format === "srt" || format === "vtt";
-  const href = `/api/meetings/${meetingId}/transcript/export?format=${format}${!captions && !timestamps ? "&timestamps=0" : ""}`;
+  const href = `/api/meetings/${encodeURIComponent(meetingId)}/transcript/export?format=${format}${!captions && !timestamps ? "&timestamps=0" : ""}`;
   return (
     <div className="mt-2 flex flex-wrap items-center gap-3 text-xs text-[var(--fg-muted)]" data-transcript-export>
       <label className="flex items-center gap-1.5">
         Format
         <select
-          value={format}
-          onChange={(e) => setFormat(e.target.value as ExportFormat)}
+          value={String(choice)}
+          onChange={(e) => {
+            const i = Number.parseInt(e.target.value, 10);
+            setChoice(Number.isInteger(i) && i >= 0 && i < EXPORT_FORMATS.length ? i : 0);
+          }}
           aria-label="Download format"
           className="rounded-md border border-[var(--line)] bg-[var(--surface-0)] px-2 py-1 text-xs text-[var(--fg-primary)]"
         >
-          {EXPORT_FORMATS.map((f) => (
-            <option key={f} value={f}>
+          {EXPORT_FORMATS.map((f, i) => (
+            <option key={f} value={String(i)}>
               {EXPORT_LABELS[f]}
             </option>
           ))}

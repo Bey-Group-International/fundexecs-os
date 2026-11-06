@@ -330,10 +330,18 @@ export function toSrt(lines: readonly ExportLine[]): string {
   );
 }
 
+/**
+ * WebVTT cue text is markup: "&", "<" and ">" must be written as character
+ * references, or a speaker's words could open a tag (or end the cue with
+ * "-->"). Escaping ">" is what keeps "-->" out of a cue.
+ */
+function vttEscape(text: string): string {
+  return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
 export function toVtt(lines: readonly ExportLine[]): string {
-  // "-->" inside a cue would end it early; WebVTT has no escape for it.
   const cues = captionCues(lines).map(
-    (c) => `${captionClock(c.start, ".")} --> ${captionClock(c.end, ".")}\n${c.text.replace(/\n+/g, " ").replace(/-->/g, "->")}`,
+    (c) => `${captionClock(c.start, ".")} --> ${captionClock(c.end, ".")}\n${vttEscape(c.text.replace(/\n+/g, " "))}`,
   );
   return `WEBVTT\n\n${cues.join("\n\n")}\n`;
 }
