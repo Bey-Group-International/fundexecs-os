@@ -200,7 +200,7 @@ export function ThreadConversation({
                   : "self-start border border-line/60 bg-surface-1 text-fg-secondary"
               }`}
             >
-              <div className="mb-0.5 font-mono text-[11px] uppercase tracking-wider text-fg-muted">
+              <div className="mb-0.5 text-xs text-fg-muted">
                 {m.author ?? (m.direction === "outbound" ? "You" : card.counterparty)} · {relativeMeeting(m.occurredAt)}
               </div>
               <div className="whitespace-pre-wrap break-words">{m.body}</div>
@@ -235,7 +235,7 @@ export function ThreadConversation({
             somebody else wrote, with no explanation, reads as a message that was
             already sent. */}
         {draftNote ? (
-          <p className="mb-2 inline-flex items-center gap-1 rounded-md border border-gold-500/40 bg-gold-500/5 px-2 py-1 font-mono text-[11px] uppercase tracking-wider text-gold-300">
+          <p className="mb-2 inline-flex items-center gap-1 rounded-md border border-gold-500/40 bg-gold-500/5 px-2 py-1 text-xs text-gold-300">
             <span aria-hidden>✎</span> {draftNote}
           </p>
         ) : null}
@@ -287,15 +287,15 @@ export function ThreadConversation({
         </ComposerAttachments>
         <div className="mt-1.5 flex flex-wrap items-center justify-between gap-2">
           {card.connected && LIVE_CAPABLE_CHANNELS.has(card.channel) ? (
-            <span className="font-mono text-[11px] uppercase tracking-wider text-fg-muted">
+            <span className="text-xs text-fg-muted">
               Routes through connected {card.channelLabel} · approvals if required
             </span>
           ) : card.connected ? (
-            <span className="font-mono text-[11px] uppercase tracking-wider text-fg-muted">
+            <span className="text-xs text-fg-muted">
               {card.channelLabel} sending isn&apos;t live yet — this will be recorded on the thread but not delivered.
             </span>
           ) : (
-            <span className="font-mono text-[11px] uppercase tracking-wider text-fg-muted">
+            <span className="text-xs text-fg-muted">
               {card.channelLabel} not connected — sends save as drafts.{" "}
               <Link href="/settings/integrations" className="text-gold-300 hover:underline">
                 Connect →
