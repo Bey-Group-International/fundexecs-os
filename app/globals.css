@@ -121,6 +121,13 @@ body {
   .fx-btn-secondary {
     @apply fx-btn rounded-lg border border-line px-4 py-2 text-sm text-fg-secondary hover:bg-surface-2 hover:text-fg-primary;
   }
+  /* A text link that acts like a small button: readable sentence-case, a 36px tap
+     target, a visible focus ring. For "Open the list ->" links beside a heading,
+     where the old 11px uppercase monospace was neither readable nor easy to hit
+     on a phone. */
+  .fx-action-link {
+    @apply fx-focus inline-flex min-h-9 items-center gap-1 rounded-md px-1.5 text-sm font-medium text-gold-300 underline-offset-4 transition hover:underline;
+  }
   /* Glass panel — for the hero/anchor surfaces that should feel set back behind
      a pane of frosted glass. */
   .fx-glass {

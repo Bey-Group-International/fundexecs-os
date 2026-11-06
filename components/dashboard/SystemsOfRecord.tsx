@@ -46,14 +46,14 @@ export function SystemsOfRecord({ systems }: { systems: SystemStatus[] }) {
             <span className="font-display text-2xl font-bold leading-none tracking-tight text-fg-primary transition-colors duration-200 group-hover:text-white">
               {s.primary}
             </span>
-            <span className="font-mono text-[11px] uppercase tracking-wider text-fg-muted">
+            <span className="text-xs text-fg-muted">
               {s.unit}
             </span>
           </div>
           {s.detail ? (
-            <p className="truncate text-[11px] text-fg-secondary">{s.detail}</p>
+            <p className="truncate text-xs text-fg-secondary">{s.detail}</p>
           ) : null}
-          <p className="mt-auto pt-1 font-mono text-[11px] uppercase tracking-wider text-fg-muted/70">
+          <p className="mt-auto pt-1 text-xs text-fg-muted">
             {s.health === "empty" ? "Awaiting first record" : `Updated ${relTime(s.lastActivity)}`}
           </p>
         </Link>

@@ -33,6 +33,13 @@ const STAGE_COLORS: Record<string, string> = {
   closing: "#5FB87A",
 };
 
+// "ic_review" -> "IC review", "sourced" -> "Sourced". CSS capitalize would give "Ic Review".
+function stageLabel(stage: string): string {
+  if (stage === "ic_review") return "IC review";
+  const t = stage.replace(/_/g, " ");
+  return t.charAt(0).toUpperCase() + t.slice(1);
+}
+
 const KPI_TONE: Record<KpiMetric["tone"], string> = {
   gold: "text-gold-300",
   neural: "text-neural-300",
@@ -85,7 +92,7 @@ function KpiTile({ kpi, delay }: { kpi: KpiMetric; delay: number }) {
         {kpi.value}
       </p>
       {kpi.sub ? (
-        <p className="mt-1.5 truncate font-mono text-[11px] uppercase tracking-wider text-fg-muted/80">
+        <p className="mt-1.5 truncate text-xs text-fg-muted">
           {kpi.sub}
         </p>
       ) : null}
@@ -110,7 +117,7 @@ function CapitalPanel({ data }: { data: CapitalPanelData }) {
     <div className="fx-card p-5">
       <SectionHeading
         action={
-          <Link href="/source/lp_pipeline" className="font-mono text-[11px] uppercase tracking-wider text-gold-300 hover:underline">
+          <Link href="/source/lp_pipeline" className="fx-action-link">
             LP pipeline →
           </Link>
         }
@@ -122,8 +129,8 @@ function CapitalPanel({ data }: { data: CapitalPanelData }) {
           The committed / called headline dollars live in the KPI band above; this
           panel shows deployment and the LP pipeline, not the same totals again. */}
       <div className="flex items-baseline justify-between">
-        <span className="font-mono text-[11px] uppercase tracking-wider text-fg-muted">Capital deployed</span>
-        <span className="font-mono text-[11px] uppercase tracking-wider text-fg-secondary">
+        <span className="text-xs text-fg-muted">Capital deployed</span>
+        <span className="text-xs text-fg-secondary">
           {Math.round(calledPct)}% called · {Math.round(distPct)}% returned
         </span>
       </div>
@@ -169,7 +176,7 @@ function PortfolioPanel({ data }: { data: PortfolioPanelData }) {
     <div className="fx-card p-5">
       <SectionHeading
         action={
-          <Link href="/source/deal_pipeline" className="font-mono text-[11px] uppercase tracking-wider text-gold-300 hover:underline">
+          <Link href="/source/deal_pipeline" className="fx-action-link">
             Deal pipeline →
           </Link>
         }
@@ -181,8 +188,8 @@ function PortfolioPanel({ data }: { data: PortfolioPanelData }) {
           value and portfolio NAV are headline figures in the KPI band above, so
           this panel shows the funnel and diligence posture, not the totals again. */}
       <div className="flex items-baseline justify-between">
-        <span className="font-mono text-[11px] uppercase tracking-wider text-fg-muted">Deal funnel</span>
-        <span className="font-mono text-[11px] uppercase tracking-wider text-fg-secondary">
+        <span className="text-xs text-fg-muted">Deal funnel</span>
+        <span className="text-xs text-fg-secondary">
           {data.dealCount} deal{data.dealCount === 1 ? "" : "s"} · {data.assetCount} asset{data.assetCount === 1 ? "" : "s"}
         </span>
       </div>
@@ -202,7 +209,7 @@ function PortfolioPanel({ data }: { data: PortfolioPanelData }) {
             })
           : null}
       </div>
-      <div className="mt-3 grid grid-cols-5 gap-1.5">
+      <div className="mt-3 grid grid-cols-3 gap-1.5 sm:grid-cols-5">
         {data.byStage.map(({ stage, count }) => {
           const color = STAGE_COLORS[stage] ?? "#38bdf8";
           return (
@@ -213,14 +220,14 @@ function PortfolioPanel({ data }: { data: PortfolioPanelData }) {
               >
                 {count}
               </p>
-              <p className="mt-1 font-mono text-[11px] uppercase tracking-wide text-fg-muted">
-                {stage.replace("_", " ")}
+              <p className="mt-1 text-xs text-fg-muted">
+                {stageLabel(stage)}
               </p>
             </div>
           );
         })}
       </div>
-      <p className="mt-3 border-t border-line/60 pt-3 font-mono text-[11px] uppercase tracking-wider text-fg-muted">
+      <p className="mt-3 border-t border-line/60 pt-3 text-xs text-fg-muted">
         {data.diligenceOpen} diligence open · {data.icRecent} recent IC decision{data.icRecent === 1 ? "" : "s"}
       </p>
     </div>
@@ -325,7 +332,7 @@ export default async function DashboardPage() {
         <div className="lg:col-span-2">
           <SectionHeading
             action={
-              <Link href="/activity" className="font-mono text-[11px] uppercase tracking-wider text-gold-300 hover:underline">
+              <Link href="/activity" className="fx-action-link">
                 Full activity →
               </Link>
             }
