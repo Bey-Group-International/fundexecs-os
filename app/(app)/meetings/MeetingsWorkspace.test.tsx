@@ -192,3 +192,34 @@ describe("weeks", () => {
     expect(within(panel("upcoming")).getByText(/Nothing next week/)).toBeInTheDocument();
   });
 });
+
+describe("the day at a glance and booking requests", () => {
+  it("sums up today with chips that open their lists", () => {
+    show();
+    const nav = screen.getByRole("navigation", { name: "Today at a glance" });
+    expect(nav.textContent).toMatch(/1 more today · 1h/);
+    expect(nav.textContent).toMatch(/1 needs prep/);
+    fireEvent.click(within(nav).getByRole("button", { name: /needs prep/ }));
+    expect(screen.getByRole("tab", { name: /needs action/i }).getAttribute("aria-selected")).toBe("true");
+  });
+
+  it("puts booking requests at the top of Needs you", async () => {
+    global.fetch = (async (url: string) =>
+      String(url).startsWith("/api/meetings/scheduling/bookings")
+        ? {
+            ok: true,
+            json: async () => ({
+              requests: [
+                { id: "bk1", eventTitle: "Intro call", inviteeName: "Ada", inviteeEmail: "a@x.test", inviteeNotes: null, startsAt: at(2), endsAt: at(2, 11), createdAt: at(-1) },
+              ],
+            }),
+          }
+        : { ok: true, json: async () => ({}) }) as unknown as typeof fetch;
+    show();
+    await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+    fireEvent.click(screen.getByRole("tab", { name: /needs action/i }));
+    expect(screen.getByText("Ada · Intro call")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Approve" })).toBeInTheDocument();
+    expect(screen.getByRole("navigation", { name: "Today at a glance" }).textContent).toMatch(/1 booking request/);
+  });
+});

@@ -45,6 +45,8 @@ import { useLivePresence, useNow } from "./hooks";
 import { useUpcomingMeetings } from "./useUpcomingMeetings";
 import { UpNextStrip } from "./UpNextStrip";
 import { upNextMeeting } from "@/lib/meetings/lobby";
+import { todaySummary } from "@/lib/meetings/lobby-today";
+import { BookingRequestRow, TodayChips, useBookingRequests } from "./LobbyToday";
 import type { UpcomingMeeting } from "./UpcomingMeetingsList";
 
 /** How often the list re-reads the clock. Every label it drives is minute-grained. */
@@ -144,9 +146,31 @@ export function MeetingsWorkspace({
     [initialPendingFollowUps, query],
   );
   const actions = useMemo(() => needsAction(matching, statusOf, pending, now), [matching, statusOf, pending, now]);
+  // Booking requests waiting on a decision, at the top of "Needs you".
+  const { requests: bookingRequests, setRequests: setBookingRequests } = useBookingRequests();
+  const shownRequests = useMemo(
+    () =>
+      bookingRequests.filter((r) =>
+        matchesQuery({ id: r.id, title: `${r.inviteeName} ${r.eventTitle ?? ""} ${r.inviteeEmail}`, scheduled_at: null }, query),
+      ),
+    [bookingRequests, query],
+  );
+  const summary = useMemo(
+    () =>
+      todaySummary(
+        meetings,
+        {
+          prep: actions.filter((a) => a.reason === "prep").length,
+          followUps: actions.filter((a) => a.reason !== "prep").length,
+          requests: bookingRequests.length,
+        },
+        now,
+      ),
+    [meetings, actions, bookingRequests.length, now],
+  );
 
   const counts: Record<WorkspaceTab, number> = {
-    needs: actions.length,
+    needs: actions.length + shownRequests.length,
     today: today.length,
     upcoming: matching.length,
     past: initialLogs.length,
@@ -296,6 +320,7 @@ export function MeetingsWorkspace({
   return (
     <div className="flex flex-col gap-3">
       <UpNextStrip next={next} now={now} />
+      <TodayChips summary={summary} onOpen={(target) => setTab(target === "today" ? "today" : "needs")} />
       {/* Tabs, search, and — for Upcoming — the week. */}
       <div className="flex flex-col gap-3 border-b border-line pb-3 md:flex-row md:items-end md:justify-between">
         <div role="tablist" aria-label="Meetings" className="-mb-px flex gap-1 overflow-x-auto">
@@ -308,7 +333,7 @@ export function MeetingsWorkspace({
               aria-selected={tab === id}
               aria-controls={`panel-${id}`}
               onClick={() => setTab(id)}
-              className={`fx-focus flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-1.5 font-mono text-[11px] font-semibold uppercase tracking-[0.12em] transition-colors ${
+              className={`fx-focus flex min-h-11 shrink-0 items-center gap-1.5 rounded-lg px-3 py-1.5 font-mono sm:min-h-0 text-[11px] font-semibold uppercase tracking-[0.12em] transition-colors ${
                 tab === id ? "bg-surface-3 text-fg-primary" : "text-fg-muted hover:bg-surface-2 hover:text-fg-secondary"
               }`}
             >
@@ -446,7 +471,16 @@ export function MeetingsWorkspace({
       <div className={`grid grid-cols-1 gap-4 ${previewing ? "lg:grid-cols-[minmax(0,1fr)_380px]" : ""} lg:items-start`}>
         <div className="flex min-w-0 flex-col gap-4">
           <div id="panel-needs" role="tabpanel" aria-labelledby="tab-needs" hidden={tab !== "needs"} className="flex flex-col gap-1.5">
-            {tab !== "needs" ? null : actions.length === 0 ? (
+            {tab === "needs"
+              ? shownRequests.map((r) => (
+                  <BookingRequestRow
+                    key={`request-${r.id}`}
+                    request={r}
+                    onDecided={(id) => setBookingRequests((prev) => prev.filter((x) => x.id !== id))}
+                  />
+                ))
+              : null}
+            {tab !== "needs" ? null : actions.length === 0 && shownRequests.length === 0 ? (
               <EmptyState
                 title="Nothing needs you"
                 body="Meetings that still need preparing, follow-ups that haven't gone out, and follow-ups nobody has answered show up here."
