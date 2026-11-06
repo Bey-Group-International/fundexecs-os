@@ -77,6 +77,12 @@ const DOC_LABEL: Record<string, string> = {
   ic_memo: "IC Memo",
 };
 
+// On a phone the table scrolls sideways inside its frame. Pinning the first
+// column keeps the deal's name beside whatever column you have scrolled to, so a
+// stage or an amount is never separated from the deal it belongs to. Below `sm`
+// only: on wider screens the table fits and rows keep their hover tint.
+const PINNED_CELL = "max-sm:sticky max-sm:left-0 max-sm:z-10 max-sm:max-w-[11rem] max-sm:bg-surface-0";
+
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
 function formatCurrency(n: number | null | undefined): string {
@@ -180,7 +186,9 @@ function StageDropdown({
         type="button"
         onClick={(e) => { e.stopPropagation(); setOpen((v) => !v); }}
         disabled={pending}
-        className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium capitalize transition ${badgeClass} ${pending ? "opacity-60" : "cursor-pointer hover:opacity-80"}`}
+        aria-label={`${stageLabel(deal.stage)} — change stage for ${deal.name}`}
+        aria-expanded={open}
+        className={`inline-flex min-h-8 items-center gap-1 rounded-full px-2.5 text-xs font-medium capitalize transition ${badgeClass} ${pending ? "opacity-60" : "cursor-pointer hover:opacity-80"}`}
       >
         {stageLabel(deal.stage)}
         <svg className="h-2.5 w-2.5 opacity-60" viewBox="0 0 10 6" fill="none">
@@ -322,7 +330,7 @@ function DealSlideOver({
               </p>
               <a
                 href="/build/documents"
-                className="mt-1.5 inline-block font-mono text-[11px] uppercase tracking-widest text-gold-300 hover:underline"
+                className="fx-action-link mt-1"
               >
                 Go to Documents →
               </a>
@@ -791,8 +799,8 @@ export function DealPipeline({ deals, enrichCap, pipelineStages }: Props) {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-line bg-surface-subtle">
-                {["Deal", "Stage", "Asset Class", "Target", "Fit", "Source", "Close", ""].map((h) => (
-                  <th key={h} className="px-4 py-3 text-left font-mono text-[11px] uppercase tracking-[0.16em] text-fg-muted">
+                {["Deal", "Stage", "Asset Class", "Target", "Fit", "Source", "Close", ""].map((h, hi) => (
+                  <th key={h} className={`px-4 py-3 text-left font-mono text-[11px] uppercase tracking-[0.16em] text-fg-muted ${hi === 0 ? PINNED_CELL : ""}`}>
                     {h}
                   </th>
                 ))}
@@ -812,7 +820,7 @@ export function DealPipeline({ deals, enrichCap, pipelineStages }: Props) {
                     if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setSelectedDeal(d); }
                   }}
                 >
-                  <td className="px-4 py-3">
+                  <td className={`px-4 py-3 ${PINNED_CELL}`}>
                     <div className="flex items-center gap-1.5">
                       <p className="font-medium text-fg">{d.name}</p>
                       {d.provenance === "ai" ? (
