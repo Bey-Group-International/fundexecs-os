@@ -64,9 +64,9 @@ export function NeedsYouStrip({ approvals, approvalsCapped, staleDeals, readines
           Nothing needs you right now.
         </p>
       ) : (
-        <ul className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+        <ul className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
           {items.map((it) => (
-            <li key={it.key}>
+            <li key={it.key} className="min-w-0">
               <Link
                 href={it.href}
                 className={`fx-card fx-card-hover flex min-h-14 items-center justify-between gap-3 px-4 py-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-400 ${

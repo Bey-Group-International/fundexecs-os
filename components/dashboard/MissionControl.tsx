@@ -87,7 +87,7 @@ function HubTile({ signal }: { signal: HubSignal }) {
         <div className="min-w-0">
           <p className="text-sm font-medium leading-snug text-fg-primary">{signal.metric}</p>
           {signal.detail ? (
-            <p className="mt-0.5 font-mono text-[11px] uppercase tracking-wider text-fg-muted">
+            <p className="mt-0.5 text-xs text-fg-muted">
               {signal.detail}
             </p>
           ) : null}

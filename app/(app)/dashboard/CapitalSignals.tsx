@@ -25,7 +25,7 @@ export function HottestCapital({ entries }: { entries: CapitalMapEntry[] }) {
           <span aria-hidden className="h-3 w-0.5 rounded-full bg-gold-500/70" />
           Hottest capital
         </h2>
-        <Link href="/capital-map" className="font-mono text-[11px] uppercase tracking-wider text-gold-300 hover:underline">
+        <Link href="/capital-map" className="fx-action-link">
           Capital Map →
         </Link>
       </div>
@@ -87,7 +87,7 @@ export function PendingGates({ approvals }: { approvals: Approval[] }) {
           Pending gates
         </h2>
         {approvals.length > 0 ? (
-          <Link href="/grid/review" className="font-mono text-[11px] uppercase tracking-wider text-gold-300 hover:underline">
+          <Link href="/grid/review" className="fx-action-link">
             Review →
           </Link>
         ) : null}

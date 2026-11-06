@@ -52,10 +52,10 @@ export function ActivityFeed({ items }: { items: ActivityItem[] }) {
                     {item.title}
                   </span>
                   {item.detail ? (
-                    <span className="block truncate text-[11px] text-fg-muted">{item.detail}</span>
+                    <span className="block truncate text-xs text-fg-muted">{item.detail}</span>
                   ) : null}
                 </span>
-                <span className="shrink-0 font-mono text-[11px] uppercase tracking-wider text-fg-muted/80">
+                <span className="shrink-0 text-xs text-fg-muted">
                   {relTime(item.at)}
                 </span>
               </Link>

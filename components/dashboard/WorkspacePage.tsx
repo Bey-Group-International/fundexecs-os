@@ -112,7 +112,7 @@ function QuickActionPanel({ view }: { view: WorkspaceViewModel }) {
         <h2 className="font-mono text-xs uppercase tracking-wider text-fg-muted">
           Quick action
         </h2>
-        <Link href={view.primaryAction.href} className="font-mono text-[11px] uppercase tracking-wider text-gold-300 hover:underline">
+        <Link href={view.primaryAction.href} className="fx-action-link">
           {view.primaryAction.label} →
         </Link>
       </div>
