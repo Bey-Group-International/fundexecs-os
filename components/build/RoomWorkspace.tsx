@@ -93,6 +93,9 @@ export function RoomWorkspace({
   const [query, setQuery] = useState("");
   const [section, setSection] = useState<string | null>(null);
   const [needsAttention, setNeedsAttention] = useState(false);
+  // On a phone the rail stacks above the pane; the section index folds away so
+  // the room's contents are not pushed off the first screen. Desktop always shows it.
+  const [indexOpen, setIndexOpen] = useState(false);
 
   const attentionIds = useMemo(
     () => new Set([...warnings.unfinished, ...warnings.empty]),
@@ -129,7 +132,7 @@ export function RoomWorkspace({
       type="button"
       onClick={() => setTab(t)}
       aria-current={tab === t}
-      className={`flex items-center gap-1.5 rounded-lg px-3.5 py-1.5 font-mono text-[11px] uppercase tracking-wider transition ${
+      className={`flex min-h-9 items-center gap-1.5 rounded-lg px-4 text-sm font-medium transition ${
         tab === t ? "bg-gold-400 text-on-gold" : "border border-line text-fg-secondary hover:text-fg-primary"
       }`}
     >
@@ -141,7 +144,7 @@ export function RoomWorkspace({
   );
 
   return (
-    <div className="grid gap-6 lg:grid-cols-[15rem_minmax(0,1fr)]">
+    <div className="grid grid-cols-1 gap-6 lg:grid-cols-[15rem_minmax(0,1fr)]">
       {/* ---------------------------------------------------------------- Rail */}
       <aside className="lg:sticky lg:top-[calc(var(--app-header-h)+1.5rem)] lg:self-start">
         {/* Capped to the viewport so the rail's footer stays reachable while
@@ -182,7 +185,7 @@ export function RoomWorkspace({
                   setTab("contents");
                 }}
                 aria-pressed={needsAttention}
-                className={`mt-2 w-full rounded-lg border px-2.5 py-1.5 text-left font-mono text-[11px] uppercase tracking-wider transition ${
+                className={`mt-2 min-h-9 w-full rounded-lg border px-3 text-left text-sm font-medium transition ${
                   needsAttention
                     ? "border-amber-500/50 bg-amber-500/10 text-amber-400"
                     : "border-line text-fg-muted hover:border-amber-500/30 hover:text-amber-400"
@@ -194,7 +197,24 @@ export function RoomWorkspace({
           </div>
 
           {/* Index */}
-          <nav className="flex max-h-[24rem] min-h-0 flex-col gap-0.5 overflow-y-auto p-2 lg:max-h-none lg:flex-1">
+          <button
+            type="button"
+            onClick={() => setIndexOpen((v) => !v)}
+            aria-expanded={indexOpen}
+            aria-controls="room-index"
+            className="flex min-h-11 w-full items-center justify-between gap-2 px-4 text-sm font-medium text-fg-primary lg:hidden"
+          >
+            <span>
+              Sections <span className="text-fg-muted">· {sections.length}</span>
+            </span>
+            <span aria-hidden className={`text-xs text-fg-muted transition ${indexOpen ? "rotate-180" : ""}`}>▾</span>
+          </button>
+          <nav
+            id="room-index"
+            className={`min-h-0 flex-col gap-0.5 overflow-y-auto p-2 lg:flex lg:max-h-none lg:flex-1 ${
+              indexOpen ? "flex max-h-[24rem] border-t border-line/60" : "hidden"
+            }`}
+          >
             <button
               type="button"
               onClick={() => {
@@ -202,7 +222,7 @@ export function RoomWorkspace({
                 setTab("contents");
               }}
               aria-current={section === null}
-              className={`flex items-center gap-2 rounded-lg px-3 py-2 text-left text-sm transition ${
+              className={`flex min-h-10 items-center gap-2 rounded-lg px-3 text-left text-sm transition ${
                 section === null
                   ? "bg-surface-0 font-medium text-fg-primary"
                   : "text-fg-secondary hover:bg-surface-0/60 hover:text-fg-primary"
@@ -224,7 +244,7 @@ export function RoomWorkspace({
                     setTab("contents");
                   }}
                   aria-current={active}
-                  className={`flex items-center gap-2 rounded-lg px-3 py-2 text-left text-sm transition ${
+                  className={`flex min-h-10 items-center gap-2 rounded-lg px-3 text-left text-sm transition ${
                     active
                       ? "bg-surface-0 font-medium text-fg-primary"
                       : "text-fg-secondary hover:bg-surface-0/60 hover:text-fg-primary"
@@ -255,7 +275,7 @@ export function RoomWorkspace({
               <p className="mt-1 text-xs leading-snug text-fg-secondary">{nextGap}</p>
               <Link
                 href="/build/documents"
-                className="mt-2 inline-block font-mono text-[11px] uppercase tracking-wider text-gold-300 hover:underline"
+                className="fx-action-link mt-1"
               >
                 Open Documents →
               </Link>
@@ -294,7 +314,7 @@ export function RoomWorkspace({
                   setSection(null);
                   setNeedsAttention(false);
                 }}
-                className="shrink-0 font-mono text-[11px] uppercase tracking-wider text-fg-muted hover:text-gold-300"
+                className="fx-action-link shrink-0"
               >
                 Clear filters
               </button>
