@@ -1,8 +1,11 @@
-// Server-side session/context helpers. The "active organization" is, for now,
-// the principal's first membership (multi-org switching comes later). Returns
+// Server-side session/context helpers. The "active organization" is the one the
+// person chose with the workspace switcher (a cookie, validated against their
+// memberships by pickActiveMembership), else their oldest membership. Returns
 // enough context for the authed layout to gate routes and for API handlers to
 // scope writes.
 import { cache } from "react";
+import { cookies } from "next/headers";
+import { ACTIVE_ORG_COOKIE, pickActiveMembership } from "@/lib/active-org";
 import { createServerClient, hasSupabaseServerEnv } from "@/lib/supabase/server";
 import type { MemberRole } from "@/lib/supabase/database.types";
 import { buildMfaState, mfaGate, verifiedTotpFactors, type AssuranceLevel, type MfaState } from "@/lib/mfa";
@@ -25,6 +28,15 @@ export interface SessionContext {
 const perRequest: typeof cache =
   typeof cache === "function" ? cache : (fn) => fn;
 
+/** The saved workspace choice, or undefined outside a request (tests, scripts). */
+async function readActiveOrgCookie(): Promise<string | undefined> {
+  try {
+    return (await cookies()).get(ACTIVE_ORG_COOKIE)?.value;
+  } catch {
+    return undefined;
+  }
+}
+
 export const getSessionContext = perRequest(async (): Promise<SessionContext | null> => {
   if (!hasSupabaseServerEnv()) return null;
 
@@ -38,13 +50,12 @@ export const getSessionContext = perRequest(async (): Promise<SessionContext | n
     } = await supabase.auth.getUser();
     if (!user) return null;
 
-    const { data: membership } = await supabase
+    const { data: memberships } = await supabase
       .from("organization_members")
       .select("organization_id, role")
       .eq("principal_id", user.id)
-      .order("created_at", { ascending: true })
-      .limit(1)
-      .maybeSingle();
+      .order("created_at", { ascending: true });
+    const membership = pickActiveMembership(memberships ?? [], await readActiveOrgCookie());
 
     // Only ask for the assurance level when a factor exists: with none, the
     // level is irrelevant, and this saves a session read on most requests.

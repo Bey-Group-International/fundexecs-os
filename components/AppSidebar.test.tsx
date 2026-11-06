@@ -120,3 +120,51 @@ it("shows no workspace block when the organization name is unknown", () => {
   render(<AppSidebar {...props} />);
   expect(screen.queryByTestId("workspace-name")).not.toBeInTheDocument();
 });
+
+describe("workspace switcher", () => {
+  const orgs = [
+    { id: "org-a", name: "Bey Group International" },
+    { id: "org-b", name: "Second Fund LLC" },
+  ];
+
+  it("is a plain label when the person belongs to one organization", () => {
+    mockPath = "/dashboard";
+    render(
+      <AppSidebar
+        {...props}
+        orgName="Bey Group International"
+        orgs={[orgs[0]]}
+        activeOrgId="org-a"
+        onSwitchOrg={jest.fn()}
+      />,
+    );
+    expect(screen.queryByTestId("workspace-switcher")).not.toBeInTheDocument();
+    expect(screen.getByTestId("workspace-name")).toHaveTextContent("Bey Group International");
+  });
+
+  it("lists every organization and marks the current one", () => {
+    mockPath = "/dashboard";
+    render(
+      <AppSidebar
+        {...props}
+        orgName="Bey Group International"
+        orgs={orgs}
+        activeOrgId="org-a"
+        onSwitchOrg={jest.fn()}
+      />,
+    );
+    const current = screen.getByRole("button", { name: /Bey Group International/ });
+    const other = screen.getByRole("button", { name: /Second Fund LLC/ });
+    expect(current).toBeDisabled();
+    expect(current).toHaveAttribute("aria-current", "true");
+    expect(other).toBeEnabled();
+    expect(other).toHaveAttribute("name", "orgId");
+    expect(other).toHaveAttribute("value", "org-b");
+  });
+
+  it("has no switcher without a handler to switch with", () => {
+    mockPath = "/dashboard";
+    render(<AppSidebar {...props} orgName="Bey Group International" orgs={orgs} activeOrgId="org-a" />);
+    expect(screen.queryByTestId("workspace-switcher")).not.toBeInTheDocument();
+  });
+});

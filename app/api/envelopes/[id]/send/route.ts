@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createServerClient } from "@/lib/supabase/server";
+import { getSessionContext } from "@/lib/auth";
 import { inviteSigners } from "@/lib/envelope-invite.server";
 import { recipientsWithoutSignature } from "@/lib/envelope-fields";
 
@@ -19,19 +20,12 @@ export async function POST(_req: Request, props: { params: Promise<{ id: string 
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
 
-  // Resolve org
-  const { data: membership } = await supabase
-    .from("organization_members")
-    .select("organization_id")
-    .eq("principal_id", user.id)
-    .order("created_at", { ascending: true })
-    .limit(1)
-    .maybeSingle();
-
-  if (!membership?.organization_id) {
+  // Resolve org: the one the person is working in, not just their first.
+  const ctx = await getSessionContext();
+  if (!ctx?.orgId) {
     return NextResponse.json({ error: "No organization found" }, { status: 403 });
   }
-  const orgId = membership.organization_id;
+  const orgId = ctx.orgId;
 
   // Update envelope status to 'sent'
   // Nothing goes out until every signer, and the owner, has a signature block to sign on.
