@@ -30,7 +30,7 @@ import { NdaSignatures } from "./NdaSignatures";
 import { RoomSignatures } from "./RoomSignatures";
 import { SignaturesAwaiting } from "./SignaturesAwaiting";
 import { loadSignaturesAwaitingFund } from "@/lib/data-room-signatures.server";
-import type { SignatureTask } from "@/lib/data-room-signatures";
+import { signatureLoadError, type SignatureTask } from "@/lib/data-room-signatures";
 import { AuditExport } from "./AuditExport";
 import { RoomSwitcher } from "./RoomSwitcher";
 import { RoomWorkspace } from "./RoomWorkspace";
@@ -120,7 +120,7 @@ export async function MaterialsModule({ roomId }: { roomId?: string } = {}) {
     // read as "nothing to sign": it is carried to the tab and shown as an error.
     loadSignaturesAwaitingFund(orgId).then(
       (tasks) => ({ tasks, error: null as string | null }),
-      (e: unknown) => ({ tasks: [] as SignatureTask[], error: e instanceof Error ? e.message : "Couldn't load the signatures." }),
+      (e: unknown) => ({ tasks: [] as SignatureTask[], error: signatureLoadError(e) }),
     ),
   ]);
 

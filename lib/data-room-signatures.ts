@@ -61,3 +61,13 @@ export function waitingLabel(days: number | null): string {
   if (days === 0) return "signed today";
   return days === 1 ? "waiting 1 day" : `waiting ${days} days`;
 }
+
+/**
+ * The message to show when the list could not be loaded. Never empty: an empty
+ * string reads as "no error", which would show the "nothing to sign" state for a
+ * failed read.
+ */
+export function signatureLoadError(e: unknown): string {
+  const message = e instanceof Error ? e.message.trim() : "";
+  return message || "Couldn't load the signatures.";
+}

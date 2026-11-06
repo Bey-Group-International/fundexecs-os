@@ -1,4 +1,4 @@
-import { daysWaiting, groupSignatureTasks, signatureSummary, waitingLabel, type SignatureTask } from "@/lib/data-room-signatures";
+import { daysWaiting, groupSignatureTasks, signatureLoadError, signatureSummary, waitingLabel, type SignatureTask } from "@/lib/data-room-signatures";
 
 const task = (id: string, roomId: string, signedAt: string | null, over: Partial<SignatureTask> = {}): SignatureTask => ({
   key: `legacy:${id}`,
@@ -61,5 +61,17 @@ describe("daysWaiting / waitingLabel", () => {
     expect(waitingLabel(0)).toBe("signed today");
     expect(waitingLabel(1)).toBe("waiting 1 day");
     expect(waitingLabel(5)).toBe("waiting 5 days");
+  });
+});
+
+describe("signatureLoadError", () => {
+  it("uses the error's own message", () => {
+    expect(signatureLoadError(new Error("Couldn't load the room signatures: boom"))).toBe("Couldn't load the room signatures: boom");
+  });
+  it("is never empty, so a failed read cannot read as no error", () => {
+    expect(signatureLoadError(new Error(""))).not.toBe("");
+    expect(signatureLoadError(new Error("   "))).not.toBe("");
+    expect(signatureLoadError("a string")).not.toBe("");
+    expect(signatureLoadError(undefined)).not.toBe("");
   });
 });
