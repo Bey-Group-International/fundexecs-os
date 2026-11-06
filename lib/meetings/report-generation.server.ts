@@ -25,6 +25,8 @@ import type { createServerClient } from "@/lib/supabase/server";
 import { generateMeetingReport } from "@/lib/meetings/report-analysis";
 import { loadChatForReport } from "@/lib/meetings/chat-for-report.server";
 import { loadMeetingBrief } from "@/lib/meetings/meeting-brief.server";
+import { loadNotetakerForReport } from "@/lib/meetings/notetaker.server";
+import { applyGlossary } from "@/lib/meetings/notetaker";
 import { inferStartedAt, meetingDurationSeconds } from "@/lib/meetings/meeting-span";
 import { mergeTranscripts, restoreTranscript, type StoredLine } from "@/lib/meetings/transcript-restore";
 import { meanRowConfidence, qualityPreamble, transcriptForModel, transcriptQuality } from "@/lib/meetings/transcript-quality";
@@ -280,17 +282,19 @@ export async function generateReportFromStoredTranscript(
 
   // The chat is read here, after every early return, so a meeting that is not
   // going to the model never pays for the read.
-  const [chat, brief] = await Promise.all([
+  const [chat, brief, notetaker] = await Promise.all([
     loadChatForReport(supabase, meeting.id),
     loadMeetingBrief(supabase, meeting.id),
+    loadNotetakerForReport(supabase as never, meeting),
   ]);
 
   let analysis = await generateMeetingReport(input.client, input.model, {
     title: meeting.title ?? "Untitled",
     participants: participantNamesForReport({ host: roles.host, present, transcript }),
-    transcript: modelTranscript,
+    transcript: applyGlossary(modelTranscript, notetaker.glossary),
     chat,
     brief,
+    notetaker: notetaker.text,
     // The span the meeting actually ran, or nothing. For a meeting being closed
     // here that is up to this moment; the booked length is never handed over.
     durationSeconds: meetingDurationSeconds({

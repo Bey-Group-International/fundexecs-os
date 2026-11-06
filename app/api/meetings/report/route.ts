@@ -10,6 +10,8 @@ import { normalizeNoteList, normalizeNoteText } from "@/lib/meetings/live-notes"
 import { EMPTY_REPORT, generateMeetingReport } from "@/lib/meetings/report-analysis";
 import { loadChatForReport } from "@/lib/meetings/chat-for-report.server";
 import { loadMeetingBrief } from "@/lib/meetings/meeting-brief.server";
+import { loadNotetakerForReport } from "@/lib/meetings/notetaker.server";
+import { applyGlossary } from "@/lib/meetings/notetaker";
 import { mergeTranscripts, restoreTranscript, type StoredLine } from "@/lib/meetings/transcript-restore";
 import { meanRowConfidence, qualityPreamble, transcriptForModel, transcriptQuality } from "@/lib/meetings/transcript-quality";
 import { readAllTranscriptRows } from "@/lib/meetings/transcript-read";
@@ -243,6 +245,8 @@ export async function POST(req: Request) {
     const chatLookup = loadChatForReport(supabase, body.meetingId);
     // What the meeting was set up to do; see meeting-brief.ts.
     const briefLookup = loadMeetingBrief(supabase, body.meetingId);
+    // The glossary, the host's notes and the bookmarks; see notetaker.ts.
+    const notetakerLookup = loadNotetakerForReport(supabase as never, meeting);
 
     // When the room opened. `started_at` was never written by the room (its
     // write was a query builder that was never awaited, so never sent), so the
@@ -355,12 +359,13 @@ export async function POST(req: Request) {
     //
     // A missing API key is NOT a failure and still takes the success path:
     // generateMeetingReport returns the empty report rather than throwing.
-    const [roles, firstJoinedAt, present, chat, brief] = await Promise.all([
+    const [roles, firstJoinedAt, present, chat, brief, notetaker] = await Promise.all([
       rolesLookup,
       firstJoinRead,
       presentLookup,
       chatLookup,
       briefLookup,
+      notetakerLookup,
     ]);
     // The end is now; the start is whatever the evidence says. Decided once,
     // here, so the meeting row, the CRM timeline and the institutional record
@@ -389,9 +394,10 @@ export async function POST(req: Request) {
       analysis = await generateMeetingReport(client, MODEL, {
         title: body.title ?? "Untitled",
         participants,
-        transcript: modelTranscript,
+        transcript: applyGlossary(modelTranscript, notetaker.glossary),
         chat,
         brief,
+        notetaker: notetaker.text,
         durationSeconds: body.duration ?? null,
         host: roles.host,
         recipients: roles.recipients,

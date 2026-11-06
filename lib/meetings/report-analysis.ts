@@ -277,6 +277,12 @@ export interface ReportAnalysisInput {
    * meeting's intake answers — formatted by meeting-brief.ts.
    */
   brief?: string | null;
+  /**
+   * What the notetaker gathered beside the transcript: the firm's glossary,
+   * the host's own notes and the moments people bookmarked — formatted by
+   * notetaker.ts. Empty or absent when there is none.
+   */
+  notetaker?: string | null;
   /** The version being corrected, so the model can see what the correction is about. */
   previous?: { summary?: string | null; followUp?: string | null } | null;
 }
@@ -316,6 +322,11 @@ export function reportPrompt(input: ReportAnalysisInput): string {
       "MEETING BRIEF (written before the meeting — what it was set up to do; the transcript says what actually happened):",
       brief,
     );
+  }
+
+  const notetaker = (input.notetaker ?? "").trim();
+  if (notetaker) {
+    lines.push("", "FROM THE NOTETAKER (gathered during the meeting):", notetaker);
   }
 
   if (correction) {

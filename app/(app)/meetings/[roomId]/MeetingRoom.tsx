@@ -77,7 +77,8 @@ import {
   encodePrivate,
 } from "@/lib/meetings/chat";
 import { CopilotErrorBoundary } from "./CopilotErrorBoundary";
-import type { PanelTab } from "./CallParts";
+import type { PanelTab, SidebarNotetaker } from "./CallParts";
+import { DEFAULT_NOTETAKER, applyGlossary, consentNotice, readNotetaker, type NotetakerSettings } from "@/lib/meetings/notetaker";
 import { NoticeStack, type StageNotice } from "./NoticeStack";
 import { useIdleControls, useRoomViewport } from "./useIdleControls";
 import { gridColumns, pageTiles } from "@/lib/meetings/room-layout";
@@ -388,6 +389,8 @@ type SignalMsg =
   // reads the pin back from the server, which only the host can write, so a
   // forged broadcast pins nothing.
   | { type: "chat_pin"; from: string }
+  /** The host changed the notetaker; read its settings back from the server. */
+  | { type: "notetaker"; from: string }
   | { type: "raise_hand"; from: string; raised: boolean }
   | { type: "reaction"; from: string; emoji: string; ts: number }
   | { type: "mute_all"; from: string }
@@ -980,6 +983,16 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   // The message the host pinned to the top of the chat, by id.
   const [pinnedChatId, setPinnedChatId] = useState<string | null>(null);
+  // The notetaker: the host's settings (paused, who sees the live notes, the
+  // transcription language) and the firm's glossary. Read by the recogniser
+  // through refs, because its handlers are bound once per run.
+  const [notetaker, setNotetaker] = useState<NotetakerSettings>(DEFAULT_NOTETAKER);
+  const notetakerPausedRef = useRef(false);
+  const notetakerLangRef = useRef<string | null>(null);
+  const glossaryRef = useRef<string[]>([]);
+  const [bookmarkVersion, setBookmarkVersion] = useState(0);
+  const [heardLines, setHeardLines] = useState(0);
+  const [consentSeen, setConsentSeen] = useState(false);
   // Private messages: one data channel per peer, opened on the call's own
   // encrypted connection to that person. See attachPrivateChannel.
   const privateChannelsRef = useRef(new Map<string, RTCDataChannel>());
@@ -2601,7 +2614,8 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
       }
     }
 
-    if (msg.type === "transcript" && msg.from !== myId) {
+    // A peer that has not heard about a pause yet is not recorded through it.
+    if (msg.type === "transcript" && msg.from !== myId && !notetakerPausedRef.current) {
       const line: TranscriptLine = {
         id: crypto.randomUUID(),
         speakerId: msg.from,
@@ -2744,6 +2758,10 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
 
     if (msg.type === "chat_pin" && msg.from !== myId) {
       void loadChatHistoryRef.current();
+    }
+
+    if (msg.type === "notetaker" && msg.from !== myId) {
+      void loadNotetakerRef.current();
     }
 
     if (msg.type === "raise_hand") {
@@ -3967,7 +3985,7 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     recognition.continuous = true; recognition.interimResults = true;
     // The browser's language, not en-US for everyone: an engine told the wrong
     // language does not fail, it produces fluent nonsense in the one it was told.
-    recognition.lang = recognitionLang(typeof navigator !== "undefined" ? navigator.language : null);
+    recognition.lang = notetakerLangRef.current ?? recognitionLang(typeof navigator !== "undefined" ? navigator.language : null);
 
     // What every line will say about the run that produced it. The brand is
     // read once: the engine behind `SpeechRecognition` is the browser's own
@@ -4043,7 +4061,8 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
       const now = Date.now();
       if (utteranceStartRef.current === null && (interim || finalText)) utteranceStartRef.current = now;
 
-      const settled = finalText.trim();
+      // The firm's spellings for the names the engine hears wrong.
+      const settled = applyGlossary(finalText.trim(), glossaryRef.current);
       let attribution: ReturnType<typeof attributeUtterance> | null = null;
       // When the settled words began; the window below is judged from there.
       let spokenAt = now;
@@ -4093,6 +4112,12 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
       // sentence in the transcript twice.
       if (attribution && !attribution.publish) {
         transcriptRef.current = transcriptRef.current.filter((l) => l.final);
+        return;
+      }
+      // The host paused the notetaker: nothing said now is kept, shown or sent.
+      if (notetakerPausedRef.current) {
+        transcriptRef.current = transcriptRef.current.filter((l) => l.final);
+        utteranceStartRef.current = null;
         return;
       }
 
@@ -6521,6 +6546,115 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     }
   }, [sendSignal]);
 
+  // ── Notetaker ──────────────────────────────────────────────────────────────
+  /** How this client proves who it is to the notetaker routes: a guest's key, or nothing. */
+  const notetakerAuthQuery = isGuest && guestKeyRef.current ? `?guestKey=${encodeURIComponent(guestKeyRef.current)}` : "";
+
+  const applyNotetaker = useCallback((next: NotetakerSettings) => {
+    setNotetaker(next);
+    notetakerPausedRef.current = next.paused;
+    if (next.paused) {
+      // Whatever was still being heard when the pause landed is not kept.
+      transcriptRef.current = transcriptRef.current.filter((l) => l.final);
+    }
+    if (notetakerLangRef.current !== next.lang) {
+      notetakerLangRef.current = next.lang;
+      // The recogniser picks the language up when it restarts, which a stop does.
+      const rec = recognitionRef.current;
+      if (rec) {
+        try {
+          rec.lang = next.lang ?? recognitionLang(typeof navigator !== "undefined" ? navigator.language : null);
+          rec.stop();
+        } catch { /* not running; the next start reads the ref */ }
+      }
+    }
+  }, []);
+
+  const loadNotetaker = useCallback(async () => {
+    const id = meetingIdRef.current;
+    if (!id) return;
+    try {
+      const res = await fetch(`/api/meetings/${id}/notetaker${notetakerAuthQuery}`, { cache: "no-store" });
+      if (!res.ok) return;
+      const body = (await res.json()) as { settings?: unknown };
+      applyNotetaker(readNotetaker(body.settings));
+    } catch { /* the defaults stand */ }
+  }, [notetakerAuthQuery, applyNotetaker]);
+  const loadNotetakerRef = useRef(loadNotetaker);
+  useEffect(() => { loadNotetakerRef.current = loadNotetaker; }, [loadNotetaker]);
+
+  useEffect(() => {
+    if (!meetingId) return;
+    void loadNotetaker();
+    if (isGuest) return;
+    // The firm's glossary, for members. A guest's lines are corrected in the report instead.
+    void (async () => {
+      try {
+        const res = await fetch("/api/meetings/glossary");
+        if (!res.ok) return;
+        const body = (await res.json()) as { terms?: Array<{ term?: unknown }> };
+        glossaryRef.current = (body.terms ?? []).map((t) => (typeof t.term === "string" ? t.term : "")).filter(Boolean);
+      } catch { /* no corrections */ }
+    })();
+  }, [meetingId, isGuest, loadNotetaker]);
+
+  /** Host only. Saved first, then the room is told to read it back. */
+  const changeNotetaker = useCallback(async (patch: Partial<NotetakerSettings>): Promise<boolean> => {
+    const id = meetingIdRef.current;
+    if (!id) return false;
+    try {
+      const res = await fetch(`/api/meetings/${id}/notetaker`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(patch),
+      });
+      if (!res.ok) return false;
+      const body = (await res.json()) as { settings?: unknown };
+      applyNotetaker(readNotetaker(body.settings));
+      sendSignal({ type: "notetaker", from: myIdRef.current });
+      return true;
+    } catch {
+      return false;
+    }
+  }, [applyNotetaker, sendSignal]);
+
+  const addBookmark = useCallback(async (label?: string): Promise<boolean> => {
+    const id = meetingIdRef.current;
+    if (!id) return false;
+    try {
+      const res = await fetch(`/api/meetings/${id}/bookmarks`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ at: new Date().toISOString(), label }),
+      });
+      if (!res.ok) return false;
+      setBookmarkVersion((v) => v + 1);
+      return true;
+    } catch {
+      return false;
+    }
+  }, []);
+
+  // How much has been said, for the Notes tab to know when the live notes are
+  // worth rewriting. Read from the ref on a slow clock, and only while it shows.
+  useEffect(() => {
+    if (!copilotOpen || panelTab !== "notes") return;
+    const read = () => setHeardLines(transcriptRef.current.reduce((n, l) => n + (l.final ? 1 : 0), 0));
+    read();
+    const timer = setInterval(read, 10_000);
+    return () => clearInterval(timer);
+  }, [copilotOpen, panelTab]);
+
+  const sidebarNotetaker = useMemo<SidebarNotetaker>(() => ({
+    settings: notetaker,
+    signedIn: !isGuest,
+    onSettingsChange: isHost ? changeNotetaker : undefined,
+    lineCount: heardLines,
+    bookmarkVersion,
+    onBookmark: isGuest ? undefined : addBookmark,
+    authQuery: notetakerAuthQuery,
+  }), [notetaker, isGuest, isHost, changeNotetaker, heardLines, bookmarkVersion, addBookmark, notetakerAuthQuery]);
+
   // The Transcript tab's copy of the live transcript. The transcript itself is a
   // ref — it changes several times a second while people talk, and re-rendering
   // the room for each change is what the ref exists to avoid — so the tab reads
@@ -7410,6 +7544,36 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
         </button>
       </div>
   ) });
+  // The notetaker, said plainly to everyone: on joining, that the meeting is
+  // being transcribed and noted (dismissible); and for as long as the host has
+  // paused it, that nothing is being kept (pinned, with Resume for the host).
+  if (notetaker.paused) stageNotices.push({ id: "notetaker-paused", pinned: true, priority: 60, node: (
+      <div className="flex items-center gap-3 px-4 py-2 bg-[var(--surface-2)] border-b border-[var(--line)] shrink-0" data-notetaker="paused">
+        <span className="shrink-0" aria-hidden>⏸</span>
+        <p className="flex-1 text-sm text-[var(--fg-primary)]">{consentNotice(notetaker)}</p>
+        {isHost && (
+          <button onClick={() => void changeNotetaker({ paused: false })}
+            className="shrink-0 min-h-9 rounded-full bg-[var(--gold-400)] px-3 text-xs font-semibold text-black">
+            Resume
+          </button>
+        )}
+      </div>
+  ) });
+  else if (!consentSeen) stageNotices.push({ id: "notetaker-consent", priority: 10, node: (
+      <div className="flex items-center gap-3 px-4 py-2 bg-[var(--surface-2)] border-b border-[var(--line)] shrink-0" data-notetaker="on">
+        <span className="shrink-0" aria-hidden>📝</span>
+        <p className="flex-1 text-sm text-[var(--fg-primary)]">{consentNotice(notetaker)}</p>
+        {isHost && (
+          <button onClick={() => void changeNotetaker({ paused: true })}
+            className="shrink-0 min-h-9 rounded-full border border-[var(--line)] px-3 text-xs font-medium text-[var(--fg-primary)]">
+            Pause
+          </button>
+        )}
+        <button onClick={() => setConsentSeen(true)} className="shrink-0 min-h-9 px-2 text-xs font-medium text-[var(--fg-muted)] underline">
+          Got it
+        </button>
+      </div>
+  ) });
   // Media permission warning. Stood down while the banner above is up:
   // they would otherwise say much the same thing twice, and only one of
   // them can be acted on.
@@ -7757,6 +7921,7 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
               // host's firm is not something the room can tell from attendance,
               // so the route decides and the panel reports the refusal.
               canShareDocs={!isGuest}
+              notetaker={sidebarNotetaker}
             />
             </CopilotErrorBoundary>
             </div>
