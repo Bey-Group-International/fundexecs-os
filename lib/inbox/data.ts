@@ -102,11 +102,13 @@ export async function autoUnsnoozeExpired(
  */
 export async function getInboxThreads(
   supabase: SupabaseClient<Database>,
+  orgId: string,
   filters: InboxThreadFilters = {},
 ): Promise<InboxThreadView[]> {
   let query = supabase
     .from("inbox_threads")
     .select("*")
+    .eq("organization_id", orgId)
     // The inbox focuses on messages — capital, partners, providers, and comms.
     // Shared-deal updates live in their own "deals that fit you" feed.
     .neq("channel", "deal_share");

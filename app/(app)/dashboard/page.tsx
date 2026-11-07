@@ -242,10 +242,10 @@ export default async function DashboardPage() {
   const supabase = await createServerClient();
   const [dashboard, capitalMap, readiness, pendingGatesRes, dealsRes] = await Promise.all([
     getInstitutionalDashboard(supabase, ctx.orgId),
-    buildCapitalMap(supabase),
+    buildCapitalMap(supabase, ctx.orgId),
     getBuildReadiness(ctx.orgId),
-    supabase.from("approvals").select("*").eq("decision", "pending").order("created_at", { ascending: false }).limit(PENDING_GATES_LIMIT),
-    supabase.from("deals").select("*").is("archived_at", null).order("created_at", { ascending: false }).limit(30),
+    supabase.from("approvals").select("*").eq("organization_id", ctx.orgId).eq("decision", "pending").order("created_at", { ascending: false }).limit(PENDING_GATES_LIMIT),
+    supabase.from("deals").select("*").eq("organization_id", ctx.orgId).is("archived_at", null).order("created_at", { ascending: false }).limit(30),
   ]);
 
   const pendingGates = (pendingGatesRes.data ?? []) as Approval[];

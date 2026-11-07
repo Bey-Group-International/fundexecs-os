@@ -21,8 +21,12 @@ export default async function MarketplacePage() {
   const supabase = await createServerClient();
   const [listingsRes, investorsRes, dealsRes] = await Promise.all([
     supabase.from("marketplace_listings").select("*").order("created_at", { ascending: false }),
-    supabase.from("investors").select("*").limit(500),
-    supabase.from("deals").select("id, name, geography, asset_class").limit(500),
+    supabase.from("investors").select("*").eq("organization_id", ctx.orgId).limit(500),
+    supabase
+      .from("deals")
+      .select("id, name, geography, asset_class")
+      .eq("organization_id", ctx.orgId)
+      .limit(500),
   ]);
   const listings = (listingsRes.data ?? []) as MarketplaceListing[];
   const investors = (investorsRes.data ?? []) as Investor[];

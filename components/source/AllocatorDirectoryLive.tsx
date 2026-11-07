@@ -169,6 +169,7 @@ async function loadAllocatorEntries() {
       supabase
         .from("investment_theses")
         .select("check_size_min, check_size_max, geographies")
+        .eq("organization_id", orgId)
         .eq("is_active", true)
         .order("updated_at", { ascending: false })
         .limit(1),

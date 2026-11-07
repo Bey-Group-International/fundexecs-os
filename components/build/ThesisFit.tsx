@@ -10,7 +10,11 @@ export async function ThesisFit({ thesis }: { thesis: InvestmentThesis | null })
   if (!thesis) return null;
 
   const supabase = await createServerClient();
-  const { data } = await supabase.from("investors").select("*").limit(100);
+  const { data } = await supabase
+    .from("investors")
+    .select("*")
+    .eq("organization_id", thesis.organization_id)
+    .limit(100);
   const investors = (data ?? []) as Investor[];
 
   if (investors.length === 0) {

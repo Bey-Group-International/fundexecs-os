@@ -265,23 +265,38 @@ export function findIntroPath(
  * Build the Capital Map for the active org. Returns one entry per investor,
  * sorted hottest-first (committed and high-fit at the top).
  */
-export async function buildCapitalMap(supabase: Client): Promise<CapitalMapEntry[]> {
+export async function buildCapitalMap(supabase: Client, orgId: string): Promise<CapitalMapEntry[]> {
   const [investorsRes, thesisRes, commitmentsRes, relationshipsRes, membersRes] =
     await Promise.all([
-      supabase.from("investors").select("*").is("archived_at", null).limit(500),
+      supabase
+        .from("investors")
+        .select("*")
+        .eq("organization_id", orgId)
+        .is("archived_at", null)
+        .limit(500),
       supabase
         .from("investment_theses")
         .select("*")
+        .eq("organization_id", orgId)
         .eq("is_active", true)
         .order("updated_at", { ascending: false })
         .limit(1),
-      supabase.from("commitments").select("investor_id, committed_amount").limit(1000),
+      supabase
+        .from("commitments")
+        .select("investor_id, committed_amount")
+        .eq("organization_id", orgId)
+        .limit(1000),
       supabase
         .from("relationships")
         .select("from_entity_type, from_entity_id, to_entity_type, to_entity_id, relation, metadata")
+        .eq("organization_id", orgId)
         .eq("graph", "relationship")
         .limit(2000),
-      supabase.from("organization_members").select("principal_id").limit(200),
+      supabase
+        .from("organization_members")
+        .select("principal_id")
+        .eq("organization_id", orgId)
+        .limit(200),
     ]);
 
   const investors = (investorsRes.data ?? []) as Investor[];

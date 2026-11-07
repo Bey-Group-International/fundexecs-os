@@ -77,6 +77,7 @@ export default async function InboxPage(
   // is not a serial leg in front of the whole fetch. Best-effort per its own
   // contract: a failed wake leaves those threads snoozed for one more load
   // instead of failing the page.
+  const orgId = ctx.orgId;
   const woken = autoUnsnoozeExpired(supabase, ctx.orgId).catch(() => {});
   // Two lanes, one inbox: the action queue ("needs you" — approvals, overdue
   // diligence, IC-ready deals, open risks) and the unified communications
@@ -84,7 +85,7 @@ export default async function InboxPage(
   // assignee picker — all fetched in parallel.
   const [inbox, views, teammates, connectedChannels] = await Promise.all([
     getInbox(ctx.orgId),
-    woken.then(() => getInboxThreads(supabase, filters)),
+    woken.then(() => getInboxThreads(supabase, orgId, filters)),
     getOrgTeammates(),
     orgConnectedChannels(supabase, ctx.orgId),
   ]);

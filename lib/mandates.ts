@@ -115,14 +115,14 @@ export async function getActiveMandate(
   supabase: Client,
   orgId?: string,
 ): Promise<Mandate | undefined> {
-  // RLS scopes the client to the caller's org, so we never filter by orgId;
-  // it is accepted for call-site clarity and forward use.
-  void orgId;
-
-  const { data } = await supabase
+  // RLS spans every org the person belongs to, so scope to the given org: a
+  // mandate from another workspace must never gate this one's actions.
+  let query = supabase
     .from("mandates")
     .select("auto_approve, autonomy_ceiling, scope, guardrails, blast_radius_rules")
-    .eq("is_active", true)
+    .eq("is_active", true);
+  if (orgId) query = query.eq("organization_id", orgId);
+  const { data } = await query
     .order("updated_at", { ascending: false })
     .limit(1)
     .maybeSingle();
@@ -199,12 +199,13 @@ export async function getActiveScreeningCriteria(
   supabase: Client,
   orgId?: string,
 ): Promise<ScreeningCriteria | null> {
-  void orgId;
   try {
-    const { data } = await supabase
+    let query = supabase
       .from("mandates")
       .select("screening_criteria")
-      .eq("is_active", true)
+      .eq("is_active", true);
+    if (orgId) query = query.eq("organization_id", orgId);
+    const { data } = await query
       .order("updated_at", { ascending: false })
       .limit(1)
       .maybeSingle();

@@ -16,6 +16,7 @@ export async function TrackRecordModule() {
   const { data } = await supabase
     .from("track_records")
     .select("*")
+    .eq("organization_id", ctx.orgId)
     .order("vintage_year", { ascending: false });
   const records = (data ?? []) as TrackRecord[];
 

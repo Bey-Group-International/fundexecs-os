@@ -84,12 +84,13 @@ function humanize(value: string): string {
 }
 
 // --- Relationship graph -----------------------------------------------------
-async function buildRelationshipGraph(supabase: Client): Promise<GraphData> {
+async function buildRelationshipGraph(supabase: Client, orgId: string): Promise<GraphData> {
   const { data: edges } = await supabase
     .from("relationships")
     .select(
       "from_entity_type, from_entity_id, to_entity_type, to_entity_id, relation, strength",
     )
+    .eq("organization_id", orgId)
     .eq("graph", "relationship")
     .limit(500);
 
@@ -167,11 +168,11 @@ async function buildRelationshipGraph(supabase: Client): Promise<GraphData> {
 }
 
 // --- Deal graph -------------------------------------------------------------
-async function buildDealGraph(supabase: Client): Promise<GraphData> {
+async function buildDealGraph(supabase: Client, orgId: string): Promise<GraphData> {
   const [dealsRes, fundsRes, assetsRes] = await Promise.all([
-    supabase.from("deals").select("id, name, stage, fund_id").limit(500),
-    supabase.from("funds").select("id, name, fund_type").limit(500),
-    supabase.from("assets").select("id, name, deal_id").limit(500),
+    supabase.from("deals").select("id, name, stage, fund_id").eq("organization_id", orgId).limit(500),
+    supabase.from("funds").select("id, name, fund_type").eq("organization_id", orgId).limit(500),
+    supabase.from("assets").select("id, name, deal_id").eq("organization_id", orgId).limit(500),
   ]);
 
   const deals = dealsRes.data ?? [];
@@ -210,13 +211,18 @@ async function buildDealGraph(supabase: Client): Promise<GraphData> {
 }
 
 // --- Capital graph ----------------------------------------------------------
-async function buildCapitalGraph(supabase: Client): Promise<GraphData> {
+async function buildCapitalGraph(supabase: Client, orgId: string): Promise<GraphData> {
   const [fundsRes, investorsRes, commitmentsRes] = await Promise.all([
-    supabase.from("funds").select("id, name").limit(500),
-    supabase.from("investors").select("id, name, investor_type").limit(500),
+    supabase.from("funds").select("id, name").eq("organization_id", orgId).limit(500),
+    supabase
+      .from("investors")
+      .select("id, name, investor_type")
+      .eq("organization_id", orgId)
+      .limit(500),
     supabase
       .from("commitments")
       .select("fund_id, investor_id, committed_amount")
+      .eq("organization_id", orgId)
       .limit(1000),
   ]);
 
@@ -246,18 +252,19 @@ async function buildCapitalGraph(supabase: Client): Promise<GraphData> {
   return { nodes: nodes.list(), edges };
 }
 
-// Assemble the requested graph. The Supabase client is RLS-scoped, so results
-// are already org-bounded.
+// Assemble the requested graph for one organization. RLS bounds the client to
+// every org the person belongs to, so each read also filters on the active org.
 export async function buildGraph(
   supabase: Client,
   graph: GraphKind,
+  orgId: string,
 ): Promise<GraphData> {
   switch (graph) {
     case "relationship":
-      return buildRelationshipGraph(supabase);
+      return buildRelationshipGraph(supabase, orgId);
     case "deal":
-      return buildDealGraph(supabase);
+      return buildDealGraph(supabase, orgId);
     case "capital":
-      return buildCapitalGraph(supabase);
+      return buildCapitalGraph(supabase, orgId);
   }
 }
