@@ -11,6 +11,7 @@ import type { Browser } from "playwright-core";
 
 import { VIEWPORTS, chromiumPath, inspect, pageHtml, report } from "@/test-utils/visual";
 import { OperatingBriefCard, SessionCard, SessionsHeader } from "@/components/workspace/SessionsView";
+import { ShowMoreList } from "@/components/workspace/ShowMoreList";
 import { buildOperatingBrief } from "@/lib/operating-brief";
 import type { Session } from "@/lib/supabase/database.types";
 
@@ -47,6 +48,15 @@ const session = (id: string, over: Partial<Session & { updated_at: string | null
     ...over,
   }) as Session & { updated_at: string | null };
 
+// Twenty-five sessions: more than the first ten, so the list folds.
+const recentList = () =>
+  wrap(
+    React.createElement(ShowMoreList, {
+      items: Array.from({ length: 25 }, (_, i) =>
+        React.createElement(SessionCard, { key: i, s: session(`r${i}`, { name: i === 0 ? LONG : `Session r${i}` }), groupName: null }),
+      ),
+    }),
+  );
 const header = () => wrap(React.createElement(SessionsHeader));
 const list = () =>
   wrap(
@@ -82,6 +92,7 @@ describeVisual("The Sessions page pieces", () => {
   const cases: [string, () => string][] = [
     ["Sessions header", header],
     ["Session list", list],
+    ["Recent list, folded", recentList],
     ["Operating brief", brief],
   ];
   for (const [name, markup] of cases) {
@@ -116,6 +127,24 @@ describeVisual("The Sessions page pieces", () => {
       await page.setContent(await pageHtml(brief()), { waitUntil: "load" });
       const h = await page.evaluate(() => Math.round((document.querySelector("summary") as HTMLElement).getBoundingClientRect().height));
       expect(h).toBeGreaterThanOrEqual(36);
+    } finally {
+      await page.close();
+    }
+  });
+
+  it("folds a long Recent list to ten rows, with a thumb-sized button that stays on screen", async () => {
+    const page = await browser.newPage({ viewport: { width: 400, height: 900 } });
+    try {
+      await page.setContent(await pageHtml(recentList()), { waitUntil: "load" });
+      const r = await page.evaluate(() => {
+        const button = document.querySelector("button") as HTMLElement;
+        const b = button.getBoundingClientRect();
+        return { rows: document.querySelectorAll("a").length, right: Math.round(b.right), h: Math.round(b.height), text: button.textContent?.trim() };
+      });
+      expect(r.rows).toBe(10);
+      expect(r.text).toBe("Show all 25 sessions");
+      expect(r.right).toBeLessThanOrEqual(400);
+      expect(r.h).toBeGreaterThanOrEqual(36);
     } finally {
       await page.close();
     }
