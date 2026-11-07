@@ -6,6 +6,7 @@ import { getActiveIntegrations } from "@/lib/integrations/active";
 import { orgConnectedChannels } from "@/lib/integrations/gateway";
 import Copilot from "@/components/Copilot";
 import { OperatingBriefCard, SessionCard, SessionsHeader } from "@/components/workspace/SessionsView";
+import { ShowMoreList } from "@/components/workspace/ShowMoreList";
 import { buildOperatingBrief } from "@/lib/operating-brief";
 import type { Session, SessionGroup } from "@/lib/supabase/database.types";
 
@@ -147,11 +148,13 @@ export default async function SessionsPage({
           <h2 className="mb-3 font-mono text-[11px] uppercase tracking-widest text-fg-muted">
             Recent
           </h2>
-          <div className="flex flex-col gap-1.5">
-            {recent.map((s) => (
+          {/* The first ten; the rest open on request, so a long history does not
+              push the composer a screen or more down the page. */}
+          <ShowMoreList
+            items={recent.map((s) => (
               <SessionCard key={s.id} s={s} groupName={s.group_id ? groupById.get(s.group_id) ?? null : null} />
             ))}
-          </div>
+          />
         </section>
       )}
 
