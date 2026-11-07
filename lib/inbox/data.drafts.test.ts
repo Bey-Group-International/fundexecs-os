@@ -79,6 +79,7 @@ function client(opts: {
       asked.readDrafts = true;
       const chain = {
         select: () => chain,
+        eq: () => chain,
         order: () => chain,
         limit: async () => ({ data: opts.drafts ?? [], error: null }),
       };
@@ -95,7 +96,8 @@ function client(opts: {
           : { data: opts.page ?? [], error: null };
       const chain: Record<string, unknown> = {
         select: () => chain,
-        eq: () => chain,
+        // The org filter ends the backfill chain, so it must stay awaitable.
+        eq: () => Object.assign(Promise.resolve(result()), chain),
         is: () => chain,
         or: () => chain,
         order: () => chain,
@@ -120,7 +122,7 @@ function client(opts: {
 describe("the draft on a thread", () => {
   it("reaches the view, so the card can say a reply is waiting", async () => {
     const { supabase } = client({ page: [thread()], drafts: [draftRow("t1")] });
-    const views = await getInboxThreads(supabase);
+    const views = await getInboxThreads(supabase, "org-1");
     expect(views[0].draft).toEqual({
       threadId: "t1",
       body: "Hi Ana,",
@@ -132,7 +134,7 @@ describe("the draft on a thread", () => {
 
   it("is null on every other thread", async () => {
     const { supabase } = client({ page: [thread()], drafts: [] });
-    expect((await getInboxThreads(supabase)).at(0)?.draft).toBeNull();
+    expect((await getInboxThreads(supabase, "org-1")).at(0)?.draft).toBeNull();
   });
 });
 
@@ -152,7 +154,7 @@ describe("where a draft-carrying thread ends up", () => {
       ],
       drafts: [draftRow("new-followup")],
     });
-    expect((await getInboxThreads(supabase)).map((v) => v.thread.id)).toEqual([
+    expect((await getInboxThreads(supabase, "org-1")).map((v) => v.thread.id)).toEqual([
       "new-followup",
       "hot",
       "warm",
@@ -164,7 +166,7 @@ describe("where a draft-carrying thread ends up", () => {
       page: [thread({ id: "hot", priority: 90 }), thread({ id: "warm", priority: 50 })],
       drafts: [],
     });
-    expect((await getInboxThreads(supabase)).map((v) => v.thread.id)).toEqual(["hot", "warm"]);
+    expect((await getInboxThreads(supabase, "org-1")).map((v) => v.thread.id)).toEqual(["hot", "warm"]);
   });
 });
 
@@ -176,7 +178,7 @@ describe("a draft-carrying thread the page read missed", () => {
       offPage: [thread({ id: "off-page", priority: 0, last_message_at: null })],
     });
 
-    const views = await getInboxThreads(supabase);
+    const views = await getInboxThreads(supabase, "org-1");
 
     expect(asked.backfilledIds).toEqual(["off-page"]);
     expect(views.map((v) => v.thread.id)).toEqual(["off-page", "hot"]);
@@ -185,7 +187,7 @@ describe("a draft-carrying thread the page read missed", () => {
 
   it("is not fetched when it is already on the page", async () => {
     const { supabase, asked } = client({ page: [thread()], drafts: [draftRow("t1")] });
-    await getInboxThreads(supabase);
+    await getInboxThreads(supabase, "org-1");
     expect(asked.backfilledIds).toBeNull();
   });
 
@@ -206,7 +208,7 @@ describe("a draft-carrying thread the page read missed", () => {
       drafts: [draftRow("off-page")],
       offPage: [thread({ id: "off-page" })],
     });
-    const views = await getInboxThreads(supabase, filters);
+    const views = await getInboxThreads(supabase, "org-1", filters);
     expect(asked.backfilledIds).toBeNull();
     expect(views.map((v) => v.thread.id)).toEqual(["hot"]);
   });
@@ -217,7 +219,7 @@ describe("when the board has nothing", () => {
     // They start together, so a board with no threads has still paid for and
     // resolved the drafts read — which is what keeps the two from serialising.
     const { supabase, asked } = client({ page: [], drafts: [] });
-    expect(await getInboxThreads(supabase)).toEqual([]);
+    expect(await getInboxThreads(supabase, "org-1")).toEqual([]);
     expect(asked.readDrafts).toBe(true);
   });
 });

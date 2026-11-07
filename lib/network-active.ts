@@ -424,7 +424,7 @@ export async function loadActiveNetwork(
   // go out together. Only the LP relationship summaries have to wait, because
   // they need the investor ids the capital map returns.
   const [entries, contactPeople, partnerPeople, providerPeople, owners] = await Promise.all([
-    buildCapitalMap(db).catch(() => [] as Awaited<ReturnType<typeof buildCapitalMap>>),
+    buildCapitalMap(db, orgId).catch(() => [] as Awaited<ReturnType<typeof buildCapitalMap>>),
     loadContactPeople(client, orgId, contactLimit),
     loadDirectoryPeople(client, orgId, "partners", "partner", "partner_type", directoryLimit),
     loadDirectoryPeople(client, orgId, "service_providers", "provider", "provider_type", directoryLimit),

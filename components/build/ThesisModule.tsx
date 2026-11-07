@@ -25,6 +25,7 @@ export async function ThesisModule() {
   const { data } = await supabase
     .from("investment_theses")
     .select("*")
+    .eq("organization_id", ctx.orgId)
     .order("created_at", { ascending: false });
   const theses = (data ?? []) as InvestmentThesis[];
 

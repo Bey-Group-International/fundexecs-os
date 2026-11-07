@@ -102,11 +102,13 @@ export async function autoUnsnoozeExpired(
  */
 export async function getInboxThreads(
   supabase: SupabaseClient<Database>,
+  orgId: string,
   filters: InboxThreadFilters = {},
 ): Promise<InboxThreadView[]> {
   let query = supabase
     .from("inbox_threads")
     .select("*")
+    .eq("organization_id", orgId)
     // The inbox focuses on messages — capital, partners, providers, and comms.
     // Shared-deal updates live in their own "deals that fit you" feed.
     .neq("channel", "deal_share");
@@ -131,7 +133,7 @@ export async function getInboxThreads(
       .order("priority", { ascending: false })
       .order("last_message_at", { ascending: false, nullsFirst: false })
       .limit(100),
-    readThreadDrafts(supabase),
+    readThreadDrafts(supabase, orgId),
   ]);
 
   const { data, error } = pageResult;
@@ -165,6 +167,8 @@ export async function getInboxThreads(
       .from("inbox_threads")
       .select("*")
       .in("id", missing)
+      // A draft-carrying thread from another workspace must not be pulled in.
+      .eq("organization_id", orgId)
       // The same exclusion the page read makes: a shared-deal thread belongs to
       // its own feed whether or not something drafted onto it.
       .neq("channel", "deal_share");

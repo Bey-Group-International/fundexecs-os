@@ -18,9 +18,9 @@ export default async function GraphPage() {
 
   const supabase = await createServerClient();
   const [relationship, deal, capital] = await Promise.all([
-    buildGraph(supabase, "relationship"),
-    buildGraph(supabase, "deal"),
-    buildGraph(supabase, "capital"),
+    buildGraph(supabase, "relationship", ctx.orgId),
+    buildGraph(supabase, "deal", ctx.orgId),
+    buildGraph(supabase, "capital", ctx.orgId),
   ]);
 
   const graphs: Record<GraphKind, GraphData> = { relationship, deal, capital };
