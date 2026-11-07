@@ -79,6 +79,7 @@ function client(opts: {
       asked.readDrafts = true;
       const chain = {
         select: () => chain,
+        eq: () => chain,
         order: () => chain,
         limit: async () => ({ data: opts.drafts ?? [], error: null }),
       };
@@ -95,7 +96,8 @@ function client(opts: {
           : { data: opts.page ?? [], error: null };
       const chain: Record<string, unknown> = {
         select: () => chain,
-        eq: () => chain,
+        // The org filter ends the backfill chain, so it must stay awaitable.
+        eq: () => Object.assign(Promise.resolve(result()), chain),
         is: () => chain,
         or: () => chain,
         order: () => chain,

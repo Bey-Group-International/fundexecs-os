@@ -5,12 +5,12 @@ jest.mock("server-only", () => ({}), { virtual: true });
 
 import { buildCapitalMap } from "@/lib/capital-map";
 import { buildGraph } from "@/lib/graph";
-import { getActiveMandate, getActiveScreeningCriteria } from "@/lib/mandates";
+import { getActiveMandate, getActiveMandateRow, getActiveScreeningCriteria } from "@/lib/mandates";
 import { getInboxThreads } from "@/lib/inbox/data";
 
 type Call = { table: string; method: string; args: unknown[] };
 
-function recordingClient() {
+function recordingClient(rowsByTable: Record<string, unknown[]> = {}) {
   const calls: Call[] = [];
   const client = {
     from(table: string) {
@@ -18,7 +18,7 @@ function recordingClient() {
       const proxy: unknown = new Proxy(builder, {
         get(_t, prop: string) {
           if (prop === "then") {
-            return (resolve: (v: unknown) => void) => resolve({ data: [], error: null });
+            return (resolve: (v: unknown) => void) => resolve({ data: rowsByTable[table] ?? [], error: null });
           }
           if (prop === "maybeSingle" || prop === "single") {
             return async () => ({ data: null, error: null });
@@ -85,5 +85,34 @@ describe("org scoping on signed-in reads", () => {
     const r = recordingClient();
     await getInboxThreads(r.client, ORG);
     expectEveryTableScoped(r, ["inbox_threads"]);
+  });
+
+  it("scopes the draft read and the draft-thread backfill to the given org", async () => {
+    // A draft on a thread that is not on the page forces the backfill read.
+    const r = recordingClient({
+      inbox_thread_drafts: [
+        {
+          thread_id: "draft-thread",
+          body: "hi",
+          source: "meeting",
+          source_meeting_id: null,
+          updated_at: "2026-09-30T12:00:00.000Z",
+        },
+      ],
+    });
+    await getInboxThreads(r.client, ORG);
+    expectEveryTableScoped(r, ["inbox_thread_drafts"]);
+    const backfills = r.calls.filter(
+      (c) => c.table === "inbox_threads" && c.method === "in" && c.args[0] === "id",
+    );
+    expect(backfills.length).toBe(1);
+    // Every inbox_threads read (page and backfill) must carry the org filter.
+    expect(r.orgFiltersFor("inbox_threads").length).toBe(2);
+  });
+
+  it("scopes the mandate row the editor loads", async () => {
+    const r = recordingClient();
+    await getActiveMandateRow(r.client, ORG);
+    expectEveryTableScoped(r, ["mandates"]);
   });
 });

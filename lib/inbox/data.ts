@@ -133,7 +133,7 @@ export async function getInboxThreads(
       .order("priority", { ascending: false })
       .order("last_message_at", { ascending: false, nullsFirst: false })
       .limit(100),
-    readThreadDrafts(supabase),
+    readThreadDrafts(supabase, orgId),
   ]);
 
   const { data, error } = pageResult;
@@ -167,6 +167,8 @@ export async function getInboxThreads(
       .from("inbox_threads")
       .select("*")
       .in("id", missing)
+      // A draft-carrying thread from another workspace must not be pulled in.
+      .eq("organization_id", orgId)
       // The same exclusion the page read makes: a shared-deal thread belongs to
       // its own feed whether or not something drafted onto it.
       .neq("channel", "deal_share");

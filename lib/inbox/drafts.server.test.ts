@@ -76,7 +76,7 @@ afterEach(() => {
 describe("reading them", () => {
   it("keys them by thread, which is what the board looks them up by", async () => {
     const { api } = client({ rows: [ROW] });
-    const drafts = await readThreadDrafts(api);
+    const drafts = await readThreadDrafts(api, "org-1");
     expect(drafts.get("t1")).toEqual({
       threadId: "t1",
       body: "Hi Ana,",
@@ -90,19 +90,26 @@ describe("reading them", () => {
   // than an arbitrary set.
   it("is bounded, newest first", async () => {
     const { api, calls } = client({ rows: [ROW] });
-    await readThreadDrafts(api);
+    await readThreadDrafts(api, "org-1");
     expect(calls[0].limit).toBe(DRAFT_LIMIT);
     expect(calls[0].order).toEqual([["updated_at", { ascending: false }]]);
   });
 
+  // A person in two organizations can read both, so the read has to name one.
+  it("reads only the given organisation's drafts", async () => {
+    const { api, calls } = client({ rows: [ROW] });
+    await readThreadDrafts(api, "org-1");
+    expect(calls[0].eq).toContainEqual(["organization_id", "org-1"]);
+  });
+
   it("comes back empty on an error rather than failing the board", async () => {
     const { api } = client({ error: "denied" });
-    expect((await readThreadDrafts(api)).size).toBe(0);
+    expect((await readThreadDrafts(api, "org-1")).size).toBe(0);
   });
 
   it("comes back empty rather than throwing", async () => {
     const { api } = client({ throws: true });
-    await expect(readThreadDrafts(api)).resolves.toEqual(new Map());
+    await expect(readThreadDrafts(api, "org-1")).resolves.toEqual(new Map());
   });
 });
 

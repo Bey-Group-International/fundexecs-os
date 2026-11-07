@@ -177,11 +177,13 @@ export async function getActiveMandateRow(
   supabase: Client,
   orgId?: string,
 ): Promise<Pick<MandateRow, "auto_approve" | "autonomy_ceiling" | "scope" | "guardrails" | "blast_radius_rules" | "screening_criteria"> | undefined> {
-  void orgId;
-  const { data } = await supabase
+  // RLS spans every org the person belongs to, so scope to the given org.
+  let query = supabase
     .from("mandates")
     .select("auto_approve, autonomy_ceiling, scope, guardrails, blast_radius_rules, screening_criteria")
-    .eq("is_active", true)
+    .eq("is_active", true);
+  if (orgId) query = query.eq("organization_id", orgId);
+  const { data } = await query
     .order("updated_at", { ascending: false })
     .limit(1)
     .maybeSingle();
