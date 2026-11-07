@@ -156,7 +156,20 @@ const COLLECT = `() => {
     });
   }
 
+  // The body of a closed <details> is not on screen, though the browser may still
+  // report a box for it. Only its <summary> is. Walk every ancestor: an open
+  // <details> inside a closed one is hidden too.
+  const hiddenByDetails = (el) => {
+    for (let d = el.parentElement; d; d = d.parentElement) {
+      if (d.tagName !== 'DETAILS' || d.open) continue;
+      const summary = el.closest('summary');
+      if (!(summary && summary.parentElement === d)) return true;
+    }
+    return false;
+  };
+
   const visible = (el) => {
+    if (hiddenByDetails(el)) return false;
     const s = getComputedStyle(el);
     if (s.display === 'none' || s.visibility === 'hidden' || Number(s.opacity) === 0) return false;
     // Overlays (dialogs, click-away layers, popovers) are meant to sit on top

@@ -137,7 +137,7 @@ function InviteLPModal({
           <h2 className="font-mono text-sm font-semibold text-fg-primary">Invite LP to Onboard</h2>
           <button
             onClick={onClose}
-            className="rounded border border-line px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider text-fg-muted transition hover:border-gold-500/40 hover:text-gold-300"
+            className="rounded border border-line px-2 min-h-9 text-xs font-medium text-fg-muted transition hover:border-gold-500/40 hover:text-gold-300"
           >
             Close
           </button>
@@ -152,7 +152,7 @@ function InviteLPModal({
               <span className="flex-1 truncate font-mono text-[11px] text-fg-secondary">{portalUrl}</span>
               <button
                 onClick={handleCopy}
-                className="shrink-0 rounded border border-line px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider text-fg-muted transition hover:border-gold-500/40 hover:text-gold-300"
+                className="shrink-0 rounded border border-line px-2 min-h-9 text-xs font-medium text-fg-muted transition hover:border-gold-500/40 hover:text-gold-300"
               >
                 {copied ? "Copied ✓" : "Copy"}
               </button>
@@ -246,7 +246,7 @@ function LogContactButton({ investorId }: { investorId: string }) {
     <button
       onClick={handleClick}
       disabled={pending}
-      className="rounded border border-line px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider text-fg-muted transition hover:border-gold-500/40 hover:text-gold-300 disabled:opacity-40"
+      className="rounded border border-line px-2 min-h-9 text-xs font-medium text-fg-muted transition hover:border-gold-500/40 hover:text-gold-300 disabled:opacity-40"
     >
       {pending ? "Saving…" : done ? "Logged ✓" : "Log contact"}
     </button>
@@ -398,7 +398,7 @@ function AllocatorRow({ entry, funds, cols }: { entry: AllocatorEntry; funds: Fu
           <EditContactBtn onClick={() => setEditingContact((v) => !v)} />
           <button
             onClick={(e) => { e.stopPropagation(); setShowInvite(true); }}
-            className="rounded border border-line px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider text-fg-muted transition hover:border-gold-500/40 hover:text-gold-300"
+            className="rounded border border-line px-2 min-h-9 text-xs font-medium text-fg-muted transition hover:border-gold-500/40 hover:text-gold-300"
           >
             Invite
           </button>

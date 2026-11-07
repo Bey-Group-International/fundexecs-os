@@ -315,7 +315,7 @@ export function OutreachStudio({ live }: { live: boolean }) {
             type="button"
             disabled={deleting}
             onClick={clearSequences}
-            className="mt-2 rounded border border-line px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider text-fg-muted transition hover:border-status-danger/40 hover:text-status-danger disabled:opacity-40"
+            className="mt-2 rounded border border-line px-2 min-h-9 text-xs font-medium text-fg-muted transition hover:border-status-danger/40 hover:text-status-danger disabled:opacity-40"
           >
             Clear all
           </button>
