@@ -90,7 +90,7 @@ export function InlineContactEdit({ table, id, initial, onClose, onSaved }: Prop
           type="button"
           onClick={handleSave}
           disabled={pending}
-          className="rounded border border-gold-500/40 bg-gold-500/10 px-3 py-1 font-mono text-[11px] uppercase tracking-widest text-gold-300 hover:bg-gold-500/20 disabled:opacity-40"
+          className="rounded border border-gold-500/40 bg-gold-500/10 px-3 min-h-9 text-xs font-medium text-gold-300 hover:bg-gold-500/20 disabled:opacity-40"
         >
           {pending ? "Saving…" : "Save"}
         </button>

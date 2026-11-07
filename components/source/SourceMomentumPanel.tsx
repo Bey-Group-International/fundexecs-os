@@ -113,57 +113,60 @@ function VelocityCard({ velocity }: { velocity: PipelineVelocity }) {
 export function SourceMomentumPanel({ momentum }: { momentum: SourceMomentum }) {
   const { overall, stage, coverage, velocity, nextAction } = momentum;
 
+  // One row until it is opened: the score, the stage and the next move are what
+  // matter on arrival. The coverage and velocity breakdown opens in place, so on a
+  // phone the list the person came for is not pushed a screen down the page.
   return (
-    <div className="mb-6 rounded-2xl border border-line bg-surface-1 p-5">
-      <div className="flex items-start gap-4">
-        <div className="relative shrink-0">
-          <Ring value={overall} />
-          <span className="absolute inset-0 flex items-center justify-center font-display text-sm font-semibold text-fg-primary">
+    <section aria-label="Sourcing readiness" className="mb-5 rounded-2xl border border-line bg-surface-1">
+      <details className="group">
+        <summary className="fx-focus flex min-h-12 cursor-pointer list-none items-center gap-3 rounded-2xl px-4 py-2.5 [&::-webkit-details-marker]:hidden">
+          <span
+            aria-hidden
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border-2 border-gold-400/60 font-display text-sm font-semibold text-fg-primary"
+          >
             {overall}%
           </span>
-        </div>
-
-        <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-300">
-              Sourcing readiness
+          <span className="min-w-0 flex-1">
+            <span className="block text-sm font-medium text-fg-primary">
+              Sourcing readiness: {overall}% <span className="text-fg-muted">· {stage.label}</span>
             </span>
-            <span className="rounded-full border border-gold-500/40 bg-gold-500/10 px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider text-gold-300">
-              {stage.label}
-            </span>
-          </div>
-          <p className="font-mono text-[11px] uppercase tracking-wider text-fg-muted">Based on profile completion</p>
+          </span>
+          <span className="shrink-0 text-xs font-medium text-gold-300">
+            <span className="group-open:hidden">Details</span>
+            <span className="hidden group-open:inline">Hide</span>
+          </span>
+        </summary>
+        <div className="border-t border-line px-4 py-4">
+          <p className="text-xs text-fg-muted">Based on profile completion</p>
           <p className="mt-1 text-sm text-fg-secondary">{stage.blurb}</p>
+          <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <CoverageCard coverage={coverage} />
+            <VelocityCard velocity={velocity} />
+          </div>
         </div>
-      </div>
+      </details>
 
-      {/* Anchor metrics */}
-      <div className="mt-4 grid gap-3 sm:grid-cols-2">
-        <CoverageCard coverage={coverage} />
-        <VelocityCard velocity={velocity} />
-      </div>
-
-      {/* Next best action */}
+      {/* Next best action: always visible, whether or not the breakdown is open. */}
       {nextAction ? (
         <Link
           href={nextAction.href}
-          className="mt-4 flex items-center gap-3 rounded-xl border border-gold-500/30 bg-gold-500/5 px-4 py-3 transition hover:bg-gold-500/10"
+          className="fx-focus flex min-h-12 items-center gap-3 rounded-b-2xl border-t border-line bg-gold-500/5 px-4 py-2.5 transition hover:bg-gold-500/10"
         >
-          <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-gold-400 font-mono text-xs text-on-gold">
+          <span aria-hidden className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-gold-400 font-mono text-xs text-on-gold">
             →
           </span>
           <span className="min-w-0">
-            <span className="block font-mono text-[11px] uppercase tracking-wider text-gold-300">
-              Next best move · {nextAction.moduleLabel}
+            <span className="block text-xs text-gold-300">Next best move · {nextAction.moduleLabel}</span>
+            <span className="block truncate text-sm text-fg-primary" title={nextAction.label}>
+              {nextAction.label}
             </span>
-            <span className="block truncate text-sm text-fg-primary">{nextAction.label}</span>
           </span>
         </Link>
       ) : (
-        <div className="mt-4 rounded-xl border border-emerald-400/30 bg-emerald-400/5 px-4 py-3 text-sm text-emerald-300">
+        <div className="rounded-b-2xl border-t border-line bg-emerald-400/5 px-4 py-3 text-sm text-emerald-300">
           ✓ Pipeline humming — coverage is on target with the bench in place.
         </div>
       )}
-    </div>
+    </section>
   );
 }

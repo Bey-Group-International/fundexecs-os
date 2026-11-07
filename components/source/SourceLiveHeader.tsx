@@ -100,7 +100,7 @@ export function SourceLiveHeader({ title, subtitle, stats = [], intervalMs = DEF
             onClick={() => setLive((v) => !v)}
             aria-pressed={live}
             title={live ? "Live — auto-refreshing. Click to pause." : "Paused. Click to resume live updates."}
-            className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 font-mono text-[11px] uppercase tracking-wider transition ${
+            className={`fx-focus inline-flex min-h-9 items-center gap-1.5 rounded-full border px-3 text-xs font-medium transition ${
               live
                 ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-300"
                 : "border-line bg-surface-2 text-fg-muted hover:text-fg-primary"
@@ -121,7 +121,7 @@ export function SourceLiveHeader({ title, subtitle, stats = [], intervalMs = DEF
             type="button"
             onClick={refresh}
             disabled={pending}
-            className="fx-focus rounded-md border border-line p-1.5 text-fg-muted transition hover:text-fg-primary disabled:opacity-50"
+            className="fx-focus inline-flex h-9 w-9 items-center justify-center rounded-md border border-line text-fg-muted transition hover:text-fg-primary disabled:opacity-50"
             title="Refresh now"
             aria-label="Refresh now"
           >
@@ -141,23 +141,23 @@ export function SourceLiveHeader({ title, subtitle, stats = [], intervalMs = DEF
 
       {stats.length ? (
         <div
-          className={`mt-4 grid grid-cols-2 gap-2 ${
+          className={`mt-3 grid grid-cols-2 gap-2 sm:mt-4 ${
             stats.length <= 2 ? "sm:grid-cols-2" : stats.length === 3 ? "sm:grid-cols-3" : "sm:grid-cols-4"
           }`}
         >
           {stats.map((s) => (
-            <div key={s.label} className="fx-stat">
-              <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-fg-muted">{s.label}</p>
-              <p className={`mt-1 font-display text-2xl font-semibold tabular-nums ${s.accent ?? "text-fg-primary"}`}>
+            <div key={s.label} className="fx-stat max-sm:px-3 max-sm:py-2">
+              <p className="truncate text-xs text-fg-muted">{s.label}</p>
+              <p className={`mt-0.5 font-display text-xl font-semibold tabular-nums sm:mt-1 sm:text-2xl ${s.accent ?? "text-fg-primary"}`}>
                 {s.value}
               </p>
-              {s.hint ? <p className="mt-0.5 text-[11px] text-fg-muted">{s.hint}</p> : null}
+              {s.hint ? <p className="mt-0.5 truncate text-xs text-fg-muted">{s.hint}</p> : null}
             </div>
           ))}
         </div>
       ) : null}
 
-      <p className="mt-3 font-mono text-[11px] uppercase tracking-wider text-fg-muted/70">
+      <p className="mt-2 text-xs text-fg-muted sm:mt-3">
         {syncedAt ? `As of ${relativeSince(syncedAt)}` : "Syncing…"}
         {live ? " · streaming" : " · paused"}
       </p>

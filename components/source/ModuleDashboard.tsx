@@ -51,8 +51,8 @@ export function ModuleDashboard({ summary, empty }: { summary: ModuleSummary; em
   if (empty) return null;
   return (
     <details className="mb-5 group">
-      <summary className="mb-3 flex cursor-pointer items-center gap-2 select-none list-none">
-        <span className="font-mono text-[11px] uppercase tracking-wider text-fg-muted group-open:text-gold-300">
+      <summary className="fx-focus mb-3 flex min-h-9 cursor-pointer list-none items-center gap-2 select-none">
+        <span className="text-sm font-medium text-fg-secondary group-open:text-gold-300">
           Stats
         </span>
         <span className="font-mono text-[11px] text-fg-muted group-open:hidden">▸</span>
