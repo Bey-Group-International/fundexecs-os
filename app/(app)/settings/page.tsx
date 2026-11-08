@@ -90,6 +90,7 @@ export default async function SettingsPage(props: {
   const { data } = await supabase
     .from("mandates")
     .select("*")
+    .eq("organization_id", ctx.orgId)
     .eq("is_active", true)
     .order("updated_at", { ascending: false })
     .limit(1)
@@ -101,6 +102,7 @@ export default async function SettingsPage(props: {
   const { data: keyRows } = await supabase
     .from("api_keys")
     .select("*")
+    .eq("organization_id", ctx.orgId)
     .order("created_at", { ascending: false });
   const apiKeys: ApiKeyView[] = ((keyRows as ApiKey[] | null) ?? []).map((k) => ({
     id: k.id,

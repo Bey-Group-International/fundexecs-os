@@ -19,7 +19,7 @@ export default async function CapitalMapPage() {
   if (!ctx.orgId) redirect("/onboarding");
 
   const supabase = await createServerClient();
-  const entries = await buildCapitalMap(supabase);
+  const entries = await buildCapitalMap(supabase, ctx.orgId);
 
   // Allocator Directory: load investors to populate the FinTrx-style directory.
   const { data: investorRows } = await supabase
@@ -54,9 +54,14 @@ export default async function CapitalMapPage() {
     supabase
       .from("marketplace_listings")
       .select("*")
+      .eq("organization_id", ctx.orgId)
       .eq("status", "listed")
       .limit(200),
-    supabase.from("deals").select("id, geography, asset_class").limit(500),
+    supabase
+      .from("deals")
+      .select("id, geography, asset_class")
+      .eq("organization_id", ctx.orgId)
+      .limit(500),
   ]);
   const listings = (listingsRes.data ?? []) as MarketplaceListing[];
   const dealCtx = new Map<string, ListingContext>();

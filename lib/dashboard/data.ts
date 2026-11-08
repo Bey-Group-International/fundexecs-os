@@ -1,4 +1,5 @@
 import { executiveCharacters, characterById } from "@/components/characters/characterConfig";
+import { getSessionContext } from "@/lib/auth";
 import { createServerClient } from "@/lib/supabase/server";
 import { dashboardWorkspaces } from "./config";
 import type {
@@ -53,8 +54,14 @@ function latestActivity(tasks: Task[], dispatches: DispatchLog[]): DashboardActi
     .slice(0, 6);
 }
 
+/** Matches no row: the org filter when a session has no active organization. */
+const NO_ORG = "00000000-0000-0000-0000-000000000000";
+
 export async function getDashboardData(): Promise<DashboardData> {
   const supabase = await createServerClient();
+  // RLS spans every org the person belongs to, so each read names the active
+  // one. With no active org the nil UUID matches nothing (fail closed).
+  const orgId = (await getSessionContext())?.orgId ?? NO_ORG;
   const [
     investorsRes,
     dealsRes,
@@ -64,18 +71,19 @@ export async function getDashboardData(): Promise<DashboardData> {
     automationsRes,
     dispatchesRes,
   ] = await Promise.all([
-    supabase.from("investors").select("*").order("updated_at", { ascending: false }).limit(12),
-    supabase.from("deals").select("*").order("updated_at", { ascending: false }).limit(12),
-    supabase.from("funds").select("*").order("updated_at", { ascending: false }).limit(8),
-    supabase.from("tasks").select("*").order("updated_at", { ascending: false }).limit(12),
+    supabase.from("investors").select("*").eq("organization_id", orgId).order("updated_at", { ascending: false }).limit(12),
+    supabase.from("deals").select("*").eq("organization_id", orgId).order("updated_at", { ascending: false }).limit(12),
+    supabase.from("funds").select("*").eq("organization_id", orgId).order("updated_at", { ascending: false }).limit(8),
+    supabase.from("tasks").select("*").eq("organization_id", orgId).order("updated_at", { ascending: false }).limit(12),
     supabase
       .from("approvals")
       .select("*")
+      .eq("organization_id", orgId)
       .eq("decision", "pending")
       .order("created_at", { ascending: false })
       .limit(6),
-    supabase.from("automations").select("*").order("updated_at", { ascending: false }).limit(8),
-    supabase.from("dispatch_log").select("*").order("created_at", { ascending: false }).limit(8),
+    supabase.from("automations").select("*").eq("organization_id", orgId).order("updated_at", { ascending: false }).limit(8),
+    supabase.from("dispatch_log").select("*").eq("organization_id", orgId).order("created_at", { ascending: false }).limit(8),
   ]);
 
   const investors = (investorsRes.data ?? []) as Investor[];

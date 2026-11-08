@@ -224,7 +224,7 @@ export default async function ModulePage(
 
     // Source › LP Pipeline — GPLPMatch LP Discovery Engine.
     if (params.hub === "source" && params.module === "lp_pipeline") {
-      const capitalMap = ctx?.orgId ? await buildCapitalMap(supabase) : [];
+      const capitalMap = ctx?.orgId ? await buildCapitalMap(supabase, ctx.orgId) : [];
       const now = Date.now();
       const investors: LPMatch[] = capitalMap.map((entry) => ({
         id: entry.investor.id,
@@ -254,7 +254,7 @@ export default async function ModulePage(
     // (these were Run › Outreach before Onboarding took that slot), above the
     // analytics over enrolled sequences.
     if (params.hub === "run" && params.module === "campaigns") {
-      const capitalMap = ctx?.orgId ? await buildCapitalMap(supabase) : [];
+      const capitalMap = ctx?.orgId ? await buildCapitalMap(supabase, ctx.orgId) : [];
       const now = Date.now();
       const items: OutreachItem[] = capitalMap
         .filter((e) => e.temperature !== "committed")

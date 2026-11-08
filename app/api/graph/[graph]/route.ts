@@ -19,6 +19,6 @@ export async function GET(_request: Request, props: { params: Promise<{ graph: s
   }
 
   const supabase = await createServerClient();
-  const data = await buildGraph(supabase, params.graph);
+  const data = await buildGraph(supabase, params.graph, auth.ctx.orgId);
   return NextResponse.json(data);
 }

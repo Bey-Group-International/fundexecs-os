@@ -40,6 +40,7 @@ export default async function AutomationsPage() {
   const { data } = await supabase
     .from("automations")
     .select("*")
+    .eq("organization_id", ctx.orgId)
     .order("created_at", { ascending: false });
   const automations = (data ?? []) as Automation[];
 

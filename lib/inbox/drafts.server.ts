@@ -11,12 +11,16 @@ import { DRAFT_LIMIT, type ThreadDraft } from "@/lib/inbox/drafts";
 type Client = SupabaseClient<Database>;
 
 /** Every draft this organisation is holding, by thread id. */
-export async function readThreadDrafts(supabase: Client): Promise<Map<string, ThreadDraft>> {
+export async function readThreadDrafts(
+  supabase: Client,
+  orgId: string,
+): Promise<Map<string, ThreadDraft>> {
   const out = new Map<string, ThreadDraft>();
   try {
     const { data, error } = await supabase
       .from("inbox_thread_drafts")
       .select("thread_id, body, source, source_meeting_id, updated_at")
+      .eq("organization_id", orgId)
       // Newest first, so if the ceiling ever bites it drops the stalest drafts
       // rather than an arbitrary set.
       .order("updated_at", { ascending: false })
