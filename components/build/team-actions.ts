@@ -5,7 +5,7 @@ import { createServerClient, createServiceClient } from "@/lib/supabase/server";
 import { getSessionContext } from "@/lib/auth";
 import { planSeatLimit, seatLimitReached } from "@/lib/billing";
 import { isPlatformAdmin } from "@/lib/platform-admin";
-import { checkRateLimit } from "@/lib/rate-limit";
+import { checkRateLimit, refundRateLimit } from "@/lib/rate-limit";
 import { savePendingInvite, sendMemberAddedEmail } from "@/lib/team-invites.server";
 import {
   createTeamTask,
@@ -270,21 +270,10 @@ export async function resendInvite(
     role = member.role;
   }
 
-  const limited = checkRateLimit({
-    key: `team-invite-resend:${ctx.orgId}:${email}`,
-    limit: 1,
-    windowMs: 5 * 60_000,
-  });
+  const limitKey = `team-invite-resend:${ctx.orgId}:${email}`;
+  const limited = checkRateLimit({ key: limitKey, limit: 1, windowMs: 5 * 60_000 });
   if (!limited.ok) {
     return { error: `A reminder was just sent to ${email}. Try again in a few minutes.` };
-  }
-
-  // A reminder on a waiting invite also gives it a fresh 30 days.
-  if (pending) {
-    await svc
-      .from("organization_invites")
-      .update({ expires_at: new Date(Date.now() + 30 * 86_400_000).toISOString() })
-      .eq("id", inviteId);
   }
 
   const mail = await sendMemberAddedEmail(svc, {
@@ -295,13 +284,28 @@ export async function resendInvite(
     pending,
     reminder: true,
   });
+
+  if (!mail.sent) {
+    // Nothing went out, so nothing was used up: give the allowance back so the
+    // admin can retry as soon as a mailbox is connected, and leave the invite's
+    // expiry alone (a reminder nobody received has not renewed anything).
+    refundRateLimit(limitKey);
+    return {
+      error:
+        "The reminder couldn't be sent. Connect a mailbox in Settings → Integrations, or let them know directly.",
+    };
+  }
+
+  // A reminder that was sent also gives a waiting invite a fresh 30 days, which
+  // revives one that has expired.
+  if (pending) {
+    await svc
+      .from("organization_invites")
+      .update({ expires_at: new Date(Date.now() + 30 * 86_400_000).toISOString() })
+      .eq("id", inviteId);
+  }
   revalidatePath(TEAM);
-  return mail.sent
-    ? { notice: `Reminder sent to ${email}.` }
-    : {
-        error:
-          "The reminder couldn't be sent. Connect a mailbox in Settings → Integrations, or let them know directly.",
-      };
+  return { notice: `Reminder sent to ${email}.` };
 }
 
 type AdminCtx = NonNullable<Awaited<ReturnType<typeof getSessionContext>>> & {

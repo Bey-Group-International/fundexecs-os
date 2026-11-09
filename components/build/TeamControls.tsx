@@ -35,8 +35,10 @@ export interface PendingInviteView {
   inviteId: string;
   email: string;
   role: MemberRole;
-  /** ISO timestamp the invite was created or last refreshed. */
+  /** ISO timestamp the invite was created. */
   sentAt: string;
+  /** Past its 30 days: it can no longer be claimed until a reminder renews it. */
+  expired?: boolean;
 }
 
 /** A person on the team with no login: display data only, no seat. */
@@ -209,6 +211,11 @@ export function TeamControls({
                 <p className="truncate text-sm text-fg-primary">{inv.email}</p>
                 <p className="text-xs text-fg-muted">
                   Invited {new Date(inv.sentAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                  {inv.expired ? (
+                    <span className="ml-1.5 font-mono uppercase tracking-wider text-status-danger">
+                      · expired, Remind renews it
+                    </span>
+                  ) : null}
                 </p>
               </div>
               <div className="ml-auto flex shrink-0 items-center gap-2">

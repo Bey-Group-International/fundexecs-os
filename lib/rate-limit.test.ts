@@ -3,6 +3,7 @@ import {
   clearRateLimitBucketsForTests,
   clientIp,
   rateLimitHeaders,
+  refundRateLimit,
 } from "./rate-limit";
 
 describe("rate limit", () => {
@@ -34,6 +35,36 @@ describe("rate limit", () => {
       "RateLimit-Remaining": "2",
       "RateLimit-Reset": "2",
     });
+  });
+});
+
+describe("refundRateLimit", () => {
+  beforeEach(() => clearRateLimitBucketsForTests());
+
+  it("gives back a hit so an action that did not happen can be retried", () => {
+    const policy = { key: "resend:o1:a@b.com", limit: 1, windowMs: 1000 };
+    expect(checkRateLimit(policy, 0).ok).toBe(true);
+    refundRateLimit(policy.key, 10);
+    expect(checkRateLimit(policy, 20).ok).toBe(true);
+  });
+
+  it("does not go below zero or revive an expired window", () => {
+    const policy = { key: "resend:o1:c@d.com", limit: 1, windowMs: 1000 };
+    refundRateLimit(policy.key, 0); // nothing to refund
+    expect(checkRateLimit(policy, 0).ok).toBe(true);
+    expect(checkRateLimit(policy, 1).ok).toBe(false);
+    refundRateLimit(policy.key, 5000); // window already over: leave it alone
+    expect(checkRateLimit(policy, 5001).ok).toBe(true); // a fresh window, not the refunded one
+  });
+
+  it("only refunds the bucket it is given", () => {
+    const a = { key: "k:a", limit: 1, windowMs: 1000 };
+    const b = { key: "k:b", limit: 1, windowMs: 1000 };
+    checkRateLimit(a, 0);
+    checkRateLimit(b, 0);
+    refundRateLimit(a.key, 1);
+    expect(checkRateLimit(a, 2).ok).toBe(true);
+    expect(checkRateLimit(b, 2).ok).toBe(false);
   });
 });
 
