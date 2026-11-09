@@ -96,6 +96,16 @@ export function rateLimitResponse(result: RateLimitResult, limit: number): Respo
   });
 }
 
+/**
+ * Give back one hit on a bucket, for an action that was counted but did not
+ * happen (a send that failed). Without it a failure uses up the allowance and
+ * the person cannot retry once they have fixed the cause.
+ */
+export function refundRateLimit(key: string, now = Date.now()): void {
+  const bucket = buckets.get(key);
+  if (bucket && bucket.resetAt > now && bucket.count > 0) bucket.count -= 1;
+}
+
 export function clearRateLimitBucketsForTests() {
   buckets.clear();
 }

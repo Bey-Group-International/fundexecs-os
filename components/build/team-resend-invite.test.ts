@@ -137,6 +137,27 @@ describe("resendInvite", () => {
     expect(sent).toHaveLength(1);
   });
 
+  it("does not use up the allowance when the mail could not be sent", async () => {
+    sendOk = false;
+    expect((await resendInvite(form({ memberId: "m-1" }))).error).toMatch(/couldn't be sent/);
+    // A mailbox gets connected; the very next click must go through.
+    sendOk = true;
+    const retry = await resendInvite(form({ memberId: "m-1" }));
+    expect(retry.error).toBeUndefined();
+    expect(sent).toHaveLength(2);
+  });
+
+  it("renews a pending invite's expiry only once the reminder was sent", async () => {
+    sendOk = false;
+    await resendInvite(form({ inviteId: "i-1" }));
+    expect(updates).toHaveLength(0);
+
+    sendOk = true;
+    await resendInvite(form({ inviteId: "i-1" }));
+    expect(updates).toHaveLength(1);
+    expect(updates[0]).toMatchObject({ table: "organization_invites" });
+  });
+
   it("says so when the mail could not be sent", async () => {
     sendOk = false;
     const res = await resendInvite(form({ memberId: "m-1" }));

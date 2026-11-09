@@ -70,13 +70,15 @@ export async function TeamModule() {
       .select("id, email, role, created_at, expires_at")
       .eq("organization_id", ctx.orgId)
       .is("accepted_at", null)
-      .gt("expires_at", new Date().toISOString())
       .order("created_at", { ascending: true });
     pendingInvites = (inviteData ?? []).map((i) => ({
       inviteId: i.id,
       email: i.email,
       role: i.role,
       sentAt: i.created_at,
+      // Kept in the list so it can be renewed: an expired invite can no longer
+      // be claimed, and nobody would otherwise know it had lapsed.
+      expired: new Date(i.expires_at).getTime() <= Date.now(),
     }));
   }
 
