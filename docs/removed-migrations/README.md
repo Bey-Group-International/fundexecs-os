@@ -47,10 +47,10 @@ same reason as above (`Remote migration versions not found in local migrations
 directory`). `DB Migrate` failed on every run from 2026-11-03 17:54 UTC, and no
 migration after `20261104144109` reached production in that time.
 
-|       Recorded version       |             Repo file (the live migration)              |  Bytes  |               md5 of recorded statement                |
-|------------------------------|---------------------------------------------------------|---------|--------------------------------------------------------|
-| `20261103175342` `signature_block_email_phone` | `20261103150000_signature_block_email_phone.sql` | 571  | `965c180a06ccd04cac66dcaf7519b540` |
-| `20261104144109` `record_envelope_signature`   | `20261104110000_record_envelope_signature.sql`   | 2773 | `7e8db9a1254b8e1a4acf56c97b3dfb29` |
+|                Recorded version                |          Repo file (the live migration)          | Bytes |     md5 of recorded statement      |
+|------------------------------------------------|--------------------------------------------------|-------|------------------------------------|
+| `20261103175342` `signature_block_email_phone` | `20261103150000_signature_block_email_phone.sql` | 571   | `965c180a06ccd04cac66dcaf7519b540` |
+| `20261104144109` `record_envelope_signature`   | `20261104110000_record_envelope_signature.sql`   | 2773  | `7e8db9a1254b8e1a4acf56c97b3dfb29` |
 
 The files here are the SQL production recorded, one statement each, copied
 before the rows are cleared. Each md5 above was computed by the database over
