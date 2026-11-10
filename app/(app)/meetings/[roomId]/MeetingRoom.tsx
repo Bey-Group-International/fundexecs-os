@@ -78,6 +78,7 @@ import {
 } from "@/lib/meetings/chat";
 import { CopilotErrorBoundary } from "./CopilotErrorBoundary";
 import type { PanelTab, SidebarNotetaker } from "./CallParts";
+import { CaptionStrip } from "./CaptionStrip";
 import { DEFAULT_NOTETAKER, applyGlossary, consentNotice, readNotetaker, type NotetakerSettings } from "@/lib/meetings/notetaker";
 import { NoticeStack, type StageNotice } from "./NoticeStack";
 import { useIdleControls, useRoomViewport } from "./useIdleControls";
@@ -6655,6 +6656,27 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     authQuery: notetakerAuthQuery,
   }), [notetaker, isGuest, isHost, changeNotetaker, heardLines, bookmarkVersion, addBookmark, notetakerAuthQuery]);
 
+  // Live captions over the stage: a per-viewer choice, remembered in this browser.
+  const [captionsOn, setCaptionsOn] = useState(false);
+  const [captionTick, setCaptionTick] = useState(0);
+  const [captionLines, setCaptionLines] = useState<TranscriptLine[]>([]);
+  useEffect(() => {
+    try { setCaptionsOn(localStorage.getItem("meeting-captions") === "1"); } catch { /* storage blocked */ }
+  }, []);
+  const toggleCaptions = useCallback(() => {
+    setCaptionsOn((on) => {
+      try { localStorage.setItem("meeting-captions", on ? "0" : "1"); } catch { /* storage blocked */ }
+      return !on;
+    });
+  }, []);
+  useEffect(() => {
+    if (!captionsOn) { setCaptionLines([]); return; }
+    const read = () => { setCaptionLines(transcriptRef.current.slice(-12)); setCaptionTick(Date.now()); };
+    read();
+    const timer = setInterval(read, 700);
+    return () => clearInterval(timer);
+  }, [captionsOn]);
+
   // The Transcript tab's copy of the live transcript. The transcript itself is a
   // ref — it changes several times a second while people talk, and re-rendering
   // the room for each change is what the ref exists to avoid — so the tab reads
@@ -7807,6 +7829,11 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
         <div className="relative flex-1 flex flex-col overflow-hidden bg-[var(--surface-0)] min-w-0">
           <ReactionTicker entries={liveReactions} />
           <NoticeStack notices={stageNotices} />
+          {captionsOn && !notetaker.paused && <CaptionStrip lines={captionLines} now={captionTick} />}
+          <button type="button" onClick={toggleCaptions} aria-pressed={captionsOn} title={captionsOn ? "Turn captions off" : "Turn captions on"}
+            className={`absolute bottom-3 left-3 z-20 min-h-9 rounded-full border px-3 text-xs font-semibold ${captionsOn ? "border-[var(--gold-400)] bg-[var(--gold-400)] text-black" : "border-[var(--line)] bg-[var(--surface-1)]/90 text-[var(--fg-primary)]"}`}>
+            CC
+          </button>
           {/* Everyone's voice, once each, independent of layout. The tiles
               below are muted pictures; see PeerAudio. */}
           {allPeers.map((peer: Peer) => (
