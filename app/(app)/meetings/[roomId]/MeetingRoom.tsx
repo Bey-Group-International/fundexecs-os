@@ -24,6 +24,7 @@ import { codecLeadFor, orderVideoCodecs } from "@/lib/meetings/codec-preference"
 import { browserFamily } from "@/lib/meetings/green-room";
 import { cameraReleaseDue, msUntilCameraRelease } from "@/lib/meetings/camera-release";
 import { RECOGNIZER_SKIPPED_NOTICE, isMobileUserAgent, recognizerSkipReason } from "@/lib/meetings/recognizer-policy";
+import { FALLBACK_UNAVAILABLE_NOTICE, wantsFallback } from "@/lib/meetings/fallback/policy";
 import { followDecision, followNotice, newlyPluggedDevices, type FollowDecision } from "@/lib/meetings/device-follow";
 import {
   constraintsFor,
@@ -3959,10 +3960,56 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
   // confidence stored on a line was the attribution's alone (who said it), so
   // an hour of noise recognised as words at engine confidence 0.2 reached the
   // report model stamped 1.0, as fact. See recognition-quality.ts.
+  // Firefox has no speech recogniser and desktop Safari's ignores the call's
+  // microphone. Those two run a Whisper-class model in a worker instead, from
+  // files this site serves (lib/meetings/fallback). The module is loaded, and
+  // the model's presence checked, only on a browser that would use it; the
+  // recogniser effect below waits for the answer.
+  const fallbackRef = useRef<typeof import("@/lib/meetings/fallback/browser") | null>(null);
+  const usingFallbackRef = useRef(false);
+  const [fallbackModel, setFallbackModel] = useState<"unknown" | "installed" | "missing">("unknown");
   useEffect(() => {
     if (!sessionLive) return;
     const w = window as any;
-    const SR = (w.SpeechRecognition ?? w.webkitSpeechRecognition) as (new () => any) | undefined;
+    const nav = navigator;
+    if (!wantsFallback({
+      hasNativeRecognizer: !!(w.SpeechRecognition ?? w.webkitSpeechRecognition),
+      isSafari: browserBrand(null, nav.userAgent) === "Safari",
+      mobile: isMobileUserAgent(nav.userAgent, nav.maxTouchPoints ?? 0),
+    })) return;
+    let cancelled = false;
+    void import("@/lib/meetings/fallback/browser").then(async (mod) => {
+      fallbackRef.current = mod;
+      const installed = await mod.modelInstalled();
+      if (!cancelled) setFallbackModel(installed ? "installed" : "missing");
+    }).catch(() => { if (!cancelled) setFallbackModel("missing"); });
+    return () => { cancelled = true; };
+  }, [sessionLive]);
+
+  useEffect(() => {
+    if (!sessionLive) return;
+    const w = window as any;
+    let SR = (w.SpeechRecognition ?? w.webkitSpeechRecognition) as (new () => any) | undefined;
+    usingFallbackRef.current = false;
+    {
+      const nav = typeof navigator !== "undefined" ? navigator : null;
+      const mobile = isMobileUserAgent(nav?.userAgent, nav?.maxTouchPoints ?? 0);
+      if (wantsFallback({ hasNativeRecognizer: !!SR, isSafari: browserBrand(null, nav?.userAgent ?? null) === "Safari", mobile })) {
+        // Still checking whether the model is installed: start nothing yet.
+        if (fallbackModel === "unknown") return;
+        const mod = fallbackRef.current;
+        if (fallbackModel === "installed" && mod && mod.readDeviceVerdict(mobile).ok) {
+          SR = mod.FallbackSpeechRecognition as unknown as new () => any;
+          usingFallbackRef.current = true;
+        } else if (!SR) {
+          // Nothing to fall back on: say so once, and what still works.
+          setSrStatus("unsupported"); srStatusRef.current = "unsupported";
+          setSrSkippedNotice(FALLBACK_UNAVAILABLE_NOTICE);
+          return;
+        }
+        // Desktop Safari without the model keeps its own engine.
+      }
+    }
     if (!SR) { setSrStatus("unsupported"); srStatusRef.current = "unsupported"; return; }
     // A phone whose engine would open a second capture of the microphone
     // beside the call's does not transcribe. "unsupported" is the honest
@@ -4358,7 +4405,7 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
       deafWatchRef.current = createDeafWatch();
       setSrDeaf(false);
     };
-  }, [sessionLive]);
+  }, [sessionLive, fallbackModel]);
 
   // Tell the room whether this client's transcription is working — announced
   // on change here and to each newcomer in the join hello, exactly like mic
@@ -4410,7 +4457,7 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
         status: srStatus,
         // "Follows" the picked microphone by whichever route: the call's track
         // where the engine honours it, or a capture of the picked device.
-        followsTrack: recognizerHearsPickedMic({ brand, available: engineFollowsTrack(SR) }),
+        followsTrack: recognizerHearsPickedMic({ brand, available: usingFallbackRef.current || engineFollowsTrack(SR) }),
         micId: selectedMicId,
         micLabel: track?.label ?? null,
         micGroupId: track?.getSettings?.().groupId ?? null,
