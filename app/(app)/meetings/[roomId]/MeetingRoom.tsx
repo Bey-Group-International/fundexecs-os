@@ -4002,9 +4002,11 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
           SR = mod.FallbackSpeechRecognition as unknown as new () => any;
           usingFallbackRef.current = true;
         } else if (!SR) {
-          // Nothing to fall back on: say so once, and what still works.
+          // Nothing to fall back on. Until the model is installed this is how
+          // the browser always behaved, so say nothing new; a device that is
+          // too weak to run an installed model is told, once, what still works.
           setSrStatus("unsupported"); srStatusRef.current = "unsupported";
-          setSrSkippedNotice(FALLBACK_UNAVAILABLE_NOTICE);
+          if (fallbackModel === "installed") setSrSkippedNotice(FALLBACK_UNAVAILABLE_NOTICE);
           return;
         }
         // Desktop Safari without the model keeps its own engine.
