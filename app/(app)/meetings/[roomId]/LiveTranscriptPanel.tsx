@@ -9,6 +9,14 @@ import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { chatClock } from "@/lib/meetings/chat";
 import { mergeFragments, transcriptAsText, transcriptFileName } from "@/lib/meetings/notetaker";
 import type { LiveTranscriptLine } from "./CallParts";
+import { useSpeaking } from "./room-shared";
+
+/** A pulsing dot beside a name while that person is audibly speaking; same source as the tile ring. */
+function SpeakingDot({ speakerId }: { speakerId: string }) {
+  const speaking = useSpeaking(speakerId, false);
+  if (!speaking) return null;
+  return <span role="img" aria-label="speaking now" title="Speaking now" className="h-1.5 w-1.5 shrink-0 self-center rounded-full bg-[var(--gold-400)] animate-pulse" />;
+}
 
 type SrStatus = "idle" | "active" | "failing" | "error" | "unsupported";
 
@@ -55,6 +63,12 @@ export function LiveTranscriptPanel({
   const turns = useMemo(() => mergeFragments(lines), [lines]);
   const matches = useMemo(() => findMatches(turns, query), [turns, query]);
   const current = matches.length ? matches[Math.min(active, matches.length - 1)] : null;
+  // Only a speaker's latest turn carries the live dot.
+  const latestTurnOf = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const t of turns) m.set(t.speakerId, t.id);
+    return m;
+  }, [turns]);
 
   useEffect(() => setActive(0), [query]);
 
@@ -207,6 +221,7 @@ export function LiveTranscriptPanel({
                   <span className="break-words text-xs font-medium" style={{ color: colorFor(turn.speakerId) }}>
                     {turn.isLocal ? "You" : turn.speaker}
                   </span>
+                  {latestTurnOf.get(turn.speakerId) === turn.id && <SpeakingDot speakerId={turn.speakerId} />}
                   <span className="font-mono text-[10px] tabular-nums text-[var(--fg-muted)]">{chatClock(turn.ts)}</span>
                 </span>
                 <p className={`break-words text-sm text-[var(--fg-primary)] ${turn.final ? "" : "italic"}`}>
