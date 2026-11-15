@@ -12,8 +12,11 @@ export const dynamic = "force-dynamic";
 type Params = Promise<{ id: string }>;
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-/** A turn is rarely longer; a bigger ask is a mistake, not a request. */
-export const MAX_LINES = 200;
+/**
+ * A turn is rarely longer; a bigger ask is a mistake, not a request. Not
+ * exported: a Next.js route file may export only its handlers and config.
+ */
+const MAX_LINES = 200;
 
 export async function PUT(req: NextRequest, { params }: { params: Params }) {
   const { id } = await params;
