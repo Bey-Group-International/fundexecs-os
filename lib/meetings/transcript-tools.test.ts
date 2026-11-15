@@ -10,6 +10,7 @@ import {
   overlayFrom,
   quoteFor,
   renameInText,
+  resplitTurns,
   speakersHeard,
   talkStats,
   toMarkdown,
@@ -174,5 +175,40 @@ describe("quotes", () => {
       "“We close in May.” — Dana (2:05)\nhttps://app.example/meetings/abc/report?x=1&t=125",
     );
     expect(quoteFor({ speaker: "", text: "Hi", atMs: null, url: null })).toBe("“Hi” — Unattributed");
+  });
+});
+
+describe("who spoke a line, on a shared microphone", () => {
+  const rows = [
+    { id: "a", speaker: "Priya", text: "Welcome.", ts: "2026-11-01T10:00:00Z" },
+    { id: "b", speaker: "Priya", text: "I think we close in March.", ts: "2026-11-01T10:00:10Z" },
+    { id: "c", speaker: "Priya", text: "Agreed.", ts: "2026-11-01T10:00:20Z" },
+  ];
+
+  it("shows the assigned name on that line only, and keeps who the room heard", () => {
+    const overlay = overlayFrom([{ original: "Priya", display: "Priya Shah" }], [], [{ line_id: "b", speaker: "Marcus Lee" }]);
+    const shown = applyOverlay(rows, overlay);
+    expect(shown.map((r) => r.speaker)).toEqual(["Priya Shah", "Marcus Lee", "Priya Shah"]);
+    expect(shown[1].originalSpeaker).toBe("Priya");
+  });
+
+  it("splits a turn around a reassigned line and closes up neighbours", () => {
+    const turn = { speaker: "Priya", atMs: 0, uncertain: false, overlapped: false, paragraphs: ["Welcome.", "I think we close in March.", "Agreed."], lineIds: ["a", "b", "c"], originals: [null, null, null] };
+    const split = resplitTurns([turn], new Map([["b", "Marcus Lee"]]));
+    expect(split.map((t) => [t.speaker, t.paragraphs])).toEqual([
+      ["Priya", ["Welcome."]],
+      ["Marcus Lee", ["I think we close in March."]],
+      ["Priya", ["Agreed."]],
+    ]);
+    // Giving the whole turn to one person is one turn again.
+    const all = resplitTurns([turn], new Map([["a", "Sam"], ["b", "Sam"], ["c", "Sam"]]));
+    expect(all).toHaveLength(1);
+    expect(all[0].paragraphs).toHaveLength(3);
+    expect(all[0].lineIds).toEqual(["a", "b", "c"]);
+  });
+
+  it("leaves turns alone with nothing assigned", () => {
+    const turn = { speaker: "Priya", atMs: 0, uncertain: false, overlapped: false, paragraphs: ["x"], lineIds: ["a"] };
+    expect(resplitTurns([turn], new Map())).toEqual([turn]);
   });
 });
