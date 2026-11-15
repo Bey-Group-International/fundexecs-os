@@ -158,6 +158,15 @@ describe("editing a meeting of a repeating series", () => {
 });
 
 describe("typing a time", () => {
+  // "nov 12" means the next Nov 12, so it reads differently once the real clock passes it.
+  // Pin "now" to the date the screen is opened on in these tests.
+  beforeEach(() => {
+    jest.useFakeTimers({ now: new Date(2026, 9, 5, 10, 0) });
+  });
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
   it("shows what it read, and fills in the date, start and length on Enter", () => {
     open();
     const quick = screen.getByLabelText("Quick time");
