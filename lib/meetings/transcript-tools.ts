@@ -11,7 +11,7 @@
 //
 // Pure. The overlay is loaded by whoever renders, and applied here.
 
-import type { CueRow } from "@/lib/meetings/transcript-cues";
+import type { CueRow, TranscriptCue } from "@/lib/meetings/transcript-cues";
 import { parseTranscript } from "@/lib/meetings/transcript-view";
 
 export const SPEAKER_NAME_MAX = 80;
@@ -33,9 +33,11 @@ export interface TranscriptOverlay {
   names: ReadonlyMap<string, string>;
   /** Line id → corrected text. */
   edits: ReadonlyMap<string, string>;
+  /** Line id → who actually said it, where several people shared one microphone. */
+  lineSpeakers: ReadonlyMap<string, string>;
 }
 
-export const EMPTY_OVERLAY: TranscriptOverlay = { names: new Map(), edits: new Map() };
+export const EMPTY_OVERLAY: TranscriptOverlay = { names: new Map(), edits: new Map(), lineSpeakers: new Map() };
 
 /** One line, no control characters, capped; null for nothing. */
 export function cleanSpeakerName(raw: unknown): string | null {
@@ -65,20 +67,25 @@ export function cleanLineText(raw: unknown): string | null {
 export function overlayFrom(
   names: ReadonlyArray<{ original: string; display: string }> | null | undefined,
   edits: ReadonlyArray<{ line_id: string; text: string }> | null | undefined,
+  lineSpeakers?: ReadonlyArray<{ line_id: string; speaker: string }> | null,
 ): TranscriptOverlay {
   return {
     names: new Map((names ?? []).filter((n) => n.original && n.display).map((n) => [n.original, n.display])),
     edits: new Map((edits ?? []).filter((e) => e.line_id && e.text).map((e) => [e.line_id, e.text])),
+    lineSpeakers: new Map((lineSpeakers ?? []).filter((l) => l.line_id && l.speaker).map((l) => [l.line_id, l.speaker])),
   };
 }
 
 /** Apply names and corrections to the stored rows. Rows are copied, never changed in place. */
 export function applyOverlay<T extends OverlayRow>(rows: readonly T[], overlay: TranscriptOverlay): Array<T & ShownRow> {
-  if (!overlay.names.size && !overlay.edits.size) return rows.map((r) => ({ ...r }));
+  if (!overlay.names.size && !overlay.edits.size && !overlay.lineSpeakers.size) return rows.map((r) => ({ ...r }));
   return rows.map((r) => {
     const out: T & ShownRow = { ...r };
     const speaker = (r.speaker ?? "").trim();
-    const name = speaker ? overlay.names.get(speaker) : undefined;
+    // Who the host says spoke this very line wins over the label's name: that
+    // label is the device's owner, and the line was somebody else on it.
+    const assigned = r.id ? overlay.lineSpeakers.get(r.id) : undefined;
+    const name = assigned ?? (speaker ? overlay.names.get(speaker) : undefined);
     if (name && name !== speaker) {
       out.originalSpeaker = speaker;
       out.speaker = name;
@@ -372,4 +379,59 @@ export function momentUrl(base: string, atMs: number): string {
   } catch {
     return base;
   }
+}
+
+
+// ── Reassigning lines on a page that is already showing turns ───────────────
+
+/**
+ * Turns re-cut after the host says who spoke some lines. A turn is one
+ * speaker's run, so a line given to somebody else splits its turn in two and
+ * the lines either side of it close up with their neighbours. Lines without an
+ * assignment keep the turn's speaker. The page uses this to show the change
+ * the moment it is saved; the next load builds the same turns from the rows.
+ */
+export function resplitTurns<T extends TranscriptCue>(
+  turns: readonly T[],
+  assigned: ReadonlyMap<string, string>,
+): T[] {
+  if (!assigned.size) return turns.slice();
+  const out: T[] = [];
+  for (const turn of turns) {
+    const ids = turn.lineIds;
+    if (!ids || !ids.some((id) => id && assigned.has(id))) {
+      out.push(turn);
+      continue;
+    }
+    let current: T | null = null;
+    turn.paragraphs.forEach((paragraph, j) => {
+      const id = ids[j] ?? null;
+      const speaker = (id && assigned.get(id)) || turn.speaker;
+      if (!current || current.speaker !== speaker) {
+        current = {
+          ...turn,
+          speaker,
+          paragraphs: [],
+          lineIds: [],
+          originals: turn.originals ? [] : undefined,
+        };
+        out.push(current);
+      }
+      current.paragraphs.push(paragraph);
+      current.lineIds!.push(id);
+      if (current.originals) current.originals.push(turn.originals?.[j] ?? null);
+    });
+  }
+  // Neighbouring turns by one speaker read as one, the way the server cuts them.
+  return out.reduce<T[]>((acc, t) => {
+    const last = acc[acc.length - 1];
+    if (last && last.speaker === t.speaker && last.uncertain === t.uncertain && last.overlapped === t.overlapped && last.lineIds && t.lineIds) {
+      last.paragraphs = [...last.paragraphs, ...t.paragraphs];
+      last.lineIds = [...last.lineIds, ...t.lineIds];
+      if (last.originals && t.originals) last.originals = [...last.originals, ...t.originals];
+      return acc;
+    }
+    acc.push({ ...t });
+    return acc;
+  }, []);
 }

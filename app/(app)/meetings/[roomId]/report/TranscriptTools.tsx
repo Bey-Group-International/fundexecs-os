@@ -218,6 +218,9 @@ export function LineActions({
   original,
   canEdit,
   onEdit,
+  speakerOptions = [],
+  laterLineIds = [],
+  onReassign,
 }: {
   text: string;
   speaker: string;
@@ -228,7 +231,17 @@ export function LineActions({
   original: string | null;
   canEdit: boolean;
   onEdit: (lineId: string, text: string | null) => Promise<string | null>;
+  /** Names already in this transcript, offered when saying who spoke. */
+  speakerOptions?: readonly string[];
+  /** The lines after this one in the same turn, for "and the rest of this turn". */
+  laterLineIds?: readonly string[];
+  /** Say who spoke these lines; null puts them back as the room heard them. */
+  onReassign?: (lineIds: string[], speaker: string | null) => Promise<string | null>;
 }) {
+  const [assigning, setAssigning] = useState(false);
+  const [who, setWho] = useState("");
+  const [other, setOther] = useState("");
+  const [rest, setRest] = useState(false);
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(text);
   const [copied, setCopied] = useState(false);
@@ -254,6 +267,67 @@ export function LineActions({
     setBusy(false);
     if (err) setError(err);
     else setEditing(false);
+  }
+
+  async function assign(speakerName: string | null) {
+    if (!lineId || !onReassign) return;
+    setBusy(true);
+    setError(null);
+    const err = await onReassign(rest ? [lineId, ...laterLineIds] : [lineId], speakerName);
+    setBusy(false);
+    if (err) setError(err);
+    else setAssigning(false);
+  }
+
+  if (assigning && lineId && onReassign) {
+    const chosen = who === "__other" ? other.trim() : who;
+    return (
+      <span className="mt-1 flex flex-col gap-1.5" data-who-spoke>
+        <label className="flex flex-col gap-1 text-xs text-[var(--fg-secondary)]">
+          Who said this?
+          <select
+            value={who}
+            onChange={(e) => setWho(e.target.value)}
+            aria-label="Who said this"
+            className="rounded-md border border-[var(--line)] bg-[var(--surface-0)] px-2 py-1 text-xs text-[var(--fg-primary)]"
+          >
+            <option value="">Choose…</option>
+            {speakerOptions.map((n) => (
+              <option key={n} value={n}>{n}</option>
+            ))}
+            <option value="__other">Someone else…</option>
+          </select>
+        </label>
+        {who === "__other" && (
+          <input
+            value={other}
+            onChange={(e) => setOther(e.target.value)}
+            maxLength={80}
+            placeholder="Their name"
+            aria-label="Their name"
+            className="rounded-md border border-[var(--line)] bg-[var(--surface-0)] px-2 py-1 text-xs text-[var(--fg-primary)]"
+          />
+        )}
+        {laterLineIds.length > 0 && (
+          <label className="flex items-center gap-1.5 text-xs text-[var(--fg-secondary)]">
+            <input type="checkbox" checked={rest} onChange={(e) => setRest(e.target.checked)} />
+            This and the {laterLineIds.length} line{laterLineIds.length === 1 ? "" : "s"} after it in this turn
+          </label>
+        )}
+        <span className="flex flex-wrap gap-2 text-xs">
+          <button type="button" className={button} disabled={busy || !chosen} onClick={() => void assign(chosen)}>
+            {busy ? "Saving…" : "Save"}
+          </button>
+          <button type="button" className={button} disabled={busy} onClick={() => void assign(null)} title="Show the speaker the room heard">
+            As heard
+          </button>
+          <button type="button" className={button} onClick={() => { setAssigning(false); setError(null); }}>
+            Cancel
+          </button>
+        </span>
+        {error && <span role="alert" className="text-xs text-[var(--status-danger,#ef4444)]">{error}</span>}
+      </span>
+    );
   }
 
   if (editing && lineId) {
@@ -295,6 +369,11 @@ export function LineActions({
           <button type="button" onClick={() => { setDraft(text); setEditing(true); }} className="hover:text-[var(--fg-primary)]" aria-label="Correct this line">
             Edit
           </button>
+          {onReassign && (
+            <button type="button" onClick={() => { setWho(""); setOther(""); setRest(false); setAssigning(true); }} className="hover:text-[var(--fg-primary)]" aria-label="Say who said this line">
+              Speaker
+            </button>
+          )}
           {original !== null && (
             <button type="button" disabled={busy} onClick={() => void save(null)} className="hover:text-[var(--fg-primary)]" aria-label="Undo correction">
               Undo

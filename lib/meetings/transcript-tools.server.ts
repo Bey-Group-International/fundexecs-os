@@ -11,14 +11,19 @@ import { overlayFrom, EMPTY_OVERLAY, type ExportLine, type OverlayRow, type Tran
 
 type Db = { from: (table: string) => any };
 
-/** A meeting's speaker names and line corrections. Empty when there are none, or no tables yet. */
+/** A meeting's speaker names, line corrections and line speakers. Empty when there are none, or no tables yet. */
 export async function loadOverlay(db: Db, meetingId: string): Promise<TranscriptOverlay> {
   try {
-    const [names, edits] = await Promise.all([
+    const [names, edits, lineSpeakers] = await Promise.all([
       db.from("live_meeting_speaker_names").select("original, display").eq("meeting_id", meetingId).limit(500),
       db.from("live_meeting_transcript_edits").select("line_id, text").eq("meeting_id", meetingId).limit(5000),
+      db.from("live_meeting_line_speakers").select("line_id, speaker").eq("meeting_id", meetingId).limit(5000),
     ]);
-    return overlayFrom(names?.error ? [] : names?.data, edits?.error ? [] : edits?.data);
+    return overlayFrom(
+      names?.error ? [] : names?.data,
+      edits?.error ? [] : edits?.data,
+      lineSpeakers?.error ? [] : lineSpeakers?.data,
+    );
   } catch {
     return EMPTY_OVERLAY;
   }

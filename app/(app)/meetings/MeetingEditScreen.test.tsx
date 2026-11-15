@@ -158,6 +158,23 @@ describe("editing a meeting of a repeating series", () => {
 });
 
 describe("typing a time", () => {
+  // "nov 12" means the next Nov 12, so what it reads depends on today's date:
+  // once Nov 12 2026 had passed it meant 2027 (a Friday) and the "Thu, Nov 12"
+  // below stopped matching. Only the clock is held still; timers stay real.
+  beforeEach(() => {
+    jest.useFakeTimers({
+      now: new Date("2026-11-01T12:00:00Z"),
+      doNotFake: [
+        "setTimeout", "clearTimeout", "setInterval", "clearInterval", "setImmediate", "clearImmediate",
+        "nextTick", "queueMicrotask", "requestAnimationFrame", "cancelAnimationFrame",
+        "requestIdleCallback", "cancelIdleCallback", "performance", "hrtime",
+      ],
+    });
+  });
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
   it("shows what it read, and fills in the date, start and length on Enter", () => {
     open();
     const quick = screen.getByLabelText("Quick time");
