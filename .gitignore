@@ -57,3 +57,6 @@ yarn-error.log*
 # during a deploy turned into backgrounds that quietly do not work.
 /public/mediapipe/vision_wasm_internal.js
 /public/mediapipe/vision_wasm_internal.wasm
+
+# self-hosted speech model + ORT runtime (scripts/fetch-whisper-model.mjs)
+/public/models/
