@@ -311,6 +311,8 @@ describe("the reads", () => {
       live_meeting_chat: 1,
       live_meeting_speaker_names: 1,
       live_meeting_transcript_edits: 1,
+      // Who the host said spoke a line, where one microphone was shared.
+      live_meeting_line_speakers: 1,
       live_meeting_transcripts: 1,
       // The notetaker's bookmarks, shown as moments in the report.
       live_meeting_bookmarks: 1,

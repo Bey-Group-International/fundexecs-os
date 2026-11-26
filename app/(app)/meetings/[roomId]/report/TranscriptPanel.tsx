@@ -2,7 +2,7 @@
 
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { LineActions, TranscriptToolbar } from "./TranscriptTools";
-import type { OverlayRow } from "@/lib/meetings/transcript-tools";
+import { resplitTurns, type OverlayRow } from "@/lib/meetings/transcript-tools";
 import {
   parseTranscript,
   speakerInitials,
@@ -217,6 +217,9 @@ const TranscriptTurn = memo(function TranscriptTurn({
                 original={cue.originals?.[j] ?? null}
                 canEdit={lineTools.canEdit}
                 onEdit={lineTools.onEdit}
+                speakerOptions={lineTools.speakerOptions}
+                laterLineIds={(cue.lineIds ?? []).slice(j + 1).filter((id): id is string => Boolean(id))}
+                onReassign={lineTools.onReassign}
               />
             )}
           </p>
@@ -229,6 +232,8 @@ const TranscriptTurn = memo(function TranscriptTurn({
 interface LineTools {
   canEdit: boolean;
   onEdit: (lineId: string, text: string | null) => Promise<string | null>;
+  speakerOptions: readonly string[];
+  onReassign: (lineIds: string[], speaker: string | null) => Promise<string | null>;
 }
 
 export interface TranscriptToolsProps {
@@ -281,6 +286,9 @@ export function TranscriptPanel({
   }, [loadedNames]);
   const [names, setNames] = useState<Map<string, string>>(() => new Map(Object.entries(loadedNames ?? {})));
   const [edits, setEdits] = useState<Map<string, { text: string; original: string | null }>>(() => new Map());
+  // Who the host said spoke which lines on this page since it loaded: line id →
+  // the name to show. Laid over what the server already applied.
+  const [assigned, setAssigned] = useState<Map<string, string>>(() => new Map());
   const shownName = useCallback((speaker: string) => {
     const heard = heardOf(speaker);
     return names.get(heard) ?? heard;
@@ -298,7 +306,7 @@ export function TranscriptPanel({
   );
   const turns = useMemo(() => {
     if (!tools) return baseTurns;
-    return baseTurns.map((t) => {
+    const shown = baseTurns.map((t) => {
       const cue = t as Partial<TranscriptCue>;
       const speaker = t.speaker ? shownName(t.speaker) : t.speaker;
       if (!cue.lineIds || !edits.size) return speaker === t.speaker ? t : { ...t, speaker };
@@ -312,7 +320,9 @@ export function TranscriptPanel({
       });
       return { ...t, speaker, paragraphs, originals };
     });
-  }, [baseTurns, tools, shownName, edits]);
+    // Lines given to somebody else split their turn, as the server cuts them.
+    return resplitTurns(shown as TranscriptCue[], assigned) as typeof shown;
+  }, [baseTurns, tools, shownName, edits, assigned]);
   const heardSpeakers = useMemo(() => {
     const out: string[] = [];
     for (const t of baseTurns) {
@@ -322,8 +332,11 @@ export function TranscriptPanel({
     return out;
   }, [baseTurns, heardOf]);
   const talkRows = useMemo(
-    () => (tools ? tools.rows.map((r) => ({ ...r, speaker: r.speaker ? shownName(r.speaker) : r.speaker })) : []),
-    [tools, shownName],
+    () =>
+      tools
+        ? tools.rows.map((r) => ({ ...r, speaker: (r.id && assigned.get(r.id)) || (r.speaker ? shownName(r.speaker) : r.speaker) }))
+        : [],
+    [tools, shownName, assigned],
   );
 
   const rename = useCallback(
@@ -371,11 +384,43 @@ export function TranscriptPanel({
     [tools],
   );
 
-  const lineTools = useMemo<LineTools | null>(
-    () => (tools ? { canEdit: tools.isHost, onEdit: editLine } : null),
-    [tools, editLine],
+  const reassign = useCallback(
+    async (lineIds: string[], speaker: string | null): Promise<string | null> => {
+      if (!tools) return null;
+      try {
+        const res = await fetch(`/api/meetings/${tools.meetingId}/transcript/line-speakers`, {
+          method: "PUT",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ lineIds, speaker }),
+        });
+        const body = (await res.json().catch(() => ({}))) as {
+          speaker?: string | null;
+          heard?: Record<string, string>;
+          error?: string;
+        };
+        if (!res.ok || !body.heard) return body.error ?? "Couldn't save who spoke.";
+        setAssigned((prev) => {
+          const next = new Map(prev);
+          for (const id of lineIds) {
+            // Put back as heard = the heard label, shown the way the rest of the page shows it.
+            const heard = body.heard![id] ?? "";
+            next.set(id, body.speaker ?? (heard ? shownName(heard) : ""));
+          }
+          return next;
+        });
+        return null;
+      } catch {
+        return "Couldn't save who spoke. Check your connection.";
+      }
+    },
+    [tools, shownName],
   );
+
   const speakers = useMemo(() => transcriptSpeakers(turns), [turns]);
+  const lineTools = useMemo<LineTools | null>(
+    () => (tools ? { canEdit: tools.isHost, onEdit: editLine, speakerOptions: speakers, onReassign: reassign } : null),
+    [tools, editLine, speakers, reassign],
+  );
   const words = useMemo(() => transcriptWordCount(turns), [turns]);
 
   // Located rather than filtered. Filtering removed the conversation around a
