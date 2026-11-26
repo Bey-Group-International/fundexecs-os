@@ -158,18 +158,10 @@ describe("editing a meeting of a repeating series", () => {
 });
 
 describe("typing a time", () => {
-  // "nov 12" means the next Nov 12, so what it reads depends on today's date:
-  // once Nov 12 2026 had passed it meant 2027 (a Friday) and the "Thu, Nov 12"
-  // below stopped matching. Only the clock is held still; timers stay real.
+  // "nov 12" means the next Nov 12, so it reads differently once the real clock passes it.
+  // Pin "now" to the date the screen is opened on in these tests.
   beforeEach(() => {
-    jest.useFakeTimers({
-      now: new Date("2026-11-01T12:00:00Z"),
-      doNotFake: [
-        "setTimeout", "clearTimeout", "setInterval", "clearInterval", "setImmediate", "clearImmediate",
-        "nextTick", "queueMicrotask", "requestAnimationFrame", "cancelAnimationFrame",
-        "requestIdleCallback", "cancelIdleCallback", "performance", "hrtime",
-      ],
-    });
+    jest.useFakeTimers({ now: new Date(2026, 9, 5, 10, 0) });
   });
   afterEach(() => {
     jest.useRealTimers();
