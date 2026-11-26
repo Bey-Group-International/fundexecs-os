@@ -158,6 +158,16 @@ describe("editing a meeting of a repeating series", () => {
 });
 
 describe("typing a time", () => {
+  // "nov 12" resolves against today, so pin the clock to the fixture's date
+  // (Oct 5, 2026). Otherwise this passes only until Nov 12 goes by, when the
+  // parser rolls to next year and the weekday changes.
+  beforeEach(() => {
+    jest.useFakeTimers({ now: new Date(2026, 9, 5, 9, 0) });
+  });
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
   it("shows what it read, and fills in the date, start and length on Enter", () => {
     open();
     const quick = screen.getByLabelText("Quick time");
