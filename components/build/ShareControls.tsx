@@ -209,6 +209,9 @@ function AccessEditor({ share }: { share: ShareView }) {
   const [domains, setDomains] = useState((share.allowed_email_domains ?? []).join(", "));
   const [maxReaders, setMaxReaders] = useState(share.max_readers ? String(share.max_readers) : "");
   const [linkPath, setLinkPath] = useState(share.token);
+  // Only a path the owner typed is ever submitted; an untouched field would
+  // otherwise resend a stale token and revive a URL that was retired.
+  const [linkPathEdited, setLinkPathEdited] = useState(false);
   const [message, setMessage] = useState<{ tone: "ok" | "error"; text: string } | null>(null);
   const [pending, startTransition] = useTransition();
 
@@ -225,8 +228,9 @@ function AccessEditor({ share }: { share: ShareView }) {
   }
 
   const invalid = parseDomains(domains).invalid;
-  const pathChanged = linkPath.trim().toLowerCase() !== share.token;
-  const pathCheck = pathChanged ? parseLinkPath(linkPath) : null;
+  // Compare the normalised path, so "acme room" for "acme-room" isn't a change.
+  const pathCheck = linkPathEdited ? parseLinkPath(linkPath) : null;
+  const pathChanged = linkPathEdited && (!pathCheck?.ok || pathCheck.path !== share.token);
   const pathError = pathCheck && !pathCheck.ok ? pathCheck.error : null;
   const save = () =>
     startTransition(async () => {
@@ -283,7 +287,12 @@ function AccessEditor({ share }: { share: ShareView }) {
         <span className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">Link URL</span>
         <div className="mt-1 flex items-center gap-1">
           <span className="font-mono text-[11px] text-fg-muted">/dataroom/</span>
-          <input value={linkPath} onChange={(e) => setLinkPath(e.target.value)} className={inputClass} />
+          <input value={linkPath} onChange={(e) => {
+              setLinkPath(e.target.value);
+              setLinkPathEdited(true);
+            }}
+            className={inputClass}
+          />
         </div>
         {pathError ? (
           <span className="mt-1 block text-[11px] text-amber-400">{pathError}</span>
