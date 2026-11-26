@@ -12,6 +12,7 @@ import { createServerClient, createServiceClient, hasSupabaseServiceEnv } from "
 import type { LpReviewState } from "@/lib/supabase/database.types";
 import { refreshIdentityCheck } from "@/lib/lp-identity.server";
 import { runOfacScreen } from "@/lib/ofac.server";
+import { runPepScreen } from "@/lib/pep.server";
 import { recordAudit } from "@/lib/lp-audit.server";
 import { assessRisk, approvalRiskBlocker } from "@/lib/lp-risk";
 import { decideCarryover, type DecideOutcome } from "@/lib/lp-reuse.server";
@@ -244,6 +245,33 @@ export async function runOfacScreenAction(
     return { ok: true, flagged: res.flagged, screened: res.screened, wrote: res.wrote };
   } catch (err) {
     console.error("runOfacScreenAction threw", err);
+    return { ok: false, error: GENERIC };
+  }
+}
+
+/**
+ * Runs the first-pass PEP screen for an LP. Unlike the OFAC screen it sends the
+ * LP's names to a screening provider, so it only ever runs when a fund manager
+ * asks for it: never automatically. It flags a possible match on the PEP check and
+ * never clears it.
+ */
+export async function runPepScreenAction(
+  sessionId: unknown,
+): Promise<OnboardingActionResult & { flagged?: number; screened?: number; wrote?: boolean }> {
+  const who = await authorize();
+  if (!who.ok) return who;
+  if (typeof sessionId !== "string" || !sessionId) return { ok: false, error: "That LP wasn't found." };
+  try {
+    const supabase = await createServerClient();
+    if (!(await sessionStage(supabase, sessionId, who.ctx.orgId))) return { ok: false, error: "That LP wasn't found." };
+    // Recorded by the system, as with the OFAC screen, so the write uses the service role after the checks above.
+    if (!hasSupabaseServiceEnv()) return { ok: false, error: GENERIC };
+    const res = await runPepScreen(createServiceClient(), sessionId, who.ctx.orgId, { actor: { kind: "user", id: who.ctx.userId } });
+    if (!res.ok) return res;
+    revalidatePath(PAGE);
+    return { ok: true, flagged: res.flagged, screened: res.screened, wrote: res.wrote };
+  } catch (err) {
+    console.error("runPepScreenAction threw", err);
     return { ok: false, error: GENERIC };
   }
 }

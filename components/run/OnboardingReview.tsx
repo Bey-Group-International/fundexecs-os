@@ -12,6 +12,7 @@ import {
   recordOnboardingDecision,
   refreshIdentityCheckAction,
   runOfacScreenAction,
+  runPepScreenAction,
   decideCarryoverAction,
 } from "@/app/(app)/[hub]/[module]/onboarding-actions";
 import { eraseLpAction } from "@/app/(app)/[hub]/[module]/onboarding-erase-actions";
@@ -151,6 +152,23 @@ function CheckRow({ lpId, info, check }: { lpId: string; info: (typeof CHECK_KIN
       });
     });
 
+  const screenPep = () =>
+    startTransition(async () => {
+      setMessage(null);
+      const res = await runPepScreenAction(lpId).catch(() => ({ ok: false as const, error: "Couldn't run the screen. Try again." }));
+      if (!res.ok) return setMessage({ tone: "error", text: res.error });
+      const flagged = "flagged" in res ? (res.flagged ?? 0) : 0;
+      const wrote = "wrote" in res ? res.wrote : true;
+      setMessage({
+        tone: flagged > 0 ? "error" : "ok",
+        text: !wrote
+          ? `Screened. ${flagged > 0 ? `${flagged} possible match${flagged === 1 ? "" : "es"}, ` : "No possible match, "}but your recorded result was left as it is.`
+          : flagged > 0
+            ? `${flagged} possible match${flagged === 1 ? "" : "es"} flagged. Reload to read the note, then confirm whether it is the same person.`
+            : "No possible match. This is not a clearance: record your own result.",
+      });
+    });
+
   const refresh = () =>
     startTransition(async () => {
       setMessage(null);
@@ -235,6 +253,19 @@ function CheckRow({ lpId, info, check }: { lpId: string; info: (typeof CHECK_KIN
             Run OFAC screen
           </button>
           <span className="ml-2 text-[11px] text-fg-muted">First pass on names against the SDN list. It flags; it never clears.</span>
+        </div>
+      ) : null}
+      {info.kind === "pep" ? (
+        <div className="mt-2">
+          <button
+            type="button"
+            disabled={pending}
+            onClick={screenPep}
+            className="rounded-lg border border-line px-3 py-1.5 font-mono text-[11px] uppercase tracking-wider text-fg-muted transition hover:text-fg-secondary disabled:opacity-50"
+          >
+            Run PEP screen
+          </button>
+          <span className="ml-2 text-[11px] text-fg-muted">Sends the LP&apos;s and owners&apos; names to your screening provider. It flags; it never clears.</span>
         </div>
       ) : null}
       {fromStripe && check?.status === "pending" ? (

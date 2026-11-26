@@ -57,11 +57,15 @@ let decideResult: unknown = "confirmed";
 const decideCarryover = jest.fn(async (..._a: unknown[]) => decideResult);
 jest.mock("@/lib/lp-reuse.server", () => ({ decideCarryover: (...a: unknown[]) => decideCarryover(...a) }));
 
+let pepResult: unknown = { ok: true, flagged: 1, screened: 2, wrote: true };
+const runPep = jest.fn(async (..._a: unknown[]) => pepResult);
+jest.mock("@/lib/pep.server", () => ({ runPepScreen: (...a: unknown[]) => runPep(...a) }));
+
 let ofacResult: unknown = { ok: true, flagged: 0, screened: 2, wrote: true };
 const runOfac = jest.fn(async (..._a: unknown[]) => ofacResult);
 jest.mock("@/lib/ofac.server", () => ({ runOfacScreen: (...a: unknown[]) => runOfac(...a) }));
 
-import { decideCarryoverAction, recordOnboardingCheck, recordOnboardingDecision, refreshIdentityCheckAction, runOfacScreenAction } from "./onboarding-actions";
+import { runPepScreenAction, decideCarryoverAction, recordOnboardingCheck, recordOnboardingDecision, refreshIdentityCheckAction, runOfacScreenAction } from "./onboarding-actions";
 
 const allClear = () =>
   ["identity", "sanctions", "pep", "adverse_media", "accreditation"].map((kind) => ({ kind, status: "clear", expires_at: null }));
@@ -77,6 +81,8 @@ beforeEach(() => {
   inserted = null;
   recordAudit.mockClear();
   decideCarryover.mockClear();
+  runPep.mockClear();
+  pepResult = { ok: true, flagged: 1, screened: 2, wrote: true };
   decideResult = "confirmed";
   profileRow = null;
   for (const k of Object.keys(sessionFilters)) delete sessionFilters[k];
@@ -422,5 +428,27 @@ describe("recordOnboardingDecision: risk-based routing", () => {
   it("does not make rejecting or asking for more information harder", async () => {
     profileRow = { entity_type: "company", country: "Iran" };
     expect((await recordOnboardingDecision({ sessionId: "s1", decision: "rejected", reason: "No." })).ok).toBe(true);
+  });
+});
+
+describe("runPepScreenAction (sends names to a screening provider, so only a fund manager can start it)", () => {
+  it("runs the screen as the signed-in owner/admin, for this organization, through the service role", async () => {
+    const res = await runPepScreenAction("s1");
+    expect(res).toEqual({ ok: true, flagged: 1, screened: 2, wrote: true });
+    expect(runPep).toHaveBeenCalledWith(SERVICE_CLIENT, "s1", "org-1", { actor: { kind: "user", id: "user-1" } });
+  });
+  it("refuses anyone who is not an owner or admin, and sends nothing", async () => {
+    auth = { ok: true, ctx: { orgId: "org-1", userId: "user-2", role: "member" } };
+    expect((await runPepScreenAction("s1")).ok).toBe(false);
+    expect(runPep).not.toHaveBeenCalled();
+  });
+  it("refuses an LP that is not this organization's, and sends nothing", async () => {
+    sessionFound = false;
+    expect(await runPepScreenAction("s1")).toEqual({ ok: false, error: "That LP wasn't found." });
+    expect(runPep).not.toHaveBeenCalled();
+  });
+  it("passes the screen's own error through", async () => {
+    pepResult = { ok: false, error: "PEP screening isn't set up for this workspace. Record your own PEP result." };
+    expect(await runPepScreenAction("s1")).toMatchObject({ ok: false, error: expect.stringMatching(/isn't set up/) });
   });
 });
