@@ -10,7 +10,7 @@ import { revalidatePath } from "next/cache";
 import { createServerClient } from "@/lib/supabase/server";
 import { getSessionContext } from "@/lib/auth";
 import { insertShare } from "@/lib/data-room-shares.server";
-import { parseDomains } from "@/lib/data-room-link-rules";
+import { parseDomains, parseLinkPath } from "@/lib/data-room-link-rules";
 
 const ROOM = "/build/data_room";
 
@@ -145,6 +145,8 @@ export interface ShareAccessChange {
   allowedDomains?: string;
   /** null clears the cap; omitted leaves it. */
   maxReaders?: number | null;
+  /** New URL path (the token). The old URL stops working. Omitted leaves it. */
+  linkPath?: string;
 }
 
 /**
@@ -177,6 +179,11 @@ export async function updateShareAccess(
     if (change.maxReaders !== null && n === null) return { ok: false, error: "The reader limit must be a whole number above zero." };
     patch.max_readers = n;
   }
+  if (change.linkPath !== undefined) {
+    const parsed = parseLinkPath(String(change.linkPath));
+    if (!parsed.ok) return { ok: false, error: parsed.error };
+    patch.token = parsed.path;
+  }
   if (Object.keys(patch).length === 0) return { ok: true };
   if (patch.allowed_email_domains || patch.max_readers) patch.require_email = true;
 
@@ -188,6 +195,7 @@ export async function updateShareAccess(
     .eq("organization_id", ctx.orgId)
     .is("revoked_at", null)
     .select("id");
+  if (error?.code === "23505") return { ok: false, error: "That URL is already taken. Try another." };
   if (error) {
     console.error("updateShareAccess failed", { shareId: id, code: error.code, message: error.message });
     return { ok: false, error: "Couldn't save. Try again." };

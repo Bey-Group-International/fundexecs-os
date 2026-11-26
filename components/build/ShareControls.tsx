@@ -8,7 +8,7 @@ import { useEffect, useMemo, useState, useTransition } from "react";
 import { suggestRoomShareSettings } from "@/lib/document-review";
 import { inputClass } from "./DraftWithEarn";
 import { createShare, revokeShare, updateShareAccess, updateShareAlerts } from "./materials-actions";
-import { describeDomains, parseDomains } from "@/lib/data-room-link-rules";
+import { describeDomains, parseDomains, parseLinkPath } from "@/lib/data-room-link-rules";
 
 /** A section this room publishes, with how many documents sit in it. */
 export interface PublishedSection {
@@ -208,6 +208,10 @@ function AccessEditor({ share }: { share: ShareView }) {
   const [expiry, setExpiry] = useState(status(share).label === "Expired" ? "30" : "keep");
   const [domains, setDomains] = useState((share.allowed_email_domains ?? []).join(", "));
   const [maxReaders, setMaxReaders] = useState(share.max_readers ? String(share.max_readers) : "");
+  const [linkPath, setLinkPath] = useState(share.token);
+  // Only a path the owner typed is ever submitted; an untouched field would
+  // otherwise resend a stale token and revive a URL that was retired.
+  const [linkPathEdited, setLinkPathEdited] = useState(false);
   const [message, setMessage] = useState<{ tone: "ok" | "error"; text: string } | null>(null);
   const [pending, startTransition] = useTransition();
 
@@ -224,6 +228,10 @@ function AccessEditor({ share }: { share: ShareView }) {
   }
 
   const invalid = parseDomains(domains).invalid;
+  // Compare the normalised path, so "acme room" for "acme-room" isn't a change.
+  const pathCheck = linkPathEdited ? parseLinkPath(linkPath) : null;
+  const pathChanged = linkPathEdited && (!pathCheck?.ok || pathCheck.path !== share.token);
+  const pathError = pathCheck && !pathCheck.ok ? pathCheck.error : null;
   const save = () =>
     startTransition(async () => {
       setMessage(null);
@@ -232,8 +240,9 @@ function AccessEditor({ share }: { share: ShareView }) {
         expiresInDays: expiry === "keep" ? undefined : expiry === "never" ? null : Number(expiry),
         allowedDomains: domains,
         maxReaders: cap ? Number(cap) : null,
+        linkPath: pathChanged ? linkPath : undefined,
       }).catch(() => ({ ok: false as const, error: "Couldn't save. Try again." }));
-      setMessage(res.ok ? { tone: "ok", text: "Saved. The link keeps its URL." } : { tone: "error", text: res.error });
+      setMessage(res.ok ? { tone: "ok", text: pathChanged ? "Saved. The new URL is live; the old one no longer works." : "Saved. The link keeps its URL." } : { tone: "error", text: res.error });
       if (res.ok) setExpiry("keep");
     });
 
@@ -274,6 +283,25 @@ function AccessEditor({ share }: { share: ShareView }) {
         />
       </label>
       </div>
+      <label className="block">
+        <span className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">Link URL</span>
+        <div className="mt-1 flex items-center gap-1">
+          <span className="font-mono text-[11px] text-fg-muted">/dataroom/</span>
+          <input value={linkPath} onChange={(e) => {
+              setLinkPath(e.target.value);
+              setLinkPathEdited(true);
+            }}
+            className={inputClass}
+          />
+        </div>
+        {pathError ? (
+          <span className="mt-1 block text-[11px] text-amber-400">{pathError}</span>
+        ) : pathChanged ? (
+          <span className="mt-1 block text-[11px] text-amber-400">
+            The current URL stops working once you save. Anyone holding it will need the new one.
+          </span>
+        ) : null}
+      </label>
       <p className="text-[11px] leading-relaxed text-fg-muted">
         Domain and reader limits ask every reader for their email. Emails aren&apos;t verified, so a domain limit stops
         casual forwarding but can&apos;t prove who someone is.
@@ -281,7 +309,7 @@ function AccessEditor({ share }: { share: ShareView }) {
       <div className="flex items-center gap-3">
         <button
           type="button"
-          disabled={pending || invalid.length > 0}
+          disabled={pending || invalid.length > 0 || Boolean(pathError)}
           onClick={save}
           className="rounded-lg border border-gold-500/40 bg-gold-500/10 px-3 min-h-9 text-xs font-medium text-gold-300 transition hover:bg-gold-500/20 disabled:opacity-50"
         >

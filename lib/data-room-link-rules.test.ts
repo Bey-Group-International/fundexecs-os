@@ -33,3 +33,17 @@ it("describes a list briefly", () => {
   expect(describeDomains(["a.com", "b.com"])).toBe("@a.com, @b.com");
   expect(describeDomains(["a.com", "b.com", "c.com", "d.com"])).toBe("@a.com, @b.com, @c.com +1");
 });
+
+import { parseLinkPath } from "./data-room-link-rules";
+
+describe("parseLinkPath", () => {
+  it("normalises and accepts a valid path", () => {
+    expect(parseLinkPath("  Acme Series-A ")).toEqual({ ok: true, path: "acme-series-a" });
+  });
+  it("rejects short, long and badly shaped paths", () => {
+    expect(parseLinkPath("abc").ok).toBe(false);
+    expect(parseLinkPath("a".repeat(65)).ok).toBe(false);
+    expect(parseLinkPath("-acme-room").ok).toBe(false);
+    expect(parseLinkPath("acme/room1").ok).toBe(false);
+  });
+});

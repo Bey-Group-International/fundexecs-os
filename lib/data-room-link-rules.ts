@@ -37,3 +37,21 @@ export function describeDomains(domains: string[]): string {
   const shown = domains.slice(0, 3).map((d) => `@${d}`);
   return domains.length > 3 ? `${shown.join(", ")} +${domains.length - 3}` : shown.join(", ");
 }
+
+export const LINK_PATH_MIN = 6;
+export const LINK_PATH_MAX = 64;
+const LINK_PATH = /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/;
+
+/**
+ * Normalise and check a custom URL path for a link (the part after
+ * /dataroom/). The path is the link's only gate, so it must be long enough not
+ * to be guessed by accident: lowercase letters, digits and hyphens, 6 to 64.
+ */
+export function parseLinkPath(input: string): { ok: true; path: string } | { ok: false; error: string } {
+  const path = input.trim().toLowerCase().replace(/\s+/g, "-");
+  if (path.length < LINK_PATH_MIN || path.length > LINK_PATH_MAX)
+    return { ok: false, error: `Use ${LINK_PATH_MIN} to ${LINK_PATH_MAX} characters.` };
+  if (!LINK_PATH.test(path))
+    return { ok: false, error: "Use only letters, numbers and hyphens, starting and ending with a letter or number." };
+  return { ok: true, path };
+}
