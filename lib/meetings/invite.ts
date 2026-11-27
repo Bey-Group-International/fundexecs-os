@@ -2,7 +2,6 @@
 // Shared meeting-invite email logic used by the manual invite route
 // (/api/meetings/invite) and the schedule/edit flows, so adding a guest email
 // to a scheduled meeting actually reaches them.
-import { INVITE_NOTE_MAX } from "@/lib/meetings/invite-note";
 import { sendEmail, escapeHtml, type SendEmailCredentials } from "@/lib/email";
 import { deliveryOutcome, type DeliveryOutcome } from "@/lib/meetings/recipients";
 import type { MeetingAttendeeInput } from "@/lib/meetings/attendees";
@@ -24,7 +23,6 @@ export function buildMeetingInviteHtml({
   whenLabel,
   calendarUrl,
   role = "guest",
-  note,
 }: {
   inviteUrl: string;
   title: string;
@@ -37,16 +35,8 @@ export function buildMeetingInviteHtml({
    */
   calendarUrl?: string | null;
   role?: ScheduledRecipient["role"];
-  /**
-   * A personal message from the host, shown to guests only. Plain text: it is
-   * escaped, and line breaks are kept so a short agenda or prep list still
-   * reads as one.
-   */
-  note?: string | null;
 }): string {
   const safeTitle = escapeHtml(title);
-  const trimmedNote = role === "host" ? "" : (note ?? "").trim().slice(0, INVITE_NOTE_MAX);
-  const safeNote = trimmedNote ? escapeHtml(trimmedNote).replace(/\r?\n/g, "<br />") : "";
   const safeSender = escapeHtml(senderName);
   const safeWhen = whenLabel ? escapeHtml(whenLabel) : "";
   const safeUrl = inviteUrl.startsWith("https://") || inviteUrl.startsWith("http://") ? inviteUrl : "#";
@@ -67,11 +57,6 @@ export function buildMeetingInviteHtml({
   }</h1>
   <p style="color:#9ca3af;font-size:14px;margin:0 0 4px">${safeTitle}</p>
   ${safeWhen ? `<p style="color:#9ca3af;font-size:14px;margin:0 0 24px">${safeWhen}</p>` : `<div style="margin-bottom:24px"></div>`}
-  ${
-    safeNote
-      ? `<p style="color:#d1d5db;font-size:14px;line-height:1.5;margin:0 0 24px;padding:12px 14px;border-left:3px solid #b8a36a;background:#16161b">${safeNote}</p>`
-      : ""
-  }
   <a href="${safeUrl}"
      style="display:inline-block;background:#b8a36a;color:#0d0d10;font-weight:600;font-size:14px;padding:12px 24px;border-radius:8px;text-decoration:none">
     Join meeting →
@@ -166,8 +151,6 @@ export async function sendMeetingInvites(args: {
    */
   location?: string | null;
   meetingUrl?: string | null;
-  /** The host's personal message, put above the join button for guests. */
-  note?: string | null;
 }): Promise<InviteSendOutcome> {
   const guests = [...new Set(args.emails.map((e) => e.trim().toLowerCase()).filter(Boolean))];
   // Everyone on the meeting — the organizer and the attendee list the calendar
@@ -212,7 +195,6 @@ export async function sendMeetingInvites(args: {
           // one-meeting .ics link would save only its first date.
           calendarUrl: args.startIso && !args.series ? buildMeetingCalendarUrl(origin, args.roomCode) : null,
           role: r.role,
-          note: args.note,
         }),
         calendarInvite: invite,
       }),

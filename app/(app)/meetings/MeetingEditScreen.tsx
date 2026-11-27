@@ -8,9 +8,6 @@ import { toAttendee, type SelectedAttendee } from "@/lib/meetings/people";
 import { failedNotice, whyNotice } from "@/lib/meetings/recipients";
 import { calendarSyncNote } from "@/lib/meetings/calendar-sync";
 import { MeetingShareLink } from "./MeetingShareLink";
-import { InviteWizard, ReminderWizard } from "./MeetingWizards";
-import { adviseReminder, reminderLabel, REMINDER_CHOICES } from "@/lib/meetings/reminder-advice";
-import { openQuestionCount, inviteQuestions, type InviteContext, type InviteQuestionId } from "@/lib/meetings/invite-advice";
 import { describeQuickWhen, parseQuickWhen } from "@/lib/meetings/quick-when";
 import { guestTimes, zoneCity, zoneClock } from "@/lib/meetings/attendee-zones";
 import {
@@ -243,18 +240,6 @@ export function MeetingEditScreen({
   const [reminderMinutes, setReminderMinutes] = useState(
     initial?.reminderMinutes === null ? "" : String(initial?.reminderMinutes ?? 15),
   );
-  // A new meeting follows the recommendation until the host chooses for
-  // themselves; an existing one keeps what it was saved with.
-  const [reminderTouched, setReminderTouched] = useState(mode !== "create");
-  const [reminderWizardOpen, setReminderWizardOpen] = useState(false);
-  // The host's personal message in the invitation email, and which invitation
-  // questions they have already dealt with.
-  const [inviteNote, setInviteNote] = useState("");
-  const [inviteWizardOpen, setInviteWizardOpen] = useState(false);
-  const [reviewedQuestions, setReviewedQuestions] = useState<ReadonlySet<InviteQuestionId>>(() => new Set());
-  // A meeting already out is saved by PATCH, which sends change notices and no
-  // personal note.
-  const isExistingEdit = mode === "edit" && !!initial?.meetingId && !initial?.isDraft;
   // Whether this meeting goes on the host's Google Calendar. Default ON for a
   // new meeting: the server decides from the connection, and this only has to
   // agree with it so the box the host sees matches what will happen. An EDIT
@@ -390,47 +375,6 @@ export function MeetingEditScreen({
     [startIso, timezone, attendees, zones],
   );
 
-  const offHoursGuests = guestClock.filter((g) => g.flag).length;
-  const externalGuests = attendees.filter((a) => a.type === "external").length;
-
-  // What reminder this meeting should get, from what the host has entered.
-  const reminderAdvice = adviseReminder({
-    meetingType,
-    startIso,
-    durationMinutes: activeDuration > 0 ? activeDuration : 60,
-    timezone,
-    guestCount: attendees.length,
-    externalCount: externalGuests,
-    offHoursGuests,
-    repeating: repeatFreq !== "none" || inSeries,
-    hasPrep: Boolean(preparationRequirements.trim()),
-  });
-  const adviceValue = reminderAdvice.minutes === null ? "" : String(reminderAdvice.minutes);
-  useEffect(() => {
-    if (!reminderTouched) setReminderMinutes(adviceValue);
-  }, [adviceValue, reminderTouched]);
-  function chooseReminder(value: string) {
-    setReminderTouched(true);
-    setReminderMinutes(value);
-  }
-
-  // What the invitation still needs, as questions.
-  const inviteCtx: InviteContext = {
-    meetingType,
-    title,
-    attendees: attendees.map((a) => ({ email: a.email, type: a.type })),
-    unreachableCount: unreachable.length,
-    objective,
-    agenda,
-    preparationRequirements,
-    guestQuickAccess,
-    offHoursGuests,
-    note: inviteNote,
-    durationMinutes: activeDuration > 0 ? activeDuration : 60,
-    noteSupported: !isExistingEdit,
-  };
-  const inviteOpenCount = openQuestionCount(inviteQuestions(inviteCtx), reviewedQuestions);
-
   // Checked as the time is picked, not only on Schedule: time a connected
   // calendar has taken cannot be saved over, so saying so after the button
   // is pressed is saying it late. The server holds the same line either way.
@@ -511,13 +455,11 @@ export function MeetingEditScreen({
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
-      // A wizard open on top owns Escape; closing the whole screen from under it
-      // would throw away what it was helping with.
-      if (e.key === "Escape" && !reminderWizardOpen && !inviteWizardOpen) onClose();
+      if (e.key === "Escape") onClose();
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [onClose, reminderWizardOpen, inviteWizardOpen]);
+  }, [onClose]);
 
   function handleOverlayClick(e: React.MouseEvent) {
     if (e.target === overlayRef.current) onClose();
@@ -557,9 +499,6 @@ export function MeetingEditScreen({
       reminderMinutes: reminderMinutes ? Number(reminderMinutes) : null,
       externalCalendarSyncEnabled: syncEnabled,
       guestQuickAccess,
-      // Only the schedule endpoint sends it; the PATCH body below is an explicit
-      // projection that leaves it out.
-      inviteNote: inviteNote.trim() || undefined,
       repeat: mode === "create" && !draft && repeatFreq !== "none" ? { freq: repeatFreq, count: repeatCount } : undefined,
     };
   }
@@ -593,6 +532,7 @@ export function MeetingEditScreen({
       // is_draft, stamps locked_at and invites the attendees. Saving it as a
       // draft again goes there too, since PATCH cannot express draft state at
       // all.
+      const isExistingEdit = mode === "edit" && !!initial?.meetingId && !initial?.isDraft;
       const res = await fetch(isExistingEdit ? `/api/meetings/${initial!.meetingId}` : "/api/meetings/schedule", {
         method: isExistingEdit ? "PATCH" : "POST",
         headers: { "Content-Type": "application/json" },
@@ -1038,48 +978,20 @@ export function MeetingEditScreen({
                 <BareTextArea value={agenda} onChange={setAgenda} placeholder="Add agenda / description" />
               </Row>
 
-              <Row icon={<IconBell />} align="start">
-                <div className="flex flex-col gap-1.5">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <BarePill
-                      label="Notification"
-                      value={reminderMinutes}
-                      onChange={chooseReminder}
-                      options={[
-                        { value: "", label: "No notification" },
-                        ...(reminderMinutes && !REMINDER_CHOICES.some((c) => String(c.minutes) === reminderMinutes)
-                          ? [{ value: reminderMinutes, label: reminderLabel(Number(reminderMinutes)) }]
-                          : []),
-                        ...REMINDER_CHOICES.map((c) => ({ value: String(c.minutes), label: c.label })),
-                      ]}
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setReminderWizardOpen(true)}
-                      className="rounded-full border border-gold-400/50 bg-gold-400/10 px-3 py-1 text-xs font-medium text-[var(--gold-300)] hover:bg-gold-400/20"
-                    >
-                      Reminder wizard
-                    </button>
-                  </div>
-                  <p className="text-[11px] leading-snug text-[var(--fg-muted)]" data-testid="reminder-hint">
-                    {reminderMinutes === adviceValue ? (
-                      <>
-                        Recommended{reminderAdvice.reasons[0] ? ` — ${reminderAdvice.reasons[0]}` : "."}
-                      </>
-                    ) : (
-                      <>
-                        Suggested: {reminderLabel(reminderAdvice.minutes).toLowerCase()}.{" "}
-                        <button
-                          type="button"
-                          onClick={() => chooseReminder(adviceValue)}
-                          className="underline decoration-dotted underline-offset-2 hover:text-[var(--fg-secondary)]"
-                        >
-                          Use it
-                        </button>
-                      </>
-                    )}
-                  </p>
-                </div>
+              <Row icon={<IconBell />}>
+                <BarePill
+                  label="Notification"
+                  value={reminderMinutes}
+                  onChange={setReminderMinutes}
+                  options={[
+                    { value: "", label: "No notification" },
+                    { value: "5", label: "5 minutes before" },
+                    { value: "15", label: "15 minutes before" },
+                    { value: "30", label: "30 minutes before" },
+                    { value: "60", label: "1 hour before" },
+                    { value: "1440", label: "1 day before" },
+                  ]}
+                />
               </Row>
 
               <Row icon={<IconLock />}>
@@ -1148,24 +1060,6 @@ export function MeetingEditScreen({
                   </div>
                 </div>
               ) : null}
-
-              {savedResult ? null : (
-                <div className="rounded-lg border border-line bg-surface-0 px-3 py-2.5">
-                  <p className="text-xs font-medium text-fg-primary">Invitation</p>
-                  <p className="mt-0.5 text-[11px] leading-snug text-fg-muted" data-testid="invite-status">
-                    {inviteOpenCount > 0
-                      ? `${inviteOpenCount} ${inviteOpenCount === 1 ? "question" : "questions"} to complete before guests are invited.`
-                      : "Nothing left to ask — guests get the invitation when you schedule."}
-                  </p>
-                  <button
-                    type="button"
-                    onClick={() => setInviteWizardOpen(true)}
-                    className="mt-1.5 rounded-full border border-gold-400/50 bg-gold-400/10 px-3 py-1 text-xs font-medium text-[var(--gold-300)] hover:bg-gold-400/20"
-                  >
-                    {inviteOpenCount > 0 ? "Complete invitation" : "Review invitation"}
-                  </button>
-                </div>
-              )}
 
               {/* Who the shareable link actually lets in. It sits with Guests
                   rather than in Advanced because it is a decision about this
@@ -1346,45 +1240,6 @@ export function MeetingEditScreen({
           {error ? <p className="mt-4 rounded-lg border border-status-danger/30 bg-status-danger/10 px-3 py-2 text-xs text-[var(--status-danger)] sm:ml-11">{error}</p> : null}
         </div>
       </div>
-
-      {reminderWizardOpen ? (
-        <ReminderWizard
-          context={{
-            meetingType,
-            startIso,
-            durationMinutes: activeDuration > 0 ? activeDuration : 60,
-            timezone,
-            guestCount: attendees.length,
-            externalCount: externalGuests,
-            offHoursGuests,
-            repeating: repeatFreq !== "none" || inSeries,
-            hasPrep: Boolean(preparationRequirements.trim()),
-          }}
-          onApply={(minutes) => {
-            chooseReminder(minutes === null ? "" : String(minutes));
-            setReminderWizardOpen(false);
-          }}
-          onClose={() => setReminderWizardOpen(false)}
-        />
-      ) : null}
-
-      {inviteWizardOpen ? (
-        <InviteWizard
-          ctx={inviteCtx}
-          attendees={attendees}
-          onAttendees={setAttendees}
-          unreachable={unreachable}
-          onRemoveUnreachable={(i) => setUnreachable((prev) => prev.filter((_, j) => j !== i))}
-          onQuickAccess={setGuestQuickAccess}
-          onObjective={setObjective}
-          onAgenda={setAgenda}
-          onPrep={setPreparationRequirements}
-          onNote={setInviteNote}
-          reviewed={reviewedQuestions}
-          onReview={(id) => setReviewedQuestions((prev) => new Set(prev).add(id))}
-          onClose={() => setInviteWizardOpen(false)}
-        />
-      ) : null}
     </div>
   );
 }

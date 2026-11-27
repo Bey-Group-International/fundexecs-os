@@ -56,8 +56,6 @@ interface ScheduleBody {
   tags?: string[];
   externalCalendarSyncEnabled?: boolean;
   guestQuickAccess?: boolean;
-  /** A personal message to put in the guests' invitation email. */
-  inviteNote?: string;
   externalCalendarProvider?: string;
   /** Repeat the meeting: { freq: "weekly" | "monthly", count }. */
   repeat?: unknown;
@@ -360,7 +358,6 @@ export async function POST(req: NextRequest) {
             title: body.title ?? "Meeting",
             senderName: userData.user?.email ?? "Someone",
             emails,
-            note: typeof body.inviteNote === "string" ? body.inviteNote : null,
             // Where it happens, so the invitation and the later update notices
             // (which already carry these) name the same place.
             location: body.location ?? null,

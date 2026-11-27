@@ -289,22 +289,3 @@ describe("sendMeetingInvites — where the meeting happens", () => {
     expect(guestMail().htmlBody).toContain('href="https://app.test/meeting-invite/abc-def"');
   });
 });
-
-describe("buildMeetingInviteHtml — personal note", () => {
-  const base = { inviteUrl: "https://app.test/meeting-invite/abc", title: "Board", senderName: "a@b.com" };
-
-  it("shows the note to a guest, escaped, keeping line breaks", () => {
-    const html = buildMeetingInviteHtml({ ...base, note: "Hi <b>all</b>\nSee you" });
-    expect(html).toContain("Hi &lt;b&gt;all&lt;/b&gt;<br />See you");
-    expect(html).not.toContain("<b>all</b>");
-  });
-
-  it("never shows it on the host's own confirmation", () => {
-    expect(buildMeetingInviteHtml({ ...base, role: "host", note: "secret note" })).not.toContain("secret note");
-  });
-
-  it("omits the block when there is no note, and caps a long one", () => {
-    expect(buildMeetingInviteHtml({ ...base, note: "   " })).not.toContain("border-left");
-    expect(buildMeetingInviteHtml({ ...base, note: "x".repeat(5000) })).not.toContain("x".repeat(1001));
-  });
-});
