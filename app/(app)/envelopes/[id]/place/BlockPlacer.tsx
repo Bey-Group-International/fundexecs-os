@@ -8,7 +8,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { PdfPages } from "@/components/signing/PdfPages";
-import { BLOCKS, MAX_OTHER_LABEL, blockColor, blockLabel, blockSpec, clampBlock, defaultRequired, newBlockAt, type BlockType } from "@/lib/signing/blocks";
+import { BLOCKS, MAX_OTHER_LABEL, blockColor, blockLabel, blockSpec, clampBlock, copyToEveryPage, defaultRequired, newBlockAt, type BlockType } from "@/lib/signing/blocks";
+import { MAX_BLOCKS } from "@/lib/envelope-fields";
 
 interface Party {
   id: string;
@@ -65,6 +66,7 @@ export function BlockPlacer({ title, fieldsUrl, pdfUrl, sendUrl, doneHref, prefi
   const [selected, setSelected] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [pageCount, setPageCount] = useState(0);
   const [pending, startTransition] = useTransition();
   const drag = useRef<{ key: string; startX: number; startY: number; x0: number; y0: number; w: number; h: number } | null>(null);
 
@@ -157,10 +159,20 @@ export function BlockPlacer({ title, fieldsUrl, pdfUrl, sendUrl, doneHref, prefi
     const prefill = prefillNames ? (type === "name" ? target?.name : type === "email" ? target?.email : "") ?? "" : "";
     const b: Block = { key: nextKey(), recipientId: partyId, type, page, ...pos, required: defaultRequired(type), prefill, locked: false, label: "" };
     setBlocks((cur) => [...cur, b]);
-    // An Other block is named straight away, in the strip that opens for it.
-    setSelected(type === "other" ? b.key : null);
+    // An Other block is named straight away, and initials can go on every page, in the strip that opens for them.
+    setSelected(type === "other" || type === "initials" ? b.key : null);
     setMenu(null);
     setNotice(null);
+  }
+
+  // The selected block, copied to the same spot on every other page.
+  function addToEveryPage(b: Block) {
+    setError(null);
+    const copies = copyToEveryPage(b, pageCount, blocks).map((c) => ({ ...c, key: nextKey() }));
+    if (!copies.length) return setNotice("It is already on every page.");
+    if (blocks.length + copies.length > MAX_BLOCKS) return setError(`That would be more than ${MAX_BLOCKS} blocks on this document.`);
+    setBlocks((cur) => [...cur, ...copies]);
+    setNotice(`Added to ${copies.length} more ${copies.length === 1 ? "page" : "pages"}.`);
   }
 
   function patch(key: string, p: Partial<Block>) {
@@ -294,6 +306,11 @@ export function BlockPlacer({ title, fieldsUrl, pdfUrl, sendUrl, doneHref, prefi
               </>
             ) : null}
             {sel.type === "datetime" ? <span className="text-fg-muted">Starts at the signing moment; the signer can adjust it, and the true time is recorded.</span> : null}
+            {pageCount > 1 ? (
+              <button type="button" onClick={() => addToEveryPage(sel)} className="text-gold-300 underline underline-offset-2">
+                Add to every page
+              </button>
+            ) : null}
             <button
               type="button"
               onClick={() => {
@@ -310,7 +327,7 @@ export function BlockPlacer({ title, fieldsUrl, pdfUrl, sendUrl, doneHref, prefi
 
       <div>
         <div className="rounded-xl bg-surface-2 p-3">
-          <PdfPages src={pdfUrl}>
+          <PdfPages src={pdfUrl} onLoaded={setPageCount}>
             {({ page, width, height }) => (
               <div
                 data-page-layer

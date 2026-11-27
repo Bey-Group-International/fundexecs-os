@@ -1,4 +1,4 @@
-import { cleanBlocks, recipientsWithoutSignature, MAX_BLOCKS } from "./envelope-fields";
+import { cleanBlocks, recipientsWithoutSignature, templateSignatureProblem, MAX_BLOCKS } from "./envelope-fields";
 
 const ok = { recipientId: "r1", type: "signature", page: 1, xPct: 10, yPct: 10, widthPct: 20, heightPct: 6 };
 
@@ -66,5 +66,21 @@ describe("initials blocks", () => {
   it("do not stand in for a signature when checking a document can be signed", () => {
     const people = [{ id: "a", name: "Jane" }];
     expect(recipientsWithoutSignature(people, [{ recipient_id: "a", field_type: "initials", required: true }])).toEqual(["Jane"]);
+  });
+});
+
+describe("templateSignatureProblem (a data-room file's blocks)", () => {
+  const sig = (who: string, required: boolean | undefined) => ({ recipient_id: who, field_type: "signature", required });
+  it("is fine with no blocks, or a required signature each for the reader and the owner", () => {
+    expect(templateSignatureProblem([])).toBeNull();
+    expect(templateSignatureProblem([sig("signer", true), sig("owner", true)])).toBeNull();
+    expect(templateSignatureProblem([sig("signer", undefined), sig("owner", true)])).toBeNull();
+  });
+  it("refuses a file where someone has no signature block, or only optional ones", () => {
+    const msg = /required signature block for the reader and one for yourself/;
+    expect(templateSignatureProblem([sig("signer", true)])).toMatch(msg);
+    expect(templateSignatureProblem([sig("signer", false), sig("owner", true)])).toMatch(msg);
+    expect(templateSignatureProblem([sig("signer", true), sig("owner", false)])).toMatch(msg);
+    expect(templateSignatureProblem([{ recipient_id: "owner", field_type: "initials", required: true }, sig("signer", true)])).toMatch(msg);
   });
 });

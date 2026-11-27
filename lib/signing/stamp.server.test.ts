@@ -2,7 +2,7 @@ jest.mock("server-only", () => ({}), { virtual: true });
 import { PDFDocument } from "pdf-lib";
 import { stampBlocks } from "./stamp.server";
 import { buildDocumentPdf } from "./executed-pdf.server";
-import { BLOCKS, blockLabel, initialsOf, isInkInput, defaultRequired, BLOCK_HEIGHT_PCT, BLOCK_WIDTH_PCT, resolveDateTimeResponse, toOffsetIso, blockSpec, clampBlock, newBlockAt, formatBlockDateTime } from "./blocks";
+import { BLOCKS, blockLabel, copyToEveryPage, initialsOf, isInkInput, defaultRequired, BLOCK_HEIGHT_PCT, BLOCK_WIDTH_PCT, resolveDateTimeResponse, toOffsetIso, blockSpec, clampBlock, newBlockAt, formatBlockDateTime } from "./blocks";
 import { missingRequiredFields } from "../envelope-signing";
 import { blockValueProblem } from "./blocks";
 
@@ -27,6 +27,19 @@ describe("blocks", () => {
     expect(isInkInput("signature") && isInkInput("initials")).toBe(true);
     expect(isInkInput("text") || isInkInput("auto")).toBe(false);
     expect(defaultRequired("initials")).toBe(true);
+  });
+
+  it("copies a block to the same spot on every other page, and does it only once", () => {
+    const first = { recipientId: "a", type: "initials", page: 2, xPct: 80, yPct: 90 };
+    const copies = copyToEveryPage(first, 4, [first]);
+    expect(copies.map((c) => [c.page, c.xPct, c.yPct])).toEqual([[1, 80, 90], [3, 80, 90], [4, 80, 90]]);
+    // Run again with the copies in place: nothing new.
+    expect(copyToEveryPage(first, 4, [first, ...copies])).toEqual([]);
+    // Another person's block, another kind of block, or a different spot does not count as already there.
+    const others = [{ ...first, page: 1, recipientId: "b" }, { ...first, page: 3, type: "name" }, { ...first, page: 4, yPct: 50 }];
+    expect(copyToEveryPage(first, 4, [first, ...others]).map((c) => c.page)).toEqual([1, 3, 4]);
+    // A one-page document has nowhere to copy to.
+    expect(copyToEveryPage({ ...first, page: 1 }, 1, [{ ...first, page: 1 }])).toEqual([]);
   });
 
   it("names an Other block as the sender did, and the rest by their own name", () => {

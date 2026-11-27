@@ -1,11 +1,16 @@
 jest.mock("next/navigation", () => ({ useRouter: () => ({ push: jest.fn(), refresh: jest.fn() }) }));
 // One 600x800 page; the real component renders pdf.js, which jsdom cannot.
 jest.mock("@/components/signing/PdfPages", () => ({
-  PdfPages: ({ children }: { children: (p: { page: number; width: number; height: number }) => React.ReactNode }) => (
-    <div data-testid="page" style={{ position: "relative", width: 600, height: 800 }}>
-      {children({ page: 1, width: 600, height: 800 })}
-    </div>
-  ),
+  // The real component reports how many pages the document has once it has loaded.
+  PdfPages: ({ children, onLoaded }: { children: (p: { page: number; width: number; height: number }) => React.ReactNode; onLoaded?: (n: number) => void }) => {
+    const { useEffect } = jest.requireActual("react") as typeof import("react");
+    useEffect(() => onLoaded?.(3), [onLoaded]);
+    return (
+      <div data-testid="page" style={{ position: "relative", width: 600, height: 800 }}>
+        {children({ page: 1, width: 600, height: 800 })}
+      </div>
+    );
+  },
 }));
 
 import React from "react";
@@ -251,6 +256,39 @@ describe("BlockPlacer: click, choose, done", () => {
       const sent = puts[0].blocks as unknown as { type: string; label?: string; prefill: string; locked: boolean }[];
       expect(sent[0]).toMatchObject({ type: "other", label: "Witness name", prefill: "J. Doe", locked: true });
       expect(sent[1].label).toBeUndefined();
+    });
+  });
+
+  describe("add to every page", () => {
+    it("opens for initials as they are placed, and copies them to every other page in the same spot, once", async () => {
+      await mount();
+      clickPage(300, 700);
+      choose("Initials");
+      // Selected straight away, with the button there.
+      fireEvent.click(screen.getByRole("button", { name: "Add to every page" }));
+      expect(screen.getByRole("status").textContent).toBe("Added to 2 more pages.");
+      expect(screen.getByRole("button", { name: "Initials block" })).toBeTruthy(); // page 1 is the only one drawn here
+      fireEvent.click(screen.getByRole("button", { name: "Add to every page" }));
+      expect(screen.getByRole("status").textContent).toBe("It is already on every page.");
+      fireEvent.click(screen.getByRole("button", { name: /Save$/ }));
+      await waitFor(() => expect(puts).toHaveLength(1));
+      const sent = puts[0].blocks as unknown as { type: string; page: number; xPct: number; yPct: number; required: boolean }[];
+      expect(sent.map((b) => [b.type, b.page])).toEqual([["initials", 1], ["initials", 2], ["initials", 3]]);
+      expect(new Set(sent.map((b) => `${b.xPct},${b.yPct}`)).size).toBe(1);
+      expect(sent.every((b) => b.required)).toBe(true);
+    });
+
+    it("works for any block the sender selects, keeping its name, pre-fill and who it is for", async () => {
+      await mount();
+      clickPage(300, 400);
+      choose("Other");
+      fireEvent.change(screen.getByRole("textbox", { name: "Name of this block" }), { target: { value: "Witness" } });
+      fireEvent.click(screen.getByRole("button", { name: "Add to every page" }));
+      fireEvent.click(screen.getByRole("button", { name: /Save$/ }));
+      await waitFor(() => expect(puts).toHaveLength(1));
+      const sent = puts[0].blocks as unknown as { type: string; label?: string; recipientId: string }[];
+      expect(sent).toHaveLength(3);
+      expect(sent.every((b) => b.type === "other" && b.label === "Witness" && b.recipientId === sent[0].recipientId)).toBe(true);
     });
   });
 });

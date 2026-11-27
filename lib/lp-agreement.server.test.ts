@@ -69,6 +69,18 @@ describe("loadLpAgreementView", () => {
     expect(v).toMatchObject({ state: "ready", signingToken: "tok-1", title: "Subscription", blocks: [{ id: "f1", type: "signature", page: 3 }] });
   });
 
+  it("keeps an Other block's name, so the LP is asked for it by that name", async () => {
+    const v = await loadLpAgreementView(
+      client({
+        envelopes: { id: "e1", title: "Subscription", status: "sent" },
+        envelope_recipients: rec,
+        envelope_fields: [{ id: "f2", field_type: "other", label: "Tax ID", page: 3, x_pct: 10, y_pct: 40, width_pct: 28, height_pct: 4, required: false, prefill: null, locked: false }],
+      }),
+      "s1",
+    );
+    expect(v).toMatchObject({ state: "ready", blocks: [{ id: "f2", type: "other", label: "Tax ID", required: false }] });
+  });
+
   it("shows signed once the LP has, and the executed copy once the fund has too", async () => {
     expect(await loadLpAgreementView(client({ envelopes: { id: "e1", title: "T", status: "partially_signed" }, envelope_recipients: { ...rec, status: "signed" } }), "s1")).toEqual({ state: "signed" });
     expect(await loadLpAgreementView(client({ envelopes: { id: "e1", title: "T", status: "completed" }, envelope_recipients: { ...rec, status: "signed" } }), "s1")).toEqual({ state: "completed", copyUrl: "https://x/copy/e1" });

@@ -3,7 +3,7 @@ import { PDFDocument } from "pdf-lib";
 import { getSessionContext } from "@/lib/auth";
 import { canAdminOrg } from "@/lib/rbac";
 import { createServerClient, createServiceClient, hasSupabaseServiceEnv } from "@/lib/supabase/server";
-import { cleanBlocks } from "@/lib/envelope-fields";
+import { cleanBlocks, templateSignatureProblem } from "@/lib/envelope-fields";
 import { documentPdf, TEMPLATE_PARTIES } from "@/lib/room-signing.server";
 import type { Document } from "@/lib/supabase/database.types";
 
@@ -67,11 +67,9 @@ export async function PUT(req: Request, props: { params: Promise<{ roomId: strin
 
   const cleaned = cleanBlocks(body.blocks, [...TEMPLATE_PARTIES], pageCount);
   if (!cleaned.ok) return NextResponse.json({ error: cleaned.error }, { status: 400 });
-  // Every reader and the countersigner each need somewhere to sign, or a document could be "signed" with no signature on it.
-  const hasSig = (who: string) => cleaned.blocks.some((b) => b.recipient_id === who && b.field_type === "signature");
-  if (cleaned.blocks.length && (!hasSig("signer") || !hasSig("owner"))) {
-    return NextResponse.json({ error: "Add a signature block for the reader and one for yourself (you countersign)." }, { status: 400 });
-  }
+  // Every reader and the countersigner each need a required signature block, or a document could be "signed" with no signature on it.
+  const problem = templateSignatureProblem(cleaned.blocks);
+  if (problem) return NextResponse.json({ error: problem }, { status: 400 });
 
   const { error } = await r.supabase
     .from("data_room_documents")

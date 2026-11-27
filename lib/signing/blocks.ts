@@ -192,3 +192,24 @@ export function resolveDateTimeResponse(chosen: unknown, nowIso: string): DateTi
   }
   return { value: raw, chosen: raw, adjusted: Math.abs(t - now) > DATETIME_ADJUSTED_MS, problem: null };
 }
+
+/**
+ * A block copied to every other page of the document, in the same spot: how initials get onto
+ * each page in one click. A page that already has the same kind of block for the same person
+ * in about that spot is left alone, so doing it twice adds nothing.
+ */
+export function copyToEveryPage<T extends { recipientId: string; type: string; page: number; xPct: number; yPct: number }>(
+  block: T,
+  pageCount: number,
+  existing: readonly T[],
+): T[] {
+  const out: T[] = [];
+  for (let page = 1; page <= pageCount; page++) {
+    if (page === block.page) continue;
+    const there = existing.some(
+      (b) => b.page === page && b.recipientId === block.recipientId && b.type === block.type && Math.abs(b.xPct - block.xPct) < 2 && Math.abs(b.yPct - block.yPct) < 2,
+    );
+    if (!there) out.push({ ...block, page });
+  }
+  return out;
+}
