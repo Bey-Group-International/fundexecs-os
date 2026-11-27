@@ -13,7 +13,7 @@ export interface StampField {
   yPct: number;
   widthPct: number;
   heightPct: number;
-  /** "signature" draws the image; every other block draws its text. */
+  /** "signature" and "initials" draw the image; every other block draws its text. */
   type: string;
   value: string | null;
   signaturePng?: string | null;
@@ -66,7 +66,7 @@ export async function stampBlocks(pdfBytes: Uint8Array, fields: StampField[]): P
     const x = (f.xPct / 100) * pw;
     const top = ph - (f.yPct / 100) * ph;
 
-    if (f.type === "signature") {
+    if (f.type === "signature" || f.type === "initials") {
       const png = parseSignaturePng(f.signaturePng);
       if (!png) continue;
       const key = f.signaturePng as string;

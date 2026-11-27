@@ -20,7 +20,7 @@ export async function POST(req: Request, props: { params: Promise<{ id: string }
   if (!canAdminOrg(ctx.role)) return NextResponse.json({ ok: false, error: "Only an owner or admin can countersign." }, { status: 403 });
   if (!ctx.emailConfirmed || !ctx.email) return NextResponse.json({ ok: false, error: "Confirm your email address before countersigning." }, { status: 403 });
 
-  let body: { signatureData?: string; fieldResponses?: Record<string, string>; signerName?: string };
+  let body: { signatureData?: string; initialsData?: string; fieldResponses?: Record<string, string>; signerName?: string };
   try {
     body = await req.json();
   } catch {
@@ -28,6 +28,8 @@ export async function POST(req: Request, props: { params: Promise<{ id: string }
   }
   if (!parseSignaturePng(body.signatureData)) return NextResponse.json({ ok: false, error: "Draw or type your signature to sign." }, { status: 400 });
   const signatureData = body.signatureData as string;
+  if (body.initialsData !== undefined && !parseSignaturePng(body.initialsData)) return NextResponse.json({ ok: false, error: "Initials must be a PNG image." }, { status: 400 });
+  const initialsData = (body.initialsData as string | undefined) ?? null;
   const responses: Record<string, string> = body.fieldResponses && typeof body.fieldResponses === "object" ? { ...body.fieldResponses } : {};
 
   const supabase = await createServerClient();
@@ -69,7 +71,7 @@ export async function POST(req: Request, props: { params: Promise<{ id: string }
       if (r.adjusted && r.chosen) adjustedTimes.push(r.chosen);
     } else if (f.locked && f.prefill) responses[f.id] = f.prefill;
   }
-  const missing = missingRequiredFields(fields, { signatureData, initialsData: null, fieldResponses: responses });
+  const missing = missingRequiredFields(fields, { signatureData, initialsData, fieldResponses: responses });
   if (missing.length) return NextResponse.json({ ok: false, error: `Required fields are incomplete: ${missing.join(", ")}` }, { status: 400 });
 
   for (const f of fields) {
@@ -93,6 +95,7 @@ export async function POST(req: Request, props: { params: Promise<{ id: string }
       status: "signed",
       signed_at: now,
       signature_data: signatureData,
+      initials_data: initialsData,
       ip_address: ip,
       // The record names whoever actually countersigned.
       email: ctx.email,

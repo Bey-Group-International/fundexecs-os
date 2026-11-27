@@ -2,7 +2,7 @@ jest.mock("server-only", () => ({}), { virtual: true });
 import { PDFDocument } from "pdf-lib";
 import { stampBlocks } from "./stamp.server";
 import { buildDocumentPdf } from "./executed-pdf.server";
-import { BLOCKS, blockLabel, BLOCK_HEIGHT_PCT, BLOCK_WIDTH_PCT, resolveDateTimeResponse, toOffsetIso, blockSpec, clampBlock, newBlockAt, formatBlockDateTime } from "./blocks";
+import { BLOCKS, blockLabel, initialsOf, isInkInput, defaultRequired, BLOCK_HEIGHT_PCT, BLOCK_WIDTH_PCT, resolveDateTimeResponse, toOffsetIso, blockSpec, clampBlock, newBlockAt, formatBlockDateTime } from "./blocks";
 import { missingRequiredFields } from "../envelope-signing";
 import { blockValueProblem } from "./blocks";
 
@@ -11,10 +11,22 @@ const PNG =
 
 describe("blocks", () => {
   it("offers exactly these blocks, and old types behave like their nearest block", () => {
-    expect(BLOCKS.map((b) => b.type)).toEqual(["name", "signature", "datetime", "company", "title", "address", "email", "phone", "other"]);
-    expect(blockSpec("initials")?.type).toBe("signature");
+    expect(BLOCKS.map((b) => b.type)).toEqual(["name", "signature", "initials", "datetime", "company", "title", "address", "email", "phone", "other"]);
+    expect(blockSpec("initials")?.type).toBe("initials");
+    expect(blockSpec("text")?.type).toBe("title");
     expect(blockSpec("date")?.type).toBe("datetime");
     expect(blockSpec("nope")).toBeNull();
+  });
+
+  it("makes typed initials from a name, and knows which blocks are marked by hand", () => {
+    expect(initialsOf("Jane Q. Smith")).toBe("JQS");
+    expect(initialsOf("  jane   smith ")).toBe("JS");
+    expect(initialsOf("Cher")).toBe("C");
+    expect(initialsOf("A B C D E")).toBe("ABC");
+    expect(initialsOf("")).toBe("");
+    expect(isInkInput("signature") && isInkInput("initials")).toBe(true);
+    expect(isInkInput("text") || isInkInput("auto")).toBe(false);
+    expect(defaultRequired("initials")).toBe(true);
   });
 
   it("names an Other block as the sender did, and the rest by their own name", () => {
@@ -67,6 +79,12 @@ describe("stampBlocks", () => {
     expect(after.getPageCount()).toBe(before.getPageCount());
     expect(Buffer.from(out).includes(Buffer.from("/Subtype /Image"))).toBe(true);
     expect(out.length).toBeGreaterThan(base.length);
+  });
+
+  it("draws initials as an image at their spot, as it does a signature", async () => {
+    const base = await buildDocumentPdf({ title: "A", text: "x" });
+    const out = await stampBlocks(base, [{ page: 1, xPct: 10, yPct: 10, widthPct: 14, heightPct: 4, type: "initials", value: null, signaturePng: PNG }]);
+    expect(Buffer.from(out).includes(Buffer.from("/Subtype /Image"))).toBe(true);
   });
 
   it("skips an empty value and a bad signature image without failing", async () => {

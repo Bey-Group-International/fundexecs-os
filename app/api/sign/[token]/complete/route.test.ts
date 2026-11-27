@@ -312,6 +312,37 @@ describe('POST /api/sign/[token]/complete', () => {
     expect(sent['f-opt']).toBeUndefined();
     expect(sent['f-req']).toMatch(/^\d{4}-\d{2}-\d{2}T/);
   });
+
+  it('refuses initials that are not a PNG image, and passes real ones to be stored', async () => {
+    makeSupabase({
+      recipient: { id: 'rec-1', status: 'viewed', envelope_id: 'env-1' },
+      envelope: { id: 'env-1', status: 'sent' },
+      fields: [{ id: 'f-i', field_type: 'initials', label: 'Initials', required: true }],
+    });
+    const tok = { params: Promise.resolve({ token: 'tok-initials' }) };
+    const bad = await POST(request({ signatureData: PNG, initialsData: 'data:text/html;base64,PGI+' }), tok);
+    expect(bad.status).toBe(400);
+    expect(rpc).not.toHaveBeenCalled();
+    const good = await POST(request({ signatureData: PNG, initialsData: PNG }), tok);
+    expect(good.status).toBe(200);
+    expect(rpc.mock.calls[0][1].p_initials).toBe(PNG);
+  });
+
+  it('wants the initials when an initials block is required, and not when it is optional', async () => {
+    makeSupabase({
+      recipient: { id: 'rec-1', status: 'viewed', envelope_id: 'env-1' },
+      envelope: { id: 'env-1', status: 'sent' },
+      fields: [{ id: 'f-i', field_type: 'initials', label: 'Initials', required: true }],
+    });
+    const tok = { params: Promise.resolve({ token: 'tok-initials-2' }) };
+    expect((await POST(request({ signatureData: PNG }), tok)).status).toBe(400);
+    makeSupabase({
+      recipient: { id: 'rec-1', status: 'viewed', envelope_id: 'env-1' },
+      envelope: { id: 'env-1', status: 'sent' },
+      fields: [{ id: 'f-i', field_type: 'initials', label: 'Initials', required: false }],
+    });
+    expect((await POST(request({ signatureData: PNG }), tok)).status).toBe(200);
+  });
 });
 
 describe('missingRequiredFields', () => {

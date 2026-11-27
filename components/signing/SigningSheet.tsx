@@ -5,11 +5,11 @@
 // spot needs, and Next moves to the following one, with the rest dimmed. A filled spot shows
 // what was entered in place of its ×. Whatever the other party already filled in is shown on
 // the page, read-only. Used by the recipient (by link) and the owner (countersign).
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
 import { PdfPages } from "@/components/signing/PdfPages";
 import { SpotPanel } from "@/components/signing/SpotPanel";
 import { forgetSignature, loadRememberedSignature, rememberSignature } from "@/lib/signing/remembered-signature";
-import { blockColor, blockLabel, blockSpec, blockValueProblem, formatBlockDateTime, toOffsetIso } from "@/lib/signing/blocks";
+import { blockColor, blockLabel, blockSpec, initialsOf, isInkInput, blockValueProblem, formatBlockDateTime, toOffsetIso } from "@/lib/signing/blocks";
 
 export interface SheetBlock {
   id: string;
@@ -52,7 +52,8 @@ export function SigningSheet({
   signerName: string;
   submitLabel: string;
   /** Resolves to an error message, or null when it worked. */
-  onSubmit: (signatureData: string, responses: Record<string, string>) => Promise<string | null>;
+  /** `initialsData` is set only when the document has an initials block the signer filled. */
+  onSubmit: (signatureData: string, responses: Record<string, string>, initialsData?: string) => Promise<string | null>;
   /** The account holder's id, where a signature may be kept on this device (the owner countersigning). */
   rememberFor?: string;
 }) {
@@ -65,6 +66,9 @@ export function SigningSheet({
     );
   });
   const [signature, setSignature] = useState<string | null>(null);
+  const [initials, setInitials] = useState<string | null>(null);
+  // The mark a spot takes: the signature, or the initials.
+  const inkFor = useCallback((input: string) => (input === "initials" ? initials : signature), [initials, signature]);
   const [agreed, setAgreed] = useState(false);
   const [stored, setStored] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -121,7 +125,7 @@ export function SigningSheet({
   // A required signature spot is filled once there is a signature; an optional one only when the
   // signer chose to sign there.
   const isFilled = (b: SheetBlock) =>
-    blockSpec(b.type)!.input === "signature" ? Boolean(signature) && (b.required || values[b.id] === "signed") : Boolean((values[b.id] ?? "").trim());
+    isInkInput(blockSpec(b.type)!.input) ? Boolean(inkFor(blockSpec(b.type)!.input)) && (b.required || values[b.id] === "signed") : Boolean((values[b.id] ?? "").trim());
 
   const open = useMemo(() => {
     const out: string[] = [];
@@ -129,10 +133,10 @@ export function SigningSheet({
       if (!b.required) continue;
       const spec = blockSpec(b.type);
       if (!spec || spec.input === "auto") continue;
-      if (spec.input === "signature" ? !signature : !(values[b.id] ?? "").trim()) out.push(blockLabel(b.type, b.label));
+      if (isInkInput(spec.input) ? !inkFor(spec.input) : !(values[b.id] ?? "").trim()) out.push(blockLabel(b.type, b.label));
     }
     return out;
-  }, [blocks, values, signature]);
+  }, [blocks, values, inkFor]);
 
   const problems = useMemo(
     () => blocks.map((b) => blockValueProblem(b.type, values[b.id])).filter((p): p is string => Boolean(p)),
@@ -144,7 +148,7 @@ export function SigningSheet({
     if (!signature) return;
     setError(null);
     startTransition(async () => {
-      const err = await onSubmit(signature, Object.fromEntries(Object.entries(values).filter(([, v]) => v.trim())));
+      const err = await onSubmit(signature, Object.fromEntries(Object.entries(values).filter(([, v]) => v.trim())), initials ?? undefined);
       if (err) setError(err);
     });
   }
@@ -169,7 +173,7 @@ export function SigningSheet({
                     {d.type === "signature" || d.type === "initials" ? (
                       d.signaturePng ? (
                         // eslint-disable-next-line @next/next/no-img-element
-                        <img src={d.signaturePng} alt="Signature" className="h-full w-auto max-w-full object-contain" />
+                        <img src={d.signaturePng} alt={d.type === "initials" ? "Initials" : "Signature"} className="h-full w-auto max-w-full object-contain" />
                       ) : null
                     ) : d.type === "datetime" && d.value ? (
                       formatBlockDateTime(d.value)
@@ -202,9 +206,9 @@ export function SigningSheet({
                     >
                       <div className="flex h-full w-full items-center overflow-hidden">
                       {filled ? (
-                        spec.input === "signature" ? (
+                        isInkInput(spec.input) ? (
                           // eslint-disable-next-line @next/next/no-img-element
-                          <img src={signature ?? ""} alt="Your signature" className="h-full w-auto max-w-full object-contain" />
+                          <img src={inkFor(spec.input) ?? ""} alt={spec.input === "initials" ? "Your initials" : "Your signature"} className="h-full w-auto max-w-full object-contain" />
                         ) : (
                           <span className="whitespace-pre-wrap px-1 text-[11px] leading-tight text-[#0d0d40]">
                             {spec.input === "auto" ? formatBlockDateTime(v) : locked ? b.prefill : v}
@@ -236,8 +240,9 @@ export function SigningSheet({
                             required={b.required}
                             value={v}
                             onValue={(nv) => setValues((cur) => ({ ...cur, [b.id]: nv }))}
-                            signature={signature}
+                            signature={inkFor(spec.input)}
                             onSignature={(png, remember) => {
+                              if (spec.input === "initials") return setInitials(png);
                               setSignature(png);
                               if (!rememberFor || remember === undefined) return;
                               if (remember) setStored(rememberSignature(rememberFor, png));
@@ -246,7 +251,7 @@ export function SigningSheet({
                                 setStored(false);
                               }
                             }}
-                            keep={rememberFor ? { stored, onForget: () => { forgetSignature(rememberFor); setStored(false); setSignature(null); } } : undefined}
+                            keep={rememberFor && spec.input === "signature" ? { stored, onForget: () => { forgetSignature(rememberFor); setStored(false); setSignature(null); } } : undefined}
                             signerName={signerName}
                             // A spot outside the walk (already filled in) opens alone: no count, no Back, Done closes it.
                             position={activeIndex + 1}
@@ -254,7 +259,7 @@ export function SigningSheet({
                             onBack={activeIndex > 0 ? () => setActiveId(steps[activeIndex - 1].id) : null}
                             onNext={(used) => {
                               // An optional signature spot is signed only when the signer chose to.
-                              if (spec.input === "signature" && !b.required) {
+                              if (isInkInput(spec.input) && !b.required) {
                                 setValues((cur) => {
                                   const next = { ...cur };
                                   if (used) next[b.id] = "signed";

@@ -80,7 +80,7 @@ export function recipientsWithoutSignature(
 ): string[] {
   const signing = new Set(
     blocks
-      .filter((b) => (b.field_type === "signature" || b.field_type === "initials") && b.required !== false)
+      .filter((b) => b.field_type === "signature" && b.required !== false)
       .map((b) => b.recipient_id),
   );
   return recipients.filter((r) => !signing.has(r.id)).map((r) => r.name);
