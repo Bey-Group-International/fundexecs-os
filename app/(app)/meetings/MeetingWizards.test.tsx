@@ -108,6 +108,35 @@ describe("reminder wizard", () => {
   });
 });
 
+describe("wizard keyboard handling", () => {
+  it("keeps Tab inside the wizard and returns focus to its opener on close", () => {
+    open();
+    const opener = screen.getByRole("button", { name: "Reminder wizard" });
+    opener.focus();
+    fireEvent.click(opener);
+    const dialog = screen.getByRole("dialog", { name: "Reminder setup" });
+    const buttons = within(dialog).getAllByRole("button");
+    const lastBtn = buttons[buttons.length - 1];
+    lastBtn.focus();
+    fireEvent.keyDown(lastBtn, { key: "Tab" });
+    expect(document.activeElement).not.toBe(lastBtn);
+    expect(dialog.contains(document.activeElement)).toBe(true);
+
+    fireEvent.keyDown(dialog, { key: "Escape" });
+    expect(document.activeElement).toBe(opener);
+  });
+
+  it("does not close when a control inside already used Escape", () => {
+    open();
+    fireEvent.click(screen.getByRole("button", { name: "Reminder wizard" }));
+    const dialog = screen.getByRole("dialog", { name: "Reminder setup" });
+    const input = within(dialog).getAllByRole("button")[0];
+    input.addEventListener("keydown", (e) => e.preventDefault());
+    fireEvent.keyDown(input, { key: "Escape" });
+    expect(screen.queryByRole("dialog", { name: "Reminder setup" })).not.toBeNull();
+  });
+});
+
 describe("invitation wizard", () => {
   it("blocks on an empty guest list until somebody is added", async () => {
     open();
@@ -155,6 +184,24 @@ describe("invitation wizard", () => {
     expect(posts[0].body.guestQuickAccess).toBe(false);
     expect(posts[0].body.preparationRequirements).toBe("Read the Q3 pack");
     expect(String(posts[0].body.inviteNote)).toContain("Before we meet: Read the Q3 pack");
+  });
+
+  it("lets a note written earlier be edited again from Review", () => {
+    open({ attendees: [{ name: "Lee", email: "lee@fund.com", type: "internal" }] });
+    fireEvent.click(screen.getByRole("button", { name: "Complete invitation" }));
+    let dialog = screen.getByRole("dialog", { name: "Invitation setup" });
+    fireEvent.change(within(dialog).getByLabelText("Personal note"), { target: { value: "First draft" } });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Next" }));
+    fireEvent.click(within(dialog).getByRole("button", { name: "Done" }));
+
+    // Reopen: the note is no longer an open question, but it can still be changed.
+    fireEvent.click(screen.getByRole("button", { name: "Review invitation" }));
+    dialog = screen.getByRole("dialog", { name: "Invitation setup" });
+    expect(within(dialog).getByText("First draft")).toBeInTheDocument();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Edit note" }));
+    fireEvent.change(within(dialog).getByLabelText("Personal note"), { target: { value: "" } });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Next" }));
+    expect(within(dialog).getByText(/No personal note/)).toBeInTheDocument();
   });
 
   it("does not offer a note when editing a meeting that is already out", () => {

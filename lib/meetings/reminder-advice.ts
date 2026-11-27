@@ -212,7 +212,10 @@ export function adviseReminder(ctx: ReminderContext): ReminderAdvice {
       const weekday = new Date(`${local.date}T12:00:00Z`).getUTCDay(); // 0 = Sunday
       timing.push({ label: "Local start", value: `${local.time} (${ctx.timezone})` });
 
-      if (hour < 9 && minutes < 1440) {
+      // Only while a day-before reminder can still be sent: for a meeting less
+      // than a day away that lead has passed, and recommending it would hand
+      // back a reminder in the past.
+      if (hour < 9 && minutes < 1440 && untilMs > 1440 * 60_000) {
         minutes = 1440;
         reasons.push(
           "It starts before 9am, when a reminder an hour or two ahead would arrive overnight — so it goes the day before.",
@@ -234,9 +237,9 @@ export function adviseReminder(ctx: ReminderContext): ReminderAdvice {
 
   if (!none && minutes < 60) {
     // Reminders are swept hourly (see reminder.ts REMINDER_SWEEP_LOOKAHEAD_MS):
-    // a short lead is honoured as "inside the last hour".
+    // a short lead can be sent up to an hour before its lead time.
     cautions.push(
-      "Reminder emails go out in an hourly sweep, so a lead under an hour arrives sometime in the last hour before the meeting.",
+      "Reminder emails go out in an hourly sweep, so a lead under an hour can arrive up to an hour before its lead time.",
     );
   }
 

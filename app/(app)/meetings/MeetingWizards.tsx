@@ -43,8 +43,12 @@ function WizardShell({
   children: React.ReactNode;
 }) {
   const ref = useRef<HTMLDivElement>(null);
+  // Focus moves into the wizard on open and goes back to what opened it on
+  // close, so a keyboard user is not dropped at the top of the page.
   useEffect(() => {
+    const opener = document.activeElement as HTMLElement | null;
     ref.current?.focus();
+    return () => opener?.focus?.();
   }, []);
 
   return (
@@ -57,9 +61,31 @@ function WizardShell({
         tabIndex={-1}
         // Escape closes the wizard, not the schedule screen underneath it.
         onKeyDown={(e) => {
+          // A control inside may already have used the key — the guest picker
+          // closes its suggestion list on Escape and says so with preventDefault.
           if (e.key === "Escape") {
             e.stopPropagation();
-            onClose();
+            if (!e.defaultPrevented) onClose();
+            return;
+          }
+          // Keep Tab inside the wizard: the screen underneath is still focusable.
+          if (e.key === "Tab" && ref.current) {
+            const items = Array.from(
+              ref.current.querySelectorAll<HTMLElement>(
+                'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+              ),
+            );
+            if (items.length === 0) return;
+            const first = items[0];
+            const lastItem = items[items.length - 1];
+            const active = document.activeElement;
+            if (e.shiftKey && (active === first || active === ref.current)) {
+              e.preventDefault();
+              lastItem.focus();
+            } else if (!e.shiftKey && active === lastItem) {
+              e.preventDefault();
+              first.focus();
+            }
           }
         }}
         className="flex h-full w-full max-w-lg flex-col overflow-hidden bg-[var(--surface-1)] shadow-2xl outline-none sm:h-auto sm:max-h-[88vh] sm:rounded-2xl sm:border sm:border-[var(--line)]"
@@ -398,14 +424,38 @@ export function InviteWizard(props: InviteWizardProps) {
 
   // Frozen when the wizard opens: answering a question must not remove it from
   // under the host mid-flow. Anything the host already reviewed is not re-asked.
-  const [queue] = useState(() =>
-    inviteQuestions(ctx)
-      .filter((q) => q.open && !reviewed.has(q.id))
-      .map((q) => q.id),
+  const questions = inviteQuestions(ctx);
+  const [queue, setQueue] = useState<InviteQuestionId[]>(() =>
+    questions.filter((q) => q.open && !reviewed.has(q.id)).map((q) => q.id),
   );
   const [step, setStep] = useState(0);
 
-  const questions = inviteQuestions(ctx);
+  // Answering one question can make others apply — adding an outside guest
+  // raises the access, agenda and note questions. They join the queue ahead of
+  // Review rather than being skipped; steps already visited stay where they are.
+  const applicableKey = questions
+    .filter((q) => q.open && !reviewed.has(q.id))
+    .map((q) => q.id)
+    .join(",");
+  useEffect(() => {
+    const wanted = applicableKey ? (applicableKey.split(",") as InviteQuestionId[]) : [];
+    setQueue((prev) => {
+      const missing = wanted.filter((id) => !prev.includes(id));
+      return missing.length ? [...prev, ...missing] : prev;
+    });
+  }, [applicableKey]);
+
+  // A question already dealt with can still be reopened from Review — a note
+  // written earlier must stay editable, or removable, before scheduling.
+  function reopen(id: InviteQuestionId) {
+    const at = queue.indexOf(id);
+    if (at >= 0) {
+      setStep(at);
+      return;
+    }
+    setQueue((prev) => [...prev, id]);
+    setStep(queue.length);
+  }
   const byId = new Map(questions.map((q) => [q.id, q]));
   const ids: Array<InviteQuestionId | "review"> = [...queue, "review"];
   const current = ids[step];
@@ -566,6 +616,20 @@ export function InviteWizard(props: InviteWizardProps) {
               { label: "Agenda", value: ctx.agenda.trim() || ctx.objective.trim() ? "Included" : "None" },
             ]}
           />
+          <div className="flex flex-wrap gap-1.5" aria-label="Edit an answer">
+            {(["guests", "access", "prep", "agenda", "note"] as InviteQuestionId[])
+              .filter((id) => byId.has(id))
+              .map((id) => (
+                <button
+                  key={id}
+                  type="button"
+                  onClick={() => reopen(id)}
+                  className="rounded-full border border-[var(--line)] px-3 py-1 text-xs font-medium text-[var(--fg-secondary)] hover:text-[var(--fg-primary)]"
+                >
+                  Edit {EDIT_LABELS[id]}
+                </button>
+              ))}
+          </div>
           {ctx.noteSupported ? (
             ctx.note.trim() ? (
               <div className="rounded-lg border-l-4 border-[var(--gold-400)] bg-[var(--surface-0)] px-3 py-2">
@@ -594,4 +658,12 @@ const STEP_TITLES: Record<InviteQuestionId, string> = {
   prep: "Preparation",
   agenda: "Agenda",
   note: "Personal note",
+};
+
+const EDIT_LABELS: Partial<Record<InviteQuestionId, string>> = {
+  guests: "guests",
+  access: "access",
+  prep: "preparation",
+  agenda: "agenda",
+  note: "note",
 };

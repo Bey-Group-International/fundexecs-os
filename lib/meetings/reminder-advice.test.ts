@@ -24,7 +24,7 @@ describe("adviseReminder", () => {
   it("gives a routine internal meeting a short nudge", () => {
     const a = adviseReminder(ctx());
     expect(a.minutes).toBe(15);
-    expect(a.cautions.join(" ")).toMatch(/hourly sweep/);
+    expect(a.cautions.join(" ")).toMatch(/up to an hour before its lead time/);
   });
 
   it("sends board, LP and diligence meetings the day before", () => {
@@ -89,6 +89,14 @@ describe("adviseReminder", () => {
     const a = adviseReminder(ctx({ startIso: "2026-10-09T07:30:00Z" }));
     expect(a.minutes).toBe(1440);
     expect(a.reasons.join(" ")).toMatch(/before 9am/);
+  });
+
+  it("does not recommend a day-before reminder for an early meeting that is less than a day away", () => {
+    // 08:30 UTC today, 30 minutes from NOW.
+    const a = adviseReminder(ctx({ startIso: "2026-10-07T08:30:00Z" }));
+    expect(a.minutes).toBe(15);
+    // Two days out at 07:30: a day-before reminder is still possible.
+    expect(adviseReminder(ctx({ startIso: "2026-10-09T07:30:00Z" })).minutes).toBe(1440);
   });
 
   it("avoids a Sunday email for a Monday meeting that needs no prep", () => {
