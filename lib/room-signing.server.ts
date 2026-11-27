@@ -142,13 +142,13 @@ export async function readerSigningView(client: Client, envelopeId: string): Pro
   if (r.status === "signed") return { ok: true, state: "signed" };
   const { data: flds } = await client
     .from("envelope_fields")
-    .select("id, field_type, page, x_pct, y_pct, width_pct, height_pct, required, prefill, locked")
+    .select("id, field_type, label, page, x_pct, y_pct, width_pct, height_pct, required, prefill, locked")
     .eq("recipient_id", r.id);
   const blocks = ((flds ?? []) as {
-    id: string; field_type: string; page: number; x_pct: number; y_pct: number;
+    id: string; field_type: string; label: string | null; page: number; x_pct: number; y_pct: number;
     width_pct: number; height_pct: number; required: boolean; prefill: string | null; locked: boolean;
   }[]).map((f) => ({
-    id: f.id, type: f.field_type, page: f.page, xPct: f.x_pct, yPct: f.y_pct,
+    id: f.id, type: f.field_type, label: f.label, page: f.page, xPct: f.x_pct, yPct: f.y_pct,
     widthPct: f.width_pct, heightPct: f.height_pct, required: f.required, prefill: f.prefill, locked: f.locked,
   }));
   return { ok: true, state: "ready", title: e.title, signingToken: r.signing_token, blocks };

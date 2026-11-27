@@ -60,7 +60,7 @@ describe("BlockPlacer: click, choose, done", () => {
     // Beside the click (16px off it), not on top of it.
     expect(menu.style.left).toBe("calc(50% + 16px)");
     expect(menu.style.top).toBe("calc(50% + 16px)");
-    expect(within(menu).getAllByRole("menuitem").map((i) => i.textContent)).toEqual(["Name", "Signature", "Date and time", "Company", "Title", "Address", "Email", "Phone"]);
+    expect(within(menu).getAllByRole("menuitem").map((i) => i.textContent)).toEqual(["Name", "Signature", "Date and time", "Company", "Title", "Address", "Email", "Phone", "Other"]);
     choose("Signature");
     expect(screen.queryByRole("menu")).toBeNull();
     const block = screen.getByRole("button", { name: "Signature block" });
@@ -221,6 +221,36 @@ describe("BlockPlacer: click, choose, done", () => {
       fireEvent.keyDown(window, { key: "Escape" });
       fireEvent.click(screen.getByRole("button", { name: /Send for signature/ }));
       await waitFor(() => expect(screen.getByRole("alert").textContent).toMatch(/at least one of Jane Smith's signature blocks required/));
+    });
+  });
+
+  describe("the Other block", () => {
+    it("starts optional, is selected so it can be named at once, and shows its name on the page", async () => {
+      await mount();
+      clickPage(300, 400);
+      choose("Other");
+      const name = screen.getByRole("textbox", { name: "Name of this block" }) as HTMLInputElement;
+      expect(name.value).toBe("");
+      expect(screen.getByRole("button", { name: "Other block" }).getAttribute("data-required")).toBe("false");
+      fireEvent.change(name, { target: { value: "Tax ID" } });
+      expect(screen.getByRole("button", { name: "Tax ID block" })).toBeTruthy();
+      expect(within(screen.getByRole("button", { name: "Tax ID block" })).getByText("Tax ID")).toBeTruthy();
+    });
+
+    it("saves the name with the block, can be pre-filled and locked, and a block of another type sends no name", async () => {
+      await mount();
+      clickPage(300, 400);
+      choose("Other");
+      fireEvent.change(screen.getByRole("textbox", { name: "Name of this block" }), { target: { value: "Witness name" } });
+      fireEvent.change(screen.getByRole("textbox", { name: "Pre-filled value" }), { target: { value: "J. Doe" } });
+      fireEvent.click(screen.getByRole("checkbox", { name: "Lock" }));
+      clickPage(300, 600);
+      choose("Company");
+      fireEvent.click(screen.getByRole("button", { name: /Save$/ }));
+      await waitFor(() => expect(puts).toHaveLength(1));
+      const sent = puts[0].blocks as unknown as { type: string; label?: string; prefill: string; locked: boolean }[];
+      expect(sent[0]).toMatchObject({ type: "other", label: "Witness name", prefill: "J. Doe", locked: true });
+      expect(sent[1].label).toBeUndefined();
     });
   });
 });

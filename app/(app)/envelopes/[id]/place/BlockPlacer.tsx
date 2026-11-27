@@ -8,7 +8,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { PdfPages } from "@/components/signing/PdfPages";
-import { BLOCKS, blockColor, blockSpec, clampBlock, defaultRequired, newBlockAt, type BlockType } from "@/lib/signing/blocks";
+import { BLOCKS, MAX_OTHER_LABEL, blockColor, blockLabel, blockSpec, clampBlock, defaultRequired, newBlockAt, type BlockType } from "@/lib/signing/blocks";
 
 interface Party {
   id: string;
@@ -28,10 +28,12 @@ interface Block {
   required: boolean;
   prefill: string;
   locked: boolean;
+  /** An Other block's own name, given by the sender. */
+  label: string;
 }
 
 const TINT = ["#C9A227", "#3B82F6"]; // recipient, owner
-const PREFILLABLE = ["name", "company", "title", "address", "email", "phone"];
+const PREFILLABLE = ["name", "company", "title", "address", "email", "phone", "other"];
 
 let counter = 0;
 const nextKey = () => `b${Date.now().toString(36)}${counter++}`;
@@ -71,7 +73,7 @@ export function BlockPlacer({ title, fieldsUrl, pdfUrl, sendUrl, doneHref, prefi
     if (!res.ok) return setError("Could not load this document.");
     const j = (await res.json()) as {
       recipients: Party[];
-      fields: { id: string; recipient_id: string; field_type: string; page: number; x_pct: number; y_pct: number; width_pct: number; height_pct: number; required: boolean; prefill: string | null; locked: boolean }[];
+      fields: { id: string; recipient_id: string; field_type: string; label: string | null; page: number; x_pct: number; y_pct: number; width_pct: number; height_pct: number; required: boolean; prefill: string | null; locked: boolean }[];
     };
     setParties(j.recipients);
     setPartyId((cur) => cur || j.recipients.find((r) => r.role !== "owner")?.id || j.recipients[0]?.id || "");
@@ -90,6 +92,7 @@ export function BlockPlacer({ title, fieldsUrl, pdfUrl, sendUrl, doneHref, prefi
           required: f.required,
           prefill: f.prefill ?? "",
           locked: f.locked,
+          label: blockSpec(f.field_type)!.type === "other" ? (f.label ?? "") : "",
         })),
     );
   }, [fieldsUrl]);
@@ -152,9 +155,10 @@ export function BlockPlacer({ title, fieldsUrl, pdfUrl, sendUrl, doneHref, prefi
     const target = party(partyId);
     // A name or email block starts with the person's own, which they can still change.
     const prefill = prefillNames ? (type === "name" ? target?.name : type === "email" ? target?.email : "") ?? "" : "";
-    const b: Block = { key: nextKey(), recipientId: partyId, type, page, ...pos, required: defaultRequired(type), prefill, locked: false };
+    const b: Block = { key: nextKey(), recipientId: partyId, type, page, ...pos, required: defaultRequired(type), prefill, locked: false, label: "" };
     setBlocks((cur) => [...cur, b]);
-    setSelected(null);
+    // An Other block is named straight away, in the strip that opens for it.
+    setSelected(type === "other" ? b.key : null);
     setMenu(null);
     setNotice(null);
   }
@@ -168,7 +172,7 @@ export function BlockPlacer({ title, fieldsUrl, pdfUrl, sendUrl, doneHref, prefi
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        blocks: blocks.map((b) => ({ recipientId: b.recipientId, type: b.type, page: b.page, xPct: b.xPct, yPct: b.yPct, widthPct: b.widthPct, heightPct: b.heightPct, required: b.required, prefill: b.prefill, locked: b.locked })),
+        blocks: blocks.map((b) => ({ recipientId: b.recipientId, type: b.type, page: b.page, xPct: b.xPct, yPct: b.yPct, widthPct: b.widthPct, heightPct: b.heightPct, required: b.required, prefill: b.prefill, locked: b.locked, ...(b.type === "other" ? { label: b.label } : {}) })),
       }),
     }).then(async (res) => {
       if (res.ok) return true;
@@ -259,8 +263,19 @@ export function BlockPlacer({ title, fieldsUrl, pdfUrl, sendUrl, doneHref, prefi
         {sel ? (
           <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-line pt-2 text-xs text-fg-secondary">
             <span className="font-semibold text-fg-primary">
-              {blockSpec(sel.type)!.label} <span className="font-normal text-fg-muted">for {party(sel.recipientId)?.role === "owner" ? "you" : party(sel.recipientId)?.name}</span>
+              {blockLabel(sel.type, sel.label)} <span className="font-normal text-fg-muted">for {party(sel.recipientId)?.role === "owner" ? "you" : party(sel.recipientId)?.name}</span>
             </span>
+            {sel.type === "other" ? (
+              <input
+                aria-label="Name of this block"
+                placeholder="Name this block (for example Tax ID)"
+                maxLength={MAX_OTHER_LABEL}
+                autoFocus={!sel.label}
+                value={sel.label}
+                onChange={(e) => patch(sel.key, { label: e.target.value })}
+                className="min-w-[12rem] flex-1 rounded-md border border-line bg-surface-0 px-2 py-1 text-xs text-fg-primary focus:border-gold-400 focus:outline-none"
+              />
+            ) : null}
             <label className="flex items-center gap-1.5">
               <input type="checkbox" checked={sel.required} onChange={(e) => patch(sel.key, { required: e.target.checked })} /> Required
             </label>
@@ -314,7 +329,7 @@ export function BlockPlacer({ title, fieldsUrl, pdfUrl, sendUrl, doneHref, prefi
                       key={b.key}
                       role="button"
                       tabIndex={0}
-                      aria-label={`${blockSpec(b.type)!.label} block`}
+                      aria-label={`${blockLabel(b.type, b.label)} block`}
                       onPointerDown={(e) => startDrag(e, b, width, height)}
                       onPointerMove={moveDrag}
                       onPointerUp={endDrag}
@@ -338,7 +353,7 @@ export function BlockPlacer({ title, fieldsUrl, pdfUrl, sendUrl, doneHref, prefi
                     >
                       <button
                         type="button"
-                        aria-label={`${blockSpec(b.type)!.label} is ${b.required ? "required" : "optional"}: click to make it ${b.required ? "optional" : "required"}`}
+                        aria-label={`${blockLabel(b.type, b.label)} is ${b.required ? "required" : "optional"}: click to make it ${b.required ? "optional" : "required"}`}
                         aria-pressed={b.required}
                         title={b.required ? "Required: the signer must complete it. Click to make it optional." : "Optional: the signer may skip it. Click to make it required."}
                         onPointerDown={(e) => e.stopPropagation()}
@@ -353,7 +368,7 @@ export function BlockPlacer({ title, fieldsUrl, pdfUrl, sendUrl, doneHref, prefi
                       </button>
                       <button
                         type="button"
-                        aria-label={`Delete ${blockSpec(b.type)!.label} block`}
+                        aria-label={`Delete ${blockLabel(b.type, b.label)} block`}
                         title="Delete this block"
                         // Not a drag, and not a click on the page behind it.
                         onPointerDown={(e) => e.stopPropagation()}
@@ -374,6 +389,11 @@ export function BlockPlacer({ title, fieldsUrl, pdfUrl, sendUrl, doneHref, prefi
                       >
                         ×
                       </span>
+                      {b.type === "other" ? (
+                        <span className="pointer-events-none ml-0.5 truncate text-[10px] font-medium" style={{ color: blockColor(b.required) }}>
+                          {blockLabel(b.type, b.label)}
+                        </span>
+                      ) : null}
                     </div>
                   ))}
                 {menu && menu.page === page ? (

@@ -44,3 +44,15 @@ describe("recipientsWithoutSignature", () => {
     expect(recipientsWithoutSignature(people, [{ recipient_id: "a", field_type: "signature" }, req("b")])).toEqual([]);
   });
 });
+
+describe("an Other block", () => {
+  const base = { recipientId: "a", type: "other", page: 1, xPct: 10, yPct: 10, widthPct: 28, heightPct: 4 };
+  it("keeps the sender's name for it, trimmed and limited, and falls back to Other", () => {
+    const r = cleanBlocks([{ ...base, label: "  Tax ID  " }, { ...base, label: "" }, { ...base, label: "x".repeat(200) }, { ...base }], ["a"], 1);
+    expect(r.ok && r.blocks.map((b) => b.label)).toEqual(["Tax ID", "Other", "x".repeat(60), "Other"]);
+  });
+  it("ignores a name sent for any other type", () => {
+    const r = cleanBlocks([{ ...base, type: "company", label: "Sneaky" }], ["a"], 1);
+    expect(r.ok && r.blocks[0].label).toBe("Company");
+  });
+});
