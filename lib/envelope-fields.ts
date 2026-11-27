@@ -2,7 +2,7 @@
 //
 // Validating the blocks an owner places, and checking an envelope is ready to send.
 // Pure: the routes feed it rows and act on what it says.
-import { BLOCKS, clampBlock, type BlockType } from "@/lib/signing/blocks";
+import { BLOCKS, blockLabel, clampBlock, type BlockType } from "@/lib/signing/blocks";
 
 const TYPES = new Set<string>(BLOCKS.map((b) => b.type));
 export const MAX_BLOCKS = 200;
@@ -18,6 +18,8 @@ export interface IncomingBlock {
   required?: boolean;
   prefill?: string | null;
   locked?: boolean;
+  /** The name of an Other block. */
+  label?: string | null;
 }
 
 export interface CleanBlock {
@@ -57,7 +59,7 @@ export function cleanBlocks(raw: unknown, recipientIds: string[], pageCount: num
       y_pct: c.yPct,
       width_pct: c.widthPct,
       height_pct: c.heightPct,
-      label: BLOCKS.find((x) => x.type === b.type)!.label,
+      label: blockLabel(b.type, b.label),
       required: b.required !== false,
       prefill,
       // A locked block needs a value to lock.

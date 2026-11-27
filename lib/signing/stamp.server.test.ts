@@ -2,7 +2,7 @@ jest.mock("server-only", () => ({}), { virtual: true });
 import { PDFDocument } from "pdf-lib";
 import { stampBlocks } from "./stamp.server";
 import { buildDocumentPdf } from "./executed-pdf.server";
-import { BLOCKS, BLOCK_HEIGHT_PCT, BLOCK_WIDTH_PCT, resolveDateTimeResponse, toOffsetIso, blockSpec, clampBlock, newBlockAt, formatBlockDateTime } from "./blocks";
+import { BLOCKS, blockLabel, BLOCK_HEIGHT_PCT, BLOCK_WIDTH_PCT, resolveDateTimeResponse, toOffsetIso, blockSpec, clampBlock, newBlockAt, formatBlockDateTime } from "./blocks";
 import { missingRequiredFields } from "../envelope-signing";
 import { blockValueProblem } from "./blocks";
 
@@ -11,10 +11,17 @@ const PNG =
 
 describe("blocks", () => {
   it("offers exactly these blocks, and old types behave like their nearest block", () => {
-    expect(BLOCKS.map((b) => b.type)).toEqual(["name", "signature", "datetime", "company", "title", "address", "email", "phone"]);
+    expect(BLOCKS.map((b) => b.type)).toEqual(["name", "signature", "datetime", "company", "title", "address", "email", "phone", "other"]);
     expect(blockSpec("initials")?.type).toBe("signature");
     expect(blockSpec("date")?.type).toBe("datetime");
     expect(blockSpec("nope")).toBeNull();
+  });
+
+  it("names an Other block as the sender did, and the rest by their own name", () => {
+    expect(blockLabel("other", "  Tax ID ")).toBe("Tax ID");
+    expect(blockLabel("other", "")).toBe("Other");
+    expect(blockLabel("other", "x".repeat(99))).toHaveLength(60);
+    expect(blockLabel("company", "Sneaky")).toBe("Company");
   });
 
   it("keeps a block wholly on its page, whatever the browser sends", () => {

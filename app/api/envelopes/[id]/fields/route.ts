@@ -23,7 +23,7 @@ export async function GET(_req: Request, props: { params: Promise<{ id: string }
 
   const [{ data: recipients }, { data: fields }, { data: env }] = await Promise.all([
     supabase.from("envelope_recipients").select("id, name, email, role, routing_order, status").eq("envelope_id", id).order("routing_order", { ascending: true }),
-    supabase.from("envelope_fields").select("id, recipient_id, field_type, page, x_pct, y_pct, width_pct, height_pct, required, prefill, locked").eq("envelope_id", id),
+    supabase.from("envelope_fields").select("id, recipient_id, field_type, label, page, x_pct, y_pct, width_pct, height_pct, required, prefill, locked").eq("envelope_id", id),
     supabase.from("envelopes").select("id, title, status").eq("id", id).maybeSingle(),
   ]);
   if (!env) return NextResponse.json({ error: "Not found" }, { status: 404 });

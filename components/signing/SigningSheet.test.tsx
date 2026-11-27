@@ -265,4 +265,20 @@ describe("SigningSheet: a × at each spot, one at a time", () => {
       expect((onSubmit.mock.calls[0] as unknown as [string, Record<string, string>])[1].s2).toBeUndefined();
     });
   });
+
+  describe("an Other block", () => {
+    it("is asked for by the sender's name for it, and optional by default tag", () => {
+      mount(undefined, [block({ id: "o", type: "other", label: "Tax ID", required: false, yPct: 10 })]);
+      const d = screen.getByRole("dialog", { name: "Tax ID" });
+      expect(within(d).getByText("Optional")).toBeTruthy();
+      expect(within(d).getByRole("textbox", { name: "Tax ID" })).toBeTruthy();
+      expect(screen.getByRole("button", { name: /^Tax ID: click to complete/ })).toBeTruthy();
+    });
+    it("uses the name when it is required and still empty, and Other when it was never named", async () => {
+      const onSubmit = mount(undefined, [block({ id: "s", type: "signature", yPct: 10 }), block({ id: "o", type: "other", label: "Witness name", yPct: 30 }), block({ id: "p", type: "other", label: "", required: false, yPct: 50 })]);
+      expect(screen.getByText(/Still to do: .*Signature, Witness name/)).toBeTruthy();
+      expect(screen.getByRole("button", { name: /^Other: click to complete/ })).toBeTruthy();
+      void onSubmit;
+    });
+  });
 });

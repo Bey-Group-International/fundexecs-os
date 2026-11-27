@@ -3,7 +3,7 @@
 // The signature blocks an owner can place on a document, and how each behaves.
 // Pure, so the placement screen, the signing screen and the server agree.
 
-export type BlockType = "name" | "signature" | "datetime" | "company" | "title" | "address" | "email" | "phone";
+export type BlockType = "name" | "signature" | "datetime" | "company" | "title" | "address" | "email" | "phone" | "other";
 
 export interface BlockSpec {
   type: BlockType;
@@ -30,7 +30,18 @@ export const BLOCKS: BlockSpec[] = [
   { type: "address", label: "Address", input: "multiline", widthPct: BLOCK_WIDTH_PCT, heightPct: BLOCK_HEIGHT_PCT },
   { type: "email", label: "Email", input: "text", inputType: "email", widthPct: BLOCK_WIDTH_PCT, heightPct: BLOCK_HEIGHT_PCT },
   { type: "phone", label: "Phone", input: "text", inputType: "tel", widthPct: BLOCK_WIDTH_PCT, heightPct: BLOCK_HEIGHT_PCT },
+  // Anything the others do not cover: the sender names it ("Tax ID", "Witness name") and the signer types an answer.
+  { type: "other", label: "Other", input: "text", widthPct: BLOCK_WIDTH_PCT, heightPct: BLOCK_HEIGHT_PCT },
 ];
+
+/** The longest name a sender may give an Other block. */
+export const MAX_OTHER_LABEL = 60;
+
+/** What a block is called on screen: an Other block carries the sender's own name for it. */
+export function blockLabel(type: string, label?: string | null): string {
+  if (type === "other") return (label ?? "").trim().slice(0, MAX_OTHER_LABEL) || "Other";
+  return blockSpec(type)?.label ?? type;
+}
 
 /** A reason a typed value is not acceptable for its block, or null. Browsers can be bypassed; the server asks too. */
 export function blockValueProblem(fieldType: string, value: string | null | undefined): string | null {
@@ -77,6 +88,8 @@ export interface PlacedBlock {
   required: boolean;
   prefill: string | null;
   locked: boolean;
+  /** Only an Other block has its own name. */
+  label?: string | null;
 }
 
 const clamp = (n: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, n));

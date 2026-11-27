@@ -9,7 +9,7 @@ import { useEffect, useMemo, useState, useTransition } from "react";
 import { PdfPages } from "@/components/signing/PdfPages";
 import { SpotPanel } from "@/components/signing/SpotPanel";
 import { forgetSignature, loadRememberedSignature, rememberSignature } from "@/lib/signing/remembered-signature";
-import { blockColor, blockSpec, blockValueProblem, formatBlockDateTime, toOffsetIso } from "@/lib/signing/blocks";
+import { blockColor, blockLabel, blockSpec, blockValueProblem, formatBlockDateTime, toOffsetIso } from "@/lib/signing/blocks";
 
 export interface SheetBlock {
   id: string;
@@ -22,6 +22,8 @@ export interface SheetBlock {
   required: boolean;
   prefill: string | null;
   locked: boolean;
+  /** An Other block's own name. */
+  label?: string | null;
 }
 export interface DoneBlock extends Omit<SheetBlock, "required" | "prefill" | "locked"> {
   value: string | null;
@@ -127,7 +129,7 @@ export function SigningSheet({
       if (!b.required) continue;
       const spec = blockSpec(b.type);
       if (!spec || spec.input === "auto") continue;
-      if (spec.input === "signature" ? !signature : !(values[b.id] ?? "").trim()) out.push(spec.label);
+      if (spec.input === "signature" ? !signature : !(values[b.id] ?? "").trim()) out.push(blockLabel(b.type, b.label));
     }
     return out;
   }, [blocks, values, signature]);
@@ -191,7 +193,7 @@ export function SigningSheet({
                       data-block-id={b.id}
                       role={locked ? undefined : "button"}
                       tabIndex={locked ? undefined : 0}
-                      aria-label={locked ? undefined : `${spec.label}: ${filled ? "filled, click to change" : "click to complete"}`}
+                      aria-label={locked ? undefined : `${blockLabel(b.type, b.label)}: ${filled ? "filled, click to change" : "click to complete"}`}
                       onClick={locked ? undefined : () => setActiveId(b.id)}
                       onKeyDown={locked ? undefined : (e) => (e.key === "Enter" || e.key === " ") && setActiveId(b.id)}
                       className={`absolute flex items-center ${locked ? "" : "cursor-pointer"} ${activeId && !isActive ? "opacity-50" : ""}`}
@@ -230,7 +232,7 @@ export function SigningSheet({
                         >
                           <SpotPanel
                             key={b.id}
-                            spec={spec}
+                            spec={{ ...spec, label: blockLabel(b.type, b.label) }}
                             required={b.required}
                             value={v}
                             onValue={(nv) => setValues((cur) => ({ ...cur, [b.id]: nv }))}
