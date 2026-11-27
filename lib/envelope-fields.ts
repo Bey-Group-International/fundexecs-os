@@ -85,3 +85,20 @@ export function recipientsWithoutSignature(
   );
   return recipients.filter((r) => !signing.has(r.id)).map((r) => r.name);
 }
+
+/**
+ * The rule for a data-room file's blocks, placed once for every reader: the reader and the
+ * countersigner (you) each need a required signature block, or a file could be "signed"
+ * with no signature on it. Null when the blocks are fine (or there are none).
+ */
+export function templateSignatureProblem(blocks: { recipient_id: string; field_type: string; required?: boolean | null }[]): string | null {
+  if (blocks.length === 0) return null;
+  const missing = recipientsWithoutSignature(
+    [
+      { id: "signer", name: "the reader" },
+      { id: "owner", name: "you" },
+    ],
+    blocks,
+  );
+  return missing.length ? "Add a required signature block for the reader and one for yourself (you countersign)." : null;
+}
