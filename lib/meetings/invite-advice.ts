@@ -10,7 +10,7 @@
 //
 // Pure: no React, no network.
 
-import { INVITE_NOTE_MAX } from "@/lib/meetings/invite";
+import { INVITE_NOTE_MAX } from "@/lib/meetings/invite-note";
 
 export type InviteQuestionId = "guests" | "unreachable" | "access" | "hours" | "prep" | "agenda" | "note";
 

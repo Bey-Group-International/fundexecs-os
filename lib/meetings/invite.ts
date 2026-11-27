@@ -2,6 +2,7 @@
 // Shared meeting-invite email logic used by the manual invite route
 // (/api/meetings/invite) and the schedule/edit flows, so adding a guest email
 // to a scheduled meeting actually reaches them.
+import { INVITE_NOTE_MAX } from "@/lib/meetings/invite-note";
 import { sendEmail, escapeHtml, type SendEmailCredentials } from "@/lib/email";
 import { deliveryOutcome, type DeliveryOutcome } from "@/lib/meetings/recipients";
 import type { MeetingAttendeeInput } from "@/lib/meetings/attendees";
@@ -15,9 +16,6 @@ import {
   type ScheduledRecipient,
 } from "@/lib/meetings/scheduled-invite";
 import { meetingInviteUrl, meetingJoinUrl } from "@/lib/meetings/share";
-
-/** Longest personal message an invitation carries. */
-export const INVITE_NOTE_MAX = 1000;
 
 export function buildMeetingInviteHtml({
   inviteUrl,
