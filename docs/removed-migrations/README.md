@@ -70,9 +70,14 @@ as before, run with production credentials:
 supabase migration repair --status reverted 20261103175342 20261104144109
 ```
 
-then let `DB Migrate` run. **This had not been run when this section was
-written**; update this paragraph once the rows are cleared and the workflow is
-green.
+then let `DB Migrate` run. **This was done on 2026-11-26.** The two rows were
+deleted from `supabase_migrations.schema_migrations`, their full contents having
+been saved first so they could be put back, and `DB Migrate` was then run by
+hand on `main` (run #422). It passed, including the drift check, and the
+`db-migrate-failure` issue closed itself. Production history now records the
+two repo files under their own versions, and every migration that had been
+stranded behind the stray rows (`20261106010607` through `20261115120000`) was
+applied.
 
 ## Restoring a record
 
