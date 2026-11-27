@@ -1211,11 +1211,11 @@ function SignatureLock({
           done={[]}
           signerName={name.trim()}
           submitLabel="Sign and open"
-          onSubmit={async (signatureData, fieldResponses) => {
+          onSubmit={async (signatureData, fieldResponses, initialsData) => {
             const res = await fetch(`/api/sign/${view.signingToken}/complete`, {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ signatureData, fieldResponses }),
+              body: JSON.stringify({ signatureData, initialsData, fieldResponses }),
             });
             if (!res.ok) return ((await res.json().catch(() => ({}))) as { error?: string }).error ?? `Server error ${res.status}`;
             router.refresh();

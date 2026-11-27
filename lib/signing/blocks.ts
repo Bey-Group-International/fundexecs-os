@@ -3,13 +3,13 @@
 // The signature blocks an owner can place on a document, and how each behaves.
 // Pure, so the placement screen, the signing screen and the server agree.
 
-export type BlockType = "name" | "signature" | "datetime" | "company" | "title" | "address" | "email" | "phone" | "other";
+export type BlockType = "name" | "signature" | "initials" | "datetime" | "company" | "title" | "address" | "email" | "phone" | "other";
 
 export interface BlockSpec {
   type: BlockType;
   label: string;
   /** How the signer fills it. `auto` blocks fill themselves at signing time. */
-  input: "signature" | "text" | "multiline" | "auto";
+  input: "signature" | "initials" | "text" | "multiline" | "auto";
   /** The keyboard a text block asks for on a phone. */
   inputType?: "email" | "tel";
   /** Default size on the page, as a percentage of page width and height. */
@@ -24,6 +24,7 @@ export const BLOCK_HEIGHT_PCT = 4;
 export const BLOCKS: BlockSpec[] = [
   { type: "name", label: "Name", input: "text", widthPct: BLOCK_WIDTH_PCT, heightPct: BLOCK_HEIGHT_PCT },
   { type: "signature", label: "Signature", input: "signature", widthPct: BLOCK_WIDTH_PCT, heightPct: BLOCK_HEIGHT_PCT },
+  { type: "initials", label: "Initials", input: "initials", widthPct: BLOCK_WIDTH_PCT, heightPct: BLOCK_HEIGHT_PCT },
   { type: "datetime", label: "Date and time", input: "auto", widthPct: BLOCK_WIDTH_PCT, heightPct: BLOCK_HEIGHT_PCT },
   { type: "company", label: "Company", input: "text", widthPct: BLOCK_WIDTH_PCT, heightPct: BLOCK_HEIGHT_PCT },
   { type: "title", label: "Title", input: "text", widthPct: BLOCK_WIDTH_PCT, heightPct: BLOCK_HEIGHT_PCT },
@@ -58,7 +59,16 @@ export function blockValueProblem(fieldType: string, value: string | null | unde
  * and the sender turns on the ones that matter. Either way, one click flips it.
  */
 export function defaultRequired(type: string): boolean {
-  return type === "signature" || type === "name" || type === "datetime";
+  return type === "signature" || type === "initials" || type === "name" || type === "datetime";
+}
+
+/** Blocks the signer marks by hand (a drawn, typed or uploaded mark) rather than by typing a value. */
+export const isInkInput = (input: string | undefined | null): boolean => input === "signature" || input === "initials";
+
+/** "Jane Q. Smith" becomes "JQS": the starting point for typed initials, which the signer can change. */
+export function initialsOf(name: string): string {
+  const words = name.trim().split(/\s+/).filter(Boolean);
+  return words.slice(0, 3).map((w) => Array.from(w)[0]?.toUpperCase() ?? "").join("");
 }
 
 /** The two colours a block wears: red when the signer must complete it, blue when they may skip it. */
@@ -69,7 +79,7 @@ export const blockColor = (required: boolean) => (required ? REQUIRED_COLOR : OP
 const BY_TYPE = new Map<string, BlockSpec>(BLOCKS.map((b) => [b.type, b]));
 
 /** Older envelopes use the earlier types; they behave like their nearest block. */
-const LEGACY: Record<string, BlockType> = { initials: "signature", text: "title", date: "datetime", checkbox: "name" };
+const LEGACY: Record<string, BlockType> = { text: "title", date: "datetime", checkbox: "name" };
 
 export function blockSpec(fieldType: string): BlockSpec | null {
   return BY_TYPE.get(fieldType) ?? BY_TYPE.get(LEGACY[fieldType] ?? "") ?? null;

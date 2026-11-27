@@ -66,8 +66,8 @@ export async function POST(
     }
     // Initials are only needed when the document has an initials block (checked with
     // the required fields below).
-    if (initialsData !== undefined && typeof initialsData !== 'string') {
-      return NextResponse.json({ ok: false, error: 'initialsData must be an image' }, { status: 400 })
+    if (initialsData !== undefined && !parseSignaturePng(initialsData)) {
+      return NextResponse.json({ ok: false, error: 'initialsData must be a PNG image' }, { status: 400 })
     }
     const responses: Record<string, string> =
       fieldResponses && typeof fieldResponses === 'object' ? fieldResponses : {}

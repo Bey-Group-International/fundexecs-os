@@ -60,7 +60,7 @@ describe("BlockPlacer: click, choose, done", () => {
     // Beside the click (16px off it), not on top of it.
     expect(menu.style.left).toBe("calc(50% + 16px)");
     expect(menu.style.top).toBe("calc(50% + 16px)");
-    expect(within(menu).getAllByRole("menuitem").map((i) => i.textContent)).toEqual(["Name", "Signature", "Date and time", "Company", "Title", "Address", "Email", "Phone", "Other"]);
+    expect(within(menu).getAllByRole("menuitem").map((i) => i.textContent)).toEqual(["Name", "Signature", "Initials", "Date and time", "Company", "Title", "Address", "Email", "Phone", "Other"]);
     choose("Signature");
     expect(screen.queryByRole("menu")).toBeNull();
     const block = screen.getByRole("button", { name: "Signature block" });
@@ -176,7 +176,7 @@ describe("BlockPlacer: click, choose, done", () => {
 
     it("starts the signature, name and date and time as required and the extras as optional", async () => {
       await mount();
-      const kinds: [string, string][] = [["Signature", "required"], ["Name", "required"], ["Date and time", "required"], ["Company", "optional"], ["Title", "optional"], ["Address", "optional"], ["Email", "optional"], ["Phone", "optional"]];
+      const kinds: [string, string][] = [["Signature", "required"], ["Initials", "required"], ["Name", "required"], ["Date and time", "required"], ["Company", "optional"], ["Title", "optional"], ["Address", "optional"], ["Email", "optional"], ["Phone", "optional"]];
       for (const [i, [label]] of kinds.entries()) {
         clickPage(40, 60 + i * 80);
         choose(label);

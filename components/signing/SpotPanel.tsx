@@ -6,7 +6,7 @@
 import { useState } from "react";
 import { SignaturePad } from "@/components/signing/SignaturePad";
 import { DateTimeWheels } from "@/components/signing/DateTimeWheels";
-import { blockColor, blockValueProblem, toOffsetIso, type BlockSpec } from "@/lib/signing/blocks";
+import { blockColor, blockValueProblem, initialsOf, isInkInput, toOffsetIso, type BlockSpec } from "@/lib/signing/blocks";
 
 export interface SpotPanelProps {
   spec: BlockSpec;
@@ -35,16 +35,19 @@ export function SpotPanel(p: SpotPanelProps) {
   const [draft, setDraft] = useState<string | null>(null);
   const [remember, setRemember] = useState(true);
   const kind = p.spec.input;
+  // A signature or initials: marked by hand (drawn, typed or uploaded) and made once, then reused.
+  const ink = isInkInput(kind);
+  const inkName = kind === "initials" ? "initials" : "signature";
   const problem = kind === "text" || kind === "multiline" ? blockValueProblem(p.spec.type, p.value) : null;
 
-  const filled = kind === "signature" ? Boolean(draft) || (Boolean(p.signature) && !changing) : kind === "auto" ? p.required || Boolean(p.value) : Boolean(p.value.trim());
+  const filled = ink ? Boolean(draft) || (Boolean(p.signature) && !changing) : kind === "auto" ? p.required || Boolean(p.value) : Boolean(p.value.trim());
   const canNext = (!p.required || filled) && !problem && (!p.agree || p.agree.checked);
   // An optional spot that has nothing in it is skipped, not completed.
   const skipping = !p.required && !filled;
   const nextLabel = skipping ? "Skip" : p.isLast ? "Done" : "Next";
 
   function next() {
-    if (kind === "signature" && (changing || !p.signature) && draft) {
+    if (ink && (changing || !p.signature) && draft) {
       p.onSignature(draft, p.keep ? remember : undefined);
       setChanging(false);
       setDraft(null);
@@ -113,12 +116,12 @@ export function SpotPanel(p: SpotPanelProps) {
         </div>
       ) : null}
 
-      {kind === "signature" ? (
+      {ink ? (
         p.signature && !changing ? (
           <div>
             <div className="flex min-h-[64px] items-center justify-center rounded-lg border border-line bg-white px-3 py-2">
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={p.signature} alt="Your signature" className="max-h-16 w-auto object-contain" />
+              <img src={p.signature} alt={`Your ${inkName}`} className="max-h-16 w-auto object-contain" />
             </div>
             <div className="mt-1 flex flex-wrap gap-x-3">
             {!p.required ? (
@@ -127,7 +130,7 @@ export function SpotPanel(p: SpotPanelProps) {
               </button>
             ) : null}
             <button type="button" onClick={() => setChanging(true)} className="text-xs text-fg-secondary underline underline-offset-2 hover:text-fg-primary">
-              Change signature
+              Change {inkName}
             </button>
             {p.keep?.stored ? (
               <button type="button" onClick={p.keep.onForget} className="text-xs text-fg-secondary underline underline-offset-2 hover:text-fg-primary">
@@ -138,7 +141,7 @@ export function SpotPanel(p: SpotPanelProps) {
           </div>
         ) : (
           <div>
-            <SignaturePad signerName={p.signerName} onChange={setDraft} label="Sign" />
+            <SignaturePad signerName={kind === "initials" ? initialsOf(p.signerName) : p.signerName} onChange={setDraft} label={kind === "initials" ? "Initial" : "Sign"} />
             {p.keep ? (
               <label className="mt-2 flex items-center gap-2 text-xs text-fg-secondary">
                 <input type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)} />
@@ -168,7 +171,7 @@ export function SpotPanel(p: SpotPanelProps) {
           disabled={!canNext}
           className="rounded-lg bg-gold-500 px-4 py-1.5 text-xs font-semibold text-on-gold hover:brightness-110 disabled:opacity-40"
         >
-          {kind === "signature" && p.signature && !changing ? (p.isLast ? "Use it" : "Use it, next") : nextLabel}
+          {ink && p.signature && !changing ? (p.isLast ? "Use it" : "Use it, next") : nextLabel}
         </button>
       </div>
     </div>

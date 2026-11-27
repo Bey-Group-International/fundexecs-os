@@ -6,7 +6,7 @@ import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { DoneBlock, SheetBlock } from "@/components/signing/SigningSheet";
 
-interface Rec { id: string; name: string; role: string; status: string; signature_data: string | null }
+interface Rec { id: string; name: string; role: string; status: string; signature_data: string | null; initials_data: string | null }
 interface Fld { id: string; recipient_id: string; field_type: string; label: string | null; page: number; x_pct: number; y_pct: number; width_pct: number; height_pct: number; required: boolean; prefill: string | null; locked: boolean; response: string | null }
 
 export async function loadCountersign(
@@ -14,7 +14,7 @@ export async function loadCountersign(
   envelopeId: string,
 ): Promise<{ defaultName: string; blocks: SheetBlock[]; done: DoneBlock[] } | null> {
   const [{ data: recs }, { data: flds }] = await Promise.all([
-    client.from("envelope_recipients").select("id, name, role, status, signature_data").eq("envelope_id", envelopeId),
+    client.from("envelope_recipients").select("id, name, role, status, signature_data, initials_data").eq("envelope_id", envelopeId),
     client.from("envelope_fields").select("id, recipient_id, field_type, label, page, x_pct, y_pct, width_pct, height_pct, required, prefill, locked, response").eq("envelope_id", envelopeId),
   ]);
   const recipients = (recs ?? []) as Rec[];
@@ -32,7 +32,7 @@ export async function loadCountersign(
     .map((f) => ({
       id: f.id, type: f.field_type, page: f.page, xPct: f.x_pct, yPct: f.y_pct, widthPct: f.width_pct, heightPct: f.height_pct,
       value: f.response,
-      signaturePng: f.field_type === "signature" || f.field_type === "initials" ? byId.get(f.recipient_id)?.signature_data ?? null : null,
+      signaturePng: f.field_type === "signature" ? byId.get(f.recipient_id)?.signature_data ?? null : f.field_type === "initials" ? byId.get(f.recipient_id)?.initials_data ?? null : null,
     }));
   return { defaultName: owner.name, blocks, done };
 }

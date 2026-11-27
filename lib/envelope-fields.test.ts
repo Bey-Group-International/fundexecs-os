@@ -9,7 +9,7 @@ describe("cleanBlocks", () => {
   });
 
   it("rejects an unknown type, a stranger as the signer, and a page that does not exist", () => {
-    expect(cleanBlocks([{ ...ok, type: "initials" }], ["r1"], 1)).toMatchObject({ ok: false });
+    expect(cleanBlocks([{ ...ok, type: "nope" }], ["r1"], 1)).toMatchObject({ ok: false });
     expect(cleanBlocks([{ ...ok, recipientId: "x" }], ["r1"], 1)).toMatchObject({ ok: false });
     expect(cleanBlocks([{ ...ok, page: 3 }], ["r1"], 2)).toMatchObject({ ok: false });
     expect(cleanBlocks([{ ...ok, page: 0 }], ["r1"], 2)).toMatchObject({ ok: false });
@@ -54,5 +54,17 @@ describe("an Other block", () => {
   it("ignores a name sent for any other type", () => {
     const r = cleanBlocks([{ ...base, type: "company", label: "Sneaky" }], ["a"], 1);
     expect(r.ok && r.blocks[0].label).toBe("Company");
+  });
+});
+
+describe("initials blocks", () => {
+  const ok = { recipientId: "r1", type: "initials", page: 1, xPct: 10, yPct: 10, widthPct: 28, heightPct: 4 };
+  it("are accepted as a block of their own", () => {
+    const r = cleanBlocks([ok], ["r1"], 1);
+    expect(r.ok && r.blocks[0]).toMatchObject({ field_type: "initials", label: "Initials", required: true });
+  });
+  it("do not stand in for a signature when checking a document can be signed", () => {
+    const people = [{ id: "a", name: "Jane" }];
+    expect(recipientsWithoutSignature(people, [{ recipient_id: "a", field_type: "initials", required: true }])).toEqual(["Jane"]);
   });
 });

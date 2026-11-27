@@ -27,10 +27,10 @@ async function buildCopy(db: SupabaseClient, id: string): Promise<(Omit<Envelope
   const envelope = env as { id: string; title: string; document_content: string | null; status: string; pdf_storage_key: string | null; document_sha256: string | null } | null;
   if (!envelope) return null;
   const [{ data: recs }, { data: flds }] = await Promise.all([
-    db.from("envelope_recipients").select("id, name, email, role, status, signed_at, signature_data, ip_address, routing_order").eq("envelope_id", id).order("routing_order", { ascending: true }),
+    db.from("envelope_recipients").select("id, name, email, role, status, signed_at, signature_data, initials_data, ip_address, routing_order").eq("envelope_id", id).order("routing_order", { ascending: true }),
     db.from("envelope_fields").select("recipient_id, field_type, page, x_pct, y_pct, width_pct, height_pct, response, required").eq("envelope_id", id),
   ]);
-  const recipients = (recs ?? []) as { id: string; name: string; email: string; role: string; status: string; signed_at: string | null; signature_data: string | null; ip_address: string | null }[];
+  const recipients = (recs ?? []) as { id: string; name: string; email: string; role: string; status: string; signed_at: string | null; signature_data: string | null; initials_data: string | null; ip_address: string | null }[];
   const signed = recipients.filter((r) => r.status === "signed" && r.signed_at);
   if (signed.length === 0) return null;
 
@@ -62,7 +62,12 @@ async function buildCopy(db: SupabaseClient, id: string): Promise<(Omit<Envelope
         type: f.field_type,
         value: f.field_type === "datetime" && f.response ? formatBlockDateTime(f.response) : f.response,
         // An optional signature spot the signer left blank gets no signature.
-        signaturePng: (f.field_type === "signature" || f.field_type === "initials") && (f.required !== false || (f.response ?? "").trim()) ? byId.get(f.recipient_id)?.signature_data : null,
+        signaturePng:
+          (f.field_type === "signature" || f.field_type === "initials") && (f.required !== false || (f.response ?? "").trim())
+            ? f.field_type === "initials"
+              ? byId.get(f.recipient_id)?.initials_data
+              : byId.get(f.recipient_id)?.signature_data
+            : null,
       }));
     const stamped = await stampBlocks(original, fields);
     built = await buildSignedPdf({ title: envelope.title, basePdf: stamped, stamps, awaiting, fingerprint, recordId: envelope.id });

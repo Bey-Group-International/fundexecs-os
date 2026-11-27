@@ -27,7 +27,7 @@ function db(): never {
   const rows: Record<string, unknown> = {
     envelopes: { id: "e1", title: "NDA", document_content: "text", status, pdf_storage_key: "envelopes/e1.pdf", document_sha256: "a".repeat(64) },
     envelope_recipients: [
-      { id: "r1", name: "Jane", email: "j@lp.com", role: "signer", status: signedRecipients ? "signed" : "pending", signed_at: signedRecipients ? "2026-11-04T10:00:00Z" : null, signature_data: "data:image/png;base64,AAAA", ip_address: "1.2.3.4" },
+      { id: "r1", name: "Jane", email: "j@lp.com", role: "signer", status: signedRecipients ? "signed" : "pending", signed_at: signedRecipients ? "2026-11-04T10:00:00Z" : null, signature_data: "data:image/png;base64,AAAA", initials_data: "data:image/png;base64,BBBB", ip_address: "1.2.3.4" },
     ],
     envelope_fields: fieldRows,
   };
@@ -125,6 +125,17 @@ describe("optional signature spots", () => {
     await getEnvelopeCopy(db(), "e1");
     const stamped = stamp.mock.calls[0][1] as { xPct: number; signaturePng: string | null }[];
     expect(stamped.map((f) => [f.xPct, Boolean(f.signaturePng)])).toEqual([[1, true], [2, true], [3, false]]);
+  });
+});
+
+describe("initials spots", () => {
+  const spot = (over: object) => ({ recipient_id: "r1", field_type: "initials", page: 1, x_pct: 10, y_pct: 10, width_pct: 28, height_pct: 4, response: null, required: true, ...over });
+
+  it("stamps the initials image, not the signature, and skips an optional spot left blank", async () => {
+    fieldRows = [spot({ x_pct: 1 }), spot({ x_pct: 2, required: false, response: "signed" }), spot({ x_pct: 3, required: false })];
+    await getEnvelopeCopy(db(), "e1");
+    const stamped = stamp.mock.calls[0][1] as { xPct: number; signaturePng: string | null }[];
+    expect(stamped.map((f) => [f.xPct, f.signaturePng])).toEqual([[1, "data:image/png;base64,BBBB"], [2, "data:image/png;base64,BBBB"], [3, null]]);
   });
 });
 

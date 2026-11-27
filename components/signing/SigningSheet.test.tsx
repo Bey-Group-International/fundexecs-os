@@ -5,12 +5,13 @@ jest.mock("@/components/signing/PdfPages", () => ({
 }));
 // The real pad draws on a canvas, which jsdom cannot.
 jest.mock("@/components/signing/SignaturePad", () => ({
-  SignaturePad: ({ onChange }: { onChange: (v: string | null) => void }) => (
+  SignaturePad: ({ onChange, label, signerName }: { onChange: (v: string | null) => void; label?: string; signerName?: string }) => (
     <div>
-      <button type="button" onClick={() => onChange("data:image/png;base64,AAAA")}>
-        make signature
+      <button type="button" onClick={() => onChange(label === "Initial" ? "data:image/png;base64,BBBB" : "data:image/png;base64,AAAA")}>
+        {label === "Initial" ? "make initials" : "make signature"}
       </button>
       <span>Draw Type Upload</span>
+      <span data-testid="typed-default">{signerName}</span>
     </div>
   ),
 }));
@@ -279,6 +280,60 @@ describe("SigningSheet: a × at each spot, one at a time", () => {
       expect(screen.getByText(/Still to do: .*Signature, Witness name/)).toBeTruthy();
       expect(screen.getByRole("button", { name: /^Other: click to complete/ })).toBeTruthy();
       void onSubmit;
+    });
+  });
+
+  describe("initials", () => {
+    const withInitials = [block({ id: "s", type: "signature", yPct: 10 }), block({ id: "i1", type: "initials", yPct: 30 }), block({ id: "i2", type: "initials", yPct: 50 })];
+
+    it("have their own pad, typed from the signer's initials, and are made once for every initials spot", async () => {
+      const onSubmit = mount(undefined, withInitials);
+      fireEvent.click(screen.getByRole("button", { name: "make signature" }));
+      fireEvent.click(screen.getByRole("button", { name: "Next" }));
+      const d = screen.getByRole("dialog", { name: "Initials" });
+      expect(within(d).getByTestId("typed-default").textContent).toBe("JS"); // Jane Smith
+      fireEvent.click(within(d).getByRole("button", { name: "make initials" }));
+      fireEvent.click(screen.getByRole("button", { name: "Next" }));
+      // The second initials spot offers the ones just made, with no new pad.
+      const d2 = screen.getByRole("dialog", { name: "Initials" });
+      expect(within(d2).getByAltText("Your initials")).toBeTruthy();
+      expect(within(d2).queryByRole("button", { name: "make initials" })).toBeNull();
+      fireEvent.click(screen.getByRole("checkbox", { name: /I agree/ }));
+      fireEvent.click(screen.getByRole("button", { name: "Use it" }));
+      fireEvent.click(screen.getByRole("button", { name: "Sign and send back" }));
+      await waitFor(() => expect(onSubmit).toHaveBeenCalled());
+      const [sig, , initials] = onSubmit.mock.calls[0] as unknown as [string, Record<string, string>, string | undefined];
+      expect(sig).toBe("data:image/png;base64,AAAA");
+      expect(initials).toBe("data:image/png;base64,BBBB"); // not the signature
+    });
+
+    it("hold up sending while a required initials spot is empty, and send no initials when there is none", async () => {
+      mount(undefined, withInitials);
+      expect(screen.getByText(/Still to do: .*Initials/)).toBeTruthy();
+    });
+
+    it("send no initials when the document has no initials block", async () => {
+      const onSubmit = mount(undefined, [block({ id: "s", type: "signature", yPct: 10 })]);
+      fireEvent.click(screen.getByRole("button", { name: "make signature" }));
+      fireEvent.click(screen.getByRole("checkbox", { name: /I agree/ }));
+      fireEvent.click(screen.getByRole("button", { name: "Done" }));
+      fireEvent.click(screen.getByRole("button", { name: "Sign and send back" }));
+      await waitFor(() => expect(onSubmit).toHaveBeenCalled());
+      expect((onSubmit.mock.calls[0] as unknown[])[2]).toBeUndefined();
+    });
+
+    it("an optional initials spot can be left blank", async () => {
+      const onSubmit = mount(undefined, [block({ id: "s", type: "signature", yPct: 10 }), block({ id: "i", type: "initials", required: false, yPct: 30 })]);
+      fireEvent.click(screen.getByRole("button", { name: "make signature" }));
+      fireEvent.click(screen.getByRole("button", { name: "Next" }));
+      expect(screen.getByRole("button", { name: "Skip" })).toBeTruthy();
+      fireEvent.click(screen.getByRole("checkbox", { name: /I agree/ }));
+      fireEvent.click(screen.getByRole("button", { name: "Skip" }));
+      fireEvent.click(screen.getByRole("button", { name: "Sign and send back" }));
+      await waitFor(() => expect(onSubmit).toHaveBeenCalled());
+      const [, responses, initials] = onSubmit.mock.calls[0] as unknown as [string, Record<string, string>, string | undefined];
+      expect(responses.i).toBeUndefined();
+      expect(initials).toBeUndefined();
     });
   });
 });

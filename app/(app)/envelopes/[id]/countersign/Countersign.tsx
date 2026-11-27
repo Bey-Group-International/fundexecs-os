@@ -17,11 +17,11 @@ export function Countersign({ envelopeId, title, defaultName, blocks, done, user
         signerName={defaultName}
         rememberFor={userId}
         submitLabel="Countersign"
-        onSubmit={async (signatureData, fieldResponses) => {
+        onSubmit={async (signatureData, fieldResponses, initialsData) => {
           const res = await fetch(`/api/envelopes/${envelopeId}/countersign`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ signatureData, fieldResponses, signerName: defaultName }),
+            body: JSON.stringify({ signatureData, initialsData, fieldResponses, signerName: defaultName }),
           });
           if (!res.ok) return ((await res.json().catch(() => ({}))) as { error?: string }).error ?? `Server error ${res.status}`;
           router.push(`/envelopes/${envelopeId}`);
