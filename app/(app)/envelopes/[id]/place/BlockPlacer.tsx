@@ -8,7 +8,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { PdfPages } from "@/components/signing/PdfPages";
-import { BLOCKS, MAX_OTHER_LABEL, blockColor, blockLabel, blockSpec, clampBlock, copyToEveryPage, defaultRequired, newBlockAt, type BlockType } from "@/lib/signing/blocks";
+import { BLOCKS, MAX_OTHER_LABEL, blockColor, blockLabel, blockSpec, clampBlock, copyToEveryPage, defaultRequired, newBlockAt, resizeBlock, type BlockType } from "@/lib/signing/blocks";
 import { MAX_BLOCKS } from "@/lib/envelope-fields";
 
 interface Party {
@@ -68,6 +68,7 @@ export function BlockPlacer({ title, fieldsUrl, pdfUrl, sendUrl, doneHref, prefi
   const [notice, setNotice] = useState<string | null>(null);
   const [pageCount, setPageCount] = useState(0);
   const [pending, startTransition] = useTransition();
+  const resize = useRef<{ key: string; startX: number; startY: number; w0: number; h0: number; pageW: number; pageH: number } | null>(null);
   const drag = useRef<{ key: string; startX: number; startY: number; x0: number; y0: number; w: number; h: number } | null>(null);
 
   const load = useCallback(async () => {
@@ -241,10 +242,29 @@ export function BlockPlacer({ title, fieldsUrl, pdfUrl, sendUrl, doneHref, prefi
     const b = blocks.find((x) => x.key === d.key);
     if (!b) return;
     const moved = clampBlock({ xPct: d.x0 + ((e.clientX - d.startX) / d.w) * 100, yPct: d.y0 + ((e.clientY - d.startY) / d.h) * 100, widthPct: b.widthPct, heightPct: b.heightPct });
-    patch(d.key, { xPct: moved.xPct, yPct: moved.yPct });
+    patch(d.key, { xPct: moved.xPct, yPct: moved.yPct, widthPct: moved.widthPct, heightPct: moved.heightPct });
   }
   const endDrag = () => {
     drag.current = null;
+  };
+
+  // Resizing a block by its bottom-right corner: the pointer's travel becomes a share of the page.
+  function startResize(e: React.PointerEvent, b: Block, pageW: number, pageH: number) {
+    e.stopPropagation(); // not a move of the block, and not a click on the page behind
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+    resize.current = { key: b.key, startX: e.clientX, startY: e.clientY, w0: b.widthPct, h0: b.heightPct, pageW, pageH };
+  }
+  function moveResize(e: React.PointerEvent) {
+    const r = resize.current;
+    if (!r) return;
+    e.stopPropagation();
+    const b = blocks.find((x) => x.key === r.key);
+    if (!b) return;
+    const sized = resizeBlock({ ...b, widthPct: r.w0, heightPct: r.h0 }, ((e.clientX - r.startX) / r.pageW) * 100, ((e.clientY - r.startY) / r.pageH) * 100);
+    patch(r.key, { widthPct: sized.widthPct, heightPct: sized.heightPct });
+  }
+  const endResize = () => {
+    resize.current = null;
   };
 
   const tint = (id: string) => TINT[partyIndex.get(id) ?? 0] ?? TINT[0];
@@ -269,7 +289,7 @@ export function BlockPlacer({ title, fieldsUrl, pdfUrl, sendUrl, doneHref, prefi
       {error ? <p role="alert" className="mb-3 rounded-lg border border-status-danger/40 bg-status-danger/10 px-3 py-2 text-sm text-status-danger">{error}</p> : null}
       {notice ? <p role="status" className="mb-3 text-sm text-fg-secondary">{notice}</p> : null}
 
-      <p className="mb-3 text-sm text-fg-secondary">Click the page where a block goes, then choose what it is. Each spot shows as a ×; drag it to move it, click it to change it.</p>
+      <p className="mb-3 text-sm text-fg-secondary">Click the page where a block goes, then choose what it is. Each spot shows as a ×; drag it to move it, click it to change it, and drag the corner square of the selected block to resize it.</p>
 
       <div className={sel ? "sticky top-0 z-10 mb-4 rounded-xl border border-line bg-surface-1/95 p-3 backdrop-blur" : "hidden"}>
         {sel ? (
@@ -354,6 +374,10 @@ export function BlockPlacer({ title, fieldsUrl, pdfUrl, sendUrl, doneHref, prefi
                         if (e.key === "Delete" || e.key === "Backspace") {
                           setBlocks((cur) => cur.filter((x) => x.key !== b.key));
                           setSelected(null);
+                        } else if ((e.key === "Enter" || e.key === " ") && e.target === e.currentTarget) {
+                          // Keyboard users select a block this way, which shows its resize handle.
+                          e.preventDefault();
+                          setSelected(b.key);
                         }
                       }}
                       className="absolute flex cursor-move items-center rounded-sm"
@@ -383,6 +407,31 @@ export function BlockPlacer({ title, fieldsUrl, pdfUrl, sendUrl, doneHref, prefi
                       >
                         {b.required ? "Required" : "Optional"}
                       </button>
+                      {selected === b.key ? (
+                        <div
+                          role="button"
+                          tabIndex={0}
+                          aria-label={`Resize ${blockLabel(b.type, b.label)} block`}
+                          title="Drag to resize"
+                          onPointerDown={(e) => startResize(e, b, width, height)}
+                          onPointerMove={moveResize}
+                          onPointerUp={endResize}
+                          onPointerCancel={endResize}
+                          onKeyDown={(e) => {
+                            const step = e.key === "ArrowRight" ? [1, 0] : e.key === "ArrowLeft" ? [-1, 0] : e.key === "ArrowDown" ? [0, 0.5] : e.key === "ArrowUp" ? [0, -0.5] : null;
+                            if (!step) return;
+                            e.preventDefault();
+                            e.stopPropagation();
+                            const sized = resizeBlock(b, step[0], step[1]);
+                            patch(b.key, { widthPct: sized.widthPct, heightPct: sized.heightPct });
+                          }}
+                          // A larger area than the square it shows, so a finger can take hold of it.
+                          className="absolute -bottom-3 -right-3 z-10 flex h-6 w-6 cursor-nwse-resize items-center justify-center"
+                          style={{ touchAction: "none" }}
+                        >
+                          <span className="block h-2.5 w-2.5 rounded-[2px] border-2 bg-white" style={{ borderColor: blockColor(b.required) }} />
+                        </div>
+                      ) : null}
                       <button
                         type="button"
                         aria-label={`Delete ${blockLabel(b.type, b.label)} block`}

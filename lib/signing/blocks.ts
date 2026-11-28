@@ -104,10 +104,19 @@ export interface PlacedBlock {
 
 const clamp = (n: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, n));
 
+/**
+ * How small and how large a block may be made by dragging its corner: never so small it cannot be
+ * clicked, never more than most of a page, and always inside the page.
+ */
+export const MIN_BLOCK_WIDTH_PCT = 8;
+export const MIN_BLOCK_HEIGHT_PCT = 2.5;
+export const MAX_BLOCK_WIDTH_PCT = 90;
+export const MAX_BLOCK_HEIGHT_PCT = 25;
+
 /** Keep a block wholly on its page; positions arrive from the browser. */
 export function clampBlock<T extends { xPct: number; yPct: number; widthPct: number; heightPct: number }>(b: T): T {
-  const widthPct = clamp(Number.isFinite(b.widthPct) ? b.widthPct : 20, 3, 100);
-  const heightPct = clamp(Number.isFinite(b.heightPct) ? b.heightPct : 4, 1.5, 100);
+  const widthPct = clamp(Number.isFinite(b.widthPct) ? b.widthPct : 20, 3, MAX_BLOCK_WIDTH_PCT);
+  const heightPct = clamp(Number.isFinite(b.heightPct) ? b.heightPct : 4, 1.5, MAX_BLOCK_HEIGHT_PCT);
   return {
     ...b,
     widthPct,
@@ -212,4 +221,16 @@ export function copyToEveryPage<T extends { recipientId: string; type: string; p
     if (!there) out.push({ ...block, page });
   }
   return out;
+}
+
+/**
+ * A block resized by its bottom-right corner: the top-left stays put and the corner moves by
+ * (dxPct, dyPct) of the page, held between the smallest and largest sizes and inside the page.
+ */
+export function resizeBlock<T extends { xPct: number; yPct: number; widthPct: number; heightPct: number }>(b: T, dxPct: number, dyPct: number): T {
+  const dx = Number.isFinite(dxPct) ? dxPct : 0;
+  const dy = Number.isFinite(dyPct) ? dyPct : 0;
+  const widthPct = clamp(b.widthPct + dx, MIN_BLOCK_WIDTH_PCT, Math.min(MAX_BLOCK_WIDTH_PCT, 100 - b.xPct));
+  const heightPct = clamp(b.heightPct + dy, MIN_BLOCK_HEIGHT_PCT, Math.min(MAX_BLOCK_HEIGHT_PCT, 100 - b.yPct));
+  return { ...b, widthPct, heightPct };
 }
