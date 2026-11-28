@@ -242,7 +242,7 @@ export function BlockPlacer({ title, fieldsUrl, pdfUrl, sendUrl, doneHref, prefi
     const b = blocks.find((x) => x.key === d.key);
     if (!b) return;
     const moved = clampBlock({ xPct: d.x0 + ((e.clientX - d.startX) / d.w) * 100, yPct: d.y0 + ((e.clientY - d.startY) / d.h) * 100, widthPct: b.widthPct, heightPct: b.heightPct });
-    patch(d.key, { xPct: moved.xPct, yPct: moved.yPct });
+    patch(d.key, { xPct: moved.xPct, yPct: moved.yPct, widthPct: moved.widthPct, heightPct: moved.heightPct });
   }
   const endDrag = () => {
     drag.current = null;
@@ -374,6 +374,10 @@ export function BlockPlacer({ title, fieldsUrl, pdfUrl, sendUrl, doneHref, prefi
                         if (e.key === "Delete" || e.key === "Backspace") {
                           setBlocks((cur) => cur.filter((x) => x.key !== b.key));
                           setSelected(null);
+                        } else if ((e.key === "Enter" || e.key === " ") && e.target === e.currentTarget) {
+                          // Keyboard users select a block this way, which shows its resize handle.
+                          e.preventDefault();
+                          setSelected(b.key);
                         }
                       }}
                       className="absolute flex cursor-move items-center rounded-sm"

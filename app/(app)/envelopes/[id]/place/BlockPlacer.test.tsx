@@ -312,6 +312,27 @@ describe("BlockPlacer: click, choose, done", () => {
       expect(screen.getByRole("button", { name: "Resize Company block" })).toBeTruthy();
     });
 
+    it("lets a keyboard user select a block with Enter, which shows its resize handle", async () => {
+      await mount();
+      clickPage(300, 400);
+      choose("Company");
+      const block = screen.getByRole("button", { name: "Company block" });
+      expect(screen.queryByRole("button", { name: "Resize Company block" })).toBeNull();
+      fireEvent.keyDown(block, { key: "Enter" });
+      expect(screen.getByRole("button", { name: "Resize Company block" })).toBeTruthy();
+    });
+
+    it("keeps an oversized stored block on the page when it is moved", async () => {
+      await mount();
+      clickPage(100, 400);
+      choose("Company");
+      const block = screen.getByRole("button", { name: "Company block" });
+      drag(block, 600, 0); // far right: position and size must still fit the page together
+      const left = parseFloat(block.style.left);
+      const [w] = sized("Company block");
+      expect(left + w).toBeLessThanOrEqual(100.0001);
+    });
+
     it("drags to resize in both directions, as a share of the page, and saves the new size", async () => {
       await mount();
       clickPage(300, 400);
