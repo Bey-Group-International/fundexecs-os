@@ -2,7 +2,7 @@ jest.mock("server-only", () => ({}), { virtual: true });
 import { PDFDocument } from "pdf-lib";
 import { stampBlocks } from "./stamp.server";
 import { buildDocumentPdf } from "./executed-pdf.server";
-import { BLOCKS, blockLabel, copyToEveryPage, initialsOf, isInkInput, defaultRequired, BLOCK_HEIGHT_PCT, BLOCK_WIDTH_PCT, resolveDateTimeResponse, toOffsetIso, blockSpec, clampBlock, newBlockAt, formatBlockDateTime } from "./blocks";
+import { BLOCKS, MAX_BLOCK_HEIGHT_PCT, MAX_BLOCK_WIDTH_PCT, MIN_BLOCK_HEIGHT_PCT, MIN_BLOCK_WIDTH_PCT, blockLabel, copyToEveryPage, resizeBlock, initialsOf, isInkInput, defaultRequired, BLOCK_HEIGHT_PCT, BLOCK_WIDTH_PCT, resolveDateTimeResponse, toOffsetIso, blockSpec, clampBlock, newBlockAt, formatBlockDateTime } from "./blocks";
 import { missingRequiredFields } from "../envelope-signing";
 import { blockValueProblem } from "./blocks";
 
@@ -27,6 +27,24 @@ describe("blocks", () => {
     expect(isInkInput("signature") && isInkInput("initials")).toBe(true);
     expect(isInkInput("text") || isInkInput("auto")).toBe(false);
     expect(defaultRequired("initials")).toBe(true);
+  });
+
+  it("resizes from the bottom-right corner, held between the smallest and largest sizes and inside the page", () => {
+    const b = { xPct: 10, yPct: 20, widthPct: 28, heightPct: 4 };
+    // The top-left stays put; the corner moves.
+    expect(resizeBlock(b, 10, 3)).toEqual({ xPct: 10, yPct: 20, widthPct: 38, heightPct: 7 });
+    expect(resizeBlock(b, -10, -1)).toEqual({ xPct: 10, yPct: 20, widthPct: 18, heightPct: 3 });
+    // Never smaller than something that can be clicked, nor bigger than most of a page.
+    expect(resizeBlock(b, -100, -100)).toMatchObject({ widthPct: MIN_BLOCK_WIDTH_PCT, heightPct: MIN_BLOCK_HEIGHT_PCT });
+    expect(resizeBlock({ ...b, xPct: 0, yPct: 0 }, 500, 500)).toMatchObject({ widthPct: MAX_BLOCK_WIDTH_PCT, heightPct: MAX_BLOCK_HEIGHT_PCT });
+    // Never past the page edge.
+    expect(resizeBlock({ ...b, xPct: 80 }, 50, 0).widthPct).toBe(20);
+    expect(resizeBlock({ ...b, yPct: 95 }, 0, 50).heightPct).toBe(5);
+    expect(resizeBlock(b, NaN, NaN)).toEqual(b);
+  });
+
+  it("holds a block sent by a browser to the largest size too", () => {
+    expect(clampBlock({ xPct: 0, yPct: 0, widthPct: 400, heightPct: 400 })).toMatchObject({ widthPct: MAX_BLOCK_WIDTH_PCT, heightPct: MAX_BLOCK_HEIGHT_PCT });
   });
 
   it("copies a block to the same spot on every other page, and does it only once", () => {

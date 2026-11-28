@@ -291,4 +291,75 @@ describe("BlockPlacer: click, choose, done", () => {
       expect(sent.every((b) => b.type === "other" && b.label === "Witness" && b.recipientId === sent[0].recipientId)).toBe(true);
     });
   });
+
+  describe("resizing by the bottom-right corner", () => {
+    const sized = (name: string) => {
+      const el = screen.getByRole("button", { name });
+      return [parseFloat(el.style.width), parseFloat(el.style.height)];
+    };
+    const drag = (handle: HTMLElement, dx: number, dy: number) => {
+      fireEvent.pointerDown(handle, { clientX: 100, clientY: 100, pointerId: 1 });
+      fireEvent.pointerMove(handle, { clientX: 100 + dx, clientY: 100 + dy, pointerId: 1 });
+      fireEvent.pointerUp(handle, { pointerId: 1 });
+    };
+
+    it("shows a corner handle on the selected block only", async () => {
+      await mount();
+      clickPage(300, 400);
+      choose("Company"); // not selected after placing
+      expect(screen.queryByRole("button", { name: "Resize Company block" })).toBeNull();
+      fireEvent.pointerDown(screen.getByRole("button", { name: "Company block" }), { clientX: 300, clientY: 400, pointerId: 1 });
+      expect(screen.getByRole("button", { name: "Resize Company block" })).toBeTruthy();
+    });
+
+    it("drags to resize in both directions, as a share of the page, and saves the new size", async () => {
+      await mount();
+      clickPage(300, 400);
+      choose("Initials"); // selected as it is placed
+      expect(sized("Initials block")).toEqual([28, 4]);
+      // The page is 600 x 800: 60px across is 10% of the width, 40px down is 5% of the height.
+      drag(screen.getByRole("button", { name: "Resize Initials block" }), 60, 40);
+      expect(sized("Initials block")).toEqual([38, 9]);
+      fireEvent.click(screen.getByRole("button", { name: /Save$/ }));
+      await waitFor(() => expect(puts).toHaveLength(1));
+      const sent = puts[0].blocks as unknown as { widthPct: number; heightPct: number }[];
+      expect([sent[0].widthPct, sent[0].heightPct]).toEqual([38, 9]);
+    });
+
+    it("stops at the smallest size and does not move the block", async () => {
+      await mount();
+      clickPage(300, 400);
+      choose("Initials");
+      const before = screen.getByRole("button", { name: "Initials block" }).style.left;
+      drag(screen.getByRole("button", { name: "Resize Initials block" }), -600, -600);
+      expect(sized("Initials block")).toEqual([8, 2.5]);
+      expect(screen.getByRole("button", { name: "Initials block" }).style.left).toBe(before);
+    });
+
+    it("resizes one block at a time, and other new blocks still start at the standard size", async () => {
+      await mount();
+      clickPage(100, 300);
+      choose("Initials");
+      drag(screen.getByRole("button", { name: "Resize Initials block" }), 60, 0);
+      clickPage(100, 600);
+      choose("Name");
+      expect(sized("Name block")).toEqual([28, 4]);
+      expect(sized("Initials block")).toEqual([38, 4]);
+    });
+
+    it("can be resized with the arrow keys, and a copy to every page keeps the size", async () => {
+      await mount();
+      clickPage(300, 400);
+      choose("Initials");
+      const handle = screen.getByRole("button", { name: "Resize Initials block" });
+      fireEvent.keyDown(handle, { key: "ArrowRight" });
+      fireEvent.keyDown(handle, { key: "ArrowDown" });
+      expect(sized("Initials block")).toEqual([29, 4.5]);
+      fireEvent.click(screen.getByRole("button", { name: "Add to every page" }));
+      fireEvent.click(screen.getByRole("button", { name: /Save$/ }));
+      await waitFor(() => expect(puts).toHaveLength(1));
+      const sent = puts[0].blocks as unknown as { widthPct: number; heightPct: number }[];
+      expect(sent.map((b) => [b.widthPct, b.heightPct])).toEqual([[29, 4.5], [29, 4.5], [29, 4.5]]);
+    });
+  });
 });
